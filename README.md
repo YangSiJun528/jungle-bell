@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="docs/files/logo.png" width="28" align="center">
+  <img src="docs/files/logo.png" width="28" style="vertical-align: middle;">
   Jungle Bell
 </h1>
 <p align="center">크래프톤 정글 출석 체크 리마인더.</p>
