@@ -1,6 +1,10 @@
-# Jungle Bell
+<h1 align="center">
+  <img src="docs/files/logo.png" width="28" align="center">
+  Jungle Bell
+</h1>
+<p align="center">크래프톤 정글 출석 체크 리마인더.</p>
 
-크래프톤 정글 출석 체크 리마인더.
+---
 
 시스템 트레이에서 출석 상태를 실시간으로 확인할 수 있으며, 체크인/체크아웃이 필요할 때 아이콘 색상으로 알려줍니다.
 
