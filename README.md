@@ -34,7 +34,7 @@
 | 상태 | 아이콘                                                            | 설명 |
 |------|----------------------------------------------------------------|------|
 | 로그인 필요 | <img src="docs/files/macos-tray-need-login.png" width="180">   | 로그인 상태를 확인할 수 없을 때 오렌지색으로 표시됩니다. 출석 페이지를 열어 로그인해야 합니다. |
-| 출석 체크 필요 | <img src="docs/files/macos-tray-need-checkin.png" width="180"> | 학습 시작 또는 학습 종료가 가능한 경우 빨간색으로 표시됩니다. 남은 시간이 함께 표시됩니다. |
+| 출석 필요 | <img src="docs/files/macos-tray-need-checkin.png" width="180"> | 학습 시작 또는 학습 종료가 가능한 경우 빨간색으로 표시됩니다. 남은 시간이 함께 표시됩니다. |
 | 학습 중 | <img src="docs/files/macos-tray-studying.png" width="180">     | 체크인 후 체크아웃 가능 시점까지 대기 중일 때 흰색으로 표시됩니다. |
 
 ## 설치
