@@ -39,7 +39,7 @@
 
 ## 설치
 
-[Releases](https://github.com/sijun-yang/jungle-bell/releases) 페이지에서 최신 버전을 다운로드하세요.
+[Releases](https://github.com/YangSiJun528/jungle-bell/releases) 페이지에서 최신 버전을 다운로드하세요.
 
 ## 라이선스
 
