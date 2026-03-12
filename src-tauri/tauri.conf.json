@@ -1,20 +1,14 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "jungle-bell",
-  "version": "0.1.0",
-  "identifier": "com.sijun-yang.jungle-bell",
+  "productName": "Jungle Bell",
+  "version": "0.0.1",
+  "identifier": "dev.sijun-yang.jungle-bell",
   "build": {
     "frontendDist": "../src"
   },
   "app": {
     "withGlobalTauri": true,
-    "windows": [
-      {
-        "title": "jungle-bell",
-        "width": 800,
-        "height": 600
-      }
-    ],
+    "windows": [],
     "security": {
       "csp": null
     }
