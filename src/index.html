@@ -1,39 +1,29 @@
 <!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="stylesheet" href="styles.css" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tauri App</title>
-    <script type="module" src="/main.js" defer></script>
-  </head>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="stylesheet" href="styles.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jungle Bell</title>
+</head>
+<body>
+  <div class="header">
+    <img src="assets/logo.png" alt="Jungle Bell" class="logo" />
+    <div>
+      <h1>Jungle Bell <small>v0.0.1</small></h1> <!-- TODO: 앱 config의 현재버전 불러오기, 스타일 개선하기 -->
+      <p>크래프톤 정글 출석 체크 리마인더</p>
+    </div>
+  </div>
 
-  <body>
-    <main class="container">
-      <h1>Welcome to Tauri</h1>
+  <table>
+    <tr><th>학습 시작</th><td>04:00 ~ 10:00</td></tr>
+    <tr><th>학습 종료</th><td>23:00 ~ 04:00</td></tr>
+  </table>
 
-      <div class="row">
-        <a href="https://tauri.app" target="_blank">
-          <img src="/assets/tauri.svg" class="logo tauri" alt="Tauri logo" />
-        </a>
-        <a
-          href="https://developer.mozilla.org/en-US/docs/Web/JavaScript"
-          target="_blank"
-        >
-          <img
-            src="/assets/javascript.svg"
-            class="logo vanilla"
-            alt="JavaScript logo"
-          />
-        </a>
-      </div>
-      <p>Click on the Tauri logo to learn more about the framework</p>
-
-      <form class="row" id="greet-form">
-        <input id="greet-input" placeholder="Enter a name..." />
-        <button type="submit">Greet</button>
-      </form>
-      <p id="greet-msg"></p>
-    </main>
-  </body>
+  <footer>
+    <a href="https://github.com/YangSiJun528/jungle-bell" target="_blank" rel="noopener noreferrer">GitHub</a>
+    <span> · </span>
+    <a href="https://github.com/YangSiJun528/jungle-bell/releases" target="_blank" rel="noopener noreferrer">릴리즈</a>
+  </footer>
+</body>
 </html>
