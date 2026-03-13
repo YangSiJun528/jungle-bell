@@ -28,7 +28,10 @@ pub fn run() {
         //            Windows %APPDATA%\dev.sijun-yang.jungle-bell\logs\
         .plugin(
             tauri_plugin_log::Builder::new()
-                .level(log::LevelFilter::Info)
+                .with_env_filter(
+                    tauri_plugin_log::EnvFilter::try_from_default_env()
+                        .unwrap_or_else(|_| tauri_plugin_log::EnvFilter::new("info")),
+                )
                 .max_file_size(500_000)
                 .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepOne)
                 .target(tauri_plugin_log::Target::new(
