@@ -1,8 +1,8 @@
 [package]
 name = "jungle-bell"
-version = "0.0.3-beta.1"
+version = "0.0.3-beta.4"
 description = "Krafton Jungle attendance check reminder"
-authors = ["you"]
+authors = ["sijun-yang"]
 edition = "2021"
 
 [lib]
