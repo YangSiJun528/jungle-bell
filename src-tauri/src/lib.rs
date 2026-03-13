@@ -35,12 +35,6 @@ pub fn run() {
                 .level(log::LevelFilter::Info)
                 .max_file_size(MAX_LOG_FILE_SIZE)
                 .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepOne)
-                .target(tauri_plugin_log::Target::new(
-                    tauri_plugin_log::TargetKind::Stdout,
-                ))
-                .target(tauri_plugin_log::Target::new(
-                    tauri_plugin_log::TargetKind::LogDir { file_name: None },
-                ))
                 .build(),
         )
         // autostart 플러그인: 시스템 시작 시 앱 자동 실행 (macOS: LaunchAgent)
