@@ -147,15 +147,16 @@ pub async fn set_auto_start(
     enabled: bool,
 ) -> Result<(), String> {
     log::info!("자동 시작 설정 변경: {}", enabled);
-    let autolaunch = app.autolaunch();
-    if enabled {
-        autolaunch.enable().map_err(|e| e.to_string())?;
-    } else {
-        autolaunch.disable().map_err(|e| e.to_string())?;
+    // 앱 설정을 먼저 저장한 후 OS 설정을 변경한다.
+    // OS 변경에 실패하더라도 다음 실행 시 setup에서 Config 기준으로 재동기화된다.
+    {
+        let mut s = state.lock().await;
+        s.config.auto_start = enabled;
+        s.config.save();
     }
-    let mut s = state.lock().await;
-    s.config.auto_start = enabled;
-    s.config.save();
+    let autolaunch = app.autolaunch();
+    let result = if enabled { autolaunch.enable() } else { autolaunch.disable() };
+    result.map_err(|e| e.to_string())?;
     Ok(())
 }
 

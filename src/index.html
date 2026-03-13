@@ -50,8 +50,13 @@
 
         const autoStartToggle = document.getElementById('auto-start-toggle');
         autoStartToggle.checked = await invoke('get_auto_start');
-        autoStartToggle.addEventListener('change', () => {
-          invoke('set_auto_start', { enabled: autoStartToggle.checked }).catch(console.error);
+        autoStartToggle.addEventListener('change', async () => {
+          try {
+            await invoke('set_auto_start', { enabled: autoStartToggle.checked });
+          } catch (e) {
+            console.error(e);
+            autoStartToggle.checked = !autoStartToggle.checked;
+          }
         });
 
         const toggle = document.getElementById('auto-update-toggle');
