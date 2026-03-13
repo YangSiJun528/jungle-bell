@@ -13,6 +13,14 @@
       "csp": null
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEU2MUU4NDE3MjY4OTc2NUMKUldSY2Rva21GNFFlNWhsTk1XV0ZIUWdwYUNwNThMWnRBWERqellsTFJOQmpXMjNDelhsLzFNSVgK",
+      "endpoints": [
+        "https://github.com/YangSiJun528/jungle-bell/releases/latest/download/latest.json"
+      ]
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",

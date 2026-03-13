@@ -8,6 +8,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use tauri::Manager;
+use tauri_plugin_updater::UpdaterExt;
 
 use config::Config;
 use state::AppState;
@@ -32,11 +33,20 @@ pub fn run() {
     tauri::Builder::default()
         // opener 플러그인: 시스템 브라우저로 URL 열기 (설정 페이지에서 사용)
         .plugin(tauri_plugin_opener::init())
+        // updater 플러그인: 자동 업데이트 지원
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
         // AppState를 Tauri의 managed state로 등록.
         // 핸들러에서 `tauri::State<Arc<Mutex<AppState>>>`로 받아 사용.
         .manage(shared_state.clone())
         // JS에서 `window.__TAURI__.core.invoke()`로 호출할 수 있는 Tauri 커맨드 등록.
-        .invoke_handler(tauri::generate_handler![checker::report_attendance_status,])
+        .invoke_handler(tauri::generate_handler![
+            checker::report_attendance_status,
+            checker::get_auto_update,
+            checker::set_auto_update,
+            checker::get_app_version,
+            checker::check_and_notify_update,
+        ])
         // setup(): 앱 초기화 후 이벤트 루프 시작 전에 한 번 실행.
         .setup(move |app| {
             tray::setup_tray(app)?;
@@ -65,6 +75,32 @@ pub fn run() {
                     api.prevent_close();
                     if let Some(w) = app_handle_close.get_webview_window("checker") {
                         let _ = w.hide();
+                    }
+                }
+            });
+
+            // 시작 시 업데이트 확인 (백그라운드). auto_update 설정이 꺼져 있으면 건너뜀.
+            let app_handle_update = app.handle().clone();
+            let shared_state_update = shared_state.clone();
+            tauri::async_runtime::spawn(async move {
+                let auto_update = shared_state_update.lock().await.config.auto_update;
+                if !auto_update {
+                    return;
+                }
+                if let Ok(updater) = app_handle_update.updater() {
+                    match updater.check().await {
+                        Ok(Some(update)) => {
+                            log::info!("새 업데이트 발견: v{}", update.version);
+                            match update.download_and_install(|_, _| {}, || {}).await {
+                                Ok(_) => {
+                                    log::info!("업데이트 설치 완료, 앱 재시작");
+                                    app_handle_update.restart();
+                                }
+                                Err(e) => log::error!("업데이트 설치 실패: {}", e),
+                            }
+                        }
+                        Ok(None) => log::info!("최신 버전입니다"),
+                        Err(e) => log::debug!("업데이트 확인 실패: {}", e),
                     }
                 }
             });
