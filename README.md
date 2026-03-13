@@ -67,7 +67,7 @@ xattr -cr "/Applications/Jungle Bell.app"
 
 ### Windows
 
-`.msi` 또는 `-setup.exe` 파일을 다운로드하여 실행하세요.
+`-setup.exe` 파일을 다운로드하여 실행하세요.
 
 "Windows의 PC 보호" 경고가 표시되면 **추가 정보** → **실행** 을 클릭하면 됩니다.
 
