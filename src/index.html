@@ -36,15 +36,21 @@
   <script>
     const { invoke } = window.__TAURI__.core;
     window.addEventListener('DOMContentLoaded', async () => {
-      document.getElementById('app-version').textContent = 'v' + await invoke('get_app_version');
+      try {
+        document.getElementById('app-version').textContent = 'v' + await invoke('get_app_version');
 
-      const toggle = document.getElementById('auto-update-toggle');
-      toggle.checked = await invoke('get_auto_update');
-      toggle.addEventListener('change', () => invoke('set_auto_update', { enabled: toggle.checked }));
+        const toggle = document.getElementById('auto-update-toggle');
+        toggle.checked = await invoke('get_auto_update');
+        toggle.addEventListener('change', () => {
+          invoke('set_auto_update', { enabled: toggle.checked }).catch(console.error);
+        });
 
-      document.getElementById('check-update-btn').addEventListener('click', () => {
-        invoke('check_and_notify_update');
-      });
+        document.getElementById('check-update-btn').addEventListener('click', () => {
+          invoke('check_and_notify_update').catch(console.error);
+        });
+      } catch (e) {
+        console.error('초기화 중 오류 발생:', e);
+      }
     });
   </script>
 

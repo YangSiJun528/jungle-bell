@@ -13,24 +13,36 @@ use tauri_plugin_updater::UpdaterExt;
 use config::Config;
 use state::AppState;
 
+/// 로그 파일 최대 크기 (500 KB). 초과 시 이전 파일 삭제 후 새 파일 시작.
+const MAX_LOG_FILE_SIZE: u128 = 500_000;
+
 /// 앱 진입점.
 ///
 /// Tauri 앱은 기본적으로 보이는 창이 없음 (tauri.conf.json에서 설정).
 /// 시스템 트레이 아이콘 + 숨겨진 WebView로 출석 상태를 모니터링한다.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // 로거 초기화. RUST_LOG 환경변수로 로그 수준 조절:
-    //   RUST_LOG=debug cargo run   → 상세 로그 (HTML 덤프 포함)
-    //   RUST_LOG=info  cargo run   → 일반 로그 (기본값)
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
-        .format_target(true)
-        .format_timestamp_secs()
-        .init();
-
     let config = Config::load();
     let shared_state = Arc::new(Mutex::new(AppState::new(config)));
 
     tauri::Builder::default()
+        // 로그 플러그인: stdout(터미널) + 파일(플랫폼 로그 디렉터리) 동시 출력.
+        // KeepOne 전략으로 500KB 초과 시 이전 파일 삭제 → 최대 ~1MB 유지.
+        // 로그 위치: macOS ~/Library/Logs/dev.sijun-yang.jungle-bell/
+        //            Windows %APPDATA%\dev.sijun-yang.jungle-bell\logs\
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .level(log::LevelFilter::Info)
+                .max_file_size(MAX_LOG_FILE_SIZE)
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepOne)
+                .target(tauri_plugin_log::Target::new(
+                    tauri_plugin_log::TargetKind::Stdout,
+                ))
+                .target(tauri_plugin_log::Target::new(
+                    tauri_plugin_log::TargetKind::LogDir { file_name: None },
+                ))
+                .build(),
+        )
         // opener 플러그인: 시스템 브라우저로 URL 열기 (설정 페이지에서 사용)
         .plugin(tauri_plugin_opener::init())
         // updater 플러그인: 자동 업데이트 지원
@@ -80,9 +92,13 @@ pub fn run() {
             });
 
             // 시작 시 업데이트 확인 (백그라운드). auto_update 설정이 꺼져 있으면 건너뜀.
+            // 업데이트가 있으면 사용자에게 다이얼로그로 알리고 설치 여부를 선택하게 함.
+            // download_and_install 성공 시 플랫폼이 자동으로 재시작을 처리하므로 app.restart() 불필요.
             let app_handle_update = app.handle().clone();
             let shared_state_update = shared_state.clone();
             tauri::async_runtime::spawn(async move {
+                use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
+
                 let auto_update = shared_state_update.lock().await.config.auto_update;
                 if !auto_update {
                     return;
@@ -91,12 +107,29 @@ pub fn run() {
                     match updater.check().await {
                         Ok(Some(update)) => {
                             log::info!("새 업데이트 발견: v{}", update.version);
-                            match update.download_and_install(|_, _| {}, || {}).await {
-                                Ok(_) => {
-                                    log::info!("업데이트 설치 완료, 앱 재시작");
-                                    app_handle_update.restart();
+                            let version = update.version.clone();
+                            let (tx, rx) = tokio::sync::oneshot::channel::<bool>();
+                            app_handle_update
+                                .dialog()
+                                .message(format!(
+                                    "새로운 버전 v{}이 있습니다. 지금 설치하고 재시작하시겠습니까?",
+                                    version
+                                ))
+                                .title("업데이트 가능")
+                                .buttons(MessageDialogButtons::OkCancelCustom(
+                                    "설치 및 재시작".into(),
+                                    "나중에".into(),
+                                ))
+                                .show(move |confirmed| {
+                                    let _ = tx.send(confirmed);
+                                });
+                            if rx.await.unwrap_or(false) {
+                                if let Err(e) =
+                                    update.download_and_install(|_, _| {}, || {}).await
+                                {
+                                    log::error!("업데이트 설치 실패: {}", e);
                                 }
-                                Err(e) => log::error!("업데이트 설치 실패: {}", e),
+                                // 성공 시 플랫폼이 자동으로 앱 재시작/설치 진행
                             }
                         }
                         Ok(None) => log::info!("최신 버전입니다"),

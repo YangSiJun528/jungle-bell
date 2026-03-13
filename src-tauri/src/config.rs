@@ -42,9 +42,16 @@ impl Config {
     pub fn load() -> Self {
         if let Some(path) = config_path() {
             if let Ok(data) = std::fs::read_to_string(&path) {
-                if let Ok(config) = serde_json::from_str::<Config>(&data) {
-                    return config;
+                match serde_json::from_str::<Config>(&data) {
+                    Ok(config) => return config,
+                    Err(e) => log::warn!(
+                        "설정 파일({}) 파싱 실패: {}. 기본 설정을 사용합니다.",
+                        path.display(),
+                        e
+                    ),
                 }
+            } else if path.exists() {
+                log::warn!("설정 파일({}) 읽기 실패. 기본 설정을 사용합니다.", path.display());
             }
         }
         Self::default()
@@ -54,10 +61,18 @@ impl Config {
     pub fn save(&self) {
         if let Some(path) = config_path() {
             if let Some(parent) = path.parent() {
-                let _ = std::fs::create_dir_all(parent);
+                if let Err(e) = std::fs::create_dir_all(parent) {
+                    log::error!("설정 디렉토리({}) 생성 실패: {}", parent.display(), e);
+                    return;
+                }
             }
-            if let Ok(data) = serde_json::to_string_pretty(self) {
-                let _ = std::fs::write(path, data);
+            match serde_json::to_string_pretty(self) {
+                Ok(data) => {
+                    if let Err(e) = std::fs::write(&path, data) {
+                        log::error!("설정 파일({}) 저장 실패: {}", path.display(), e);
+                    }
+                }
+                Err(e) => log::error!("설정 직렬화 실패: {}", e),
             }
         }
     }
