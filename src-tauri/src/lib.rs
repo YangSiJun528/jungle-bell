@@ -35,12 +35,6 @@ pub fn run() {
                 .level(log::LevelFilter::Info)
                 .max_file_size(MAX_LOG_FILE_SIZE)
                 .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepOne)
-                .target(tauri_plugin_log::Target::new(
-                    tauri_plugin_log::TargetKind::Stdout,
-                ))
-                .target(tauri_plugin_log::Target::new(
-                    tauri_plugin_log::TargetKind::LogDir { file_name: None },
-                ))
                 .build(),
         )
         // opener 플러그인: 시스템 브라우저로 URL 열기 (설정 페이지에서 사용)
