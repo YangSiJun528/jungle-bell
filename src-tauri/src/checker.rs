@@ -12,6 +12,7 @@ use serde::Deserialize;
 use tauri::Emitter;
 use tokio::sync::Mutex;
 
+use tauri_plugin_autostart::ManagerExt as AutostartManagerExt;
 use tauri_plugin_updater::UpdaterExt;
 
 use crate::state::{self, AppState};
@@ -130,6 +131,24 @@ pub async fn set_auto_update(
 #[tauri::command]
 pub fn get_app_version(app: tauri::AppHandle) -> String {
     app.package_info().version.to_string()
+}
+
+/// Tauri 커맨드: 자동 시작 설정 조회.
+#[tauri::command]
+pub fn get_auto_start(app: tauri::AppHandle) -> Result<bool, String> {
+    app.autolaunch().is_enabled().map_err(|e| e.to_string())
+}
+
+/// Tauri 커맨드: 자동 시작 설정 변경.
+#[tauri::command]
+pub fn set_auto_start(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
+    log::info!("자동 시작 설정 변경: {}", enabled);
+    let autolaunch = app.autolaunch();
+    if enabled {
+        autolaunch.enable().map_err(|e| e.to_string())
+    } else {
+        autolaunch.disable().map_err(|e| e.to_string())
+    }
 }
 
 /// Tauri 커맨드: 업데이트 확인 후 결과를 시스템 다이얼로그로 표시.

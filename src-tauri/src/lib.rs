@@ -43,6 +43,11 @@ pub fn run() {
                 ))
                 .build(),
         )
+        // autostart 플러그인: 시스템 시작 시 앱 자동 실행 (macOS: LaunchAgent)
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         // opener 플러그인: 시스템 브라우저로 URL 열기 (설정 페이지에서 사용)
         .plugin(tauri_plugin_opener::init())
         // updater 플러그인: 자동 업데이트 지원
@@ -58,6 +63,8 @@ pub fn run() {
             checker::set_auto_update,
             checker::get_app_version,
             checker::check_and_notify_update,
+            checker::get_auto_start,
+            checker::set_auto_start,
         ])
         // setup(): 앱 초기화 후 이벤트 루프 시작 전에 한 번 실행.
         .setup(move |app| {
