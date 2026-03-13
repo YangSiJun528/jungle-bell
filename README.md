@@ -39,7 +39,7 @@
 
 ## 설치
 
-[Releases](https://github.com/YangSiJun528/jungle-bell/releases) 페이지에서 운영체제에 맞는 파일을 다운로드하세요.
+[Releases](https://github.com/YangSiJun528/jungle-bell/releases) 페이지에서 macOS 또는 Windows용 파일을 다운로드하세요.
 
 | 파일명 | 대상 |
 |--------|------|
