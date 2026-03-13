@@ -39,7 +39,7 @@ cargo tauri build
 # 결과물 위치:
 # macOS: src-tauri/target/release/bundle/dmg/*.dmg
 #        src-tauri/target/release/bundle/macos/*.app
-# Windows: src-tauri/target/release/bundle/msi/*.msi
+# Windows: src-tauri/target/release/bundle/nsis/*-setup.exe
 ```
 
 ---

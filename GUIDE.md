@@ -291,7 +291,7 @@ jungle-bell/
 
 ### 10.1 빌드
 
-- Tauri v2 CLI로 macOS (.dmg) 및 Windows (.msi 또는 .exe) 빌드.
+- Tauri v2 CLI로 macOS (.dmg) 및 Windows (.exe) 빌드.
 - CI: GitHub Actions에서 크로스 플랫폼 빌드.
 
 ### 10.2 업데이트
