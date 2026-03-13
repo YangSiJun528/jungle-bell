@@ -1,6 +1,6 @@
 [package]
 name = "jungle-bell"
-version = "0.0.3-beta.6"
+version = "0.0.3-beta.7"
 description = "Krafton Jungle attendance check reminder"
 authors = ["sijun-yang"]
 edition = "2021"
@@ -26,3 +26,6 @@ tokio = { version = "1", features = ["time", "sync"] }
 dirs = "6"
 log = "0.4"
 tauri-plugin-log = "2"
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-updater = "2"
