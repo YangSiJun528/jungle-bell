@@ -12,6 +12,9 @@ use tauri::Manager;
 use config::Config;
 use state::AppState;
 
+/// 로그 파일 최대 크기 (500 KB). 초과 시 이전 파일 삭제 후 새 파일 시작.
+const MAX_LOG_FILE_SIZE: u128 = 500_000;
+
 /// 앱 진입점.
 ///
 /// Tauri 앱은 기본적으로 보이는 창이 없음 (tauri.conf.json에서 설정).
@@ -32,7 +35,7 @@ pub fn run() {
                     tauri_plugin_log::EnvFilter::try_from_default_env()
                         .unwrap_or_else(|_| tauri_plugin_log::EnvFilter::new("info")),
                 )
-                .max_file_size(500_000)
+                .max_file_size(MAX_LOG_FILE_SIZE)
                 .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepOne)
                 .target(tauri_plugin_log::Target::new(
                     tauri_plugin_log::TargetKind::Stdout,
