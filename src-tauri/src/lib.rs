@@ -68,6 +68,21 @@ pub fn run() {
         ])
         // setup(): 앱 초기화 후 이벤트 루프 시작 전에 한 번 실행.
         .setup(move |app| {
+            // 자동 시작: Config 값을 기준으로 OS 상태를 동기화.
+            // 기본값이 true이므로 첫 설치 시 자동으로 등록됨.
+            {
+                use tauri_plugin_autostart::ManagerExt as AutostartManagerExt;
+                let auto_start = shared_state.try_lock().map(|s| s.config.auto_start).unwrap_or(true);
+                let autolaunch = app.autolaunch();
+                if auto_start {
+                    if let Err(e) = autolaunch.enable() {
+                        log::warn!("자동 시작 등록 실패: {}", e);
+                    }
+                } else if let Err(e) = autolaunch.disable() {
+                    log::warn!("자동 시작 해제 실패: {}", e);
+                }
+            }
+
             tray::setup_tray(app)?;
 
             // 숨겨진 WebView로 LMS 출석 페이지를 로드.

@@ -135,20 +135,28 @@ pub fn get_app_version(app: tauri::AppHandle) -> String {
 
 /// Tauri 커맨드: 자동 시작 설정 조회.
 #[tauri::command]
-pub fn get_auto_start(app: tauri::AppHandle) -> Result<bool, String> {
-    app.autolaunch().is_enabled().map_err(|e| e.to_string())
+pub async fn get_auto_start(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<bool, String> {
+    Ok(state.lock().await.config.auto_start)
 }
 
-/// Tauri 커맨드: 자동 시작 설정 변경.
+/// Tauri 커맨드: 자동 시작 설정 변경 및 저장.
 #[tauri::command]
-pub fn set_auto_start(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
+pub async fn set_auto_start(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    enabled: bool,
+) -> Result<(), String> {
     log::info!("자동 시작 설정 변경: {}", enabled);
     let autolaunch = app.autolaunch();
     if enabled {
-        autolaunch.enable().map_err(|e| e.to_string())
+        autolaunch.enable().map_err(|e| e.to_string())?;
     } else {
-        autolaunch.disable().map_err(|e| e.to_string())
+        autolaunch.disable().map_err(|e| e.to_string())?;
     }
+    let mut s = state.lock().await;
+    s.config.auto_start = enabled;
+    s.config.save();
+    Ok(())
 }
 
 /// Tauri 커맨드: 업데이트 확인 후 결과를 시스템 다이얼로그로 표시.
