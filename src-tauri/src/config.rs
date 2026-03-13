@@ -1,4 +1,8 @@
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
+
 /// 시각 값 (시 + 분). 스케줄 경계 설정에 사용.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TimeOfDay {
     pub hour: u32,
     pub minute: u32,
@@ -10,6 +14,7 @@ pub struct TimeOfDay {
 ///   morning_start ~ morning_end  : 학습 시작(체크인) 목표 시간  (04:00 ~ 10:00)
 ///   morning_end   ~ evening_start: 학습 중, 액션 없음          (10:00 ~ 23:00)
 ///   evening_start ~ evening_end  : 학습 종료(체크아웃) 시간     (23:00 ~ 04:00)
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     /// 하루 시작 / 체크인 가능 시작 (기본 04:00)
     pub morning_start: TimeOfDay,
@@ -19,16 +24,53 @@ pub struct Config {
     pub evening_start: TimeOfDay,
     /// 체크아웃 마감 / 하루 끝 (기본 다음 날 04:00)
     pub evening_end: TimeOfDay,
+    /// 앱 시작 시 자동 업데이트 확인 여부 (기본 true)
+    #[serde(default = "default_true")]
+    pub auto_update: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn config_path() -> Option<PathBuf> {
+    dirs::config_dir().map(|p| p.join("jungle-bell").join("config.json"))
 }
 
 impl Config {
-    /// 설정 로드. 현재는 하드코딩, 추후 파일 기반으로 변경 예정.
+    /// 설정 로드. 파일이 없거나 파싱 실패 시 기본값 사용.
     pub fn load() -> Self {
+        if let Some(path) = config_path() {
+            if let Ok(data) = std::fs::read_to_string(&path) {
+                if let Ok(config) = serde_json::from_str::<Config>(&data) {
+                    return config;
+                }
+            }
+        }
+        Self::default()
+    }
+
+    /// 설정을 파일에 저장.
+    pub fn save(&self) {
+        if let Some(path) = config_path() {
+            if let Some(parent) = path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            if let Ok(data) = serde_json::to_string_pretty(self) {
+                let _ = std::fs::write(path, data);
+            }
+        }
+    }
+}
+
+impl Default for Config {
+    fn default() -> Self {
         Self {
             morning_start: TimeOfDay { hour: 4, minute: 0 },
             morning_end: TimeOfDay { hour: 10, minute: 0 },
             evening_start: TimeOfDay { hour: 23, minute: 0 },
             evening_end: TimeOfDay { hour: 4, minute: 0 },
+            auto_update: true,
         }
     }
 }
