@@ -43,6 +43,11 @@ pub fn run() {
                 ))
                 .build(),
         )
+        // autostart 플러그인: 시스템 시작 시 앱 자동 실행 (macOS: LaunchAgent)
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         // opener 플러그인: 시스템 브라우저로 URL 열기 (설정 페이지에서 사용)
         .plugin(tauri_plugin_opener::init())
         // updater 플러그인: 자동 업데이트 지원
@@ -58,9 +63,26 @@ pub fn run() {
             checker::set_auto_update,
             checker::get_app_version,
             checker::check_and_notify_update,
+            checker::get_auto_start,
+            checker::set_auto_start,
         ])
         // setup(): 앱 초기화 후 이벤트 루프 시작 전에 한 번 실행.
         .setup(move |app| {
+            // 자동 시작: Config 값을 기준으로 OS 상태를 동기화.
+            // 기본값이 true이므로 첫 설치 시 자동으로 등록됨.
+            {
+                use tauri_plugin_autostart::ManagerExt as AutostartManagerExt;
+                let auto_start = shared_state.try_lock().map(|s| s.config.auto_start).unwrap_or(true);
+                let autolaunch = app.autolaunch();
+                if auto_start {
+                    if let Err(e) = autolaunch.enable() {
+                        log::warn!("자동 시작 등록 실패: {}", e);
+                    }
+                } else if let Err(e) = autolaunch.disable() {
+                    log::warn!("자동 시작 해제 실패: {}", e);
+                }
+            }
+
             tray::setup_tray(app)?;
 
             // 숨겨진 WebView로 LMS 출석 페이지를 로드.

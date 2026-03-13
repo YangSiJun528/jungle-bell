@@ -19,6 +19,15 @@
     <tr><th>학습 시작</th><td>04:00 ~ 10:00</td></tr>
     <tr><th>학습 종료</th><td>23:00 ~ 04:00</td></tr>
     <tr>
+      <th>자동 시작</th>
+      <td>
+        <label class="toggle">
+          <input type="checkbox" id="auto-start-toggle" />
+          <span class="toggle-slider"></span>
+        </label>
+      </td>
+    </tr>
+    <tr>
       <th>자동 업데이트</th>
       <td>
         <label class="toggle">
@@ -38,6 +47,17 @@
     window.addEventListener('DOMContentLoaded', async () => {
       try {
         document.getElementById('app-version').textContent = 'v' + await invoke('get_app_version');
+
+        const autoStartToggle = document.getElementById('auto-start-toggle');
+        autoStartToggle.checked = await invoke('get_auto_start');
+        autoStartToggle.addEventListener('change', async () => {
+          try {
+            await invoke('set_auto_start', { enabled: autoStartToggle.checked });
+          } catch (e) {
+            console.error(e);
+            autoStartToggle.checked = !autoStartToggle.checked;
+          }
+        });
 
         const toggle = document.getElementById('auto-update-toggle');
         toggle.checked = await invoke('get_auto_update');

@@ -27,6 +27,9 @@ pub struct Config {
     /// 앱 시작 시 자동 업데이트 확인 여부 (기본 true)
     #[serde(default = "default_true")]
     pub auto_update: bool,
+    /// 시스템 시작 시 앱 자동 실행 여부 (기본 true)
+    #[serde(default = "default_true")]
+    pub auto_start: bool,
 }
 
 fn default_true() -> bool {
@@ -86,6 +89,7 @@ impl Default for Config {
             evening_start: TimeOfDay { hour: 23, minute: 0 },
             evening_end: TimeOfDay { hour: 4, minute: 0 },
             auto_update: true,
+            auto_start: true,
         }
     }
 }
