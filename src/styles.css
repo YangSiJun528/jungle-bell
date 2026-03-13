@@ -19,6 +19,16 @@ th, td { padding: 4px 0; }
 th { text-align: left; font-weight: 500; color: #555; }
 td { text-align: right; color: #444; }
 
+.toggle { position: relative; display: inline-block; width: 36px; height: 20px; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: #ccc; border-radius: 20px; transition: .2s; }
+.toggle-slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 2px; bottom: 2px; background: white; border-radius: 50%; transition: .2s; }
+input:checked + .toggle-slider { background: #34c759; }
+input:checked + .toggle-slider:before { transform: translateX(16px); }
+
+.link-btn { background: none; border: none; color: #007aff; font-size: inherit; cursor: pointer; padding: 0; }
+.link-btn:hover { text-decoration: underline; }
+
 footer { text-align: center; font-size: 0.75rem; color: #999; margin-top: 16px; }
 footer a { color: #007aff; text-decoration: none; }
 footer a:hover { text-decoration: underline; }

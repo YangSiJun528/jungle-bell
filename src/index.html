@@ -10,7 +10,7 @@
   <div class="header">
     <img src="assets/logo.png" alt="Jungle Bell" class="logo" />
     <div>
-      <h1>Jungle Bell <small>v0.0.1</small></h1> <!-- TODO: 앱 config의 현재버전 불러오기, 스타일 개선하기 -->
+      <h1>Jungle Bell <small id="app-version"></small></h1>
       <p>크래프톤 정글 출석 체크 리마인더</p>
     </div>
   </div>
@@ -18,7 +18,41 @@
   <table>
     <tr><th>학습 시작</th><td>04:00 ~ 10:00</td></tr>
     <tr><th>학습 종료</th><td>23:00 ~ 04:00</td></tr>
+    <tr>
+      <th>자동 업데이트</th>
+      <td>
+        <label class="toggle">
+          <input type="checkbox" id="auto-update-toggle" />
+          <span class="toggle-slider"></span>
+        </label>
+      </td>
+    </tr>
+    <tr>
+      <th></th>
+      <td><button id="check-update-btn" class="link-btn">업데이트 확인</button></td>
+    </tr>
   </table>
+
+  <script>
+    const { invoke } = window.__TAURI__.core;
+    window.addEventListener('DOMContentLoaded', async () => {
+      try {
+        document.getElementById('app-version').textContent = 'v' + await invoke('get_app_version');
+
+        const toggle = document.getElementById('auto-update-toggle');
+        toggle.checked = await invoke('get_auto_update');
+        toggle.addEventListener('change', () => {
+          invoke('set_auto_update', { enabled: toggle.checked }).catch(console.error);
+        });
+
+        document.getElementById('check-update-btn').addEventListener('click', () => {
+          invoke('check_and_notify_update').catch(console.error);
+        });
+      } catch (e) {
+        console.error('초기화 중 오류 발생:', e);
+      }
+    });
+  </script>
 
   <footer>
     <a href="https://github.com/YangSiJun528/jungle-bell" target="_blank" rel="noopener noreferrer">GitHub</a>

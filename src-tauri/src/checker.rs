@@ -12,6 +12,8 @@ use serde::Deserialize;
 use tauri::Emitter;
 use tokio::sync::Mutex;
 
+use tauri_plugin_updater::UpdaterExt;
+
 use crate::state::{self, AppState};
 use crate::tray;
 
@@ -101,6 +103,92 @@ pub async fn report_attendance_status(
     let (phase, remaining) = state::compute_daily_phase(&s.config, now, s.morning_checked, s.evening_checked);
     s.phase = phase;
     tray::update_tray(&app, phase, remaining, s.needs_login);
+
+    Ok(())
+}
+
+/// Tauri 커맨드: 자동 업데이트 설정 조회.
+#[tauri::command]
+pub async fn get_auto_update(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<bool, String> {
+    Ok(state.lock().await.config.auto_update)
+}
+
+/// Tauri 커맨드: 자동 업데이트 설정 변경 및 저장.
+#[tauri::command]
+pub async fn set_auto_update(
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    enabled: bool,
+) -> Result<(), String> {
+    log::info!("자동 업데이트 설정 변경: {}", enabled);
+    let mut s = state.lock().await;
+    s.config.auto_update = enabled;
+    s.config.save();
+    Ok(())
+}
+
+/// Tauri 커맨드: 현재 앱 버전 반환.
+#[tauri::command]
+pub fn get_app_version(app: tauri::AppHandle) -> String {
+    app.package_info().version.to_string()
+}
+
+/// Tauri 커맨드: 업데이트 확인 후 결과를 시스템 다이얼로그로 표시.
+/// 업데이트가 있으면 확인/취소 다이얼로그를 띄우고, 확인 시 설치.
+/// download_and_install 성공 시 플랫폼이 자동으로 재시작/설치 진행하므로 app.restart() 불필요.
+#[tauri::command]
+pub async fn check_and_notify_update(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
+
+    log::info!("업데이트 확인 요청");
+    let updater = app.updater().map_err(|e| e.to_string())?;
+    let check_result = updater.check().await;
+
+    tauri::async_runtime::spawn(async move {
+        match check_result {
+            Ok(Some(update)) => {
+                log::info!("새 업데이트 발견: v{}", update.version);
+                let version = update.version.clone();
+                let (tx, rx) = tokio::sync::oneshot::channel::<bool>();
+                app.dialog()
+                    .message(format!(
+                        "새로운 버전 v{}이 있습니다. 지금 설치하고 재시작하시겠습니까?",
+                        version
+                    ))
+                    .title("업데이트 가능")
+                    .buttons(MessageDialogButtons::OkCancelCustom(
+                        "설치 및 재시작".into(),
+                        "나중에".into(),
+                    ))
+                    .show(move |confirmed| {
+                        let _ = tx.send(confirmed);
+                    });
+                if rx.await.unwrap_or(false) {
+                    if let Err(e) = update.download_and_install(|_, _| {}, || {}).await {
+                        log::error!("업데이트 설치 실패: {}", e);
+                        app.dialog()
+                            .message(format!("업데이트 설치에 실패했습니다: {}", e))
+                            .title("업데이트 오류")
+                            .show(|_| {});
+                    }
+                    // 성공 시 플랫폼이 자동으로 앱 재시작/설치 진행
+                }
+            }
+            Ok(None) => {
+                log::info!("최신 버전입니다");
+                app.dialog()
+                    .message("현재 최신 버전입니다.")
+                    .title("업데이트 확인")
+                    .show(|_| {});
+            }
+            Err(e) => {
+                log::debug!("업데이트 확인 실패: {}", e);
+                app.dialog()
+                    .message(format!("업데이트 확인에 실패했습니다.\n{}", e))
+                    .title("업데이트 확인")
+                    .show(|_| {});
+            }
+        }
+    });
 
     Ok(())
 }
