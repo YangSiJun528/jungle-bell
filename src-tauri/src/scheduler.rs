@@ -1,12 +1,13 @@
 //! 스케줄러 모듈 — 앱의 주기적 로직을 구동하는 백그라운드 루프.
 //!
 //! tokio 태스크로 실행되며, 적응형 간격으로 틱:
-//!   - 2초: 첫 체커 보고 대기 중
-//!   - 10초: 사용자 액션 필요 시 (NeedStart, StartOverdue, NeedEnd)
-//!   - 120초: 대기 중 (Studying, Complete, Idle)
+//!   - 5초: 첫 체커 보고 대기 중
+//!   - 60초: 사용자 액션 필요 시 (NeedStart, StartOverdue, NeedEnd)
+//!   - 300초: 대기 중 (Studying, Complete, Idle)
 //!
 //! 매 틱마다: 날짜 변경 시 일일 리셋, 상태 계산, 트레이 갱신,
 //! 체커 WebView 주기적 리로드를 수행.
+//! API 기반 조회를 사용하므로 DOM 의존성 없이 안정적으로 동작.
 
 use std::sync::Arc;
 
@@ -22,15 +23,13 @@ use crate::checker;
 use crate::state::{self, kst, AppState, DailyPhase};
 use crate::tray;
 
-/// 액션 필요 시 틱 간격 (초)
-const TICK_INTERVAL_ACTIVE: u64 = 10;
-/// 대기 시 틱 간격 (초)
-const TICK_INTERVAL_IDLE: u64 = 120;
+/// 액션 필요 시 틱 간격 (초). API 호출 빈도를 줄이기 위해 60초.
+const TICK_INTERVAL_ACTIVE: u64 = 60;
+/// 대기 시 틱 간격 (초). 5분 간격으로 상태 확인.
+const TICK_INTERVAL_IDLE: u64 = 300;
 
-/// 체커 WebView 리로드 간격 (틱 단위, 초가 아님).
-/// 일반: 15틱 * 120초 = ~30분. 로그인 필요: 3틱 * 10초 = ~30초.
-const RELOAD_TICKS_NORMAL: u32 = 15;
-const RELOAD_TICKS_LOGIN: u32 = 3;
+/// 체커 WebView 리로드 간격 (초). 세션/토큰 갱신 목적.
+const RELOAD_INTERVAL_NORMAL: u64 = 15 * 60; // 15분
 
 /// 백그라운드 스케줄러 루프 시작.
 pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<AppState>>) {
@@ -153,27 +152,48 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
                 }
 
                 // --- 체커 WebView 주기적 리로드 ---
-                // 체커 WebView가 오래되면 세션 만료나 SPA 상태 드리프트 발생 가능.
-                // 주기적으로 출석 페이지로 다시 이동시킴.
-                s.tick_count += 1;
-                let reload_threshold = if s.needs_login {
-                    RELOAD_TICKS_LOGIN
-                } else {
-                    RELOAD_TICKS_NORMAL
-                };
-                if s.tick_count >= reload_threshold {
-                    s.tick_count = 0;
-                    if let Some(checker) = app_handle.get_webview_window("checker") {
-                        debug!("reloading checker webview");
-                        let _ = checker.navigate("https://jungle-lms.krafton.com/check-in".parse().unwrap());
+                // API 호출은 WebView 쿠키를 사용하므로 세션/토큰 갱신을 위해
+                // 주기적으로 출석 페이지로 다시 이동시킴 (15분 간격).
+                // 로그인 필요 시에는 리로드하지 않음 (출석 페이지 닫힘 시에만 리로드).
+                if !s.needs_login {
+                    let now = Instant::now();
+                    let should_reload = match s.last_reload {
+                        Some(last) => now.duration_since(last) >= std::time::Duration::from_secs(RELOAD_INTERVAL_NORMAL),
+                        None => {
+                            s.last_reload = Some(now);
+                            false
+                        }
+                    };
+                    if should_reload {
+                        s.last_reload = Some(now);
+                        if let Some(checker) = app_handle.get_webview_window("checker") {
+                            debug!("reloading checker webview");
+                            let _ = checker.navigate("https://jungle-lms.krafton.com/check-in".parse().unwrap());
+                        }
+                    }
+                }
+
+                // --- 로그인 재시도 윈도우 만료 확인 ---
+                if let Some(until) = s.login_retry_until {
+                    if Instant::now() >= until {
+                        s.login_retry_until = None;
+                        debug!("login retry window expired");
                     }
                 }
 
                 // --- 적응형 틱 간격 ---
-                // 액션 필요 시 빠르게, 대기 시 느리게.
-                // 상태 전환 시점이 임박하면 그 시점에 맞춰 깨어남.
+                // 로그인 필요 시: 출석 페이지 열림 또는 재시도 윈도우 활성이면 빠르게 폴링,
+                // 그 외에는 불필요한 요청을 보내지 않음.
+                // 액션 필요 시 60초, 대기 시 300초.
+                let attendance_open = app_handle.get_webview_window("attendance").is_some();
                 let base_interval = if !s.data_loaded {
-                    2 // 첫 체커 보고까지 빠르게 폴링
+                    5 // 첫 체커 보고까지 빠르게 폴링
+                } else if s.needs_login {
+                    if attendance_open || s.login_retry_until.is_some() {
+                        10 // 출석 페이지 열림 또는 재시도 윈도우 활성: 빠르게 확인
+                    } else {
+                        600 // 로그인 필요하지만 재시도 없음: 대기
+                    }
                 } else {
                     match s.phase {
                         DailyPhase::NeedStart | DailyPhase::StartOverdue | DailyPhase::NeedEnd => TICK_INTERVAL_ACTIVE,

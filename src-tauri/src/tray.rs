@@ -8,7 +8,7 @@
 use std::sync::Arc;
 use tokio::sync::Mutex as TokioMutex;
 
-use crate::state::DailyPhase;
+use crate::state::{AppState, DailyPhase};
 use tauri::{
     image::Image,
     menu::{MenuBuilder, MenuItem, MenuItemBuilder},
@@ -149,14 +149,23 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                     .focused(true)
                     .build()
                     {
-                        // 출석 창이 닫히면 체커를 리로드해서
-                        // 사용자가 LMS에서 한 변경사항을 반영.
+                        // 출석 창이 닫히면 체커를 리로드하고
+                        // 로그인 재시도 윈도우를 활성화 (3분간 로그인 상태 재확인).
                         window.on_window_event(move |event| {
                             if let tauri::WindowEvent::Destroyed = event {
-                                log::info!("attendance page closed, reloading checker");
+                                log::info!("attendance page closed, reloading checker + activating login retry");
                                 if let Some(checker) = app_handle.get_webview_window("checker") {
                                     let _ =
                                         checker.navigate("https://jungle-lms.krafton.com/check-in".parse().unwrap());
+                                }
+                                // 로그인 재시도 윈도우: 3분간 활성
+                                {
+                                    let state: tauri::State<Arc<TokioMutex<AppState>>> = app_handle.state();
+                                    if let Ok(mut s) = state.try_lock() {
+                                        s.login_retry_until = Some(
+                                            tokio::time::Instant::now() + std::time::Duration::from_secs(LOGIN_RETRY_WINDOW_SECS)
+                                        );
+                                    };
                                 }
                             }
                         });
