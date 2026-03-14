@@ -62,28 +62,36 @@
       <tr class="notif-field">
         <th>시작 출석</th>
         <td>
-          <select id="notification-start-select">
-            <option value="4">04:00</option>
-            <option value="5">05:00</option>
-            <option value="6">06:00</option>
-            <option value="7">07:00</option>
-            <option value="8">08:00</option>
-            <option value="9">09:00</option>
-            <option value="10">10:00</option>
-          </select>
+          <span class="time-range">
+            <select id="notification-start-select">
+              <option value="4">04:00</option>
+              <option value="5">05:00</option>
+              <option value="6">06:00</option>
+              <option value="7">07:00</option>
+              <option value="8">08:00</option>
+              <option value="9">09:00</option>
+              <option value="10">10:00</option>
+            </select>
+            <span class="time-hint time-separator">~</span>
+            <span class="time-hint">10:00</span>
+          </span>
         </td>
       </tr>
       <tr class="notif-field">
         <th>종료 출석</th>
         <td>
-          <select id="notification-end-select">
-            <option value="23">23:00</option>
-            <option value="0">00:00</option>
-            <option value="1">01:00</option>
-            <option value="2">02:00</option>
-            <option value="3">03:00</option>
-            <option value="4">04:00</option>
-          </select>
+          <span class="time-range">
+            <span class="time-hint">23:00</span>
+            <span class="time-hint time-separator">~</span>
+            <select id="notification-end-select">
+              <option value="23">23:00</option>
+              <option value="0">00:00</option>
+              <option value="1">01:00</option>
+              <option value="2">02:00</option>
+              <option value="3">03:00</option>
+              <option value="4">04:00</option>
+            </select>
+          </span>
         </td>
       </tr>
       <tr class="notif-field">
