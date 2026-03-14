@@ -100,3 +100,10 @@ xattr -cr "/Applications/Jungle Bell.app"
 ## 라이선스
 
 [Apache License 2.0](LICENSE)
+
+## 문의 시 함께 보내 주세요
+
+버그 이슈나 사용 중 문의를 남길 때 로그 파일을 함께 보내주시면 문제 해결에 도움이 됩니다.
+
+- macOS: `~/Library/Logs/dev.sijun-yang.jungle-bell/`
+- Windows: `%APPDATA%\dev.sijun-yang.jungle-bell\logs\`
