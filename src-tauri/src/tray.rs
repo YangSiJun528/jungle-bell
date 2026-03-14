@@ -18,6 +18,9 @@ use tauri::{
 
 const ATTENDANCE_URL: &str = "https://jungle-lms.krafton.com/check-in";
 
+/// 출석 페이지 닫힌 후 로그인 재시도 윈도우 (초). 3분간 빠르게 재확인.
+const LOGIN_RETRY_WINDOW_SECS: u64 = 180;
+
 // 트레이 아이콘 — 컴파일 시 include_bytes!로 바이너리에 포함
 const ICON_DEFAULT: &[u8] = include_bytes!("../icons/tray-white.png");
 const ICON_ALERT: &[u8] = include_bytes!("../icons/tray-red.png");
