@@ -123,7 +123,7 @@ pub fn run() {
 
             // 시작 시 업데이트 확인 (백그라운드). auto_update 설정이 꺼져 있으면 건너뜀.
             // 업데이트가 있으면 사용자에게 다이얼로그로 알리고 설치 여부를 선택하게 함.
-            // download_and_install 성공 시 플랫폼이 자동으로 재시작을 처리하므로 app.restart() 불필요.
+            // 시작 시 업데이트 확인 (백그라운드).
             let app_handle_update = app.handle().clone();
             let shared_state_update = shared_state.clone();
             tauri::async_runtime::spawn(async move {
@@ -154,12 +154,15 @@ pub fn run() {
                                     let _ = tx.send(confirmed);
                                 });
                             if rx.await.unwrap_or(false) {
-                                if let Err(e) =
-                                    update.download_and_install(|_, _| {}, || {}).await
-                                {
-                                    log::error!("업데이트 설치 실패: {}", e);
+                                match update.download_and_install(|_, _| {}, || {}).await {
+                                    Ok(_) => {
+                                        log::info!("업데이트 설치 완료, 앱 재시작");
+                                        app_handle_update.restart();
+                                    }
+                                    Err(e) => {
+                                        log::error!("업데이트 설치 실패: {}", e);
+                                    }
                                 }
-                                // 성공 시 플랫폼이 자동으로 앱 재시작/설치 진행
                             }
                         }
                         Ok(None) => log::info!("최신 버전입니다"),

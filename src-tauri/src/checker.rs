@@ -192,14 +192,19 @@ pub async fn check_and_notify_update(app: tauri::AppHandle) -> Result<(), String
                         let _ = tx.send(confirmed);
                     });
                 if rx.await.unwrap_or(false) {
-                    if let Err(e) = update.download_and_install(|_, _| {}, || {}).await {
-                        log::error!("업데이트 설치 실패: {}", e);
-                        app.dialog()
-                            .message(format!("업데이트 설치에 실패했습니다: {}", e))
-                            .title("업데이트 오류")
-                            .show(|_| {});
+                    match update.download_and_install(|_, _| {}, || {}).await {
+                        Ok(_) => {
+                            log::info!("업데이트 설치 완료, 앱 재시작");
+                            app.restart();
+                        }
+                        Err(e) => {
+                            log::error!("업데이트 설치 실패: {}", e);
+                            app.dialog()
+                                .message(format!("업데이트 설치에 실패했습니다: {}", e))
+                                .title("업데이트 오류")
+                                .show(|_| {});
+                        }
                     }
-                    // 성공 시 플랫폼이 자동으로 앱 재시작/설치 진행
                 }
             }
             Ok(None) => {
