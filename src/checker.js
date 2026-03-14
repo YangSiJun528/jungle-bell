@@ -116,16 +116,22 @@
     });
   }
 
+  function reportResult(result) {
+    jsLog('debug', 'result: needs_login=' + result.needs_login +
+      ' morning=' + result.morning_done +
+      ' evening=' + result.evening_done +
+      (result.api_error ? ' api_error=true' : ''));
+    window.__TAURI__.core.invoke('report_attendance_status', {
+      status: result,
+    });
+  }
+
   // Rust의 trigger-check 이벤트를 수신하면 API 조회 후 invoke로 반환
   window.__TAURI__.event.listen('trigger-check', function () {
-    checkAttendance().then(function (result) {
-      jsLog('debug', 'result: needs_login=' + result.needs_login +
-        ' morning=' + result.morning_done +
-        ' evening=' + result.evening_done +
-        (result.api_error ? ' api_error=true' : ''));
-      window.__TAURI__.core.invoke('report_attendance_status', {
-        status: result,
-      });
-    });
+    checkAttendance().then(reportResult);
   });
+
+  // 초기화 시 즉시 첫 체크 실행 — 스케줄러 이벤트 유실 방지
+  jsLog('info', 'checker.js loaded, running initial check');
+  checkAttendance().then(reportResult);
 })();
