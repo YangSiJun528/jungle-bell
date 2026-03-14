@@ -49,7 +49,7 @@ fn default_true() -> bool {
 }
 
 fn default_notification_interval() -> u32 {
-    5
+    15
 }
 
 fn default_notification_start() -> TimeOfDay {
@@ -119,7 +119,7 @@ impl Default for Config {
             auto_update: true,
             auto_start: true,
             notification_enabled: true,
-            notification_interval_mins: 5,
+            notification_interval_mins: 15,
             notification_start: TimeOfDay { hour: 9, minute: 0 },
             notification_end: TimeOfDay { hour: 1, minute: 0 },
         }
