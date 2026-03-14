@@ -42,7 +42,7 @@
     </tr>
     <tr><td colspan="2" style="height:8px"></td></tr>
     <tr>
-      <th>알림</th>
+      <th>출석 알림</th>
       <td>
         <label class="toggle">
           <input type="checkbox" id="notification-toggle" />
@@ -51,15 +51,30 @@
       </td>
     </tr>
     <tr>
-      <th>시작 시간</th>
+      <th>시작 출석</th>
       <td>
-        <select id="notification-start-select"></select>
+        <select id="notification-start-select">
+          <option value="4">04:00</option>
+          <option value="5">05:00</option>
+          <option value="6">06:00</option>
+          <option value="7">07:00</option>
+          <option value="8">08:00</option>
+          <option value="9">09:00</option>
+          <option value="10">10:00</option>
+        </select>
       </td>
     </tr>
     <tr>
-      <th>종료 시간</th>
+      <th>종료 출석</th>
       <td>
-        <select id="notification-end-select"></select>
+        <select id="notification-end-select">
+          <option value="23">23:00</option>
+          <option value="0">00:00</option>
+          <option value="1">01:00</option>
+          <option value="2">02:00</option>
+          <option value="3">03:00</option>
+          <option value="4">04:00</option>
+        </select>
       </td>
     </tr>
     <tr>
@@ -111,21 +126,7 @@
           invoke('set_notification_enabled', { enabled: notifToggle.checked }).catch(console.error);
         });
 
-        // fromHour~toHour 범위의 시간 옵션 생성 (자정 넘김 지원)
-        function populateHourSelect(selectEl, fromHour, toHour) {
-          let h = fromHour;
-          while (true) {
-            const opt = document.createElement('option');
-            opt.value = h;
-            opt.textContent = String(h).padStart(2, '0') + ':00';
-            selectEl.appendChild(opt);
-            if (h === toHour) break;
-            h = (h + 1) % 24;
-          }
-        }
-
         const notifStartSelect = document.getElementById('notification-start-select');
-        populateHourSelect(notifStartSelect, 4, 10);
         const notifStart = await invoke('get_notification_start');
         notifStartSelect.value = notifStart.hour;
         notifStartSelect.addEventListener('change', () => {
@@ -133,7 +134,6 @@
         });
 
         const notifEndSelect = document.getElementById('notification-end-select');
-        populateHourSelect(notifEndSelect, 23, 4);
         const notifEnd = await invoke('get_notification_end');
         notifEndSelect.value = notifEnd.hour;
         notifEndSelect.addEventListener('change', () => {
