@@ -65,6 +65,17 @@ pub fn trigger_check(app: &tauri::AppHandle) {
     );
 }
 
+/// Tauri 커맨드: JS에서 Rust 로그 시스템으로 메시지 전달.
+#[tauri::command]
+pub fn log_from_js(level: String, message: String) {
+    match level.as_str() {
+        "error" => log::error!("[checker:js] {}", message),
+        "warn" => log::warn!("[checker:js] {}", message),
+        "debug" => log::debug!("[checker:js] {}", message),
+        _ => log::info!("[checker:js] {}", message),
+    }
+}
+
 /// Tauri 커맨드: API 조회 결과를 수신.
 /// `trigger_check()`가 이벤트를 보내면, JS가 이 커맨드를 invoke로 호출한다.
 #[tauri::command]

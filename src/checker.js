@@ -5,6 +5,10 @@
 (function () {
   var cachedCohortId = null;
 
+  function jsLog(level, message) {
+    window.__TAURI__.core.invoke('log_from_js', { level: level, message: message });
+  }
+
   // /api/v2/me/cohorts에서 cohort 목록을 가져와
   // startDate가 가장 최신인 cohort의 ID를 반환.
   function fetchCohortId() {
@@ -13,8 +17,14 @@
       headers: { accept: 'application/json' },
     })
       .then(function (res) {
-        if (res.status === 401) return null;
-        if (!res.ok) return null;
+        if (res.status === 401) {
+          jsLog('info', 'fetchCohortId: status=401 (login required)');
+          return null;
+        }
+        if (!res.ok) {
+          jsLog('warn', 'fetchCohortId: status=' + res.status);
+          return null;
+        }
         return res.json();
       })
       .then(function (cohorts) {
@@ -23,9 +33,12 @@
         cohorts.sort(function (a, b) {
           return new Date(b.startDate) - new Date(a.startDate);
         });
-        return cohorts[0].id;
+        var id = cohorts[0].id;
+        jsLog('debug', 'fetchCohortId: ok, cohortId=' + id);
+        return id;
       })
-      .catch(function () {
+      .catch(function (e) {
+        jsLog('error', 'fetchCohortId failed: ' + (e.message || e));
         return null;
       });
   }
@@ -42,11 +55,19 @@
       }
     )
       .then(function (res) {
-        if (res.status === 401) return { needs_login: true };
-        if (!res.ok) return null;
+        if (res.status === 401) {
+          jsLog('info', 'fetchAttendance: status=401 (login required)');
+          return { needs_login: true };
+        }
+        if (!res.ok) {
+          jsLog('warn', 'fetchAttendance: status=' + res.status);
+          return null;
+        }
+        jsLog('debug', 'fetchAttendance: status=200');
         return res.json();
       })
-      .catch(function () {
+      .catch(function (e) {
+        jsLog('error', 'fetchAttendance failed: ' + (e.message || e));
         return null;
       });
   }
@@ -54,6 +75,7 @@
   function checkAttendance() {
     var currentUrl = window.location.href;
     if (currentUrl.includes('/login')) {
+      jsLog('info', 'login required (/login URL detected)');
       return Promise.resolve({
         needs_login: true,
         morning_done: false,
@@ -97,6 +119,10 @@
   // Rust의 trigger-check 이벤트를 수신하면 API 조회 후 invoke로 반환
   window.__TAURI__.event.listen('trigger-check', function () {
     checkAttendance().then(function (result) {
+      jsLog('debug', 'result: needs_login=' + result.needs_login +
+        ' morning=' + result.morning_done +
+        ' evening=' + result.evening_done +
+        (result.api_error ? ' api_error=true' : ''));
       window.__TAURI__.core.invoke('report_attendance_status', {
         status: result,
       });

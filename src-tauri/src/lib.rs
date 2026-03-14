@@ -59,6 +59,7 @@ pub fn run() {
         // JS에서 `window.__TAURI__.core.invoke()`로 호출할 수 있는 Tauri 커맨드 등록.
         .invoke_handler(tauri::generate_handler![
             checker::report_attendance_status,
+            checker::log_from_js,
             checker::get_auto_update,
             checker::set_auto_update,
             checker::get_app_version,
