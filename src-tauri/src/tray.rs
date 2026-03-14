@@ -135,6 +135,7 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .menu(&menu)
         .on_menu_event(move |app, event| match event.id().as_ref() {
             "open_page" => {
+                log::info!("[tray] attendance window opened");
                 // 기존 출석 창이 있으면 재사용, 없으면 새로 생성.
                 if let Some(window) = app.get_webview_window("attendance") {
                     let _ = window.show();
@@ -156,7 +157,7 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                         // 로그인 재시도 윈도우를 활성화 (3분간 로그인 상태 재확인).
                         window.on_window_event(move |event| {
                             if let tauri::WindowEvent::Destroyed = event {
-                                log::info!("attendance page closed, reloading checker + activating login retry");
+                                log::info!("[tray] attendance page closed, reloading checker + activating login retry");
                                 if let Some(checker) = app_handle.get_webview_window("checker") {
                                     let _ =
                                         checker.navigate("https://jungle-lms.krafton.com/check-in".parse().unwrap());
@@ -176,6 +177,7 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             "settings" => {
+                log::info!("[tray] settings window opened");
                 // 기존 설정 창이 있으면 재사용, 없으면 새로 생성.
                 // 설정 창은 src/index.html (프론트엔드)을 로드.
                 if let Some(window) = app.get_webview_window("settings") {

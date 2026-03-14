@@ -37,7 +37,7 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
         {
             let s = shared_state.lock().await;
             info!(
-                "config: day_start={:02}:{:02} start_deadline={:02}:{:02} end_open={:02}:{:02} day_end={:02}:{:02}",
+                "[scheduler] config: day_start={:02}:{:02} start_deadline={:02}:{:02} end_open={:02}:{:02} day_end={:02}:{:02}",
                 s.config.morning_start.hour,
                 s.config.morning_start.minute,
                 s.config.morning_end.hour,
@@ -62,7 +62,7 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
 
                 if let Some(last_day) = s.last_reset_day {
                     if current_day != last_day && current_hour >= s.config.morning_start.hour {
-                        info!("daily reset at KST={}", kst_now.format("%Y-%m-%d %H:%M:%S"));
+                        info!("[scheduler] daily reset at KST={}", kst_now.format("%Y-%m-%d %H:%M:%S"));
                         s.morning_checked = false;
                         s.evening_checked = false;
                         s.last_reset_day = Some(current_day);
@@ -82,7 +82,7 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
 
                     if phase_changed {
                         info!(
-                            "phase={:?} started={} ended={} remaining={:?} needs_login={}",
+                            "[scheduler] phase={:?} started={} ended={} remaining={:?} needs_login={}",
                             phase, s.morning_checked, s.evening_checked, remaining, s.needs_login,
                         );
                     }
@@ -140,7 +140,7 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
                                     .body(body)
                                     .show();
                                 s.last_notification = Some(Instant::now());
-                                info!("notification sent: phase={:?}", s.phase);
+                                info!("[scheduler] notification sent: phase={:?}", s.phase);
                             }
                         }
                     }
@@ -167,7 +167,7 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
                     if should_reload {
                         s.last_reload = Some(now);
                         if let Some(checker) = app_handle.get_webview_window("checker") {
-                            debug!("reloading checker webview");
+                            info!("[checker] webview reloaded for session refresh");
                             let _ = checker.navigate("https://jungle-lms.krafton.com/check-in".parse().unwrap());
                         }
                     }
@@ -177,7 +177,7 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
                 if let Some(until) = s.login_retry_until {
                     if Instant::now() >= until {
                         s.login_retry_until = None;
-                        debug!("login retry window expired");
+                        debug!("[scheduler] login retry window expired");
                     }
                 }
 
@@ -211,6 +211,14 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
                     base_interval
                 }
             };
+
+            {
+                let s = shared_state.lock().await;
+                debug!(
+                    "[scheduler] tick: interval={}s phase={:?} needs_login={} data_loaded={}",
+                    tick_secs, s.phase, s.needs_login, s.data_loaded,
+                );
+            }
 
             // Rust가 오케스트레이터: 매 틱마다 JS 스냅샷 수집을 트리거.
             // 결과는 report_attendance_status 커맨드를 통해 비동기로 돌아온다.

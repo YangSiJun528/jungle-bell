@@ -39,7 +39,7 @@ pub fn run() {
         )
         // single-instance 플러그인: 이미 실행 중인 인스턴스가 있으면 두 번째 실행을 차단.
         .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {
-            log::info!("다른 인스턴스 실행이 감지되어 차단되었습니다");
+            log::info!("[app] 다른 인스턴스 실행이 감지되어 차단되었습니다");
         }))
         // autostart 플러그인: 시스템 시작 시 앱 자동 실행 (macOS: LaunchAgent)
         .plugin(tauri_plugin_autostart::init(
@@ -76,6 +76,12 @@ pub fn run() {
         ])
         // setup(): 앱 초기화 후 이벤트 루프 시작 전에 한 번 실행.
         .setup(move |app| {
+            log::info!(
+                "[app] starting v{} (log_level=info, log_max_size={}KB)",
+                app.package_info().version,
+                MAX_LOG_FILE_SIZE / 1000,
+            );
+
             // 자동 시작: Config 값을 기준으로 OS 상태를 동기화.
             // 기본값이 true이므로 첫 설치 시 자동으로 등록됨.
             {
@@ -84,10 +90,10 @@ pub fn run() {
                 let autolaunch = app.autolaunch();
                 if auto_start {
                     if let Err(e) = autolaunch.enable() {
-                        log::warn!("자동 시작 등록 실패: {}", e);
+                        log::warn!("[app] 자동 시작 등록 실패: {}", e);
                     }
                 } else if let Err(e) = autolaunch.disable() {
-                    log::warn!("자동 시작 해제 실패: {}", e);
+                    log::warn!("[app] 자동 시작 해제 실패: {}", e);
                 }
             }
 
@@ -136,7 +142,7 @@ pub fn run() {
                 if let Ok(updater) = app_handle_update.updater() {
                     match updater.check().await {
                         Ok(Some(update)) => {
-                            log::info!("새 업데이트 발견: v{}", update.version);
+                            log::info!("[updater] 새 업데이트 발견: v{}", update.version);
 
                             // 릴리즈 후 30분 이내면 CI 빌드가 아직 진행 중일 수 있으므로 건너뜀
                             let is_building = update.date.map_or(false, |date| {
@@ -144,7 +150,7 @@ pub fn run() {
                                 elapsed < 30 * 60
                             });
                             if is_building {
-                                log::info!("릴리즈 후 30분 미경과, 빌드 진행 중으로 판단하여 건너뜀");
+                                log::info!("[updater] 릴리즈 후 30분 미경과, 빌드 진행 중으로 판단하여 건너뜀");
                                 return;
                             }
 
@@ -172,17 +178,17 @@ pub fn run() {
                                     .show(|_| {});
                                 match update.download_and_install(|_, _| {}, || {}).await {
                                     Ok(_) => {
-                                        log::info!("업데이트 설치 완료, 앱 재시작");
+                                        log::info!("[updater] 업데이트 설치 완료, 앱 재시작");
                                         app_handle_update.restart();
                                     }
                                     Err(e) => {
-                                        log::error!("업데이트 설치 실패: {}", e);
+                                        log::error!("[updater] 업데이트 설치 실패: {}", e);
                                     }
                                 }
                             }
                         }
-                        Ok(None) => log::info!("최신 버전입니다"),
-                        Err(e) => log::debug!("업데이트 확인 실패: {}", e),
+                        Ok(None) => log::info!("[updater] 최신 버전입니다"),
+                        Err(e) => log::debug!("[updater] 업데이트 확인 실패: {}", e),
                     }
                 }
             });

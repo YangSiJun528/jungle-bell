@@ -55,6 +55,7 @@ pub fn apply_report(state: &mut AppState, report: &AttendanceReport) {
 /// JS가 이벤트를 수신하면 API를 조회해
 /// `report_attendance_status` invoke로 반환한다.
 pub fn trigger_check(app: &tauri::AppHandle) {
+    debug!("[checker] trigger_check emitted");
     let _ = app.emit_to(
         tauri::EventTarget::WebviewWindow {
             label: "checker".into(),
@@ -74,16 +75,20 @@ pub async fn report_attendance_status(
 ) -> Result<(), String> {
     // API 오류 시 상태 갱신하지 않음
     if status.api_error {
-        debug!("API error, skipping status update");
+        info!("[checker] API error received, skipping state update");
         return Ok(());
     }
 
-    info!(
-        "report: needs_login={} morning={} evening={}",
-        status.needs_login,
-        status.morning_done,
-        status.evening_done,
-    );
+    {
+        let s = state.lock().await;
+        info!(
+            "[checker] report: needs_login={} morning={} evening={} current_phase={:?}",
+            status.needs_login,
+            status.morning_done,
+            status.evening_done,
+            s.phase,
+        );
+    }
 
     let mut s = state.lock().await;
     apply_report(&mut s, &status);
@@ -109,7 +114,7 @@ pub async fn set_auto_update(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
     enabled: bool,
 ) -> Result<(), String> {
-    log::info!("자동 업데이트 설정 변경: {}", enabled);
+    log::info!("[settings] 자동 업데이트 설정 변경: {}", enabled);
     let mut s = state.lock().await;
     s.config.auto_update = enabled;
     s.config.save();
@@ -135,7 +140,7 @@ pub async fn set_auto_start(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
     enabled: bool,
 ) -> Result<(), String> {
-    log::info!("자동 시작 설정 변경: {}", enabled);
+    log::info!("[settings] 자동 시작 설정 변경: {}", enabled);
     // 앱 설정을 먼저 저장한 후 OS 설정을 변경한다.
     // OS 변경에 실패하더라도 다음 실행 시 setup에서 Config 기준으로 재동기화된다.
     {
@@ -156,14 +161,14 @@ pub async fn set_auto_start(
 pub async fn check_and_notify_update(app: tauri::AppHandle) -> Result<(), String> {
     use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 
-    log::info!("업데이트 확인 요청");
+    log::info!("[updater] 업데이트 확인 요청");
     let updater = app.updater().map_err(|e| e.to_string())?;
     let check_result = updater.check().await;
 
     tauri::async_runtime::spawn(async move {
         match check_result {
             Ok(Some(update)) => {
-                log::info!("새 업데이트 발견: v{}", update.version);
+                log::info!("[updater] 새 업데이트 발견: v{}", update.version);
 
                 // 릴리즈 후 30분 이내면 CI 빌드가 아직 진행 중일 수 있음
                 let is_building = update.date.map_or(false, |date| {
@@ -171,7 +176,7 @@ pub async fn check_and_notify_update(app: tauri::AppHandle) -> Result<(), String
                     elapsed < 30 * 60
                 });
                 if is_building {
-                    log::info!("릴리즈 후 30분 미경과, 빌드 진행 중으로 판단");
+                    log::info!("[updater] 릴리즈 후 30분 미경과, 빌드 진행 중으로 판단");
                     app.dialog()
                         .message(format!(
                             "새로운 버전 v{}이 출시되었지만, 빌드가 진행 중입니다.\n잠시 후에 다시 시도해 주세요.",
@@ -204,11 +209,11 @@ pub async fn check_and_notify_update(app: tauri::AppHandle) -> Result<(), String
                         .show(|_| {});
                     match update.download_and_install(|_, _| {}, || {}).await {
                         Ok(_) => {
-                            log::info!("업데이트 설치 완료, 앱 재시작");
+                            log::info!("[updater] 업데이트 설치 완료, 앱 재시작");
                             app.restart();
                         }
                         Err(e) => {
-                            log::error!("업데이트 설치 실패: {}", e);
+                            log::error!("[updater] 업데이트 설치 실패: {}", e);
                             app.dialog()
                                 .message(format!("업데이트 설치에 실패했습니다: {}", e))
                                 .title("업데이트 오류")
@@ -218,14 +223,14 @@ pub async fn check_and_notify_update(app: tauri::AppHandle) -> Result<(), String
                 }
             }
             Ok(None) => {
-                log::info!("최신 버전입니다");
+                log::info!("[updater] 최신 버전입니다");
                 app.dialog()
                     .message("현재 최신 버전입니다.")
                     .title("업데이트 확인")
                     .show(|_| {});
             }
             Err(e) => {
-                log::debug!("업데이트 확인 실패: {}", e);
+                log::debug!("[updater] 업데이트 확인 실패: {}", e);
                 app.dialog()
                     .message(format!("업데이트 확인에 실패했습니다.\n{}", e))
                     .title("업데이트 확인")
@@ -249,7 +254,7 @@ pub async fn set_notification_enabled(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
     enabled: bool,
 ) -> Result<(), String> {
-    log::info!("알림 설정 변경: {}", enabled);
+    log::info!("[settings] 알림 설정 변경: {}", enabled);
     let mut s = state.lock().await;
     s.config.notification_enabled = enabled;
     s.config.save();
@@ -268,7 +273,7 @@ pub async fn set_notification_interval(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
     minutes: u32,
 ) -> Result<(), String> {
-    log::info!("알림 간격 변경: {}분", minutes);
+    log::info!("[settings] 알림 간격 변경: {}분", minutes);
     let mut s = state.lock().await;
     s.config.notification_interval_mins = minutes;
     s.config.save();
@@ -289,7 +294,7 @@ pub async fn set_notification_start(
     hour: u32,
     minute: u32,
 ) -> Result<(), String> {
-    log::info!("알림 시작 시각 변경: {:02}:{:02}", hour, minute);
+    log::info!("[settings] 알림 시작 시각 변경: {:02}:{:02}", hour, minute);
     let mut s = state.lock().await;
     s.config.notification_start = TimeOfDay { hour, minute };
     s.config.save();
@@ -310,7 +315,7 @@ pub async fn set_notification_end(
     hour: u32,
     minute: u32,
 ) -> Result<(), String> {
-    log::info!("알림 종료 시각 변경: {:02}:{:02}", hour, minute);
+    log::info!("[settings] 알림 종료 시각 변경: {:02}:{:02}", hour, minute);
     let mut s = state.lock().await;
     s.config.notification_end = TimeOfDay { hour, minute };
     s.config.save();
