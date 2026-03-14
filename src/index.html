@@ -51,13 +51,13 @@
       </td>
     </tr>
     <tr>
-      <th>알림 시작</th>
+      <th>시작 시간</th>
       <td>
         <select id="notification-start-select"></select>
       </td>
     </tr>
     <tr>
-      <th>알림 종료</th>
+      <th>종료 시간</th>
       <td>
         <select id="notification-end-select"></select>
       </td>
@@ -111,18 +111,21 @@
           invoke('set_notification_enabled', { enabled: notifToggle.checked }).catch(console.error);
         });
 
-        // 시간 선택 옵션 생성 (00:00 ~ 23:00, 1시간 단위)
-        function populateHourSelect(selectEl) {
-          for (let h = 0; h < 24; h++) {
+        // fromHour~toHour 범위의 시간 옵션 생성 (자정 넘김 지원)
+        function populateHourSelect(selectEl, fromHour, toHour) {
+          let h = fromHour;
+          while (true) {
             const opt = document.createElement('option');
             opt.value = h;
             opt.textContent = String(h).padStart(2, '0') + ':00';
             selectEl.appendChild(opt);
+            if (h === toHour) break;
+            h = (h + 1) % 24;
           }
         }
 
         const notifStartSelect = document.getElementById('notification-start-select');
-        populateHourSelect(notifStartSelect);
+        populateHourSelect(notifStartSelect, 4, 10);
         const notifStart = await invoke('get_notification_start');
         notifStartSelect.value = notifStart.hour;
         notifStartSelect.addEventListener('change', () => {
@@ -130,7 +133,7 @@
         });
 
         const notifEndSelect = document.getElementById('notification-end-select');
-        populateHourSelect(notifEndSelect);
+        populateHourSelect(notifEndSelect, 23, 4);
         const notifEnd = await invoke('get_notification_end');
         notifEndSelect.value = notifEnd.hour;
         notifEndSelect.addEventListener('change', () => {
