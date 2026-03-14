@@ -156,12 +156,16 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
                 // 주기적으로 출석 페이지로 다시 이동시킴 (15분 간격).
                 // 로그인 필요 시에는 리로드하지 않음 (출석 페이지 닫힘 시에만 리로드).
                 if !s.needs_login {
+                    let now = Instant::now();
                     let should_reload = match s.last_reload {
-                        Some(last) => last.elapsed() >= std::time::Duration::from_secs(RELOAD_INTERVAL_NORMAL),
-                        None => false, // 첫 실행 시에는 이미 로드됨
+                        Some(last) => now.duration_since(last) >= std::time::Duration::from_secs(RELOAD_INTERVAL_NORMAL),
+                        None => {
+                            s.last_reload = Some(now);
+                            false
+                        }
                     };
                     if should_reload {
-                        s.last_reload = Some(Instant::now());
+                        s.last_reload = Some(now);
                         if let Some(checker) = app_handle.get_webview_window("checker") {
                             debug!("reloading checker webview");
                             let _ = checker.navigate("https://jungle-lms.krafton.com/check-in".parse().unwrap());
