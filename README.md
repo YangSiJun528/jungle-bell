@@ -10,6 +10,10 @@
 
 <br/>
 
+<p align="center">
+    <img src="docs/files/demo_20260315.gif" alt="demo.gif">
+</p>
+
 > [!CAUTION]     
 > 1. **이 앱은 크래프톤 정글의 공식 앱이 아닙니다.**    
 > SW-AI Lab 12기인 한 정글러가 관리하는 비공식 앱입니다.    
