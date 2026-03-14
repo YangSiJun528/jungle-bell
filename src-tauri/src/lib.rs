@@ -51,6 +51,8 @@ pub fn run() {
         // updater 플러그인: 자동 업데이트 지원
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
+        // notification 플러그인: OS 네이티브 알림 지원
+        .plugin(tauri_plugin_notification::init())
         // AppState를 Tauri의 managed state로 등록.
         // 핸들러에서 `tauri::State<Arc<Mutex<AppState>>>`로 받아 사용.
         .manage(shared_state.clone())
@@ -63,6 +65,14 @@ pub fn run() {
             checker::check_and_notify_update,
             checker::get_auto_start,
             checker::set_auto_start,
+            checker::get_notification_enabled,
+            checker::set_notification_enabled,
+            checker::get_notification_interval,
+            checker::set_notification_interval,
+            checker::get_notification_start,
+            checker::set_notification_start,
+            checker::get_notification_end,
+            checker::set_notification_end,
         ])
         // setup(): 앱 초기화 후 이벤트 루프 시작 전에 한 번 실행.
         .setup(move |app| {

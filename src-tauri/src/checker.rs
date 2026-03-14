@@ -15,6 +15,7 @@ use tokio::sync::Mutex;
 use tauri_plugin_autostart::ManagerExt as AutostartManagerExt;
 use tauri_plugin_updater::UpdaterExt;
 
+use crate::config::TimeOfDay;
 use crate::state::{self, AppState};
 use crate::tray;
 
@@ -218,5 +219,85 @@ pub async fn check_and_notify_update(app: tauri::AppHandle) -> Result<(), String
         }
     });
 
+    Ok(())
+}
+
+/// Tauri 커맨드: 알림 활성화 설정 조회.
+#[tauri::command]
+pub async fn get_notification_enabled(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<bool, String> {
+    Ok(state.lock().await.config.notification_enabled)
+}
+
+/// Tauri 커맨드: 알림 활성화 설정 변경 및 저장.
+#[tauri::command]
+pub async fn set_notification_enabled(
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    enabled: bool,
+) -> Result<(), String> {
+    log::info!("알림 설정 변경: {}", enabled);
+    let mut s = state.lock().await;
+    s.config.notification_enabled = enabled;
+    s.config.save();
+    Ok(())
+}
+
+/// Tauri 커맨드: 알림 간격(분) 조회.
+#[tauri::command]
+pub async fn get_notification_interval(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<u32, String> {
+    Ok(state.lock().await.config.notification_interval_mins)
+}
+
+/// Tauri 커맨드: 알림 간격(분) 변경 및 저장.
+#[tauri::command]
+pub async fn set_notification_interval(
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    minutes: u32,
+) -> Result<(), String> {
+    log::info!("알림 간격 변경: {}분", minutes);
+    let mut s = state.lock().await;
+    s.config.notification_interval_mins = minutes;
+    s.config.save();
+    Ok(())
+}
+
+/// Tauri 커맨드: 알림 시작 시각 조회.
+#[tauri::command]
+pub async fn get_notification_start(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<TimeOfDay, String> {
+    let s = state.lock().await;
+    Ok(s.config.notification_start.clone())
+}
+
+/// Tauri 커맨드: 알림 시작 시각 변경 및 저장.
+#[tauri::command]
+pub async fn set_notification_start(
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    hour: u32,
+    minute: u32,
+) -> Result<(), String> {
+    log::info!("알림 시작 시각 변경: {:02}:{:02}", hour, minute);
+    let mut s = state.lock().await;
+    s.config.notification_start = TimeOfDay { hour, minute };
+    s.config.save();
+    Ok(())
+}
+
+/// Tauri 커맨드: 알림 종료 시각 조회.
+#[tauri::command]
+pub async fn get_notification_end(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<TimeOfDay, String> {
+    let s = state.lock().await;
+    Ok(s.config.notification_end.clone())
+}
+
+/// Tauri 커맨드: 알림 종료 시각 변경 및 저장.
+#[tauri::command]
+pub async fn set_notification_end(
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    hour: u32,
+    minute: u32,
+) -> Result<(), String> {
+    log::info!("알림 종료 시각 변경: {:02}:{:02}", hour, minute);
+    let mut s = state.lock().await;
+    s.config.notification_end = TimeOfDay { hour, minute };
+    s.config.save();
     Ok(())
 }

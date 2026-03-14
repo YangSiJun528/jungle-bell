@@ -22,6 +22,8 @@ pub struct AppState {
     pub last_reset_day: Option<u32>,
     /// 체커 WebView 주기적 리로드 카운터
     pub tick_count: u32,
+    /// 마지막 알림 전송 시각
+    pub last_notification: Option<tokio::time::Instant>,
 }
 
 impl AppState {
@@ -35,6 +37,7 @@ impl AppState {
             data_loaded: false,
             last_reset_day: None,
             tick_count: 0,
+            last_notification: None,
         }
     }
 }

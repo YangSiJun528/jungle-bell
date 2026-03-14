@@ -30,10 +30,34 @@ pub struct Config {
     /// 시스템 시작 시 앱 자동 실행 여부 (기본 true)
     #[serde(default = "default_true")]
     pub auto_start: bool,
+    /// 알림 활성화 여부 (기본 true)
+    #[serde(default = "default_true")]
+    pub notification_enabled: bool,
+    /// 알림 간격 (분, 기본 5)
+    #[serde(default = "default_notification_interval")]
+    pub notification_interval_mins: u32,
+    /// 알림 시작 시각 — 이 시각 이전에는 아침 알림을 보내지 않음 (기본 09:00)
+    #[serde(default = "default_notification_start")]
+    pub notification_start: TimeOfDay,
+    /// 알림 종료 시각 — 이 시각 이후에는 저녁 알림을 보내지 않음 (기본 01:00)
+    #[serde(default = "default_notification_end")]
+    pub notification_end: TimeOfDay,
 }
 
 fn default_true() -> bool {
     true
+}
+
+fn default_notification_interval() -> u32 {
+    5
+}
+
+fn default_notification_start() -> TimeOfDay {
+    TimeOfDay { hour: 9, minute: 0 }
+}
+
+fn default_notification_end() -> TimeOfDay {
+    TimeOfDay { hour: 1, minute: 0 }
 }
 
 fn config_path() -> Option<PathBuf> {
@@ -90,6 +114,10 @@ impl Default for Config {
             evening_end: TimeOfDay { hour: 4, minute: 0 },
             auto_update: true,
             auto_start: true,
+            notification_enabled: true,
+            notification_interval_mins: 5,
+            notification_start: TimeOfDay { hour: 9, minute: 0 },
+            notification_end: TimeOfDay { hour: 1, minute: 0 },
         }
     }
 }
