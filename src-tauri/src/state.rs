@@ -13,15 +13,18 @@ pub struct AppState {
     pub evening_checked: bool,
     /// 현재 일일 상태 (스케줄러가 계산)
     pub phase: DailyPhase,
-    /// 체커 WebView가 로그인 페이지에 있는지 여부
+    /// 로그인이 필요한 상태 (API 401 또는 로그인 페이지)
     pub needs_login: bool,
     /// 체커로부터 첫 보고를 받았는지 여부.
     /// false일 때는 상태 계산을 건너뛰어 잘못된 데이터 표시를 방지.
     pub data_loaded: bool,
     /// 마지막으로 확인한 KST 날짜 (day-of-year), 일일 리셋 감지용
     pub last_reset_day: Option<u32>,
-    /// 체커 WebView 주기적 리로드 카운터
-    pub tick_count: u32,
+    /// 체커 WebView 마지막 리로드 시각
+    pub last_reload: Option<tokio::time::Instant>,
+    /// 로그인 재시도 윈도우 마감 시각.
+    /// 출석 페이지가 닫힌 후 일정 시간 동안만 로그인 상태를 재확인.
+    pub login_retry_until: Option<tokio::time::Instant>,
     /// 마지막 알림 전송 시각
     pub last_notification: Option<tokio::time::Instant>,
 }
@@ -36,7 +39,8 @@ impl AppState {
             needs_login: false,
             data_loaded: false,
             last_reset_day: None,
-            tick_count: 0,
+            last_reload: None,
+            login_retry_until: None,
             last_notification: None,
         }
     }
