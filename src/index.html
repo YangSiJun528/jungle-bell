@@ -40,6 +40,41 @@
       <th></th>
       <td><button id="check-update-btn" class="link-btn">업데이트 확인</button></td>
     </tr>
+    <tr><td colspan="2" style="height:8px"></td></tr>
+    <tr>
+      <th>알림</th>
+      <td>
+        <label class="toggle">
+          <input type="checkbox" id="notification-toggle" />
+          <span class="toggle-slider"></span>
+        </label>
+      </td>
+    </tr>
+    <tr>
+      <th>알림 시작</th>
+      <td>
+        <select id="notification-start-select"></select>
+      </td>
+    </tr>
+    <tr>
+      <th>알림 종료</th>
+      <td>
+        <select id="notification-end-select"></select>
+      </td>
+    </tr>
+    <tr>
+      <th>알림 간격</th>
+      <td>
+        <select id="notification-interval-select">
+          <option value="1">1분</option>
+          <option value="3">3분</option>
+          <option value="5">5분</option>
+          <option value="10">10분</option>
+          <option value="15">15분</option>
+          <option value="30">30분</option>
+        </select>
+      </td>
+    </tr>
   </table>
 
   <script>
@@ -67,6 +102,46 @@
 
         document.getElementById('check-update-btn').addEventListener('click', () => {
           invoke('check_and_notify_update').catch(console.error);
+        });
+
+        // --- 알림 설정 ---
+        const notifToggle = document.getElementById('notification-toggle');
+        notifToggle.checked = await invoke('get_notification_enabled');
+        notifToggle.addEventListener('change', () => {
+          invoke('set_notification_enabled', { enabled: notifToggle.checked }).catch(console.error);
+        });
+
+        // 시간 선택 옵션 생성 (00:00 ~ 23:00, 1시간 단위)
+        function populateHourSelect(selectEl) {
+          for (let h = 0; h < 24; h++) {
+            const opt = document.createElement('option');
+            opt.value = h;
+            opt.textContent = String(h).padStart(2, '0') + ':00';
+            selectEl.appendChild(opt);
+          }
+        }
+
+        const notifStartSelect = document.getElementById('notification-start-select');
+        populateHourSelect(notifStartSelect);
+        const notifStart = await invoke('get_notification_start');
+        notifStartSelect.value = notifStart.hour;
+        notifStartSelect.addEventListener('change', () => {
+          invoke('set_notification_start', { hour: parseInt(notifStartSelect.value), minute: 0 }).catch(console.error);
+        });
+
+        const notifEndSelect = document.getElementById('notification-end-select');
+        populateHourSelect(notifEndSelect);
+        const notifEnd = await invoke('get_notification_end');
+        notifEndSelect.value = notifEnd.hour;
+        notifEndSelect.addEventListener('change', () => {
+          invoke('set_notification_end', { hour: parseInt(notifEndSelect.value), minute: 0 }).catch(console.error);
+        });
+
+        const notifIntervalSelect = document.getElementById('notification-interval-select');
+        const currentInterval = await invoke('get_notification_interval');
+        notifIntervalSelect.value = currentInterval;
+        notifIntervalSelect.addEventListener('change', () => {
+          invoke('set_notification_interval', { minutes: parseInt(notifIntervalSelect.value) }).catch(console.error);
         });
       } catch (e) {
         console.error('초기화 중 오류 발생:', e);
