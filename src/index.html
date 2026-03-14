@@ -15,87 +15,118 @@
     </div>
   </div>
 
-  <table>
-    <tr><th>학습 시작</th><td>04:00 ~ 10:00</td></tr>
-    <tr><th>학습 종료</th><td>23:00 ~ 04:00</td></tr>
-    <tr>
-      <th>자동 시작</th>
-      <td>
-        <label class="toggle">
-          <input type="checkbox" id="auto-start-toggle" />
-          <span class="toggle-slider"></span>
-        </label>
-      </td>
-    </tr>
-    <tr>
-      <th>자동 업데이트</th>
-      <td>
-        <label class="toggle">
-          <input type="checkbox" id="auto-update-toggle" />
-          <span class="toggle-slider"></span>
-        </label>
-      </td>
-    </tr>
-    <tr>
-      <th></th>
-      <td><button id="check-update-btn" class="link-btn">업데이트 확인</button></td>
-    </tr>
-    <tr><td colspan="2" style="height:8px"></td></tr>
-    <tr>
-      <th>출석 알림</th>
-      <td>
-        <label class="toggle">
-          <input type="checkbox" id="notification-toggle" />
-          <span class="toggle-slider"></span>
-        </label>
-      </td>
-    </tr>
-    <tr>
-      <th>시작 출석</th>
-      <td>
-        <select id="notification-start-select">
-          <option value="4">04:00</option>
-          <option value="5">05:00</option>
-          <option value="6">06:00</option>
-          <option value="7">07:00</option>
-          <option value="8">08:00</option>
-          <option value="9">09:00</option>
-          <option value="10">10:00</option>
-        </select>
-      </td>
-    </tr>
-    <tr>
-      <th>종료 출석</th>
-      <td>
-        <select id="notification-end-select">
-          <option value="23">23:00</option>
-          <option value="0">00:00</option>
-          <option value="1">01:00</option>
-          <option value="2">02:00</option>
-          <option value="3">03:00</option>
-          <option value="4">04:00</option>
-        </select>
-      </td>
-    </tr>
-    <tr>
-      <th>알림 간격</th>
-      <td>
-        <select id="notification-interval-select">
-          <option value="1">1분</option>
-          <option value="3">3분</option>
-          <option value="5">5분</option>
-          <option value="10">10분</option>
-          <option value="15">15분</option>
-          <option value="30">30분</option>
-        </select>
-      </td>
-    </tr>
-  </table>
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="general">일반</button>
+    <button class="tab-btn" data-tab="notification">알림</button>
+    <button class="tab-btn" data-tab="info">정보</button>
+  </div>
+
+  <div id="tab-general" class="tab-content active">
+    <table>
+      <tr>
+        <th>자동 시작</th>
+        <td>
+          <label class="toggle">
+            <input type="checkbox" id="auto-start-toggle" />
+            <span class="toggle-slider"></span>
+          </label>
+        </td>
+      </tr>
+      <tr>
+        <th>자동 업데이트</th>
+        <td>
+          <label class="toggle">
+            <input type="checkbox" id="auto-update-toggle" />
+            <span class="toggle-slider"></span>
+          </label>
+        </td>
+      </tr>
+      <tr>
+        <th></th>
+        <td><button id="check-update-btn" class="link-btn">업데이트 확인</button></td>
+      </tr>
+    </table>
+  </div>
+
+  <div id="tab-notification" class="tab-content">
+    <table>
+      <tr>
+        <th>출석 알림</th>
+        <td>
+          <label class="toggle">
+            <input type="checkbox" id="notification-toggle" />
+            <span class="toggle-slider"></span>
+          </label>
+        </td>
+      </tr>
+      <tr class="notif-field">
+        <th>시작 출석</th>
+        <td>
+          <select id="notification-start-select">
+            <option value="4">04:00</option>
+            <option value="5">05:00</option>
+            <option value="6">06:00</option>
+            <option value="7">07:00</option>
+            <option value="8">08:00</option>
+            <option value="9">09:00</option>
+            <option value="10">10:00</option>
+          </select>
+        </td>
+      </tr>
+      <tr class="notif-field">
+        <th>종료 출석</th>
+        <td>
+          <select id="notification-end-select">
+            <option value="23">23:00</option>
+            <option value="0">00:00</option>
+            <option value="1">01:00</option>
+            <option value="2">02:00</option>
+            <option value="3">03:00</option>
+            <option value="4">04:00</option>
+          </select>
+        </td>
+      </tr>
+      <tr class="notif-field">
+        <th>알림 간격</th>
+        <td>
+          <select id="notification-interval-select">
+            <option value="1">1분</option>
+            <option value="3">3분</option>
+            <option value="5">5분</option>
+            <option value="10">10분</option>
+            <option value="15">15분</option>
+            <option value="30">30분</option>
+          </select>
+        </td>
+      </tr>
+    </table>
+  </div>
+
+  <div id="tab-info" class="tab-content">
+    <table>
+      <tr><th>학습 시작</th><td>04:00 ~ 10:00</td></tr>
+      <tr><th>학습 종료</th><td>23:00 ~ 04:00</td></tr>
+    </table>
+  </div>
+
+  <footer class="footer-links">
+    <a href="https://github.com/YangSiJun528/jungle-bell" target="_blank" rel="noopener noreferrer">GitHub</a>
+    <span> · </span>
+    <a href="https://github.com/YangSiJun528/jungle-bell/releases" target="_blank" rel="noopener noreferrer">릴리즈</a>
+  </footer>
 
   <script>
     const { invoke } = window.__TAURI__.core;
     window.addEventListener('DOMContentLoaded', async () => {
       try {
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+          });
+        });
         document.getElementById('app-version').textContent = 'v' + await invoke('get_app_version');
 
         const autoStartToggle = document.getElementById('auto-start-toggle');
@@ -121,9 +152,18 @@
 
         // --- 알림 설정 ---
         const notifToggle = document.getElementById('notification-toggle');
+        const notifFields = document.querySelectorAll('#tab-notification .notif-field');
+        function updateNotifFieldsState(enabled) {
+          notifFields.forEach(row => {
+            row.classList.toggle('disabled', !enabled);
+            row.querySelector('select').disabled = !enabled;
+          });
+        }
         notifToggle.checked = await invoke('get_notification_enabled');
+        updateNotifFieldsState(notifToggle.checked);
         notifToggle.addEventListener('change', () => {
           invoke('set_notification_enabled', { enabled: notifToggle.checked }).catch(console.error);
+          updateNotifFieldsState(notifToggle.checked);
         });
 
         const notifStartSelect = document.getElementById('notification-start-select');
@@ -152,10 +192,5 @@
     });
   </script>
 
-  <footer>
-    <a href="https://github.com/YangSiJun528/jungle-bell" target="_blank" rel="noopener noreferrer">GitHub</a>
-    <span> · </span>
-    <a href="https://github.com/YangSiJun528/jungle-bell/releases" target="_blank" rel="noopener noreferrer">릴리즈</a>
-  </footer>
 </body>
 </html>
