@@ -192,6 +192,10 @@ pub async fn check_and_notify_update(app: tauri::AppHandle) -> Result<(), String
                         let _ = tx.send(confirmed);
                     });
                 if rx.await.unwrap_or(false) {
+                    app.dialog()
+                        .message("업데이트를 다운로드하고 있습니다. 잠시만 기다려 주세요...")
+                        .title("업데이트 중")
+                        .show(|_| {});
                     match update.download_and_install(|_, _| {}, || {}).await {
                         Ok(_) => {
                             log::info!("업데이트 설치 완료, 앱 재시작");
