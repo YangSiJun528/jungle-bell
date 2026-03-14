@@ -10,17 +10,18 @@
 
 <br/>
 
-<p align="center">
-    <img src="docs/files/demo_20260315.gif" alt="demo.gif">
-</p>
-
 > [!CAUTION]     
 > 1. **이 앱은 크래프톤 정글의 공식 앱이 아닙니다.**    
 > SW-AI Lab 12기인 한 정글러가 관리하는 비공식 앱입니다.    
 > 기능 관련 버그나 문의는 [이슈](https://github.com/YangSiJun528/jungle-bell/issues)를 통해 제보해 주세요.   
 > 2. **자동 출석 기능은 제공하지 않으며, 앞으로도 제공할 계획이 없습니다.**   
 > 자동화된 방식으로 출석을 처리하는 행위는 불이익을 받을 수 있습니다.   
-> 제작자는 이러한 사용을 지원하거나 권장하지 않습니다.   
+> 제작자는 이러한 사용을 지원하거나 권장하지 않습니다.  
+
+## 데모
+<p align="center">
+    <img src="docs/files/demo_20260315.gif" alt="demo.gif">
+</p>
 
 ## 메뉴
 
