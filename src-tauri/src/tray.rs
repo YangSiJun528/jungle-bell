@@ -167,7 +167,8 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                                     let state: tauri::State<Arc<TokioMutex<AppState>>> = app_handle.state();
                                     if let Ok(mut s) = state.try_lock() {
                                         s.login_retry_until = Some(
-                                            tokio::time::Instant::now() + std::time::Duration::from_secs(LOGIN_RETRY_WINDOW_SECS)
+                                            tokio::time::Instant::now()
+                                                + std::time::Duration::from_secs(LOGIN_RETRY_WINDOW_SECS),
                                         );
                                     };
                                 }

@@ -90,8 +90,12 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
                     debug!(
                         "[scheduler] state: phase={:?} morning_checked={} evening_checked={} \
                          needs_login={} data_loaded={} remaining={:?} kst={}",
-                        phase, s.morning_checked, s.evening_checked,
-                        s.needs_login, s.data_loaded, remaining,
+                        phase,
+                        s.morning_checked,
+                        s.evening_checked,
+                        s.needs_login,
+                        s.data_loaded,
+                        remaining,
                         kst_now.format("%Y-%m-%d %H:%M:%S"),
                     );
 
@@ -106,12 +110,12 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
                             DailyPhase::NeedStart | DailyPhase::StartOverdue | DailyPhase::NeedEnd
                         );
                         let kst_mins = (kst_now.hour() * 60 + kst_now.minute()) as i32;
-                        let notif_start_mins = (s.config.notification_start.hour * 60
-                            + s.config.notification_start.minute) as i32;
-                        let notif_end_mins = (s.config.notification_end.hour * 60
-                            + s.config.notification_end.minute) as i32;
-                        let evening_start_mins = (s.config.evening_start.hour * 60
-                            + s.config.evening_start.minute) as i32;
+                        let notif_start_mins =
+                            (s.config.notification_start.hour * 60 + s.config.notification_start.minute) as i32;
+                        let notif_end_mins =
+                            (s.config.notification_end.hour * 60 + s.config.notification_end.minute) as i32;
+                        let evening_start_mins =
+                            (s.config.evening_start.hour * 60 + s.config.evening_start.minute) as i32;
 
                         let in_notification_window = match s.phase {
                             DailyPhase::NeedStart | DailyPhase::StartOverdue => {
@@ -131,22 +135,14 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
                         };
 
                         if should_notify && in_notification_window {
-                            let interval_secs =
-                                s.config.notification_interval_mins as u64 * 60;
+                            let interval_secs = s.config.notification_interval_mins as u64 * 60;
                             let should_send = match s.last_notification {
-                                Some(last) => last.elapsed()
-                                    >= std::time::Duration::from_secs(interval_secs),
+                                Some(last) => last.elapsed() >= std::time::Duration::from_secs(interval_secs),
                                 None => true,
                             };
                             if should_send {
-                                let (title, body) =
-                                    notification_message(s.phase, remaining);
-                                let _ = app_handle
-                                    .notification()
-                                    .builder()
-                                    .title(title)
-                                    .body(body)
-                                    .show();
+                                let (title, body) = notification_message(s.phase, remaining);
+                                let _ = app_handle.notification().builder().title(title).body(body).show();
                                 s.last_notification = Some(Instant::now());
                                 info!("[scheduler] notification sent: phase={:?}", s.phase);
                             }
@@ -166,7 +162,9 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
                 if !s.needs_login {
                     let now = Instant::now();
                     let should_reload = match s.last_reload {
-                        Some(last) => now.duration_since(last) >= std::time::Duration::from_secs(RELOAD_INTERVAL_NORMAL),
+                        Some(last) => {
+                            now.duration_since(last) >= std::time::Duration::from_secs(RELOAD_INTERVAL_NORMAL)
+                        }
                         None => {
                             s.last_reload = Some(now);
                             false
@@ -253,10 +251,7 @@ fn notification_message(phase: DailyPhase, remaining: Option<i64>) -> (&'static 
             };
             ("출석 체크 시간입니다", body)
         }
-        DailyPhase::StartOverdue => (
-            "출석 체크 지각!",
-            "빨리 체크인하세요.".into(),
-        ),
+        DailyPhase::StartOverdue => ("출석 체크 지각!", "빨리 체크인하세요.".into()),
         DailyPhase::NeedEnd => {
             let body = if let Some(secs) = remaining {
                 let mins = secs / 60;

@@ -84,7 +84,10 @@ impl Config {
                     ),
                 }
             } else if path.exists() {
-                log::warn!("[config] 설정 파일({}) 읽기 실패. 기본 설정을 사용합니다.", path.display());
+                log::warn!(
+                    "[config] 설정 파일({}) 읽기 실패. 기본 설정을 사용합니다.",
+                    path.display()
+                );
             }
         }
         log::info!("[config] using defaults");
