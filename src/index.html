@@ -126,6 +126,12 @@
           </label>
         </td>
       </tr>
+      <tr>
+        <th>로그 폴더</th>
+        <td>
+          <button id="open-log-folder-btn" class="link-btn">열기</button>
+        </td>
+      </tr>
     </table>
   </div>
 
@@ -185,6 +191,10 @@
             }
           }
           invoke('set_debug_mode', { enabled: debugToggle.checked }).catch(console.error);
+        });
+
+        document.getElementById('open-log-folder-btn').addEventListener('click', () => {
+          invoke('open_log_folder').catch(console.error);
         });
 
         // --- 알림 설정 ---

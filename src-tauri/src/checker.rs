@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use log::{debug, info};
 use serde::Deserialize;
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 use tokio::sync::Mutex;
 
 use tauri_plugin_autostart::ManagerExt as AutostartManagerExt;
@@ -331,6 +331,15 @@ pub async fn set_notification_end(
     s.config.notification_end = TimeOfDay { hour, minute };
     s.config.save();
     Ok(())
+}
+
+/// Tauri 커맨드: 로그 폴더를 시스템 파일 탐색기로 열기.
+#[tauri::command]
+pub async fn open_log_folder(app: tauri::AppHandle) -> Result<(), String> {
+    let log_dir = app.path().app_log_dir().map_err(|e| e.to_string())?;
+    log::info!("[settings] 로그 폴더 열기: {:?}", log_dir);
+    tauri_plugin_opener::open_path(&log_dir, None::<&str>)
+        .map_err(|e| e.to_string())
 }
 
 /// Tauri 커맨드: 디버그 모드 설정 조회.

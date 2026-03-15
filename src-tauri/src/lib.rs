@@ -82,6 +82,7 @@ pub fn run() {
             checker::set_notification_end,
             checker::get_debug_mode,
             checker::set_debug_mode,
+            checker::open_log_folder,
         ])
         // setup(): 앱 초기화 후 이벤트 루프 시작 전에 한 번 실행.
         .setup(move |app| {
