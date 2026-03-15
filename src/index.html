@@ -115,6 +115,18 @@
       <tr><th>학습 시작</th><td>04:00 ~ 10:00</td></tr>
       <tr><th>학습 종료</th><td>23:00 ~ 04:00</td></tr>
     </table>
+    <br />
+    <table>
+      <tr>
+        <th>디버그 모드</th>
+        <td>
+          <label class="toggle">
+            <input type="checkbox" id="debug-mode-toggle" />
+            <span class="toggle-slider"></span>
+          </label>
+        </td>
+      </tr>
+    </table>
   </div>
 
   <footer class="footer-links">
@@ -156,6 +168,23 @@
 
         document.getElementById('check-update-btn').addEventListener('click', () => {
           invoke('check_and_notify_update').catch(console.error);
+        });
+
+        const debugToggle = document.getElementById('debug-mode-toggle');
+        debugToggle.checked = await invoke('get_debug_mode');
+        debugToggle.addEventListener('change', async () => {
+          if (debugToggle.checked) {
+            const confirmed = await window.__TAURI__.dialog.confirm(
+              '디버그 모드를 활성화하면 API 요청/응답 데이터, 앱 내부 상태 등 상세 로그가 기록됩니다.\n' +
+              '로그 파일 크기가 빠르게 증가할 수 있으며, 문제 해결 후에는 비활성화를 권장합니다.',
+              { title: '디버그 모드 활성화', okLabel: '활성화', cancelLabel: '취소' }
+            );
+            if (!confirmed) {
+              debugToggle.checked = false;
+              return;
+            }
+          }
+          invoke('set_debug_mode', { enabled: debugToggle.checked }).catch(console.error);
         });
 
         // --- 알림 설정 ---
