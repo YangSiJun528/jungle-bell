@@ -107,6 +107,16 @@
           </select>
         </td>
       </tr>
+      <tr class="notif-field">
+        <th>시스템 설정</th>
+        <td>
+          <button id="open-notification-settings-btn" class="link-btn">알림 설정 열기</button>
+        </td>
+      </tr>
+      <tr class="notif-field">
+        <th></th>
+        <td class="setting-hint">OS 알림이 차단되어 있으면 알림이 전달되지 않습니다. <br> 설정을 확인하세요.</td>
+      </tr>
     </table>
   </div>
 
@@ -203,7 +213,9 @@
         function updateNotifFieldsState(enabled) {
           notifFields.forEach(row => {
             row.classList.toggle('disabled', !enabled);
-            row.querySelector('select').disabled = !enabled;
+            row.querySelectorAll('select, button, input').forEach(control => {
+              control.disabled = !enabled;
+            });
           });
         }
         notifToggle.checked = await invoke('get_notification_enabled');
@@ -232,6 +244,18 @@
         notifIntervalSelect.value = currentInterval;
         notifIntervalSelect.addEventListener('change', () => {
           invoke('set_notification_interval', { minutes: parseInt(notifIntervalSelect.value) }).catch(console.error);
+        });
+
+        document.getElementById('open-notification-settings-btn').addEventListener('click', async () => {
+          try {
+            await invoke('open_notification_settings');
+          } catch (e) {
+            console.error(e);
+            await window.__TAURI__.dialog.message(
+              '시스템 알림 설정을 열지 못했습니다.\n' + e,
+              { title: '알림 설정' }
+            );
+          }
         });
       } catch (e) {
         console.error('초기화 중 오류 발생:', e);

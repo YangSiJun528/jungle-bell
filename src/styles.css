@@ -53,11 +53,20 @@ th {
     text-align: left;
     font-weight: 500;
     color: #555;
+    width: 200px;
 }
 
 td {
     text-align: right;
     color: #444;
+}
+
+.setting-hint {
+    text-align: right;
+    color: #777;
+    font-size: 0.72rem;
+    line-height: 1.4;
+    width: 600px;
 }
 
 .toggle {
@@ -217,6 +226,10 @@ tr.notif-field.disabled {
 
     td {
         color: #bbb;
+    }
+
+    .setting-hint {
+        color: #999;
     }
 
     .tabs {

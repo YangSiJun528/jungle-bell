@@ -5,6 +5,7 @@
 //! JS가 API를 조회해 `report_attendance_status` invoke로 반환한다.
 //! 이 모듈은 반환된 결과를 처리하고 공유 앱 상태를 갱신한다.
 
+use std::process::Command;
 use std::sync::Arc;
 
 use log::{debug, info};
@@ -94,10 +95,7 @@ pub async fn report_attendance_status(
         let s = state.lock().await;
         info!(
             "[checker] report: needs_login={} morning={} evening={} current_phase={:?}",
-            status.needs_login,
-            status.morning_done,
-            status.evening_done,
-            s.phase,
+            status.needs_login, status.morning_done, status.evening_done, s.phase,
         );
     }
 
@@ -121,10 +119,7 @@ pub async fn get_auto_update(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> R
 
 /// Tauri 커맨드: 자동 업데이트 설정 변경 및 저장.
 #[tauri::command]
-pub async fn set_auto_update(
-    state: tauri::State<'_, Arc<Mutex<AppState>>>,
-    enabled: bool,
-) -> Result<(), String> {
+pub async fn set_auto_update(state: tauri::State<'_, Arc<Mutex<AppState>>>, enabled: bool) -> Result<(), String> {
     log::info!("[settings] 자동 업데이트 설정 변경: {}", enabled);
     let mut s = state.lock().await;
     s.config.auto_update = enabled;
@@ -160,7 +155,11 @@ pub async fn set_auto_start(
         s.config.save();
     }
     let autolaunch = app.autolaunch();
-    let result = if enabled { autolaunch.enable() } else { autolaunch.disable() };
+    let result = if enabled {
+        autolaunch.enable()
+    } else {
+        autolaunch.disable()
+    };
     result.map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -338,8 +337,51 @@ pub async fn set_notification_end(
 pub async fn open_log_folder(app: tauri::AppHandle) -> Result<(), String> {
     let log_dir = app.path().app_log_dir().map_err(|e| e.to_string())?;
     log::info!("[settings] 로그 폴더 열기: {:?}", log_dir);
-    tauri_plugin_opener::open_path(&log_dir, None::<&str>)
-        .map_err(|e| e.to_string())
+    tauri_plugin_opener::open_path(&log_dir, None::<&str>).map_err(|e| e.to_string())
+}
+
+/// Tauri 커맨드: OS 알림 설정 화면을 연다.
+#[tauri::command]
+pub async fn open_notification_settings() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let targets = [
+            "x-apple.systempreferences:com.apple.Notifications-Settings.extension",
+            "x-apple.systempreferences:com.apple.preference.notifications",
+        ];
+
+        for target in targets {
+            let status = Command::new("open")
+                .arg(target)
+                .status()
+                .map_err(|e| format!("macOS 설정 앱 실행 실패: {}", e))?;
+            if status.success() {
+                log::info!("[settings] macOS 알림 설정 열기: {}", target);
+                return Ok(());
+            }
+        }
+
+        return Err("macOS 알림 설정을 열지 못했습니다.".into());
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let status = Command::new("cmd")
+            .args(["/C", "start", "", "ms-settings:notifications"])
+            .status()
+            .map_err(|e| format!("Windows 설정 앱 실행 실패: {}", e))?;
+        if status.success() {
+            log::info!("[settings] Windows 알림 설정 열기");
+            return Ok(());
+        }
+
+        return Err("Windows 알림 설정을 열지 못했습니다.".into());
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        Err("이 플랫폼에서는 시스템 알림 설정 바로가기를 지원하지 않습니다.".into())
+    }
 }
 
 /// Tauri 커맨드: 디버그 모드 설정 조회.
@@ -351,10 +393,7 @@ pub async fn get_debug_mode(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Re
 /// Tauri 커맨드: 디버그 모드 설정 변경 및 저장.
 /// 런타임에 로그 레벨도 즉시 전환 (Info ↔ Debug).
 #[tauri::command]
-pub async fn set_debug_mode(
-    state: tauri::State<'_, Arc<Mutex<AppState>>>,
-    enabled: bool,
-) -> Result<(), String> {
+pub async fn set_debug_mode(state: tauri::State<'_, Arc<Mutex<AppState>>>, enabled: bool) -> Result<(), String> {
     log::info!("[settings] 디버그 모드 변경: {}", enabled);
     let mut s = state.lock().await;
     s.config.debug_mode = enabled;

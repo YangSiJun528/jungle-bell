@@ -89,6 +89,7 @@ pub fn run() {
             checker::set_notification_start,
             checker::get_notification_end,
             checker::set_notification_end,
+            checker::open_notification_settings,
             checker::get_debug_mode,
             checker::set_debug_mode,
             checker::open_log_folder,
