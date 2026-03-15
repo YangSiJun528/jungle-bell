@@ -332,3 +332,32 @@ pub async fn set_notification_end(
     s.config.save();
     Ok(())
 }
+
+/// Tauri 커맨드: 디버그 모드 설정 조회.
+#[tauri::command]
+pub async fn get_debug_mode(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<bool, String> {
+    Ok(state.lock().await.config.debug_mode)
+}
+
+/// Tauri 커맨드: 디버그 모드 설정 변경 및 저장.
+/// 런타임에 로그 레벨도 즉시 전환 (Info ↔ Debug).
+#[tauri::command]
+pub async fn set_debug_mode(
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    enabled: bool,
+) -> Result<(), String> {
+    log::info!("[settings] 디버그 모드 변경: {}", enabled);
+    let mut s = state.lock().await;
+    s.config.debug_mode = enabled;
+    s.config.save();
+
+    // 런타임 로그 레벨 즉시 전환
+    let level = if enabled {
+        log::LevelFilter::Debug
+    } else {
+        log::LevelFilter::Info
+    };
+    log::set_max_level(level);
+    log::info!("[settings] 로그 레벨 전환: {}", level);
+    Ok(())
+}

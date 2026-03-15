@@ -87,6 +87,14 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
                         );
                     }
 
+                    debug!(
+                        "[scheduler] state: phase={:?} morning_checked={} evening_checked={} \
+                         needs_login={} data_loaded={} remaining={:?} kst={}",
+                        phase, s.morning_checked, s.evening_checked,
+                        s.needs_login, s.data_loaded, remaining,
+                        kst_now.format("%Y-%m-%d %H:%M:%S"),
+                    );
+
                     s.phase = phase;
 
                     tray::update_tray(&app_handle, phase, remaining, s.needs_login);

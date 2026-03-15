@@ -13,8 +13,8 @@ use tauri_plugin_updater::UpdaterExt;
 use config::Config;
 use state::AppState;
 
-/// 로그 파일 최대 크기 (500 KB). 초과 시 이전 파일 삭제 후 새 파일 시작.
-const MAX_LOG_FILE_SIZE: u128 = 500_000;
+/// 로그 파일 최대 크기 (5 MB). 초과 시 이전 파일 삭제 후 새 파일 시작.
+const MAX_LOG_FILE_SIZE: u128 = 5_000_000;
 
 /// 앱 진입점.
 ///
@@ -23,6 +23,11 @@ const MAX_LOG_FILE_SIZE: u128 = 500_000;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let config = Config::load();
+    let log_level = if config.debug_mode {
+        log::LevelFilter::Debug
+    } else {
+        log::LevelFilter::Info
+    };
     let shared_state = Arc::new(Mutex::new(AppState::new(config)));
 
     tauri::Builder::default()
@@ -30,9 +35,10 @@ pub fn run() {
         // KeepOne 전략으로 500KB 초과 시 이전 파일 삭제 → 최대 ~1MB 유지.
         // 로그 위치: macOS ~/Library/Logs/dev.sijun-yang.jungle-bell/
         //            Windows %APPDATA%\dev.sijun-yang.jungle-bell\logs\
+        // debug_mode가 활성화되면 Debug 레벨까지 출력.
         .plugin(
             tauri_plugin_log::Builder::new()
-                .level(log::LevelFilter::Info)
+                .level(log_level)
                 .max_file_size(MAX_LOG_FILE_SIZE)
                 .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepOne)
                 .build(),
@@ -74,12 +80,15 @@ pub fn run() {
             checker::set_notification_start,
             checker::get_notification_end,
             checker::set_notification_end,
+            checker::get_debug_mode,
+            checker::set_debug_mode,
         ])
         // setup(): 앱 초기화 후 이벤트 루프 시작 전에 한 번 실행.
         .setup(move |app| {
             log::info!(
-                "[app] starting v{} (log_level=info, log_max_size={}KB)",
+                "[app] starting v{} (log_level={}, log_max_size={}KB)",
                 app.package_info().version,
+                log_level,
                 MAX_LOG_FILE_SIZE / 1000,
             );
 

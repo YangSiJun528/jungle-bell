@@ -12,29 +12,41 @@
   // /api/v2/me/cohorts에서 cohort 목록을 가져와
   // startDate가 가장 최신인 cohort의 ID를 반환.
   function fetchCohortId() {
-    return fetch('https://jungle-lms.krafton.com/api/v2/me/cohorts', {
+    var url = 'https://jungle-lms.krafton.com/api/v2/me/cohorts';
+    jsLog('debug', 'fetchCohortId: GET ' + url);
+    return fetch(url, {
       credentials: 'include',
       headers: { accept: 'application/json' },
     })
       .then(function (res) {
+        jsLog('debug', 'fetchCohortId: response status=' + res.status + ' statusText=' + res.statusText);
         if (res.status === 401) {
           jsLog('info', 'fetchCohortId: status=401 (login required)');
           return null;
         }
         if (!res.ok) {
           jsLog('warn', 'fetchCohortId: status=' + res.status);
-          return null;
+          // 에러 응답 본문도 디버그 로그
+          return res.text().then(function (body) {
+            jsLog('debug', 'fetchCohortId: error body=' + body.substring(0, 500));
+            return null;
+          });
         }
-        return res.json();
+        return res.json().then(function (data) {
+          jsLog('debug', 'fetchCohortId: raw response=' + JSON.stringify(data).substring(0, 1000));
+          return data;
+        });
       })
       .then(function (cohorts) {
-        if (!cohorts || !Array.isArray(cohorts) || cohorts.length === 0)
+        if (!cohorts || !Array.isArray(cohorts) || cohorts.length === 0) {
+          jsLog('debug', 'fetchCohortId: no valid cohorts (null or empty)');
           return null;
+        }
         cohorts.sort(function (a, b) {
           return new Date(b.startDate) - new Date(a.startDate);
         });
         var id = cohorts[0].id;
-        jsLog('debug', 'fetchCohortId: ok, cohortId=' + id);
+        jsLog('debug', 'fetchCohortId: selected cohortId=' + id + ' (total=' + cohorts.length + ')');
         return id;
       })
       .catch(function (e) {
@@ -45,26 +57,31 @@
 
   // 특정 cohort의 오늘 출석 상태를 조회.
   function fetchAttendance(cohortId) {
-    return fetch(
-      'https://jungle-lms.krafton.com/api/v2/me/cohorts/' +
-        cohortId +
-        '/attendance/today',
-      {
+    var url = 'https://jungle-lms.krafton.com/api/v2/me/cohorts/' +
+      cohortId + '/attendance/today';
+    jsLog('debug', 'fetchAttendance: GET ' + url);
+    return fetch(url, {
         credentials: 'include',
         headers: { accept: 'application/json' },
       }
     )
       .then(function (res) {
+        jsLog('debug', 'fetchAttendance: response status=' + res.status + ' statusText=' + res.statusText);
         if (res.status === 401) {
           jsLog('info', 'fetchAttendance: status=401 (login required)');
           return { needs_login: true };
         }
         if (!res.ok) {
           jsLog('warn', 'fetchAttendance: status=' + res.status);
-          return null;
+          return res.text().then(function (body) {
+            jsLog('debug', 'fetchAttendance: error body=' + body.substring(0, 500));
+            return null;
+          });
         }
-        jsLog('debug', 'fetchAttendance: status=200');
-        return res.json();
+        return res.json().then(function (data) {
+          jsLog('debug', 'fetchAttendance: raw response=' + JSON.stringify(data).substring(0, 1000));
+          return data;
+        });
       })
       .catch(function (e) {
         jsLog('error', 'fetchAttendance failed: ' + (e.message || e));
@@ -95,6 +112,7 @@
 
       return fetchAttendance(cohortId).then(function (data) {
         if (!data) {
+          jsLog('debug', 'checkAttendance: fetchAttendance returned null → api_error');
           // API 오류 — 상태 갱신하지 않도록 표시
           return {
             needs_login: false,
@@ -104,9 +122,12 @@
           };
         }
         if (data.needs_login) {
+          jsLog('debug', 'checkAttendance: needs_login flag set, clearing cohort cache');
           cachedCohortId = null;
           return { needs_login: true, morning_done: false, evening_done: false };
         }
+        jsLog('debug', 'checkAttendance: parsing checkedAt=' + JSON.stringify(data.checkedAt) +
+          ' checkedOutAt=' + JSON.stringify(data.checkedOutAt));
         return {
           needs_login: false,
           morning_done: !!data.checkedAt,

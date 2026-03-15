@@ -42,6 +42,9 @@ pub struct Config {
     /// 알림 종료 시각 — 이 시각 이후에는 저녁 알림을 보내지 않음 (기본 01:00)
     #[serde(default = "default_notification_end")]
     pub notification_end: TimeOfDay,
+    /// 디버그 모드 — 활성화 시 상세 로그 출력 (기본 false)
+    #[serde(default)]
+    pub debug_mode: bool,
 }
 
 fn default_true() -> bool {
@@ -122,6 +125,7 @@ impl Default for Config {
             notification_interval_mins: 15,
             notification_start: TimeOfDay { hour: 9, minute: 0 },
             notification_end: TimeOfDay { hour: 1, minute: 0 },
+            debug_mode: false,
         }
     }
 }
