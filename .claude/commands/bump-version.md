@@ -1,9 +1,11 @@
 ---
 description: "Bump the app version across all config files"
-allowed-tools: Read, Edit, Grep, Bash
+allowed-tools: Read, Edit, Grep, Bash, AskUserQuestion
 ---
 
-Bump the version of this project to the version specified by the user: $ARGUMENTS
+Bump the version of this project.
+
+If the user provided a specific version via `$ARGUMENTS`, use that version. If `$ARGUMENTS` is empty or not a valid version string, read the current version from `src-tauri/Cargo.toml` first, then ask the user what version they want to bump to.
 
 The following files need to be updated:
 
@@ -13,6 +15,7 @@ The following files need to be updated:
 
 Steps:
 1. Read both config files to confirm current version
-2. Update the version string in both config files
-3. Run `cargo generate-lockfile` in `src-tauri/` to update Cargo.lock
-4. Report the old version and new version to the user
+2. If no target version was specified, ask the user which version to bump to (show the current version for reference)
+3. Update the version string in both config files
+4. Run `cargo generate-lockfile` in `src-tauri/` to update Cargo.lock
+5. Report the old version and new version to the user
