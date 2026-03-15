@@ -41,6 +41,15 @@ pub fn run() {
                 .level(log_level)
                 .max_file_size(MAX_LOG_FILE_SIZE)
                 .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepOne)
+                .format(|callback, message, record| {
+                    callback.finish(format_args!(
+                        "[v{}][{}][{}] {}",
+                        env!("CARGO_PKG_VERSION"),
+                        record.level(),
+                        record.target(),
+                        message,
+                    ))
+                })
                 .build(),
         )
         // single-instance 플러그인: 이미 실행 중인 인스턴스가 있으면 두 번째 실행을 차단.
