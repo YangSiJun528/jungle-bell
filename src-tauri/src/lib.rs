@@ -42,8 +42,10 @@ pub fn run() {
                 .max_file_size(MAX_LOG_FILE_SIZE)
                 .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepOne)
                 .format(|callback, message, record| {
+                    let now = chrono::Local::now();
                     callback.finish(format_args!(
-                        "[v{}][{}][{}] {}",
+                        "[{}][v{}][{}][{}] {}",
+                        now.format("%Y-%m-%d %H:%M:%S"),
                         env!("CARGO_PKG_VERSION"),
                         record.level(),
                         record.target(),
