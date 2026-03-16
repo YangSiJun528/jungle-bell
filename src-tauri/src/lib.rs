@@ -196,7 +196,7 @@ pub fn run() {
                             if rx.await.unwrap_or(false) {
                                 app_handle_update
                                     .dialog()
-                                    .message("업데이트를 다운로드하고 있습니다. 잠시만 기다려 주세요...")
+                                    .message("업데이트를 다운로드 중입니다.\n완료될 때까지 앱을 종료하지 마세요. (이 창은 닫아도 됩니다.)")
                                     .title("업데이트 중")
                                     .show(|_| {});
                                 match update.download_and_install(|_, _| {}, || {}).await {
