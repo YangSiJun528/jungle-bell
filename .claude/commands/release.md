@@ -39,7 +39,9 @@ git push origin v{version}
 gh release create v{version} --title "v{version}" --generate-notes --latest
 ```
 
-- Even if the version contains prerelease identifiers like `alpha`, `beta`, or `rc`, do **not** mark it as a prerelease. Always use `--latest` to set it as the latest release.
+- If the version contains prerelease identifiers (e.g., `-alpha`, `-beta`, `-rc`), ask the user whether to mark it as a **prerelease**.
+  - If yes: use `--prerelease` flag and omit `--latest`.
+  - If no: use `--latest` as usual.
 
 ## Step 5: Report result
 
