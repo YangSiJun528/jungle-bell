@@ -29,6 +29,7 @@ const TICK_INTERVAL_ACTIVE: u64 = 60;
 const TICK_INTERVAL_IDLE: u64 = 300;
 
 /// 체커 WebView 리로드 간격 (초). 세션/토큰 갱신 목적.
+/// 액세스 토큰이 1시간 만료이므로 15분 간격으로 리로드하여 갱신.
 const RELOAD_INTERVAL_NORMAL: u64 = 15 * 60; // 15분
 
 /// 백그라운드 스케줄러 루프 시작.
@@ -158,8 +159,9 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
                 // --- 체커 WebView 주기적 리로드 ---
                 // API 호출은 WebView 쿠키를 사용하므로 세션/토큰 갱신을 위해
                 // 주기적으로 출석 페이지로 다시 이동시킴 (15분 간격).
-                // 로그인 필요 시에는 리로드하지 않음 (출석 페이지 닫힘 시에만 리로드).
-                if !s.needs_login {
+                // needs_login 상태에서도 리로드하여 사용자가 attendance 창에서
+                // 로그인한 경우 세션이 자동 복구되도록 함.
+                {
                     let now = Instant::now();
                     let should_reload = match s.last_reload {
                         Some(last) => {
