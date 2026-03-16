@@ -121,5 +121,7 @@ xattr -cr "/Applications/Jungle Bell.app"
 
 버그 이슈나 사용 중 문의를 남길 때 로그 파일을 함께 보내주시면 문제 해결에 도움이 됩니다.
 
+설정 > 정보 탭에서 **로그 폴더 열기** 버튼으로 바로 열 수 있습니다.
+
 - macOS: `~/Library/Logs/dev.sijun-yang.jungle-bell/`
 - Windows: `%APPDATA%\dev.sijun-yang.jungle-bell\logs\`
