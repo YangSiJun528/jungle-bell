@@ -46,11 +46,11 @@
 
 [Releases](https://github.com/YangSiJun528/jungle-bell/releases) 페이지에서 macOS 또는 Windows용 파일을 다운로드하세요.
 
-| 파일명 | 대상 |
-|--------|------|
-| `Jungle Bell_x.x.x_aarch64.dmg` | macOS (Apple Silicon) — M1, M2, M3, M4 |
-| `Jungle Bell_x.x.x_x64.dmg` | macOS (Intel) |
-| `Jungle Bell_x.x.x_x64-setup.exe` | Windows |
+| 파일명 | 대상                            |
+|--------|-------------------------------|
+| `Jungle Bell_x.x.x_aarch64.dmg` | macOS (Apple Silicon) — M 시리즈 |
+| `Jungle Bell_x.x.x_x64.dmg` | macOS (Intel)                 |
+| `Jungle Bell_x.x.x_x64-setup.exe` | Windows                       |
 
 모델을 모르겠다면 Mac에서 왼쪽 상단  → **이 Mac에 관하여**에서 확인할 수 있습니다.
 
@@ -58,9 +58,10 @@
 
 > [!WARNING]    
 > Jungle Bell은 Apple 공인 인증서로 서명되지 않은 앱입니다.     
-> macOS에서 처음 실행할 때 **"손상되었기 때문에 열 수 없습니다"** 오류가 표시될 수 있습니다.  
+> macOS에서 처음 실행할 때 **"손상되었기 때문에 열 수 없습니다"** 오류가 표시됩니다. 
+> 다음 순서에 맞게 설치해주세요.
 >   
-> Apple Developer Program 비용이 연 $99라 너무 비싸요. 😭
+> ~~Apple Developer Program 비용이 $99라 너무 비싸요. 😭~~
 
 `.dmg` 파일을 다운로드한 후, 클릭하여 Applications 폴더에 설치해주세요.
 
