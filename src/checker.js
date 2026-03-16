@@ -78,7 +78,12 @@
             return null;
           });
         }
-        return res.json().then(function (data) {
+        return res.text().then(function (body) {
+          if (!body || body.trim() === '') {
+            jsLog('debug', 'fetchAttendance: empty body (no attendance today)');
+            return { checkedAt: null, checkedOutAt: null };
+          }
+          var data = JSON.parse(body);
           jsLog('debug', 'fetchAttendance: raw response=' + JSON.stringify(data).substring(0, 1000));
           return data;
         });

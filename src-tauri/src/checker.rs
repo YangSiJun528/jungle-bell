@@ -85,9 +85,11 @@ pub async fn report_attendance_status(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
     status: AttendanceReport,
 ) -> Result<(), String> {
-    // API 오류 시 상태 갱신하지 않음
+    // API 오류 시 출석 상태는 갱신하지 않되, 로딩 상태는 해제
     if status.api_error {
         info!("[checker] API error received, skipping state update");
+        let mut s = state.lock().await;
+        s.data_loaded = true;
         return Ok(());
     }
 
