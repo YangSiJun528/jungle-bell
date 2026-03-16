@@ -2113,7 +2113,7 @@ dependencies = [
 
 [[package]]
 name = "jungle-bell"
-version = "0.0.5-beta.1"
+version = "0.0.5-beta.2"
 dependencies = [
  "chrono",
  "dirs 6.0.0",
