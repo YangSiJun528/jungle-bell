@@ -139,6 +139,17 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                 // 기존 출석 창이 있으면 재사용, 없으면 새로 생성.
                 if let Some(window) = app.get_webview_window("attendance") {
                     let _ = window.show();
+                    let _ = window.unminimize();
+                    // macOS에서 트레이 앱은 set_focus() 전에 앱 자체를 활성화해야 창이 포커스됨.
+                    #[cfg(target_os = "macos")]
+                    {
+                        use objc2_app_kit::NSApplication;
+                        use objc2_foundation::MainThreadMarker;
+                        if let Some(mtm) = MainThreadMarker::new() {
+                            let ns_app = NSApplication::sharedApplication(mtm);
+                            ns_app.activate();
+                        }
+                    }
                     let _ = window.set_focus();
                 } else {
                     let app_handle = app.clone();
@@ -183,6 +194,16 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                 // 설정 창은 src/index.html (프론트엔드)을 로드.
                 if let Some(window) = app.get_webview_window("settings") {
                     let _ = window.show();
+                    let _ = window.unminimize();
+                    #[cfg(target_os = "macos")]
+                    {
+                        use objc2_app_kit::NSApplication;
+                        use objc2_foundation::MainThreadMarker;
+                        if let Some(mtm) = MainThreadMarker::new() {
+                            let ns_app = NSApplication::sharedApplication(mtm);
+                            ns_app.activate();
+                        }
+                    }
                     let _ = window.set_focus();
                 } else {
                     let _ =
