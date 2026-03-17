@@ -8,6 +8,13 @@
 
 <hr>
 
+[![GitHub Release](https://img.shields.io/github/v/release/YangSiJun528/jungle-bell?include_prereleases)](https://github.com/YangSiJun528/jungle-bell/releases)
+[![Downloads](https://img.shields.io/github/downloads/YangSiJun528/jungle-bell/total)](https://github.com/YangSiJun528/jungle-bell/releases)
+[![License](https://img.shields.io/github/license/YangSiJun528/jungle-bell)](LICENSE)
+[![Release](https://img.shields.io/github/actions/workflow/status/YangSiJun528/jungle-bell/release.yml)](https://github.com/YangSiJun528/jungle-bell/actions/workflows/release.yml)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey)]()
+[![Stars](https://img.shields.io/github/stars/YangSiJun528/jungle-bell)](https://github.com/YangSiJun528/jungle-bell)
+
 <br/>
 
 > [!CAUTION]     
