@@ -16,8 +16,10 @@ use tokio::sync::Mutex;
 use tauri_plugin_autostart::ManagerExt as AutostartManagerExt;
 use tauri_plugin_updater::UpdaterExt;
 
+use chrono::{DateTime, Utc};
+
 use crate::config::TimeOfDay;
-use crate::state::{self, AppState};
+use crate::state::{self, AppState, DailyPhase};
 use crate::tray;
 
 /// checker.js의 API 조회 결과.
@@ -77,6 +79,29 @@ pub fn log_from_js(level: String, message: String) {
     }
 }
 
+/// 순수 로직: 체커 보고를 앱 상태에 반영하고 phase를 재계산.
+///
+/// API 에러 시 `data_loaded`만 설정하고 `None` 반환.
+/// 그 외에는 `apply_report` + `compute_daily_phase`를 수행하고
+/// `Some((phase, remaining))` 반환.
+pub(crate) fn process_report(
+    state: &mut AppState,
+    report: &AttendanceReport,
+    now: DateTime<Utc>,
+) -> Option<(DailyPhase, Option<i64>)> {
+    if report.api_error {
+        state.data_loaded = true;
+        return None;
+    }
+
+    apply_report(state, report);
+
+    let (phase, remaining) =
+        state::compute_daily_phase(&state.config, now, state.morning_checked, state.evening_checked);
+    state.phase = phase;
+    Some((phase, remaining))
+}
+
 /// Tauri 커맨드: API 조회 결과를 수신.
 /// `trigger_check()`가 이벤트를 보내면, JS가 이 커맨드를 invoke로 호출한다.
 #[tauri::command]
@@ -85,30 +110,22 @@ pub async fn report_attendance_status(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
     status: AttendanceReport,
 ) -> Result<(), String> {
-    // API 오류 시 출석 상태는 갱신하지 않되, 로딩 상태는 해제
     if status.api_error {
         info!("[checker] API error received, skipping state update");
-        let mut s = state.lock().await;
-        s.data_loaded = true;
-        return Ok(());
-    }
-
-    {
+    } else {
         let s = state.lock().await;
         info!(
             "[checker] report: needs_login={} morning={} evening={} current_phase={:?}",
             status.needs_login, status.morning_done, status.evening_done, s.phase,
         );
+        drop(s);
     }
 
     let mut s = state.lock().await;
-    apply_report(&mut s, &status);
-
-    // 즉시 상태 재계산 + 트레이 갱신
     let now = chrono::Utc::now();
-    let (phase, remaining) = state::compute_daily_phase(&s.config, now, s.morning_checked, s.evening_checked);
-    s.phase = phase;
-    tray::update_tray(&app, phase, remaining, s.needs_login);
+    if let Some((phase, remaining)) = process_report(&mut s, &status, now) {
+        tray::update_tray(&app, phase, remaining, s.needs_login);
+    }
 
     Ok(())
 }
@@ -410,4 +427,102 @@ pub async fn set_debug_mode(state: tauri::State<'_, Arc<Mutex<AppState>>>, enabl
     log::set_max_level(level);
     log::info!("[settings] 로그 레벨 전환: {}", level);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::{FixedOffset, TimeZone};
+    use crate::config::Config;
+
+    /// KST 시각을 UTC DateTime으로 변환하는 헬퍼.
+    fn kst_time(h: u32, m: u32, s: u32) -> DateTime<Utc> {
+        FixedOffset::east_opt(9 * 3600)
+            .unwrap()
+            .with_ymd_and_hms(2026, 3, 17, h, m, s)
+            .unwrap()
+            .with_timezone(&Utc)
+    }
+
+    fn default_state() -> AppState {
+        AppState::new(Config::default())
+    }
+
+    #[test]
+    fn process_report_api_error_sets_data_loaded() {
+        let mut state = default_state();
+        let report = AttendanceReport {
+            needs_login: false,
+            morning_done: false,
+            evening_done: false,
+            api_error: true,
+        };
+        let result = process_report(&mut state, &report, kst_time(9, 0, 0));
+        assert!(result.is_none());
+        assert!(state.data_loaded);
+    }
+
+    #[test]
+    fn process_report_needs_login() {
+        let mut state = default_state();
+        let report = AttendanceReport {
+            needs_login: true,
+            morning_done: false,
+            evening_done: false,
+            api_error: false,
+        };
+        let result = process_report(&mut state, &report, kst_time(9, 0, 0));
+        assert!(result.is_some());
+        let (phase, remaining) = result.unwrap();
+        // needs_login=true이지만 phase는 시간에 따라 계산됨
+        assert_eq!(phase, DailyPhase::NeedStart);
+        assert!(remaining.is_some());
+        assert!(state.needs_login);
+    }
+
+    #[test]
+    fn process_report_morning_done() {
+        let mut state = default_state();
+        let report = AttendanceReport {
+            needs_login: false,
+            morning_done: true,
+            evening_done: false,
+            api_error: false,
+        };
+        // KST 12:00 — 체크인 완료, 체크아웃 전 → Studying
+        let result = process_report(&mut state, &report, kst_time(12, 0, 0));
+        let (phase, _) = result.unwrap();
+        assert_eq!(phase, DailyPhase::Studying);
+        assert!(state.morning_checked);
+        assert!(!state.evening_checked);
+    }
+
+    #[test]
+    fn process_report_both_done() {
+        let mut state = default_state();
+        let report = AttendanceReport {
+            needs_login: false,
+            morning_done: true,
+            evening_done: true,
+            api_error: false,
+        };
+        let result = process_report(&mut state, &report, kst_time(23, 30, 0));
+        let (phase, _) = result.unwrap();
+        assert_eq!(phase, DailyPhase::Complete);
+    }
+
+    #[test]
+    fn process_report_checkin_overdue() {
+        let mut state = default_state();
+        let report = AttendanceReport {
+            needs_login: false,
+            morning_done: false,
+            evening_done: false,
+            api_error: false,
+        };
+        // KST 11:00 — morning_end(10:00) 지남, 미체크인 → StartOverdue
+        let result = process_report(&mut state, &report, kst_time(11, 0, 0));
+        let (phase, _) = result.unwrap();
+        assert_eq!(phase, DailyPhase::StartOverdue);
+    }
 }
