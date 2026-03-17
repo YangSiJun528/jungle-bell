@@ -165,34 +165,25 @@ pub(crate) fn compute_tick_interval(
 
 /// phase와 남은 시간으로 알림 제목·본문 생성.
 pub(crate) fn notification_message(phase: DailyPhase, remaining: Option<i64>) -> (&'static str, String) {
+    let format_remaining = |secs: i64| {
+        let mins = secs / 60;
+        if mins >= 60 {
+            format!("마감까지 {}시간 {}분 남았습니다.", mins / 60, mins % 60)
+        } else {
+            format!("마감까지 {}분 남았습니다.", mins)
+        }
+    };
+
     match phase {
-        DailyPhase::NeedStart => {
-            let body = if let Some(secs) = remaining {
-                let mins = secs / 60;
-                if mins >= 60 {
-                    format!("마감까지 {}시간 {}분 남았습니다.", mins / 60, mins % 60)
-                } else {
-                    format!("마감까지 {}분 남았습니다.", mins)
-                }
-            } else {
-                "출석 체크를 해주세요.".into()
-            };
-            ("출석 체크 시간입니다", body)
-        }
+        DailyPhase::NeedStart => (
+            "출석 체크 시간입니다",
+            remaining.map(&format_remaining).unwrap_or_else(|| "출석 체크를 해주세요.".into()),
+        ),
         DailyPhase::StartOverdue => ("출석 체크 지각!", "빨리 체크인하세요.".into()),
-        DailyPhase::NeedEnd => {
-            let body = if let Some(secs) = remaining {
-                let mins = secs / 60;
-                if mins >= 60 {
-                    format!("마감까지 {}시간 {}분 남았습니다.", mins / 60, mins % 60)
-                } else {
-                    format!("마감까지 {}분 남았습니다.", mins)
-                }
-            } else {
-                "학습 종료 체크를 해주세요.".into()
-            };
-            ("학습 종료 체크가 필요합니다", body)
-        }
+        DailyPhase::NeedEnd => (
+            "학습 종료 체크가 필요합니다",
+            remaining.map(&format_remaining).unwrap_or_else(|| "학습 종료 체크를 해주세요.".into()),
+        ),
         _ => ("Jungle Bell", "출석 상태를 확인하세요.".into()),
     }
 }
