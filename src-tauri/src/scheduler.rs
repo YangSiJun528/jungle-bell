@@ -403,59 +403,74 @@ mod tests {
     // --- check_daily_reset ---
 
     #[test]
-    fn daily_reset_first_call_sets_day() {
+    fn 첫_호출시_날짜가_설정되고_리셋은_발생하지_않는다() {
+        // given
         let mut state = default_state();
         assert!(state.last_reset_day.is_none());
+
+        // when
         let reset = check_daily_reset(&mut state, kst_dt(9, 0, 0));
+
+        // then
         assert!(!reset);
         assert!(state.last_reset_day.is_some());
     }
 
     #[test]
-    fn daily_reset_same_day_no_reset() {
+    fn 같은_날에는_리셋이_발생하지_않는다() {
+        // given
         let mut state = default_state();
         let kst = kst_dt(9, 0, 0);
         check_daily_reset(&mut state, kst);
         state.morning_checked = true;
         state.evening_checked = true;
 
+        // when
         let reset = check_daily_reset(&mut state, kst);
+
+        // then
         assert!(!reset);
         assert!(state.morning_checked);
     }
 
     #[test]
-    fn daily_reset_next_day_after_morning_start() {
+    fn 다음날_morning_start_이후에는_리셋이_발생한다() {
+        // given
         let mut state = default_state();
         let day1 = kst_dt(9, 0, 0);
         check_daily_reset(&mut state, day1);
         state.morning_checked = true;
         state.evening_checked = true;
 
-        // 다음 날 05:00 (morning_start=04:00 이후)
+        // when: 다음 날 05:00 (morning_start=04:00 이후)
         let day2 = FixedOffset::east_opt(9 * 3600)
             .unwrap()
             .with_ymd_and_hms(2026, 3, 18, 5, 0, 0)
             .unwrap();
         let reset = check_daily_reset(&mut state, day2);
+
+        // then
         assert!(reset);
         assert!(!state.morning_checked);
         assert!(!state.evening_checked);
     }
 
     #[test]
-    fn daily_reset_next_day_before_morning_start_no_reset() {
+    fn 다음날_morning_start_이전에는_리셋이_발생하지_않는다() {
+        // given
         let mut state = default_state();
         let day1 = kst_dt(9, 0, 0);
         check_daily_reset(&mut state, day1);
         state.morning_checked = true;
 
-        // 다음 날 02:00 (morning_start=04:00 이전)
+        // when: 다음 날 02:00 (morning_start=04:00 이전)
         let day2 = FixedOffset::east_opt(9 * 3600)
             .unwrap()
             .with_ymd_and_hms(2026, 3, 18, 2, 0, 0)
             .unwrap();
         let reset = check_daily_reset(&mut state, day2);
+
+        // then
         assert!(!reset);
         assert!(state.morning_checked);
     }
@@ -463,178 +478,264 @@ mod tests {
     // --- should_notify ---
 
     #[test]
-    fn notify_disabled() {
+    fn 알림_비활성화시_알림을_보내지_않는다() {
+        // given
         let mut config = Config::default();
         config.notification_enabled = false;
+
+        // when
         let d = should_notify(&config, DailyPhase::NeedStart, Some(3600), false, kst_dt(9, 30, 0), None);
+
+        // then
         assert!(!d.send);
     }
 
     #[test]
-    fn notify_needs_login() {
+    fn 로그인_필요시_알림을_보내지_않는다() {
+        // given
         let config = Config::default();
+
+        // when
         let d = should_notify(&config, DailyPhase::NeedStart, Some(3600), true, kst_dt(9, 30, 0), None);
+
+        // then
         assert!(!d.send);
     }
 
     #[test]
-    fn notify_non_actionable_phase() {
+    fn 액션_불필요_페이즈에서는_알림을_보내지_않는다() {
+        // given
         let config = Config::default();
+
+        // when
         let d = should_notify(&config, DailyPhase::Studying, Some(3600), false, kst_dt(12, 0, 0), None);
+
+        // then
         assert!(!d.send);
     }
 
     #[test]
-    fn notify_before_window() {
-        let config = Config::default(); // notification_start=09:00
-        // KST 08:00 — 아침 알림 윈도우 전
+    fn 알림_윈도우_이전에는_알림을_보내지_않는다() {
+        // given: notification_start=09:00
+        let config = Config::default();
+
+        // when: KST 08:00 — 아침 알림 윈도우 전
         let d = should_notify(&config, DailyPhase::NeedStart, Some(7200), false, kst_dt(8, 0, 0), None);
+
+        // then
         assert!(!d.send);
     }
 
     #[test]
-    fn notify_in_window_first_time() {
-        let config = Config::default(); // notification_start=09:00
+    fn 알림_윈도우_내_첫_알림은_발송된다() {
+        // given: notification_start=09:00
+        let config = Config::default();
+
+        // when
         let d = should_notify(&config, DailyPhase::NeedStart, Some(3600), false, kst_dt(9, 30, 0), None);
+
+        // then
         assert!(d.send);
         assert!(d.message.is_some());
     }
 
     #[test]
-    fn notify_throttled() {
-        let config = Config::default(); // interval=15분
-        // 마지막 알림 5분 전 → 쓰로틀
+    fn 쓰로틀_간격_내에는_알림을_보내지_않는다() {
+        // given: interval=15분, 마지막 알림 5분 전
+        let config = Config::default();
+
+        // when
         let d = should_notify(&config, DailyPhase::NeedStart, Some(3600), false, kst_dt(9, 30, 0), Some(300));
+
+        // then
         assert!(!d.send);
     }
 
     #[test]
-    fn notify_after_throttle_expires() {
-        let config = Config::default(); // interval=15분=900초
+    fn 쓰로틀_만료_후에는_알림이_발송된다() {
+        // given: interval=15분=900초
+        let config = Config::default();
+
+        // when: 901초 경과
         let d = should_notify(&config, DailyPhase::NeedStart, Some(3600), false, kst_dt(9, 30, 0), Some(901));
+
+        // then
         assert!(d.send);
     }
 
     #[test]
-    fn notify_evening_across_midnight() {
-        let config = Config::default(); // evening_start=23:00, notification_end=01:00
-        // KST 00:30 — 자정 넘긴 저녁 윈도우 내
+    fn 자정을_넘긴_저녁_윈도우_내에서_알림이_발송된다() {
+        // given: evening_start=23:00, notification_end=01:00
+        let config = Config::default();
+
+        // when: KST 00:30 — 자정 넘긴 저녁 윈도우 내
         let kst_0030 = FixedOffset::east_opt(9 * 3600)
             .unwrap()
             .with_ymd_and_hms(2026, 3, 18, 0, 30, 0)
             .unwrap();
         let d = should_notify(&config, DailyPhase::NeedEnd, Some(12600), false, kst_0030, None);
+
+        // then
         assert!(d.send);
     }
 
     #[test]
-    fn notify_evening_after_window() {
-        let config = Config::default(); // notification_end=01:00
-        // KST 01:30 — 윈도우 밖
+    fn 저녁_윈도우_종료_후에는_알림을_보내지_않는다() {
+        // given: notification_end=01:00
+        let config = Config::default();
+
+        // when: KST 01:30 — 윈도우 밖
         let kst_0130 = FixedOffset::east_opt(9 * 3600)
             .unwrap()
             .with_ymd_and_hms(2026, 3, 18, 1, 30, 0)
             .unwrap();
         let d = should_notify(&config, DailyPhase::NeedEnd, Some(9000), false, kst_0130, None);
+
+        // then
         assert!(!d.send);
     }
 
     // --- compute_tick_interval ---
 
     #[test]
-    fn tick_not_loaded() {
-        assert_eq!(compute_tick_interval(false, false, false, false, DailyPhase::Idle, None), 5);
+    fn 데이터_미로드시_틱_간격은_5초이다() {
+        // given & when
+        let result = compute_tick_interval(false, false, false, false, DailyPhase::Idle, None);
+
+        // then
+        assert_eq!(result, 5);
     }
 
     #[test]
-    fn tick_needs_login_attendance_open() {
-        assert_eq!(compute_tick_interval(true, true, true, false, DailyPhase::Idle, None), 10);
+    fn 로그인_필요하고_출석_열려있으면_틱_간격은_10초이다() {
+        // given & when
+        let result = compute_tick_interval(true, true, true, false, DailyPhase::Idle, None);
+
+        // then
+        assert_eq!(result, 10);
     }
 
     #[test]
-    fn tick_needs_login_retry_active() {
-        assert_eq!(compute_tick_interval(true, true, false, true, DailyPhase::Idle, None), 10);
+    fn 로그인_필요하고_재시도_활성화시_틱_간격은_10초이다() {
+        // given & when
+        let result = compute_tick_interval(true, true, false, true, DailyPhase::Idle, None);
+
+        // then
+        assert_eq!(result, 10);
     }
 
     #[test]
-    fn tick_needs_login_no_retry() {
-        assert_eq!(compute_tick_interval(true, true, false, false, DailyPhase::Idle, None), 600);
+    fn 로그인_필요하고_재시도_없으면_틱_간격은_600초이다() {
+        // given & when
+        let result = compute_tick_interval(true, true, false, false, DailyPhase::Idle, None);
+
+        // then
+        assert_eq!(result, 600);
     }
 
     #[test]
-    fn tick_active_phase() {
-        assert_eq!(
-            compute_tick_interval(true, false, false, false, DailyPhase::NeedStart, Some(3600)),
-            TICK_INTERVAL_ACTIVE
-        );
+    fn 액티브_페이즈에서_틱_간격은_활성_간격이다() {
+        // given & when
+        let result = compute_tick_interval(true, false, false, false, DailyPhase::NeedStart, Some(3600));
+
+        // then
+        assert_eq!(result, TICK_INTERVAL_ACTIVE);
     }
 
     #[test]
-    fn tick_idle_phase() {
-        assert_eq!(
-            compute_tick_interval(true, false, false, false, DailyPhase::Studying, Some(1800)),
-            TICK_INTERVAL_IDLE
-        );
+    fn 유휴_페이즈에서_틱_간격은_유휴_간격이다() {
+        // given & when
+        let result = compute_tick_interval(true, false, false, false, DailyPhase::Studying, Some(1800));
+
+        // then
+        assert_eq!(result, TICK_INTERVAL_IDLE);
     }
 
     #[test]
-    fn tick_remaining_overrides_base() {
-        // remaining=30 < base=60 → 31
-        assert_eq!(
-            compute_tick_interval(true, false, false, false, DailyPhase::NeedStart, Some(30)),
-            31
-        );
+    fn 잔여시간이_기본_간격보다_짧으면_잔여시간_플러스_1이다() {
+        // given & when: remaining=30 < base=60 → 31
+        let result = compute_tick_interval(true, false, false, false, DailyPhase::NeedStart, Some(30));
+
+        // then
+        assert_eq!(result, 31);
     }
 
     #[test]
-    fn tick_remaining_zero_no_override() {
-        assert_eq!(
-            compute_tick_interval(true, false, false, false, DailyPhase::NeedStart, Some(0)),
-            TICK_INTERVAL_ACTIVE
-        );
+    fn 잔여시간이_0이면_기본_간격을_사용한다() {
+        // given & when
+        let result = compute_tick_interval(true, false, false, false, DailyPhase::NeedStart, Some(0));
+
+        // then
+        assert_eq!(result, TICK_INTERVAL_ACTIVE);
     }
 
     // --- notification_message ---
 
     #[test]
-    fn message_need_start_with_remaining() {
-        let (title, body) = notification_message(DailyPhase::NeedStart, Some(5400));
+    fn 출석체크_필요시_시간_분_메시지를_생성한다() {
+        // given
+        let remaining = Some(5400);
+
+        // when
+        let (title, body) = notification_message(DailyPhase::NeedStart, remaining);
+
+        // then
         assert_eq!(title, "출석 체크 시간입니다");
         assert!(body.contains("1시간 30분"));
     }
 
     #[test]
-    fn message_need_start_minutes_only() {
-        let (_, body) = notification_message(DailyPhase::NeedStart, Some(1800));
+    fn 출석체크_필요시_분만_있으면_시간을_표시하지_않는다() {
+        // given
+        let remaining = Some(1800);
+
+        // when
+        let (_, body) = notification_message(DailyPhase::NeedStart, remaining);
+
+        // then
         assert!(body.contains("30분"));
         assert!(!body.contains("시간"));
     }
 
     #[test]
-    fn message_start_overdue() {
+    fn 지각시_지각_메시지를_생성한다() {
+        // given & when
         let (title, body) = notification_message(DailyPhase::StartOverdue, None);
+
+        // then
         assert_eq!(title, "출석 체크 지각!");
         assert!(body.contains("빨리"));
     }
 
     #[test]
-    fn message_need_end() {
+    fn 종료체크_필요시_종료_메시지를_생성한다() {
+        // given & when
         let (title, _) = notification_message(DailyPhase::NeedEnd, Some(3600));
+
+        // then
         assert_eq!(title, "학습 종료 체크가 필요합니다");
     }
 
     #[test]
-    fn message_fallback() {
+    fn 기타_페이즈에서는_기본_메시지를_생성한다() {
+        // given & when
         let (title, _) = notification_message(DailyPhase::Idle, None);
+
+        // then
         assert_eq!(title, "Jungle Bell");
     }
 
     // --- compute_tick (통합) ---
 
     #[test]
-    fn compute_tick_before_data_loaded() {
+    fn 데이터_미로드시_트레이_알림_리로드_모두_없다() {
+        // given
         let mut state = default_state();
+
+        // when
         let result = compute_tick(&mut state, kst_utc(9, 0, 0), false);
+
+        // then
         assert_eq!(result.tick_interval, 5);
         assert!(result.tray_update.is_none());
         assert!(result.notification.is_none());
@@ -642,12 +743,15 @@ mod tests {
     }
 
     #[test]
-    fn compute_tick_need_start_with_notification() {
+    fn 출석_필요_상태에서_알림_윈도우_내이면_알림이_발송된다() {
+        // given
         let mut state = default_state();
         state.data_loaded = true;
 
-        // 첫 틱: NeedStart + 알림 윈도우 내 → 알림 발송
+        // when: 첫 틱, NeedStart + 알림 윈도우 내
         let result = compute_tick(&mut state, kst_utc(9, 30, 0), false);
+
+        // then
         assert_eq!(state.phase, DailyPhase::NeedStart);
         assert!(result.tray_update.is_some());
         assert!(result.notification.is_some());
@@ -655,110 +759,129 @@ mod tests {
     }
 
     #[test]
-    fn compute_tick_notification_throttled() {
+    fn 알림_쓰로틀_후_간격_경과시_재발송된다() {
+        // given
         let mut state = default_state();
         state.data_loaded = true;
-        // 첫 틱: 알림 발송
         compute_tick(&mut state, kst_utc(9, 30, 0), false);
         assert!(state.last_notification.is_some());
 
-        // 5분 후: 쓰로틀 (interval=15분)
-        let result = compute_tick(&mut state, kst_utc(9, 35, 0), false);
-        assert!(result.notification.is_none());
+        // when: 5분 후 → 쓰로틀 (interval=15분)
+        let result_5min = compute_tick(&mut state, kst_utc(9, 35, 0), false);
 
-        // 16분 후: 쓰로틀 해제
-        let result = compute_tick(&mut state, kst_utc(9, 46, 1), false);
-        assert!(result.notification.is_some());
+        // then: 쓰로틀됨
+        assert!(result_5min.notification.is_none());
+
+        // when: 16분 후 → 쓰로틀 해제
+        let result_16min = compute_tick(&mut state, kst_utc(9, 46, 1), false);
+
+        // then: 재발송
+        assert!(result_16min.notification.is_some());
     }
 
     #[test]
-    fn compute_tick_studying_no_notification() {
+    fn 학습중_상태에서는_알림이_발송되지_않는다() {
+        // given
         let mut state = default_state();
         state.data_loaded = true;
         state.morning_checked = true;
 
+        // when
         let result = compute_tick(&mut state, kst_utc(12, 0, 0), false);
+
+        // then
         assert_eq!(state.phase, DailyPhase::Studying);
         assert!(result.notification.is_none());
         assert!(result.tray_update.is_some());
     }
 
     #[test]
-    fn compute_tick_reload_after_interval() {
+    fn 리로드_간격_경과시_리로드가_발생한다() {
+        // given
         let mut state = default_state();
         state.data_loaded = true;
-
-        // 첫 틱: last_reload 초기화
         let t0 = kst_utc(9, 0, 0);
         let result = compute_tick(&mut state, t0, false);
         assert!(!result.should_reload);
         assert_eq!(state.last_reload, Some(t0));
 
-        // 14분 후: 리로드 안 함
+        // when: 14분 후
         let t1 = kst_utc(9, 14, 0);
-        let result = compute_tick(&mut state, t1, false);
-        assert!(!result.should_reload);
+        let result_14min = compute_tick(&mut state, t1, false);
 
-        // 16분 후: 리로드
+        // then: 아직 리로드 안 함
+        assert!(!result_14min.should_reload);
+
+        // when: 16분 후
         let t2 = kst_utc(9, 16, 0);
-        let result = compute_tick(&mut state, t2, false);
-        assert!(result.should_reload);
+        let result_16min = compute_tick(&mut state, t2, false);
+
+        // then: 리로드 발생
+        assert!(result_16min.should_reload);
         assert_eq!(state.last_reload, Some(t2));
     }
 
     #[test]
-    fn compute_tick_login_retry_expires() {
+    fn 로그인_재시도_만료시_틱_간격이_늘어난다() {
+        // given
         let mut state = default_state();
         state.data_loaded = true;
         state.needs_login = true;
-
-        // 3분 후 만료되는 로그인 재시도 윈도우
         let now = kst_utc(9, 0, 0);
         state.login_retry_until = Some(now + chrono::Duration::seconds(180));
 
+        // when: 재시도 윈도우 내
         let result = compute_tick(&mut state, now, false);
-        assert!(state.login_retry_until.is_some());
-        assert_eq!(result.tick_interval, 10); // login + retry active
 
-        // 4분 후: 만료
+        // then
+        assert!(state.login_retry_until.is_some());
+        assert_eq!(result.tick_interval, 10);
+
+        // when: 4분 후 만료
         let later = kst_utc(9, 4, 0);
         let result = compute_tick(&mut state, later, false);
+
+        // then
         assert!(state.login_retry_until.is_none());
-        assert_eq!(result.tick_interval, 600); // login + no retry
+        assert_eq!(result.tick_interval, 600);
     }
 
     #[test]
-    fn compute_tick_daily_reset() {
+    fn 일일_리셋시_체크_상태가_초기화된다() {
+        // given
         let mut state = default_state();
         state.data_loaded = true;
         state.morning_checked = true;
         state.evening_checked = true;
-
-        // Day 1
         compute_tick(&mut state, kst_utc(23, 0, 0), false);
         assert!(state.morning_checked);
 
-        // Day 2 05:00 — 리셋
+        // when: Day 2 05:00 — 리셋
         let day2 = FixedOffset::east_opt(9 * 3600)
             .unwrap()
             .with_ymd_and_hms(2026, 3, 18, 5, 0, 0)
             .unwrap()
             .with_timezone(&Utc);
         let result = compute_tick(&mut state, day2, false);
+
+        // then
         assert!(result.daily_reset);
         assert!(!state.morning_checked);
         assert!(!state.evening_checked);
     }
 
     #[test]
-    fn compute_tick_phase_change_detected() {
+    fn 페이즈_변경시_변경_플래그가_설정된다() {
+        // given
         let mut state = default_state();
         state.data_loaded = true;
         state.phase = DailyPhase::NeedStart;
-
-        // 체크인 완료 → Studying
         state.morning_checked = true;
+
+        // when: 체크인 완료 → Studying
         let result = compute_tick(&mut state, kst_utc(12, 0, 0), false);
+
+        // then
         assert!(result.phase_changed);
         assert_eq!(state.phase, DailyPhase::Studying);
     }
