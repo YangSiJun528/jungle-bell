@@ -1,0 +1,46 @@
+name: "버그 리포트"
+description: "버그를 발견하셨나요? 알려주세요!"
+labels: ["버그"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: "앱 버전"
+      description: "메뉴 > 정보에서 확인할 수 있어요."
+      placeholder: "예: 0.1.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: symptom
+    attributes:
+      label: "어떤 증상이 발생하나요?"
+      description: "가능하면 재현 순서도 함께 적어주세요."
+      placeholder: |
+        1. ○○ 화면에서 ○○ 버튼을 클릭
+        2. ○○ 현상이 발생
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: "기대했던 동작"
+      placeholder: "정상적으로 동작했다면 어떻게 됐어야 하나요?"
+    validations:
+      required: false
+
+  - type: markdown
+    attributes:
+      value: |
+        > **로그가 있으신가요?**
+        > 로그는 문제 해결에 큰 도움이 됩니다! 다만 GitHub 이슈는 누구에게나 공개되고 용량도 크기 때문에,
+        > 로그는 슬랙 DM 등으로 별도 전달 부탁드려요.
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: "기타"
+      description: "스크린샷, OS 정보 등 추가 정보가 있다면 자유롭게 적어주세요."
+    validations:
+      required: false

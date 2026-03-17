@@ -1,0 +1,24 @@
+name: "궁금해요"
+description: "사용법이나 동작에 대해 궁금한 점이 있으신가요?"
+labels: ["궁금해요"]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: "궁금한 점"
+      description: "자유롭게 질문해 주세요."
+      placeholder: |
+        예: 알림 소리를 바꿀 수 있나요?
+        예: 특정 시간대에만 알림을 끌 수 있나요?
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: "배경 / 상황 (선택)"
+      description: "질문에 대한 배경이 있다면 적어주시면 더 정확한 답변을 드릴 수 있어요."
+      placeholder: |
+        예: 회의 중에는 알림을 받고 싶지 않아서요.
+    validations:
+      required: false

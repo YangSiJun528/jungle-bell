@@ -1,0 +1,33 @@
+name: "기능 개선 건의"
+description: "이런 기능이 있으면 좋겠다! 아이디어를 들려주세요."
+labels: ["기능_개선_건의"]
+body:
+  - type: textarea
+    id: proposal
+    attributes:
+      label: "어떤 기능을 원하시나요?"
+      description: "추가되거나 개선됐으면 하는 기능을 설명해 주세요."
+      placeholder: |
+        예: 타이머 종료 시 슬랙 메시지를 자동으로 보내는 기능이 있으면 좋겠어요.
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: "왜 필요한가요? (선택)"
+      description: "이 기능이 어떤 상황에서 도움이 될지 알려주시면 우선순위 판단에 참고할게요."
+      placeholder: |
+        예: 매번 수동으로 알리기 번거로워서요.
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: "현재 대안 (선택)"
+      description: "지금은 어떻게 해결하고 계신가요?"
+      placeholder: |
+        예: 타이머 끝나면 직접 슬랙에 메시지를 보내고 있어요.
+    validations:
+      required: false
