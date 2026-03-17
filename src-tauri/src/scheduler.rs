@@ -215,7 +215,7 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
             );
         }
         loop {
-            let tick_secs = {
+            let (tick_secs, did_reload) = {
                 let now = Utc::now();
                 let kst_now = now.with_timezone(&kst());
                 let mut s = shared_state.lock().await;
@@ -275,6 +275,13 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
                 }
 
                 // --- 체커 WebView 주기적 리로드 ---
+                // API 호출은 WebView 쿠키를 사용하므로 세션/토큰 갱신을 위해
+                // 주기적으로 출석 페이지로 다시 이동시킴 (15분 간격).
+                // needs_login 상태에서도 리로드하여 사용자가 attendance 창에서
+                // 로그인한 경우 세션이 자동 복구되도록 함.
+                // 리로드 시 checker.js가 자동으로 initial check를 수행하므로
+                // trigger_check를 건너뛰어 "Load failed" 레이스 컨디션을 방지.
+                let did_reload;
                 {
                     let now = Instant::now();
                     let should_reload = match s.last_reload {
@@ -286,6 +293,7 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
                             false
                         }
                     };
+                    did_reload = should_reload;
                     if should_reload {
                         s.last_reload = Some(now);
                         if let Some(checker) = app_handle.get_webview_window("checker") {
@@ -306,7 +314,8 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
                 // --- 적응형 틱 간격 ---
                 let attendance_open = app_handle.get_webview_window("attendance").is_some();
                 let login_retry_active = s.login_retry_until.is_some();
-                compute_tick_interval(s.data_loaded, s.needs_login, attendance_open, login_retry_active, s.phase, remaining)
+                let interval = compute_tick_interval(s.data_loaded, s.needs_login, attendance_open, login_retry_active, s.phase, remaining);
+                (interval, did_reload)
             };
 
             {
@@ -318,7 +327,11 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
             }
 
             // Rust가 오케스트레이터: 매 틱마다 JS 스냅샷 수집을 트리거.
-            checker::trigger_check(&app_handle);
+            // 결과는 report_attendance_status 커맨드를 통해 비동기로 돌아온다.
+            // 리로드한 틱에서는 건너뜀 — 새 페이지의 checker.js가 initial check를 수행.
+            if !did_reload {
+                checker::trigger_check(&app_handle);
+            }
 
             tokio::time::sleep(tokio::time::Duration::from_secs(tick_secs)).await;
         }
