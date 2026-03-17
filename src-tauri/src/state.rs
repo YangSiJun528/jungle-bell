@@ -21,12 +21,12 @@ pub struct AppState {
     /// 마지막으로 확인한 KST 날짜 (day-of-year), 일일 리셋 감지용
     pub last_reset_day: Option<u32>,
     /// 체커 WebView 마지막 리로드 시각
-    pub last_reload: Option<tokio::time::Instant>,
+    pub last_reload: Option<DateTime<Utc>>,
     /// 로그인 재시도 윈도우 마감 시각.
     /// 출석 페이지가 닫힌 후 일정 시간 동안만 로그인 상태를 재확인.
-    pub login_retry_until: Option<tokio::time::Instant>,
+    pub login_retry_until: Option<DateTime<Utc>>,
     /// 마지막 알림 전송 시각
-    pub last_notification: Option<tokio::time::Instant>,
+    pub last_notification: Option<DateTime<Utc>>,
 }
 
 impl AppState {

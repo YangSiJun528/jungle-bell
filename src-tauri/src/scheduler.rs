@@ -14,7 +14,6 @@ use std::sync::Arc;
 use chrono::{DateTime, Datelike, FixedOffset, Timelike, Utc};
 use log::{debug, info};
 use tokio::sync::Mutex;
-use tokio::time::Instant;
 
 use tauri::Manager;
 use tauri_plugin_notification::NotificationExt;
@@ -37,6 +36,22 @@ const RELOAD_INTERVAL_NORMAL: u64 = 15 * 60; // 15분
 pub(crate) struct NotificationDecision {
     pub send: bool,
     pub message: Option<(&'static str, String)>,
+}
+
+/// 틱 한 번의 순수 계산 결과. 부수효과는 호출자가 수행.
+pub(crate) struct TickResult {
+    /// 다음 틱까지 대기할 초.
+    pub tick_interval: u64,
+    /// 체커 WebView를 리로드해야 하는지 여부.
+    pub should_reload: bool,
+    /// phase가 변경되었는지 여부.
+    pub phase_changed: bool,
+    /// 발송할 알림 (제목, 본문). None이면 발송하지 않음.
+    pub notification: Option<(&'static str, String)>,
+    /// 트레이 갱신 정보. None이면 갱신하지 않음 (data_loaded 전).
+    pub tray_update: Option<(DailyPhase, Option<i64>, bool)>,
+    /// 일일 리셋이 수행되었는지 여부.
+    pub daily_reset: bool,
 }
 
 /// 일일 리셋 판단: KST 날짜가 바뀌고 morning_start 이후이면 리셋 수행.
@@ -188,6 +203,93 @@ pub(crate) fn notification_message(phase: DailyPhase, remaining: Option<i64>) ->
     }
 }
 
+/// 스케줄러 틱 한 번의 순수 계산.
+///
+/// 상태를 갱신하고, 부수효과 지시를 `TickResult`로 반환.
+/// 실제 부수효과(tray 갱신, 알림 발송, WebView 리로드)는 호출자가 수행.
+pub(crate) fn compute_tick(
+    state: &mut AppState,
+    now: DateTime<Utc>,
+    attendance_open: bool,
+) -> TickResult {
+    let kst_now = now.with_timezone(&kst());
+
+    // --- 일일 리셋 ---
+    let daily_reset = check_daily_reset(state, kst_now);
+
+    // --- 상태 계산 ---
+    let mut remaining: Option<i64> = None;
+    let mut phase_changed = false;
+    let mut notification = None;
+    let mut tray_update = None;
+
+    if state.data_loaded {
+        let (phase, rem) = state::compute_daily_phase(
+            &state.config, now, state.morning_checked, state.evening_checked,
+        );
+        remaining = rem;
+        phase_changed = phase != state.phase;
+        state.phase = phase;
+
+        tray_update = Some((phase, remaining, state.needs_login));
+
+        // --- 네이티브 알림 ---
+        let secs_since_last = state.last_notification.map(|last| {
+            (now - last).num_seconds().max(0) as u64
+        });
+        let decision = should_notify(
+            &state.config, phase, remaining, state.needs_login, kst_now, secs_since_last,
+        );
+        if decision.send {
+            if let Some(msg) = decision.message {
+                notification = Some(msg);
+                state.last_notification = Some(now);
+            }
+        }
+    }
+
+    // --- 체커 WebView 주기적 리로드 ---
+    // API 호출은 WebView 쿠키를 사용하므로 세션/토큰 갱신을 위해
+    // 주기적으로 출석 페이지로 다시 이동시킴 (15분 간격).
+    // needs_login 상태에서도 리로드하여 사용자가 attendance 창에서
+    // 로그인한 경우 세션이 자동 복구되도록 함.
+    // 리로드 시 checker.js가 자동으로 initial check를 수행하므로
+    // trigger_check를 건너뛰어 "Load failed" 레이스 컨디션을 방지.
+    let should_reload = match state.last_reload {
+        Some(last) => (now - last).num_seconds() as u64 >= RELOAD_INTERVAL_NORMAL,
+        None => {
+            state.last_reload = Some(now);
+            false
+        }
+    };
+    if should_reload {
+        state.last_reload = Some(now);
+    }
+
+    // --- 로그인 재시도 윈도우 만료 확인 ---
+    if let Some(until) = state.login_retry_until {
+        if now >= until {
+            state.login_retry_until = None;
+        }
+    }
+
+    // --- 적응형 틱 간격 ---
+    let login_retry_active = state.login_retry_until.is_some();
+    let tick_interval = compute_tick_interval(
+        state.data_loaded, state.needs_login, attendance_open,
+        login_retry_active, state.phase, remaining,
+    );
+
+    TickResult {
+        tick_interval,
+        should_reload,
+        phase_changed,
+        notification,
+        tray_update,
+        daily_reset,
+    }
+}
+
 /// 백그라운드 스케줄러 루프 시작.
 pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<AppState>>) {
     tauri::async_runtime::spawn(async move {
@@ -206,125 +308,72 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
             );
         }
         loop {
-            let (tick_secs, did_reload) = {
+            let tick_result = {
                 let now = Utc::now();
-                let kst_now = now.with_timezone(&kst());
                 let mut s = shared_state.lock().await;
+                let attendance_open = app_handle.get_webview_window("attendance").is_some();
 
-                // --- 일일 리셋 ---
-                if check_daily_reset(&mut s, kst_now) {
+                let result = compute_tick(&mut s, now, attendance_open);
+
+                if result.daily_reset {
+                    let kst_now = now.with_timezone(&kst());
                     info!("[scheduler] daily reset at KST={}", kst_now.format("%Y-%m-%d %H:%M:%S"));
                 }
 
-                // --- 상태 계산 ---
-                // 체커의 첫 보고가 올 때까지 건너뜀.
-                let mut remaining: Option<i64> = None;
-                if s.data_loaded {
-                    let (phase, rem) = state::compute_daily_phase(&s.config, now, s.morning_checked, s.evening_checked);
-                    remaining = rem;
-
-                    let phase_changed = phase != s.phase;
-
-                    if phase_changed {
-                        info!(
-                            "[scheduler] phase={:?} started={} ended={} remaining={:?} needs_login={}",
-                            phase, s.morning_checked, s.evening_checked, remaining, s.needs_login,
-                        );
-                    }
-
-                    debug!(
-                        "[scheduler] state: phase={:?} morning_checked={} evening_checked={} \
-                         needs_login={} data_loaded={} remaining={:?} kst={}",
-                        phase,
-                        s.morning_checked,
-                        s.evening_checked,
+                if result.phase_changed {
+                    info!(
+                        "[scheduler] phase={:?} started={} ended={} remaining={:?} needs_login={}",
+                        s.phase, s.morning_checked, s.evening_checked,
+                        result.tray_update.as_ref().map(|t| t.1).flatten(),
                         s.needs_login,
-                        s.data_loaded,
-                        remaining,
-                        kst_now.format("%Y-%m-%d %H:%M:%S"),
                     );
+                }
 
-                    s.phase = phase;
+                debug!(
+                    "[scheduler] state: phase={:?} morning_checked={} evening_checked={} \
+                     needs_login={} data_loaded={} kst={}",
+                    s.phase, s.morning_checked, s.evening_checked,
+                    s.needs_login, s.data_loaded,
+                    now.with_timezone(&kst()).format("%Y-%m-%d %H:%M:%S"),
+                );
 
-                    tray::update_tray(&app_handle, phase, remaining, s.needs_login);
+                // --- 부수효과 ---
+                if let Some((phase, remaining, needs_login)) = result.tray_update {
+                    tray::update_tray(&app_handle, phase, remaining, needs_login);
+                }
 
-                    // --- 네이티브 알림 ---
-                    let secs_since_last = s.last_notification.map(|last| last.elapsed().as_secs());
-                    let decision = should_notify(&s.config, phase, remaining, s.needs_login, kst_now, secs_since_last);
-                    if decision.send {
-                        if let Some((title, body)) = decision.message {
-                            let _ = app_handle.notification().builder().title(title).body(body).show();
-                            s.last_notification = Some(Instant::now());
-                            info!("[scheduler] notification sent: phase={:?}", phase);
-                        }
-                    }
+                if let Some((title, body)) = &result.notification {
+                    let _ = app_handle.notification().builder().title(*title).body(body).show();
+                    info!("[scheduler] notification sent: phase={:?}", s.phase);
+                }
 
-                    // 프론트엔드 창이 상태 변화에 반응할 수 있도록 이벤트 발행
-                    if phase_changed {
-                        let _ = tauri::Emitter::emit(&app_handle, "phase-changed", &phase);
+                if result.phase_changed {
+                    let _ = tauri::Emitter::emit(&app_handle, "phase-changed", &s.phase);
+                }
+
+                if result.should_reload {
+                    if let Some(checker) = app_handle.get_webview_window("checker") {
+                        info!("[checker] webview reloaded for session refresh");
+                        let _ = checker.navigate("https://jungle-lms.krafton.com/check-in".parse().unwrap());
                     }
                 }
 
-                // --- 체커 WebView 주기적 리로드 ---
-                // API 호출은 WebView 쿠키를 사용하므로 세션/토큰 갱신을 위해
-                // 주기적으로 출석 페이지로 다시 이동시킴 (15분 간격).
-                // needs_login 상태에서도 리로드하여 사용자가 attendance 창에서
-                // 로그인한 경우 세션이 자동 복구되도록 함.
-                // 리로드 시 checker.js가 자동으로 initial check를 수행하므로
-                // trigger_check를 건너뛰어 "Load failed" 레이스 컨디션을 방지.
-                let did_reload;
-                {
-                    let now = Instant::now();
-                    let should_reload = match s.last_reload {
-                        Some(last) => {
-                            now.duration_since(last) >= std::time::Duration::from_secs(RELOAD_INTERVAL_NORMAL)
-                        }
-                        None => {
-                            s.last_reload = Some(now);
-                            false
-                        }
-                    };
-                    did_reload = should_reload;
-                    if should_reload {
-                        s.last_reload = Some(now);
-                        if let Some(checker) = app_handle.get_webview_window("checker") {
-                            info!("[checker] webview reloaded for session refresh");
-                            let _ = checker.navigate("https://jungle-lms.krafton.com/check-in".parse().unwrap());
-                        }
-                    }
-                }
-
-                // --- 로그인 재시도 윈도우 만료 확인 ---
-                if let Some(until) = s.login_retry_until {
-                    if Instant::now() >= until {
-                        s.login_retry_until = None;
-                        debug!("[scheduler] login retry window expired");
-                    }
-                }
-
-                // --- 적응형 틱 간격 ---
-                let attendance_open = app_handle.get_webview_window("attendance").is_some();
-                let login_retry_active = s.login_retry_until.is_some();
-                let interval = compute_tick_interval(s.data_loaded, s.needs_login, attendance_open, login_retry_active, s.phase, remaining);
-                (interval, did_reload)
+                result
             };
 
-            {
-                let s = shared_state.lock().await;
-                debug!(
-                    "[scheduler] tick: interval={}s phase={:?} needs_login={} data_loaded={}",
-                    tick_secs, s.phase, s.needs_login, s.data_loaded,
-                );
-            }
+            debug!(
+                "[scheduler] tick: interval={}s",
+                tick_result.tick_interval,
+            );
 
             // Rust가 오케스트레이터: 매 틱마다 JS 스냅샷 수집을 트리거.
             // 결과는 report_attendance_status 커맨드를 통해 비동기로 돌아온다.
             // 리로드한 틱에서는 건너뜀 — 새 페이지의 checker.js가 initial check를 수행.
-            if !did_reload {
+            if !tick_result.should_reload {
                 checker::trigger_check(&app_handle);
             }
 
-            tokio::time::sleep(tokio::time::Duration::from_secs(tick_secs)).await;
+            tokio::time::sleep(tokio::time::Duration::from_secs(tick_result.tick_interval)).await;
         }
     });
 }
@@ -340,6 +389,11 @@ mod tests {
             .unwrap()
             .with_ymd_and_hms(2026, 3, 17, h, m, s)
             .unwrap()
+    }
+
+    /// KST 시각을 UTC DateTime으로 변환하는 헬퍼.
+    fn kst_utc(h: u32, m: u32, s: u32) -> DateTime<Utc> {
+        kst_dt(h, m, s).with_timezone(&Utc)
     }
 
     fn default_state() -> AppState {
@@ -573,5 +627,139 @@ mod tests {
     fn message_fallback() {
         let (title, _) = notification_message(DailyPhase::Idle, None);
         assert_eq!(title, "Jungle Bell");
+    }
+
+    // --- compute_tick (통합) ---
+
+    #[test]
+    fn compute_tick_before_data_loaded() {
+        let mut state = default_state();
+        let result = compute_tick(&mut state, kst_utc(9, 0, 0), false);
+        assert_eq!(result.tick_interval, 5);
+        assert!(result.tray_update.is_none());
+        assert!(result.notification.is_none());
+        assert!(!result.should_reload);
+    }
+
+    #[test]
+    fn compute_tick_need_start_with_notification() {
+        let mut state = default_state();
+        state.data_loaded = true;
+
+        // 첫 틱: NeedStart + 알림 윈도우 내 → 알림 발송
+        let result = compute_tick(&mut state, kst_utc(9, 30, 0), false);
+        assert_eq!(state.phase, DailyPhase::NeedStart);
+        assert!(result.tray_update.is_some());
+        assert!(result.notification.is_some());
+        assert!(state.last_notification.is_some());
+    }
+
+    #[test]
+    fn compute_tick_notification_throttled() {
+        let mut state = default_state();
+        state.data_loaded = true;
+        // 첫 틱: 알림 발송
+        compute_tick(&mut state, kst_utc(9, 30, 0), false);
+        assert!(state.last_notification.is_some());
+
+        // 5분 후: 쓰로틀 (interval=15분)
+        let result = compute_tick(&mut state, kst_utc(9, 35, 0), false);
+        assert!(result.notification.is_none());
+
+        // 16분 후: 쓰로틀 해제
+        let result = compute_tick(&mut state, kst_utc(9, 46, 1), false);
+        assert!(result.notification.is_some());
+    }
+
+    #[test]
+    fn compute_tick_studying_no_notification() {
+        let mut state = default_state();
+        state.data_loaded = true;
+        state.morning_checked = true;
+
+        let result = compute_tick(&mut state, kst_utc(12, 0, 0), false);
+        assert_eq!(state.phase, DailyPhase::Studying);
+        assert!(result.notification.is_none());
+        assert!(result.tray_update.is_some());
+    }
+
+    #[test]
+    fn compute_tick_reload_after_interval() {
+        let mut state = default_state();
+        state.data_loaded = true;
+
+        // 첫 틱: last_reload 초기화
+        let t0 = kst_utc(9, 0, 0);
+        let result = compute_tick(&mut state, t0, false);
+        assert!(!result.should_reload);
+        assert_eq!(state.last_reload, Some(t0));
+
+        // 14분 후: 리로드 안 함
+        let t1 = kst_utc(9, 14, 0);
+        let result = compute_tick(&mut state, t1, false);
+        assert!(!result.should_reload);
+
+        // 16분 후: 리로드
+        let t2 = kst_utc(9, 16, 0);
+        let result = compute_tick(&mut state, t2, false);
+        assert!(result.should_reload);
+        assert_eq!(state.last_reload, Some(t2));
+    }
+
+    #[test]
+    fn compute_tick_login_retry_expires() {
+        let mut state = default_state();
+        state.data_loaded = true;
+        state.needs_login = true;
+
+        // 3분 후 만료되는 로그인 재시도 윈도우
+        let now = kst_utc(9, 0, 0);
+        state.login_retry_until = Some(now + chrono::Duration::seconds(180));
+
+        let result = compute_tick(&mut state, now, false);
+        assert!(state.login_retry_until.is_some());
+        assert_eq!(result.tick_interval, 10); // login + retry active
+
+        // 4분 후: 만료
+        let later = kst_utc(9, 4, 0);
+        let result = compute_tick(&mut state, later, false);
+        assert!(state.login_retry_until.is_none());
+        assert_eq!(result.tick_interval, 600); // login + no retry
+    }
+
+    #[test]
+    fn compute_tick_daily_reset() {
+        let mut state = default_state();
+        state.data_loaded = true;
+        state.morning_checked = true;
+        state.evening_checked = true;
+
+        // Day 1
+        compute_tick(&mut state, kst_utc(23, 0, 0), false);
+        assert!(state.morning_checked);
+
+        // Day 2 05:00 — 리셋
+        let day2 = FixedOffset::east_opt(9 * 3600)
+            .unwrap()
+            .with_ymd_and_hms(2026, 3, 18, 5, 0, 0)
+            .unwrap()
+            .with_timezone(&Utc);
+        let result = compute_tick(&mut state, day2, false);
+        assert!(result.daily_reset);
+        assert!(!state.morning_checked);
+        assert!(!state.evening_checked);
+    }
+
+    #[test]
+    fn compute_tick_phase_change_detected() {
+        let mut state = default_state();
+        state.data_loaded = true;
+        state.phase = DailyPhase::NeedStart;
+
+        // 체크인 완료 → Studying
+        state.morning_checked = true;
+        let result = compute_tick(&mut state, kst_utc(12, 0, 0), false);
+        assert!(result.phase_changed);
+        assert_eq!(state.phase, DailyPhase::Studying);
     }
 }
