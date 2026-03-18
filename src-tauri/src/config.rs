@@ -45,6 +45,10 @@ pub struct Config {
     /// 디버그 모드 — 활성화 시 상세 로그 출력 (기본 false)
     #[serde(default)]
     pub debug_mode: bool,
+    /// 환영 알림 발송 완료 여부 (기본 false)
+    /// 기존 config에 필드가 없으면 false → 신규/기존 사용자 모두 한 번 알림 수신.
+    #[serde(default)]
+    pub welcome_notification_sent: bool,
 }
 
 fn default_true() -> bool {
@@ -88,9 +92,10 @@ impl Config {
                     "[config] 설정 파일({}) 읽기 실패. 기본 설정을 사용합니다.",
                     path.display()
                 );
+                return Self::default();
             }
         }
-        log::info!("[config] using defaults");
+        log::info!("[config] using defaults (first launch)");
         Self::default()
     }
 
@@ -129,6 +134,7 @@ impl Default for Config {
             notification_start: TimeOfDay { hour: 9, minute: 0 },
             notification_end: TimeOfDay { hour: 1, minute: 0 },
             debug_mode: false,
+            welcome_notification_sent: false,
         }
     }
 }

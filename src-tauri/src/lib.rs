@@ -122,6 +122,23 @@ pub fn run() {
 
             tray::setup_tray(app)?;
 
+            // 환영 알림: OS 알림 설정에 앱을 등록하기 위해 한 번 보내야 한다.
+            // welcome_notification_sent 플래그로 신규/기존 사용자 모두 한 번만 수신.
+            {
+                let mut state = shared_state.try_lock().unwrap();
+                if !state.config.welcome_notification_sent {
+                    use tauri_plugin_notification::NotificationExt;
+                    let _ = app.notification()
+                        .builder()
+                        .title("Jungle Bell 설치 완료")
+                        .body("트레이 아이콘에서 출석 창을 열고 LMS에 로그인해 주세요. 사용법은 GitHub README를 참고하세요.")
+                        .show();
+                    log::info!("[app] 환영 알림 발송");
+                    state.config.welcome_notification_sent = true;
+                    state.config.save();
+                }
+            }
+
             // 숨겨진 WebView로 LMS 출석 페이지를 로드.
             // checker.js가 initialization_script로 주입되어 DOM을 읽고,
             // invoke()를 통해 Rust 쪽으로 출석 상태를 보고한다.
