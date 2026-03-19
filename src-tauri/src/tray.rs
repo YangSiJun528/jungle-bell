@@ -60,7 +60,13 @@ fn build_status_text(phase: DailyPhase, remaining: Option<i64>, needs_login: boo
         DailyPhase::Idle => "대기 중".to_string(),
         DailyPhase::NeedStart => {
             if let Some(m) = mins {
-                format!("학습 시작 가능 ({}분 남음)", m)
+                let hours = m / 60;
+                let rest_mins = m % 60;
+                if hours > 0 {
+                    format!("학습 시작 가능 ({}h {}m 남음)", hours, rest_mins)
+                } else {
+                    format!("학습 시작 가능 ({}분 남음)", m)
+                }
             } else {
                 "학습 시작 가능".to_string()
             }
