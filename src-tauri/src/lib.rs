@@ -131,7 +131,7 @@ pub fn run() {
                     let _ = app.notification()
                         .builder()
                         .title("Jungle Bell 설치 완료")
-                        .body("트레이 아이콘에서 출석 창을 열고 LMS에 로그인해 주세요. 사용법은 GitHub README를 참고하세요.")
+                        .body("트레이 아이콘에서 출석 창을 열고 LMS에 로그인해 주세요.")
                         .show();
                     log::info!("[app] 환영 알림 발송");
                     state.config.welcome_notification_sent = true;
