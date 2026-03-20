@@ -54,7 +54,7 @@ fn build_status_text(phase: DailyPhase, remaining: Option<i64>, needs_login: boo
         return "⚠️ 로그인 필요".to_string();
     }
 
-    let mins = remaining.map(|s| s / 60);
+    let mins = remaining.map(|s| (s + 59) / 60);
 
     match phase {
         DailyPhase::Idle => "대기 중".to_string(),
@@ -285,8 +285,8 @@ mod tests {
     }
 
     #[test]
-    fn 학습시작_59초면_0분으로_표시한다() {
-        assert_eq!(build_status_text(DailyPhase::NeedStart, Some(59), false), "학습 시작 가능 (0분 남음)");
+    fn 학습시작_59초면_1분으로_올림_표시한다() {
+        assert_eq!(build_status_text(DailyPhase::NeedStart, Some(59), false), "학습 시작 가능 (1분 남음)");
     }
 
     #[test]

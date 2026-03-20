@@ -189,7 +189,7 @@ pub(crate) fn compute_tick_interval(
 /// phase와 남은 시간으로 알림 제목·본문 생성.
 pub(crate) fn notification_message(phase: DailyPhase, remaining: Option<i64>) -> (&'static str, String) {
     let format_remaining = |secs: i64| {
-        let mins = secs / 60;
+        let mins = (secs + 59) / 60;
         if mins >= 60 {
             format!("마감까지 {}시간 {}분 남았습니다.", mins / 60, mins % 60)
         } else {
@@ -203,7 +203,7 @@ pub(crate) fn notification_message(phase: DailyPhase, remaining: Option<i64>) ->
             remaining.map(&format_remaining).unwrap_or_else(|| "출석 체크를 해주세요.".into()),
         ),
         DailyPhase::StartOverdue => match remaining {
-            Some(r) if r > 0 => ("출석 체크 지각 임박!", format!("마감까지 {}분 남았습니다.", r / 60)),
+            Some(r) if r > 0 => ("출석 체크 지각 임박!", format!("마감까지 {}분 남았습니다.", (r + 59) / 60)),
             _ => ("출석 체크 지각!", "빨리 체크인하세요.".into()),
         },
         DailyPhase::NeedEnd => (
@@ -800,9 +800,9 @@ mod tests {
     }
 
     #[test]
-    fn 잔여시간_59초면_0분으로_표시한다() {
+    fn 잔여시간_59초면_1분으로_올림_표시한다() {
         let (_, body) = notification_message(DailyPhase::NeedStart, Some(59));
-        assert_eq!(body, "마감까지 0분 남았습니다.");
+        assert_eq!(body, "마감까지 1분 남았습니다.");
     }
 
     #[test]
