@@ -35,6 +35,7 @@ const RELOAD_INTERVAL_NORMAL: u64 = 15 * 60; // 15분
 /// 알림 판단 결과.
 pub(crate) struct NotificationDecision {
     pub send: bool,
+    pub reason: &'static str,
     pub message: Option<(&'static str, String)>,
 }
 
@@ -86,19 +87,29 @@ pub(crate) fn should_notify(
     secs_since_last: Option<u64>,
 ) -> NotificationDecision {
     if needs_login {
-        return NotificationDecision { send: false, message: None };
+        return NotificationDecision { send: false, reason: "needs_login", message: None };
     }
 
     // 일요일 알림 끄기
     if config.skip_sunday && kst_now.weekday() == Weekday::Sun {
-        return NotificationDecision { send: false, message: None };
+        return NotificationDecision { send: false, reason: "skip_sunday", message: None };
     }
 
-    // 오늘 알림 끄기
+    // 오늘 출석 알림 끄기: morning_start 이전이면 전날 날짜도 매칭하여
+    // "오늘의 출석"이 다음날 morning_start까지 차단되도록 함.
     if let Some(skip_date) = &config.skip_today {
         let today = kst_now.format("%Y-%m-%d").to_string();
         if skip_date == &today {
-            return NotificationDecision { send: false, message: None };
+            return NotificationDecision { send: false, reason: "skip_today", message: None };
+        }
+        // 자정~morning_start 사이: 전날 skip이 아직 유효
+        if kst_now.hour() < config.morning_start.hour as u32 {
+            let yesterday = (kst_now - chrono::Duration::days(1))
+                .format("%Y-%m-%d")
+                .to_string();
+            if skip_date == &yesterday {
+                return NotificationDecision { send: false, reason: "skip_today", message: None };
+            }
         }
     }
 
@@ -109,7 +120,7 @@ pub(crate) fn should_notify(
         _ => false,
     };
     if !enabled {
-        return NotificationDecision { send: false, message: None };
+        return NotificationDecision { send: false, reason: "disabled", message: None };
     }
 
     let kst_secs = (kst_now.hour() as i64) * 3600 + (kst_now.minute() as i64) * 60 + (kst_now.second() as i64);
@@ -133,7 +144,7 @@ pub(crate) fn should_notify(
     };
 
     if !in_window {
-        return NotificationDecision { send: false, message: None };
+        return NotificationDecision { send: false, reason: "outside_window", message: None };
     }
 
     // 쓰로틀링
@@ -149,12 +160,13 @@ pub(crate) fn should_notify(
     };
 
     if throttled {
-        return NotificationDecision { send: false, message: None };
+        return NotificationDecision { send: false, reason: "throttled", message: None };
     }
 
     let (title, body) = notification_message(phase, remaining);
     NotificationDecision {
         send: true,
+        reason: "send",
         message: Some((title, body)),
     }
 }
@@ -260,6 +272,10 @@ pub(crate) fn compute_tick(
         let decision = should_notify(
             &state.config, phase, remaining, state.needs_login, kst_now, secs_since_last,
         );
+        log::debug!(
+            "[scheduler] notify decision: reason={} phase={:?} secs_since_last={:?}",
+            decision.reason, phase, secs_since_last,
+        );
         if decision.send {
             if let Some(msg) = decision.message {
                 notification = Some(msg);
@@ -363,8 +379,10 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
                 }
 
                 if let Some((title, body)) = &result.notification {
-                    let _ = app_handle.notification().builder().title(*title).body(body).show();
-                    log::info!("[scheduler] notification sent: phase={:?}", s.phase);
+                    match app_handle.notification().builder().title(*title).body(body).show() {
+                        Ok(_) => log::info!("[scheduler] notification sent: phase={:?}", s.phase),
+                        Err(e) => log::error!("[scheduler] notification show failed: {e}"),
+                    }
                 }
 
                 if result.phase_changed {
@@ -1028,14 +1046,48 @@ mod tests {
 
     #[test]
     fn 오늘_알림_끄기_날짜가_다르면_알림이_발송된다() {
-        // given
+        // given: morning_start 이후에는 전날 skip이 무효
         let mut config = Config::default();
         config.skip_today = Some("2026-03-16".into()); // 어제 날짜
 
-        // when
+        // when: 09:30 (morning_start=04:00 이후)
         let d = should_notify(&config, DailyPhase::NeedStart, Some(3600), false, kst_dt(9, 30, 0), None);
 
         // then
+        assert!(d.send);
+    }
+
+    #[test]
+    fn 오늘_알림_끄기_자정_이후_morning_start_이전에는_전날_skip이_유효하다() {
+        // given: 전날(03-17) skip 설정, 현재 03-18 02:00 (morning_start=04:00 이전)
+        let mut config = Config::default();
+        config.skip_today = Some("2026-03-17".into());
+        let kst = FixedOffset::east_opt(9 * 3600)
+            .unwrap()
+            .with_ymd_and_hms(2026, 3, 18, 2, 0, 0)
+            .unwrap();
+
+        // when
+        let d = should_notify(&config, DailyPhase::NeedEnd, Some(3600), false, kst, None);
+
+        // then: morning_start 이전이므로 전날 skip이 아직 유효
+        assert!(!d.send);
+    }
+
+    #[test]
+    fn 오늘_알림_끄기_morning_start_이후에는_전날_skip이_해제된다() {
+        // given: 전날(03-17) skip 설정, 현재 03-18 09:30 (morning_start=04:00 이후, 알림윈도우 내)
+        let mut config = Config::default();
+        config.skip_today = Some("2026-03-17".into());
+        let kst = FixedOffset::east_opt(9 * 3600)
+            .unwrap()
+            .with_ymd_and_hms(2026, 3, 18, 9, 30, 0)
+            .unwrap();
+
+        // when
+        let d = should_notify(&config, DailyPhase::NeedStart, Some(3600), false, kst, None);
+
+        // then: morning_start 이후이므로 전날 skip은 무효
         assert!(d.send);
     }
 
