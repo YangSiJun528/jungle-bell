@@ -243,6 +243,125 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- build_status_text ---
+
+    #[test]
+    fn 로그인_필요시_로그인_메시지를_표시한다() {
+        assert_eq!(build_status_text(DailyPhase::Idle, None, true), "⚠️ 로그인 필요");
+    }
+
+    #[test]
+    fn 로그인_필요시_phase와_무관하게_로그인_메시지를_표시한다() {
+        assert_eq!(build_status_text(DailyPhase::NeedStart, Some(3600), true), "⚠️ 로그인 필요");
+    }
+
+    #[test]
+    fn 대기중_상태를_표시한다() {
+        assert_eq!(build_status_text(DailyPhase::Idle, None, false), "대기 중");
+    }
+
+    #[test]
+    fn 학습시작_시간_분_형식을_표시한다() {
+        assert_eq!(build_status_text(DailyPhase::NeedStart, Some(5400), false), "학습 시작 가능 (1h 30m 남음)");
+    }
+
+    #[test]
+    fn 학습시작_분만_표시한다() {
+        assert_eq!(build_status_text(DailyPhase::NeedStart, Some(1800), false), "학습 시작 가능 (30분 남음)");
+    }
+
+    #[test]
+    fn 학습시작_잔여시간_없으면_시간_생략한다() {
+        assert_eq!(build_status_text(DailyPhase::NeedStart, None, false), "학습 시작 가능");
+    }
+
+    #[test]
+    fn 학습시작_정확히_1시간이면_시간_분_형식을_표시한다() {
+        assert_eq!(build_status_text(DailyPhase::NeedStart, Some(3600), false), "학습 시작 가능 (1h 0m 남음)");
+    }
+
+    #[test]
+    fn 학습시작_59초면_0분으로_표시한다() {
+        assert_eq!(build_status_text(DailyPhase::NeedStart, Some(59), false), "학습 시작 가능 (0분 남음)");
+    }
+
+    #[test]
+    fn 지각임박_잔여분을_표시한다() {
+        assert_eq!(build_status_text(DailyPhase::StartOverdue, Some(300), false), "지각 임박 (5분 남음)");
+    }
+
+    #[test]
+    fn 지각_잔여0이면_지각_메시지를_표시한다() {
+        assert_eq!(build_status_text(DailyPhase::StartOverdue, Some(0), false), "학습 시작 지각!");
+    }
+
+    #[test]
+    fn 지각_잔여없으면_지각_메시지를_표시한다() {
+        assert_eq!(build_status_text(DailyPhase::StartOverdue, None, false), "학습 시작 지각!");
+    }
+
+    #[test]
+    fn 학습중_시간_분_형식을_표시한다() {
+        assert_eq!(build_status_text(DailyPhase::Studying, Some(5400), false), "학습 중 (종료 가능까지 1h 30m)");
+    }
+
+    #[test]
+    fn 학습중_분만_표시한다() {
+        assert_eq!(build_status_text(DailyPhase::Studying, Some(1800), false), "학습 중 (종료 가능까지 30분)");
+    }
+
+    #[test]
+    fn 학습중_잔여시간_없으면_시간_생략한다() {
+        assert_eq!(build_status_text(DailyPhase::Studying, None, false), "학습 중");
+    }
+
+    #[test]
+    fn 종료가능_시간_분_형식을_표시한다() {
+        assert_eq!(build_status_text(DailyPhase::NeedEnd, Some(5400), false), "학습 종료 가능 (1h 30m 남음)");
+    }
+
+    #[test]
+    fn 종료가능_분만_표시한다() {
+        assert_eq!(build_status_text(DailyPhase::NeedEnd, Some(1800), false), "학습 종료 가능 (30분 남음)");
+    }
+
+    #[test]
+    fn 종료가능_잔여시간_없으면_시간_생략한다() {
+        assert_eq!(build_status_text(DailyPhase::NeedEnd, None, false), "학습 종료 가능");
+    }
+
+    #[test]
+    fn 출석완료_상태를_표시한다() {
+        assert_eq!(build_status_text(DailyPhase::Complete, None, false), "오늘 출석 완료");
+    }
+
+    // --- build_tooltip ---
+
+    #[test]
+    fn 툴팁_대기중을_표시한다() {
+        assert_eq!(build_tooltip(DailyPhase::Idle, None, false), "Jungle Bell - 대기 중");
+    }
+
+    #[test]
+    fn 툴팁_학습시작_잔여시간을_표시한다() {
+        assert_eq!(build_tooltip(DailyPhase::NeedStart, Some(1800), false), "Jungle Bell - 학습 시작 가능 (30분 남음)");
+    }
+
+    #[test]
+    fn 툴팁_로그인_필요를_표시한다() {
+        assert_eq!(build_tooltip(DailyPhase::Idle, None, true), "Jungle Bell - ⚠️ 로그인 필요");
+    }
+
+    #[test]
+    fn 툴팁_출석완료를_표시한다() {
+        assert_eq!(build_tooltip(DailyPhase::Complete, None, false), "Jungle Bell - 오늘 출석 완료");
+    }
+}
+
 /// 트레이 아이콘, 툴팁, 상태 메뉴 텍스트 갱신.
 /// 스케줄러(주기적)와 체커(보고 시) 양쪽에서 호출됨.
 pub fn update_tray(app: &tauri::AppHandle, phase: DailyPhase, remaining: Option<i64>, needs_login: bool) {

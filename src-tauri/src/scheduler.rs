@@ -710,66 +710,105 @@ mod tests {
 
     #[test]
     fn 출석체크_필요시_시간_분_메시지를_생성한다() {
-        // given
-        let remaining = Some(5400);
-
-        // when
-        let (title, body) = notification_message(DailyPhase::NeedStart, remaining);
-
-        // then
+        let (title, body) = notification_message(DailyPhase::NeedStart, Some(5400));
         assert_eq!(title, "출석 체크 시간입니다");
-        assert!(body.contains("1시간 30분"));
+        assert_eq!(body, "마감까지 1시간 30분 남았습니다.");
     }
 
     #[test]
     fn 출석체크_필요시_분만_있으면_시간을_표시하지_않는다() {
-        // given
-        let remaining = Some(1800);
+        let (title, body) = notification_message(DailyPhase::NeedStart, Some(1800));
+        assert_eq!(title, "출석 체크 시간입니다");
+        assert_eq!(body, "마감까지 30분 남았습니다.");
+    }
 
-        // when
-        let (_, body) = notification_message(DailyPhase::NeedStart, remaining);
-
-        // then
-        assert!(body.contains("30분"));
-        assert!(!body.contains("시간"));
+    #[test]
+    fn 출석체크_필요시_잔여시간_없으면_기본_메시지를_생성한다() {
+        let (title, body) = notification_message(DailyPhase::NeedStart, None);
+        assert_eq!(title, "출석 체크 시간입니다");
+        assert_eq!(body, "출석 체크를 해주세요.");
     }
 
     #[test]
     fn 지각시_지각_메시지를_생성한다() {
-        // given & when
         let (title, body) = notification_message(DailyPhase::StartOverdue, None);
-
-        // then
         assert_eq!(title, "출석 체크 지각!");
-        assert!(body.contains("빨리"));
+        assert_eq!(body, "빨리 체크인하세요.");
     }
 
     #[test]
     fn 지각_임박시_임박_메시지를_생성한다() {
-        // given: 5분 남음
         let (title, body) = notification_message(DailyPhase::StartOverdue, Some(300));
-
-        // then
         assert_eq!(title, "출석 체크 지각 임박!");
-        assert!(body.contains("5분"));
+        assert_eq!(body, "마감까지 5분 남았습니다.");
+    }
+
+    #[test]
+    fn 지각_잔여시간_0이면_지각_메시지를_생성한다() {
+        let (title, body) = notification_message(DailyPhase::StartOverdue, Some(0));
+        assert_eq!(title, "출석 체크 지각!");
+        assert_eq!(body, "빨리 체크인하세요.");
     }
 
     #[test]
     fn 종료체크_필요시_종료_메시지를_생성한다() {
-        // given & when
-        let (title, _) = notification_message(DailyPhase::NeedEnd, Some(3600));
-
-        // then
+        let (title, body) = notification_message(DailyPhase::NeedEnd, Some(3600));
         assert_eq!(title, "학습 종료 체크가 필요합니다");
+        assert_eq!(body, "마감까지 1시간 0분 남았습니다.");
+    }
+
+    #[test]
+    fn 종료체크_시간_분_메시지를_생성한다() {
+        let (title, body) = notification_message(DailyPhase::NeedEnd, Some(5400));
+        assert_eq!(title, "학습 종료 체크가 필요합니다");
+        assert_eq!(body, "마감까지 1시간 30분 남았습니다.");
+    }
+
+    #[test]
+    fn 종료체크_분만_메시지를_생성한다() {
+        let (title, body) = notification_message(DailyPhase::NeedEnd, Some(1800));
+        assert_eq!(title, "학습 종료 체크가 필요합니다");
+        assert_eq!(body, "마감까지 30분 남았습니다.");
+    }
+
+    #[test]
+    fn 종료체크_잔여시간_없으면_기본_메시지를_생성한다() {
+        let (title, body) = notification_message(DailyPhase::NeedEnd, None);
+        assert_eq!(title, "학습 종료 체크가 필요합니다");
+        assert_eq!(body, "학습 종료 체크를 해주세요.");
     }
 
     #[test]
     fn 기타_페이즈에서는_기본_메시지를_생성한다() {
-        // given & when
-        let (title, _) = notification_message(DailyPhase::Idle, None);
-
-        // then
+        let (title, body) = notification_message(DailyPhase::Idle, None);
         assert_eq!(title, "Jungle Bell");
+        assert_eq!(body, "출석 상태를 확인하세요.");
+    }
+
+    #[test]
+    fn 학습중_페이즈에서는_기본_메시지를_생성한다() {
+        let (title, body) = notification_message(DailyPhase::Studying, Some(3600));
+        assert_eq!(title, "Jungle Bell");
+        assert_eq!(body, "출석 상태를 확인하세요.");
+    }
+
+    #[test]
+    fn 완료_페이즈에서는_기본_메시지를_생성한다() {
+        let (title, body) = notification_message(DailyPhase::Complete, None);
+        assert_eq!(title, "Jungle Bell");
+        assert_eq!(body, "출석 상태를 확인하세요.");
+    }
+
+    #[test]
+    fn 잔여시간_59초면_0분으로_표시한다() {
+        let (_, body) = notification_message(DailyPhase::NeedStart, Some(59));
+        assert_eq!(body, "마감까지 0분 남았습니다.");
+    }
+
+    #[test]
+    fn 잔여시간_10시간이면_시간_분_형식으로_표시한다() {
+        let (_, body) = notification_message(DailyPhase::NeedStart, Some(36000));
+        assert_eq!(body, "마감까지 10시간 0분 남았습니다.");
     }
 
     // --- compute_tick (통합) ---
