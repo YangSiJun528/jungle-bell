@@ -71,7 +71,17 @@ fn build_status_text(phase: DailyPhase, remaining: Option<i64>, needs_login: boo
                 "학습 시작 가능".to_string()
             }
         }
-        DailyPhase::StartOverdue => "학습 시작 지각!".to_string(),
+        DailyPhase::StartOverdue => {
+            if let Some(m) = mins {
+                if m > 0 {
+                    format!("지각 임박 ({}분 남음)", m)
+                } else {
+                    "학습 시작 지각!".to_string()
+                }
+            } else {
+                "학습 시작 지각!".to_string()
+            }
+        }
         DailyPhase::Studying => {
             if let Some(m) = mins {
                 let hours = m / 60;

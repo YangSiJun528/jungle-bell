@@ -202,7 +202,10 @@ pub(crate) fn notification_message(phase: DailyPhase, remaining: Option<i64>) ->
             "출석 체크 시간입니다",
             remaining.map(&format_remaining).unwrap_or_else(|| "출석 체크를 해주세요.".into()),
         ),
-        DailyPhase::StartOverdue => ("출석 체크 지각!", "빨리 체크인하세요.".into()),
+        DailyPhase::StartOverdue => match remaining {
+            Some(r) if r > 0 => ("출석 체크 지각 임박!", format!("마감까지 {}분 남았습니다.", r / 60)),
+            _ => ("출석 체크 지각!", "빨리 체크인하세요.".into()),
+        },
         DailyPhase::NeedEnd => (
             "학습 종료 체크가 필요합니다",
             remaining.map(&format_remaining).unwrap_or_else(|| "학습 종료 체크를 해주세요.".into()),
@@ -742,6 +745,16 @@ mod tests {
     }
 
     #[test]
+    fn 지각_임박시_임박_메시지를_생성한다() {
+        // given: 5분 남음
+        let (title, body) = notification_message(DailyPhase::StartOverdue, Some(300));
+
+        // then
+        assert_eq!(title, "출석 체크 지각 임박!");
+        assert!(body.contains("5분"));
+    }
+
+    #[test]
     fn 종료체크_필요시_종료_메시지를_생성한다() {
         // given & when
         let (title, _) = notification_message(DailyPhase::NeedEnd, Some(3600));
@@ -918,5 +931,49 @@ mod tests {
         // then
         assert!(result.phase_changed);
         assert_eq!(state.phase, DailyPhase::Studying);
+    }
+
+    // --- StartOverdue 유예 구간 ---
+
+    #[test]
+    fn 지각_임박_10시5분에는_remaining이_300이다() {
+        // given: 10:05 KST, morning_end=10:00 → grace_remaining = 10:10 - 10:05 = 300초
+        let config = Config::default();
+        let now = kst_utc(10, 5, 0);
+
+        // when
+        let (phase, remaining) = state::compute_daily_phase(&config, now, false, false);
+
+        // then
+        assert_eq!(phase, DailyPhase::StartOverdue);
+        assert_eq!(remaining, Some(300));
+    }
+
+    #[test]
+    fn 지각_10시15분에는_remaining이_none이다() {
+        // given: 10:15 KST, morning_end=10:00 → grace_remaining = 10:10 - 10:15 = -300 → None
+        let config = Config::default();
+        let now = kst_utc(10, 15, 0);
+
+        // when
+        let (phase, remaining) = state::compute_daily_phase(&config, now, false, false);
+
+        // then
+        assert_eq!(phase, DailyPhase::StartOverdue);
+        assert_eq!(remaining, None);
+    }
+
+    #[test]
+    fn 지각_정확히_10시10분에는_remaining이_none이다() {
+        // given: 10:10:00 → grace_remaining = 0 → None
+        let config = Config::default();
+        let now = kst_utc(10, 10, 0);
+
+        // when
+        let (phase, remaining) = state::compute_daily_phase(&config, now, false, false);
+
+        // then
+        assert_eq!(phase, DailyPhase::StartOverdue);
+        assert_eq!(remaining, None);
     }
 }
