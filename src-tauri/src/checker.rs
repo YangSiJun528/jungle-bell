@@ -5,6 +5,7 @@
 //! JS가 API를 조회해 `report_attendance_status` invoke로 반환한다.
 //! 이 모듈은 반환된 결과를 처리하고 공유 앱 상태를 갱신한다.
 
+use chrono::Timelike;
 use std::process::Command;
 use std::sync::Arc;
 
@@ -197,16 +198,27 @@ setting_time!(get_notification_end, set_notification_end, notification_end, "알
 
 setting_bool!(get_skip_sunday, set_skip_sunday, skip_sunday, "일요일 알림 끄기");
 
-/// Tauri 커맨드: 오늘 알림 끄기 상태 조회.
-/// config.skip_today가 오늘 KST 날짜와 일치하면 true.
+/// Tauri 커맨드: 오늘 출석 알림 끄기 상태 조회.
+/// config.skip_today가 현재 "출석일" 날짜와 일치하면 true.
+/// 자정~morning_start 사이에는 전날 날짜도 유효로 판정.
 #[tauri::command]
 pub async fn get_skip_today(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<bool, String> {
     let s = state.lock().await;
-    let today = chrono::Utc::now()
-        .with_timezone(&state::kst())
-        .format("%Y-%m-%d")
-        .to_string();
-    Ok(s.config.skip_today.as_deref() == Some(today.as_str()))
+    let kst_now = chrono::Utc::now().with_timezone(&state::kst());
+    let today = kst_now.format("%Y-%m-%d").to_string();
+    if s.config.skip_today.as_deref() == Some(today.as_str()) {
+        return Ok(true);
+    }
+    // 자정~morning_start 사이: 전날 skip이 아직 유효
+    if kst_now.hour() < s.config.morning_start.hour as u32 {
+        let yesterday = (kst_now - chrono::Duration::days(1))
+            .format("%Y-%m-%d")
+            .to_string();
+        if s.config.skip_today.as_deref() == Some(yesterday.as_str()) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// Tauri 커맨드: 오늘 알림 끄기 설정 변경 및 저장.

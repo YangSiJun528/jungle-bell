@@ -209,7 +209,7 @@
     <span> · </span>
     <a href="https://github.com/YangSiJun528/jungle-bell/releases" target="_blank" rel="noopener noreferrer">릴리즈</a>
     <span> · </span>
-    <a href="https://github.com/YangSiJun528/jungle-bell/issues/new" target="_blank" rel="noopener noreferrer">버그/기능 제보</a>
+    <a href="https://github.com/YangSiJun528/jungle-bell/issues/new/choose" target="_blank" rel="noopener noreferrer">버그/기능 제보</a>
   </footer>
 
   <script>
@@ -278,7 +278,7 @@
             tomorrow.setDate(tomorrow.getDate() + 1);
             const mm = String(tomorrow.getMonth() + 1).padStart(2, '0');
             const dd = String(tomorrow.getDate()).padStart(2, '0');
-            skipTodayHintText.textContent = `내일(${mm}/${dd}) 00:00에 자동으로 해제됩니다.`;
+            skipTodayHintText.textContent = `내일(${mm}/${dd}) 출석 시작 시각에 자동으로 해제됩니다.`;
             skipTodayHint.style.display = '';
           } else {
             skipTodayHint.style.display = 'none';
