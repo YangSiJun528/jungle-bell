@@ -8,7 +8,6 @@
 use std::process::Command;
 use std::sync::Arc;
 
-use log::{debug, info};
 use serde::Deserialize;
 use tauri::{Emitter, Manager};
 use tokio::sync::Mutex;
@@ -58,7 +57,7 @@ pub fn apply_report(state: &mut AppState, report: &AttendanceReport) {
 /// JS가 이벤트를 수신하면 API를 조회해
 /// `report_attendance_status` invoke로 반환한다.
 pub fn trigger_check(app: &tauri::AppHandle) {
-    debug!("[checker] trigger_check emitted");
+    log::debug!("[checker] trigger_check emitted");
     let _ = app.emit_to(
         tauri::EventTarget::WebviewWindow {
             label: "checker".into(),
@@ -111,10 +110,10 @@ pub async fn report_attendance_status(
     status: AttendanceReport,
 ) -> Result<(), String> {
     if status.api_error {
-        info!("[checker] API error received, skipping state update");
+        log::info!("[checker] API error received, skipping state update");
     } else {
         let s = state.lock().await;
-        info!(
+        log::info!(
             "[checker] report: needs_login={} morning={} evening={} current_phase={:?}",
             status.needs_login, status.morning_done, status.evening_done, s.phase,
         );

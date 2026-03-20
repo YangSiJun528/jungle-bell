@@ -12,7 +12,6 @@
 use std::sync::Arc;
 
 use chrono::{DateTime, Datelike, FixedOffset, Timelike, Utc};
-use log::{debug, info};
 use tokio::sync::Mutex;
 
 use tauri::Manager;
@@ -303,7 +302,7 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
     tauri::async_runtime::spawn(async move {
         {
             let s = shared_state.lock().await;
-            info!(
+            log::info!(
                 "[scheduler] config: day_start={:02}:{:02} start_deadline={:02}:{:02} end_open={:02}:{:02} day_end={:02}:{:02}",
                 s.config.morning_start.hour,
                 s.config.morning_start.minute,
@@ -325,11 +324,11 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
 
                 if result.daily_reset {
                     let kst_now = now.with_timezone(&kst());
-                    info!("[scheduler] daily reset at KST={}", kst_now.format("%Y-%m-%d %H:%M:%S"));
+                    log::info!("[scheduler] daily reset at KST={}", kst_now.format("%Y-%m-%d %H:%M:%S"));
                 }
 
                 if result.phase_changed {
-                    info!(
+                    log::info!(
                         "[scheduler] phase={:?} started={} ended={} remaining={:?} needs_login={}",
                         s.phase, s.morning_checked, s.evening_checked,
                         result.tray_update.as_ref().map(|t| t.1).flatten(),
@@ -337,7 +336,7 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
                     );
                 }
 
-                debug!(
+                log::debug!(
                     "[scheduler] state: phase={:?} morning_checked={} evening_checked={} \
                      needs_login={} data_loaded={} kst={}",
                     s.phase, s.morning_checked, s.evening_checked,
@@ -352,7 +351,7 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
 
                 if let Some((title, body)) = &result.notification {
                     let _ = app_handle.notification().builder().title(*title).body(body).show();
-                    info!("[scheduler] notification sent: phase={:?}", s.phase);
+                    log::info!("[scheduler] notification sent: phase={:?}", s.phase);
                 }
 
                 if result.phase_changed {
@@ -361,7 +360,7 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
 
                 if result.should_reload {
                     if let Some(checker) = app_handle.get_webview_window("checker") {
-                        info!("[checker] webview reloaded for session refresh");
+                        log::info!("[checker] webview reloaded for session refresh");
                         let _ = checker.navigate("https://jungle-lms.krafton.com/check-in".parse().unwrap());
                     }
                 }
@@ -369,7 +368,7 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
                 result
             };
 
-            debug!(
+            log::debug!(
                 "[scheduler] tick: interval={}s",
                 tick_result.tick_interval,
             );
