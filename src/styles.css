@@ -53,7 +53,7 @@ th {
     text-align: left;
     font-weight: 500;
     color: #555;
-    width: 200px;
+    width: 120px;
 }
 
 td {
@@ -66,7 +66,7 @@ td {
     color: #777;
     font-size: 0.72rem;
     line-height: 1.4;
-    width: 600px;
+    width: 360px;
 }
 
 .toggle {
