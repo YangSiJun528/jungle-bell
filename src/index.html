@@ -68,6 +68,10 @@
           </label>
         </td>
       </tr>
+      <tr id="skip-today-hint" style="display:none">
+        <th></th>
+        <td class="setting-hint" id="skip-today-hint-text"></td>
+      </tr>
       <tr class="gap-field"></tr>
       <tr class="gap-field"></tr>
       <tr>
@@ -260,10 +264,26 @@
 
         // --- 오늘 알림 끄기 ---
         const skipTodayToggle = document.getElementById('skip-today-toggle');
+        const skipTodayHint = document.getElementById('skip-today-hint');
+        const skipTodayHintText = document.getElementById('skip-today-hint-text');
+        function updateSkipTodayHint(enabled) {
+          if (enabled) {
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const mm = String(tomorrow.getMonth() + 1).padStart(2, '0');
+            const dd = String(tomorrow.getDate()).padStart(2, '0');
+            skipTodayHintText.textContent = `내일(${mm}/${dd}) 00:00에 자동으로 해제됩니다.`;
+            skipTodayHint.style.display = '';
+          } else {
+            skipTodayHint.style.display = 'none';
+          }
+        }
         skipTodayToggle.checked = await invoke('get_skip_today');
+        updateSkipTodayHint(skipTodayToggle.checked);
         skipTodayToggle.addEventListener('change', async () => {
           try {
             await invoke('set_skip_today', { enabled: skipTodayToggle.checked });
+            updateSkipTodayHint(skipTodayToggle.checked);
           } catch (e) {
             console.error(e);
             skipTodayToggle.checked = !skipTodayToggle.checked;
