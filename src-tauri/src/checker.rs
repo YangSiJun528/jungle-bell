@@ -195,6 +195,40 @@ setting_u32!(get_end_notification_interval, set_end_notification_interval, end_n
 setting_time!(get_notification_start, set_notification_start, notification_start, "알림 시작 시각");
 setting_time!(get_notification_end, set_notification_end, notification_end, "알림 종료 시각");
 
+setting_bool!(get_skip_sunday, set_skip_sunday, skip_sunday, "일요일 알림 끄기");
+
+/// Tauri 커맨드: 오늘 알림 끄기 상태 조회.
+/// config.skip_today가 오늘 KST 날짜와 일치하면 true.
+#[tauri::command]
+pub async fn get_skip_today(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<bool, String> {
+    let s = state.lock().await;
+    let today = chrono::Utc::now()
+        .with_timezone(&state::kst())
+        .format("%Y-%m-%d")
+        .to_string();
+    Ok(s.config.skip_today.as_deref() == Some(today.as_str()))
+}
+
+/// Tauri 커맨드: 오늘 알림 끄기 설정 변경 및 저장.
+/// enabled=true이면 오늘 KST 날짜를 저장, false이면 None.
+#[tauri::command]
+pub async fn set_skip_today(state: tauri::State<'_, Arc<Mutex<AppState>>>, enabled: bool) -> Result<(), String> {
+    let mut s = state.lock().await;
+    s.config.skip_today = if enabled {
+        Some(
+            chrono::Utc::now()
+                .with_timezone(&state::kst())
+                .format("%Y-%m-%d")
+                .to_string(),
+        )
+    } else {
+        None
+    };
+    log::info!("[settings] 오늘 알림 끄기 변경: {:?}", s.config.skip_today);
+    s.config.save();
+    Ok(())
+}
+
 /// Tauri 커맨드: 현재 앱 버전 반환.
 #[tauri::command]
 pub fn get_app_version(app: tauri::AppHandle) -> String {

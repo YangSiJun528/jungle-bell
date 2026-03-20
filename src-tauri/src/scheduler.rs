@@ -11,7 +11,7 @@
 
 use std::sync::Arc;
 
-use chrono::{DateTime, Datelike, FixedOffset, Timelike, Utc};
+use chrono::{DateTime, Datelike, FixedOffset, Timelike, Utc, Weekday};
 use tokio::sync::Mutex;
 
 use tauri::Manager;
@@ -87,6 +87,19 @@ pub(crate) fn should_notify(
 ) -> NotificationDecision {
     if needs_login {
         return NotificationDecision { send: false, message: None };
+    }
+
+    // 일요일 알림 끄기
+    if config.skip_sunday && kst_now.weekday() == Weekday::Sun {
+        return NotificationDecision { send: false, message: None };
+    }
+
+    // 오늘 알림 끄기
+    if let Some(skip_date) = &config.skip_today {
+        let today = kst_now.format("%Y-%m-%d").to_string();
+        if skip_date == &today {
+            return NotificationDecision { send: false, message: None };
+        }
     }
 
     // 시작/종료 출석별 알림 활성화 여부 확인
@@ -996,6 +1009,98 @@ mod tests {
         // then
         assert_eq!(phase, DailyPhase::StartOverdue);
         assert_eq!(remaining, None);
+    }
+
+    // --- skip_today ---
+
+    #[test]
+    fn 오늘_알림_끄기_활성화시_알림을_보내지_않는다() {
+        // given
+        let mut config = Config::default();
+        config.skip_today = Some("2026-03-17".into()); // kst_dt의 날짜와 동일
+
+        // when
+        let d = should_notify(&config, DailyPhase::NeedStart, Some(3600), false, kst_dt(9, 30, 0), None);
+
+        // then
+        assert!(!d.send);
+    }
+
+    #[test]
+    fn 오늘_알림_끄기_날짜가_다르면_알림이_발송된다() {
+        // given
+        let mut config = Config::default();
+        config.skip_today = Some("2026-03-16".into()); // 어제 날짜
+
+        // when
+        let d = should_notify(&config, DailyPhase::NeedStart, Some(3600), false, kst_dt(9, 30, 0), None);
+
+        // then
+        assert!(d.send);
+    }
+
+    // --- skip_sunday ---
+
+    #[test]
+    fn 일요일_알림_끄기_활성화시_일요일에_알림을_보내지_않는다() {
+        // given: 2026-03-22는 일요일
+        let mut config = Config::default();
+        config.skip_sunday = true;
+        let sunday = FixedOffset::east_opt(9 * 3600)
+            .unwrap()
+            .with_ymd_and_hms(2026, 3, 22, 9, 30, 0)
+            .unwrap();
+
+        // when
+        let d = should_notify(&config, DailyPhase::NeedStart, Some(3600), false, sunday, None);
+
+        // then
+        assert!(!d.send);
+    }
+
+    #[test]
+    fn 일요일_알림_끄기_활성화시_월요일에는_알림이_발송된다() {
+        // given: 2026-03-23는 월요일
+        let mut config = Config::default();
+        config.skip_sunday = true;
+        let monday = FixedOffset::east_opt(9 * 3600)
+            .unwrap()
+            .with_ymd_and_hms(2026, 3, 23, 9, 30, 0)
+            .unwrap();
+
+        // when
+        let d = should_notify(&config, DailyPhase::NeedStart, Some(3600), false, monday, None);
+
+        // then
+        assert!(d.send);
+    }
+
+    #[test]
+    fn 일요일_알림_끄기_비활성화시_일요일에도_알림이_발송된다() {
+        // given
+        let config = Config::default(); // skip_sunday = false
+        let sunday = FixedOffset::east_opt(9 * 3600)
+            .unwrap()
+            .with_ymd_and_hms(2026, 3, 22, 9, 30, 0)
+            .unwrap();
+
+        // when
+        let d = should_notify(&config, DailyPhase::NeedStart, Some(3600), false, sunday, None);
+
+        // then
+        assert!(d.send);
+    }
+
+    #[test]
+    fn 오늘_알림_끄기_미설정시_알림이_발송된다() {
+        // given
+        let config = Config::default(); // skip_today = None
+
+        // when
+        let d = should_notify(&config, DailyPhase::NeedStart, Some(3600), false, kst_dt(9, 30, 0), None);
+
+        // then
+        assert!(d.send);
     }
 
     #[test]

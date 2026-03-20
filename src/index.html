@@ -51,6 +51,26 @@
   <div id="tab-notification" class="tab-content">
     <table>
       <tr>
+        <th>일요일 알림 끄기</th>
+        <td>
+          <label class="toggle">
+            <input type="checkbox" id="skip-sunday-toggle" />
+            <span class="toggle-slider"></span>
+          </label>
+        </td>
+      </tr>
+      <tr>
+        <th>오늘 알림 끄기</th>
+        <td>
+          <label class="toggle">
+            <input type="checkbox" id="skip-today-toggle" />
+            <span class="toggle-slider"></span>
+          </label>
+        </td>
+      </tr>
+      <tr class="gap-field"></tr>
+      <tr class="gap-field"></tr>
+      <tr>
         <th>시작 출석</th>
         <td>
           <label class="toggle">
@@ -236,6 +256,24 @@
 
         document.getElementById('open-log-folder-btn').addEventListener('click', () => {
           invoke('open_log_folder').catch(console.error);
+        });
+
+        // --- 오늘 알림 끄기 ---
+        const skipTodayToggle = document.getElementById('skip-today-toggle');
+        skipTodayToggle.checked = await invoke('get_skip_today');
+        skipTodayToggle.addEventListener('change', async () => {
+          try {
+            await invoke('set_skip_today', { enabled: skipTodayToggle.checked });
+          } catch (e) {
+            console.error(e);
+            skipTodayToggle.checked = !skipTodayToggle.checked;
+          }
+        });
+
+        const skipSundayToggle = document.getElementById('skip-sunday-toggle');
+        skipSundayToggle.checked = await invoke('get_skip_sunday');
+        skipSundayToggle.addEventListener('change', () => {
+          invoke('set_skip_sunday', { enabled: skipSundayToggle.checked }).catch(console.error);
         });
 
         // --- 알림 설정 ---

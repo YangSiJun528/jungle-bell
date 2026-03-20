@@ -59,6 +59,13 @@ pub struct Config {
     /// None이면 첫 설치 (환영 알림 대상).
     #[serde(default)]
     pub last_version: Option<String>,
+    /// 오늘 알림 끄기 — 해당 날짜(KST, "YYYY-MM-DD")에만 알림을 보내지 않음.
+    /// None이면 비활성, 날짜가 오늘과 다르면 자동 무시.
+    #[serde(default)]
+    pub skip_today: Option<String>,
+    /// 일요일(KST) 알림 끄기 (기본 false)
+    #[serde(default)]
+    pub skip_sunday: bool,
 }
 
 fn default_true() -> bool {
@@ -155,6 +162,8 @@ impl Default for Config {
             debug_mode: false,
             welcome_notification_sent: false,
             last_version: None,
+            skip_today: None,
+            skip_sunday: false,
         }
     }
 }
