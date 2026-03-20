@@ -32,6 +32,7 @@ const TICK_INTERVAL_IDLE: u64 = 300;
 /// 액세스 토큰이 1시간 만료이므로 15분 간격으로 리로드하여 갱신.
 const RELOAD_INTERVAL_NORMAL: u64 = 15 * 60; // 15분
 
+
 /// 알림 판단 결과.
 pub(crate) struct NotificationDecision {
     pub send: bool,
@@ -85,15 +86,17 @@ pub(crate) fn should_notify(
     kst_now: DateTime<FixedOffset>,
     secs_since_last: Option<u64>,
 ) -> NotificationDecision {
-    if !config.notification_enabled || needs_login {
+    if needs_login {
         return NotificationDecision { send: false, message: None };
     }
 
-    let actionable = matches!(
-        phase,
-        DailyPhase::NeedStart | DailyPhase::StartOverdue | DailyPhase::NeedEnd
-    );
-    if !actionable {
+    // 시작/종료 출석별 알림 활성화 여부 확인
+    let enabled = match phase {
+        DailyPhase::NeedStart | DailyPhase::StartOverdue => config.start_notification_enabled,
+        DailyPhase::NeedEnd => config.end_notification_enabled,
+        _ => false,
+    };
+    if !enabled {
         return NotificationDecision { send: false, message: None };
     }
 
@@ -125,7 +128,12 @@ pub(crate) fn should_notify(
     }
 
     // 쓰로틀링
-    let interval_secs = config.notification_interval_mins as u64 * 60;
+    let interval_mins = match phase {
+        DailyPhase::NeedStart | DailyPhase::StartOverdue => config.start_notification_interval_mins,
+        DailyPhase::NeedEnd => config.end_notification_interval_mins,
+        _ => config.start_notification_interval_mins,
+    };
+    let interval_secs = interval_mins as u64 * 60;
     let throttled = match secs_since_last {
         Some(elapsed) => elapsed < interval_secs,
         None => false, // 첫 알림
@@ -478,16 +486,42 @@ mod tests {
     // --- should_notify ---
 
     #[test]
-    fn 알림_비활성화시_알림을_보내지_않는다() {
+    fn 시작_알림_비활성화시_시작_알림을_보내지_않는다() {
         // given
         let mut config = Config::default();
-        config.notification_enabled = false;
+        config.start_notification_enabled = false;
 
         // when
         let d = should_notify(&config, DailyPhase::NeedStart, Some(3600), false, kst_dt(9, 30, 0), None);
 
         // then
         assert!(!d.send);
+    }
+
+    #[test]
+    fn 종료_알림_비활성화시_종료_알림을_보내지_않는다() {
+        // given
+        let mut config = Config::default();
+        config.end_notification_enabled = false;
+
+        // when: KST 23:30 — 저녁 윈도우 내
+        let d = should_notify(&config, DailyPhase::NeedEnd, Some(3600), false, kst_dt(23, 30, 0), None);
+
+        // then
+        assert!(!d.send);
+    }
+
+    #[test]
+    fn 시작_알림_비활성화시에도_종료_알림은_발송된다() {
+        // given
+        let mut config = Config::default();
+        config.start_notification_enabled = false;
+
+        // when: KST 23:30 — 저녁 윈도우 내
+        let d = should_notify(&config, DailyPhase::NeedEnd, Some(3600), false, kst_dt(23, 30, 0), None);
+
+        // then
+        assert!(d.send);
     }
 
     #[test]

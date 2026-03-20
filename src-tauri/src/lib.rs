@@ -83,10 +83,14 @@ pub fn run() {
             checker::check_and_notify_update,
             checker::get_auto_start,
             checker::set_auto_start,
-            checker::get_notification_enabled,
-            checker::set_notification_enabled,
-            checker::get_notification_interval,
-            checker::set_notification_interval,
+            checker::get_start_notification_enabled,
+            checker::set_start_notification_enabled,
+            checker::get_end_notification_enabled,
+            checker::set_end_notification_enabled,
+            checker::get_start_notification_interval,
+            checker::set_start_notification_interval,
+            checker::get_end_notification_interval,
+            checker::set_end_notification_interval,
             checker::get_notification_start,
             checker::set_notification_start,
             checker::get_notification_end,
@@ -122,21 +126,40 @@ pub fn run() {
 
             tray::setup_tray(app)?;
 
-            // 환영 알림: OS 알림 설정에 앱을 등록하기 위해 한 번 보내야 한다.
-            // welcome_notification_sent 플래그로 신규/기존 사용자 모두 한 번만 수신.
+            // 환영 알림 또는 업데이트 완료 알림.
+            // - last_version이 None이면 첫 설치 → 환영 알림 (로그인 요청)
+            // - last_version이 현재 버전과 다르면 업데이트 완료 → 업데이트 알림
+            // - 같으면 일반 시작 → 알림 없음
             {
+                use tauri_plugin_notification::NotificationExt;
                 let mut state = shared_state.try_lock().unwrap();
-                if !state.config.welcome_notification_sent {
-                    use tauri_plugin_notification::NotificationExt;
-                    let _ = app.notification()
-                        .builder()
-                        .title("Jungle Bell 설치 완료")
-                        .body("트레이 아이콘에서 출석 창을 열고 LMS에 로그인해 주세요.")
-                        .show();
-                    log::info!("[app] 환영 알림 발송");
-                    state.config.welcome_notification_sent = true;
-                    state.config.save();
+                let current_version = app.package_info().version.to_string();
+
+                match &state.config.last_version {
+                    None => {
+                        // 첫 설치: 로그인 요청 알림
+                        let _ = app.notification()
+                            .builder()
+                            .title("Jungle Bell 설치 완료")
+                            .body("트레이 아이콘에서 출석 창을 열고 LMS에 로그인해 주세요.")
+                            .show();
+                        log::info!("[app] 환영 알림 발송 (첫 설치)");
+                    }
+                    Some(last) if last != &current_version => {
+                        // 업데이트 완료
+                        let _ = app.notification()
+                            .builder()
+                            .title("Jungle Bell 업데이트 완료")
+                            .body(&format!("v{} → v{}로 업데이트되었습니다.", last, current_version))
+                            .show();
+                        log::info!("[app] 업데이트 완료 알림 발송: v{} → v{}", last, current_version);
+                    }
+                    _ => {}
                 }
+
+                state.config.last_version = Some(current_version);
+                state.config.welcome_notification_sent = true;
+                state.config.save();
             }
 
             // 숨겨진 WebView로 LMS 출석 페이지를 로드.

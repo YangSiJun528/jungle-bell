@@ -30,12 +30,18 @@ pub struct Config {
     /// 시스템 시작 시 앱 자동 실행 여부 (기본 true)
     #[serde(default = "default_true")]
     pub auto_start: bool,
-    /// 알림 활성화 여부 (기본 true)
+    /// 시작 출석 알림 활성화 여부 (기본 true)
     #[serde(default = "default_true")]
-    pub notification_enabled: bool,
-    /// 알림 간격 (분, 기본 5)
+    pub start_notification_enabled: bool,
+    /// 종료 출석 알림 활성화 여부 (기본 true)
+    #[serde(default = "default_true")]
+    pub end_notification_enabled: bool,
+    /// 시작 출석 알림 간격 (분, 기본 15)
     #[serde(default = "default_notification_interval")]
-    pub notification_interval_mins: u32,
+    pub start_notification_interval_mins: u32,
+    /// 종료 출석 알림 간격 (분, 기본 15)
+    #[serde(default = "default_notification_interval")]
+    pub end_notification_interval_mins: u32,
     /// 알림 시작 시각 — 이 시각 이전에는 아침 알림을 보내지 않음 (기본 09:00)
     #[serde(default = "default_notification_start")]
     pub notification_start: TimeOfDay,
@@ -49,6 +55,10 @@ pub struct Config {
     /// 기존 config에 필드가 없으면 false → 신규/기존 사용자 모두 한 번 알림 수신.
     #[serde(default)]
     pub welcome_notification_sent: bool,
+    /// 마지막으로 실행된 앱 버전. 업데이트 완료 알림 판단에 사용.
+    /// None이면 첫 설치 (환영 알림 대상).
+    #[serde(default)]
+    pub last_version: Option<String>,
 }
 
 fn default_true() -> bool {
@@ -129,12 +139,15 @@ impl Default for Config {
             evening_end: TimeOfDay { hour: 4, minute: 0 },
             auto_update: true,
             auto_start: true,
-            notification_enabled: true,
-            notification_interval_mins: 15,
+            start_notification_enabled: true,
+            end_notification_enabled: true,
+            start_notification_interval_mins: 15,
+            end_notification_interval_mins: 15,
             notification_start: TimeOfDay { hour: 9, minute: 0 },
             notification_end: TimeOfDay { hour: 1, minute: 0 },
             debug_mode: false,
             welcome_notification_sent: false,
+            last_version: None,
         }
     }
 }

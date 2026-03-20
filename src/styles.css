@@ -181,9 +181,14 @@ input:checked + .toggle-slider:before {
     text-decoration: underline;
 }
 
-tr.notif-field.disabled {
+tr.start-notif-field.disabled,
+tr.end-notif-field.disabled {
     opacity: 0.4;
     pointer-events: none;
+}
+
+tr.gap-field {
+    height: 6px;
 }
 
 .time-range {
