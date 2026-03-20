@@ -5,6 +5,8 @@ allowed-tools: Read, Bash, Edit, Grep, Skill, AskUserQuestion
 
 Create a GitHub release. Follow the steps below in order.
 
+**Important:** Always use the `AskUserQuestion` tool when asking the user a question. Never ask via plain text output.
+
 ## Step 1: Check local state
 
 1. Verify the current branch is `main`.

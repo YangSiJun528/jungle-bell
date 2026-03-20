@@ -13,6 +13,8 @@ The following files need to be updated:
 2. `src-tauri/tauri.conf.json` — `"version"` field at the top level
 3. `src-tauri/Cargo.lock` — `version` field for the `jungle-bell` package
 
+**Important:** Always use the `AskUserQuestion` tool when asking the user a question. Never ask via plain text output.
+
 Steps:
 1. Read both config files to confirm current version
 2. If no target version was specified, ask the user which version to bump to (show the current version for reference)
