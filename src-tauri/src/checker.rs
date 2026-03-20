@@ -198,15 +198,15 @@ setting_time!(get_notification_end, set_notification_end, notification_end, "알
 
 setting_bool!(get_skip_sunday, set_skip_sunday, skip_sunday, "일요일 알림 끄기");
 
-/// Tauri 커맨드: 오늘 출석 알림 끄기 상태 조회.
-/// config.skip_today가 현재 "출석일" 날짜와 일치하면 true.
+/// Tauri 커맨드: 이번 출석 알림 끄기 상태 조회.
+/// config.skip_attendance가 현재 "출석일" 날짜와 일치하면 true.
 /// 자정~morning_start 사이에는 전날 날짜도 유효로 판정.
 #[tauri::command]
-pub async fn get_skip_today(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<bool, String> {
+pub async fn get_skip_attendance(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<bool, String> {
     let s = state.lock().await;
     let kst_now = chrono::Utc::now().with_timezone(&state::kst());
     let today = kst_now.format("%Y-%m-%d").to_string();
-    if s.config.skip_today.as_deref() == Some(today.as_str()) {
+    if s.config.skip_attendance.as_deref() == Some(today.as_str()) {
         return Ok(true);
     }
     // 자정~morning_start 사이: 전날 skip이 아직 유효
@@ -214,19 +214,19 @@ pub async fn get_skip_today(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Re
         let yesterday = (kst_now - chrono::Duration::days(1))
             .format("%Y-%m-%d")
             .to_string();
-        if s.config.skip_today.as_deref() == Some(yesterday.as_str()) {
+        if s.config.skip_attendance.as_deref() == Some(yesterday.as_str()) {
             return Ok(true);
         }
     }
     Ok(false)
 }
 
-/// Tauri 커맨드: 오늘 알림 끄기 설정 변경 및 저장.
+/// Tauri 커맨드: 이번 출석 알림 끄기 설정 변경 및 저장.
 /// enabled=true이면 오늘 KST 날짜를 저장, false이면 None.
 #[tauri::command]
-pub async fn set_skip_today(state: tauri::State<'_, Arc<Mutex<AppState>>>, enabled: bool) -> Result<(), String> {
+pub async fn set_skip_attendance(state: tauri::State<'_, Arc<Mutex<AppState>>>, enabled: bool) -> Result<(), String> {
     let mut s = state.lock().await;
-    s.config.skip_today = if enabled {
+    s.config.skip_attendance = if enabled {
         Some(
             chrono::Utc::now()
                 .with_timezone(&state::kst())
@@ -236,7 +236,7 @@ pub async fn set_skip_today(state: tauri::State<'_, Arc<Mutex<AppState>>>, enabl
     } else {
         None
     };
-    log::info!("[settings] 오늘 알림 끄기 변경: {:?}", s.config.skip_today);
+    log::info!("[settings] 이번 출석 알림 끄기 변경: {:?}", s.config.skip_attendance);
     s.config.save();
     Ok(())
 }

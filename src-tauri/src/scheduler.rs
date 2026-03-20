@@ -95,12 +95,12 @@ pub(crate) fn should_notify(
         return NotificationDecision { send: false, reason: "skip_sunday", message: None };
     }
 
-    // 오늘 출석 알림 끄기: morning_start 이전이면 전날 날짜도 매칭하여
-    // "오늘의 출석"이 다음날 morning_start까지 차단되도록 함.
-    if let Some(skip_date) = &config.skip_today {
+    // 이번 출석 알림 끄기: morning_start 이전이면 전날 날짜도 매칭하여
+    // 해당 출석일의 알림이 다음날 morning_start까지 차단되도록 함.
+    if let Some(skip_date) = &config.skip_attendance {
         let today = kst_now.format("%Y-%m-%d").to_string();
         if skip_date == &today {
-            return NotificationDecision { send: false, reason: "skip_today", message: None };
+            return NotificationDecision { send: false, reason: "skip_attendance", message: None };
         }
         // 자정~morning_start 사이: 전날 skip이 아직 유효
         if kst_now.hour() < config.morning_start.hour as u32 {
@@ -108,7 +108,7 @@ pub(crate) fn should_notify(
                 .format("%Y-%m-%d")
                 .to_string();
             if skip_date == &yesterday {
-                return NotificationDecision { send: false, reason: "skip_today", message: None };
+                return NotificationDecision { send: false, reason: "skip_attendance", message: None };
             }
         }
     }
@@ -1029,13 +1029,13 @@ mod tests {
         assert_eq!(remaining, None);
     }
 
-    // --- skip_today ---
+    // --- skip_attendance ---
 
     #[test]
-    fn 오늘_알림_끄기_활성화시_알림을_보내지_않는다() {
+    fn 이번_출석_알림_끄기_활성화시_알림을_보내지_않는다() {
         // given
         let mut config = Config::default();
-        config.skip_today = Some("2026-03-17".into()); // kst_dt의 날짜와 동일
+        config.skip_attendance = Some("2026-03-17".into()); // kst_dt의 날짜와 동일
 
         // when
         let d = should_notify(&config, DailyPhase::NeedStart, Some(3600), false, kst_dt(9, 30, 0), None);
@@ -1045,10 +1045,10 @@ mod tests {
     }
 
     #[test]
-    fn 오늘_알림_끄기_날짜가_다르면_알림이_발송된다() {
+    fn 이번_출석_알림_끄기_날짜가_다르면_알림이_발송된다() {
         // given: morning_start 이후에는 전날 skip이 무효
         let mut config = Config::default();
-        config.skip_today = Some("2026-03-16".into()); // 어제 날짜
+        config.skip_attendance = Some("2026-03-16".into()); // 어제 날짜
 
         // when: 09:30 (morning_start=04:00 이후)
         let d = should_notify(&config, DailyPhase::NeedStart, Some(3600), false, kst_dt(9, 30, 0), None);
@@ -1058,10 +1058,10 @@ mod tests {
     }
 
     #[test]
-    fn 오늘_알림_끄기_자정_이후_morning_start_이전에는_전날_skip이_유효하다() {
+    fn 이번_출석_알림_끄기_자정_이후_morning_start_이전에는_전날_skip이_유효하다() {
         // given: 전날(03-17) skip 설정, 현재 03-18 02:00 (morning_start=04:00 이전)
         let mut config = Config::default();
-        config.skip_today = Some("2026-03-17".into());
+        config.skip_attendance = Some("2026-03-17".into());
         let kst = FixedOffset::east_opt(9 * 3600)
             .unwrap()
             .with_ymd_and_hms(2026, 3, 18, 2, 0, 0)
@@ -1075,10 +1075,10 @@ mod tests {
     }
 
     #[test]
-    fn 오늘_알림_끄기_morning_start_이후에는_전날_skip이_해제된다() {
+    fn 이번_출석_알림_끄기_morning_start_이후에는_전날_skip이_해제된다() {
         // given: 전날(03-17) skip 설정, 현재 03-18 09:30 (morning_start=04:00 이후, 알림윈도우 내)
         let mut config = Config::default();
-        config.skip_today = Some("2026-03-17".into());
+        config.skip_attendance = Some("2026-03-17".into());
         let kst = FixedOffset::east_opt(9 * 3600)
             .unwrap()
             .with_ymd_and_hms(2026, 3, 18, 9, 30, 0)
@@ -1144,9 +1144,9 @@ mod tests {
     }
 
     #[test]
-    fn 오늘_알림_끄기_미설정시_알림이_발송된다() {
+    fn 이번_출석_알림_끄기_미설정시_알림이_발송된다() {
         // given
-        let config = Config::default(); // skip_today = None
+        let config = Config::default(); // skip_attendance = None
 
         // when
         let d = should_notify(&config, DailyPhase::NeedStart, Some(3600), false, kst_dt(9, 30, 0), None);
