@@ -11,7 +11,7 @@ The following files need to be updated:
 
 1. `src-tauri/Cargo.toml` — `version` field in `[package]`
 2. `src-tauri/tauri.conf.json` — `"version"` field at the top level
-3. `src-tauri/Cargo.lock` — `version` field for the `jungle-bell` package
+3. `src-tauri/Cargo.lock` — updated via `cargo generate-lockfile`
 
 **Important:** Always use the `AskUserQuestion` tool when asking the user a question. Never ask via plain text output.
 

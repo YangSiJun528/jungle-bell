@@ -337,7 +337,7 @@
         const startIntervalSelect = document.getElementById('start-notification-interval-select');
         startIntervalSelect.value = await invoke('get_start_notification_interval');
         startIntervalSelect.addEventListener('change', () => {
-          invoke('set_start_notification_interval', { minutes: parseInt(startIntervalSelect.value) }).catch(console.error);
+          invoke('set_start_notification_interval', { value: parseInt(startIntervalSelect.value) }).catch(console.error);
         });
 
         const notifEndSelect = document.getElementById('notification-end-select');
@@ -350,7 +350,7 @@
         const endIntervalSelect = document.getElementById('end-notification-interval-select');
         endIntervalSelect.value = await invoke('get_end_notification_interval');
         endIntervalSelect.addEventListener('change', () => {
-          invoke('set_end_notification_interval', { minutes: parseInt(endIntervalSelect.value) }).catch(console.error);
+          invoke('set_end_notification_interval', { value: parseInt(endIntervalSelect.value) }).catch(console.error);
         });
 
         document.getElementById('open-notification-settings-btn').addEventListener('click', async () => {

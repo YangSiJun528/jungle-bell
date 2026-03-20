@@ -13,7 +13,9 @@ Create a GitHub release. Follow the steps below in order.
 2. Check for uncommitted changes (both unstaged and staged).
 3. Check for unpushed commits.
 
-If any of the above apply, **refuse the operation** and explain why. Ask the user to resolve the issues and try again.
+If the branch is not `main` or there are uncommitted changes, **refuse the operation** and explain why.
+
+If there are unpushed commits, use `AskUserQuestion` to ask whether to push them to the remote before proceeding. If the user agrees, run `git push origin main` and continue. If not, abort.
 
 ## Step 2: Check version and existing tags/releases
 
@@ -22,7 +24,7 @@ If any of the above apply, **refuse the operation** and explain why. Ask the use
 3. Check if the tag already exists on the remote (`git ls-remote --tags origin`).
 4. Check if a GitHub release already exists (`gh release view`).
 
-If a tag or release already exists, present the user with these options:
+If a tag or release already exists, use `AskUserQuestion` to present the user with these options:
 
 1. **Abort** — the user resolves it manually and tries again
 2. **Force deploy** — delete the existing release and tag, then recreate them
@@ -41,10 +43,6 @@ git push origin v{version}
 gh release create v{version} --title "v{version}" --generate-notes --latest
 ```
 
-- If the version contains prerelease identifiers (e.g., `-alpha`, `-beta`, `-rc`), ask the user whether to mark it as a **prerelease**.
+- If the version contains prerelease identifiers (e.g., `-alpha`, `-beta`, `-rc`), use `AskUserQuestion` to ask the user whether to mark it as a **prerelease**.
   - If yes: use `--prerelease` flag and omit `--latest`.
   - If no: use `--latest` as usual.
-
-## Step 5: Report result
-
-Show the created release URL to the user.
