@@ -100,24 +100,21 @@ pub(crate) fn should_notify(
         return NotificationDecision { send: false, message: None };
     }
 
-    let kst_mins = (kst_now.hour() * 60 + kst_now.minute()) as i32;
-    let notif_start_mins =
-        (config.notification_start.hour * 60 + config.notification_start.minute) as i32;
-    let notif_end_mins =
-        (config.notification_end.hour * 60 + config.notification_end.minute) as i32;
-    let evening_start_mins =
-        (config.evening_start.hour * 60 + config.evening_start.minute) as i32;
+    let kst_secs = (kst_now.hour() as i64) * 3600 + (kst_now.minute() as i64) * 60 + (kst_now.second() as i64);
+    let notif_start_secs = config.notification_start.to_secs();
+    let notif_end_secs = config.notification_end.to_secs();
+    let evening_start_secs = config.evening_start.to_secs();
 
     let in_window = match phase {
         DailyPhase::NeedStart | DailyPhase::StartOverdue => {
-            kst_mins >= notif_start_mins
+            kst_secs >= notif_start_secs
         }
         DailyPhase::NeedEnd => {
-            if notif_end_mins <= evening_start_mins {
+            if notif_end_secs <= evening_start_secs {
                 // 자정 넘김 (예: 23:00~01:00)
-                kst_mins >= evening_start_mins || kst_mins < notif_end_mins
+                kst_secs >= evening_start_secs || kst_secs < notif_end_secs
             } else {
-                kst_mins >= evening_start_mins && kst_mins < notif_end_mins
+                kst_secs >= evening_start_secs && kst_secs < notif_end_secs
             }
         }
         _ => false,

@@ -96,25 +96,21 @@ pub fn compute_daily_phase(
     }
 
     let kst_now = now.with_timezone(&kst());
-    let h = kst_now.hour();
-    let m = kst_now.minute();
-    let s = kst_now.second();
-    let now_mins = h * 60 + m;
-    let now_secs = (h as i64) * 3600 + (m as i64) * 60 + (s as i64);
+    let now_secs = (kst_now.hour() as i64) * 3600 + (kst_now.minute() as i64) * 60 + (kst_now.second() as i64);
 
-    // 스케줄 경계 (분 단위)
-    let day_start_mins = config.morning_start.hour * 60 + config.morning_start.minute; // 04:00
-    let end_window_mins = config.evening_start.hour * 60 + config.evening_start.minute; // 23:00
-    let day_end_mins = config.evening_end.hour * 60 + config.evening_end.minute; // 04:00
+    // 스케줄 경계 (초 단위)
+    let day_start_secs = config.morning_start.to_secs();
+    let end_window_secs = config.evening_start.to_secs();
+    let day_end_secs = config.evening_end.to_secs();
 
     // 시간대 판별 (두 구간이 24시간을 커버)
-    let in_start_window = now_mins >= day_start_mins && now_mins < end_window_mins; // 04:00-22:59
-    let in_end_window = now_mins >= end_window_mins || now_mins < day_end_mins; // 23:00-03:59
+    let in_start_window = now_secs >= day_start_secs && now_secs < end_window_secs; // 04:00-22:59
+    let in_end_window = now_secs >= end_window_secs || now_secs < day_end_secs; // 23:00-03:59
 
     if !started {
         if in_start_window {
             // 체크인 가능 (04:00-22:59)
-            let goal_secs = (config.morning_end.hour as i64) * 3600 + (config.morning_end.minute as i64) * 60;
+            let goal_secs = config.morning_end.to_secs();
             let remaining_to_goal = goal_secs - now_secs;
 
             if remaining_to_goal <= 0 {
@@ -138,14 +134,12 @@ pub fn compute_daily_phase(
     // 체크인 완료, 체크아웃 미완료
     if in_start_window {
         // 학습 중 — 체크아웃 버튼 비활성 상태
-        let end_window_secs = (config.evening_start.hour as i64) * 3600 + (config.evening_start.minute as i64) * 60;
         let remaining = end_window_secs - now_secs;
         return (DailyPhase::Studying, Some(remaining));
     }
 
     if in_end_window {
         // 체크아웃 가능 (23:00-03:59)
-        let day_end_secs = (config.evening_end.hour as i64) * 3600 + (config.evening_end.minute as i64) * 60;
         let remaining = if now_secs >= day_end_secs {
             // 자정 전 (23:xx): 마감은 다음 날 04:00
             (24 * 3600 - now_secs) + day_end_secs

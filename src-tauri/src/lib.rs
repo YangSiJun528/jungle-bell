@@ -8,7 +8,6 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use tauri::Manager;
-use tauri_plugin_updater::UpdaterExt;
 
 use config::Config;
 use state::AppState;
@@ -191,69 +190,14 @@ pub fn run() {
             });
 
             // 시작 시 업데이트 확인 (백그라운드). auto_update 설정이 꺼져 있으면 건너뜀.
-            // 업데이트가 있으면 사용자에게 다이얼로그로 알리고 설치 여부를 선택하게 함.
-            // 시작 시 업데이트 확인 (백그라운드).
             let app_handle_update = app.handle().clone();
             let shared_state_update = shared_state.clone();
             tauri::async_runtime::spawn(async move {
-                use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
-
                 let auto_update = shared_state_update.lock().await.config.auto_update;
                 if !auto_update {
                     return;
                 }
-                if let Ok(updater) = app_handle_update.updater() {
-                    match updater.check().await {
-                        Ok(Some(update)) => {
-                            log::info!("[updater] 새 업데이트 발견: v{}", update.version);
-
-                            // 릴리즈 후 30분 이내면 CI 빌드가 아직 진행 중일 수 있으므로 건너뜀
-                            let is_building = update.date.map_or(false, |date| {
-                                let elapsed = chrono::Utc::now().timestamp() - date.unix_timestamp();
-                                elapsed < 30 * 60
-                            });
-                            if is_building {
-                                log::info!("[updater] 릴리즈 후 30분 미경과, 빌드 진행 중으로 판단하여 건너뜀");
-                                return;
-                            }
-
-                            let version = update.version.clone();
-                            let (tx, rx) = tokio::sync::oneshot::channel::<bool>();
-                            app_handle_update
-                                .dialog()
-                                .message(format!(
-                                    "새로운 버전 v{}이 있습니다. 지금 설치하고 재시작하시겠습니까?",
-                                    version
-                                ))
-                                .title("업데이트 가능")
-                                .buttons(MessageDialogButtons::OkCancelCustom(
-                                    "설치 및 재시작".into(),
-                                    "나중에".into(),
-                                ))
-                                .show(move |confirmed| {
-                                    let _ = tx.send(confirmed);
-                                });
-                            if rx.await.unwrap_or(false) {
-                                app_handle_update
-                                    .dialog()
-                                    .message("업데이트를 다운로드 중입니다.\n완료될 때까지 앱을 종료하지 마세요. (이 창은 닫아도 됩니다.)")
-                                    .title("업데이트 중")
-                                    .show(|_| {});
-                                match update.download_and_install(|_, _| {}, || {}).await {
-                                    Ok(_) => {
-                                        log::info!("[updater] 업데이트 설치 완료, 앱 재시작");
-                                        app_handle_update.restart();
-                                    }
-                                    Err(e) => {
-                                        log::error!("[updater] 업데이트 설치 실패: {}", e);
-                                    }
-                                }
-                            }
-                        }
-                        Ok(None) => log::info!("[updater] 최신 버전입니다"),
-                        Err(e) => log::debug!("[updater] 업데이트 확인 실패: {}", e),
-                    }
-                }
+                checker::prompt_and_install_update(app_handle_update, true).await;
             });
 
             // 백그라운드 루프: 상태 계산, 트레이 갱신, 체커 주기적 리로드.

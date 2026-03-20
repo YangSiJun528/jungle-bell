@@ -77,6 +77,13 @@ fn default_notification_end() -> TimeOfDay {
     TimeOfDay { hour: 1, minute: 0 }
 }
 
+impl TimeOfDay {
+    /// 자정 기준 초 단위 변환. 시간 비교·계산에 사용.
+    pub fn to_secs(&self) -> i64 {
+        (self.hour as i64) * 3600 + (self.minute as i64) * 60
+    }
+}
+
 fn config_path() -> Option<PathBuf> {
     dirs::config_dir().map(|p| p.join("jungle-bell").join("config.json"))
 }

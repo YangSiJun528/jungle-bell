@@ -56,58 +56,35 @@ fn build_status_text(phase: DailyPhase, remaining: Option<i64>, needs_login: boo
 
     let mins = remaining.map(|s| (s + 59) / 60);
 
+    /// 분 단위 잔여시간을 "Xh Ym" 또는 "X분" 형식으로 포매팅.
+    fn fmt_time(m: i64) -> String {
+        let hours = m / 60;
+        let rest = m % 60;
+        if hours > 0 {
+            format!("{}h {}m", hours, rest)
+        } else {
+            format!("{}분", m)
+        }
+    }
+
     match phase {
         DailyPhase::Idle => "대기 중".to_string(),
-        DailyPhase::NeedStart => {
-            if let Some(m) = mins {
-                let hours = m / 60;
-                let rest_mins = m % 60;
-                if hours > 0 {
-                    format!("학습 시작 가능 ({}h {}m 남음)", hours, rest_mins)
-                } else {
-                    format!("학습 시작 가능 ({}분 남음)", m)
-                }
-            } else {
-                "학습 시작 가능".to_string()
-            }
-        }
-        DailyPhase::StartOverdue => {
-            if let Some(m) = mins {
-                if m > 0 {
-                    format!("지각 임박 ({}분 남음)", m)
-                } else {
-                    "학습 시작 지각!".to_string()
-                }
-            } else {
-                "학습 시작 지각!".to_string()
-            }
-        }
-        DailyPhase::Studying => {
-            if let Some(m) = mins {
-                let hours = m / 60;
-                let rest_mins = m % 60;
-                if hours > 0 {
-                    format!("학습 중 (종료 가능까지 {}h {}m)", hours, rest_mins)
-                } else {
-                    format!("학습 중 (종료 가능까지 {}분)", m)
-                }
-            } else {
-                "학습 중".to_string()
-            }
-        }
-        DailyPhase::NeedEnd => {
-            if let Some(m) = mins {
-                let hours = m / 60;
-                let rest_mins = m % 60;
-                if hours > 0 {
-                    format!("학습 종료 가능 ({}h {}m 남음)", hours, rest_mins)
-                } else {
-                    format!("학습 종료 가능 ({}분 남음)", m)
-                }
-            } else {
-                "학습 종료 가능".to_string()
-            }
-        }
+        DailyPhase::NeedStart => match mins {
+            Some(m) => format!("학습 시작 가능 ({} 남음)", fmt_time(m)),
+            None => "학습 시작 가능".to_string(),
+        },
+        DailyPhase::StartOverdue => match mins {
+            Some(m) if m > 0 => format!("지각 임박 ({}분 남음)", m),
+            _ => "학습 시작 지각!".to_string(),
+        },
+        DailyPhase::Studying => match mins {
+            Some(m) => format!("학습 중 (종료 가능까지 {})", fmt_time(m)),
+            None => "학습 중".to_string(),
+        },
+        DailyPhase::NeedEnd => match mins {
+            Some(m) => format!("학습 종료 가능 ({} 남음)", fmt_time(m)),
+            None => "학습 종료 가능".to_string(),
+        },
         DailyPhase::Complete => "오늘 출석 완료".to_string(),
     }
 }
