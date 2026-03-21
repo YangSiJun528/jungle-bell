@@ -2,10 +2,11 @@ name: Release
 
 on:
   release:
-    types: [published]
+    types: [created]
 
 jobs:
   publish-tauri:
+    if: github.event.release.draft == true
     permissions:
       contents: write
     strategy:
@@ -45,3 +46,19 @@ jobs:
           args: ${{ matrix.args }}
           projectPath: src-tauri
           updaterJsonPreferNsis: true
+
+  publish-release:
+    needs: [publish-tauri]
+    if: github.event.release.draft == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release edit ${{ github.event.release.tag_name }} \
+            --repo ${{ github.repository }} \
+            --draft=false \
+            ${{ github.event.release.prerelease && ' ' || '--latest' }}

@@ -297,25 +297,6 @@ pub(crate) async fn prompt_and_install_update(app: tauri::AppHandle, silent: boo
         Ok(Some(update)) => {
             log::info!("[updater] 새 업데이트 발견: v{}", update.version);
 
-            // 릴리즈 후 30분 이내면 CI 빌드가 아직 진행 중일 수 있음
-            let is_building = update.date.map_or(false, |date| {
-                let elapsed = chrono::Utc::now().timestamp() - date.unix_timestamp();
-                elapsed < 30 * 60
-            });
-            if is_building {
-                log::info!("[updater] 릴리즈 후 30분 미경과, 빌드 진행 중으로 판단");
-                if !silent {
-                    app.dialog()
-                        .message(format!(
-                            "새로운 버전 v{}이 출시되었지만, 빌드가 진행 중입니다.\n잠시 후에 다시 시도해 주세요.",
-                            update.version
-                        ))
-                        .title("업데이트 확인")
-                        .show(|_| {});
-                }
-                return;
-            }
-
             let version = update.version.clone();
             let (tx, rx) = tokio::sync::oneshot::channel::<bool>();
             app.dialog()

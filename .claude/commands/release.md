@@ -37,12 +37,18 @@ git tag v{version}
 git push origin v{version}
 ```
 
-## Step 4: Create GitHub release
+## Step 4: Create GitHub release (draft)
+
+The release is created as a **draft**. The CI workflow will automatically publish it after all builds complete.
 
 ```
-gh release create v{version} --title "v{version}" --generate-notes --latest
+gh release create v{version} --title "v{version}" --generate-notes --draft
 ```
 
 - If the version contains prerelease identifiers (e.g., `-alpha`, `-beta`, `-rc`), use `AskUserQuestion` to ask the user whether to mark it as a **prerelease**.
-  - If yes: use `--prerelease` flag and omit `--latest`.
-  - If no: use `--latest` as usual.
+  - If yes: add `--prerelease` flag (e.g., `--draft --prerelease`).
+  - If no: use `--draft` as usual.
+
+## Step 5: Confirm
+
+Inform the user that the release was created as a draft, and that it will be automatically published once the CI build completes. Provide a link to the GitHub Actions workflow run.
