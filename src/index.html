@@ -365,17 +365,17 @@
           }
         });
         // 설정 창이 다시 보여질 때 skip_attendance 토글 상태 갱신.
-        // 창이 숨겨졌다가 다시 show()되면 DOMContentLoaded가 재실행되지 않으므로,
-        // visibilitychange로 날짜가 지난 skip 상태를 반영한다.
-        document.addEventListener('visibilitychange', async () => {
-          if (document.visibilityState === 'visible') {
-            try {
-              const currentSkip = await invoke('get_skip_attendance');
-              skipAttendanceToggle.checked = currentSkip;
-              updateSkipAttendanceHint(currentSkip);
-            } catch (e) {
-              console.error('skip_attendance 상태 갱신 실패:', e);
-            }
+        // 창이 숨겨졌다가 다시 show() + set_focus()되면 DOMContentLoaded가 재실행되지 않으므로,
+        // window focus 이벤트로 날짜가 지난 skip 상태를 반영한다.
+        window.addEventListener('focus', async () => {
+          invoke('log_from_js', { level: 'info', message: '[settings] window focus' });
+          try {
+            const currentSkip = await invoke('get_skip_attendance');
+            invoke('log_from_js', { level: 'info', message: '[settings] skip_attendance 상태 갱신: ' + currentSkip });
+            skipAttendanceToggle.checked = currentSkip;
+            updateSkipAttendanceHint(currentSkip);
+          } catch (e) {
+            invoke('log_from_js', { level: 'error', message: '[settings] skip_attendance 상태 갱신 실패: ' + e });
           }
         });
 
