@@ -1,0 +1,20 @@
+{
+  "name": "jungle-campus-analyzer",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "postinstall": "node scripts/patch-prettier.mjs",
+    "analyze": "node analyze.mjs",
+    "login": "node analyze.mjs --login --url https://jungle-lms.krafton.com/check-in"
+  },
+  "dependencies": {
+    "playwright": "^1.50",
+    "webcrack": "^2.15",
+    "@wakaru/unminify": "^0.2",
+    "@wakaru/unpacker": "^0.1"
+  },
+  "overrides": {
+    "isolated-vm": "^6.0.0"
+  }
+}

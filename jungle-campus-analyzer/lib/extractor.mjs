@@ -1,8 +1,8 @@
-import { readFileSync, writeFileSync, copyFileSync, globSync } from 'node:fs';
+import { readFileSync, writeFileSync, globSync } from 'node:fs';
 import { existsSync } from 'node:fs';
-import { join, relative, basename } from 'node:path';
+import { join, basename } from 'node:path';
 import { assert, assertNonEmpty, assertHasKeys, assertType } from './assert.mjs';
-import { log, debug, ensureDir, writeJson, readJson, API_REQUESTS_PATH, REPORT_PATH } from './utils.mjs';
+import { log, debug, ensureDir, writeJson, API_REQUESTS_PATH, REPORT_PATH } from './utils.mjs';
 
 // ── 키워드 ──────────────────────────────────────
 const PRIMARY_KEYWORDS = ['/api/v2/me/cohorts', '/attendance/today'];
@@ -41,16 +41,10 @@ export async function extract(unminifiedDir, outputDir, options = {}) {
   const apiModules = findApiModules(allModules);
   log('EXTRACT', `httpV2 호출 포함 모듈: ${apiModules.length}개`);
 
-  // 매칭 모듈 + API 모듈 합집합 → output/api-modules/ 복사
+  // 매칭 모듈 + API 모듈 합집합
   await ensureDir(outputDir);
   const allRelevant = dedupeModules([...matchedModules, ...apiModules]);
-  const relatedModuleNames = [];
-  for (const mod of allRelevant) {
-    const name = basename(mod.filePath);
-    const dest = join(outputDir, name);
-    copyFileSync(mod.filePath, dest);
-    relatedModuleNames.push(name);
-  }
+  const relatedModuleNames = allRelevant.map(mod => basename(mod.filePath));
 
   // ── 정적 API 호출 추출 ──
   const apiCalls = extractApiCalls(apiModules);
@@ -60,8 +54,7 @@ export async function extract(unminifiedDir, outputDir, options = {}) {
   }
 
   // ── ENUM 추출 ──
-  const allCode = matchedModules.map(m => m.code).join('\n');
-  const extractedEnums = extractEnums(allCode, matchedModules);
+  const extractedEnums = extractEnums(matchedModules);
 
   const enumGroupNames = Object.keys(extractedEnums);
   assert(enumGroupNames.length > 0, 'EXTRACT',
@@ -295,7 +288,7 @@ function extractErrorMessages(contextBlock) {
 // ENUM 추출
 // ══════════════════════════════════════════════════
 
-function extractEnums(allCode, matchedModules) {
+function extractEnums(matchedModules) {
   const enumGroups = new Map();
 
   for (const mod of matchedModules) {
@@ -315,7 +308,6 @@ function extractEnums(allCode, matchedModules) {
         for (const [, key] of pairs) group.values.add(key);
         if (!group.source) {
           group.source = `${basename(filePath)}:L${lineOfIndex(code, m.index)}`;
-          group.raw = m[0].substring(0, 200);
         }
       }
     }
@@ -338,11 +330,7 @@ function extractEnums(allCode, matchedModules) {
 
   const enums = {};
   for (const [name, group] of enumGroups) {
-    enums[name] = { foundValues: [...group.values].sort(), source: group.source, raw: group.raw };
-  }
-  if (!enums.status) {
-    const att = Object.entries(enums).find(([, g]) => g.foundValues.includes('PRESENT'));
-    if (att) enums.status = att[1];
+    enums[name] = { foundValues: [...group.values].sort(), source: group.source };
   }
   return enums;
 }
@@ -380,12 +368,11 @@ function flushGroup(group, filePath, code, enumGroups) {
   for (const v of values) enumGroup.values.add(v);
   if (!enumGroup.source) {
     enumGroup.source = `${basename(filePath)}:L${group[0].lineNum}`;
-    enumGroup.raw = code.substring(group[0].index, group[0].index + 200);
   }
 }
 
 function getOrCreateGroup(groups, name) {
-  if (!groups.has(name)) groups.set(name, { values: new Set(), source: null, raw: null });
+  if (!groups.has(name)) groups.set(name, { values: new Set(), source: null });
   return groups.get(name);
 }
 
@@ -470,36 +457,26 @@ function buildReport(rawApiData, apiCalls, enums, relatedModules, filter) {
   const runtimeMap = new Map(); // normalizedPath → { method, response, ... }
   for (const [path, entry] of Object.entries(rawApiData)) {
     const normalized = normalizeRuntimePath(path);
-    // 하위 호환: old format (response JSON 직접) vs new format ({ method, response, ... })
-    const isNewFormat = entry && typeof entry === 'object' && 'response' in entry;
     runtimeMap.set(normalized, {
-      method: isNewFormat ? entry.method : 'GET',
-      queryString: isNewFormat ? entry.queryString : null,
-      postData: isNewFormat ? entry.postData : null,
-      response: isNewFormat ? entry.response : entry,
+      method: entry.method,
+      queryString: entry.queryString,
+      postData: entry.postData,
+      response: entry.response,
       originalPath: path,
     });
   }
 
-  // 2. 정적 분석 path 수집
-  const staticMap = new Map(); // urlTemplate → apiCall
-  for (const call of apiCalls) {
-    // 같은 URL에 여러 method가 있을 수 있음 (GET + POST 등)
-    const key = `${call.method} ${call.urlTemplate}`;
-    staticMap.set(key, call);
-  }
-
-  // 3. 모든 path 합집합
+  // 2. 모든 path 합집합
   const allPaths = new Set();
   for (const path of runtimeMap.keys()) allPaths.add(path);
   for (const call of apiCalls) allPaths.add(call.urlTemplate);
 
-  // filter 적용
+  // 3. filter 적용
   const targetPaths = filter
     ? [...allPaths].filter(p => filter.some(f => p.includes(f)))
     : [...allPaths];
 
-  // 4. 각 path에 대해 엔트리 생성
+  // 4. 각 path에 대해 entry 생성
   for (const normalizedPath of targetPaths.sort()) {
     const runtime = runtimeMap.get(normalizedPath);
     // 이 path에 해당하는 정적 호출 찾기
