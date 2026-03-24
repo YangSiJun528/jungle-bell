@@ -1,7 +1,6 @@
 import { createRequire } from 'node:module';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, globSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import { globSync } from 'node:fs';
 import { assert, assertNonEmpty } from './assert.mjs';
 import { log, debug, ensureDir } from './utils.mjs';
 
@@ -11,63 +10,40 @@ const { runDefaultTransformationRules } = require('@wakaru/unminify');
 const BATCH_SIZE = 10;
 
 export async function unminify(debundledDir, outputDir) {
-  const moduleFiles = globSync(join(debundledDir, '**/*.js').replace(/\\/g, '/'));
-  assertNonEmpty(moduleFiles, 'UNMINIFY', 'debundled 내 모듈 파일');
+  const files = globSync(join(debundledDir, '**/*.js').replace(/\\/g, '/'));
+  assertNonEmpty(files, 'UNMINIFY', 'debundled 내 모듈 파일');
 
-  let successCount = 0;
-  let failedCount = 0;
-  const totalCount = moduleFiles.length;
+  let success = 0;
+  let failed = 0;
 
-  // 배치 처리
-  for (let i = 0; i < moduleFiles.length; i += BATCH_SIZE) {
-    const batch = moduleFiles.slice(i, i + BATCH_SIZE);
-
+  for (let i = 0; i < files.length; i += BATCH_SIZE) {
+    const batch = files.slice(i, i + BATCH_SIZE);
     const results = await Promise.allSettled(
-      batch.map(async (filePath) => {
-        const originalCode = readFileSync(filePath, 'utf-8');
-        if (!originalCode.trim()) return { filePath, skipped: true };
+      batch.map(async (fp) => {
+        const src = readFileSync(fp, 'utf-8');
+        if (!src.trim()) return null;
 
-        const relPath = relative(debundledDir, filePath);
-        const outPath = join(outputDir, relPath);
+        const out = join(outputDir, relative(debundledDir, fp));
+        const result = await runDefaultTransformationRules({ source: src, path: fp });
+        assert(result.code?.length > 0, 'UNMINIFY', `빈 변환 결과: ${fp}`);
 
-        const result = await runDefaultTransformationRules({
-          source: originalCode,
-          path: filePath,
-        });
-
-        const code = result.code;
-        assert(code && code.length > 0, 'UNMINIFY', `빈 변환 결과: ${relPath}`);
-
-        if (code === originalCode) {
-          debug('UNMINIFY', `[WARN] 변환 없음: ${relPath}`);
-        }
-
-        await ensureDir(join(outPath, '..'));
-        writeFileSync(outPath, code);
-        return { filePath, success: true };
+        await ensureDir(join(out, '..'));
+        writeFileSync(out, result.code);
+        return true;
       })
     );
 
     for (const r of results) {
-      if (r.status === 'fulfilled' && !r.value?.skipped) {
-        successCount++;
-      } else if (r.status === 'rejected') {
-        failedCount++;
-        debug('UNMINIFY', `[WARN] 실패 skip: ${r.reason?.message}`);
+      if (r.status === 'fulfilled' && r.value) success++;
+      else if (r.status === 'rejected') {
+        failed++;
+        debug('UNMINIFY', `실패 skip: ${r.reason?.message}`);
       }
     }
   }
 
-  // 성공률 검증
-  if (totalCount > 0) {
-    const successRate = successCount / totalCount;
-    assert(successRate > 0.5, 'UNMINIFY', '50% 이상 실패 — wakaru 또는 prettier 패치 문제 확인 필요', {
-      total: totalCount,
-      success: successCount,
-      failed: failedCount,
-      successRate: `${(successRate * 100).toFixed(1)}%`,
-    });
-  }
-
-  log('UNMINIFY', `완료: ${successCount}/${totalCount} 성공 (${failedCount}개 skip)`);
+  assert(success / files.length > 0.5, 'UNMINIFY', '50% 이상 실패', {
+    total: files.length, success, failed,
+  });
+  log('UNMINIFY', `완료: ${success}/${files.length} 성공 (${failed}개 skip)`);
 }

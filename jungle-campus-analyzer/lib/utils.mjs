@@ -1,10 +1,7 @@
-import { mkdir, writeFile, readFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { assert, assertType } from './assert.mjs';
 
-// ── 경로 상수 ──────────────────────────────────
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = join(__dirname, '..');
 
@@ -17,33 +14,11 @@ export const API_MODULES_DIR = join(OUTPUT_DIR, 'api-modules');
 export const API_REQUESTS_PATH = join(OUTPUT_DIR, 'api-requests.json');
 export const REPORT_PATH = join(API_MODULES_DIR, 'report.json');
 
-// ── verbose 제어 ───────────────────────────────
 let verbose = false;
 export function setVerbose(v) { verbose = v; }
 
-// ── 로깅 ───────────────────────────────────────
-export function log(stage, message) {
-  console.log(`[${stage}] ${message}`);
-}
+export function log(stage, msg) { console.log(`[${stage}] ${msg}`); }
+export function debug(stage, msg) { if (verbose) console.log(`[${stage}][DEBUG] ${msg}`); }
 
-export function debug(stage, message) {
-  if (verbose) console.log(`[${stage}][DEBUG] ${message}`);
-}
-
-// ── 파일 유틸 ──────────────────────────────────
-export async function ensureDir(dirPath) {
-  await mkdir(dirPath, { recursive: true });
-  assert(existsSync(dirPath), 'UTILS', `디렉토리 생성 실패: ${dirPath}`);
-}
-
-export async function writeJson(filePath, data) {
-  await writeFile(filePath, JSON.stringify(data, null, 2));
-  assert(existsSync(filePath), 'UTILS', `JSON 파일 쓰기 실패: ${filePath}`);
-}
-
-export async function readJson(filePath) {
-  if (!existsSync(filePath)) return null;
-  const data = JSON.parse(await readFile(filePath, 'utf-8'));
-  assertType(data, 'object', 'UTILS', `readJson(${filePath})`);
-  return data;
-}
+export async function ensureDir(p) { await mkdir(p, { recursive: true }); }
+export async function writeJson(p, data) { await writeFile(p, JSON.stringify(data, null, 2)); }

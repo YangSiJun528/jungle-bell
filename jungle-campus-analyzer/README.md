@@ -94,7 +94,7 @@ output/
         "fields": ["id", "name", "isActive", ...],
         "fieldTypes": { "id": "string (CUID)", "name": "string", "isActive": "boolean" }
       },
-      "enums": {},
+      "enums": { "attendance_status": ["ABSENT", "LATE", "PRESENT", "SELF_STUDY"] },
       "relatedModules": [...]
     }
   }
