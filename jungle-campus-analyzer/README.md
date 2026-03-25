@@ -1,83 +1,41 @@
 # Jungle Campus API 모델 추출기
 
-Jungle Campus(jungle-lms.krafton.com) 프론트엔드의 JS 번들을 정적 분석하여 API 엔드포인트와 ENUM을 자동 추출하는 도구.
-
-## 사전 요구사항
-
-- **Node.js 22+**
-- **Chromium** (Playwright가 자동 설치)
+Jungle Campus(jungle-lms.krafton.com) 프론트엔드 JS 번들을 정적 분석하여 API 엔드포인트와 ENUM을 자동 추출.
 
 ## 설치
 
 ```bash
 cd jungle-campus-analyzer
-npm install
+npm install                      # postinstall이 prettier ESM 패치 자동 적용
 npx playwright install chromium
 ```
 
-> `npm install` 시 `postinstall` 훅이 prettier 2.x ESM 패치를 자동 적용합니다.
-
 ## 사용법
 
-### 1. 최초 로그인 (1회)
-
 ```bash
+# 최초 로그인 (1회) — 브라우저에서 구글 로그인 후 닫기
 node analyze.mjs --login --url https://jungle-lms.krafton.com/check-in
-```
 
-브라우저가 열리면 구글 계정으로 로그인한 뒤 **브라우저를 닫아주세요**. 세션이 `.browser-data/`에 저장됩니다.
-
-### 2. 분석 실행
-
-```bash
+# 분석 실행
 node analyze.mjs --url https://jungle-lms.krafton.com/check-in
-```
 
-### 3. 특정 API만 필터링
-
-```bash
-node analyze.mjs --url https://jungle-lms.krafton.com/check-in --filter "/api/v2/me/cohorts,/attendance/today"
-```
-
-### 4. 상세 로그
-
-```bash
-node analyze.mjs --url https://jungle-lms.krafton.com/check-in --verbose
-```
-
-## CLI 옵션
-
-| 옵션 | 설명 |
-|------|------|
-| `--url <url>` | **(필수)** 분석할 페이지 URL |
-| `--login` | 수동 로그인 모드 |
-| `--filter <apis>` | 쉼표 구분 API 경로 필터 |
-| `--verbose` | 디버그 로그 출력 |
-| `--help` | 도움말 |
-
-## 출력 디렉토리 구조
-
-```
-output/
-├── raw-bundles/            # 원본 JS 번들 파일
-├── debundled/              # 디번들 결과 (Turbopack + webpack)
-├── unminified/             # wakaru unminify 결과
-└── api-modules/
-    └── report.json         # API 모델 + ENUM 리포트
+# 옵션: --filter <apis>  특정 API만 필터링
+#        --verbose        상세 로그
 ```
 
 ## 파이프라인
 
-1. **데이터 수집** — Playwright로 JS 번들 파일 수집
-2. **디번들링** — Turbopack(AST 파서) / webpack(webcrack)으로 개별 모듈 분리
-3. **Unminify** — wakaru로 코드 가독성 복원
-4. **패턴 분석** — `httpV2.*()` 정적 분석으로 API 엔드포인트 추출, 구조 기반 ENUM 자동 감지
+1. **수집** — Playwright로 JS 번들 수집 (인증 세션 필요)
+2. **디번들링** — Turbopack(AST) / webpack(webcrack) → 개별 모듈 분리
+3. **Unminify** — wakaru로 가독성 복원
+4. **추출** — `httpV2.*()` 패턴으로 API 엔드포인트 + ENUM 자동 감지
 
-## report.json 스키마
+결과: `output/api-modules/report.json`
+
+## report.json 예시
 
 ```json
 {
-  "timestamp": "2025-...",
   "apis": {
     "GET /api/v2/me/cohorts": {
       "method": "GET",
@@ -90,18 +48,13 @@ output/
   "enums": {
     "attendance_status": ["ABSENT", "LATE", "PRESENT", "SELF_STUDY"],
     "leave_request_status": ["APPROVED", "PENDING", "REJECTED", "RETURNED"]
-  },
-  "relatedModules": ["22586.js", "850325.js", "617321.js", "320746.js"]
+  }
 }
 ```
 
-## 런타임 응답 캡처
+## 참고
 
-현재는 정적 분석만 수행합니다. 실제 API 응답 JSON(필드명, 타입)이 필요하면 `collector.mjs`에서 Playwright `page.on('response')` 인터셉트로 `/api/v2/` 응답을 캡처하고, `extractor.mjs`에서 정적 분석 결과와 병합하는 방식으로 확장할 수 있습니다.
-
-## 알려진 이슈
-
-- **Unminify 경고**: `prettier Invalid left-hand side`, `lebab variable.markModified is not a function` 등의 에러가 출력될 수 있음. wakaru/lebab이 일부 minified 코드(주로 React 내부)를 복원하지 못해 발생하며, 해당 모듈은 skip됨. API 분석 대상 모듈에는 보통 영향 없고, 성공률 50% 이상이면 파이프라인 정상 진행.
-- **prettier ESM 패치**: wakaru가 의존하는 prettier 2.x가 ESM 환경에서 모듈 해석 오류를 발생시킴. `postinstall` 스크립트가 자동 패치하지만, `node_modules` 삭제 후 반드시 `npm install` 재실행 필요.
-- **세션 만료**: 구글 로그인 세션이 만료되면 `--login`으로 재로그인 필요.
-- **wakaru CJS**: `@wakaru/unminify`와 `@wakaru/unpacker`는 ESM 직접 import 불가. 내부적으로 `createRequire()` 워커라운드 사용.
+- **런타임 응답 캡처**: 현재는 정적 분석만 수행. API 응답 JSON이 필요하면 `collector.mjs`에서 `page.on('response')`로 `/api/v2/` 응답을 캡처하는 방식으로 확장 가능.
+- **Unminify 경고**: `prettier Invalid left-hand side`, `lebab markModified` 등은 React 내부 코드 복원 실패로 발생하며, API 모듈에는 영향 없음. 무시 가능.
+- **세션 만료**: `--login`으로 재로그인.
+- **prettier ESM 패치**: `node_modules` 삭제 후 반드시 `npm install` 재실행.
