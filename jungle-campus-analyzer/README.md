@@ -1,6 +1,6 @@
 # Jungle Campus API 모델 추출기
 
-Jungle Campus(jungle-lms.krafton.com) 프론트엔드의 JS 번들을 분석하여 API 요청/응답 모델과 ENUM을 자동 추출하는 도구.
+Jungle Campus(jungle-lms.krafton.com) 프론트엔드의 JS 번들을 정적 분석하여 API 엔드포인트와 ENUM을 자동 추출하는 도구.
 
 ## 사전 요구사항
 
@@ -62,17 +62,16 @@ output/
 ├── raw-bundles/            # 원본 JS 번들 파일
 ├── debundled/              # 디번들 결과 (Turbopack + webpack)
 ├── unminified/             # wakaru unminify 결과
-├── api-modules/            # 대상 API 관련 모듈
-│   └── report.json         # API 모델 + ENUM 리포트
-└── api-requests.json       # 런타임 캡처된 API 요청/응답
+└── api-modules/
+    └── report.json         # API 모델 + ENUM 리포트
 ```
 
 ## 파이프라인
 
-1. **데이터 수집** — Playwright로 JS 번들과 API 요청/응답(method, headers, body) 캡처
-2. **디번들링** — Turbopack 번들은 AST 파서, webpack 번들은 webcrack으로 개별 모듈 분리
+1. **데이터 수집** — Playwright로 JS 번들 파일 수집
+2. **디번들링** — Turbopack(AST 파서) / webpack(webcrack)으로 개별 모듈 분리
 3. **Unminify** — wakaru로 코드 가독성 복원
-4. **패턴 분석** — `httpV2.*()` 정적 분석 + 런타임 캡처 병합으로 API 모델 추출, 구조 기반 ENUM 자동 감지
+4. **패턴 분석** — `httpV2.*()` 정적 분석으로 API 엔드포인트 추출, 구조 기반 ENUM 자동 감지
 
 ## report.json 스키마
 
@@ -81,25 +80,24 @@ output/
   "timestamp": "2025-...",
   "apis": {
     "GET /api/v2/me/cohorts": {
-      "request": {
-        "method": "GET",
-        "pathParams": null,
-        "queryParams": null,
-        "bodyFields": null,
-        "contentType": null,
-        "errorMessages": { "generic": "소속 기수 목록을 불러오는데 실패했어요." }
-      },
-      "response": {
-        "capturedData": [...],
-        "fields": ["id", "name", "isActive", ...],
-        "fieldTypes": { "id": "string (CUID)", "name": "string", "isActive": "boolean" }
-      },
-      "enums": { "attendance_status": ["ABSENT", "LATE", "PRESENT", "SELF_STUDY"] },
-      "relatedModules": [...]
+      "method": "GET",
+      "pathParams": null,
+      "queryParams": null,
+      "errorMessages": { "generic": "소속 기수 목록을 불러오는데 실패했어요." },
+      "source": "22586.js:L7"
     }
-  }
+  },
+  "enums": {
+    "attendance_status": ["ABSENT", "LATE", "PRESENT", "SELF_STUDY"],
+    "leave_request_status": ["APPROVED", "PENDING", "REJECTED", "RETURNED"]
+  },
+  "relatedModules": ["22586.js", "850325.js", "617321.js", "320746.js"]
 }
 ```
+
+## 런타임 응답 캡처
+
+현재는 정적 분석만 수행합니다. 실제 API 응답 JSON(필드명, 타입)이 필요하면 `collector.mjs`에서 Playwright `page.on('response')` 인터셉트로 `/api/v2/` 응답을 캡처하고, `extractor.mjs`에서 정적 분석 결과와 병합하는 방식으로 확장할 수 있습니다.
 
 ## 알려진 이슈
 

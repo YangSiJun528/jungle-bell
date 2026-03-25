@@ -1,14 +1,11 @@
 import { readFileSync, globSync } from 'node:fs';
-import { existsSync } from 'node:fs';
 import { join, basename } from 'node:path';
-import { assert, assertNonEmpty } from './assert.mjs';
-import { log, debug, ensureDir, writeJson, API_REQUESTS_PATH, REPORT_PATH } from './utils.mjs';
+import { assertNonEmpty } from './assert.mjs';
+import { log, debug, ensureDir, writeJson, REPORT_PATH } from './utils.mjs';
 
-const CUID_RE = /c[a-z0-9]{20,}/;
 const ENUM_KEY_RE = /^[A-Z][A-Z_]{1,}$/;
 
 export async function extract(unminifiedDir, outputDir, options = {}) {
-  // 모든 모듈 수집
   let files = globSync(join(unminifiedDir, '**/*.js').replace(/\\/g, '/'));
   if (files.length === 0) {
     files = globSync(join(unminifiedDir.replace('unminified', 'debundled'), '**/*.js').replace(/\\/g, '/'));
@@ -31,11 +28,27 @@ export async function extract(unminifiedDir, outputDir, options = {}) {
     log('EXTRACT', `ENUM [${name}]: [${values.join(', ')}]`);
   }
 
-  const runtimeData = existsSync(API_REQUESTS_PATH)
-    ? JSON.parse(readFileSync(API_REQUESTS_PATH, 'utf-8'))
-    : {};
+  // 리포트 생성
+  const report = { timestamp: new Date().toISOString(), apis: {}, enums };
+  const relatedModules = modules.map(m => basename(m.path));
 
-  const report = buildReport(apiCalls, runtimeData, enums, modules, options.filter);
+  let targets = apiCalls;
+  if (options.filter) {
+    targets = apiCalls.filter(c => options.filter.some(f => c.url.includes(f)));
+  }
+
+  for (const call of targets) {
+    report.apis[`${call.method} ${call.url}`] = {
+      method: call.method,
+      pathParams: call.pathParams,
+      queryParams: call.queryParams,
+      bodyFields: call.bodyFields,
+      contentType: call.contentType,
+      errorMessages: call.errorMessages,
+      source: call.source,
+    };
+  }
+  report.relatedModules = relatedModules;
 
   await ensureDir(outputDir);
   await writeJson(REPORT_PATH, report);
@@ -89,15 +102,6 @@ function normalizeUrl(raw) {
   });
 }
 
-// 런타임 path의 CUID → {cohortId} 등으로 치환
-function normalizeRuntimePath(path) {
-  return path.split('/').map((seg, i, arr) => {
-    if (!CUID_RE.test(seg)) return seg;
-    const prev = (arr[i - 1] || 'resource').replace(/s$/, '').replace(/-(\w)/g, (_, c) => c.toUpperCase());
-    return `{${prev}Id}`;
-  }).join('/');
-}
-
 function parseQueryParams(snippet) {
   const m = snippet.match(/params:\s*\{([^}]+)\}/);
   if (!m) return null;
@@ -127,7 +131,6 @@ function parseErrors(block) {
 }
 
 // ── ENUM 추출 ──────────────────────────────────
-// 연속된 UPPER_CASE: { ... } 패턴을 그룹으로 감지
 
 function extractEnums(modules) {
   const groups = {};
@@ -168,84 +171,4 @@ function flushEnum(keys, groups) {
     ? 'leave_request_status'
     : `enum_${Object.keys(groups).length}`;
   groups[name] = [...new Set([...(groups[name] || []), ...keys])].sort();
-}
-
-// ── 리포트 생성 ────────────────────────────────
-
-function buildReport(apiCalls, runtimeData, enums, modules, filter) {
-  const report = { timestamp: new Date().toISOString(), apis: {} };
-  const relatedModules = modules.map(m => basename(m.path));
-
-  // 런타임 캡처 정규화
-  const runtime = new Map();
-  for (const [path, entry] of Object.entries(runtimeData)) {
-    runtime.set(normalizeRuntimePath(path), entry);
-  }
-
-  // 정적 + 런타임 path 합집합
-  const allPaths = new Set([...runtime.keys(), ...apiCalls.map(c => c.url)]);
-  const paths = filter
-    ? [...allPaths].filter(p => filter.some(f => p.includes(f)))
-    : [...allPaths];
-
-  for (const path of paths.sort()) {
-    const rt = runtime.get(path);
-    const calls = apiCalls.filter(c => c.url === path);
-
-    // 런타임에서만 캡처된 API (정적 분석에서 미발견)
-    if (calls.length === 0 && rt) {
-      const params = [...path.matchAll(/\{(\w+)\}/g)].map(m => m[1]);
-      report.apis[`${rt.method} ${path}`] = {
-        request: { method: rt.method, pathParams: params.length ? params : null },
-        response: formatResponse(rt.response),
-        enums: enumsForPath(path, enums),
-        relatedModules,
-      };
-    }
-
-    // 정적 분석 기반 (+ 런타임 머지)
-    for (const call of calls) {
-      report.apis[`${call.method} ${path}`] = {
-        request: {
-          method: call.method,
-          pathParams: call.pathParams,
-          queryParams: call.queryParams,
-          bodyFields: call.bodyFields,
-          contentType: call.contentType,
-          errorMessages: call.errorMessages,
-          source: call.source,
-        },
-        response: formatResponse(rt?.response),
-        enums: enumsForPath(path, enums),
-        relatedModules,
-      };
-    }
-  }
-
-  return report;
-}
-
-function formatResponse(data) {
-  if (!data) return { capturedData: null, fields: [], fieldTypes: {} };
-  const sample = Array.isArray(data) ? data[0] || {} : data;
-  const types = {};
-  for (const [k, v] of Object.entries(sample)) {
-    if (v === null) types[k] = 'nullable';
-    else if (Array.isArray(v)) types[k] = 'array';
-    else if (typeof v === 'string') {
-      if (/^\d{4}-\d{2}-\d{2}T/.test(v)) types[k] = 'string (ISO 8601)';
-      else if (/^c[a-z0-9]{20,}$/.test(v)) types[k] = 'string (CUID)';
-      else if (/^[A-Z_]+$/.test(v)) types[k] = 'string (ENUM)';
-      else types[k] = 'string';
-    } else types[k] = typeof v;
-  }
-  return { capturedData: data, fields: Object.keys(sample), fieldTypes: types };
-}
-
-function enumsForPath(path, enums) {
-  if (path.includes('/attendance')) return enums;
-  if (path.includes('/leave-request')) {
-    return enums.leave_request_status ? { leave_request_status: enums.leave_request_status } : {};
-  }
-  return {};
 }

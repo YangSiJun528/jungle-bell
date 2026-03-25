@@ -11,7 +11,6 @@ export const RAW_BUNDLES_DIR = join(OUTPUT_DIR, 'raw-bundles');
 export const DEBUNDLED_DIR = join(OUTPUT_DIR, 'debundled');
 export const UNMINIFIED_DIR = join(OUTPUT_DIR, 'unminified');
 export const API_MODULES_DIR = join(OUTPUT_DIR, 'api-modules');
-export const API_REQUESTS_PATH = join(OUTPUT_DIR, 'api-requests.json');
 export const REPORT_PATH = join(API_MODULES_DIR, 'report.json');
 
 let verbose = false;
