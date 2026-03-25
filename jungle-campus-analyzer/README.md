@@ -101,6 +101,7 @@ output/
 
 ## 알려진 이슈
 
+- **Unminify 경고**: `prettier Invalid left-hand side`, `lebab variable.markModified is not a function` 등의 에러가 출력될 수 있음. wakaru/lebab이 일부 minified 코드(주로 React 내부)를 복원하지 못해 발생하며, 해당 모듈은 skip됨. API 분석 대상 모듈에는 보통 영향 없고, 성공률 50% 이상이면 파이프라인 정상 진행.
 - **prettier ESM 패치**: wakaru가 의존하는 prettier 2.x가 ESM 환경에서 모듈 해석 오류를 발생시킴. `postinstall` 스크립트가 자동 패치하지만, `node_modules` 삭제 후 반드시 `npm install` 재실행 필요.
 - **세션 만료**: 구글 로그인 세션이 만료되면 `--login`으로 재로그인 필요.
 - **wakaru CJS**: `@wakaru/unminify`와 `@wakaru/unpacker`는 ESM 직접 import 불가. 내부적으로 `createRequire()` 워커라운드 사용.
