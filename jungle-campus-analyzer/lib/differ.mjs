@@ -1,0 +1,115 @@
+import { execSync } from 'node:child_process';
+import { relative } from 'node:path';
+import { log } from './utils.mjs';
+
+// git에 커밋된 이전 report.json 읽기
+export function loadPreviousReport(reportPath) {
+  try {
+    const root = execSync('git rev-parse --show-toplevel', { encoding: 'utf-8' }).trim();
+    const relPath = relative(root, reportPath);
+    const json = execSync(`git show HEAD:${relPath}`, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
+    return JSON.parse(json);
+  } catch {
+    return null; // 첫 실행이거나 git에 없음
+  }
+}
+
+// 구조적 diff
+export function diff(oldReport, newReport) {
+  if (!oldReport) return { firstRun: true, hasChanges: true, changes: [] };
+
+  const changes = [];
+
+  // API 추가/삭제
+  const oldApis = new Set(Object.keys(oldReport.apis || {}));
+  const newApis = new Set(Object.keys(newReport.apis || {}));
+
+  for (const api of newApis) {
+    if (!oldApis.has(api)) changes.push({ type: 'api_added', detail: api });
+  }
+  for (const api of oldApis) {
+    if (!newApis.has(api)) changes.push({ type: 'api_removed', detail: api });
+  }
+
+  // API 필드 변경 (queryParams, errorMessages 등)
+  for (const api of newApis) {
+    if (!oldApis.has(api)) continue;
+    const oldApi = oldReport.apis[api];
+    const newApi = newReport.apis[api];
+    for (const field of ['queryParams', 'errorMessages', 'bodyFields', 'contentType']) {
+      if (JSON.stringify(oldApi[field]) !== JSON.stringify(newApi[field])) {
+        changes.push({ type: 'api_changed', detail: `${api} → ${field}` });
+      }
+    }
+  }
+
+  // ENUM 변경
+  const oldEnums = oldReport.enums || {};
+  const newEnums = newReport.enums || {};
+
+  for (const name of new Set([...Object.keys(oldEnums), ...Object.keys(newEnums)])) {
+    const oldVals = oldEnums[name] || [];
+    const newVals = newEnums[name] || [];
+    const added = newVals.filter(v => !oldVals.includes(v));
+    const removed = oldVals.filter(v => !newVals.includes(v));
+    if (added.length) changes.push({ type: 'enum_added', detail: `${name} +${added.join(', +')}` });
+    if (removed.length) changes.push({ type: 'enum_removed', detail: `${name} -${removed.join(', -')}` });
+  }
+
+  return { firstRun: false, hasChanges: changes.length > 0, changes };
+}
+
+// 변경 로그 출력
+export function logChanges(result) {
+  if (result.firstRun) {
+    log('DIFF', '첫 실행 — 비교 대상 없음');
+    return;
+  }
+  if (!result.hasChanges) {
+    log('DIFF', '변경 없음');
+    return;
+  }
+  log('DIFF', `변경 ${result.changes.length}건 감지:`);
+  for (const c of result.changes) {
+    log('DIFF', `  ${c.type}: ${c.detail}`);
+  }
+}
+
+// 커밋 메시지 생성
+export function buildCommitMessage(report, diffResult) {
+  const date = report.timestamp.split('T')[0];
+  const apiCount = Object.keys(report.apis).length;
+  const enumCount = Object.keys(report.enums).length;
+
+  if (diffResult.firstRun) {
+    return `analyze: ${date} 첫 실행 (API ${apiCount}개, ENUM ${enumCount}그룹)`;
+  }
+  if (!diffResult.hasChanges) {
+    return `analyze: ${date} 변경 없음`;
+  }
+
+  const parts = [];
+  const added = diffResult.changes.filter(c => c.type === 'api_added').length;
+  const removed = diffResult.changes.filter(c => c.type === 'api_removed').length;
+  if (added) parts.push(`API ${added}개 추가`);
+  if (removed) parts.push(`API ${removed}개 삭제`);
+
+  const enumChanges = diffResult.changes.filter(c => c.type.startsWith('enum_'));
+  for (const c of enumChanges) parts.push(`ENUM ${c.detail}`);
+
+  const apiChanges = diffResult.changes.filter(c => c.type === 'api_changed').length;
+  if (apiChanges) parts.push(`API ${apiChanges}건 변경`);
+
+  return `analyze: ${date} ${parts.join(', ')}`;
+}
+
+// git add + commit
+export function commitReport(reportPath, message) {
+  try {
+    execSync(`git add "${reportPath}"`, { stdio: 'pipe' });
+    execSync(`git commit -m "${message.replace(/"/g, '\\"')}"`, { stdio: 'pipe' });
+    log('DIFF', `커밋: ${message}`);
+  } catch (e) {
+    log('DIFF', `커밋 실패 (수동 커밋 필요): ${e.message}`);
+  }
+}

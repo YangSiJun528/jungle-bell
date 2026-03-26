@@ -3,12 +3,13 @@
 import { assert } from './lib/assert.mjs';
 import {
   log, setVerbose, ensureDir,
-  OUTPUT_DIR, RAW_BUNDLES_DIR, DEBUNDLED_DIR, UNMINIFIED_DIR, API_MODULES_DIR,
+  OUTPUT_DIR, RAW_BUNDLES_DIR, DEBUNDLED_DIR, UNMINIFIED_DIR, API_MODULES_DIR, REPORT_PATH,
 } from './lib/utils.mjs';
 import { collect } from './lib/collector.mjs';
 import { debundle } from './lib/debundler.mjs';
 import { unminify } from './lib/unminifier.mjs';
 import { extract } from './lib/extractor.mjs';
+import { loadPreviousReport, diff, logChanges, buildCommitMessage, commitReport } from './lib/differ.mjs';
 
 function parseArgs(argv) {
   const args = { login: false, url: null, filter: null, verbose: false, help: false };
@@ -50,7 +51,14 @@ async function main() {
   await unminify(DEBUNDLED_DIR, UNMINIFIED_DIR);
 
   log('PIPELINE', '④ API 모델 추출');
-  await extract(UNMINIFIED_DIR, API_MODULES_DIR, { filter: args.filter });
+  const report = await extract(UNMINIFIED_DIR, API_MODULES_DIR, { filter: args.filter });
+
+  // ⑤ 이전 결과와 비교 + git 커밋
+  log('PIPELINE', '⑤ 변경 감지 + 커밋');
+  const previous = loadPreviousReport(REPORT_PATH);
+  const diffResult = diff(previous, report);
+  logChanges(diffResult);
+  commitReport(REPORT_PATH, buildCommitMessage(report, diffResult));
 
   log('PIPELINE', '완료');
 }
