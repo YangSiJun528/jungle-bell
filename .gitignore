@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Jungle Campus Analyzer
+jungle-campus-analyzer/.browser-data/
+jungle-campus-analyzer/output/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
