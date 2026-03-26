@@ -9,7 +9,7 @@ import { collect } from './lib/collector.mjs';
 import { debundle } from './lib/debundler.mjs';
 import { unminify } from './lib/unminifier.mjs';
 import { extract } from './lib/extractor.mjs';
-import { loadPreviousReport, diff, logChanges, buildCommitMessage, commitReport } from './lib/differ.mjs';
+import { loadPreviousReport, diff, logChanges } from './lib/differ.mjs';
 
 function parseArgs(argv) {
   const args = { login: false, url: null, filter: null, verbose: false, help: false };
@@ -54,11 +54,10 @@ async function main() {
   const report = await extract(UNMINIFIED_DIR, API_MODULES_DIR, { filter: args.filter });
 
   // ⑤ 이전 결과와 비교 + git 커밋
-  log('PIPELINE', '⑤ 변경 감지 + 커밋');
+  log('PIPELINE', '⑤ 변경 감지');
   const previous = loadPreviousReport(REPORT_PATH);
   const diffResult = diff(previous, report);
   logChanges(diffResult);
-  commitReport(REPORT_PATH, buildCommitMessage(report, diffResult));
 
   log('PIPELINE', '완료');
 }
