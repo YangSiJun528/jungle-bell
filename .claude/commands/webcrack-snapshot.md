@@ -1,53 +1,50 @@
 ---
-description: "역디번들링 파이프라인 실행 후 스냅샷 저장 및 변경 시 자동 커밋"
-allowed-tools: Bash, Read, Grep, AskUserQuestion
+description: "jungle-lms.krafton.com JS 번들을 역디번들링하여 API 스냅샷을 저장하고, 변경이 감지되면 git 자동 커밋합니다. 사용자가 API 스키마 추출, 번들 분석, webcrack 스냅샷 실행을 요청할 때 사용합니다."
+allowed-tools: Bash, Read, Grep
 ---
 
-Jungle Campus Analyzer 전체 파이프라인을 실행하고 결과를 스냅샷으로 저장합니다.
-변경이 감지되면 `campus/webcrack/changes/` 파일을 자동 커밋합니다.
+## URL
 
-**URL 결정**: `$ARGUMENTS`에서 URL을 추출합니다.
-- `$ARGUMENTS`가 비어 있거나 `https://`로 시작하는 URL이 없으면 기본값 `https://jungle-lms.krafton.com/check-in` 을 사용합니다.
-- 별도 URL을 물어보지 않습니다.
+`$ARGUMENTS`에 `https://`로 시작하는 URL이 있으면 사용, 없으면 기본값 사용:
 
-**실행 순서**:
+```
+https://jungle-lms.krafton.com/check-in
+```
 
-1. 파이프라인 실행 (작업 디렉터리: 저장소 루트):
-   ```bash
-   cd jungle-campus-analyzer && node analyze.mjs --url <URL> --snapshot-root ../campus/webcrack
-   ```
+## 실행
 
-2. 실패 감지 (exit code 1 또는 stderr 확인):
-   - 출력에 `세션 만료` 또는 `--login` 이 포함된 경우 → 아래 안내 출력:
-     ```
-     로그인 세션이 만료되었습니다. 먼저 아래 명령으로 재로그인 후 다시 실행하세요:
-       cd jungle-campus-analyzer && node analyze.mjs --login --url https://jungle-lms.krafton.com/check-in
-     브라우저가 열리면 구글 로그인 후 창을 닫으세요.
-     ```
-   - 그 외 에러 → 에러 내용 그대로 사용자에게 보고
+```bash
+cd jungle-campus-analyzer && node analyze.mjs --url <URL> --snapshot-root ../campus/webcrack
+```
 
-3. 출력에서 `[SNAPSHOT]` 라인 확인:
-   - `[SNAPSHOT] 변경 있음: N건 → <파일경로>` 패턴이 있으면 → **4단계 진행**
-   - `[SNAPSHOT] 변경 없음` → 커밋 없이 완료 메시지 출력
-   - `[SNAPSHOT] 첫 실행` → 커밋 없이 완료 메시지 출력
+## 결과 처리
 
-4. 변경 있을 때만 커밋:
-   - 변경 건수(N)와 변경 파일 경로를 `[SNAPSHOT]` 라인에서 추출
-   - `git add <파일경로>` (changes/ 파일만, logs/ 제외)
-   - 변경 타입 목록을 파일에서 읽어 정리 (예: `api_added`, `enum_removed`)
-   - 커밋 메시지 형식 (grep 용이):
-     ```
-     [webcrack] YYYY-MM-DD: N건 변경 (type1, type2, ...)
-     ```
-     날짜는 파일명에서 추출하거나 `date +%Y-%m-%d` 로 가져옵니다.
-   - 커밋은 HEREDOC 형식으로:
-     ```bash
-     git commit -m "$(cat <<'EOF'
-     [webcrack] 2026-04-01: 3건 변경 (api_added, enum_removed)
+| 출력 | 처리 |
+|------|------|
+| `세션 만료` 또는 `--login` 포함 | 재로그인 안내 출력 |
+| 그 외 에러 (exit 1) | 에러 내용 그대로 보고 |
+| `[SNAPSHOT] 변경 있음: N건 → <경로>` | 커밋 진행 |
+| `[SNAPSHOT] 변경 없음` 또는 `첫 실행` | 커밋 없이 완료 보고 |
 
-     Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
-     EOF
-     )"
-     ```
+**재로그인 필요 시 안내:**
+```
+세션이 만료되었습니다. 재로그인 후 다시 실행하세요:
+  cd jungle-campus-analyzer && node analyze.mjs --login --url https://jungle-lms.krafton.com/check-in
+브라우저가 열리면 구글 로그인 후 창을 닫으세요.
+```
 
-**완료 후**: 커밋 여부, 저장된 파일 경로, 변경 내용 요약을 사용자에게 출력합니다.
+## 커밋 (변경 있을 때만)
+
+`[SNAPSHOT]` 라인에서 파일 경로·변경 건수 추출, changes 파일의 `changes[].type` 필드로 타입 목록 확인:
+
+```bash
+git add <changes-파일경로>
+git commit -m "$(cat <<'EOF'
+[webcrack] YYYY-MM-DD: N건 변경 (type1, type2)
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"
+```
+
+날짜는 `date +%Y-%m-%d`로 가져옵니다.
