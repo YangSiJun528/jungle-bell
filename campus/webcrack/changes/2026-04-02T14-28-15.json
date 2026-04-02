@@ -1,0 +1,83 @@
+{
+  "timestamp": "2026-04-02T05:28:15.731Z",
+  "changeCount": 19,
+  "firstRun": true,
+  "changes": [
+    {
+      "type": "api_added",
+      "detail": "PATCH /api/v2/me/cohorts/{cohortId}/attendances/{attendanceId}"
+    },
+    {
+      "type": "api_added",
+      "detail": "PATCH /api/v2/me/cohorts/{cohortId}/leave-requests/{leaveRequestId}"
+    },
+    {
+      "type": "api_added",
+      "detail": "DELETE /api/v2/me/cohorts/{cohortId}/leave-requests/{leaveRequestId}"
+    },
+    {
+      "type": "api_added",
+      "detail": "POST /api/v2/me/cohorts/{cohortId}/leave-requests/{leaveRequestId}/files"
+    },
+    {
+      "type": "api_added",
+      "detail": "POST /api/v2/me/cohorts/{cohortId}/attendance/check-in"
+    },
+    {
+      "type": "api_added",
+      "detail": "POST /api/v2/me/cohorts/{cohortId}/attendance/check-out"
+    },
+    {
+      "type": "api_added",
+      "detail": "POST /api/v2/me/cohorts/{cohortId}/leave-requests"
+    },
+    {
+      "type": "api_added",
+      "detail": "GET /api/v2/me/cohorts/{cohortId}/heatmap"
+    },
+    {
+      "type": "api_added",
+      "detail": "GET /api/v2/me/cohorts/{cohortId}/study-time"
+    },
+    {
+      "type": "api_added",
+      "detail": "GET /api/v2/me/cohorts/{cohortId}/attendance/today"
+    },
+    {
+      "type": "api_added",
+      "detail": "GET /api/v2/me/cohorts/{cohortId}/leave-requests"
+    },
+    {
+      "type": "api_added",
+      "detail": "GET /api/v2/me/cohorts/{cohortId}/attendances"
+    },
+    {
+      "type": "api_added",
+      "detail": "GET /api/v2/me/cohorts"
+    },
+    {
+      "type": "api_added",
+      "detail": "GET /api/v2/me/cohorts/{cohortId}/assignments/latest"
+    },
+    {
+      "type": "api_added",
+      "detail": "GET /api/v2/me/cohorts/{cohortId}/learning"
+    },
+    {
+      "type": "api_added",
+      "detail": "GET /api/v2/me/cohorts/{cohortId}/learning/{learningId}"
+    },
+    {
+      "type": "api_added",
+      "detail": "POST /api/v2/auth/logout"
+    },
+    {
+      "type": "enum_added",
+      "detail": "attendance_status +ABSENT, +LATE, +PRESENT, +SELF_STUDY"
+    },
+    {
+      "type": "enum_added",
+      "detail": "leave_request_status +APPROVED, +PENDING, +REJECTED, +RETURNED"
+    }
+  ]
+}
