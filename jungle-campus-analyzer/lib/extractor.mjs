@@ -6,11 +6,18 @@ import { log, debug, ensureDir, writeJson, REPORT_PATH } from './utils.mjs';
 const ENUM_KEY_RE = /^[A-Z][A-Z_]{1,}$/;
 
 export async function extract(unminifiedDir, outputDir, options = {}) {
-  let files = globSync(join(unminifiedDir, '**/*.js').replace(/\\/g, '/'));
-  if (files.length === 0) {
-    files = globSync(join(unminifiedDir.replace('unminified', 'debundled'), '**/*.js').replace(/\\/g, '/'));
-  }
-  assertNonEmpty(files, 'EXTRACT', 'unminified 모듈 파일');
+  const debundledDir = unminifiedDir.replace('unminified', 'debundled');
+  const debundledFiles = globSync(join(debundledDir, '**/*.js').replace(/\\/g, '/'));
+  const unminifiedFiles = globSync(join(unminifiedDir, '**/*.js').replace(/\\/g, '/'));
+
+  // 상대 경로를 키로: debundled 기반 + unminified로 덮어씌워 병합
+  const fileMap = new Map();
+  for (const fp of debundledFiles) fileMap.set(fp.slice(debundledDir.length), fp);
+  for (const fp of unminifiedFiles) fileMap.set(fp.slice(unminifiedDir.length), fp);
+  const files = [...fileMap.values()];
+
+  assertNonEmpty(files, 'EXTRACT', 'unminified/debundled 모듈 파일');
+  log('EXTRACT', `debundled ${debundledFiles.length}개 + unminified ${unminifiedFiles.length}개 → 병합 ${files.length}개`);
 
   // httpV2 호출 포함 모듈만 로드
   const modules = [];
