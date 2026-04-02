@@ -35,16 +35,10 @@ cd jungle-campus-analyzer && node analyze.mjs --url <URL> --snapshot-root ../cam
 
 ## 커밋 (변경 있을 때만)
 
-`[SNAPSHOT]` 라인에서 파일 경로·변경 건수 추출, changes 파일의 `changes[].type` 필드로 타입 목록 확인:
+`[SNAPSHOT]` 라인의 changes 파일만 스테이징 후 커밋. 제목 규칙:
 
-```bash
-git add <changes-파일경로>
-git commit -m "$(cat <<'EOF'
+```
 [webcrack] YYYY-MM-DD: N건 변경 (type1, type2)
-
-Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
-EOF
-)"
 ```
 
-날짜는 `date +%Y-%m-%d`로 가져옵니다.
+변경 타입은 changes 파일의 `changes[].type` 값, 날짜는 오늘 날짜.
