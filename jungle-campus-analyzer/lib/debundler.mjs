@@ -63,7 +63,7 @@ function extractTurbopackModules(code) {
       const id = prev?.type === 'Literal' ? prev.value : `anon_${i}`;
       const params = elems[i].params.map(p => code.slice(p.start, p.end)).join(', ');
       const body = code.slice(elems[i].body.start, elems[i].body.end);
-      modules.push({ id, code: `module.exports = function(${params}) ${body};` });
+      modules.push({ id, code: `module.exports = function(${params}) ${body.trim().startsWith('{') ? body : `{ return ${body}; }`}` });
     }
   });
 
