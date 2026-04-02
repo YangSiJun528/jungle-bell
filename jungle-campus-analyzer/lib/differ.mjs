@@ -7,7 +7,7 @@ export function loadPreviousReport(reportPath) {
   try {
     const root = execSync('git rev-parse --show-toplevel', { encoding: 'utf-8' }).trim();
     const relPath = relative(root, reportPath);
-    const json = execSync(`git show HEAD:${relPath}`, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
+    const json = execSync(`git show "HEAD:${relPath}"`, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
     return JSON.parse(json);
   } catch {
     return null; // 첫 실행이거나 git에 없음
