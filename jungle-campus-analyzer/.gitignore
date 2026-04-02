@@ -12,12 +12,9 @@ dist
 dist-ssr
 *.local
 
-# Jungle Campus Analyzer
-jungle-campus-analyzer/.browser-data/
-jungle-campus-analyzer/output/
-
-# Webcrack snapshots (로컬 참조용, 커밋 제외)
-campus/webcrack/logs/
+# Analyzer output
+.browser-data/
+output/
 
 # Editor directories and files
 .vscode/*
