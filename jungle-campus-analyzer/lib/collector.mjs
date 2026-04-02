@@ -11,7 +11,7 @@ export async function collect(url, options = {}) {
   await ensureDir(RAW_BUNDLES_DIR);
 
   const context = await chromium.launchPersistentContext(BROWSER_DATA_DIR, {
-    headless: false,
+    headless: !login,
     args: ['--disable-blink-features=AutomationControlled'],
   });
   const page = context.pages()[0] || await context.newPage();
