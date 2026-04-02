@@ -71,9 +71,7 @@ async function main() {
     const logPath = await saveSnapshot(report, logsDir);
     log('SNAPSHOT', `로그 저장: ${logPath}`);
 
-    if (diffResult.firstRun) {
-      log('SNAPSHOT', '첫 실행 — 기준 로그 저장됨');
-    } else if (diffResult.hasChanges) {
+    if (diffResult.hasChanges) {
       const changesPath = await saveChanges(diffResult, changesDir);
       log('SNAPSHOT', `변경 있음: ${diffResult.changes.length}건 → ${changesPath}`);
     } else {

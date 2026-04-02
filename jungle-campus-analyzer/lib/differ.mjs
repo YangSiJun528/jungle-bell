@@ -16,7 +16,16 @@ export function loadPreviousReport(reportPath) {
 
 // 구조적 diff
 export function diff(oldReport, newReport) {
-  if (!oldReport) return { firstRun: true, hasChanges: true, changes: [] };
+  if (!oldReport) {
+    const changes = [];
+    for (const api of Object.keys(newReport.apis || {})) {
+      changes.push({ type: 'api_added', detail: api });
+    }
+    for (const [name, vals] of Object.entries(newReport.enums || {})) {
+      changes.push({ type: 'enum_added', detail: `${name} +${vals.join(', +')}` });
+    }
+    return { firstRun: true, hasChanges: true, changes };
+  }
 
   const changes = [];
 
