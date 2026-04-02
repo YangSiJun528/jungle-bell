@@ -49,7 +49,8 @@ campus/webcrack/
 **스킬로 실행** (Claude Code):
 
 ```
-/webcrack-snapshot https://jungle-lms.krafton.com/check-in
+/webcrack-snapshot                                          # 기본 URL 사용
+/webcrack-snapshot https://jungle-lms.krafton.com/check-in # 명시적 URL
 ```
 
 파이프라인 실행 → 스냅샷 저장 → 변경 감지 시 아래 형식으로 자동 커밋:

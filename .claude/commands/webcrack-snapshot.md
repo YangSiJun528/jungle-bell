@@ -6,9 +6,9 @@ allowed-tools: Bash, Read, Grep, AskUserQuestion
 Jungle Campus Analyzer 전체 파이프라인을 실행하고 결과를 스냅샷으로 저장합니다.
 변경이 감지되면 `campus/webcrack/changes/` 파일을 자동 커밋합니다.
 
-**URL 파싱**: `$ARGUMENTS`에서 URL을 추출합니다.
-- `$ARGUMENTS`가 비어 있거나 URL이 없으면 `AskUserQuestion` 도구로 URL을 물어봅니다.
-- URL은 `https://` 로 시작해야 합니다.
+**URL 결정**: `$ARGUMENTS`에서 URL을 추출합니다.
+- `$ARGUMENTS`가 비어 있거나 `https://`로 시작하는 URL이 없으면 기본값 `https://jungle-lms.krafton.com/check-in` 을 사용합니다.
+- 별도 URL을 물어보지 않습니다.
 
 **실행 순서**:
 
