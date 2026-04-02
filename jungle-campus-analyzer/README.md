@@ -19,8 +19,49 @@ node analyze.mjs --login --url https://jungle-lms.krafton.com/check-in
 # 분석 실행
 node analyze.mjs --url https://jungle-lms.krafton.com/check-in
 
-# 옵션: --filter <apis>  특정 API만 필터링
-#        --verbose        상세 로그
+# 옵션: --filter <apis>       특정 API만 필터링
+#        --verbose              상세 로그
+#        --snapshot-root <dir>  스냅샷 저장 디렉터리 지정 (아래 참고)
+```
+
+## 스냅샷 & 변경 추적
+
+`--snapshot-root` 옵션을 지정하면 실행 결과를 파일로 저장하고 이전 결과와 비교합니다.
+
+```bash
+# 저장소 루트 기준으로 실행
+node analyze.mjs --url https://jungle-lms.krafton.com/check-in --snapshot-root ../campus/webcrack
+```
+
+**저장 구조:**
+
+```
+campus/webcrack/
+  logs/      ← 매 실행 결과 전체 저장 (gitignore, 로컬 참조용)
+               파일명: YYYY-MM-DDTHH-MM-SS.json
+  changes/   ← 변경 있을 때만 저장 (git 추적)
+               파일명: YYYY-MM-DDTHH-MM-SS.json
+```
+
+- `logs/`: 실행할 때마다 `report.json` 스냅샷이 쌓임. git에 포함되지 않음.
+- `changes/`: 이전 로그와 diff 했을 때 변경이 감지된 경우에만 생성. 자동 커밋 대상.
+
+**스킬로 실행** (Claude Code):
+
+```
+/webcrack-snapshot https://jungle-lms.krafton.com/check-in
+```
+
+파이프라인 실행 → 스냅샷 저장 → 변경 감지 시 아래 형식으로 자동 커밋:
+
+```
+[webcrack] 2026-04-01: 3건 변경 (api_added, enum_removed)
+```
+
+변경 커밋 히스토리 확인:
+
+```bash
+git log --oneline | grep '\[webcrack\]'
 ```
 
 ## 파이프라인

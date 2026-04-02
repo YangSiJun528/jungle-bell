@@ -16,6 +16,9 @@ dist-ssr
 jungle-campus-analyzer/.browser-data/
 jungle-campus-analyzer/output/
 
+# Webcrack snapshots (로컬 참조용, 커밋 제외)
+campus/webcrack/logs/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
