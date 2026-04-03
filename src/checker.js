@@ -2,12 +2,53 @@
 // 숨겨진 checker WebView에 initialization_script로 주입.
 // DOM 파싱 대신 LMS REST API를 사용하여 안정적으로 상태를 확인한다.
 
+// ─── 외부 API 스키마 (jungle-lms.krafton.com) ───────────────────────────────
+// 아래 JSDoc은 현재 의존하는 필드를 문서화한 것.
+// API 변경 시 대응 파싱 함수(parseCohorts / parseAttendanceToday)만 수정하면 됨.
+//
+// API 변경 감지 및 응답 형식 분석은 jungle-campus-analyzer 프로젝트로 관리.
+// JS 번들을 역디번들링·정적 분석하여 엔드포인트·ENUM을 추출하고,
+// 변경이 감지되면 campus/webcrack/changes/ 에 스냅샷을 저장한다.
+//
+// GET /api/v2/me/cohorts
+/**
+ * @typedef {{ id: string, startDate: string }} Cohort
+ * 사용 필드: id, startDate (ISO 8601)
+ */
+//
+// GET /api/v2/me/cohorts/{cohortId}/attendance/today
+/**
+ * @typedef {{ checkedAt: string|null, checkedOutAt: string|null }} AttendanceTodayResponse
+ * 사용 필드: checkedAt, checkedOutAt (ISO 8601 타임스탬프 or null)
+ * 응답 없음(빈 body)은 오늘 출석 기록 없음을 의미.
+ */
+// ─────────────────────────────────────────────────────────────────────────────
+
 (function () {
   var cachedCohortId = null;
 
   function jsLog(level, message) {
     window.__TAURI__.core.invoke('log_from_js', { level: level, message: message });
   }
+
+  // ─── API 응답 파싱 함수 ──────────────────────────────────────────────────
+  // fetch 결과를 앱 내부 표현으로 변환. 외부 API 의존성을 여기에 격리.
+
+  /** @param {Cohort[]} cohorts */
+  function parseCohorts(cohorts) {
+    if (!Array.isArray(cohorts) || cohorts.length === 0) return null;
+    cohorts.sort(function (a, b) { return new Date(b.startDate) - new Date(a.startDate); });
+    return cohorts[0].id || null;
+  }
+
+  /** @param {AttendanceTodayResponse} data */
+  function parseAttendanceToday(data) {
+    return {
+      morning_done: !!data.checkedAt,
+      evening_done: !!data.checkedOutAt,
+    };
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   // /api/v2/me/cohorts에서 cohort 목록을 가져와
   // startDate가 가장 최신인 cohort의 ID를 반환.
@@ -26,7 +67,6 @@
         }
         if (!res.ok) {
           jsLog('warn', 'fetchCohortId: status=' + res.status);
-          // 에러 응답 본문도 디버그 로그
           return res.text().then(function (body) {
             jsLog('debug', 'fetchCohortId: error body=' + body.substring(0, 500));
             return null;
@@ -37,16 +77,10 @@
           return data;
         });
       })
-      .then(function (cohorts) {
-        if (!cohorts || !Array.isArray(cohorts) || cohorts.length === 0) {
-          jsLog('debug', 'fetchCohortId: no valid cohorts (null or empty)');
-          return null;
-        }
-        cohorts.sort(function (a, b) {
-          return new Date(b.startDate) - new Date(a.startDate);
-        });
-        var id = cohorts[0].id;
-        jsLog('debug', 'fetchCohortId: selected cohortId=' + id + ' (total=' + cohorts.length + ')');
+      .then(function (data) {
+        if (!data) return null;
+        var id = parseCohorts(data);
+        jsLog('debug', 'fetchCohortId: selected cohortId=' + id + ' (total=' + (data.length || 0) + ')');
         return id;
       })
       .catch(function (e) {
@@ -81,11 +115,11 @@
         return res.text().then(function (body) {
           if (!body || body.trim() === '') {
             jsLog('debug', 'fetchAttendance: empty body (no attendance today)');
-            return { checkedAt: null, checkedOutAt: null };
+            return parseAttendanceToday({ checkedAt: null, checkedOutAt: null });
           }
           var data = JSON.parse(body);
           jsLog('debug', 'fetchAttendance: raw response=' + JSON.stringify(data).substring(0, 1000));
-          return data;
+          return parseAttendanceToday(data);
         });
       })
       .catch(function (e) {
@@ -131,12 +165,11 @@
           cachedCohortId = null;
           return { needs_login: true, morning_done: false, evening_done: false };
         }
-        jsLog('debug', 'checkAttendance: parsing checkedAt=' + JSON.stringify(data.checkedAt) +
-          ' checkedOutAt=' + JSON.stringify(data.checkedOutAt));
+        jsLog('debug', 'checkAttendance: morning_done=' + data.morning_done + ' evening_done=' + data.evening_done);
         return {
           needs_login: false,
-          morning_done: !!data.checkedAt,
-          evening_done: !!data.checkedOutAt,
+          morning_done: data.morning_done,
+          evening_done: data.evening_done,
         };
       });
     });
