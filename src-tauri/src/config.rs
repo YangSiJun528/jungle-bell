@@ -102,8 +102,21 @@ impl Config {
         if let Some(path) = config_path() {
             if let Ok(data) = std::fs::read_to_string(&path) {
                 match serde_json::from_str::<Config>(&data) {
-                    Ok(config) => {
+                    Ok(mut config) => {
                         log::info!("[config] loaded from {}", path.display());
+                        // UI에서 제거된 옵션 값을 가장 가까운 유효 시각으로 마이그레이션.
+                        // notification_start: 4~9시만 허용 (10시 제거됨)
+                        if config.notification_start.hour > 9 {
+                            log::info!("[config] notification_start {}시 → 9시로 마이그레이션", config.notification_start.hour);
+                            config.notification_start.hour = 9;
+                            config.save();
+                        }
+                        // notification_end: 0~4시만 허용 (23시 제거됨)
+                        if config.notification_end.hour == 23 {
+                            log::info!("[config] notification_end 23시 → 0시로 마이그레이션");
+                            config.notification_end.hour = 0;
+                            config.save();
+                        }
                         return config;
                     }
                     Err(e) => log::warn!(
