@@ -202,7 +202,7 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                     let _ =
                         tauri::WebviewWindowBuilder::new(app, "settings", tauri::WebviewUrl::App("index.html".into()))
                             .title("설정")
-                            .inner_size(480.0, 400.0)
+                            .inner_size(380.0, 520.0)
                             .resizable(false)
                             .minimizable(false)
                             .maximizable(false)

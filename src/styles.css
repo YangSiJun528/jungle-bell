@@ -1,79 +1,453 @@
-* {
-    margin: 0;
-    padding: 0;
+/* ==========================================================================
+   !! SANITIZE.CSS — DO NOT EDIT !!
+   Source: https://csstools.github.io/sanitize.css/
+   This block is managed externally. AI and humans must not modify it.
+   BEGIN-SANITIZE
+   ========================================================================== */
+
+*,
+::before,
+::after {
     box-sizing: border-box;
 }
 
-body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans KR', sans-serif;
-    font-size: 13px;
-    color: #333;
-    background: #f5f5f7;
-    padding: 20px 20px 40px;
+::before,
+::after {
+    text-decoration: inherit;
+    vertical-align: inherit;
 }
+
+html {
+    cursor: default;
+    line-height: 1.5;
+    -moz-tab-size: 4;
+    tab-size: 4;
+    -webkit-tap-highlight-color: transparent;
+    -ms-text-size-adjust: 100%;
+    -webkit-text-size-adjust: 100%;
+    word-break: break-word;
+}
+
+body {
+    margin: 0;
+}
+
+h1 {
+    font-size: 2em;
+    margin: 0.67em 0;
+}
+
+dl dl, dl ol, dl ul, ol dl, ul dl {
+    margin: 0;
+}
+
+ol ol, ol ul, ul ol, ul ul {
+    margin: 0;
+}
+
+hr {
+    height: 0;
+    overflow: visible;
+}
+
+main {
+    display: block;
+}
+
+nav ol,
+nav ul {
+    list-style: none;
+    padding: 0;
+}
+
+pre {
+    font-family: monospace, monospace;
+    font-size: 1em;
+}
+
+a {
+    background-color: transparent;
+}
+
+abbr[title] {
+    text-decoration: underline;
+    text-decoration: underline dotted;
+}
+
+b,
+strong {
+    font-weight: bolder;
+}
+
+code, kbd, samp {
+    font-family: monospace, monospace;
+    font-size: 1em;
+}
+
+small {
+    font-size: 80%;
+}
+
+audio, canvas, iframe, img, svg, video {
+    vertical-align: middle;
+}
+
+audio, video {
+    display: inline-block;
+}
+
+audio:not([controls]) {
+    display: none;
+    height: 0;
+}
+
+iframe {
+    border-style: none;
+}
+
+img {
+    border-style: none;
+}
+
+svg:not([fill]) {
+    fill: currentColor;
+}
+
+svg:not(:root) {
+    overflow: hidden;
+}
+
+table {
+    border-collapse: collapse;
+}
+
+button, input, select {
+    margin: 0;
+}
+
+button {
+    overflow: visible;
+    text-transform: none;
+}
+
+button,
+[type="button"],
+[type="reset"],
+[type="submit"] {
+    -webkit-appearance: button;
+}
+
+fieldset {
+    border: 1px solid #a0a0a0;
+    padding: 0.35em 0.75em 0.625em;
+}
+
+input {
+    overflow: visible;
+}
+
+legend {
+    color: inherit;
+    display: table;
+    max-width: 100%;
+    white-space: normal;
+}
+
+progress {
+    display: inline-block;
+    vertical-align: baseline;
+}
+
+select {
+    text-transform: none;
+}
+
+textarea {
+    margin: 0;
+    overflow: auto;
+    resize: vertical;
+}
+
+[type="checkbox"],
+[type="radio"] {
+    padding: 0;
+}
+
+[type="search"] {
+    -webkit-appearance: textfield;
+    outline-offset: -2px;
+}
+
+::-webkit-inner-spin-button,
+::-webkit-outer-spin-button {
+    height: auto;
+}
+
+::-webkit-input-placeholder {
+    color: inherit;
+    opacity: 0.54;
+}
+
+::-webkit-search-decoration {
+    -webkit-appearance: none;
+}
+
+::-webkit-file-upload-button {
+    -webkit-appearance: button;
+    font: inherit;
+}
+
+::-moz-focus-inner {
+    border-style: none;
+    padding: 0;
+}
+
+:-moz-focusring {
+    outline: 1px dotted ButtonText;
+}
+
+:-moz-ui-invalid {
+    box-shadow: none;
+}
+
+details {
+    display: block;
+}
+
+dialog {
+    background-color: white;
+    border: solid;
+    color: black;
+    display: block;
+    height: -moz-fit-content;
+    height: -webkit-fit-content;
+    height: fit-content;
+    left: 0;
+    margin: auto;
+    padding: 1em;
+    position: absolute;
+    right: 0;
+    width: -moz-fit-content;
+    width: -webkit-fit-content;
+    width: fit-content;
+}
+
+dialog:not([open]) {
+    display: none;
+}
+
+summary {
+    display: list-item;
+}
+
+canvas {
+    display: inline-block;
+}
+
+template {
+    display: none;
+}
+
+a, area, button, input, label, select, summary, textarea, [tabindex] {
+    -ms-touch-action: manipulation;
+    touch-action: manipulation;
+}
+
+[hidden] {
+    display: none;
+}
+
+[aria-busy="true"] {
+    cursor: progress;
+}
+
+[aria-controls] {
+    cursor: pointer;
+}
+
+[aria-disabled="true"],
+[disabled] {
+    cursor: not-allowed;
+}
+
+[aria-hidden="false"][hidden] {
+    display: initial;
+}
+
+[aria-hidden="false"][hidden]:not(:focus) {
+    clip: rect(0, 0, 0, 0);
+    position: absolute;
+}
+
+/* ==========================================================================
+   END-SANITIZE
+   ========================================================================== */
+
+
+/* ==========================================================================
+   Design tokens
+   색상, 타이포, 간격, 크기 등 모든 테마 값은 여기서만 수정한다.
+   ========================================================================== */
+
+:root {
+    /* --- Colors (light) --- */
+    --color-bg: #f5f5f7;
+    --color-text: #333333;
+    --color-th: #555555;
+    --color-td: #444444;
+    --color-text-muted: #777777;
+    --color-text-faint: #888888;
+    --color-accent: #007aff;
+    --color-success: #34c759;
+    --color-toggle-off: #cccccc;
+    --color-toggle-knob: #ffffff;
+    --color-border: #dddddd;
+    --color-pill-bg: #e8e8ed;
+
+    /* --- Typography (px only) --- */
+    --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans KR', sans-serif;
+    --font-size-base: 12px;
+    --font-size-h1: 14px;
+    --font-size-subtext: 12px;
+    --font-size-table: 12px;
+    --font-size-hint: 10px;
+    --font-size-tab: 12px;
+    --font-size-footer: 11px;
+
+    /* --- Spacing --- */
+    --space-page-x: 16px;
+    --space-page-top: 14px;
+    --space-page-bottom: 14px;
+    --space-header-gap: 10px;
+    --space-header-mb: 12px;
+    --space-cell-v: 4px;
+    --space-gap-row: 4px;
+    --space-section-gap: 16px;
+    --space-footer-v: 7px;
+    --space-row-ctrl-gap: 6px;
+
+    /* --- Component sizes --- */
+    --size-logo: 56px;
+    --size-logo-radius: 12px;
+    --size-toggle-w: 36px;
+    --size-toggle-h: 20px;
+    --size-toggle-knob: 16px;
+    --size-th-width: 120px;
+
+    /* --- Motion --- */
+    --transition: 0.2s;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --color-bg: #1e1e1e;
+        --color-text: #e0e0e0;
+        --color-th: #aaaaaa;
+        --color-td: #bbbbbb;
+        --color-text-muted: #999999;
+        --color-text-faint: #666666;
+        --color-accent: #4da3ff;
+        --color-border: #444444;
+        --color-pill-bg: #2c2c2e;
+    }
+}
+
+
+/* ==========================================================================
+   App styles
+   ========================================================================== */
+
+body {
+    font-family: var(--font-family);
+    font-size: var(--font-size-base);
+    color: var(--color-text);
+    background: var(--color-bg);
+    padding: var(--space-page-top) var(--space-page-x) var(--space-page-bottom);
+}
+
+/* Header */
 
 .header {
     display: flex;
-    gap: 12px;
-    margin-bottom: 16px;
+    gap: var(--space-header-gap);
+    margin-bottom: var(--space-header-mb);
 }
 
 .logo {
-    width: 56px;
-    height: 56px;
-    border-radius: 12px;
+    width: var(--size-logo);
+    height: var(--size-logo);
+    border-radius: var(--size-logo-radius);
 }
 
 .header h1 {
-    font-size: 1.1rem;
+    font-size: var(--font-size-h1);
+    margin-bottom: 4px;
 }
 
 .header small {
-    font-size: 0.7rem;
-    color: #888;
+    font-size: var(--font-size-hint);
+    color: var(--color-text-faint);
     font-weight: normal;
 }
 
 .header p {
-    font-size: 0.75rem;
-    color: #666;
+    font-size: var(--font-size-subtext);
+    color: var(--color-text-muted);
+    margin: 0 0;
 }
+
+/* Table */
 
 table {
     width: 100%;
-    font-size: 0.8rem;
-    border-collapse: collapse;
+    font-size: var(--font-size-table);
 }
 
 th, td {
-    padding: 4px 0;
+    padding: var(--space-cell-v) 0;
 }
 
 th {
     text-align: left;
     font-weight: 500;
-    color: #555;
-    width: 120px;
+    color: var(--color-th);
+    width: var(--size-th-width);
 }
 
 td {
     text-align: right;
-    color: #444;
+    color: var(--color-td);
 }
 
 .setting-hint {
-    text-align: right;
-    color: #777;
-    font-size: 0.72rem;
+    text-align: left;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-hint);
     line-height: 1.4;
-    width: 360px;
 }
+
+tr.gap-field {
+    height: var(--space-gap-row);
+}
+
+/* 연속된 두 gap-field 바로 뒤의 tr = 새 섹션 시작 */
+tr.gap-field + tr.gap-field + tr > th,
+tr.gap-field + tr.gap-field + tr > td {
+    padding-top: var(--space-section-gap);
+}
+
+tr.gap-field + tr.gap-field + tr > th,
+tr.gap-field + tr.gap-field + tr > td {
+    border-top: 1px solid rgba(128, 128, 128, 0.15);
+}
+
+/* Toggle */
 
 .toggle {
     position: relative;
     display: inline-block;
-    width: 36px;
-    height: 20px;
+    width: var(--size-toggle-w);
+    height: var(--size-toggle-h);
 }
 
 .toggle input {
@@ -89,35 +463,97 @@ td {
     left: 0;
     right: 0;
     bottom: 0;
-    background: #ccc;
-    border-radius: 20px;
-    transition: .2s;
+    background: var(--color-toggle-off);
+    border-radius: var(--size-toggle-h);
+    transition: var(--transition);
 }
 
 .toggle-slider:before {
     position: absolute;
     content: "";
-    height: 16px;
-    width: 16px;
+    height: var(--size-toggle-knob);
+    width: var(--size-toggle-knob);
     left: 2px;
     bottom: 2px;
-    background: white;
+    background: var(--color-toggle-knob);
     border-radius: 50%;
-    transition: .2s;
+    transition: var(--transition);
 }
 
 input:checked + .toggle-slider {
-    background: #34c759;
+    background: var(--color-success);
 }
 
 input:checked + .toggle-slider:before {
-    transform: translateX(16px);
+    transform: translateX(calc(var(--size-toggle-w) - var(--size-toggle-knob) - 4px));
 }
+
+/* Select pills: 시간범위 + 간격 */
+
+.select-pills {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-row-ctrl-gap);
+}
+
+.pill {
+    display: inline-flex;
+    align-items: center;
+    background: var(--color-pill-bg);
+    border-radius: 8px;
+    padding: 3px 4px 3px 8px;
+}
+
+.pill select {
+    background: none;
+    border: none;
+    font-size: var(--font-size-table);
+    color: var(--color-text);
+    cursor: pointer;
+    padding: 0;
+    appearance: none;
+    -webkit-appearance: none;
+}
+
+/* 커스텀 드롭다운 화살표 wrapper */
+.pill-select-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+.pill-select-wrap select {
+    padding-right: 14px;
+}
+
+.pill-select-wrap::after {
+    content: "";
+    position: absolute;
+    right: 2px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid var(--color-text-muted);
+    pointer-events: none;
+}
+
+/* Disabled rows */
+
+tr.start-notif-field.disabled,
+tr.end-notif-field.disabled {
+    opacity: 0.4;
+    pointer-events: none;
+}
+
+/* Tabs */
 
 .tabs {
     display: flex;
     margin-bottom: 12px;
-    border-bottom: 1px solid #ddd;
+    border-bottom: 1px solid var(--color-border);
 }
 
 .tab-btn {
@@ -126,15 +562,15 @@ input:checked + .toggle-slider:before {
     background: none;
     border: none;
     border-bottom: 2px solid transparent;
-    font-size: 0.8rem;
-    color: #888;
+    font-size: var(--font-size-tab);
+    color: var(--color-text-muted);
     cursor: pointer;
-    transition: .2s;
+    transition: var(--transition);
 }
 
 .tab-btn.active {
-    color: #007aff;
-    border-bottom-color: #007aff;
+    color: var(--color-accent);
+    border-bottom-color: var(--color-accent);
     font-weight: 600;
 }
 
@@ -146,10 +582,12 @@ input:checked + .toggle-slider:before {
     display: block;
 }
 
+/* Link button */
+
 .link-btn {
     background: none;
     border: none;
-    color: #007aff;
+    color: var(--color-accent);
     font-size: inherit;
     cursor: pointer;
     padding: 0;
@@ -159,103 +597,26 @@ input:checked + .toggle-slider:before {
     text-decoration: underline;
 }
 
+/* Footer */
+
 .footer-links {
     position: fixed;
     bottom: 0;
     left: 0;
     right: 0;
     text-align: center;
-    font-size: 0.75rem;
-    color: #999;
-    padding: 8px 0;
-    background: #f5f5f7;
-    border-top: 1px solid #ddd;
+    font-size: var(--font-size-footer);
+    color: var(--color-text-muted);
+    padding: var(--space-footer-v) 0;
+    background: var(--color-bg);
+    border-top: 1px solid var(--color-border);
 }
 
 .footer-links a {
-    color: #007aff;
+    color: var(--color-accent);
     text-decoration: none;
 }
 
 .footer-links a:hover {
     text-decoration: underline;
-}
-
-tr.start-notif-field.disabled,
-tr.end-notif-field.disabled {
-    opacity: 0.4;
-    pointer-events: none;
-}
-
-tr.gap-field {
-    height: 6px;
-}
-
-.time-range {
-  display: flex;
-  align-items: center;
-  width: 60%;
-  gap: 8px;
-  margin-left: auto;
-}
-
-.time-range select,
-.time-range .time-hint {
-    flex: 1;
-    text-align: center;
-    min-width: 24px;
-}
-
-.time-range .time-hint.time-separator {
-    flex: 0;
-    min-width: 8px;
-}
-
-@media (prefers-color-scheme: dark) {
-    body {
-        color: #e0e0e0;
-        background: #1e1e1e;
-    }
-
-    .header small {
-        color: #666;
-    }
-
-    .header p {
-        color: #999;
-    }
-
-    th {
-        color: #aaa;
-    }
-
-    td {
-        color: #bbb;
-    }
-
-    .setting-hint {
-        color: #999;
-    }
-
-    .tabs {
-        border-bottom-color: #444;
-    }
-
-    .tab-btn {
-        color: #777;
-    }
-
-    .tab-btn.active {
-        color: #4da3ff;
-        border-bottom-color: #4da3ff;
-    }
-
-    .footer-links {
-        background: #1e1e1e;
-        border-top-color: #444;
-    }
-
-    .footer-links a {
-        color: #4da3ff;
-    }
 }

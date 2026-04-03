@@ -1,389 +1,396 @@
 <!doctype html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8" />
-  <link rel="stylesheet" href="styles.css" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Jungle Bell</title>
+    <meta charset="UTF-8"/>
+    <link rel="stylesheet" href="styles.css"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Jungle Bell</title>
 </head>
 <body>
-  <div class="header">
-    <img src="assets/logo.png" alt="Jungle Bell" class="logo" />
+<div class="header">
+    <img src="assets/logo.png" alt="Jungle Bell" class="logo"/>
     <div>
-      <h1>Jungle Bell <small id="app-version"></small></h1>
-      <p>크래프톤 정글 출석 체크 리마인더</p>
+        <h1>Jungle Bell <small id="app-version"></small></h1>
+        <p>크래프톤 정글 출석 체크 리마인더</p>
     </div>
-  </div>
+</div>
 
-  <div class="tabs">
+<div class="tabs">
     <button class="tab-btn active" data-tab="general">일반</button>
     <button class="tab-btn" data-tab="notification">알림</button>
     <button class="tab-btn" data-tab="info">정보</button>
-  </div>
+</div>
 
-  <div id="tab-general" class="tab-content active">
+<div id="tab-general" class="tab-content active">
     <table>
-      <tr>
-        <th>자동 시작</th>
-        <td>
-          <label class="toggle">
-            <input type="checkbox" id="auto-start-toggle" />
-            <span class="toggle-slider"></span>
-          </label>
-        </td>
-      </tr>
-      <tr>
-        <th>자동 업데이트</th>
-        <td>
-          <label class="toggle">
-            <input type="checkbox" id="auto-update-toggle" />
-            <span class="toggle-slider"></span>
-          </label>
-        </td>
-      </tr>
-      <tr>
-        <th></th>
-        <td><button id="check-update-btn" class="link-btn">업데이트 확인</button></td>
-      </tr>
+        <tr>
+            <th>자동 시작</th>
+            <td>
+                <label class="toggle">
+                    <input type="checkbox" id="auto-start-toggle"/>
+                    <span class="toggle-slider"></span>
+                </label>
+            </td>
+        </tr>
+        <tr>
+            <th>자동 업데이트</th>
+            <td>
+                <label class="toggle">
+                    <input type="checkbox" id="auto-update-toggle"/>
+                    <span class="toggle-slider"></span>
+                </label>
+            </td>
+        </tr>
+        <tr>
+            <th></th>
+            <td>
+                <button id="check-update-btn" class="link-btn">업데이트 확인</button>
+            </td>
+        </tr>
     </table>
-  </div>
+</div>
 
-  <div id="tab-notification" class="tab-content">
+<div id="tab-notification" class="tab-content">
     <table>
-      <tr>
-        <th>일요일 알림 끄기</th>
-        <td>
-          <label class="toggle">
-            <input type="checkbox" id="skip-sunday-toggle" />
-            <span class="toggle-slider"></span>
-          </label>
-        </td>
-      </tr>
-      <tr>
-        <th>이번 출석 알림 끄기</th>
-        <td>
-          <label class="toggle">
-            <input type="checkbox" id="skip-attendance-toggle" />
-            <span class="toggle-slider"></span>
-          </label>
-        </td>
-      </tr>
-      <tr id="skip-attendance-hint" style="display:none">
-        <th></th>
-        <td class="setting-hint" id="skip-attendance-hint-text"></td>
-      </tr>
-      <tr class="gap-field"></tr>
-      <tr class="gap-field"></tr>
-      <tr>
-        <th>시작 출석</th>
-        <td>
-          <label class="toggle">
-            <input type="checkbox" id="start-notification-toggle" />
-            <span class="toggle-slider"></span>
-          </label>
-        </td>
-      </tr>
-      <tr class="start-notif-field">
-        <th></th>
-        <td>
-          <span class="time-range">
-            <select id="notification-start-select">
-              <option value="4">04:00</option>
-              <option value="5">05:00</option>
-              <option value="6">06:00</option>
-              <option value="7">07:00</option>
-              <option value="8">08:00</option>
-              <option value="9">09:00</option>
-              <option value="10">10:00</option>
-            </select>
-            <span class="time-hint time-separator">~</span>
-            <span class="time-hint">10:00</span>
-          </span>
-        </td>
-      </tr>
-      <tr class="start-notif-field">
-        <th></th>
-        <td>
-          <span class="interval-setting">
-            <select id="start-notification-interval-select">
-              <option value="1">1분</option>
-              <option value="3">3분</option>
-              <option value="5">5분</option>
-              <option value="10">10분</option>
-              <option value="15">15분</option>
-              <option value="30">30분</option>
-            </select>
-            <span class="time-hint">간격</span>
-          </span>
-        </td>
-      </tr>
-      <tr class="start-notif-field">
-        <th></th>
-        <td class="setting-hint">출석 시작 체크를 하지 않으면 10:00 이후에도 알림이 발송됩니다.</td>
-      </tr>
-      <tr class="gap-field"></tr>
-      <tr>
-        <th>종료 출석</th>
-        <td>
-          <label class="toggle">
-            <input type="checkbox" id="end-notification-toggle" />
-            <span class="toggle-slider"></span>
-          </label>
-        </td>
-      </tr>
-      <tr class="end-notif-field">
-        <th></th>
-        <td>
-          <span class="time-range">
-            <span class="time-hint">23:00</span>
-            <span class="time-hint time-separator">~</span>
-            <select id="notification-end-select">
-              <option value="23">23:00</option>
-              <option value="0">00:00</option>
-              <option value="1">01:00</option>
-              <option value="2">02:00</option>
-              <option value="3">03:00</option>
-              <option value="4">04:00</option>
-            </select>
-          </span>
-        </td>
-      </tr>
-      <tr class="end-notif-field">
-        <th></th>
-        <td>
-          <span class="interval-setting">
-            <select id="end-notification-interval-select">
-              <option value="1">1분</option>
-              <option value="3">3분</option>
-              <option value="5">5분</option>
-              <option value="10">10분</option>
-              <option value="15">15분</option>
-              <option value="30">30분</option>
-            </select>
-            <span class="time-hint">간격</span>
-          </span>
-        </td>
-      </tr>
-      <tr class="gap-field"></tr>
-      <tr class="gap-field"></tr>
-      <tr>
-        <th>시스템 설정</th>
-        <td>
-          <button id="open-notification-settings-btn" class="link-btn">알림 설정 열기</button>
-        </td>
-      </tr>
-      <tr>
-        <th></th>
-        <td class="setting-hint">OS 알림이 차단되어 있으면 알림이 전달되지 않습니다. <br> 설정을 확인하세요.</td>
-      </tr>
+        <tr>
+            <th>일요일 알림 끄기</th>
+            <td>
+                <label class="toggle">
+                    <input type="checkbox" id="skip-sunday-toggle"/>
+                    <span class="toggle-slider"></span>
+                </label>
+            </td>
+        </tr>
+        <tr>
+            <th>이번 출석 알림 끄기</th>
+            <td>
+                <label class="toggle">
+                    <input type="checkbox" id="skip-attendance-toggle"/>
+                    <span class="toggle-slider"></span>
+                </label>
+            </td>
+        </tr>
+        <tr id="skip-attendance-hint" style="display:none">
+            <td class="setting-hint" colspan="2" id="skip-attendance-hint-text"></td>
+        </tr>
+        <tr class="gap-field"></tr>
+        <tr class="gap-field"></tr>
+        <tr>
+            <th>시작 출석</th>
+            <td>
+                <label class="toggle">
+                    <input type="checkbox" id="start-notification-toggle"/>
+                    <span class="toggle-slider"></span>
+                </label>
+            </td>
+        </tr>
+        <tr class="start-notif-field">
+            <th></th>
+            <td>
+                <div class="select-pills">
+                    <div class="pill">
+                        <div class="pill-select-wrap">
+                            <select id="notification-start-select" aria-label="시작 출석 시간 범위">
+                                <option value="4">04:00 ~ 10:00</option>
+                                <option value="5">05:00 ~ 10:00</option>
+                                <option value="6">06:00 ~ 10:00</option>
+                                <option value="7">07:00 ~ 10:00</option>
+                                <option value="8">08:00 ~ 10:00</option>
+                                <option value="9">09:00 ~ 10:00</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="pill">
+                        <div class="pill-select-wrap">
+                            <select id="start-notification-interval-select" aria-label="시작 출석 알림 간격">
+                                <option value="1">1분 간격</option>
+                                <option value="3">3분 간격</option>
+                                <option value="5">5분 간격</option>
+                                <option value="10">10분 간격</option>
+                                <option value="15">15분 간격</option>
+                                <option value="30">30분 간격</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </td>
+        </tr>
+        <tr class="start-notif-field">
+            <td class="setting-hint" colspan="2">시작 체크를 하지 않으면 10:00 이후에도 알림이 발송됩니다.</td>
+        </tr>
+        <tr class="gap-field"></tr>
+        <tr>
+            <th>종료 출석</th>
+            <td>
+                <label class="toggle">
+                    <input type="checkbox" id="end-notification-toggle"/>
+                    <span class="toggle-slider"></span>
+                </label>
+            </td>
+        </tr>
+        <tr class="end-notif-field">
+            <th></th>
+            <td>
+                <div class="select-pills">
+                    <div class="pill">
+                        <div class="pill-select-wrap">
+                            <select id="notification-end-select" aria-label="종료 출석 시간 범위">
+                                <option value="0">23:00 ~ 00:00</option>
+                                <option value="1">23:00 ~ 01:00</option>
+                                <option value="2">23:00 ~ 02:00</option>
+                                <option value="3">23:00 ~ 03:00</option>
+                                <option value="4">23:00 ~ 04:00</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="pill">
+                        <div class="pill-select-wrap">
+                            <select id="end-notification-interval-select" aria-label="종료 출석 알림 간격">
+                                <option value="1">1분 간격</option>
+                                <option value="3">3분 간격</option>
+                                <option value="5">5분 간격</option>
+                                <option value="10">10분 간격</option>
+                                <option value="15">15분 간격</option>
+                                <option value="30">30분 간격</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </td>
+        </tr>
+        <tr class="gap-field"></tr>
+        <tr class="gap-field"></tr>
+        <tr>
+            <th>시스템 설정</th>
+            <td>
+                <button id="open-notification-settings-btn" class="link-btn">알림 설정 열기</button>
+            </td>
+        </tr>
+        <tr>
+            <td class="setting-hint" colspan="2">OS 알림이 차단되어 있으면 알림이 전달되지 않습니다. 설정을 확인하세요.</td>
+        </tr>
     </table>
-  </div>
+</div>
 
-  <div id="tab-info" class="tab-content">
+<div id="tab-info" class="tab-content">
     <table>
-      <tr><th>학습 시작</th><td>04:00 ~ 10:00</td></tr>
-      <tr><th>학습 종료</th><td>23:00 ~ 04:00</td></tr>
+        <tr>
+            <th>학습 시작</th>
+            <td>04:00 ~ 10:00</td>
+        </tr>
+        <tr>
+            <th>학습 종료</th>
+            <td>23:00 ~ 04:00</td>
+        </tr>
     </table>
-    <br />
+    <br/>
     <table>
-      <tr>
-        <th>디버그 모드</th>
-        <td>
-          <label class="toggle">
-            <input type="checkbox" id="debug-mode-toggle" />
-            <span class="toggle-slider"></span>
-          </label>
-        </td>
-      </tr>
-      <tr>
-        <th>로그 폴더</th>
-        <td>
-          <button id="open-log-folder-btn" class="link-btn">열기</button>
-        </td>
-      </tr>
+        <tr>
+            <th>디버그 모드</th>
+            <td>
+                <label class="toggle">
+                    <input type="checkbox" id="debug-mode-toggle"/>
+                    <span class="toggle-slider"></span>
+                </label>
+            </td>
+        </tr>
+        <tr>
+            <th>로그 폴더</th>
+            <td>
+                <button id="open-log-folder-btn" class="link-btn">열기</button>
+            </td>
+        </tr>
     </table>
-  </div>
+</div>
 
-  <footer class="footer-links">
+<footer class="footer-links">
     <a href="https://github.com/YangSiJun528/jungle-bell" target="_blank" rel="noopener noreferrer">GitHub</a>
     <span> · </span>
     <a href="https://github.com/YangSiJun528/jungle-bell/releases" target="_blank" rel="noopener noreferrer">릴리즈</a>
     <span> · </span>
-    <a href="https://github.com/YangSiJun528/jungle-bell/issues/new/choose" target="_blank" rel="noopener noreferrer">버그/기능 제보</a>
-  </footer>
+    <a href="https://github.com/YangSiJun528/jungle-bell/issues/new/choose" target="_blank" rel="noopener noreferrer">버그/기능
+        제보</a>
+</footer>
 
-  <script>
-    const { invoke } = window.__TAURI__.core;
+<script>
+    const {invoke} = window.__TAURI__.core;
     window.addEventListener('DOMContentLoaded', async () => {
-      try {
-        document.querySelectorAll('.tab-btn').forEach(btn => {
-          btn.addEventListener('click', () => {
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            btn.classList.add('active');
-            document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
-          });
-        });
-        document.getElementById('app-version').textContent = 'v' + await invoke('get_app_version');
-
-        const autoStartToggle = document.getElementById('auto-start-toggle');
-        autoStartToggle.checked = await invoke('get_auto_start');
-        autoStartToggle.addEventListener('change', async () => {
-          try {
-            await invoke('set_auto_start', { enabled: autoStartToggle.checked });
-          } catch (e) {
-            console.error(e);
-            autoStartToggle.checked = !autoStartToggle.checked;
-          }
-        });
-
-        const toggle = document.getElementById('auto-update-toggle');
-        toggle.checked = await invoke('get_auto_update');
-        toggle.addEventListener('change', () => {
-          invoke('set_auto_update', { enabled: toggle.checked }).catch(console.error);
-        });
-
-        document.getElementById('check-update-btn').addEventListener('click', () => {
-          invoke('check_and_notify_update').catch(console.error);
-        });
-
-        const debugToggle = document.getElementById('debug-mode-toggle');
-        debugToggle.checked = await invoke('get_debug_mode');
-        debugToggle.addEventListener('change', async () => {
-          if (debugToggle.checked) {
-            const confirmed = await window.__TAURI__.dialog.confirm(
-              '디버그 모드를 활성화하면 API 요청/응답 데이터, 앱 내부 상태 등 상세 로그가 기록됩니다.\n' +
-              '로그 파일 크기가 빠르게 증가할 수 있으며, 문제 해결 후에는 비활성화를 권장합니다.',
-              { title: '디버그 모드 활성화', okLabel: '활성화', cancelLabel: '취소' }
-            );
-            if (!confirmed) {
-              debugToggle.checked = false;
-              return;
-            }
-          }
-          invoke('set_debug_mode', { enabled: debugToggle.checked }).catch(console.error);
-        });
-
-        document.getElementById('open-log-folder-btn').addEventListener('click', () => {
-          invoke('open_log_folder').catch(console.error);
-        });
-
-        // --- 이번 출석 알림 끄기 ---
-        const skipAttendanceToggle = document.getElementById('skip-attendance-toggle');
-        const skipAttendanceHint = document.getElementById('skip-attendance-hint');
-        const skipAttendanceHintText = document.getElementById('skip-attendance-hint-text');
-        function updateSkipAttendanceHint(enabled) {
-          if (enabled) {
-            const tomorrow = new Date();
-            tomorrow.setDate(tomorrow.getDate() + 1);
-            const mm = String(tomorrow.getMonth() + 1).padStart(2, '0');
-            const dd = String(tomorrow.getDate()).padStart(2, '0');
-            skipAttendanceHintText.textContent = `내일(${mm}/${dd}) 출석 시작 시각에 자동으로 해제됩니다.`;
-            skipAttendanceHint.style.display = '';
-          } else {
-            skipAttendanceHint.style.display = 'none';
-          }
-        }
-        skipAttendanceToggle.checked = await invoke('get_skip_attendance');
-        updateSkipAttendanceHint(skipAttendanceToggle.checked);
-        skipAttendanceToggle.addEventListener('change', async () => {
-          try {
-            await invoke('set_skip_attendance', { enabled: skipAttendanceToggle.checked });
-            updateSkipAttendanceHint(skipAttendanceToggle.checked);
-          } catch (e) {
-            console.error(e);
-            skipAttendanceToggle.checked = !skipAttendanceToggle.checked;
-          }
-        });
-
-        const skipSundayToggle = document.getElementById('skip-sunday-toggle');
-        skipSundayToggle.checked = await invoke('get_skip_sunday');
-        skipSundayToggle.addEventListener('change', () => {
-          invoke('set_skip_sunday', { enabled: skipSundayToggle.checked }).catch(console.error);
-        });
-
-        // --- 알림 설정 ---
-        function setupNotifToggle(toggleId, fieldClass, getCmd, setCmd) {
-          const toggle = document.getElementById(toggleId);
-          const fields = document.querySelectorAll('#tab-notification .' + fieldClass);
-          function updateFields(enabled) {
-            fields.forEach(row => {
-              row.classList.toggle('disabled', !enabled);
-              row.querySelectorAll('select, button, input').forEach(c => c.disabled = !enabled);
+        try {
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                    btn.classList.add('active');
+                    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+                });
             });
-          }
-          toggle.addEventListener('change', () => {
-            invoke(setCmd, { enabled: toggle.checked }).catch(console.error);
-            updateFields(toggle.checked);
-          });
-          return { toggle, updateFields };
+            document.getElementById('app-version').textContent = 'v' + await invoke('get_app_version');
+
+            const autoStartToggle = document.getElementById('auto-start-toggle');
+            autoStartToggle.checked = await invoke('get_auto_start');
+            autoStartToggle.addEventListener('change', async () => {
+                try {
+                    await invoke('set_auto_start', {enabled: autoStartToggle.checked});
+                } catch (e) {
+                    console.error(e);
+                    autoStartToggle.checked = !autoStartToggle.checked;
+                }
+            });
+
+            const toggle = document.getElementById('auto-update-toggle');
+            toggle.checked = await invoke('get_auto_update');
+            toggle.addEventListener('change', () => {
+                invoke('set_auto_update', {enabled: toggle.checked}).catch(console.error);
+            });
+
+            document.getElementById('check-update-btn').addEventListener('click', () => {
+                invoke('check_and_notify_update').catch(console.error);
+            });
+
+            const debugToggle = document.getElementById('debug-mode-toggle');
+            debugToggle.checked = await invoke('get_debug_mode');
+            debugToggle.addEventListener('change', async () => {
+                if (debugToggle.checked) {
+                    const confirmed = await window.__TAURI__.dialog.confirm(
+                        '디버그 모드를 활성화하면 API 요청/응답 데이터, 앱 내부 상태 등 상세 로그가 기록됩니다.\n' +
+                        '로그 파일 크기가 빠르게 증가할 수 있으며, 문제 해결 후에는 비활성화를 권장합니다.',
+                        {title: '디버그 모드 활성화', okLabel: '활성화', cancelLabel: '취소'}
+                    );
+                    if (!confirmed) {
+                        debugToggle.checked = false;
+                        return;
+                    }
+                }
+                invoke('set_debug_mode', {enabled: debugToggle.checked}).catch(console.error);
+            });
+
+            document.getElementById('open-log-folder-btn').addEventListener('click', () => {
+                invoke('open_log_folder').catch(console.error);
+            });
+
+            // --- 이번 출석 알림 끄기 ---
+            const skipAttendanceToggle = document.getElementById('skip-attendance-toggle');
+            const skipAttendanceHint = document.getElementById('skip-attendance-hint');
+            const skipAttendanceHintText = document.getElementById('skip-attendance-hint-text');
+
+            function updateSkipAttendanceHint(enabled) {
+                if (enabled) {
+                    const tomorrow = new Date();
+                    tomorrow.setDate(tomorrow.getDate() + 1);
+                    const mm = String(tomorrow.getMonth() + 1).padStart(2, '0');
+                    const dd = String(tomorrow.getDate()).padStart(2, '0');
+                    skipAttendanceHintText.textContent = `내일(${mm}/${dd}) 출석 시작 시각에 자동으로 해제됩니다.`;
+                    skipAttendanceHint.style.display = '';
+                } else {
+                    skipAttendanceHint.style.display = 'none';
+                }
+            }
+
+            skipAttendanceToggle.checked = await invoke('get_skip_attendance');
+            updateSkipAttendanceHint(skipAttendanceToggle.checked);
+            skipAttendanceToggle.addEventListener('change', async () => {
+                try {
+                    await invoke('set_skip_attendance', {enabled: skipAttendanceToggle.checked});
+                    updateSkipAttendanceHint(skipAttendanceToggle.checked);
+                } catch (e) {
+                    console.error(e);
+                    skipAttendanceToggle.checked = !skipAttendanceToggle.checked;
+                }
+            });
+
+            const skipSundayToggle = document.getElementById('skip-sunday-toggle');
+            skipSundayToggle.checked = await invoke('get_skip_sunday');
+            skipSundayToggle.addEventListener('change', () => {
+                invoke('set_skip_sunday', {enabled: skipSundayToggle.checked}).catch(console.error);
+            });
+
+            // --- 알림 설정 ---
+            function setupNotifToggle(toggleId, fieldClass, getCmd, setCmd) {
+                const toggle = document.getElementById(toggleId);
+                const fields = document.querySelectorAll('#tab-notification .' + fieldClass);
+
+                function updateFields(enabled) {
+                    fields.forEach(el => {
+                        el.classList.toggle('disabled', !enabled);
+                        el.querySelectorAll('select, button, input').forEach(c => c.disabled = !enabled);
+                    });
+                }
+
+                toggle.addEventListener('change', () => {
+                    invoke(setCmd, {enabled: toggle.checked}).catch(console.error);
+                    updateFields(toggle.checked);
+                });
+                return {toggle, updateFields};
+            }
+
+            const startNotif = setupNotifToggle('start-notification-toggle', 'start-notif-field', 'get_start_notification_enabled', 'set_start_notification_enabled');
+            startNotif.toggle.checked = await invoke('get_start_notification_enabled');
+            startNotif.updateFields(startNotif.toggle.checked);
+
+            const endNotif = setupNotifToggle('end-notification-toggle', 'end-notif-field', 'get_end_notification_enabled', 'set_end_notification_enabled');
+            endNotif.toggle.checked = await invoke('get_end_notification_enabled');
+            endNotif.updateFields(endNotif.toggle.checked);
+
+            const notifStartSelect = document.getElementById('notification-start-select');
+            const notifStart = await invoke('get_notification_start');
+            notifStartSelect.value = notifStart.hour;
+            notifStartSelect.addEventListener('change', () => {
+                invoke('set_notification_start', {
+                    hour: parseInt(notifStartSelect.value),
+                    minute: 0
+                }).catch(console.error);
+            });
+
+            const startIntervalSelect = document.getElementById('start-notification-interval-select');
+            startIntervalSelect.value = await invoke('get_start_notification_interval');
+            startIntervalSelect.addEventListener('change', () => {
+                invoke('set_start_notification_interval', {value: parseInt(startIntervalSelect.value)}).catch(console.error);
+            });
+
+            const notifEndSelect = document.getElementById('notification-end-select');
+            const notifEnd = await invoke('get_notification_end');
+            notifEndSelect.value = notifEnd.hour;
+            notifEndSelect.addEventListener('change', () => {
+                invoke('set_notification_end', {hour: parseInt(notifEndSelect.value), minute: 0}).catch(console.error);
+            });
+
+            const endIntervalSelect = document.getElementById('end-notification-interval-select');
+            endIntervalSelect.value = await invoke('get_end_notification_interval');
+            endIntervalSelect.addEventListener('change', () => {
+                invoke('set_end_notification_interval', {value: parseInt(endIntervalSelect.value)}).catch(console.error);
+            });
+
+            document.getElementById('open-notification-settings-btn').addEventListener('click', async () => {
+                try {
+                    await invoke('open_notification_settings');
+                } catch (e) {
+                    console.error(e);
+                    await window.__TAURI__.dialog.message(
+                        '시스템 알림 설정을 열지 못했습니다.\n' + e,
+                        {title: '알림 설정'}
+                    );
+                }
+            });
+            // 설정 창이 다시 보여질 때 skip_attendance 토글 상태 갱신.
+            // 창이 숨겨졌다가 다시 show() + set_focus()되면 DOMContentLoaded가 재실행되지 않으므로,
+            // window focus 이벤트로 날짜가 지난 skip 상태를 반영한다.
+            window.addEventListener('focus', async () => {
+                invoke('log_from_js', {level: 'info', message: '[settings] window focus'});
+                try {
+                    const currentSkip = await invoke('get_skip_attendance');
+                    invoke('log_from_js', {level: 'info', message: '[settings] skip_attendance 상태 갱신: ' + currentSkip});
+                    skipAttendanceToggle.checked = currentSkip;
+                    updateSkipAttendanceHint(currentSkip);
+                } catch (e) {
+                    invoke('log_from_js', {level: 'error', message: '[settings] skip_attendance 상태 갱신 실패: ' + e});
+                }
+            });
+
+        } catch (e) {
+            console.error('초기화 중 오류 발생:', e);
         }
-
-        const startNotif = setupNotifToggle('start-notification-toggle', 'start-notif-field', 'get_start_notification_enabled', 'set_start_notification_enabled');
-        startNotif.toggle.checked = await invoke('get_start_notification_enabled');
-        startNotif.updateFields(startNotif.toggle.checked);
-
-        const endNotif = setupNotifToggle('end-notification-toggle', 'end-notif-field', 'get_end_notification_enabled', 'set_end_notification_enabled');
-        endNotif.toggle.checked = await invoke('get_end_notification_enabled');
-        endNotif.updateFields(endNotif.toggle.checked);
-
-        const notifStartSelect = document.getElementById('notification-start-select');
-        const notifStart = await invoke('get_notification_start');
-        notifStartSelect.value = notifStart.hour;
-        notifStartSelect.addEventListener('change', () => {
-          invoke('set_notification_start', { hour: parseInt(notifStartSelect.value), minute: 0 }).catch(console.error);
-        });
-
-        const startIntervalSelect = document.getElementById('start-notification-interval-select');
-        startIntervalSelect.value = await invoke('get_start_notification_interval');
-        startIntervalSelect.addEventListener('change', () => {
-          invoke('set_start_notification_interval', { value: parseInt(startIntervalSelect.value) }).catch(console.error);
-        });
-
-        const notifEndSelect = document.getElementById('notification-end-select');
-        const notifEnd = await invoke('get_notification_end');
-        notifEndSelect.value = notifEnd.hour;
-        notifEndSelect.addEventListener('change', () => {
-          invoke('set_notification_end', { hour: parseInt(notifEndSelect.value), minute: 0 }).catch(console.error);
-        });
-
-        const endIntervalSelect = document.getElementById('end-notification-interval-select');
-        endIntervalSelect.value = await invoke('get_end_notification_interval');
-        endIntervalSelect.addEventListener('change', () => {
-          invoke('set_end_notification_interval', { value: parseInt(endIntervalSelect.value) }).catch(console.error);
-        });
-
-        document.getElementById('open-notification-settings-btn').addEventListener('click', async () => {
-          try {
-            await invoke('open_notification_settings');
-          } catch (e) {
-            console.error(e);
-            await window.__TAURI__.dialog.message(
-              '시스템 알림 설정을 열지 못했습니다.\n' + e,
-              { title: '알림 설정' }
-            );
-          }
-        });
-        // 설정 창이 다시 보여질 때 skip_attendance 토글 상태 갱신.
-        // 창이 숨겨졌다가 다시 show() + set_focus()되면 DOMContentLoaded가 재실행되지 않으므로,
-        // window focus 이벤트로 날짜가 지난 skip 상태를 반영한다.
-        window.addEventListener('focus', async () => {
-          invoke('log_from_js', { level: 'info', message: '[settings] window focus' });
-          try {
-            const currentSkip = await invoke('get_skip_attendance');
-            invoke('log_from_js', { level: 'info', message: '[settings] skip_attendance 상태 갱신: ' + currentSkip });
-            skipAttendanceToggle.checked = currentSkip;
-            updateSkipAttendanceHint(currentSkip);
-          } catch (e) {
-            invoke('log_from_js', { level: 'error', message: '[settings] skip_attendance 상태 갱신 실패: ' + e });
-          }
-        });
-
-      } catch (e) {
-        console.error('초기화 중 오류 발생:', e);
-      }
     });
-  </script>
+</script>
 
 </body>
 </html>
