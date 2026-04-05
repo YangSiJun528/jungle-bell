@@ -49,6 +49,20 @@ gh release create v{version} --title "v{version}" --generate-notes --draft
   - If yes: add `--prerelease` flag (e.g., `--draft --prerelease`).
   - If no: use `--draft` as usual.
 
-## Step 5: Confirm
+## Step 5: Trigger CI workflow
 
-Inform the user that the release was created as a draft, and that it will be automatically published once the CI build completes. Provide a link to the GitHub Actions workflow run.
+Trigger the release workflow manually via `workflow_dispatch`:
+
+```
+gh workflow run release.yml -f tag=v{version}
+```
+
+Wait 3 seconds, then get the workflow run URL:
+
+```
+sleep 3 && gh run list --workflow=release.yml --limit=1 --json url --jq '.[0].url'
+```
+
+## Step 6: Confirm
+
+Inform the user that the release was created as a draft and the CI workflow has been triggered. Provide a link to the GitHub Actions workflow run. The release will be automatically published once all builds complete.

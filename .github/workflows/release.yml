@@ -3,10 +3,35 @@ name: Release
 on:
   release:
     types: [created]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag name (e.g. v0.2.2-beta.1)'
+        required: true
+        type: string
 
 jobs:
+  get-release-info:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.info.outputs.tag }}
+      release_id: ${{ steps.info.outputs.release_id }}
+      is_prerelease: ${{ steps.info.outputs.is_prerelease }}
+    steps:
+      - name: Get release info
+        id: info
+        run: |
+          TAG="${{ github.event.release.tag_name || inputs.tag }}"
+          RELEASE_ID=$(gh release view "$TAG" --json databaseId --jq .databaseId)
+          IS_PRERELEASE=$(gh release view "$TAG" --json isPrerelease --jq .isPrerelease)
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "release_id=$RELEASE_ID" >> $GITHUB_OUTPUT
+          echo "is_prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   publish-tauri:
-    if: github.event.release.draft == true
+    needs: [get-release-info]
     permissions:
       contents: write
     strategy:
@@ -23,6 +48,8 @@ jobs:
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.get-release-info.outputs.tag }}
 
       - name: setup node
         uses: actions/setup-node@v6
@@ -41,15 +68,14 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          releaseId: ${{ github.event.release.id }}
-          tagName: ${{ github.event.release.tag_name }}
+          releaseId: ${{ needs.get-release-info.outputs.release_id }}
+          tagName: ${{ needs.get-release-info.outputs.tag }}
           args: ${{ matrix.args }}
           projectPath: src-tauri
           updaterJsonPreferNsis: true
 
   publish-release:
-    needs: [publish-tauri]
-    if: github.event.release.draft == true
+    needs: [publish-tauri, get-release-info]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -58,7 +84,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release edit ${{ github.event.release.tag_name }} \
-            --repo ${{ github.repository }} \
-            --draft=false \
-            ${{ github.event.release.prerelease && ' ' || '--latest' }}
+          TAG="${{ needs.get-release-info.outputs.tag }}"
+          IS_PRERELEASE="${{ needs.get-release-info.outputs.is_prerelease }}"
+
+          if [ "$IS_PRERELEASE" = "true" ]; then
+            gh release edit "$TAG" --repo ${{ github.repository }} --draft=false
+          else
+            gh release edit "$TAG" --repo ${{ github.repository }} --draft=false --latest
+          fi
