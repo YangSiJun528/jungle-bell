@@ -22,8 +22,8 @@ jobs:
         id: info
         run: |
           TAG="${{ github.event.release.tag_name || inputs.tag }}"
-          RELEASE_ID=$(gh release view "$TAG" --json databaseId --jq .databaseId)
-          IS_PRERELEASE=$(gh release view "$TAG" --json isPrerelease --jq .isPrerelease)
+          RELEASE_ID=$(gh release view "$TAG" --repo ${{ github.repository }} --json databaseId --jq .databaseId)
+          IS_PRERELEASE=$(gh release view "$TAG" --repo ${{ github.repository }} --json isPrerelease --jq .isPrerelease)
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "release_id=$RELEASE_ID" >> $GITHUB_OUTPUT
           echo "is_prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
