@@ -1,8 +1,10 @@
 mod checker;
+mod commands;
 mod config;
 mod scheduler;
 mod state;
 mod tray;
+mod updater;
 
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -74,34 +76,34 @@ pub fn run() {
         .manage(shared_state.clone())
         // JS에서 `window.__TAURI__.core.invoke()`로 호출할 수 있는 Tauri 커맨드 등록.
         .invoke_handler(tauri::generate_handler![
-            checker::report_attendance_status,
-            checker::log_from_js,
-            checker::get_auto_update,
-            checker::set_auto_update,
-            checker::get_app_version,
-            checker::check_and_notify_update,
-            checker::get_auto_start,
-            checker::set_auto_start,
-            checker::get_start_notification_enabled,
-            checker::set_start_notification_enabled,
-            checker::get_end_notification_enabled,
-            checker::set_end_notification_enabled,
-            checker::get_start_notification_interval,
-            checker::set_start_notification_interval,
-            checker::get_end_notification_interval,
-            checker::set_end_notification_interval,
-            checker::get_notification_start,
-            checker::set_notification_start,
-            checker::get_notification_end,
-            checker::set_notification_end,
-            checker::get_skip_attendance,
-            checker::set_skip_attendance,
-            checker::get_skip_sunday,
-            checker::set_skip_sunday,
-            checker::open_notification_settings,
-            checker::get_debug_mode,
-            checker::set_debug_mode,
-            checker::open_log_folder,
+            commands::report_attendance_status,
+            commands::log_from_js,
+            commands::get_auto_update,
+            commands::set_auto_update,
+            commands::get_app_version,
+            commands::check_and_notify_update,
+            commands::get_auto_start,
+            commands::set_auto_start,
+            commands::get_start_notification_enabled,
+            commands::set_start_notification_enabled,
+            commands::get_end_notification_enabled,
+            commands::set_end_notification_enabled,
+            commands::get_start_notification_interval,
+            commands::set_start_notification_interval,
+            commands::get_end_notification_interval,
+            commands::set_end_notification_interval,
+            commands::get_notification_start,
+            commands::set_notification_start,
+            commands::get_notification_end,
+            commands::set_notification_end,
+            commands::get_skip_attendance,
+            commands::set_skip_attendance,
+            commands::get_skip_sunday,
+            commands::set_skip_sunday,
+            commands::open_notification_settings,
+            commands::get_debug_mode,
+            commands::set_debug_mode,
+            commands::open_log_folder,
         ])
         // setup(): 앱 초기화 후 이벤트 루프 시작 전에 한 번 실행.
         .setup(move |app| {
@@ -201,7 +203,7 @@ pub fn run() {
                 if !auto_update {
                     return;
                 }
-                checker::prompt_and_install_update(app_handle_update, true).await;
+                updater::prompt_and_install_update(app_handle_update, true).await;
             });
 
             // 백그라운드 루프: 상태 계산, 트레이 갱신, 체커 주기적 리로드.
