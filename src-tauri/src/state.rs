@@ -27,10 +27,8 @@ pub struct AppState {
     pub login_retry_until: Option<DateTime<Utc>>,
     /// 마지막 알림 전송 시각
     pub last_notification: Option<DateTime<Utc>>,
-    /// 발견된 업데이트 버전 (None이면 최신 버전)
+    /// 발견된 업데이트 버전 (None이면 최신 버전 또는 미확인)
     pub pending_update: Option<String>,
-    /// 마지막 업데이트 알림 발송 시각
-    pub last_update_notification: Option<DateTime<Utc>>,
 }
 
 impl AppState {
@@ -47,7 +45,6 @@ impl AppState {
             login_retry_until: None,
             last_notification: None,
             pending_update: None,
-            last_update_notification: None,
         }
     }
 }

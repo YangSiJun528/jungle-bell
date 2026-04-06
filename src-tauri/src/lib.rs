@@ -92,7 +92,9 @@ fn spawn_startup_update_check(app: tauri::AppHandle, shared_state: Arc<Mutex<App
     tauri::async_runtime::spawn(async move {
         let auto_update = shared_state.lock().await.config.auto_update;
         if auto_update {
-            updater::prompt_and_install_update(app, true).await;
+            updater::auto_install_update(app).await;
+        } else {
+            updater::check_and_store_pending_update(&app, &shared_state).await;
         }
     });
 }

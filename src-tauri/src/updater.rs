@@ -5,20 +5,12 @@
 
 use std::sync::Arc;
 
-use chrono::{Timelike, Utc};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_updater::UpdaterExt;
 use tokio::sync::Mutex;
 
 use crate::state::AppState;
-
-/// 알림을 보내는 KST 시작 시각 (11시 이상)
-const NOTIFY_HOUR_START_KST: u32 = 11;
-/// 알림을 보내는 KST 종료 시각 (22시 미만)
-const NOTIFY_HOUR_END_KST: u32 = 22;
-/// 같은 버전에 대한 알림 재발송 최소 간격 (4시간)
-const NOTIFY_COOLDOWN_SECS: i64 = 4 * 60 * 60;
 
 /// 업데이트를 확인하고 사용자 확인 후 설치하는 공통 로직.
 ///
@@ -95,21 +87,14 @@ pub(crate) async fn prompt_and_install_update(app: tauri::AppHandle, silent: boo
     }
 }
 
-/// 주기적 업데이트 체크 — OS 알림 전용, 다이얼로그 없음.
+/// 자동 업데이트 — 업데이트 발견 시 알림 후 즉시 설치·재시작.
 ///
-/// 업데이트 발견 시 `state.pending_update`에 버전을 저장하고,
-/// KST 11:00~22:00 사이일 때만 OS 알림을 발송한다.
-/// 최신 버전이면 `pending_update`를 클리어한다.
-pub(crate) async fn check_update_periodic(app: &tauri::AppHandle, shared_state: &Arc<Mutex<AppState>>) {
-    let auto_update = shared_state.lock().await.config.auto_update;
-    if !auto_update {
-        return;
-    }
-
+/// 사용자 확인 없이 자동으로 다운로드·설치하며, 재시작 전에 OS 알림을 발송한다.
+pub(crate) async fn auto_install_update(app: tauri::AppHandle) {
     let updater = match app.updater() {
         Ok(u) => u,
         Err(e) => {
-            log::debug!("[updater] 주기적 체크: updater 초기화 실패: {}", e);
+            log::debug!("[updater] updater 초기화 실패: {}", e);
             return;
         }
     };
@@ -117,42 +102,69 @@ pub(crate) async fn check_update_periodic(app: &tauri::AppHandle, shared_state: 
     match updater.check().await {
         Ok(Some(update)) => {
             let version = update.version.clone();
-            log::info!("[updater] 주기적 체크: 새 업데이트 발견 v{}", version);
-            shared_state.lock().await.pending_update = Some(version.clone());
-
-            // KST 시간 확인 (11:00~22:00만 알림 발송)
-            let kst_now = Utc::now().with_timezone(&crate::state::kst());
-            let hour = kst_now.hour();
-            if hour < NOTIFY_HOUR_START_KST || hour >= NOTIFY_HOUR_END_KST {
-                log::info!("[updater] 주기적 체크: 알림 시간 아님 ({}시, KST {}~{}시만 발송)", hour, NOTIFY_HOUR_START_KST, NOTIFY_HOUR_END_KST);
-                return;
-            }
-
-            // 4시간 쿨다운: 같은 버전에 대해 너무 자주 알림 보내지 않음
-            let last_notif = shared_state.lock().await.last_update_notification;
-            if let Some(last) = last_notif {
-                let elapsed = Utc::now().signed_duration_since(last).num_seconds();
-                if elapsed < NOTIFY_COOLDOWN_SECS {
-                    log::info!("[updater] 주기적 체크: 쿨다운 중 ({}초 남음)", NOTIFY_COOLDOWN_SECS - elapsed);
-                    return;
-                }
-            }
-
-            shared_state.lock().await.last_update_notification = Some(Utc::now());
+            log::info!("[updater] 자동 업데이트: v{} 발견, 설치 시작", version);
             let _ = app
                 .notification()
                 .builder()
-                .title("Jungle Bell 업데이트 알림")
-                .body(&format!("v{} 업데이트가 있습니다. 설정에서 확인하세요.", version))
+                .title("Jungle Bell 업데이트")
+                .body(&format!("v{}로 업데이트합니다. 잠시 후 재시작됩니다.", version))
                 .show();
-            log::info!("[updater] 주기적 업데이트 알림 발송: v{}", version);
+            match update.download_and_install(|_, _| {}, || {}).await {
+                Ok(_) => {
+                    log::info!("[updater] 자동 업데이트 완료, 재시작");
+                    app.restart();
+                }
+                Err(e) => {
+                    log::error!("[updater] 자동 업데이트 실패: {}", e);
+                }
+            }
         }
         Ok(None) => {
-            log::debug!("[updater] 주기적 체크: 최신 버전");
+            log::debug!("[updater] 자동 업데이트: 최신 버전");
+        }
+        Err(e) => {
+            log::warn!("[updater] 자동 업데이트 확인 실패: {}", e);
+        }
+    }
+}
+
+/// 업데이트 확인 후 `pending_update`에만 저장 — 알림·설치 없음.
+///
+/// 자동 업데이트가 꺼져 있을 때 주기적 체크 및 시작 시 사용.
+/// UI가 `get_pending_update`로 조회해 배너를 표시한다.
+pub(crate) async fn check_and_store_pending_update(app: &tauri::AppHandle, shared_state: &Arc<Mutex<AppState>>) {
+    let updater = match app.updater() {
+        Ok(u) => u,
+        Err(e) => {
+            log::debug!("[updater] updater 초기화 실패: {}", e);
+            return;
+        }
+    };
+
+    match updater.check().await {
+        Ok(Some(update)) => {
+            log::info!("[updater] 업데이트 발견 (수동): v{}", update.version);
+            shared_state.lock().await.pending_update = Some(update.version);
+        }
+        Ok(None) => {
+            log::debug!("[updater] 최신 버전 (수동 체크)");
             shared_state.lock().await.pending_update = None;
         }
         Err(e) => {
-            log::warn!("[updater] 주기적 체크 실패: {}", e);
+            log::warn!("[updater] 업데이트 확인 실패: {}", e);
         }
+    }
+}
+
+/// 주기적 업데이트 체크.
+///
+/// - 자동 업데이트 ON: 즉시 다운로드·설치·재시작.
+/// - 자동 업데이트 OFF: `pending_update`에 버전 저장 → UI 배너로 표시.
+pub(crate) async fn check_update_periodic(app: &tauri::AppHandle, shared_state: &Arc<Mutex<AppState>>) {
+    let auto_update = shared_state.lock().await.config.auto_update;
+    if auto_update {
+        auto_install_update(app.clone()).await;
+    } else {
+        check_and_store_pending_update(app, shared_state).await;
     }
 }

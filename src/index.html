@@ -49,6 +49,7 @@
             <th></th>
             <td>
                 <button id="check-update-btn" class="link-btn">업데이트 확인</button>
+                <span id="pending-update-badge" style="display:none; margin-left:6px; font-size:var(--font-size-hint); color:var(--color-accent);"></span>
             </td>
         </tr>
     </table>
@@ -224,19 +225,19 @@
             const version = await invoke('get_pending_update');
             const banner = document.getElementById('update-banner');
             const bannerText = document.getElementById('update-banner-text');
+            const badge = document.getElementById('pending-update-badge');
             if (version) {
                 bannerText.textContent = 'v' + version + ' 업데이트가 있습니다';
                 banner.style.display = 'flex';
+                badge.textContent = 'v' + version + ' 사용 가능';
+                badge.style.display = 'inline';
             } else {
                 banner.style.display = 'none';
+                badge.style.display = 'none';
             }
         } catch (e) {
             console.error('[update] 상태 조회 실패:', e);
         }
-    }
-
-    async function installUpdate() {
-        await invoke('check_and_notify_update').catch(console.error);
     }
 
     window.addEventListener('DOMContentLoaded', async () => {
@@ -247,13 +248,13 @@
                     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
                     btn.classList.add('active');
                     document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
-                    if (btn.dataset.tab === 'general') {
-                        refreshUpdateStatus();
-                    }
+                    if (btn.dataset.tab === 'general') refreshUpdateStatus();
                 });
             });
             document.getElementById('app-version').textContent = 'v' + await invoke('get_app_version');
-            document.getElementById('update-now-btn').addEventListener('click', installUpdate);
+            document.getElementById('update-now-btn').addEventListener('click', () => {
+                invoke('check_and_notify_update').catch(console.error);
+            });
             refreshUpdateStatus();
 
             const autoStartToggle = document.getElementById('auto-start-toggle');
