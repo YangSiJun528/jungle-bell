@@ -97,6 +97,16 @@ fn spawn_startup_update_check(app: tauri::AppHandle, shared_state: Arc<Mutex<App
     });
 }
 
+fn spawn_periodic_update_check(app: tauri::AppHandle, shared_state: Arc<Mutex<AppState>>) {
+    tauri::async_runtime::spawn(async move {
+        const INTERVAL_SECS: u64 = 60 * 60; // 1시간마다 체크
+        loop {
+            tokio::time::sleep(tokio::time::Duration::from_secs(INTERVAL_SECS)).await;
+            updater::check_update_periodic(&app, &shared_state).await;
+        }
+    });
+}
+
 /// 앱 진입점.
 ///
 /// Tauri 앱은 기본적으로 보이는 창이 없음 (tauri.conf.json에서 설정).
@@ -162,6 +172,7 @@ pub fn run() {
             commands::get_auto_update,
             commands::set_auto_update,
             commands::get_app_version,
+            commands::get_pending_update,
             commands::check_and_notify_update,
             commands::get_auto_start,
             commands::set_auto_start,
@@ -202,6 +213,7 @@ pub fn run() {
             notify_startup_status(app.handle(), &shared_state);
             build_checker_window(app.handle())?;
             spawn_startup_update_check(app.handle().clone(), shared_state.clone());
+            spawn_periodic_update_check(app.handle().clone(), shared_state.clone());
 
             // 백그라운드 루프: 상태 계산, 트레이 갱신, 체커 주기적 리로드.
             let app_handle = app.handle().clone();

@@ -620,3 +620,33 @@ tr.end-notif-field.disabled {
 .footer-links a:hover {
     text-decoration: underline;
 }
+
+/* Update banner */
+
+.update-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    background: var(--color-accent);
+    color: var(--color-toggle-knob);
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-bottom: 10px;
+    font-size: var(--font-size-table);
+}
+
+.update-banner-btn {
+    flex-shrink: 0;
+    background: var(--color-toggle-knob);
+    border: none;
+    color: var(--color-accent);
+    border-radius: 6px;
+    padding: 3px 10px;
+    font-size: var(--font-size-table);
+    cursor: pointer;
+}
+
+.update-banner-btn:hover {
+    opacity: 0.85;
+}

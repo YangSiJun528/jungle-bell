@@ -251,6 +251,14 @@ pub async fn set_debug_mode(state: tauri::State<'_, Arc<Mutex<AppState>>>, enabl
 
 // ── 업데이트 ─────────────────────────────────────────────
 
+/// Tauri 커맨드: 주기적 체크에서 발견된 업데이트 버전 반환. None이면 최신 버전.
+#[tauri::command]
+pub async fn get_pending_update(
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+) -> Result<Option<String>, String> {
+    Ok(state.lock().await.pending_update.clone())
+}
+
 /// Tauri 커맨드: 업데이트 확인 후 결과를 시스템 다이얼로그로 표시.
 #[tauri::command]
 pub async fn check_and_notify_update(app: tauri::AppHandle) -> Result<(), String> {
