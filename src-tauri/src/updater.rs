@@ -141,19 +141,24 @@ pub(crate) async fn check_and_store_pending_update(app: &tauri::AppHandle, share
         }
     };
 
-    match updater.check().await {
+    let pending = match updater.check().await {
         Ok(Some(update)) => {
             log::info!("[updater] 업데이트 발견 (수동): v{}", update.version);
-            shared_state.lock().await.pending_update = Some(update.version);
+            let version = update.version.clone();
+            shared_state.lock().await.pending_update = Some(version.clone());
+            Some(version)
         }
         Ok(None) => {
             log::debug!("[updater] 최신 버전 (수동 체크)");
             shared_state.lock().await.pending_update = None;
+            None
         }
         Err(e) => {
             log::warn!("[updater] 업데이트 확인 실패: {}", e);
+            return;
         }
-    }
+    };
+    crate::tray::update_tray_version(app, pending);
 }
 
 /// 주기적 업데이트 체크.

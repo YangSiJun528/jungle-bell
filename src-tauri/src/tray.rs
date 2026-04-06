@@ -30,6 +30,7 @@ const ICON_WARNING: &[u8] = include_bytes!("../icons/tray-orange.png");
 /// Tauri managed state로 저장: `Arc<TokioMutex<TrayState>>`.
 pub struct TrayState {
     pub status_item: MenuItem<tauri::Wry>,
+    pub version_item: MenuItem<tauri::Wry>,
 }
 
 /// 상태에 따라 트레이 아이콘 선택.
@@ -184,6 +185,12 @@ fn handle_menu_event(app: &tauri::AppHandle, event_id: &str) {
     match event_id {
         "open_page" => open_attendance_window(app),
         "settings" => open_settings_window(app),
+        "version" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                crate::updater::prompt_and_install_update(app, false).await;
+            });
+        }
         "quit" => app.exit(0),
         _ => {}
     }
@@ -199,6 +206,11 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     let settings = MenuItemBuilder::with_id("settings", "설정...").build(app)?;
 
+    let current_version = app.package_info().version.to_string();
+    let version_item = MenuItemBuilder::with_id("version", format!("v{}", current_version))
+        .enabled(false)
+        .build(app)?;
+
     let quit = MenuItemBuilder::with_id("quit", "종료").build(app)?;
 
     let menu = MenuBuilder::new(app)
@@ -207,12 +219,14 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .item(&open_page)
         .item(&settings)
         .separator()
+        .item(&version_item)
         .item(&quit)
         .build()?;
 
     // 상태 아이템을 Tauri managed state에 저장해서 update_tray()에서 접근 가능하게 함.
     let tray_state = Arc::new(TokioMutex::new(TrayState {
         status_item: status_item.clone(),
+        version_item: version_item.clone(),
     }));
     app.manage(tray_state);
 
@@ -388,6 +402,24 @@ mod tests {
             "Jungle Bell - 오늘 출석 완료"
         );
     }
+}
+
+/// 트레이 버전 메뉴 아이템 갱신.
+///
+/// - `pending_update` = Some(version): "v{current} (업데이트 가능)" — 클릭 가능
+/// - `pending_update` = None: "v{current}" — 비활성(회색)
+pub fn update_tray_version(app: &tauri::AppHandle, pending_update: Option<String>) {
+    let current_version = app.package_info().version.to_string();
+    let (text, enabled) = if pending_update.is_some() {
+        (format!("v{} (업데이트 가능)", current_version), true)
+    } else {
+        (format!("v{}", current_version), false)
+    };
+    let tray_state: tauri::State<Arc<TokioMutex<TrayState>>> = app.state();
+    if let Ok(ts) = tray_state.try_lock() {
+        let _ = ts.version_item.set_text(text);
+        let _ = ts.version_item.set_enabled(enabled);
+    };
 }
 
 /// 트레이 아이콘, 툴팁, 상태 메뉴 텍스트 갱신.
