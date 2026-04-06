@@ -32,6 +32,11 @@ pub fn run() {
     let shared_state = Arc::new(Mutex::new(AppState::new(config)));
 
     tauri::Builder::default()
+        // single-instance 플러그인: 공식 문서 권장대로 가장 먼저 등록한다.
+        // 이미 실행 중인 인스턴스가 있으면 두 번째 실행을 차단한다.
+        .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {
+            log::info!("[app] 다른 인스턴스 실행이 감지되어 차단되었습니다");
+        }))
         // 로그 플러그인: stdout(터미널) + 파일(플랫폼 로그 디렉터리) 동시 출력.
         // KeepOne 전략으로 500KB 초과 시 이전 파일 삭제 → 최대 ~1MB 유지.
         // 로그 위치: macOS ~/Library/Logs/dev.sijun-yang.jungle-bell/
@@ -55,10 +60,6 @@ pub fn run() {
                 })
                 .build(),
         )
-        // single-instance 플러그인: 이미 실행 중인 인스턴스가 있으면 두 번째 실행을 차단.
-        .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {
-            log::info!("[app] 다른 인스턴스 실행이 감지되어 차단되었습니다");
-        }))
         // autostart 플러그인: 시스템 시작 시 앱 자동 실행 (macOS: LaunchAgent)
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
