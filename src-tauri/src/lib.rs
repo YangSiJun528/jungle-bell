@@ -1,3 +1,5 @@
+mod attendance_day;
+mod autostart;
 mod checker;
 mod commands;
 mod config;
@@ -16,6 +18,84 @@ use state::AppState;
 
 /// 로그 파일 최대 크기 (5 MB). 초과 시 이전 파일 삭제 후 새 파일 시작.
 const MAX_LOG_FILE_SIZE: u128 = 5_000_000;
+
+fn sync_auto_start_setting(app: &tauri::AppHandle, shared_state: &Arc<Mutex<AppState>>) {
+    let auto_start = shared_state.try_lock().map(|s| s.config.auto_start).unwrap_or(true);
+
+    if let Err(e) = autostart::sync_auto_start(app, auto_start) {
+        let action = if auto_start { "등록" } else { "해제" };
+        log::warn!("[app] 자동 시작 {} 실패: {}", action, e);
+    }
+}
+
+fn notify_startup_status(app: &tauri::AppHandle, shared_state: &Arc<Mutex<AppState>>) {
+    use tauri_plugin_notification::NotificationExt;
+
+    let mut state = shared_state.try_lock().unwrap();
+    let current_version = app.package_info().version.to_string();
+
+    match &state.config.last_version {
+        None => {
+            let _ = app
+                .notification()
+                .builder()
+                .title("Jungle Bell 설치 완료")
+                .body("트레이 아이콘에서 출석 창을 열고 LMS에 로그인해 주세요.")
+                .show();
+            log::info!("[app] 환영 알림 발송 (첫 설치)");
+        }
+        Some(last) if last != &current_version => {
+            let _ = app
+                .notification()
+                .builder()
+                .title("Jungle Bell 업데이트 완료")
+                .body(&format!("v{} → v{}로 업데이트되었습니다.", last, current_version))
+                .show();
+            log::info!("[app] 업데이트 완료 알림 발송: v{} → v{}", last, current_version);
+        }
+        _ => {}
+    }
+
+    state.config.last_version = Some(current_version);
+    state.config.welcome_notification_sent = true;
+    state.config.save();
+}
+
+fn build_checker_window(app: &tauri::AppHandle) -> tauri::Result<tauri::WebviewWindow> {
+    let checker_script = include_str!("../../src/checker.js");
+    let checker = tauri::WebviewWindowBuilder::new(
+        app,
+        "checker",
+        tauri::WebviewUrl::External("https://jungle-lms.krafton.com/check-in".parse().unwrap()),
+    )
+    .title("Jungle Bell")
+    .visible(false)
+    .focused(false)
+    .skip_taskbar(true)
+    .initialization_script(checker_script)
+    .build()?;
+
+    let app_handle = app.clone();
+    checker.on_window_event(move |event| {
+        if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+            api.prevent_close();
+            if let Some(window) = app_handle.get_webview_window("checker") {
+                let _ = window.hide();
+            }
+        }
+    });
+
+    Ok(checker)
+}
+
+fn spawn_startup_update_check(app: tauri::AppHandle, shared_state: Arc<Mutex<AppState>>) {
+    tauri::async_runtime::spawn(async move {
+        let auto_update = shared_state.lock().await.config.auto_update;
+        if auto_update {
+            updater::prompt_and_install_update(app, true).await;
+        }
+    });
+}
 
 /// 앱 진입점.
 ///
@@ -117,95 +197,11 @@ pub fn run() {
 
             // 자동 시작: Config 값을 기준으로 OS 상태를 동기화.
             // 기본값이 true이므로 첫 설치 시 자동으로 등록됨.
-            {
-                use tauri_plugin_autostart::ManagerExt as AutostartManagerExt;
-                let auto_start = shared_state.try_lock().map(|s| s.config.auto_start).unwrap_or(true);
-                let autolaunch = app.autolaunch();
-                if auto_start {
-                    if let Err(e) = autolaunch.enable() {
-                        log::warn!("[app] 자동 시작 등록 실패: {}", e);
-                    }
-                } else if let Err(e) = autolaunch.disable() {
-                    log::warn!("[app] 자동 시작 해제 실패: {}", e);
-                }
-            }
-
+            sync_auto_start_setting(app.handle(), &shared_state);
             tray::setup_tray(app)?;
-
-            // 환영 알림 또는 업데이트 완료 알림.
-            // - last_version이 None이면 첫 설치 → 환영 알림 (로그인 요청)
-            // - last_version이 현재 버전과 다르면 업데이트 완료 → 업데이트 알림
-            // - 같으면 일반 시작 → 알림 없음
-            {
-                use tauri_plugin_notification::NotificationExt;
-                let mut state = shared_state.try_lock().unwrap();
-                let current_version = app.package_info().version.to_string();
-
-                match &state.config.last_version {
-                    None => {
-                        // 첫 설치: 로그인 요청 알림
-                        let _ = app.notification()
-                            .builder()
-                            .title("Jungle Bell 설치 완료")
-                            .body("트레이 아이콘에서 출석 창을 열고 LMS에 로그인해 주세요.")
-                            .show();
-                        log::info!("[app] 환영 알림 발송 (첫 설치)");
-                    }
-                    Some(last) if last != &current_version => {
-                        // 업데이트 완료
-                        let _ = app.notification()
-                            .builder()
-                            .title("Jungle Bell 업데이트 완료")
-                            .body(&format!("v{} → v{}로 업데이트되었습니다.", last, current_version))
-                            .show();
-                        log::info!("[app] 업데이트 완료 알림 발송: v{} → v{}", last, current_version);
-                    }
-                    _ => {}
-                }
-
-                state.config.last_version = Some(current_version);
-                state.config.welcome_notification_sent = true;
-                state.config.save();
-            }
-
-            // 숨겨진 WebView로 LMS 출석 페이지를 로드.
-            // checker.js가 initialization_script로 주입되어 DOM을 읽고,
-            // invoke()를 통해 Rust 쪽으로 출석 상태를 보고한다.
-            let checker_script = include_str!("../../src/checker.js");
-            let checker = tauri::WebviewWindowBuilder::new(
-                app,
-                "checker",
-                tauri::WebviewUrl::External("https://jungle-lms.krafton.com/check-in".parse().unwrap()),
-            )
-            .title("Jungle Bell")
-            .visible(false)
-            .focused(false)
-            .skip_taskbar(true)
-            // initialization_script: 이 WebView의 모든 페이지 로드 시 실행되는 JS
-            .initialization_script(checker_script)
-            .build()?;
-
-            // 체커 WebView가 닫히면 숨기기만 함 (출석 모니터링을 계속하기 위해).
-            let app_handle_close = app.handle().clone();
-            checker.on_window_event(move |event| {
-                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                    api.prevent_close();
-                    if let Some(w) = app_handle_close.get_webview_window("checker") {
-                        let _ = w.hide();
-                    }
-                }
-            });
-
-            // 시작 시 업데이트 확인 (백그라운드). auto_update 설정이 꺼져 있으면 건너뜀.
-            let app_handle_update = app.handle().clone();
-            let shared_state_update = shared_state.clone();
-            tauri::async_runtime::spawn(async move {
-                let auto_update = shared_state_update.lock().await.config.auto_update;
-                if !auto_update {
-                    return;
-                }
-                updater::prompt_and_install_update(app_handle_update, true).await;
-            });
+            notify_startup_status(app.handle(), &shared_state);
+            build_checker_window(app.handle())?;
+            spawn_startup_update_check(app.handle().clone(), shared_state.clone());
 
             // 백그라운드 루프: 상태 계산, 트레이 갱신, 체커 주기적 리로드.
             let app_handle = app.handle().clone();

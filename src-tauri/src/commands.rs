@@ -7,12 +7,11 @@
 use std::process::Command;
 use std::sync::Arc;
 
-use chrono::Timelike;
 use tauri::Manager;
 use tokio::sync::Mutex;
 
-use tauri_plugin_autostart::ManagerExt as AutostartManagerExt;
-
+use crate::attendance_day;
+use crate::autostart;
 use crate::checker;
 use crate::config::TimeOfDay;
 use crate::state::{self, AppState};
@@ -34,7 +33,10 @@ pub async fn report_attendance_status(
         let s = state.lock().await;
         log::info!(
             "[checker] report: needs_login={} morning={} evening={} current_phase={:?}",
-            status.needs_login, status.morning_done, status.evening_done, s.phase,
+            status.needs_login,
+            status.morning_done,
+            status.evening_done,
+            s.phase,
         );
         drop(s);
     }
@@ -122,12 +124,42 @@ macro_rules! setting_time {
 // ── 매크로 생성 설정 커맨드 ──────────────────────────────
 
 setting_bool!(get_auto_update, set_auto_update, auto_update, "자동 업데이트 설정");
-setting_bool!(get_start_notification_enabled, set_start_notification_enabled, start_notification_enabled, "시작 출석 알림 설정");
-setting_bool!(get_end_notification_enabled, set_end_notification_enabled, end_notification_enabled, "종료 출석 알림 설정");
-setting_u32!(get_start_notification_interval, set_start_notification_interval, start_notification_interval_mins, "시작 출석 알림 간격");
-setting_u32!(get_end_notification_interval, set_end_notification_interval, end_notification_interval_mins, "종료 출석 알림 간격");
-setting_time!(get_notification_start, set_notification_start, notification_start, "알림 시작 시각");
-setting_time!(get_notification_end, set_notification_end, notification_end, "알림 종료 시각");
+setting_bool!(
+    get_start_notification_enabled,
+    set_start_notification_enabled,
+    start_notification_enabled,
+    "시작 출석 알림 설정"
+);
+setting_bool!(
+    get_end_notification_enabled,
+    set_end_notification_enabled,
+    end_notification_enabled,
+    "종료 출석 알림 설정"
+);
+setting_u32!(
+    get_start_notification_interval,
+    set_start_notification_interval,
+    start_notification_interval_mins,
+    "시작 출석 알림 간격"
+);
+setting_u32!(
+    get_end_notification_interval,
+    set_end_notification_interval,
+    end_notification_interval_mins,
+    "종료 출석 알림 간격"
+);
+setting_time!(
+    get_notification_start,
+    set_notification_start,
+    notification_start,
+    "알림 시작 시각"
+);
+setting_time!(
+    get_notification_end,
+    set_notification_end,
+    notification_end,
+    "알림 종료 시각"
+);
 
 setting_bool!(get_skip_sunday, set_skip_sunday, skip_sunday, "일요일 알림 끄기");
 
@@ -140,20 +172,8 @@ setting_bool!(get_skip_sunday, set_skip_sunday, skip_sunday, "일요일 알림 �
 pub async fn get_skip_attendance(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<bool, String> {
     let s = state.lock().await;
     let kst_now = chrono::Utc::now().with_timezone(&state::kst());
-    let today = kst_now.format("%Y-%m-%d").to_string();
-    if s.config.skip_attendance.as_deref() == Some(today.as_str()) {
-        return Ok(true);
-    }
-    // 자정~morning_start 사이: 전날 skip이 아직 유효
-    if kst_now.hour() < s.config.morning_start.hour as u32 {
-        let yesterday = (kst_now - chrono::Duration::days(1))
-            .format("%Y-%m-%d")
-            .to_string();
-        if s.config.skip_attendance.as_deref() == Some(yesterday.as_str()) {
-            return Ok(true);
-        }
-    }
-    Ok(false)
+
+    Ok(attendance_day::is_skip_attendance_active(&s.config, kst_now))
 }
 
 /// Tauri 커맨드: 이번 출석 알림 끄기 설정 변경 및 저장.
@@ -162,12 +182,8 @@ pub async fn get_skip_attendance(state: tauri::State<'_, Arc<Mutex<AppState>>>) 
 pub async fn set_skip_attendance(state: tauri::State<'_, Arc<Mutex<AppState>>>, enabled: bool) -> Result<(), String> {
     let mut s = state.lock().await;
     s.config.skip_attendance = if enabled {
-        Some(
-            chrono::Utc::now()
-                .with_timezone(&state::kst())
-                .format("%Y-%m-%d")
-                .to_string(),
-        )
+        let kst_now = chrono::Utc::now().with_timezone(&state::kst());
+        Some(attendance_day::calendar_date_string(kst_now))
     } else {
         None
     };
@@ -203,13 +219,7 @@ pub async fn set_auto_start(
         s.config.auto_start = enabled;
         s.config.save();
     }
-    let autolaunch = app.autolaunch();
-    let result = if enabled {
-        autolaunch.enable()
-    } else {
-        autolaunch.disable()
-    };
-    result.map_err(|e| e.to_string())?;
+    autostart::sync_auto_start(&app, enabled)?;
     Ok(())
 }
 

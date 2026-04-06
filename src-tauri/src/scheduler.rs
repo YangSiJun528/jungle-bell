@@ -17,6 +17,7 @@ use tokio::sync::Mutex;
 use tauri::Manager;
 use tauri_plugin_notification::NotificationExt;
 
+use crate::attendance_day;
 use crate::checker;
 use crate::config::Config;
 use crate::state::{self, kst, AppState, DailyPhase};
@@ -30,7 +31,6 @@ const TICK_INTERVAL_IDLE: u64 = 300;
 /// 체커 WebView 리로드 간격 (초). 세션/토큰 갱신 목적.
 /// 액세스 토큰이 1시간 만료이므로 15분 간격으로 리로드하여 갱신.
 const RELOAD_INTERVAL_NORMAL: u64 = 15 * 60; // 15분
-
 
 /// 알림 판단 결과.
 pub(crate) struct NotificationDecision {
@@ -53,6 +53,130 @@ pub(crate) struct TickResult {
     pub tray_update: Option<(DailyPhase, Option<i64>, bool)>,
     /// 일일 리셋이 수행되었는지 여부.
     pub daily_reset: bool,
+}
+
+fn is_phase_actionable(phase: DailyPhase) -> bool {
+    matches!(
+        phase,
+        DailyPhase::NeedStart | DailyPhase::StartOverdue | DailyPhase::NeedEnd
+    )
+}
+
+fn compute_phase_update(state: &mut AppState, now: DateTime<Utc>) -> Option<(DailyPhase, Option<i64>)> {
+    if !state.data_loaded {
+        return None;
+    }
+
+    let (phase, remaining) =
+        state::compute_daily_phase(&state.config, now, state.morning_checked, state.evening_checked);
+    state.phase = phase;
+
+    Some((phase, remaining))
+}
+
+fn compute_notification_for_phase(
+    state: &mut AppState,
+    now: DateTime<Utc>,
+    kst_now: DateTime<FixedOffset>,
+    phase: DailyPhase,
+    remaining: Option<i64>,
+) -> Option<(&'static str, String)> {
+    let secs_since_last = state
+        .last_notification
+        .map(|last| (now - last).num_seconds().max(0) as u64);
+    let decision = should_notify(
+        &state.config,
+        phase,
+        remaining,
+        state.needs_login,
+        kst_now,
+        secs_since_last,
+    );
+    log::debug!(
+        "[scheduler] notify decision: reason={} phase={:?} secs_since_last={:?}",
+        decision.reason,
+        phase,
+        secs_since_last,
+    );
+
+    let message = decision.message.filter(|_| decision.send);
+    if message.is_some() {
+        state.last_notification = Some(now);
+    }
+    message
+}
+
+fn should_reload_checker(state: &mut AppState, now: DateTime<Utc>) -> bool {
+    match state.last_reload {
+        Some(last) if (now - last).num_seconds() as u64 >= RELOAD_INTERVAL_NORMAL => {
+            state.last_reload = Some(now);
+            true
+        }
+        Some(_) => false,
+        None => {
+            state.last_reload = Some(now);
+            false
+        }
+    }
+}
+
+fn expire_login_retry_window(state: &mut AppState, now: DateTime<Utc>) {
+    if matches!(state.login_retry_until, Some(until) if now >= until) {
+        state.login_retry_until = None;
+    }
+}
+
+fn apply_tick_effects(app_handle: &tauri::AppHandle, phase: DailyPhase, result: &TickResult) {
+    if let Some((phase, remaining, needs_login)) = result.tray_update {
+        tray::update_tray(app_handle, phase, remaining, needs_login);
+    }
+
+    if let Some((title, body)) = &result.notification {
+        match app_handle.notification().builder().title(*title).body(body).show() {
+            Ok(_) => log::info!("[scheduler] notification sent: phase={:?}", phase),
+            Err(e) => log::error!("[scheduler] notification show failed: {e}"),
+        }
+    }
+
+    if result.phase_changed {
+        let _ = tauri::Emitter::emit(app_handle, "phase-changed", &phase);
+    }
+
+    if result.should_reload {
+        if let Some(checker) = app_handle.get_webview_window("checker") {
+            log::info!("[checker] webview reloaded for session refresh");
+            let _ = checker.navigate("https://jungle-lms.krafton.com/check-in".parse().unwrap());
+        }
+    }
+}
+
+fn log_tick_state(now: DateTime<Utc>, state: &AppState, result: &TickResult) {
+    if result.daily_reset {
+        let kst_now = now.with_timezone(&kst());
+        log::info!("[scheduler] daily reset at KST={}", kst_now.format("%Y-%m-%d %H:%M:%S"));
+    }
+
+    if result.phase_changed {
+        log::info!(
+            "[scheduler] phase={:?} started={} ended={} remaining={:?} needs_login={}",
+            state.phase,
+            state.morning_checked,
+            state.evening_checked,
+            result.tray_update.as_ref().and_then(|t| t.1),
+            state.needs_login,
+        );
+    }
+
+    log::debug!(
+        "[scheduler] state: phase={:?} morning_checked={} evening_checked={} \
+         needs_login={} data_loaded={} kst={}",
+        state.phase,
+        state.morning_checked,
+        state.evening_checked,
+        state.needs_login,
+        state.data_loaded,
+        now.with_timezone(&kst()).format("%Y-%m-%d %H:%M:%S"),
+    );
 }
 
 /// 일일 리셋 판단: KST 날짜가 바뀌고 morning_start 이후이면 리셋 수행.
@@ -87,30 +211,28 @@ pub(crate) fn should_notify(
     secs_since_last: Option<u64>,
 ) -> NotificationDecision {
     if needs_login {
-        return NotificationDecision { send: false, reason: "needs_login", message: None };
+        return NotificationDecision {
+            send: false,
+            reason: "needs_login",
+            message: None,
+        };
     }
 
     // 일요일 알림 끄기
     if config.skip_sunday && kst_now.weekday() == Weekday::Sun {
-        return NotificationDecision { send: false, reason: "skip_sunday", message: None };
+        return NotificationDecision {
+            send: false,
+            reason: "skip_sunday",
+            message: None,
+        };
     }
 
-    // 이번 출석 알림 끄기: morning_start 이전이면 전날 날짜도 매칭하여
-    // 해당 출석일의 알림이 다음날 morning_start까지 차단되도록 함.
-    if let Some(skip_date) = &config.skip_attendance {
-        let today = kst_now.format("%Y-%m-%d").to_string();
-        if skip_date == &today {
-            return NotificationDecision { send: false, reason: "skip_attendance", message: None };
-        }
-        // 자정~morning_start 사이: 전날 skip이 아직 유효
-        if kst_now.hour() < config.morning_start.hour as u32 {
-            let yesterday = (kst_now - chrono::Duration::days(1))
-                .format("%Y-%m-%d")
-                .to_string();
-            if skip_date == &yesterday {
-                return NotificationDecision { send: false, reason: "skip_attendance", message: None };
-            }
-        }
+    if attendance_day::is_skip_attendance_active(config, kst_now) {
+        return NotificationDecision {
+            send: false,
+            reason: "skip_attendance",
+            message: None,
+        };
     }
 
     // 시작/종료 출석별 알림 활성화 여부 확인
@@ -120,7 +242,11 @@ pub(crate) fn should_notify(
         _ => false,
     };
     if !enabled {
-        return NotificationDecision { send: false, reason: "disabled", message: None };
+        return NotificationDecision {
+            send: false,
+            reason: "disabled",
+            message: None,
+        };
     }
 
     let kst_secs = (kst_now.hour() as i64) * 3600 + (kst_now.minute() as i64) * 60 + (kst_now.second() as i64);
@@ -129,9 +255,7 @@ pub(crate) fn should_notify(
     let evening_start_secs = config.evening_start.to_secs();
 
     let in_window = match phase {
-        DailyPhase::NeedStart | DailyPhase::StartOverdue => {
-            kst_secs >= notif_start_secs
-        }
+        DailyPhase::NeedStart | DailyPhase::StartOverdue => kst_secs >= notif_start_secs,
         DailyPhase::NeedEnd => {
             if notif_end_secs <= evening_start_secs {
                 // 자정 넘김 (예: 23:00~01:00)
@@ -144,7 +268,11 @@ pub(crate) fn should_notify(
     };
 
     if !in_window {
-        return NotificationDecision { send: false, reason: "outside_window", message: None };
+        return NotificationDecision {
+            send: false,
+            reason: "outside_window",
+            message: None,
+        };
     }
 
     // 쓰로틀링
@@ -160,7 +288,11 @@ pub(crate) fn should_notify(
     };
 
     if throttled {
-        return NotificationDecision { send: false, reason: "throttled", message: None };
+        return NotificationDecision {
+            send: false,
+            reason: "throttled",
+            message: None,
+        };
     }
 
     let (title, body) = notification_message(phase, remaining);
@@ -183,27 +315,21 @@ pub(crate) fn compute_tick_interval(
     let base_interval = if !data_loaded {
         5
     } else if needs_login {
-        if attendance_open || login_retry_active {
-            10
-        } else {
-            600
+        match (attendance_open, login_retry_active) {
+            (true, _) | (_, true) => 10,
+            _ => 600,
         }
     } else {
-        match phase {
-            DailyPhase::NeedStart | DailyPhase::StartOverdue | DailyPhase::NeedEnd => TICK_INTERVAL_ACTIVE,
-            _ => TICK_INTERVAL_IDLE,
+        if is_phase_actionable(phase) {
+            TICK_INTERVAL_ACTIVE
+        } else {
+            TICK_INTERVAL_IDLE
         }
     };
 
-    if let Some(secs) = remaining {
-        let secs = secs as u64;
-        if secs > 0 && secs < base_interval {
-            secs + 1
-        } else {
-            base_interval
-        }
-    } else {
-        base_interval
+    match remaining.map(|secs| secs as u64) {
+        Some(secs) if secs > 0 && secs < base_interval => secs + 1,
+        _ => base_interval,
     }
 }
 
@@ -221,15 +347,22 @@ pub(crate) fn notification_message(phase: DailyPhase, remaining: Option<i64>) ->
     match phase {
         DailyPhase::NeedStart => (
             "출석 체크 시간입니다",
-            remaining.map(&format_remaining).unwrap_or_else(|| "출석 체크를 해주세요.".into()),
+            remaining
+                .map(&format_remaining)
+                .unwrap_or_else(|| "출석 체크를 해주세요.".into()),
         ),
         DailyPhase::StartOverdue => match remaining {
-            Some(r) if r > 0 => ("출석 체크 지각 임박!", format!("마감까지 {}분 남았습니다.", (r + 59) / 60)),
+            Some(r) if r > 0 => (
+                "출석 체크 지각 임박!",
+                format!("마감까지 {}분 남았습니다.", (r + 59) / 60),
+            ),
             _ => ("출석 체크 지각!", "빨리 체크인하세요.".into()),
         },
         DailyPhase::NeedEnd => (
             "학습 종료 체크가 필요합니다",
-            remaining.map(&format_remaining).unwrap_or_else(|| "학습 종료 체크를 해주세요.".into()),
+            remaining
+                .map(&format_remaining)
+                .unwrap_or_else(|| "학습 종료 체크를 해주세요.".into()),
         ),
         _ => ("Jungle Bell", "출석 상태를 확인하세요.".into()),
     }
@@ -239,50 +372,20 @@ pub(crate) fn notification_message(phase: DailyPhase, remaining: Option<i64>) ->
 ///
 /// 상태를 갱신하고, 부수효과 지시를 `TickResult`로 반환.
 /// 실제 부수효과(tray 갱신, 알림 발송, WebView 리로드)는 호출자가 수행.
-pub(crate) fn compute_tick(
-    state: &mut AppState,
-    now: DateTime<Utc>,
-    attendance_open: bool,
-) -> TickResult {
+pub(crate) fn compute_tick(state: &mut AppState, now: DateTime<Utc>, attendance_open: bool) -> TickResult {
     let kst_now = now.with_timezone(&kst());
 
     // --- 일일 리셋 ---
     let daily_reset = check_daily_reset(state, kst_now);
 
     // --- 상태 계산 ---
-    let mut remaining: Option<i64> = None;
-    let mut phase_changed = false;
-    let mut notification = None;
-    let mut tray_update = None;
-
-    if state.data_loaded {
-        let (phase, rem) = state::compute_daily_phase(
-            &state.config, now, state.morning_checked, state.evening_checked,
-        );
-        remaining = rem;
-        phase_changed = phase != state.phase;
-        state.phase = phase;
-
-        tray_update = Some((phase, remaining, state.needs_login));
-
-        // --- 네이티브 알림 ---
-        let secs_since_last = state.last_notification.map(|last| {
-            (now - last).num_seconds().max(0) as u64
-        });
-        let decision = should_notify(
-            &state.config, phase, remaining, state.needs_login, kst_now, secs_since_last,
-        );
-        log::debug!(
-            "[scheduler] notify decision: reason={} phase={:?} secs_since_last={:?}",
-            decision.reason, phase, secs_since_last,
-        );
-        if decision.send {
-            if let Some(msg) = decision.message {
-                notification = Some(msg);
-                state.last_notification = Some(now);
-            }
-        }
-    }
+    let previous_phase = state.phase;
+    let phase_update = compute_phase_update(state, now);
+    let remaining = phase_update.map(|(_, remaining)| remaining).unwrap_or(None);
+    let phase_changed = phase_update.map(|(phase, _)| phase != previous_phase).unwrap_or(false);
+    let tray_update = phase_update.map(|(phase, remaining)| (phase, remaining, state.needs_login));
+    let notification = phase_update
+        .and_then(|(phase, remaining)| compute_notification_for_phase(state, now, kst_now, phase, remaining));
 
     // --- 체커 WebView 주기적 리로드 ---
     // API 호출은 WebView 쿠키를 사용하므로 세션/토큰 갱신을 위해
@@ -291,29 +394,20 @@ pub(crate) fn compute_tick(
     // 로그인한 경우 세션이 자동 복구되도록 함.
     // 리로드 시 checker.js가 자동으로 initial check를 수행하므로
     // trigger_check를 건너뛰어 "Load failed" 레이스 컨디션을 방지.
-    let should_reload = match state.last_reload {
-        Some(last) => (now - last).num_seconds() as u64 >= RELOAD_INTERVAL_NORMAL,
-        None => {
-            state.last_reload = Some(now);
-            false
-        }
-    };
-    if should_reload {
-        state.last_reload = Some(now);
-    }
+    let should_reload = should_reload_checker(state, now);
 
     // --- 로그인 재시도 윈도우 만료 확인 ---
-    if let Some(until) = state.login_retry_until {
-        if now >= until {
-            state.login_retry_until = None;
-        }
-    }
+    expire_login_retry_window(state, now);
 
     // --- 적응형 틱 간격 ---
     let login_retry_active = state.login_retry_until.is_some();
     let tick_interval = compute_tick_interval(
-        state.data_loaded, state.needs_login, attendance_open,
-        login_retry_active, state.phase, remaining,
+        state.data_loaded,
+        state.needs_login,
+        attendance_open,
+        login_retry_active,
+        state.phase,
+        remaining,
     );
 
     TickResult {
@@ -350,59 +444,15 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
                 let attendance_open = app_handle.get_webview_window("attendance").is_some();
 
                 let result = compute_tick(&mut s, now, attendance_open);
+                let phase = s.phase;
 
-                if result.daily_reset {
-                    let kst_now = now.with_timezone(&kst());
-                    log::info!("[scheduler] daily reset at KST={}", kst_now.format("%Y-%m-%d %H:%M:%S"));
-                }
-
-                if result.phase_changed {
-                    log::info!(
-                        "[scheduler] phase={:?} started={} ended={} remaining={:?} needs_login={}",
-                        s.phase, s.morning_checked, s.evening_checked,
-                        result.tray_update.as_ref().map(|t| t.1).flatten(),
-                        s.needs_login,
-                    );
-                }
-
-                log::debug!(
-                    "[scheduler] state: phase={:?} morning_checked={} evening_checked={} \
-                     needs_login={} data_loaded={} kst={}",
-                    s.phase, s.morning_checked, s.evening_checked,
-                    s.needs_login, s.data_loaded,
-                    now.with_timezone(&kst()).format("%Y-%m-%d %H:%M:%S"),
-                );
-
-                // --- 부수효과 ---
-                if let Some((phase, remaining, needs_login)) = result.tray_update {
-                    tray::update_tray(&app_handle, phase, remaining, needs_login);
-                }
-
-                if let Some((title, body)) = &result.notification {
-                    match app_handle.notification().builder().title(*title).body(body).show() {
-                        Ok(_) => log::info!("[scheduler] notification sent: phase={:?}", s.phase),
-                        Err(e) => log::error!("[scheduler] notification show failed: {e}"),
-                    }
-                }
-
-                if result.phase_changed {
-                    let _ = tauri::Emitter::emit(&app_handle, "phase-changed", &s.phase);
-                }
-
-                if result.should_reload {
-                    if let Some(checker) = app_handle.get_webview_window("checker") {
-                        log::info!("[checker] webview reloaded for session refresh");
-                        let _ = checker.navigate("https://jungle-lms.krafton.com/check-in".parse().unwrap());
-                    }
-                }
+                log_tick_state(now, &s, &result);
+                apply_tick_effects(&app_handle, phase, &result);
 
                 result
             };
 
-            log::debug!(
-                "[scheduler] tick: interval={}s",
-                tick_result.tick_interval,
-            );
+            log::debug!("[scheduler] tick: interval={}s", tick_result.tick_interval,);
 
             // Rust가 오케스트레이터: 매 틱마다 JS 스냅샷 수집을 트리거.
             // 결과는 report_attendance_status 커맨드를 통해 비동기로 돌아온다.
@@ -419,8 +469,8 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::TimeZone;
     use crate::config::Config;
+    use chrono::TimeZone;
 
     fn kst_dt(h: u32, m: u32, s: u32) -> DateTime<FixedOffset> {
         FixedOffset::east_opt(9 * 3600)
@@ -522,7 +572,14 @@ mod tests {
         config.start_notification_enabled = false;
 
         // when
-        let d = should_notify(&config, DailyPhase::NeedStart, Some(3600), false, kst_dt(9, 30, 0), None);
+        let d = should_notify(
+            &config,
+            DailyPhase::NeedStart,
+            Some(3600),
+            false,
+            kst_dt(9, 30, 0),
+            None,
+        );
 
         // then
         assert!(!d.send);
@@ -596,7 +653,14 @@ mod tests {
         let config = Config::default();
 
         // when
-        let d = should_notify(&config, DailyPhase::NeedStart, Some(3600), false, kst_dt(9, 30, 0), None);
+        let d = should_notify(
+            &config,
+            DailyPhase::NeedStart,
+            Some(3600),
+            false,
+            kst_dt(9, 30, 0),
+            None,
+        );
 
         // then
         assert!(d.send);
@@ -609,7 +673,14 @@ mod tests {
         let config = Config::default();
 
         // when
-        let d = should_notify(&config, DailyPhase::NeedStart, Some(3600), false, kst_dt(9, 30, 0), Some(300));
+        let d = should_notify(
+            &config,
+            DailyPhase::NeedStart,
+            Some(3600),
+            false,
+            kst_dt(9, 30, 0),
+            Some(300),
+        );
 
         // then
         assert!(!d.send);
@@ -621,7 +692,14 @@ mod tests {
         let config = Config::default();
 
         // when: 901초 경과
-        let d = should_notify(&config, DailyPhase::NeedStart, Some(3600), false, kst_dt(9, 30, 0), Some(901));
+        let d = should_notify(
+            &config,
+            DailyPhase::NeedStart,
+            Some(3600),
+            false,
+            kst_dt(9, 30, 0),
+            Some(901),
+        );
 
         // then
         assert!(d.send);
@@ -1038,7 +1116,14 @@ mod tests {
         config.skip_attendance = Some("2026-03-17".into()); // kst_dt의 날짜와 동일
 
         // when
-        let d = should_notify(&config, DailyPhase::NeedStart, Some(3600), false, kst_dt(9, 30, 0), None);
+        let d = should_notify(
+            &config,
+            DailyPhase::NeedStart,
+            Some(3600),
+            false,
+            kst_dt(9, 30, 0),
+            None,
+        );
 
         // then
         assert!(!d.send);
@@ -1051,7 +1136,14 @@ mod tests {
         config.skip_attendance = Some("2026-03-16".into()); // 어제 날짜
 
         // when: 09:30 (morning_start=04:00 이후)
-        let d = should_notify(&config, DailyPhase::NeedStart, Some(3600), false, kst_dt(9, 30, 0), None);
+        let d = should_notify(
+            &config,
+            DailyPhase::NeedStart,
+            Some(3600),
+            false,
+            kst_dt(9, 30, 0),
+            None,
+        );
 
         // then
         assert!(d.send);
@@ -1149,7 +1241,14 @@ mod tests {
         let config = Config::default(); // skip_attendance = None
 
         // when
-        let d = should_notify(&config, DailyPhase::NeedStart, Some(3600), false, kst_dt(9, 30, 0), None);
+        let d = should_notify(
+            &config,
+            DailyPhase::NeedStart,
+            Some(3600),
+            false,
+            kst_dt(9, 30, 0),
+            None,
+        );
 
         // then
         assert!(d.send);

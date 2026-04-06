@@ -13,7 +13,7 @@ use tauri::{
     image::Image,
     menu::{MenuBuilder, MenuItem, MenuItemBuilder},
     tray::TrayIconBuilder,
-    Manager,
+    Manager, WebviewWindow,
 };
 
 const ATTENDANCE_URL: &str = "https://jungle-lms.krafton.com/check-in";
@@ -95,6 +95,100 @@ fn build_tooltip(phase: DailyPhase, remaining: Option<i64>, needs_login: bool) -
     format!("Jungle Bell - {}", status)
 }
 
+fn focus_window(window: &WebviewWindow<tauri::Wry>) {
+    let _ = window.show();
+    let _ = window.unminimize();
+
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_app_kit::NSApplication;
+        use objc2_foundation::MainThreadMarker;
+
+        if let Some(mtm) = MainThreadMarker::new() {
+            let ns_app = NSApplication::sharedApplication(mtm);
+            ns_app.activate();
+        }
+    }
+
+    let _ = window.set_focus();
+}
+
+fn activate_login_retry_window(app_handle: &tauri::AppHandle) {
+    let state: tauri::State<Arc<TokioMutex<AppState>>> = app_handle.state();
+    if let Ok(mut s) = state.try_lock() {
+        s.login_retry_until = Some(chrono::Utc::now() + chrono::Duration::seconds(LOGIN_RETRY_WINDOW_SECS as i64));
+    };
+}
+
+fn reload_checker(app_handle: &tauri::AppHandle) {
+    if let Some(checker) = app_handle.get_webview_window("checker") {
+        let _ = checker.navigate(ATTENDANCE_URL.parse().unwrap());
+    }
+}
+
+fn build_attendance_window(app: &tauri::AppHandle) {
+    let app_handle = app.clone();
+    if let Ok(window) = tauri::WebviewWindowBuilder::new(
+        app,
+        "attendance",
+        tauri::WebviewUrl::External(ATTENDANCE_URL.parse().unwrap()),
+    )
+    .title("Jungle Compass")
+    .inner_size(660.0, 700.0)
+    .resizable(true)
+    .focused(true)
+    .build()
+    {
+        window.on_window_event(move |event| {
+            if let tauri::WindowEvent::Destroyed = event {
+                log::info!("[tray] attendance page closed, reloading checker + activating login retry");
+                reload_checker(&app_handle);
+                activate_login_retry_window(&app_handle);
+            }
+        });
+    }
+}
+
+fn open_attendance_window(app: &tauri::AppHandle) {
+    log::info!("[tray] attendance window opened");
+
+    if let Some(window) = app.get_webview_window("attendance") {
+        focus_window(&window);
+    } else {
+        build_attendance_window(app);
+    }
+}
+
+fn build_settings_window(app: &tauri::AppHandle) {
+    let _ = tauri::WebviewWindowBuilder::new(app, "settings", tauri::WebviewUrl::App("index.html".into()))
+        .title("설정")
+        .inner_size(380.0, 520.0)
+        .resizable(false)
+        .minimizable(false)
+        .maximizable(false)
+        .focused(true)
+        .build();
+}
+
+fn open_settings_window(app: &tauri::AppHandle) {
+    log::info!("[tray] settings window opened");
+
+    if let Some(window) = app.get_webview_window("settings") {
+        focus_window(&window);
+    } else {
+        build_settings_window(app);
+    }
+}
+
+fn handle_menu_event(app: &tauri::AppHandle, event_id: &str) {
+    match event_id {
+        "open_page" => open_attendance_window(app),
+        "settings" => open_settings_window(app),
+        "quit" => app.exit(0),
+        _ => {}
+    }
+}
+
 /// 시스템 트레이 생성: 아이콘, 메뉴, 이벤트 핸들러 설정.
 pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let status_item = MenuItemBuilder::with_id("status", "로딩 중...")
@@ -126,95 +220,7 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .icon(Image::from_bytes(ICON_WARNING).expect("invalid icon PNG"))
         .tooltip("Jungle Bell")
         .menu(&menu)
-        .on_menu_event(move |app, event| match event.id().as_ref() {
-            "open_page" => {
-                log::info!("[tray] attendance window opened");
-                // 기존 출석 창이 있으면 재사용, 없으면 새로 생성.
-                if let Some(window) = app.get_webview_window("attendance") {
-                    let _ = window.show();
-                    let _ = window.unminimize();
-                    // macOS에서 트레이 앱은 set_focus() 전에 앱 자체를 활성화해야 창이 포커스됨.
-                    #[cfg(target_os = "macos")]
-                    {
-                        use objc2_app_kit::NSApplication;
-                        use objc2_foundation::MainThreadMarker;
-                        if let Some(mtm) = MainThreadMarker::new() {
-                            let ns_app = NSApplication::sharedApplication(mtm);
-                            ns_app.activate();
-                        }
-                    }
-                    let _ = window.set_focus();
-                } else {
-                    let app_handle = app.clone();
-                    if let Ok(window) = tauri::WebviewWindowBuilder::new(
-                        app,
-                        "attendance",
-                        tauri::WebviewUrl::External(ATTENDANCE_URL.parse().unwrap()),
-                    )
-                    .title("Jungle Compass")
-                    .inner_size(660.0, 700.0)
-                    .resizable(true)
-                    .focused(true)
-                    .build()
-                    {
-                        // 출석 창이 닫히면 체커를 리로드하고
-                        // 로그인 재시도 윈도우를 활성화 (3분간 로그인 상태 재확인).
-                        window.on_window_event(move |event| {
-                            if let tauri::WindowEvent::Destroyed = event {
-                                log::info!("[tray] attendance page closed, reloading checker + activating login retry");
-                                if let Some(checker) = app_handle.get_webview_window("checker") {
-                                    let _ =
-                                        checker.navigate("https://jungle-lms.krafton.com/check-in".parse().unwrap());
-                                }
-                                // 로그인 재시도 윈도우: 3분간 활성
-                                {
-                                    let state: tauri::State<Arc<TokioMutex<AppState>>> = app_handle.state();
-                                    if let Ok(mut s) = state.try_lock() {
-                                        s.login_retry_until = Some(
-                                            chrono::Utc::now()
-                                                + chrono::Duration::seconds(LOGIN_RETRY_WINDOW_SECS as i64),
-                                        );
-                                    };
-                                }
-                            }
-                        });
-                    }
-                }
-            }
-            "settings" => {
-                log::info!("[tray] settings window opened");
-                // 기존 설정 창이 있으면 재사용, 없으면 새로 생성.
-                // 설정 창은 src/index.html (프론트엔드)을 로드.
-                if let Some(window) = app.get_webview_window("settings") {
-                    let _ = window.show();
-                    let _ = window.unminimize();
-                    #[cfg(target_os = "macos")]
-                    {
-                        use objc2_app_kit::NSApplication;
-                        use objc2_foundation::MainThreadMarker;
-                        if let Some(mtm) = MainThreadMarker::new() {
-                            let ns_app = NSApplication::sharedApplication(mtm);
-                            ns_app.activate();
-                        }
-                    }
-                    let _ = window.set_focus();
-                } else {
-                    let _ =
-                        tauri::WebviewWindowBuilder::new(app, "settings", tauri::WebviewUrl::App("index.html".into()))
-                            .title("설정")
-                            .inner_size(380.0, 520.0)
-                            .resizable(false)
-                            .minimizable(false)
-                            .maximizable(false)
-                            .focused(true)
-                            .build();
-                }
-            }
-            "quit" => {
-                app.exit(0);
-            }
-            _ => {}
-        })
+        .on_menu_event(move |app, event| handle_menu_event(app, event.id().as_ref()))
         .build(app)?;
 
     Ok(())
@@ -233,7 +239,10 @@ mod tests {
 
     #[test]
     fn 로그인_필요시_phase와_무관하게_로그인_메시지를_표시한다() {
-        assert_eq!(build_status_text(DailyPhase::NeedStart, Some(3600), true), "⚠️ 로그인 필요");
+        assert_eq!(
+            build_status_text(DailyPhase::NeedStart, Some(3600), true),
+            "⚠️ 로그인 필요"
+        );
     }
 
     #[test]
@@ -243,12 +252,18 @@ mod tests {
 
     #[test]
     fn 학습시작_시간_분_형식을_표시한다() {
-        assert_eq!(build_status_text(DailyPhase::NeedStart, Some(5400), false), "학습 시작 가능 (1h 30m 남음)");
+        assert_eq!(
+            build_status_text(DailyPhase::NeedStart, Some(5400), false),
+            "학습 시작 가능 (1h 30m 남음)"
+        );
     }
 
     #[test]
     fn 학습시작_분만_표시한다() {
-        assert_eq!(build_status_text(DailyPhase::NeedStart, Some(1800), false), "학습 시작 가능 (30분 남음)");
+        assert_eq!(
+            build_status_text(DailyPhase::NeedStart, Some(1800), false),
+            "학습 시작 가능 (30분 남음)"
+        );
     }
 
     #[test]
@@ -258,37 +273,58 @@ mod tests {
 
     #[test]
     fn 학습시작_정확히_1시간이면_시간_분_형식을_표시한다() {
-        assert_eq!(build_status_text(DailyPhase::NeedStart, Some(3600), false), "학습 시작 가능 (1h 0m 남음)");
+        assert_eq!(
+            build_status_text(DailyPhase::NeedStart, Some(3600), false),
+            "학습 시작 가능 (1h 0m 남음)"
+        );
     }
 
     #[test]
     fn 학습시작_59초면_1분으로_올림_표시한다() {
-        assert_eq!(build_status_text(DailyPhase::NeedStart, Some(59), false), "학습 시작 가능 (1분 남음)");
+        assert_eq!(
+            build_status_text(DailyPhase::NeedStart, Some(59), false),
+            "학습 시작 가능 (1분 남음)"
+        );
     }
 
     #[test]
     fn 지각임박_잔여분을_표시한다() {
-        assert_eq!(build_status_text(DailyPhase::StartOverdue, Some(300), false), "지각 임박 (5분 남음)");
+        assert_eq!(
+            build_status_text(DailyPhase::StartOverdue, Some(300), false),
+            "지각 임박 (5분 남음)"
+        );
     }
 
     #[test]
     fn 지각_잔여0이면_지각_메시지를_표시한다() {
-        assert_eq!(build_status_text(DailyPhase::StartOverdue, Some(0), false), "학습 시작 지각!");
+        assert_eq!(
+            build_status_text(DailyPhase::StartOverdue, Some(0), false),
+            "학습 시작 지각!"
+        );
     }
 
     #[test]
     fn 지각_잔여없으면_지각_메시지를_표시한다() {
-        assert_eq!(build_status_text(DailyPhase::StartOverdue, None, false), "학습 시작 지각!");
+        assert_eq!(
+            build_status_text(DailyPhase::StartOverdue, None, false),
+            "학습 시작 지각!"
+        );
     }
 
     #[test]
     fn 학습중_시간_분_형식을_표시한다() {
-        assert_eq!(build_status_text(DailyPhase::Studying, Some(5400), false), "학습 중 (종료 가능까지 1h 30m)");
+        assert_eq!(
+            build_status_text(DailyPhase::Studying, Some(5400), false),
+            "학습 중 (종료 가능까지 1h 30m)"
+        );
     }
 
     #[test]
     fn 학습중_분만_표시한다() {
-        assert_eq!(build_status_text(DailyPhase::Studying, Some(1800), false), "학습 중 (종료 가능까지 30분)");
+        assert_eq!(
+            build_status_text(DailyPhase::Studying, Some(1800), false),
+            "학습 중 (종료 가능까지 30분)"
+        );
     }
 
     #[test]
@@ -298,12 +334,18 @@ mod tests {
 
     #[test]
     fn 종료가능_시간_분_형식을_표시한다() {
-        assert_eq!(build_status_text(DailyPhase::NeedEnd, Some(5400), false), "학습 종료 가능 (1h 30m 남음)");
+        assert_eq!(
+            build_status_text(DailyPhase::NeedEnd, Some(5400), false),
+            "학습 종료 가능 (1h 30m 남음)"
+        );
     }
 
     #[test]
     fn 종료가능_분만_표시한다() {
-        assert_eq!(build_status_text(DailyPhase::NeedEnd, Some(1800), false), "학습 종료 가능 (30분 남음)");
+        assert_eq!(
+            build_status_text(DailyPhase::NeedEnd, Some(1800), false),
+            "학습 종료 가능 (30분 남음)"
+        );
     }
 
     #[test]
@@ -325,17 +367,26 @@ mod tests {
 
     #[test]
     fn 툴팁_학습시작_잔여시간을_표시한다() {
-        assert_eq!(build_tooltip(DailyPhase::NeedStart, Some(1800), false), "Jungle Bell - 학습 시작 가능 (30분 남음)");
+        assert_eq!(
+            build_tooltip(DailyPhase::NeedStart, Some(1800), false),
+            "Jungle Bell - 학습 시작 가능 (30분 남음)"
+        );
     }
 
     #[test]
     fn 툴팁_로그인_필요를_표시한다() {
-        assert_eq!(build_tooltip(DailyPhase::Idle, None, true), "Jungle Bell - ⚠️ 로그인 필요");
+        assert_eq!(
+            build_tooltip(DailyPhase::Idle, None, true),
+            "Jungle Bell - ⚠️ 로그인 필요"
+        );
     }
 
     #[test]
     fn 툴팁_출석완료를_표시한다() {
-        assert_eq!(build_tooltip(DailyPhase::Complete, None, false), "Jungle Bell - 오늘 출석 완료");
+        assert_eq!(
+            build_tooltip(DailyPhase::Complete, None, false),
+            "Jungle Bell - 오늘 출석 완료"
+        );
     }
 }
 
