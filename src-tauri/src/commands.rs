@@ -13,7 +13,7 @@ use tokio::sync::Mutex;
 use crate::attendance_day;
 use crate::autostart;
 use crate::checker;
-use crate::config::TimeOfDay;
+use crate::config::{self, TimeOfDay};
 use crate::state::{self, AppState};
 use crate::tray;
 
@@ -82,45 +82,6 @@ macro_rules! setting_bool {
     };
 }
 
-/// u32 설정 getter/setter 생성 매크로.
-macro_rules! setting_u32 {
-    ($get:ident, $set:ident, $field:ident, $label:expr) => {
-        #[tauri::command]
-        pub async fn $get(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<u32, String> {
-            Ok(state.lock().await.config.$field)
-        }
-
-        #[tauri::command]
-        pub async fn $set(state: tauri::State<'_, Arc<Mutex<AppState>>>, value: u32) -> Result<(), String> {
-            log::info!("[settings] {} 변경: {}", $label, value);
-            let mut s = state.lock().await;
-            s.config.$field = value;
-            s.config.save();
-            Ok(())
-        }
-    };
-}
-
-/// TimeOfDay 설정 getter/setter 생성 매크로.
-macro_rules! setting_time {
-    ($get:ident, $set:ident, $field:ident, $label:expr) => {
-        #[tauri::command]
-        pub async fn $get(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<TimeOfDay, String> {
-            let s = state.lock().await;
-            Ok(s.config.$field.clone())
-        }
-
-        #[tauri::command]
-        pub async fn $set(state: tauri::State<'_, Arc<Mutex<AppState>>>, hour: u32, minute: u32) -> Result<(), String> {
-            log::info!("[settings] {} 변경: {:02}:{:02}", $label, hour, minute);
-            let mut s = state.lock().await;
-            s.config.$field = TimeOfDay { hour, minute };
-            s.config.save();
-            Ok(())
-        }
-    };
-}
-
 // ── 매크로 생성 설정 커맨드 ──────────────────────────────
 
 setting_bool!(get_auto_update, set_auto_update, auto_update, "자동 업데이트 설정");
@@ -136,34 +97,84 @@ setting_bool!(
     end_notification_enabled,
     "종료 출석 알림 설정"
 );
-setting_u32!(
-    get_start_notification_interval,
-    set_start_notification_interval,
-    start_notification_interval_mins,
-    "시작 출석 알림 간격"
-);
-setting_u32!(
-    get_end_notification_interval,
-    set_end_notification_interval,
-    end_notification_interval_mins,
-    "종료 출석 알림 간격"
-);
-setting_time!(
-    get_notification_start,
-    set_notification_start,
-    notification_start,
-    "알림 시작 시각"
-);
-setting_time!(
-    get_notification_end,
-    set_notification_end,
-    notification_end,
-    "알림 종료 시각"
-);
 
 setting_bool!(get_skip_sunday, set_skip_sunday, skip_sunday, "일요일 알림 끄기");
 
 // ── 커스텀 설정 커맨드 ───────────────────────────────────
+
+#[tauri::command]
+pub async fn get_start_notification_interval(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<u32, String> {
+    Ok(state.lock().await.config.start_notification_interval_mins)
+}
+
+#[tauri::command]
+pub async fn set_start_notification_interval(
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    value: u32,
+) -> Result<(), String> {
+    let value = config::validate_notification_interval(value)?;
+    log::info!("[settings] 시작 출석 알림 간격 변경: {}", value);
+    let mut s = state.lock().await;
+    s.config.start_notification_interval_mins = value;
+    s.config.save();
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_end_notification_interval(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<u32, String> {
+    Ok(state.lock().await.config.end_notification_interval_mins)
+}
+
+#[tauri::command]
+pub async fn set_end_notification_interval(
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    value: u32,
+) -> Result<(), String> {
+    let value = config::validate_notification_interval(value)?;
+    log::info!("[settings] 종료 출석 알림 간격 변경: {}", value);
+    let mut s = state.lock().await;
+    s.config.end_notification_interval_mins = value;
+    s.config.save();
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_notification_start(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<TimeOfDay, String> {
+    Ok(state.lock().await.config.notification_start.clone())
+}
+
+#[tauri::command]
+pub async fn set_notification_start(
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    hour: u32,
+    minute: u32,
+) -> Result<(), String> {
+    let time = config::validate_notification_start(hour, minute)?;
+    log::info!("[settings] 알림 시작 시각 변경: {:02}:{:02}", time.hour, time.minute);
+    let mut s = state.lock().await;
+    s.config.notification_start = time;
+    s.config.save();
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_notification_end(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<TimeOfDay, String> {
+    Ok(state.lock().await.config.notification_end.clone())
+}
+
+#[tauri::command]
+pub async fn set_notification_end(
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    hour: u32,
+    minute: u32,
+) -> Result<(), String> {
+    let time = config::validate_notification_end(hour, minute)?;
+    log::info!("[settings] 알림 종료 시각 변경: {:02}:{:02}", time.hour, time.minute);
+    let mut s = state.lock().await;
+    s.config.notification_end = time;
+    s.config.save();
+    Ok(())
+}
 
 /// Tauri 커맨드: 이번 출석 알림 끄기 상태 조회.
 /// config.skip_attendance가 현재 "출석일" 날짜와 일치하면 true.
@@ -253,9 +264,7 @@ pub async fn set_debug_mode(state: tauri::State<'_, Arc<Mutex<AppState>>>, enabl
 
 /// Tauri 커맨드: 주기적 체크에서 발견된 업데이트 버전 반환. None이면 최신 버전.
 #[tauri::command]
-pub async fn get_pending_update(
-    state: tauri::State<'_, Arc<Mutex<AppState>>>,
-) -> Result<Option<String>, String> {
+pub async fn get_pending_update(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<Option<String>, String> {
     Ok(state.lock().await.pending_update.clone())
 }
 

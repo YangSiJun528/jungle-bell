@@ -1,4 +1,7 @@
 use serde::{Deserialize, Serialize};
+use std::fs::{self, OpenOptions};
+use std::io::Write;
+use std::path::Path;
 use std::path::PathBuf;
 
 /// 시각 값 (시 + 분). 스케줄 경계 설정에 사용.
@@ -85,10 +88,40 @@ fn default_notification_end() -> TimeOfDay {
     TimeOfDay { hour: 1, minute: 0 }
 }
 
+const ALLOWED_NOTIFICATION_INTERVAL_MINS: [u32; 6] = [1, 3, 5, 10, 15, 30];
+
 impl TimeOfDay {
     /// 자정 기준 초 단위 변환. 시간 비교·계산에 사용.
     pub fn to_secs(&self) -> i64 {
         (self.hour as i64) * 3600 + (self.minute as i64) * 60
+    }
+}
+
+pub fn validate_notification_start(hour: u32, minute: u32) -> Result<TimeOfDay, String> {
+    if minute != 0 {
+        return Err("알림 시작 시각의 분은 0이어야 합니다.".into());
+    }
+    if !(4..=9).contains(&hour) {
+        return Err("알림 시작 시각은 04:00부터 09:00 사이여야 합니다.".into());
+    }
+    Ok(TimeOfDay { hour, minute })
+}
+
+pub fn validate_notification_end(hour: u32, minute: u32) -> Result<TimeOfDay, String> {
+    if minute != 0 {
+        return Err("알림 종료 시각의 분은 0이어야 합니다.".into());
+    }
+    if hour > 4 {
+        return Err("알림 종료 시각은 00:00부터 04:00 사이여야 합니다.".into());
+    }
+    Ok(TimeOfDay { hour, minute })
+}
+
+pub fn validate_notification_interval(value: u32) -> Result<u32, String> {
+    if ALLOWED_NOTIFICATION_INTERVAL_MINS.contains(&value) {
+        Ok(value)
+    } else {
+        Err("알림 간격은 1, 3, 5, 10, 15, 30분 중 하나여야 합니다.".into())
     }
 }
 
@@ -104,17 +137,7 @@ impl Config {
                 match serde_json::from_str::<Config>(&data) {
                     Ok(mut config) => {
                         log::info!("[config] loaded from {}", path.display());
-                        // UI에서 제거된 옵션 값을 가장 가까운 유효 시각으로 마이그레이션.
-                        // notification_start: 4~9시만 허용 (10시 제거됨)
-                        if config.notification_start.hour > 9 {
-                            log::info!("[config] notification_start {}시 → 9시로 마이그레이션", config.notification_start.hour);
-                            config.notification_start.hour = 9;
-                            config.save();
-                        }
-                        // notification_end: 0~4시만 허용 (23시 제거됨)
-                        if config.notification_end.hour == 23 {
-                            log::info!("[config] notification_end 23시 → 0시로 마이그레이션");
-                            config.notification_end.hour = 0;
+                        if config.normalize_loaded_values() {
                             config.save();
                         }
                         return config;
@@ -141,20 +164,45 @@ impl Config {
     pub fn save(&self) {
         if let Some(path) = config_path() {
             if let Some(parent) = path.parent() {
-                if let Err(e) = std::fs::create_dir_all(parent) {
+                if let Err(e) = fs::create_dir_all(parent) {
                     log::error!("[config] 설정 디렉토리({}) 생성 실패: {}", parent.display(), e);
                     return;
                 }
             }
             match serde_json::to_string_pretty(self) {
                 Ok(data) => {
-                    if let Err(e) = std::fs::write(&path, data) {
+                    if let Err(e) = write_file_atomically(&path, data.as_bytes()) {
                         log::error!("[config] 설정 파일({}) 저장 실패: {}", path.display(), e);
                     }
                 }
                 Err(e) => log::error!("[config] 설정 직렬화 실패: {}", e),
             }
         }
+    }
+
+    fn normalize_loaded_values(&mut self) -> bool {
+        let mut changed = false;
+
+        if normalize_notification_start(&mut self.notification_start) {
+            changed = true;
+        }
+        if normalize_notification_end(&mut self.notification_end) {
+            changed = true;
+        }
+        if normalize_notification_interval(
+            &mut self.start_notification_interval_mins,
+            "start_notification_interval_mins",
+        ) {
+            changed = true;
+        }
+        if normalize_notification_interval(
+            &mut self.end_notification_interval_mins,
+            "end_notification_interval_mins",
+        ) {
+            changed = true;
+        }
+
+        changed
     }
 }
 
@@ -179,5 +227,205 @@ impl Default for Config {
             skip_attendance: None,
             skip_sunday: false,
         }
+    }
+}
+
+fn normalize_notification_start(time: &mut TimeOfDay) -> bool {
+    let original_hour = time.hour;
+    let original_minute = time.minute;
+
+    if time.hour < 4 {
+        time.hour = 4;
+    } else if time.hour > 9 {
+        time.hour = 9;
+    }
+    time.minute = 0;
+
+    let changed = time.hour != original_hour || time.minute != original_minute;
+    if changed {
+        log::info!(
+            "[config] notification_start {:02}:{:02} → {:02}:{:02}로 마이그레이션",
+            original_hour,
+            original_minute,
+            time.hour,
+            time.minute
+        );
+    }
+    changed
+}
+
+fn normalize_notification_end(time: &mut TimeOfDay) -> bool {
+    let original_hour = time.hour;
+    let original_minute = time.minute;
+
+    if time.hour == 23 {
+        time.hour = 0;
+    } else if time.hour > 4 {
+        time.hour = 4;
+    }
+    time.minute = 0;
+
+    let changed = time.hour != original_hour || time.minute != original_minute;
+    if changed {
+        log::info!(
+            "[config] notification_end {:02}:{:02} → {:02}:{:02}로 마이그레이션",
+            original_hour,
+            original_minute,
+            time.hour,
+            time.minute
+        );
+    }
+    changed
+}
+
+fn normalize_notification_interval(value: &mut u32, field_name: &str) -> bool {
+    if ALLOWED_NOTIFICATION_INTERVAL_MINS.contains(value) {
+        return false;
+    }
+
+    let original = *value;
+    *value = nearest_notification_interval(*value);
+    log::info!("[config] {} {}분 → {}분으로 마이그레이션", field_name, original, *value);
+    true
+}
+
+fn nearest_notification_interval(value: u32) -> u32 {
+    let mut best = ALLOWED_NOTIFICATION_INTERVAL_MINS[0];
+    let mut best_distance = best.abs_diff(value);
+
+    for candidate in ALLOWED_NOTIFICATION_INTERVAL_MINS.iter().copied().skip(1) {
+        let distance = candidate.abs_diff(value);
+        if distance < best_distance || (distance == best_distance && candidate < best) {
+            best = candidate;
+            best_distance = distance;
+        }
+    }
+
+    best
+}
+
+fn write_file_atomically(path: &Path, data: &[u8]) -> std::io::Result<()> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| std::io::Error::other("설정 파일 상위 디렉토리가 없습니다."))?;
+    let file_name = path
+        .file_name()
+        .ok_or_else(|| std::io::Error::other("설정 파일 이름을 확인할 수 없습니다."))?
+        .to_string_lossy()
+        .into_owned();
+
+    let mut temp_path = None;
+    for attempt in 0..32 {
+        let candidate = parent.join(format!(".{}.tmp-{}-{}", file_name, std::process::id(), attempt));
+        match OpenOptions::new().write(true).create_new(true).open(&candidate) {
+            Ok(mut file) => {
+                file.write_all(data)?;
+                file.sync_all()?;
+                drop(file);
+                temp_path = Some(candidate);
+                break;
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e),
+        }
+    }
+
+    let temp_path = temp_path.ok_or_else(|| std::io::Error::other("임시 설정 파일을 만들지 못했습니다."))?;
+
+    if let Err(e) = replace_file(&temp_path, path) {
+        let _ = fs::remove_file(&temp_path);
+        return Err(e);
+    }
+
+    sync_directory(parent)?;
+    Ok(())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn replace_file(from: &Path, to: &Path) -> std::io::Result<()> {
+    fs::rename(from, to)
+}
+
+#[cfg(target_os = "windows")]
+fn replace_file(from: &Path, to: &Path) -> std::io::Result<()> {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+
+    const MOVEFILE_REPLACE_EXISTING: u32 = 0x1;
+    const MOVEFILE_WRITE_THROUGH: u32 = 0x8;
+
+    unsafe extern "system" {
+        fn MoveFileExW(lpExistingFileName: *const u16, lpNewFileName: *const u16, dwFlags: u32) -> i32;
+    }
+
+    fn to_wide(path: &Path) -> Vec<u16> {
+        OsStr::new(path).encode_wide().chain(std::iter::once(0)).collect()
+    }
+
+    let from_wide = to_wide(from);
+    let to_wide = to_wide(to);
+
+    let ok = unsafe {
+        MoveFileExW(
+            from_wide.as_ptr(),
+            to_wide.as_ptr(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+    };
+
+    if ok == 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn sync_directory(_path: &Path) -> std::io::Result<()> {
+    Ok(())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn sync_directory(path: &Path) -> std::io::Result<()> {
+    fs::File::open(path)?.sync_all()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_notification_times_reject_invalid_values() {
+        assert!(validate_notification_start(4, 0).is_ok());
+        assert!(validate_notification_end(4, 0).is_ok());
+        assert!(validate_notification_start(10, 0).is_err());
+        assert!(validate_notification_start(9, 30).is_err());
+        assert!(validate_notification_end(5, 0).is_err());
+        assert!(validate_notification_end(2, 30).is_err());
+    }
+
+    #[test]
+    fn validate_notification_interval_rejects_unknown_values() {
+        assert_eq!(validate_notification_interval(15).unwrap(), 15);
+        assert!(validate_notification_interval(2).is_err());
+    }
+
+    #[test]
+    fn normalize_loaded_values_clamps_removed_or_invalid_values() {
+        let mut config = Config {
+            notification_start: TimeOfDay { hour: 10, minute: 30 },
+            notification_end: TimeOfDay { hour: 23, minute: 45 },
+            start_notification_interval_mins: 2,
+            end_notification_interval_mins: 99,
+            ..Config::default()
+        };
+
+        assert!(config.normalize_loaded_values());
+        assert_eq!(config.notification_start.hour, 9);
+        assert_eq!(config.notification_start.minute, 0);
+        assert_eq!(config.notification_end.hour, 0);
+        assert_eq!(config.notification_end.minute, 0);
+        assert_eq!(config.start_notification_interval_mins, 1);
+        assert_eq!(config.end_notification_interval_mins, 30);
     }
 }
