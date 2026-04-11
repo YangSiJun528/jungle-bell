@@ -26,6 +26,7 @@
 
 (function () {
   var cachedCohortId = null;
+  var identityReported = false;
 
   function jsLog(level, message) {
     window.__TAURI__.core.invoke('log_from_js', { level: level, message: message });
@@ -49,6 +50,32 @@
     };
   }
   // ─────────────────────────────────────────────────────────────────────────
+
+  // /api/v2/me에서 사용자 ID를 가져와 Rust에 보고 (한 번만).
+  // PostHog distinct_id로 사용하기 위해 SHA-256 해시됨.
+  function reportIdentityOnce() {
+    if (identityReported) return;
+    identityReported = true;
+
+    fetch('https://jungle-lms.krafton.com/api/v2/me', {
+      credentials: 'include',
+      headers: { accept: 'application/json' },
+    })
+      .then(function (res) {
+        if (!res.ok) return null;
+        return res.json();
+      })
+      .then(function (data) {
+        if (data && data.id) {
+          jsLog('debug', 'reportIdentity: id reported');
+          window.__TAURI__.core.invoke('report_cms_identity', { cmsUserId: data.id });
+        }
+      })
+      .catch(function (e) {
+        jsLog('debug', 'reportIdentity failed: ' + (e.message || e));
+        identityReported = false; // 다음 시도 시 재시도
+      });
+  }
 
   // /api/v2/me/cohorts에서 cohort 목록을 가져와
   // startDate가 가장 최신인 cohort의 ID를 반환.
@@ -148,6 +175,7 @@
         return { needs_login: true, morning_done: false, evening_done: false };
       }
       cachedCohortId = cohortId;
+      reportIdentityOnce();
 
       return fetchAttendance(cohortId).then(function (data) {
         if (!data) {

@@ -1,3 +1,4 @@
+mod analytics;
 mod attendance_day;
 mod autostart;
 mod checker;
@@ -170,6 +171,7 @@ pub fn run() {
         // JS에서 `window.__TAURI__.core.invoke()`로 호출할 수 있는 Tauri 커맨드 등록.
         .invoke_handler(tauri::generate_handler![
             commands::report_attendance_status,
+            commands::report_cms_identity,
             commands::log_from_js,
             commands::get_auto_update,
             commands::set_auto_update,
@@ -207,6 +209,10 @@ pub fn run() {
                 log_level,
                 MAX_LOG_FILE_SIZE / 1000,
             );
+
+            // 분석: PostHog 클라이언트 초기화.
+            // app_opened 이벤트는 identity 설정 시(set_identity) 전송한다.
+            analytics::init();
 
             // 자동 시작: Config 값을 기준으로 OS 상태를 동기화.
             // 기본값이 true이므로 첫 설치 시 자동으로 등록됨.

@@ -10,6 +10,7 @@ use std::sync::Arc;
 use tauri::Manager;
 use tokio::sync::Mutex;
 
+use crate::analytics;
 use crate::attendance_day;
 use crate::autostart;
 use crate::checker;
@@ -47,7 +48,19 @@ pub async fn report_attendance_status(
         tray::update_tray(&app, phase, remaining, s.needs_login);
     }
 
+    // 출석 체크 시도 이벤트 (API 에러가 아닌 실제 체크 시도만 기록)
+    if !status.api_error {
+        analytics::track_attendance_check(&app.package_info().version.to_string());
+    }
+
     Ok(())
+}
+
+/// Tauri 커맨드: CMS 사용자 식별자 수신. JS에서 /api/v2/me 호출 후 id를 전달.
+/// SHA-256 해시하여 PostHog distinct_id로 사용.
+#[tauri::command]
+pub fn report_cms_identity(cms_user_id: String) {
+    analytics::set_identity(&cms_user_id);
 }
 
 /// Tauri 커맨드: JS에서 Rust 로그 시스템으로 메시지 전달.
