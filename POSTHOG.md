@@ -11,11 +11,16 @@
 |---|---|
 | `settings_opened` | 트레이 → 설정 창 열 때 |
 | `attendance_page_opened` | 트레이 → 출석 페이지 열 때 |
-| `attendance_check_attempted` | 출석 체크 API 조회 성공 시 (api_error 제외) |
+| `attendance_completed` | 출석 상태가 `false → true`로 전이할 때 (morning/evening 각각 최대 1일 1회) |
 
 ### 이벤트 프로퍼티
 
-모든 이벤트에 `app_version`이 포함됩니다.
+- 모든 이벤트: `app_version` (빌드 시 `CARGO_PKG_VERSION`에서 주입)
+- `attendance_completed`: `period` = `"morning"` 또는 `"evening"`
+
+> **Note:** `attendance_completed`는 스케줄러 틱마다가 아니라 **상태 전이시점**에만 발사합니다.
+> 앱 재시작 직후의 최초 보고(`data_loaded=false`)는 "오늘 이미 완료된 출석"일 수 있어
+> 중복 카운트 방지를 위해 이벤트 발사 대상에서 제외됩니다.
 
 ### distinct_id
 
@@ -32,6 +37,14 @@ identity는 checker.js에서 cohort 조회 성공 후 `/api/v2/me`를 호출해 
 
 1. [https://posthog.com](https://posthog.com) → **Get started for free**
 2. 로그인 후: **Settings → Project settings → Project API key** (`phc_xxx` 형식)
+
+> ⚠️ **중요 — 키가 바이너리에 임베드됩니다.**
+> `option_env!("POSTHOG_API_KEY")`로 컴파일 시점에 값이 바이너리 문자열 섹션에
+> 포함되므로 배포된 실행 파일에서 `strings` 등으로 **추출 가능합니다.**
+>
+> - PostHog의 **Project API key (`phc_*`)** 는 공개 전제(클라이언트 SDK에서 사용)이므로 임베드해도 무방합니다.
+> - **Personal API key**, **Feature Flag secure key**, 기타 write-all 권한 키는 **절대 사용하지 마세요.**
+> - 키 노출이 문제되는 경우, PostHog 대시보드의 **Authorized URLs** 및 이벤트 필터링으로 오남용을 차단하세요.
 
 ### 2. 빌드 시 키 전달
 

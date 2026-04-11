@@ -152,7 +152,7 @@ fn build_attendance_window(app: &tauri::AppHandle) {
 
 fn open_attendance_window(app: &tauri::AppHandle) {
     log::info!("[tray] attendance window opened");
-    crate::analytics::track_attendance_page_opened(&app.package_info().version.to_string());
+    crate::analytics::track_attendance_page_opened();
 
     if let Some(window) = app.get_webview_window("attendance") {
         focus_window(&window);
@@ -174,7 +174,7 @@ fn build_settings_window(app: &tauri::AppHandle) {
 
 fn open_settings_window(app: &tauri::AppHandle) {
     log::info!("[tray] settings window opened");
-    crate::analytics::track_settings_opened(&app.package_info().version.to_string());
+    crate::analytics::track_settings_opened();
 
     if let Some(window) = app.get_webview_window("settings") {
         focus_window(&window);

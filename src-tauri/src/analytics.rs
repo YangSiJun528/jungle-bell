@@ -7,84 +7,103 @@
 //! 추적 이벤트:
 //!   - `settings_opened`: 트레이에서 설정 창 열 때
 //!   - `attendance_page_opened`: 트레이에서 출석 페이지 열 때
-//!   - `attendance_check_attempted`: 출석 체크 시도 시
+//!   - `attendance_completed`: 출석 상태가 false→true로 전이할 때 (period=morning|evening)
 
 use sha2::{Digest, Sha256};
-use std::sync::Mutex;
+use std::sync::OnceLock;
 use tokio::sync::OnceCell;
 
 static CLIENT: OnceCell<posthog_rs::Client> = OnceCell::const_new();
-static DISTINCT_ID: Mutex<Option<String>> = Mutex::new(None);
+static DISTINCT_ID: OnceLock<String> = OnceLock::new();
 
 /// PostHog API 키 (컴파일 시 환경변수). 미설정 시 분석 비활성화.
 const API_KEY: Option<&str> = option_env!("POSTHOG_API_KEY");
 
-/// PostHog 클라이언트를 비동기로 초기화한다. API 키가 없으면 no-op.
-pub fn init() {
-    let Some(api_key) = API_KEY else {
-        log::info!("[analytics] POSTHOG_API_KEY not set, analytics disabled");
-        return;
-    };
+/// 앱 버전 (컴파일 시 Cargo에서 주입).
+const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-    let api_key = api_key.to_owned();
-    tauri::async_runtime::spawn(async move {
-        let client = posthog_rs::client(api_key.as_str()).await;
-        CLIENT.set(client).ok();
-        log::info!("[analytics] initialized");
-    });
+/// 분석 활성화 여부만 로깅한다. 실제 PostHog 클라이언트는 첫 이벤트 발사 시
+/// `get_client()`에서 lazy 초기화되므로, 초기 이벤트가 경쟁 상태로 유실되지 않는다.
+pub fn init() {
+    if API_KEY.is_none() {
+        log::info!("[analytics] POSTHOG_API_KEY not set, analytics disabled");
+    } else {
+        log::info!("[analytics] enabled (client will initialize on first event)");
+    }
+}
+
+/// PostHog 클라이언트를 최초 호출 시 초기화하여 반환한다.
+/// 이후 호출은 캐시된 인스턴스를 그대로 반환한다.
+async fn get_client() -> Option<&'static posthog_rs::Client> {
+    let api_key = API_KEY?;
+    Some(
+        CLIENT
+            .get_or_init(|| async {
+                log::info!("[analytics] initializing posthog client");
+                posthog_rs::client(api_key).await
+            })
+            .await,
+    )
 }
 
 /// CMS 사용자 ID를 SHA-256으로 해시하여 distinct_id 설정.
 /// 최초 설정 시에만 적용하고, 이후 호출은 무시한다.
 pub fn set_identity(cms_user_id: &str) {
+    if API_KEY.is_none() {
+        return;
+    }
     let hash = sha256_hex(cms_user_id);
-    if let Ok(mut id) = DISTINCT_ID.lock() {
-        if id.is_none() {
-            log::info!("[analytics] identity set (hash={}...)", &hash[..8]);
-            *id = Some(hash);
-        }
+    let preview = hash.get(..8).unwrap_or("").to_owned();
+    if DISTINCT_ID.set(hash).is_ok() {
+        log::info!("[analytics] identity set (hash={}...)", preview);
     }
 }
 
 /// 이벤트 전송 (fire-and-forget).
 /// - 로그인 상태: hashed CMS ID 사용
 /// - 미로그인 상태: "anonymous" 고정값 사용
-fn capture(event_name: &str, app_version: &str) {
+fn capture(event_name: &'static str, extra_props: &[(&'static str, &str)]) {
     if API_KEY.is_none() {
         return;
     }
 
     let distinct_id = DISTINCT_ID
-        .lock()
-        .ok()
-        .and_then(|g| g.clone())
+        .get()
+        .cloned()
         .unwrap_or_else(|| "anonymous".to_owned());
 
     let mut event = posthog_rs::Event::new(event_name, &distinct_id);
-    if let Err(e) = event.insert_prop("app_version", app_version) {
-        log::debug!("[analytics] insert_prop failed: {}", e);
-        return;
+    if let Err(e) = event.insert_prop("app_version", APP_VERSION) {
+        // 프로퍼티 삽입 실패는 이벤트 자체를 버릴 만큼 치명적이지 않다.
+        // 로그만 남기고 전송은 계속 진행한다.
+        log::debug!("[analytics] insert_prop 'app_version' failed: {}", e);
+    }
+    for (key, value) in extra_props {
+        if let Err(e) = event.insert_prop(*key, *value) {
+            log::debug!("[analytics] insert_prop '{}' failed: {}", key, e);
+        }
     }
 
-    let event_name = event_name.to_owned();
     tauri::async_runtime::spawn(async move {
-        let Some(client) = CLIENT.get() else { return };
+        let Some(client) = get_client().await else { return };
         if let Err(e) = client.capture(event).await {
             log::warn!("[analytics] capture '{}' failed: {}", event_name, e);
         }
     });
 }
 
-pub fn track_settings_opened(app_version: &str) {
-    capture("settings_opened", app_version);
+pub fn track_settings_opened() {
+    capture("settings_opened", &[]);
 }
 
-pub fn track_attendance_page_opened(app_version: &str) {
-    capture("attendance_page_opened", app_version);
+pub fn track_attendance_page_opened() {
+    capture("attendance_page_opened", &[]);
 }
 
-pub fn track_attendance_check(app_version: &str) {
-    capture("attendance_check_attempted", app_version);
+/// 출석 완료 이벤트. `period`는 "morning" 또는 "evening".
+/// 스케줄러 틱마다가 아니라 morning/evening 상태가 false→true로 전이할 때만 호출한다.
+pub fn track_attendance_completed(period: &'static str) {
+    capture("attendance_completed", &[("period", period)]);
 }
 
 fn sha256_hex(input: &str) -> String {

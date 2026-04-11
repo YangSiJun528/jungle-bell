@@ -44,13 +44,28 @@ pub async fn report_attendance_status(
 
     let mut s = state.lock().await;
     let now = chrono::Utc::now();
+
+    // 전이 감지를 위해 이전 상태 보존.
+    // `was_loaded`가 false인 최초 보고는 "앱 재시작 후 오늘 이미 완료된 출석"일 수 있으므로
+    // 이벤트 발사 대상에서 제외해야 한다 (중복 카운트 방지).
+    let was_loaded = s.data_loaded;
+    let prev_morning = s.morning_checked;
+    let prev_evening = s.evening_checked;
+
     if let Some((phase, remaining)) = checker::process_report(&mut s, &status, now) {
         tray::update_tray(&app, phase, remaining, s.needs_login);
     }
+    drop(s);
 
-    // 출석 체크 시도 이벤트 (API 에러가 아닌 실제 체크 시도만 기록)
-    if !status.api_error {
-        analytics::track_attendance_check(&app.package_info().version.to_string());
+    // 출석 완료 이벤트: false → true 전이 시점에만 한 번 발사한다.
+    // 스케줄러의 일일 리셋(자정) 이후 첫 완료 시에도 정상적으로 전이로 감지된다.
+    if was_loaded && !status.api_error && !status.needs_login {
+        if !prev_morning && status.morning_done {
+            analytics::track_attendance_completed("morning");
+        }
+        if !prev_evening && status.evening_done {
+            analytics::track_attendance_completed("evening");
+        }
     }
 
     Ok(())
