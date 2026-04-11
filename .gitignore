@@ -16,6 +16,9 @@ dist-ssr
 jungle-campus-analyzer/.browser-data/
 jungle-campus-analyzer/output/
 
+# config
+.cargo/config.toml
+
 # Webcrack snapshots (로컬 참조용, 커밋 제외)
 campus/webcrack/logs/
 
