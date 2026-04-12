@@ -2,8 +2,11 @@
 
 ## 개요
 
-`POSTHOG_API_KEY` 환경변수가 설정된 경우에만 활성화됩니다.
-미설정 시 모든 이벤트 전송이 비활성화됩니다 (no-op).
+Project API Key가 `analytics.rs`에 하드코딩되어 항상 활성화됩니다.
+
+> **키 공개 여부:** PostHog의 **Project API key (`phc_*`)** 는 클라이언트 SDK 전용으로
+> 공개 전제 설계입니다. 프론트엔드 JS·모바일 앱에 하드코딩하는 것이 표준 방식이며
+> 소스코드에 포함해도 무방합니다. (참고: https://posthog.com/docs/api#authentication)
 
 ## 수집 이벤트
 
@@ -38,29 +41,11 @@ identity는 checker.js에서 cohort 조회 성공 후 `/api/v2/me`를 호출해 
 1. [https://posthog.com](https://posthog.com) → **Get started for free**
 2. 로그인 후: **Settings → Project settings → Project API key** (`phc_xxx` 형식)
 
-> ⚠️ **중요 — 키가 바이너리에 임베드됩니다.**
-> `option_env!("POSTHOG_API_KEY")`로 컴파일 시점에 값이 바이너리 문자열 섹션에
-> 포함되므로 배포된 실행 파일에서 `strings` 등으로 **추출 가능합니다.**
->
-> - PostHog의 **Project API key (`phc_*`)** 는 공개 전제(클라이언트 SDK에서 사용)이므로 임베드해도 무방합니다.
-> - **Personal API key**, **Feature Flag secure key**, 기타 write-all 권한 키는 **절대 사용하지 마세요.**
-> - 키 노출이 문제되는 경우, PostHog 대시보드의 **Authorized URLs** 및 이벤트 필터링으로 오남용을 차단하세요.
+> **참고 — 키가 바이너리에 임베드됩니다.**
+> 배포된 실행 파일에서 `strings` 등으로 추출 가능하지만, Project API key는 공개 전제이므로 문제없습니다.
+> **Personal API key**, **Feature Flag secure key** 등 write-all 권한 키는 절대 사용하지 마세요.
 
-### 2. 빌드 시 키 전달
-
-```bash
-POSTHOG_API_KEY="phc_xxxxxxxxxxxx" cargo tauri dev
-POSTHOG_API_KEY="phc_xxxxxxxxxxxx" cargo tauri build
-```
-
-또는 `.cargo/config.toml`에 저장 (git 커밋 금지):
-
-```toml
-[env]
-POSTHOG_API_KEY = "phc_xxxxxxxxxxxx"
-```
-
-### 3. EU 서버 사용 시
+### 2. EU 서버 사용 시
 
 `analytics.rs`의 클라이언트 초기화를 수정합니다:
 

@@ -1,6 +1,5 @@
 //! 분석 모듈 — PostHog 이벤트 수집.
 //!
-//! 컴파일 시 `POSTHOG_API_KEY` 환경변수가 설정된 경우에만 활성화.
 //! CMS 사용자 ID는 SHA-256으로 해시하여 distinct_id로 사용한다.
 //! 로그인 전에는 "anonymous" 고정값을 사용한다.
 //!
@@ -16,8 +15,13 @@ use tokio::sync::OnceCell;
 static CLIENT: OnceCell<posthog_rs::Client> = OnceCell::const_new();
 static DISTINCT_ID: OnceLock<String> = OnceLock::new();
 
-/// PostHog API 키 (컴파일 시 환경변수). 미설정 시 분석 비활성화.
-const API_KEY: Option<&str> = option_env!("POSTHOG_API_KEY");
+/// PostHog 이벤트 수집용 Project API Key.
+///
+/// 이 키는 공개해도 안전하다. PostHog의 Project API Key는 이벤트 전송 전용으로
+/// 설계되어 있으며, 프론트엔드 JS·모바일 앱 등에 하드코딩하는 것이 표준 방식이다.
+/// 대시보드 접근·데이터 조회 권한이 없는 Personal API Key와는 다르다.
+/// 참고: https://posthog.com/docs/api#authentication
+const API_KEY: Option<&str> = Some("phc_oinkQXTbUdqUVtfVeF5CwkB9An8uDViHX4buoYcsvZ96");
 
 /// 앱 버전 (컴파일 시 Cargo에서 주입).
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -25,11 +29,7 @@ const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// 분석 활성화 여부만 로깅한다. 실제 PostHog 클라이언트는 첫 이벤트 발사 시
 /// `get_client()`에서 lazy 초기화되므로, 초기 이벤트가 경쟁 상태로 유실되지 않는다.
 pub fn init() {
-    if API_KEY.is_none() {
-        log::info!("[analytics] POSTHOG_API_KEY not set, analytics disabled");
-    } else {
-        log::info!("[analytics] enabled (client will initialize on first event)");
-    }
+    log::info!("[analytics] enabled (client will initialize on first event)");
 }
 
 /// PostHog 클라이언트를 최초 호출 시 초기화하여 반환한다.
