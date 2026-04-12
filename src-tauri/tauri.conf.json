@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Jungle Bell",
-  "version": "0.2.4",
+  "version": "0.2.5-beta.1",
   "identifier": "dev.sijun-yang.jungle-bell",
   "build": {
     "frontendDist": "../src"
