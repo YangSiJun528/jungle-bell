@@ -7,6 +7,7 @@
 //!   - `settings_opened`: 트레이에서 설정 창 열 때
 //!   - `attendance_page_opened`: 트레이에서 출석 페이지 열 때
 //!   - `attendance_completed`: 출석 상태가 false→true로 전이할 때 (period=morning|evening)
+//!   - `meal_plan_opened`: 트레이에서 식단표 보러가기 클릭 시
 
 use sha2::{Digest, Sha256};
 use std::sync::OnceLock;
@@ -98,6 +99,10 @@ pub fn track_settings_opened() {
 
 pub fn track_attendance_page_opened() {
     capture("attendance_page_opened", &[]);
+}
+
+pub fn track_meal_plan_opened() {
+    capture("meal_plan_opened", &[]);
 }
 
 /// 출석 완료 이벤트. `period`는 "morning" 또는 "evening".

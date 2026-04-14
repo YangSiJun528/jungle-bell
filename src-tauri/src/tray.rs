@@ -188,6 +188,7 @@ fn handle_menu_event(app: &tauri::AppHandle, event_id: &str) {
     match event_id {
         "open_page" => open_attendance_window(app),
         "meal_plan" => {
+            crate::analytics::track_meal_plan_opened();
             let _ = tauri_plugin_opener::open_url(MEAL_PLAN_URL, None::<&str>);
         }
         "settings" => open_settings_window(app),
