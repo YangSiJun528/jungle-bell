@@ -17,6 +17,7 @@ use tauri::{
 };
 
 const ATTENDANCE_URL: &str = "https://jungle-lms.krafton.com/check-in";
+const MEAL_PLAN_URL: &str = "https://pf.kakao.com/_xhzNjn/posts";
 
 /// 출석 페이지 닫힌 후 로그인 재시도 윈도우 (초). 3분간 빠르게 재확인.
 const LOGIN_RETRY_WINDOW_SECS: u64 = 180;
@@ -186,6 +187,9 @@ fn open_settings_window(app: &tauri::AppHandle) {
 fn handle_menu_event(app: &tauri::AppHandle, event_id: &str) {
     match event_id {
         "open_page" => open_attendance_window(app),
+        "meal_plan" => {
+            let _ = tauri_plugin_opener::open_url(MEAL_PLAN_URL, None::<&str>);
+        }
         "settings" => open_settings_window(app),
         "version" => {
             let app = app.clone();
@@ -206,6 +210,8 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     let open_page = MenuItemBuilder::with_id("open_page", "출석 페이지 열기").build(app)?;
 
+    let meal_plan = MenuItemBuilder::with_id("meal_plan", "식단표 보러가기").build(app)?;
+
     let settings = MenuItemBuilder::with_id("settings", "설정...").build(app)?;
 
     let current_version = app.package_info().version.to_string();
@@ -219,6 +225,7 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .item(&status_item)
         .separator()
         .item(&open_page)
+        .item(&meal_plan)
         .item(&settings)
         .separator()
         .item(&version_item)
