@@ -223,12 +223,12 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     let menu = MenuBuilder::new(app)
         .item(&status_item)
-        .separator()
         .item(&open_page)
+        .separator()
         .item(&meal_plan)
-        .item(&settings)
         .separator()
         .item(&version_item)
+        .item(&settings)
         .item(&quit)
         .build()?;
 
