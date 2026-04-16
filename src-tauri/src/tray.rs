@@ -103,18 +103,16 @@ fn build_tooltip(phase: DailyPhase, remaining: Option<i64>, needs_login: bool, d
     }
 }
 
-fn build_dday_item_text(config: &Config) -> String {
-    let kst_now = chrono::Utc::now().with_timezone(&crate::state::kst());
-    dday::build_status_text(config, kst_now)
+fn build_dday_item_text(config: &Config, dday_display: Option<&dday::DdayDisplay>) -> String {
+    dday::build_status_text_from_display(config, dday_display)
 }
 
-fn build_tray_title(config: &Config) -> Option<String> {
+fn build_tray_title<'a>(config: &Config, dday_display: Option<&'a dday::DdayDisplay>) -> Option<&'a str> {
     if !config.dday_show_in_tray_title {
         return None;
     }
 
-    let kst_now = chrono::Utc::now().with_timezone(&crate::state::kst());
-    dday::compute_display(config, kst_now).map(|display| display.badge)
+    dday_display.map(|display| display.badge.as_str())
 }
 
 fn apply_tray_title<S: AsRef<str>>(tray: &tauri::tray::TrayIcon<tauri::Wry>, title: Option<S>) {
@@ -284,8 +282,10 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     let state: tauri::State<Arc<TokioMutex<AppState>>> = app.state();
     if let Ok(s) = state.try_lock() {
-        let _ = dday_item.set_text(build_dday_item_text(&s.config));
-        apply_tray_title(&tray, build_tray_title(&s.config).as_deref());
+        let kst_now = chrono::Utc::now().with_timezone(&crate::state::kst());
+        let dday_display = dday::compute_display(&s.config, kst_now);
+        let _ = dday_item.set_text(build_dday_item_text(&s.config, dday_display.as_ref()));
+        apply_tray_title(&tray, build_tray_title(&s.config, dday_display.as_ref()));
     }
 
     Ok(())
@@ -491,20 +491,21 @@ pub fn update_tray(
     config: &Config,
 ) {
     let status_text = build_status_text(phase, remaining, needs_login);
-    let dday_display = dday::compute_display(config, chrono::Utc::now().with_timezone(&crate::state::kst()));
+    let kst_now = chrono::Utc::now().with_timezone(&crate::state::kst());
+    let dday_display = dday::compute_display(config, kst_now);
     let tooltip = build_tooltip(
         phase,
         remaining,
         needs_login,
         dday_display.as_ref().map(|display| display.summary.as_str()),
     );
-    let dday_text = build_dday_item_text(config);
-    let tray_title = build_tray_title(config);
+    let dday_text = build_dday_item_text(config, dday_display.as_ref());
+    let tray_title = build_tray_title(config, dday_display.as_ref());
 
     if let Some(tray) = app.tray_by_id("main-tray") {
         let _ = tray.set_icon(Some(icon_for_phase(phase, needs_login)));
         let _ = tray.set_tooltip(Some(&tooltip));
-        apply_tray_title(&tray, tray_title.as_deref());
+        apply_tray_title(&tray, tray_title);
     }
 
     // 상태 메뉴 아이템 텍스트 갱신.
