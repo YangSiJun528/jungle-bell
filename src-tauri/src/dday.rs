@@ -75,13 +75,13 @@ pub fn compute_display(config: &Config, kst_now: DateTime<FixedOffset>) -> Optio
     })
 }
 
-pub fn build_status_text(config: &Config, kst_now: DateTime<FixedOffset>) -> String {
+pub fn build_status_text_from_display(config: &Config, display: Option<&DdayDisplay>) -> String {
     if !config.dday_enabled {
         return "사용 안 함".to_string();
     }
 
-    match compute_display(config, kst_now) {
-        Some(display) => display.summary,
+    match display {
+        Some(display) => display.summary.clone(),
         None if config.dday_target_date.is_none() => "날짜를 선택하세요".to_string(),
         None => "날짜 형식을 확인하세요".to_string(),
     }
