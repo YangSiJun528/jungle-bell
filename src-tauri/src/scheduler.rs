@@ -126,9 +126,9 @@ fn expire_login_retry_window(state: &mut AppState, now: DateTime<Utc>) {
     }
 }
 
-fn apply_tick_effects(app_handle: &tauri::AppHandle, phase: DailyPhase, result: &TickResult) {
+fn apply_tick_effects(app_handle: &tauri::AppHandle, phase: DailyPhase, result: &TickResult, config: &Config) {
     if let Some((phase, remaining, needs_login)) = result.tray_update {
-        tray::update_tray(app_handle, phase, remaining, needs_login);
+        tray::update_tray(app_handle, phase, remaining, needs_login, config);
     }
 
     if let Some((title, body)) = &result.notification {
@@ -447,7 +447,7 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
                 let phase = s.phase;
 
                 log_tick_state(now, &s, &result);
-                apply_tick_effects(&app_handle, phase, &result);
+                apply_tick_effects(&app_handle, phase, &result, &s.config);
 
                 result
             };

@@ -543,9 +543,28 @@ input:checked + .toggle-slider:before {
 /* Disabled rows */
 
 tr.start-notif-field.disabled,
-tr.end-notif-field.disabled {
+tr.end-notif-field.disabled,
+tr.dday-field.disabled {
     opacity: 0.4;
     pointer-events: none;
+}
+
+/* Text inputs */
+
+.text-field {
+    width: 180px;
+    max-width: 100%;
+    padding: 6px 10px;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    background: var(--color-pill-bg);
+    color: var(--color-text);
+    text-align: right;
+    font-size: var(--font-size-table);
+}
+
+.text-field::placeholder {
+    color: var(--color-text-muted);
 }
 
 /* Tabs */

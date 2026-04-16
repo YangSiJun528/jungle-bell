@@ -4,6 +4,8 @@ use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 
+use crate::dday;
+
 /// 시각 값 (시 + 분). 스케줄 경계 설정에 사용.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TimeOfDay {
@@ -70,6 +72,18 @@ pub struct Config {
     /// 일요일(KST) 알림 끄기 (기본 false)
     #[serde(default)]
     pub skip_sunday: bool,
+    /// 디데이 기능 활성화 여부 (기본 false)
+    #[serde(default)]
+    pub dday_enabled: bool,
+    /// 디데이 라벨 (예: 최종 발표)
+    #[serde(default)]
+    pub dday_label: String,
+    /// 디데이 목표 날짜 (YYYY-MM-DD)
+    #[serde(default)]
+    pub dday_target_date: Option<String>,
+    /// 툴바/메뉴바에 D-day 배지 텍스트 표시 여부
+    #[serde(default)]
+    pub dday_show_in_tray_title: bool,
 }
 
 fn default_true() -> bool {
@@ -201,6 +215,12 @@ impl Config {
         ) {
             changed = true;
         }
+        if dday::normalize_label(&mut self.dday_label) {
+            changed = true;
+        }
+        if dday::normalize_target_date(&mut self.dday_target_date) {
+            changed = true;
+        }
 
         changed
     }
@@ -226,6 +246,10 @@ impl Default for Config {
             last_version: None,
             skip_attendance: None,
             skip_sunday: false,
+            dday_enabled: false,
+            dday_label: String::new(),
+            dday_target_date: None,
+            dday_show_in_tray_title: false,
         }
     }
 }
