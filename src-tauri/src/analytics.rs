@@ -15,6 +15,7 @@ use tokio::sync::OnceCell;
 
 static CLIENT: OnceCell<posthog_rs::Client> = OnceCell::const_new();
 static DISTINCT_ID: OnceLock<String> = OnceLock::new();
+static OS_NAME: OnceLock<String> = OnceLock::new();
 
 /// PostHog 이벤트 수집용 Project API Key.
 ///
@@ -26,6 +27,12 @@ const API_KEY: Option<&str> = Some("phc_oinkQXTbUdqUVtfVeF5CwkB9An8uDViHX4buoYcs
 
 /// 앱 버전 (컴파일 시 Cargo에서 주입).
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// 런타임 OS 이름을 최초 호출 시 수집해 캐시한다.
+/// PostHog 표준 프로퍼티(`$os`)에 매핑해 대시보드에서 자동 인식되도록 한다.
+fn os_name() -> &'static str {
+    OS_NAME.get_or_init(|| os_info::get().os_type().to_string())
+}
 
 /// 분석 활성화 여부만 로깅한다. 실제 PostHog 클라이언트는 첫 이벤트 발사 시
 /// `get_client()`에서 lazy 초기화되므로, 초기 이벤트가 경쟁 상태로 유실되지 않는다.
@@ -78,6 +85,9 @@ fn capture(event_name: &'static str, extra_props: &[(&'static str, &str)]) {
         // 프로퍼티 삽입 실패는 이벤트 자체를 버릴 만큼 치명적이지 않다.
         // 로그만 남기고 전송은 계속 진행한다.
         log::debug!("[analytics] insert_prop 'app_version' failed: {}", e);
+    }
+    if let Err(e) = event.insert_prop("$os", os_name()) {
+        log::debug!("[analytics] insert_prop '$os' failed: {}", e);
     }
     for (key, value) in extra_props {
         if let Err(e) = event.insert_prop(*key, *value) {

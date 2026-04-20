@@ -29,6 +29,7 @@ log = "0.4"
 tauri-plugin-log = "2"
 posthog-rs = "0.3"
 sha2 = "0.10"
+os_info = "3"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"
