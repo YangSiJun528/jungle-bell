@@ -2,7 +2,8 @@
 
 ## 개요
 
-Project API Key가 `analytics.rs`에 하드코딩되어 항상 활성화됩니다.
+Project API Key가 `analytics.rs`에 하드코딩되어 **릴리스 빌드**에서만 활성화됩니다.
+`cargo tauri dev` 등 `debug_assertions`이 켜진 개발 빌드에서는 이벤트가 전송되지 않습니다.
 
 > **키 공개 여부:** PostHog의 **Project API key (`phc_*`)** 는 클라이언트 SDK 전용으로
 > 공개 전제 설계입니다. 프론트엔드 JS·모바일 앱에 하드코딩하는 것이 표준 방식이며

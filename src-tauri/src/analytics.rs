@@ -34,10 +34,20 @@ fn os_name() -> &'static str {
     OS_NAME.get_or_init(|| os_info::get().os_type().to_string())
 }
 
+/// 개발 빌드(`cargo tauri dev` 등 `debug_assertions`이 켜진 빌드)에서는
+/// PostHog 이벤트를 보내지 않는다. 릴리스 빌드(`cargo tauri build`)에서만 활성화된다.
+fn is_enabled() -> bool {
+    !cfg!(debug_assertions) && API_KEY.is_some()
+}
+
 /// 분석 활성화 여부만 로깅한다. 실제 PostHog 클라이언트는 첫 이벤트 발사 시
 /// `get_client()`에서 lazy 초기화되므로, 초기 이벤트가 경쟁 상태로 유실되지 않는다.
 pub fn init() {
-    log::info!("[analytics] enabled (client will initialize on first event)");
+    if is_enabled() {
+        log::info!("[analytics] enabled (client will initialize on first event)");
+    } else {
+        log::info!("[analytics] disabled (debug build)");
+    }
 }
 
 /// PostHog 클라이언트를 최초 호출 시 초기화하여 반환한다.
@@ -57,7 +67,7 @@ async fn get_client() -> Option<&'static posthog_rs::Client> {
 /// CMS 사용자 ID를 SHA-256으로 해시하여 distinct_id 설정.
 /// 최초 설정 시에만 적용하고, 이후 호출은 무시한다.
 pub fn set_identity(cms_user_id: &str) {
-    if API_KEY.is_none() {
+    if !is_enabled() {
         return;
     }
     let hash = sha256_hex(cms_user_id);
@@ -71,7 +81,7 @@ pub fn set_identity(cms_user_id: &str) {
 /// - 로그인 상태: hashed CMS ID 사용
 /// - 미로그인 상태: "anonymous" 고정값 사용
 fn capture(event_name: &'static str, extra_props: &[(&'static str, &str)]) {
-    if API_KEY.is_none() {
+    if !is_enabled() {
         return;
     }
 
