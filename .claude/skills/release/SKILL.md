@@ -1,7 +1,9 @@
 ---
-description: "Create a GitHub release with tag from the current version in Cargo.toml"
-allowed-tools: Read, Bash, Edit, Grep, Skill, AskUserQuestion
+name: release
+description: Create a GitHub release with a tag from the current version in src-tauri/Cargo.toml. Use when the user asks to create a release, says "릴리즈 만들어줘", "release", "/release", or otherwise wants to publish a new version. Handles branch/state checks, changelog drafting (Korean), tag push, draft release creation, and CI workflow trigger.
 ---
+
+# Release
 
 Create a GitHub release. Follow the steps below in order.
 
@@ -28,7 +30,7 @@ If a tag or release already exists, use `AskUserQuestion` to present the user wi
 
 1. **Abort** — the user resolves it manually and tries again
 2. **Force deploy** — delete the existing release and tag, then recreate them
-3. **Bump version and retry** — use `/bump-version` to increment to the next version, commit/push the changes, then restart from Step 1
+3. **Bump version and retry** — use the `bump-version` skill to increment to the next version, commit/push the changes, then restart from Step 1
 
 ## Step 3 (stable releases only): Review changelog and get user approval
 
