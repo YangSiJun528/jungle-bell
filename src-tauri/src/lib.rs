@@ -4,6 +4,7 @@ mod autostart;
 mod checker;
 mod commands;
 mod config;
+mod dday;
 mod scheduler;
 mod state;
 mod tray;
@@ -198,6 +199,15 @@ pub fn run() {
             commands::set_skip_sunday,
             commands::open_notification_settings,
             commands::get_debug_mode,
+            commands::get_dday_enabled,
+            commands::set_dday_enabled,
+            commands::get_dday_label,
+            commands::set_dday_label,
+            commands::get_dday_target_date,
+            commands::set_dday_target_date,
+            commands::get_dday_show_in_tray_title,
+            commands::set_dday_show_in_tray_title,
+            commands::get_dday_display,
             commands::set_debug_mode,
             commands::open_log_folder,
         ])

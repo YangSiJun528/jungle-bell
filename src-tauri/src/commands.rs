@@ -15,6 +15,7 @@ use crate::attendance_day;
 use crate::autostart;
 use crate::checker;
 use crate::config::{self, TimeOfDay};
+use crate::dday;
 use crate::state::{self, AppState};
 use crate::tray;
 
@@ -53,7 +54,7 @@ pub async fn report_attendance_status(
     let prev_evening = s.evening_checked;
 
     if let Some((phase, remaining)) = checker::process_report(&mut s, &status, now) {
-        tray::update_tray(&app, phase, remaining, s.needs_login);
+        tray::update_tray(&app, phase, remaining, s.needs_login, &s.config);
     }
     drop(s);
 
@@ -108,6 +109,21 @@ macro_rules! setting_bool {
             Ok(())
         }
     };
+}
+
+fn refresh_tray_from_state(app: &tauri::AppHandle, state: &AppState) {
+    let (phase, remaining) = if state.data_loaded {
+        state::compute_daily_phase(
+            &state.config,
+            chrono::Utc::now(),
+            state.morning_checked,
+            state.evening_checked,
+        )
+    } else {
+        (state.phase, None)
+    };
+
+    tray::update_tray(app, phase, remaining, state.needs_login, &state.config);
 }
 
 // ── 매크로 생성 설정 커맨드 ──────────────────────────────
@@ -266,6 +282,95 @@ pub async fn set_auto_start(
 #[tauri::command]
 pub async fn get_debug_mode(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<bool, String> {
     Ok(state.lock().await.config.debug_mode)
+}
+
+#[tauri::command]
+pub async fn get_dday_enabled(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<bool, String> {
+    Ok(state.lock().await.config.dday_enabled)
+}
+
+#[tauri::command]
+pub async fn set_dday_enabled(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    enabled: bool,
+) -> Result<(), String> {
+    log::info!("[settings] 디데이 활성화 변경: {}", enabled);
+    let mut s = state.lock().await;
+    s.config.dday_enabled = enabled;
+    s.config.save();
+    refresh_tray_from_state(&app, &s);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_dday_label(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<String, String> {
+    Ok(state.lock().await.config.dday_label.clone())
+}
+
+#[tauri::command]
+pub async fn set_dday_label(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    value: String,
+) -> Result<(), String> {
+    let mut s = state.lock().await;
+    s.config.dday_label = value;
+    dday::normalize_label(&mut s.config.dday_label);
+    log::info!("[settings] 디데이 라벨 변경: {}", s.config.dday_label);
+    s.config.save();
+    refresh_tray_from_state(&app, &s);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_dday_target_date(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<Option<String>, String> {
+    Ok(state.lock().await.config.dday_target_date.clone())
+}
+
+#[tauri::command]
+pub async fn set_dday_target_date(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    value: Option<String>,
+) -> Result<(), String> {
+    let value = dday::validate_target_date(value)?;
+    let mut s = state.lock().await;
+    s.config.dday_target_date = value;
+    log::info!("[settings] 디데이 날짜 변경: {:?}", s.config.dday_target_date);
+    s.config.save();
+    refresh_tray_from_state(&app, &s);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_dday_show_in_tray_title(
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+) -> Result<bool, String> {
+    Ok(state.lock().await.config.dday_show_in_tray_title)
+}
+
+#[tauri::command]
+pub async fn set_dday_show_in_tray_title(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    enabled: bool,
+) -> Result<(), String> {
+    log::info!("[settings] 디데이 툴바 표시 변경: {}", enabled);
+    let mut s = state.lock().await;
+    s.config.dday_show_in_tray_title = enabled;
+    s.config.save();
+    refresh_tray_from_state(&app, &s);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_dday_display(
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+) -> Result<Option<dday::DdayDisplay>, String> {
+    let s = state.lock().await;
+    let kst_now = chrono::Utc::now().with_timezone(&state::kst());
+    Ok(dday::compute_display(&s.config, kst_now))
 }
 
 /// Tauri 커맨드: 디버그 모드 설정 변경 및 저장.
