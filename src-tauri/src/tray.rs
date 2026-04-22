@@ -23,6 +23,10 @@ const FEEDBACK_URL: &str = "https://github.com/YangSiJun528/jungle-bell/issues/n
 /// 출석 페이지 닫힌 후 로그인 재시도 윈도우 (초). 3분간 빠르게 재확인.
 const LOGIN_RETRY_WINDOW_SECS: u64 = 180;
 
+/// 트레이 메뉴 최소 가로 폭(문자 수). 상태 아이템 텍스트에 non-breaking space로
+/// 패딩을 채워 메뉴 전체 폭을 보장한다.
+const TRAY_STATUS_MIN_WIDTH: usize = 26;
+
 // 트레이 아이콘 — 컴파일 시 include_bytes!로 바이너리에 포함
 const ICON_DEFAULT: &[u8] = include_bytes!("../icons/tray-white.png");
 const ICON_ALERT: &[u8] = include_bytes!("../icons/tray-red.png");
@@ -96,6 +100,21 @@ fn build_status_text(phase: DailyPhase, remaining: Option<i64>, needs_login: boo
 fn build_tooltip(phase: DailyPhase, remaining: Option<i64>, needs_login: bool) -> String {
     let status = build_status_text(phase, remaining, needs_login);
     format!("Jungle Bell - {}", status)
+}
+
+/// 문자열 뒤에 non-breaking space(U+00A0)를 채워 최소 폭을 보장.
+/// 일반 공백은 macOS NSMenu 등에서 trim될 수 있어 NBSP를 사용한다.
+fn pad_to_min_width(s: &str, min: usize) -> String {
+    let len = s.chars().count();
+    if len >= min {
+        s.to_string()
+    } else {
+        let mut out = String::from(s);
+        for _ in 0..(min - len) {
+            out.push('\u{00A0}');
+        }
+        out
+    }
 }
 
 fn focus_window(window: &WebviewWindow<tauri::Wry>) {
@@ -210,7 +229,8 @@ fn handle_menu_event(app: &tauri::AppHandle, event_id: &str) {
 
 /// 시스템 트레이 생성: 아이콘, 메뉴, 이벤트 핸들러 설정.
 pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
-    let status_item = MenuItemBuilder::with_id("status", "로딩 중...")
+    // 전체에 다 pad_to_min_width해도 되지만, 항상 띄워지는거 하나만 있어도 괜찮음.
+    let status_item = MenuItemBuilder::with_id("status", pad_to_min_width("로딩 중...", TRAY_STATUS_MIN_WIDTH))
         .enabled(false)
         .build(app)?;
 
@@ -455,6 +475,6 @@ pub fn update_tray(app: &tauri::AppHandle, phase: DailyPhase, remaining: Option<
     // try_lock 사용 — 락이 잡혀 있으면 이번 갱신은 건너뜀.
     let tray_state: tauri::State<Arc<TokioMutex<TrayState>>> = app.state();
     if let Ok(ts) = tray_state.try_lock() {
-        let _ = ts.status_item.set_text(status_text);
+        let _ = ts.status_item.set_text(pad_to_min_width(&status_text, TRAY_STATUS_MIN_WIDTH));
     };
 }
