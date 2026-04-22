@@ -18,6 +18,7 @@ use tauri::{
 
 const ATTENDANCE_URL: &str = "https://jungle-lms.krafton.com/check-in";
 const MEAL_PLAN_URL: &str = "https://pf.kakao.com/_xhzNjn/posts";
+const FEEDBACK_URL: &str = "https://github.com/YangSiJun528/jungle-bell/issues/new/choose";
 
 /// 출석 페이지 닫힌 후 로그인 재시도 윈도우 (초). 3분간 빠르게 재확인.
 const LOGIN_RETRY_WINDOW_SECS: u64 = 180;
@@ -191,6 +192,10 @@ fn handle_menu_event(app: &tauri::AppHandle, event_id: &str) {
             crate::analytics::track_meal_plan_opened();
             let _ = tauri_plugin_opener::open_url(MEAL_PLAN_URL, None::<&str>);
         }
+        "feedback" => {
+            crate::analytics::track_feedback_opened();
+            let _ = tauri_plugin_opener::open_url(FEEDBACK_URL, None::<&str>);
+        }
         "settings" => open_settings_window(app),
         "version" => {
             let app = app.clone();
@@ -220,6 +225,8 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .enabled(false)
         .build(app)?;
 
+    let feedback = MenuItemBuilder::with_id("feedback", "피드백 보내기").build(app)?;
+
     let quit = MenuItemBuilder::with_id("quit", "종료").build(app)?;
 
     let menu = MenuBuilder::new(app)
@@ -229,6 +236,7 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .item(&meal_plan)
         .separator()
         .item(&version_item)
+        .item(&feedback)
         .item(&settings)
         .item(&quit)
         .build()?;

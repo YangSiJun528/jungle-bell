@@ -125,6 +125,10 @@ pub fn track_meal_plan_opened() {
     capture("meal_plan_opened", &[]);
 }
 
+pub fn track_feedback_opened() {
+    capture("feedback_opened", &[]);
+}
+
 /// 출석 완료 이벤트. `period`는 "morning" 또는 "evening".
 /// 스케줄러 틱마다가 아니라 morning/evening 상태가 false→true로 전이할 때만 호출한다.
 pub fn track_attendance_completed(period: &'static str) {
