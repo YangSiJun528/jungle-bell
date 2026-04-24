@@ -56,7 +56,23 @@
 
 ## 설치
 
-[Releases](https://github.com/YangSiJun528/jungle-bell/releases) 페이지에서 macOS 또는 Windows용 파일을 다운로드하세요.
+한 줄로 최신 버전을 설치할 수 있습니다. 특정 버전이나 수동 설치는 [수동 다운로드](#수동-다운로드)를 참고하세요.
+
+### macOS
+
+```bash
+curl -fsSL https://install.sijun-yang.com/jungle-bell.sh | sh
+```
+
+### Windows
+
+```powershell
+irm https://install.sijun-yang.com/jungle-bell.ps1 | iex
+```
+
+### 수동 다운로드
+
+특정 버전이 필요하거나 자동 설치가 어려운 환경이라면 [Releases](https://github.com/YangSiJun528/jungle-bell/releases)에서 직접 받을 수 있습니다.
 
 | 파일명 | 대상                            |
 |--------|-------------------------------|
@@ -66,12 +82,12 @@
 
 모델을 모르겠다면 Mac에서 왼쪽 상단  → **이 Mac에 관하여**에서 확인할 수 있습니다.
 
-### macOS
+#### macOS 수동 설치
 
 > [!WARNING]    
 > Jungle Bell은 Apple 공인 인증서로 서명되지 않은 앱입니다.     
-> macOS에서 처음 실행할 때 **"손상되었기 때문에 열 수 없습니다"** 오류가 표시됩니다.    
-> 다음 순서에 맞게 설치해주세요.
+> `.dmg`로 직접 설치하면 macOS 첫 실행 시 **"손상되었기 때문에 열 수 없습니다"** 오류가 표시됩니다.     
+> 아래 명령으로 격리 속성을 제거하면 실행할 수 있습니다. (자동 설치 스크립트는 이 과정을 대신 수행합니다.)
 >   
 > ~~Apple Developer Program 비용이 $99라 너무 비싸요. 😭~~
 
@@ -83,7 +99,7 @@
 xattr -cr "/Applications/Jungle Bell.app"
 ```
 
-### Windows
+#### Windows 수동 설치
 
 `-setup.exe` 파일을 다운로드하여 실행하세요.
 
@@ -109,7 +125,7 @@ xattr -cr "/Applications/Jungle Bell.app"
 
 **Q. macOS에서 "손상되었기 때문에 열 수 없습니다" 오류가 떠요.**
 
-[macOS 설치 방법](#macos) 을 참고하세요.
+자동 설치 스크립트(`curl ... | sh`)를 사용했다면 발생하지 않습니다. `.dmg`로 수동 설치한 경우 [macOS 수동 설치](#macos-수동-설치) 의 `xattr` 명령을 실행해 주세요.
 
 **Q. Windows에서 "Windows의 PC 보호" 경고가 떠요.**
 
