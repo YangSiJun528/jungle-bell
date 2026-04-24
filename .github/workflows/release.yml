@@ -85,8 +85,52 @@ jobs:
           projectPath: src-tauri
           updaterJsonPreferNsis: true
 
-  publish-release:
+      - name: Archive .app as tar.gz (macOS only)
+        if: matrix.platform == 'macos-latest'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.get-release-info.outputs.tag }}
+        run: |
+          set -euo pipefail
+          VER="${TAG#v}"
+          if [[ "${{ matrix.args }}" == *aarch64* ]]; then
+            TRIPLE="aarch64-apple-darwin"
+            ARCH="aarch64"
+          else
+            TRIPLE="x86_64-apple-darwin"
+            ARCH="x64"
+          fi
+          APP_DIR="src-tauri/target/${TRIPLE}/release/bundle/macos"
+          ASSET="Jungle.Bell_${VER}_${ARCH}.tar.gz"
+          tar -czf "$ASSET" -C "$APP_DIR" "Jungle Bell.app"
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber "$ASSET"
+
+  publish-installer-scripts:
     needs: [publish-tauri, get-release-info]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.get-release-info.outputs.tag }}
+
+      - name: Render and upload installer scripts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.get-release-info.outputs.tag }}
+        run: |
+          set -euo pipefail
+          VER="${TAG#v}"
+          mkdir -p out
+          sed "s/__VERSION__/${VER}/g" install/jungle-bell.sh.tmpl  > out/jungle-bell.sh
+          sed "s/__VERSION__/${VER}/g" install/jungle-bell.ps1.tmpl > out/jungle-bell.ps1
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+            out/jungle-bell.sh out/jungle-bell.ps1
+
+  publish-release:
+    needs: [publish-tauri, publish-installer-scripts, get-release-info]
     runs-on: ubuntu-latest
     permissions:
       contents: write
