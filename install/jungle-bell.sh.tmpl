@@ -1,0 +1,88 @@
+#!/bin/sh
+# Jungle Bell macOS installer bootstrap.
+# Release workflow replaces __VERSION__ with the actual version before upload.
+set -eu
+
+VERSION="__VERSION__"
+REPO="YangSiJun528/jungle-bell"
+
+TAG="v$VERSION"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --tag)
+      [ $# -ge 2 ] || { echo "--tag requires a value" >&2; exit 1; }
+      TAG="$2"
+      shift 2
+      ;;
+    --version)
+      [ $# -ge 2 ] || { echo "--version requires a value" >&2; exit 1; }
+      TAG="v$2"
+      shift 2
+      ;;
+    -h|--help)
+      cat <<'USAGE'
+Usage: jungle-bell.sh [--tag vX.Y.Z | --version X.Y.Z]
+  --tag       Install the given release tag (e.g. v0.2.6-beta.1)
+  --version   Install the given version (tag is inferred as v<version>)
+Without arguments, installs the version baked into this script.
+USAGE
+      exit 0
+      ;;
+    *)
+      echo "unknown arg: $1" >&2
+      exit 1
+      ;;
+  esac
+done
+
+VER="${TAG#v}"
+
+case "$(uname -m)" in
+  arm64)  ARCH="aarch64" ;;
+  x86_64) ARCH="x64"     ;;
+  *)
+    echo "unsupported architecture: $(uname -m)" >&2
+    exit 1
+    ;;
+esac
+
+ASSET="Jungle.Bell_${VER}_${ARCH}.tar.gz"
+URL="${JUNGLE_BELL_ASSET_URL:-https://github.com/${REPO}/releases/download/${TAG}/${ASSET}}"
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT INT TERM
+
+echo "Downloading Jungle Bell ${TAG} (${ARCH})..."
+case "$URL" in
+  file://*)
+    SRC="${URL#file://}"
+    cp "$SRC" "$TMP/app.tar.gz"
+    ;;
+  *)
+    curl -fL --progress-bar "$URL" -o "$TMP/app.tar.gz"
+    ;;
+esac
+
+tar -xzf "$TMP/app.tar.gz" -C "$TMP"
+
+if [ ! -d "$TMP/Jungle Bell.app" ]; then
+  echo "archive does not contain 'Jungle Bell.app'" >&2
+  exit 1
+fi
+
+DEST="/Applications"
+if [ ! -w "$DEST" ]; then
+  DEST="$HOME/Applications"
+  mkdir -p "$DEST"
+fi
+
+rm -rf "$DEST/Jungle Bell.app"
+ditto "$TMP/Jungle Bell.app" "$DEST/Jungle Bell.app"
+
+# Ad-hoc re-sign so launchd accepts the unsigned-by-Apple binary, and clear
+# every extended attribute (notably com.apple.quarantine) so Gatekeeper won't
+# show the "앱이 손상되었기 때문에 열 수 없습니다" dialog on first launch.
+codesign --force --deep --sign - "$DEST/Jungle Bell.app" 2>/dev/null || true
+xattr -cr "$DEST/Jungle Bell.app" 2>/dev/null || true
+
+echo "Installed: $DEST/Jungle Bell.app"

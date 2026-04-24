@@ -1,0 +1,48 @@
+# Jungle Bell Windows installer bootstrap.
+# Release workflow replaces __VERSION__ with the actual version before upload.
+[CmdletBinding()]
+param(
+  [string]$Tag,
+  [string]$Version
+)
+
+$ErrorActionPreference = 'Stop'
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+$DefaultVersion = "__VERSION__"
+$Repo = "YangSiJun528/jungle-bell"
+
+if ($Version) {
+  $resolvedTag = "v$Version"
+} elseif ($Tag) {
+  $resolvedTag = $Tag
+} else {
+  $resolvedTag = "v$DefaultVersion"
+}
+$ver = $resolvedTag.TrimStart('v')
+
+$asset = "Jungle.Bell_${ver}_x64-setup.exe"
+if ($env:JUNGLE_BELL_ASSET_URL) {
+  $url = $env:JUNGLE_BELL_ASSET_URL
+} else {
+  $url = "https://github.com/$Repo/releases/download/$resolvedTag/$asset"
+}
+
+$tmp = Join-Path $env:TEMP ("jungle-bell-" + [guid]::NewGuid().ToString() + ".exe")
+try {
+  Write-Host "Downloading Jungle Bell $resolvedTag..."
+  Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $tmp
+
+  Write-Host "Installing silently..."
+  $proc = Start-Process -FilePath $tmp -ArgumentList '/S' -Wait -PassThru
+  if ($proc.ExitCode -ne 0) {
+    throw "Installer exited with code $($proc.ExitCode)."
+  }
+
+  Write-Host "Installed. Launch Jungle Bell from the Start menu."
+}
+finally {
+  if (Test-Path $tmp) {
+    Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+  }
+}
