@@ -56,7 +56,7 @@
 
 ## 설치
 
-한 줄로 최신 버전을 설치할 수 있습니다. 특정 버전이나 수동 설치는 [수동 다운로드](#수동-다운로드)를 참고하세요.
+한 줄로 최신 버전을 설치할 수 있습니다. 자동 설치가 어려운 환경이라면 [수동 다운로드](#수동-다운로드)를 참고하세요.
 
 ### macOS
 
@@ -70,9 +70,23 @@ curl -fsSL https://install.sijun-yang.com/jungle-bell.sh | sh
 irm https://install.sijun-yang.com/jungle-bell.ps1 | iex
 ```
 
+### 특정 버전 설치
+
+URL 끝에 `?tag=vX.Y.Z`를 붙이면 해당 버전으로 설치됩니다. 사용 가능한 태그는 [Releases](https://github.com/YangSiJun528/jungle-bell/releases) 페이지에서 확인하세요.
+
+```bash
+# macOS
+curl -fsSL "https://install.sijun-yang.com/jungle-bell.sh?tag=v0.2.5" | sh
+```
+
+```powershell
+# Windows
+irm "https://install.sijun-yang.com/jungle-bell.ps1?tag=v0.2.5" | iex
+```
+
 ### 수동 다운로드
 
-특정 버전이 필요하거나 자동 설치가 어려운 환경이라면 [Releases](https://github.com/YangSiJun528/jungle-bell/releases)에서 직접 받을 수 있습니다.
+자동 설치가 어렵다면 [Releases](https://github.com/YangSiJun528/jungle-bell/releases)에서 직접 받을 수 있습니다.
 
 | 파일명 | 대상                            |
 |--------|-------------------------------|
