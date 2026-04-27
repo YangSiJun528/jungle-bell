@@ -85,7 +85,7 @@ fn default_notification_start() -> TimeOfDay {
 }
 
 fn default_notification_end() -> TimeOfDay {
-    TimeOfDay { hour: 1, minute: 0 }
+    TimeOfDay { hour: 4, minute: 0 }
 }
 
 const ALLOWED_NOTIFICATION_INTERVAL_MINS: [u32; 6] = [1, 3, 5, 10, 15, 30];
@@ -220,7 +220,7 @@ impl Default for Config {
             start_notification_interval_mins: 15,
             end_notification_interval_mins: 15,
             notification_start: TimeOfDay { hour: 9, minute: 0 },
-            notification_end: TimeOfDay { hour: 1, minute: 0 },
+            notification_end: TimeOfDay { hour: 4, minute: 0 },
             debug_mode: false,
             welcome_notification_sent: false,
             last_version: None,

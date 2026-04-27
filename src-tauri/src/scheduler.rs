@@ -258,7 +258,7 @@ pub(crate) fn should_notify(
         DailyPhase::NeedStart | DailyPhase::StartOverdue => kst_secs >= notif_start_secs,
         DailyPhase::NeedEnd => {
             if notif_end_secs <= evening_start_secs {
-                // 자정 넘김 (예: 23:00~01:00)
+                // 자정을 넘기는 알림 윈도우
                 kst_secs >= evening_start_secs || kst_secs < notif_end_secs
             } else {
                 kst_secs >= evening_start_secs && kst_secs < notif_end_secs
@@ -637,7 +637,6 @@ mod tests {
 
     #[test]
     fn 알림_윈도우_이전에는_알림을_보내지_않는다() {
-        // given: notification_start=09:00
         let config = Config::default();
 
         // when: KST 08:00 — 아침 알림 윈도우 전
@@ -649,7 +648,6 @@ mod tests {
 
     #[test]
     fn 알림_윈도우_내_첫_알림은_발송된다() {
-        // given: notification_start=09:00
         let config = Config::default();
 
         // when
@@ -707,7 +705,6 @@ mod tests {
 
     #[test]
     fn 자정을_넘긴_저녁_윈도우_내에서_알림이_발송된다() {
-        // given: evening_start=23:00, notification_end=01:00
         let config = Config::default();
 
         // when: KST 00:30 — 자정 넘긴 저녁 윈도우 내
@@ -723,15 +720,14 @@ mod tests {
 
     #[test]
     fn 저녁_윈도우_종료_후에는_알림을_보내지_않는다() {
-        // given: notification_end=01:00
         let config = Config::default();
 
-        // when: KST 01:30 — 윈도우 밖
-        let kst_0130 = FixedOffset::east_opt(9 * 3600)
+        // when: KST 04:30 — 윈도우 밖
+        let kst_0430 = FixedOffset::east_opt(9 * 3600)
             .unwrap()
-            .with_ymd_and_hms(2026, 3, 18, 1, 30, 0)
+            .with_ymd_and_hms(2026, 3, 18, 4, 30, 0)
             .unwrap();
-        let d = should_notify(&config, DailyPhase::NeedEnd, Some(9000), false, kst_0130, None);
+        let d = should_notify(&config, DailyPhase::NeedEnd, Some(9000), false, kst_0430, None);
 
         // then
         assert!(!d.send);
