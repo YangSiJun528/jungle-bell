@@ -757,13 +757,15 @@ tr.ob-end-field.disabled {
     font-size: var(--font-size-hint);
     color: var(--color-text-muted);
     line-height: 1.5;
+    text-align: center;
 }
 
 .onboarding-os-note {
-    width: min(100%, 360px);
+    width: fit-content;
+    max-width: min(100%, 360px);
     margin-left: auto;
     margin-right: auto;
-    text-align: left;
+    text-align: center;
 }
 
 .onboarding-os-note:has(.onboarding-note-icon) {
@@ -774,6 +776,11 @@ tr.ob-end-field.disabled {
 
 .onboarding-note-icon {
     line-height: 1.5;
+}
+
+.onboarding-note-copy {
+    min-width: 0;
+    text-align: center;
 }
 
 .onboarding-note-line {
