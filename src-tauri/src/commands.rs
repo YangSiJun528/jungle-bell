@@ -7,7 +7,8 @@
 use std::process::Command;
 use std::sync::Arc;
 
-use tauri::Manager;
+use serde::Serialize;
+use tauri::{Emitter, Manager};
 use tokio::sync::Mutex;
 
 use crate::analytics;
@@ -17,6 +18,22 @@ use crate::checker;
 use crate::config::{self, TimeOfDay};
 use crate::state::{self, AppState};
 use crate::tray;
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoginStatus {
+    pub data_loaded: bool,
+    pub needs_login: bool,
+}
+
+impl LoginStatus {
+    fn from_state(state: &AppState) -> Self {
+        Self {
+            data_loaded: state.data_loaded,
+            needs_login: state.needs_login,
+        }
+    }
+}
 
 // ── 출석 보고 ────────────────────────────────────────────
 
@@ -49,13 +66,23 @@ pub async fn report_attendance_status(
     // `was_loaded`가 false인 최초 보고는 "앱 재시작 후 오늘 이미 완료된 출석"일 수 있으므로
     // 이벤트 발사 대상에서 제외해야 한다 (중복 카운트 방지).
     let was_loaded = s.data_loaded;
+    let prev_data_loaded = s.data_loaded;
     let prev_morning = s.morning_checked;
     let prev_evening = s.evening_checked;
+    let prev_needs_login = s.needs_login;
 
     if let Some((phase, remaining)) = checker::process_report(&mut s, &status, now) {
         tray::update_tray(&app, phase, remaining, s.needs_login);
     }
+    let curr_needs_login = s.needs_login;
+    let curr_data_loaded = s.data_loaded;
+    let login_status = LoginStatus::from_state(&s);
     drop(s);
+
+    // 로그인 상태/초기 로드 상태 전이 시 이벤트 발사 — 온보딩 슬라이드가 ✓ 표시 갱신용으로 listen.
+    if prev_needs_login != curr_needs_login || prev_data_loaded != curr_data_loaded {
+        let _ = app.emit("login-status-changed", login_status);
+    }
 
     // 출석 완료 이벤트: false → true 전이 시점에만 한 번 발사한다.
     // 스케줄러의 일일 리셋(자정) 이후 첫 완료 시에도 정상적으로 전이로 감지된다.
@@ -314,6 +341,41 @@ pub async fn open_log_folder(app: tauri::AppHandle) -> Result<(), String> {
     let log_dir = app.path().app_log_dir().map_err(|e| e.to_string())?;
     log::info!("[settings] 로그 폴더 열기: {:?}", log_dir);
     tauri_plugin_opener::open_path(&log_dir, None::<&str>).map_err(|e| e.to_string())
+}
+
+/// Tauri 커맨드: 온보딩(시작하기) 창을 연다.
+#[tauri::command]
+pub fn open_onboarding(app: tauri::AppHandle) {
+    tray::open_onboarding_window(&app);
+}
+
+/// Tauri 커맨드: 온보딩(시작하기) 창을 닫는다.
+#[tauri::command]
+pub fn close_onboarding(app: tauri::AppHandle) {
+    tray::close_onboarding_window(&app);
+}
+
+/// Tauri 커맨드: 출석 페이지 창을 연다 (온보딩의 "출석 페이지 열기" 버튼용).
+/// 트레이 메뉴의 "출석 페이지 열기"와 동일한 동작.
+#[tauri::command]
+pub fn open_attendance_window(app: tauri::AppHandle) {
+    tray::open_attendance_window(&app);
+    tray::refresh_login_status(&app);
+}
+
+/// Tauri 커맨드: 현재 로그인 확인 상태 조회.
+/// 온보딩 슬라이드 진입 시 초기 표시 여부 결정용.
+#[tauri::command]
+pub async fn get_login_status(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<LoginStatus, String> {
+    let state = state.lock().await;
+    Ok(LoginStatus::from_state(&state))
+}
+
+/// Tauri 커맨드: hidden checker를 다시 출석 페이지로 이동시켜 로그인 상태를 재확인한다.
+/// 온보딩에서 출석 창 로그인 완료를 빠르게 감지하기 위한 보조 커맨드.
+#[tauri::command]
+pub fn refresh_login_status(app: tauri::AppHandle) {
+    tray::refresh_login_status(&app);
 }
 
 /// Tauri 커맨드: OS 알림 설정 화면을 연다.

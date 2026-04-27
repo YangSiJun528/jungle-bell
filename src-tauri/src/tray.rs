@@ -144,8 +144,18 @@ fn activate_login_retry_window(app_handle: &tauri::AppHandle) {
 
 fn reload_checker(app_handle: &tauri::AppHandle) {
     if let Some(checker) = app_handle.get_webview_window("checker") {
-        let _ = checker.navigate(ATTENDANCE_URL.parse().unwrap());
+        if let Err(e) = checker.navigate(ATTENDANCE_URL.parse().unwrap()) {
+            log::warn!("[checker] reload failed: {}", e);
+        }
     }
+}
+
+pub fn refresh_login_status(app_handle: &tauri::AppHandle) {
+    activate_login_retry_window(app_handle);
+    // TODO: checker reload 완료 후 상태 확인을 트리거하는 이벤트 흐름으로 정리한다.
+    // 현재는 즉시 trigger_check 후 navigate에 의존하므로, 로드 타이밍에 따라 불필요한 재시도가 생길 수 있다.
+    crate::checker::trigger_check(app_handle);
+    reload_checker(app_handle);
 }
 
 fn build_attendance_window(app: &tauri::AppHandle) {
@@ -171,7 +181,7 @@ fn build_attendance_window(app: &tauri::AppHandle) {
     }
 }
 
-fn open_attendance_window(app: &tauri::AppHandle) {
+pub fn open_attendance_window(app: &tauri::AppHandle) {
     log::info!("[tray] attendance window opened");
     crate::analytics::track_attendance_page_opened();
 
@@ -191,6 +201,33 @@ fn build_settings_window(app: &tauri::AppHandle) {
         .maximizable(false)
         .focused(true)
         .build();
+}
+
+fn build_onboarding_window(app: &tauri::AppHandle) {
+    let _ = tauri::WebviewWindowBuilder::new(app, "onboarding", tauri::WebviewUrl::App("onboarding.html".into()))
+        .title("Jungle Bell 시작하기")
+        .inner_size(480.0, 680.0)
+        .resizable(false)
+        .minimizable(false)
+        .maximizable(false)
+        .focused(true)
+        .build();
+}
+
+pub fn open_onboarding_window(app: &tauri::AppHandle) {
+    log::info!("[tray] onboarding window opened");
+    if let Some(window) = app.get_webview_window("onboarding") {
+        focus_window(&window);
+    } else {
+        build_onboarding_window(app);
+    }
+}
+
+pub fn close_onboarding_window(app: &tauri::AppHandle) {
+    log::info!("[tray] onboarding window closed");
+    if let Some(window) = app.get_webview_window("onboarding") {
+        let _ = window.close();
+    }
 }
 
 fn open_settings_window(app: &tauri::AppHandle) {

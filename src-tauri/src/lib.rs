@@ -44,6 +44,7 @@ fn notify_startup_status(app: &tauri::AppHandle, shared_state: &Arc<Mutex<AppSta
                 .body("트레이 아이콘에서 출석 창을 열고 LMS에 로그인해 주세요.")
                 .show();
             log::info!("[app] 환영 알림 발송 (첫 설치)");
+            tray::open_onboarding_window(app);
         }
         Some(last) if last != &current_version => {
             let _ = app
@@ -200,6 +201,11 @@ pub fn run() {
             commands::get_debug_mode,
             commands::set_debug_mode,
             commands::open_log_folder,
+            commands::open_onboarding,
+            commands::close_onboarding,
+            commands::open_attendance_window,
+            commands::get_login_status,
+            commands::refresh_login_status,
         ])
         // setup(): 앱 초기화 후 이벤트 루프 시작 전에 한 번 실행.
         .setup(move |app| {
@@ -218,8 +224,8 @@ pub fn run() {
             // 기본값이 true이므로 첫 설치 시 자동으로 등록됨.
             sync_auto_start_setting(app.handle(), &shared_state);
             tray::setup_tray(app)?;
-            notify_startup_status(app.handle(), &shared_state);
             build_checker_window(app.handle())?;
+            notify_startup_status(app.handle(), &shared_state);
             spawn_startup_update_check(app.handle().clone(), shared_state.clone());
             spawn_periodic_update_check(app.handle().clone(), shared_state.clone());
 

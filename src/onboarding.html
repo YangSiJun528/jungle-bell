@@ -1,0 +1,608 @@
+<!doctype html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8"/>
+    <link rel="stylesheet" href="styles.css"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Jungle Bell 시작하기</title>
+</head>
+<body class="onboarding-body">
+
+<div class="header">
+    <img src="assets/logo.png" alt="Jungle Bell" class="logo"/>
+    <div>
+        <h1>Jungle Bell <small id="onboarding-step-indicator">1 / 6</small></h1>
+        <p>처음 사용하시는 분들을 위한 안내</p>
+    </div>
+</div>
+
+<!-- 글로벌 OS 토글 — 모든 슬라이드에서 보임 -->
+<div class="onboarding-os-bar">
+    <div class="scenario-tabs onboarding-os-tabs" role="tablist" aria-label="OS 선택">
+        <button type="button" class="scenario-tab active" data-os="mac">macOS</button>
+        <button type="button" class="scenario-tab" data-os="win">Windows</button>
+    </div>
+</div>
+
+<div class="onboarding-card" data-step="0" data-total="6">
+
+    <!-- 0: 환영 + 데모 -->
+    <section class="onboarding-slide" data-slide="0">
+        <h2 class="onboarding-title">환영합니다</h2>
+        <p class="onboarding-desc">
+            Jungle Bell은
+            <span data-os-only="mac">메뉴 바</span><span data-os-only="win" hidden>작업 표시줄</span>에
+            살아 있는 출석 알림 앱이에요.<br/>
+            <span data-os-only="mac">메뉴 바 아이콘을 클릭하면 이런 메뉴가 떠요.</span>
+            <span data-os-only="win" hidden>트레이 아이콘을 클릭하면 이런 메뉴가 떠요.</span>
+        </p>
+
+        <div class="scenario-mock scenario-mock-macos welcome-mock" data-os="mac">
+            <div class="scenario-bar scenario-bar-top">
+                <div class="scenario-bar-cluster">
+                    <span class="scenario-placeholder"></span>
+                    <span class="scenario-placeholder"></span>
+                    <img class="scenario-tray-icon" src="assets/tray-mini-white.png" alt="메뉴 바 아이콘"/>
+                    <span class="scenario-placeholder scenario-placeholder-time">14:08</span>
+                </div>
+            </div>
+            <div class="scenario-menu scenario-menu-macos">
+                <div class="scenario-menu-item scenario-menu-status">학습 중</div>
+                <div class="scenario-menu-item">출석 페이지 열기</div>
+                <div class="scenario-menu-sep"></div>
+                <div class="scenario-menu-item">식단표 보러가기</div>
+                <div class="scenario-menu-sep"></div>
+                <div class="scenario-menu-item scenario-menu-disabled">v0.2.6</div>
+                <div class="scenario-menu-item">피드백 보내기</div>
+                <div class="scenario-menu-item">설정...</div>
+                <div class="scenario-menu-item">종료</div>
+            </div>
+        </div>
+
+        <div class="scenario-mock scenario-mock-windows welcome-mock" data-os="win" hidden>
+            <div class="scenario-menu scenario-menu-windows">
+                <div class="scenario-menu-item scenario-menu-status">학습 중</div>
+                <div class="scenario-menu-item">출석 페이지 열기</div>
+                <div class="scenario-menu-sep"></div>
+                <div class="scenario-menu-item">식단표 보러가기</div>
+                <div class="scenario-menu-sep"></div>
+                <div class="scenario-menu-item scenario-menu-disabled">v0.2.6</div>
+                <div class="scenario-menu-item">피드백 보내기</div>
+                <div class="scenario-menu-item">설정...</div>
+                <div class="scenario-menu-item">종료</div>
+            </div>
+            <div class="scenario-bar scenario-bar-bottom">
+                <div class="scenario-bar-cluster scenario-bar-cluster-right">
+                    <span class="scenario-placeholder"></span>
+                    <span class="scenario-placeholder"></span>
+                    <img class="scenario-tray-icon" src="assets/tray-mini-white.png" alt="트레이 아이콘"/>
+                    <span class="scenario-placeholder scenario-placeholder-time">14:08</span>
+                </div>
+            </div>
+        </div>
+
+        <small class="onboarding-note onboarding-os-note" data-os-only="win" hidden>
+            <span class="onboarding-note-icon" aria-hidden="true">💡</span>
+            <span class="onboarding-note-copy">
+                <span class="onboarding-note-line">트레이 아이콘이 처음엔 <strong>숨겨진 아이콘 메뉴</strong>(우하단 ∧)에 있을 수 있어요.</span>
+                <span class="onboarding-note-line">Jungle Bell을 작업 표시줄로 끌어두면 항상 보여요.</span>
+            </span>
+        </small>
+    </section>
+
+    <!-- 1: LMS 로그인 -->
+    <section class="onboarding-slide" data-slide="1">
+        <div class="onboarding-illust onboarding-illust-emoji" aria-hidden="true">🔐</div>
+        <h2 class="onboarding-title">먼저 LMS에 로그인하세요</h2>
+        <p class="onboarding-desc">
+            출석 상태를 확인하고 알림을 보내려면 로그인이 필요해요.
+        </p>
+        <div class="onboarding-action-row">
+            <button type="button" class="onboarding-btn onboarding-btn-primary onboarding-btn-inline" id="open-attendance-btn">
+                출석 페이지 열기
+            </button>
+            <span class="onboarding-status-badge" id="login-status-badge" hidden>✓ 로그인 완료</span>
+            <span class="onboarding-status-pending" id="login-status-pending">로그인 상태 확인 중</span>
+        </div>
+        <small class="onboarding-note">
+            자동 출석은 하지 않아요. 페이지에서 직접 체크인/체크아웃을 눌러주세요.
+        </small>
+    </section>
+
+    <!-- 2: 알림 시간 설정 -->
+    <section class="onboarding-slide" data-slide="2">
+        <h2 class="onboarding-title">알림 시간을 설정해 보세요</h2>
+        <p class="onboarding-desc">출석이 필요한 시간대에 반복 알림을 받을 수 있어요.</p>
+        <div class="onboarding-form">
+            <table>
+                <tr>
+                    <th>시작 출석 알림</th>
+                    <td>
+                        <label class="toggle">
+                            <input type="checkbox" id="ob-start-toggle"/>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </td>
+                </tr>
+                <tr class="ob-start-field">
+                    <th></th>
+                    <td>
+                        <div class="select-pills">
+                            <div class="pill">
+                                <div class="pill-select-wrap">
+                                    <select id="ob-notif-start" aria-label="시작 알림 시간 범위">
+                                        <option value="4">04:00 ~ 10:00</option>
+                                        <option value="5">05:00 ~ 10:00</option>
+                                        <option value="6">06:00 ~ 10:00</option>
+                                        <option value="7">07:00 ~ 10:00</option>
+                                        <option value="8">08:00 ~ 10:00</option>
+                                        <option value="9">09:00 ~ 10:00</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="pill">
+                                <div class="pill-select-wrap">
+                                    <select id="ob-start-interval" aria-label="시작 알림 간격">
+                                        <option value="1">1분 간격</option>
+                                        <option value="3">3분 간격</option>
+                                        <option value="5">5분 간격</option>
+                                        <option value="10">10분 간격</option>
+                                        <option value="15">15분 간격</option>
+                                        <option value="30">30분 간격</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                <tr class="gap-field"></tr>
+                <tr>
+                    <th>종료 출석 알림</th>
+                    <td>
+                        <label class="toggle">
+                            <input type="checkbox" id="ob-end-toggle"/>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </td>
+                </tr>
+                <tr class="ob-end-field">
+                    <th></th>
+                    <td>
+                        <div class="select-pills">
+                            <div class="pill">
+                                <div class="pill-select-wrap">
+                                    <select id="ob-notif-end" aria-label="종료 알림 시간 범위">
+                                        <option value="0">23:00 ~ 00:00</option>
+                                        <option value="1">23:00 ~ 01:00</option>
+                                        <option value="2">23:00 ~ 02:00</option>
+                                        <option value="3">23:00 ~ 03:00</option>
+                                        <option value="4">23:00 ~ 04:00</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="pill">
+                                <div class="pill-select-wrap">
+                                    <select id="ob-end-interval" aria-label="종료 알림 간격">
+                                        <option value="1">1분 간격</option>
+                                        <option value="3">3분 간격</option>
+                                        <option value="5">5분 간격</option>
+                                        <option value="10">10분 간격</option>
+                                        <option value="15">15분 간격</option>
+                                        <option value="30">30분 간격</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+            </table>
+            <small class="onboarding-note">설정 → 알림 탭에서 언제든 다시 바꿀 수 있어요.</small>
+        </div>
+    </section>
+
+    <!-- 3: 시스템 알림 권한 확인 (필수) -->
+    <section class="onboarding-slide" data-slide="3">
+        <div class="onboarding-illust onboarding-illust-emoji" aria-hidden="true">🔔</div>
+        <h2 class="onboarding-title">시스템 알림이 켜져 있는지 확인해 주세요</h2>
+        <p class="onboarding-desc">
+            OS 알림이 차단되어 있으면 Jungle Bell의 알림이 전달되지 않아요.<br/>
+            아래 버튼으로 시스템 알림 설정을 열어 <strong>Jungle Bell</strong>을 허용으로 바꿔주세요.
+        </p>
+        <div class="onboarding-action-row">
+            <button type="button" class="onboarding-btn onboarding-btn-primary onboarding-btn-inline" id="ob-open-notif-settings">
+                시스템 알림 설정 열기
+            </button>
+        </div>
+    </section>
+
+    <!-- 4: 하루 시나리오 -->
+    <section class="onboarding-slide" data-slide="4">
+        <h2 class="onboarding-title">출석 상태는 이렇게 바뀌어요</h2>
+        <div class="scenario-tabs scenario-time-tabs" role="tablist" aria-label="출석 상태 선택">
+            <button type="button" class="scenario-tab active" data-scenario="morning">시작 전</button>
+            <button type="button" class="scenario-tab" data-scenario="day">학습 중</button>
+            <button type="button" class="scenario-tab" data-scenario="night">종료 전</button>
+        </div>
+
+        <div class="scenario-mock scenario-mock-macos" id="scenario-mock-macos" data-os="mac">
+            <div class="scenario-bar scenario-bar-top">
+                <div class="scenario-bar-cluster">
+                    <span class="scenario-placeholder"></span>
+                    <span class="scenario-placeholder"></span>
+                    <img class="scenario-tray-icon" data-tray="mac" src="assets/tray-mini-red.png" alt="메뉴 바 아이콘"/>
+                    <span class="scenario-placeholder scenario-placeholder-time">09:24</span>
+                </div>
+            </div>
+            <div class="scenario-menu scenario-menu-macos">
+                <div class="scenario-menu-item scenario-menu-status" data-status="mac">출석 시작 가능</div>
+                <div class="scenario-menu-item">출석 페이지 열기</div>
+                <div class="scenario-menu-sep"></div>
+                <div class="scenario-menu-item">식단표 보러가기</div>
+                <div class="scenario-menu-sep"></div>
+                <div class="scenario-menu-item scenario-menu-disabled">v0.2.6</div>
+                <div class="scenario-menu-item">피드백 보내기</div>
+                <div class="scenario-menu-item">설정...</div>
+                <div class="scenario-menu-item">종료</div>
+            </div>
+        </div>
+
+        <div class="scenario-mock scenario-mock-windows" id="scenario-mock-windows" data-os="win" hidden>
+            <div class="scenario-menu scenario-menu-windows">
+                <div class="scenario-menu-item scenario-menu-status" data-status="win">출석 시작 가능</div>
+                <div class="scenario-menu-item">출석 페이지 열기</div>
+                <div class="scenario-menu-sep"></div>
+                <div class="scenario-menu-item">식단표 보러가기</div>
+                <div class="scenario-menu-sep"></div>
+                <div class="scenario-menu-item scenario-menu-disabled">v0.2.6</div>
+                <div class="scenario-menu-item">피드백 보내기</div>
+                <div class="scenario-menu-item">설정...</div>
+                <div class="scenario-menu-item">종료</div>
+            </div>
+            <div class="scenario-bar scenario-bar-bottom">
+                <div class="scenario-bar-cluster scenario-bar-cluster-right">
+                    <span class="scenario-placeholder"></span>
+                    <span class="scenario-placeholder"></span>
+                    <img class="scenario-tray-icon" data-tray="win" src="assets/tray-mini-red.png" alt="트레이 아이콘"/>
+                    <span class="scenario-placeholder scenario-placeholder-time">09:24</span>
+                </div>
+            </div>
+        </div>
+
+        <p class="onboarding-note" id="scenario-caption">
+            빨간 종은 출석 시작이 필요한 상태를 보여줘요. 출석 페이지 창을 열어 체크인해 주세요.
+        </p>
+    </section>
+
+    <!-- 5: 준비 끝 -->
+    <section class="onboarding-slide" data-slide="5">
+        <div class="onboarding-illust onboarding-illust-emoji" aria-hidden="true">🎉</div>
+        <h2 class="onboarding-title">준비 끝!</h2>
+    </section>
+
+    <div class="onboarding-dots" role="tablist" aria-label="진행 단계">
+        <span class="onboarding-dot" data-dot="0"></span>
+        <span class="onboarding-dot" data-dot="1"></span>
+        <span class="onboarding-dot" data-dot="2"></span>
+        <span class="onboarding-dot" data-dot="3"></span>
+        <span class="onboarding-dot" data-dot="4"></span>
+        <span class="onboarding-dot" data-dot="5"></span>
+    </div>
+
+    <div class="onboarding-actions">
+        <button type="button" class="onboarding-btn onboarding-btn-secondary" id="onboarding-prev">이전</button>
+        <button type="button" class="onboarding-btn onboarding-btn-primary" id="onboarding-next">다음</button>
+    </div>
+    <button type="button" class="onboarding-step-skip link-btn" id="onboarding-skip">건너뛰기</button>
+</div>
+
+<script>
+    const {invoke} = window.__TAURI__.core;
+    const {listen} = window.__TAURI__.event;
+
+    const TOTAL = 6;
+    const LOGIN_STEP = 1;
+
+    const card = document.querySelector('.onboarding-card');
+    const slides = document.querySelectorAll('.onboarding-slide');
+    const dots = document.querySelectorAll('.onboarding-dot');
+    const prevBtn = document.getElementById('onboarding-prev');
+    const nextBtn = document.getElementById('onboarding-next');
+    const skipBtn = document.getElementById('onboarding-skip');
+    const stepIndicator = document.getElementById('onboarding-step-indicator');
+
+    const scenarioSlide = document.querySelector('[data-slide="4"]');
+
+    let step = 0;
+    let loginDataLoaded = false;
+    let needsLogin = true;
+    let unlistenLogin = null;
+    let loginRefreshTimer = null;
+
+    async function close() {
+        stopLoginRefresh();
+        try {
+            await invoke('close_onboarding');
+        } catch (e) {
+            console.error('[onboarding] close failed:', e);
+            window.close();
+        }
+    }
+
+    function isNextDisabled() {
+        if (step === LOGIN_STEP && (!loginDataLoaded || needsLogin)) return true;
+        return false;
+    }
+
+    function render() {
+        card.dataset.step = String(step);
+        slides.forEach((el, i) => el.classList.toggle('active', i === step));
+        dots.forEach((el, i) => el.classList.toggle('active', i === step));
+        prevBtn.disabled = step === 0;
+        const isLast = step === TOTAL - 1;
+        nextBtn.textContent = isLast ? '시작하기' : '다음';
+        nextBtn.disabled = isNextDisabled();
+        skipBtn.classList.toggle('is-placeholder', isLast);
+        skipBtn.disabled = isLast;
+        skipBtn.setAttribute('aria-hidden', String(isLast));
+        if (stepIndicator) stepIndicator.textContent = `${step + 1} / ${TOTAL}`;
+        if (step === LOGIN_STEP && (!loginDataLoaded || needsLogin)) {
+            startLoginRefresh();
+        } else if (step !== LOGIN_STEP) {
+            stopLoginRefresh();
+        }
+    }
+
+    function applyLoginStatus(status) {
+        if (typeof status === 'boolean') {
+            loginDataLoaded = true;
+            needsLogin = status;
+            return;
+        }
+        loginDataLoaded = !!status.dataLoaded;
+        needsLogin = !loginDataLoaded || !!status.needsLogin;
+    }
+
+    async function syncLoginStatus() {
+        try {
+            applyLoginStatus(await invoke('get_login_status'));
+            updateLoginUi();
+            render();
+        } catch (e) {
+            console.error('[onboarding] login status sync failed:', e);
+        }
+    }
+
+    function requestLoginRefresh() {
+        invoke('refresh_login_status').catch(console.error);
+        window.setTimeout(syncLoginStatus, 1200);
+    }
+
+    function startLoginRefresh() {
+        if (loginRefreshTimer) return;
+        requestLoginRefresh();
+        loginRefreshTimer = window.setInterval(() => {
+            if (step === LOGIN_STEP && (!loginDataLoaded || needsLogin)) {
+                requestLoginRefresh();
+            } else {
+                stopLoginRefresh();
+            }
+        }, 5000);
+    }
+
+    function stopLoginRefresh() {
+        if (!loginRefreshTimer) return;
+        window.clearInterval(loginRefreshTimer);
+        loginRefreshTimer = null;
+    }
+
+    function updateLoginUi() {
+        const badge = document.getElementById('login-status-badge');
+        const openBtn = document.getElementById('open-attendance-btn');
+        const pending = document.getElementById('login-status-pending');
+        if (!loginDataLoaded) {
+            badge.hidden = true;
+            openBtn.hidden = false;
+            pending.hidden = false;
+        } else if (!needsLogin) {
+            badge.hidden = false;
+            openBtn.hidden = true;
+            pending.hidden = true;
+            stopLoginRefresh();
+        } else {
+            badge.hidden = true;
+            openBtn.hidden = false;
+            pending.hidden = true;
+        }
+        if (step === LOGIN_STEP) nextBtn.disabled = isNextDisabled();
+    }
+
+    // ── 슬라이드 네비게이션 ────────────────────────────
+    prevBtn.addEventListener('click', () => {
+        if (step > 0) { step -= 1; render(); }
+    });
+    nextBtn.addEventListener('click', () => {
+        if (isNextDisabled()) return;
+        if (step < TOTAL - 1) { step += 1; render(); }
+        else close();
+    });
+    skipBtn.addEventListener('click', () => {
+        if (step < TOTAL - 1) { step += 1; render(); }
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') close();
+        else if (e.key === 'ArrowRight' && !nextBtn.disabled) nextBtn.click();
+        else if (e.key === 'ArrowLeft' && !prevBtn.disabled) prevBtn.click();
+    });
+
+    // ── 슬라이드 1: 로그인 ─────────────────────────────
+    document.getElementById('open-attendance-btn').addEventListener('click', () => {
+        invoke('open_attendance_window').catch(console.error);
+        startLoginRefresh();
+    });
+
+    // ── 알림/옵션 헬퍼 ─────────────────────────────────
+    function setupNotifToggleField(toggleId, fieldClass, getCmd, setCmd) {
+        const toggle = document.getElementById(toggleId);
+        const fields = document.querySelectorAll('.' + fieldClass);
+        const updateFields = (enabled) => {
+            fields.forEach(el => {
+                el.classList.toggle('disabled', !enabled);
+                el.querySelectorAll('select, button, input').forEach(c => c.disabled = !enabled);
+            });
+        };
+        toggle.addEventListener('change', () => {
+            invoke(setCmd, {enabled: toggle.checked}).catch(console.error);
+            updateFields(toggle.checked);
+        });
+        return {toggle, updateFields};
+    }
+
+    function bindSelect(id, setCmd, paramName) {
+        const el = document.getElementById(id);
+        el.addEventListener('change', () => {
+            const value = parseInt(el.value);
+            const args = paramName === 'time'
+                ? {hour: value, minute: 0}
+                : {[paramName]: value};
+            invoke(setCmd, args).catch(console.error);
+        });
+        return el;
+    }
+
+    // ── 슬라이드 4: 시나리오 시간대 토글 ────────────────
+    const SCENARIOS = {
+        morning: {
+            color: 'red',
+            status: '출석 시작 가능',
+            time: '09:24',
+            caption: {
+                mac: '빨간 종은 출석 시작이 필요한 상태를 보여줘요. 출석 페이지 창을 열어 체크인해 주세요.',
+                win: '빨간 종은 출석 시작이 필요한 상태를 보여줘요. 출석 페이지 창을 열어 체크인해 주세요.',
+            },
+        },
+        day: {
+            color: 'white',
+            status: '학습 중',
+            time: '14:08',
+            caption: {
+                mac: '흰색 종은 출석이 완료되어 학습 중인 상태를 의미해요.',
+                win: '흰색 종은 출석이 완료되어 학습 중인 상태를 의미해요.',
+            },
+        },
+        night: {
+            color: 'red',
+            status: '출석 종료 가능',
+            time: '23:30',
+            caption: {
+                mac: '빨간 종은 출석 종료가 필요한 상태를 보여줘요. 출석 페이지 창을 열어 체크아웃해 주세요.',
+                win: '빨간 종은 출석 종료가 필요한 상태를 보여줘요. 출석 페이지 창을 열어 체크아웃해 주세요.',
+            },
+        },
+    };
+
+    function applyScenario(name) {
+        const s = SCENARIOS[name];
+        scenarioSlide.querySelectorAll('.scenario-tray-icon').forEach(el => {
+            el.src = `assets/tray-mini-${s.color}.png`;
+        });
+        scenarioSlide.querySelectorAll('[data-status]').forEach(el => el.textContent = s.status);
+        scenarioSlide.querySelectorAll('.scenario-placeholder-time').forEach(el => el.textContent = s.time);
+        document.getElementById('scenario-caption').textContent = s.caption[currentOs];
+        scenarioSlide.querySelectorAll('.scenario-time-tabs .scenario-tab').forEach(t => {
+            t.classList.toggle('active', t.dataset.scenario === name);
+        });
+    }
+
+    // ── 글로벌 OS 토글 — 모든 mockup, 모든 hint에 영향 ──
+    let currentOs = /Mac/i.test(navigator.userAgent) ? 'mac'
+                  : /Win/i.test(navigator.userAgent) ? 'win'
+                  : 'mac';
+
+    function applyOs(os) {
+        currentOs = os;
+        // 모든 mockup (welcome + scenario) 토글
+        document.querySelectorAll('.scenario-mock').forEach(el => {
+            el.hidden = el.dataset.os !== os;
+        });
+        // 글로벌 OS 탭 active 갱신
+        document.querySelectorAll('.onboarding-os-tabs .scenario-tab').forEach(t => {
+            t.classList.toggle('active', t.dataset.os === os);
+        });
+        // OS 전용 문구/힌트 토글 — data-os-only="mac" 또는 "win"
+        document.querySelectorAll('[data-os-only]').forEach(el => {
+            el.hidden = el.dataset.osOnly !== os;
+        });
+        const activeScenario = scenarioSlide.querySelector('.scenario-time-tabs .scenario-tab.active')?.dataset.scenario || 'morning';
+        applyScenario(activeScenario);
+    }
+
+    document.querySelectorAll('.onboarding-os-tabs .scenario-tab').forEach(tab => {
+        tab.addEventListener('click', () => applyOs(tab.dataset.os));
+    });
+    scenarioSlide.querySelectorAll('.scenario-time-tabs .scenario-tab').forEach(tab => {
+        tab.addEventListener('click', () => applyScenario(tab.dataset.scenario));
+    });
+
+    // ── 초기화 ────────────────────────────────────────
+    (async () => {
+        try {
+            // 로그인 — 이벤트를 먼저 구독한 뒤 현재 상태를 조회해 초기/전이 모두 반영
+            unlistenLogin = await listen('login-status-changed', (e) => {
+                applyLoginStatus(e.payload);
+                updateLoginUi();
+                render();
+            });
+            await syncLoginStatus();
+
+            // 알림 토글/select — settings 창과 같은 커맨드 (현재 config 값을 로드)
+            const startNotif = setupNotifToggleField('ob-start-toggle', 'ob-start-field', 'get_start_notification_enabled', 'set_start_notification_enabled');
+            startNotif.toggle.checked = await invoke('get_start_notification_enabled');
+            startNotif.updateFields(startNotif.toggle.checked);
+
+            const endNotif = setupNotifToggleField('ob-end-toggle', 'ob-end-field', 'get_end_notification_enabled', 'set_end_notification_enabled');
+            endNotif.toggle.checked = await invoke('get_end_notification_enabled');
+            endNotif.updateFields(endNotif.toggle.checked);
+
+            const notifStart = await invoke('get_notification_start');
+            const notifStartEl = bindSelect('ob-notif-start', 'set_notification_start', 'time');
+            notifStartEl.value = notifStart.hour;
+
+            const startIntervalEl = bindSelect('ob-start-interval', 'set_start_notification_interval', 'value');
+            startIntervalEl.value = await invoke('get_start_notification_interval');
+
+            const notifEnd = await invoke('get_notification_end');
+            const notifEndEl = bindSelect('ob-notif-end', 'set_notification_end', 'time');
+            notifEndEl.value = notifEnd.hour;
+
+            const endIntervalEl = bindSelect('ob-end-interval', 'set_end_notification_interval', 'value');
+            endIntervalEl.value = await invoke('get_end_notification_interval');
+
+            // 시스템 알림 설정 열기
+            document.getElementById('ob-open-notif-settings').addEventListener('click', async () => {
+                try { await invoke('open_notification_settings'); }
+                catch (e) {
+                    console.error(e);
+                    await window.__TAURI__.dialog.message('시스템 알림 설정을 열지 못했습니다.\n' + e, {title: '알림 설정'});
+                }
+            });
+
+            // OS, 시나리오 초기 상태 — 사용자 OS 자동 감지
+            applyOs(currentOs);
+            applyScenario('morning');
+
+            render();
+        } catch (e) {
+            console.error('[onboarding] 초기화 오류:', e);
+            render();
+        }
+    })();
+
+    window.addEventListener('beforeunload', () => {
+        stopLoginRefresh();
+        if (unlistenLogin) try { unlistenLogin(); } catch (e) { /* noop */ }
+    });
+</script>
+
+</body>
+</html>
