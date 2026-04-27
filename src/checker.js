@@ -218,7 +218,5 @@
     checkAttendance().then(reportResult);
   });
 
-  // 초기화 시 즉시 첫 체크 실행 — 스케줄러 이벤트 유실 방지
-  jsLog('info', 'checker.js loaded, running initial check');
-  checkAttendance().then(reportResult);
+  jsLog('info', 'checker.js loaded, waiting for Rust trigger');
 })();

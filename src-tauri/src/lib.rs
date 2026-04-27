@@ -12,7 +12,7 @@ mod updater;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use tauri::Manager;
+use tauri::{webview::PageLoadEvent, Manager};
 
 use config::Config;
 use state::AppState;
@@ -75,6 +75,12 @@ fn build_checker_window(app: &tauri::AppHandle) -> tauri::Result<tauri::WebviewW
     .focused(false)
     .skip_taskbar(true)
     .initialization_script(checker_script)
+    .on_page_load(|window, payload| {
+        if payload.event() == PageLoadEvent::Finished {
+            log::debug!("[checker] page loaded, triggering check: {}", payload.url());
+            checker::trigger_check(window.app_handle());
+        }
+    })
     .build()?;
 
     let app_handle = app.clone();

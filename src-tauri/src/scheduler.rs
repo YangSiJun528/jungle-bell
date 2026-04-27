@@ -392,7 +392,7 @@ pub(crate) fn compute_tick(state: &mut AppState, now: DateTime<Utc>, attendance_
     // 주기적으로 출석 페이지로 다시 이동시킴 (15분 간격).
     // needs_login 상태에서도 리로드하여 사용자가 attendance 창에서
     // 로그인한 경우 세션이 자동 복구되도록 함.
-    // 리로드 시 checker.js가 자동으로 initial check를 수행하므로
+    // 리로드 시 checker WebView의 page-load handler가 상태 확인을 트리거하므로
     // trigger_check를 건너뛰어 "Load failed" 레이스 컨디션을 방지.
     let should_reload = should_reload_checker(state, now);
 
@@ -456,7 +456,7 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
 
             // Rust가 오케스트레이터: 매 틱마다 JS 스냅샷 수집을 트리거.
             // 결과는 report_attendance_status 커맨드를 통해 비동기로 돌아온다.
-            // 리로드한 틱에서는 건너뜀 — 새 페이지의 checker.js가 initial check를 수행.
+            // 리로드한 틱에서는 건너뜀 — page-load handler가 새 페이지에서 체크를 수행.
             if !tick_result.should_reload {
                 checker::trigger_check(&app_handle);
             }

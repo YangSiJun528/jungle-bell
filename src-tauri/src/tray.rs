@@ -152,9 +152,6 @@ fn reload_checker(app_handle: &tauri::AppHandle) {
 
 pub fn refresh_login_status(app_handle: &tauri::AppHandle) {
     activate_login_retry_window(app_handle);
-    // TODO: checker reload 완료 후 상태 확인을 트리거하는 이벤트 흐름으로 정리한다.
-    // 현재는 즉시 trigger_check 후 navigate에 의존하므로, 로드 타이밍에 따라 불필요한 재시도가 생길 수 있다.
-    crate::checker::trigger_check(app_handle);
     reload_checker(app_handle);
 }
 
