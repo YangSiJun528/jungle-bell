@@ -19,42 +19,42 @@ pub struct TimeOfDay {
 ///   evening_start ~ evening_end  : 학습 종료(체크아웃) 시간     (23:00 ~ 04:00)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
-    /// 하루 시작 / 체크인 가능 시작 (기본 04:00)
+    /// 하루 시작 / 체크인 가능 시작
     pub morning_start: TimeOfDay,
-    /// 체크인 목표 마감 (기본 10:00, 이후는 지각)
+    /// 체크인 목표 마감. 이후는 지각으로 처리.
     pub morning_end: TimeOfDay,
-    /// 체크아웃 가능 시작 (기본 23:00)
+    /// 체크아웃 가능 시작
     pub evening_start: TimeOfDay,
-    /// 체크아웃 마감 / 하루 끝 (기본 다음 날 04:00)
+    /// 체크아웃 마감 / 하루 끝
     pub evening_end: TimeOfDay,
-    /// 앱 시작 시 자동 업데이트 확인 여부 (기본 true)
+    /// 앱 시작 시 자동 업데이트 확인 여부
     #[serde(default = "default_true")]
     pub auto_update: bool,
-    /// 시스템 시작 시 앱 자동 실행 여부 (기본 true)
+    /// 시스템 시작 시 앱 자동 실행 여부
     #[serde(default = "default_true")]
     pub auto_start: bool,
-    /// 시작 출석 알림 활성화 여부 (기본 true)
+    /// 시작 출석 알림 활성화 여부
     #[serde(default = "default_true")]
     pub start_notification_enabled: bool,
-    /// 종료 출석 알림 활성화 여부 (기본 true)
+    /// 종료 출석 알림 활성화 여부
     #[serde(default = "default_true")]
     pub end_notification_enabled: bool,
-    /// 시작 출석 알림 간격 (분, 기본 15)
+    /// 시작 출석 알림 간격 (분)
     #[serde(default = "default_notification_interval")]
     pub start_notification_interval_mins: u32,
-    /// 종료 출석 알림 간격 (분, 기본 15)
+    /// 종료 출석 알림 간격 (분)
     #[serde(default = "default_notification_interval")]
     pub end_notification_interval_mins: u32,
-    /// 알림 시작 시각 — 이 시각 이전에는 아침 알림을 보내지 않음 (기본 09:00)
+    /// 알림 시작 시각 — 이 시각 이전에는 아침 알림을 보내지 않음
     #[serde(default = "default_notification_start")]
     pub notification_start: TimeOfDay,
-    /// 알림 종료 시각 — 이 시각 이후에는 저녁 알림을 보내지 않음 (기본 01:00)
+    /// 알림 종료 시각 — 이 시각 이후에는 저녁 알림을 보내지 않음
     #[serde(default = "default_notification_end")]
     pub notification_end: TimeOfDay,
-    /// 디버그 모드 — 활성화 시 상세 로그 출력 (기본 false)
+    /// 디버그 모드 — 활성화 시 상세 로그 출력
     #[serde(default)]
     pub debug_mode: bool,
-    /// 환영 알림 발송 완료 여부 (기본 false)
+    /// 환영 알림 발송 완료 여부
     /// 기존 config에 필드가 없으면 false → 신규/기존 사용자 모두 한 번 알림 수신.
     #[serde(default)]
     pub welcome_notification_sent: bool,
@@ -67,7 +67,7 @@ pub struct Config {
     /// morning_start 기준으로 출석일이 구분되므로 자정~morning_start 사이에는 전날 날짜도 유효.
     #[serde(default, alias = "skip_today")]
     pub skip_attendance: Option<String>,
-    /// 일요일(KST) 알림 끄기 (기본 false)
+    /// 일요일(KST) 알림 끄기
     #[serde(default)]
     pub skip_sunday: bool,
 }
