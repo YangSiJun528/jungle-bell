@@ -204,6 +204,12 @@
                 <button id="open-log-folder-btn" class="link-btn">열기</button>
             </td>
         </tr>
+        <tr>
+            <th>온보딩</th>
+            <td>
+                <button id="open-onboarding-btn" class="link-btn">다시 온보딩 실행하기</button>
+            </td>
+        </tr>
     </table>
 </div>
 
@@ -292,6 +298,10 @@
 
             document.getElementById('open-log-folder-btn').addEventListener('click', () => {
                 invoke('open_log_folder').catch(console.error);
+            });
+
+            document.getElementById('open-onboarding-btn').addEventListener('click', () => {
+                invoke('open_onboarding').catch(console.error);
             });
 
             // --- 이번 출석 알림 끄기 ---
