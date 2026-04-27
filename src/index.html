@@ -16,40 +16,34 @@
 </div>
 
 <div class="tabs">
-    <button class="tab-btn active" data-tab="general">일반</button>
+    <button class="tab-btn active" data-tab="attendance">출석</button>
     <button class="tab-btn" data-tab="notification">알림</button>
-    <button class="tab-btn" data-tab="info">정보</button>
+    <button class="tab-btn" data-tab="app">앱</button>
 </div>
 
-<div id="tab-general" class="tab-content active">
-    <div id="update-banner" class="update-banner" style="display:none">
-        <span id="update-banner-text"></span>
-        <button class="update-banner-btn" id="update-now-btn">지금 업데이트</button>
-    </div>
+<div id="tab-attendance" class="tab-content active">
     <table>
         <tr>
-            <th>자동 시작</th>
+            <th>학습 시작</th>
+            <td>04:00 ~ 10:00</td>
+        </tr>
+        <tr>
+            <th>학습 종료</th>
+            <td>23:00 ~ 04:00</td>
+        </tr>
+        <tr class="gap-field"></tr>
+        <tr class="gap-field"></tr>
+        <tr>
+            <th>이번 출석 알림 끄기</th>
             <td>
                 <label class="toggle">
-                    <input type="checkbox" id="auto-start-toggle"/>
+                    <input type="checkbox" id="skip-attendance-toggle"/>
                     <span class="toggle-slider"></span>
                 </label>
             </td>
         </tr>
-        <tr>
-            <th>자동 업데이트</th>
-            <td>
-                <label class="toggle">
-                    <input type="checkbox" id="auto-update-toggle"/>
-                    <span class="toggle-slider"></span>
-                </label>
-            </td>
-        </tr>
-        <tr>
-            <th></th>
-            <td>
-                <button id="check-update-btn" class="link-btn">업데이트 확인</button>
-            </td>
+        <tr id="skip-attendance-hint" style="display:none">
+            <td class="setting-hint" colspan="2" id="skip-attendance-hint-text"></td>
         </tr>
     </table>
 </div>
@@ -65,19 +59,6 @@
                 </label>
             </td>
         </tr>
-        <tr>
-            <th>이번 출석 알림 끄기</th>
-            <td>
-                <label class="toggle">
-                    <input type="checkbox" id="skip-attendance-toggle"/>
-                    <span class="toggle-slider"></span>
-                </label>
-            </td>
-        </tr>
-        <tr id="skip-attendance-hint" style="display:none">
-            <td class="setting-hint" colspan="2" id="skip-attendance-hint-text"></td>
-        </tr>
-        <tr class="gap-field"></tr>
         <tr class="gap-field"></tr>
         <tr>
             <th>시작 출석</th>
@@ -163,32 +144,50 @@
             </td>
         </tr>
         <tr class="gap-field"></tr>
-        <tr class="gap-field"></tr>
         <tr>
-            <th>시스템 설정</th>
+            <th>시스템 알림</th>
             <td>
-                <button id="open-notification-settings-btn" class="link-btn">알림 설정 열기</button>
+                <button id="open-notification-settings-btn" class="link-btn">설정 열기</button>
             </td>
         </tr>
         <tr>
-            <td class="setting-hint" colspan="2">OS 알림이 차단되어 있으면 알림이 전달되지 않습니다. 설정을 확인하세요.</td>
+            <td class="setting-hint" colspan="2">알림이 오지 않으면 시스템 설정에서 Jungle Bell을 허용해 주세요.</td>
         </tr>
     </table>
 </div>
 
-<div id="tab-info" class="tab-content">
+<div id="tab-app" class="tab-content">
+    <div id="update-banner" class="update-banner" style="display:none">
+        <span id="update-banner-text"></span>
+        <button class="update-banner-btn" id="update-now-btn">지금 업데이트</button>
+    </div>
     <table>
         <tr>
-            <th>학습 시작</th>
-            <td>04:00 ~ 10:00</td>
+            <th>자동 시작</th>
+            <td>
+                <label class="toggle">
+                    <input type="checkbox" id="auto-start-toggle"/>
+                    <span class="toggle-slider"></span>
+                </label>
+            </td>
         </tr>
         <tr>
-            <th>학습 종료</th>
-            <td>23:00 ~ 04:00</td>
+            <th>자동 업데이트</th>
+            <td>
+                <label class="toggle">
+                    <input type="checkbox" id="auto-update-toggle"/>
+                    <span class="toggle-slider"></span>
+                </label>
+            </td>
         </tr>
-    </table>
-    <br/>
-    <table>
+        <tr>
+            <th></th>
+            <td>
+                <button id="check-update-btn" class="link-btn">업데이트 확인</button>
+            </td>
+        </tr>
+        <tr class="gap-field"></tr>
+        <tr class="gap-field"></tr>
         <tr>
             <th>디버그 모드</th>
             <td>
@@ -204,10 +203,12 @@
                 <button id="open-log-folder-btn" class="link-btn">열기</button>
             </td>
         </tr>
+        <tr class="gap-field"></tr>
+        <tr class="gap-field"></tr>
         <tr>
             <th>온보딩</th>
             <td>
-                <button id="open-onboarding-btn" class="link-btn">다시 온보딩 실행하기</button>
+                <button id="open-onboarding-btn" class="link-btn">다시 보기</button>
             </td>
         </tr>
     </table>
@@ -249,7 +250,7 @@
                     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
                     btn.classList.add('active');
                     document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
-                    if (btn.dataset.tab === 'general') refreshUpdateStatus();
+                    if (btn.dataset.tab === 'app') refreshUpdateStatus();
                 });
             });
             document.getElementById('app-version').textContent = 'v' + await invoke('get_app_version');
@@ -340,7 +341,7 @@
                 invoke('set_skip_sunday', {enabled: skipSundayToggle.checked}).catch(console.error);
             });
 
-            // --- 알림 설정 ---
+            // --- 출석 알림 설정 ---
             function setupNotifToggle(toggleId, fieldClass, getCmd, setCmd) {
                 const toggle = document.getElementById(toggleId);
                 const fields = document.querySelectorAll('#tab-notification .' + fieldClass);
