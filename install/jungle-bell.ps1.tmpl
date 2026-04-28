@@ -29,6 +29,94 @@ if ($env:JUNGLE_BELL_ASSET_URL) {
 }
 
 $tmp = Join-Path $env:TEMP ("jungle-bell-" + [guid]::NewGuid().ToString() + ".exe")
+function Start-JungleBell {
+  $candidates = @()
+  if ($env:LOCALAPPDATA) {
+    $candidates += Join-Path $env:LOCALAPPDATA 'Programs\Jungle Bell\Jungle Bell.exe'
+  }
+  if ($env:ProgramFiles) {
+    $candidates += Join-Path $env:ProgramFiles 'Jungle Bell\Jungle Bell.exe'
+  }
+  $programFilesX86 = [Environment]::GetEnvironmentVariable('ProgramFiles(x86)')
+  if ($programFilesX86) {
+    $candidates += Join-Path $programFilesX86 'Jungle Bell\Jungle Bell.exe'
+  }
+
+  foreach ($candidate in $candidates) {
+    if (Test-Path -LiteralPath $candidate) {
+      Start-Process -FilePath $candidate
+      return $true
+    }
+  }
+
+  $uninstallRoots = @(
+    'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
+    'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
+    'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
+  )
+  foreach ($root in $uninstallRoots) {
+    if (-not (Test-Path -LiteralPath $root)) {
+      continue
+    }
+
+    $app = Get-ChildItem -LiteralPath $root -ErrorAction SilentlyContinue |
+      Get-ItemProperty -ErrorAction SilentlyContinue |
+      Where-Object { $_.DisplayName -eq 'Jungle Bell' } |
+      Select-Object -First 1
+    if ($app -and $app.InstallLocation) {
+      $candidate = Join-Path $app.InstallLocation 'Jungle Bell.exe'
+      if (Test-Path -LiteralPath $candidate) {
+        Start-Process -FilePath $candidate
+        return $true
+      }
+    }
+    if ($app -and $app.DisplayIcon) {
+      $candidate = $app.DisplayIcon.Trim('"') -replace ',\d+$', ''
+      if (Test-Path -LiteralPath $candidate) {
+        Start-Process -FilePath $candidate
+        return $true
+      }
+    }
+  }
+
+  $shortcutCandidates = @()
+  if ($env:APPDATA) {
+    $shortcutCandidates += Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Jungle Bell.lnk'
+  }
+  if ($env:ProgramData) {
+    $shortcutCandidates += Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\Jungle Bell.lnk'
+  }
+
+  foreach ($shortcut in $shortcutCandidates) {
+    if (Test-Path -LiteralPath $shortcut) {
+      Start-Process -FilePath $shortcut
+      return $true
+    }
+  }
+
+  $startMenuRoots = @()
+  if ($env:APPDATA) {
+    $startMenuRoots += Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs'
+  }
+  if ($env:ProgramData) {
+    $startMenuRoots += Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs'
+  }
+  foreach ($root in $startMenuRoots) {
+    if (-not (Test-Path -LiteralPath $root)) {
+      continue
+    }
+
+    $shortcut = Get-ChildItem -LiteralPath $root -Filter 'Jungle Bell.lnk' -Recurse -ErrorAction SilentlyContinue |
+      Select-Object -First 1
+    if ($shortcut) {
+      Start-Process -FilePath $shortcut.FullName
+      return $true
+    }
+  }
+
+  return $false
+}
+
 try {
   Write-Host "Downloading Jungle Bell $resolvedTag..."
   Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $tmp
@@ -39,7 +127,12 @@ try {
     throw "Installer exited with code $($proc.ExitCode)."
   }
 
-  Write-Host "Installed. Launch Jungle Bell from the Start menu."
+  Write-Host "Opening Jungle Bell..."
+  if (Start-JungleBell) {
+    Write-Host "Installed and opened Jungle Bell."
+  } else {
+    Write-Warning "Installed, but couldn't find Jungle Bell to open. Launch it from the Start menu."
+  }
 }
 finally {
   if (Test-Path $tmp) {
