@@ -58,6 +58,9 @@ pub struct Config {
     /// 기존 config에 필드가 없으면 false → 신규/기존 사용자 모두 한 번 알림 수신.
     #[serde(default)]
     pub welcome_notification_sent: bool,
+    /// 온보딩 완료 여부
+    #[serde(default)]
+    pub onboarding_completed: bool,
     /// 마지막으로 실행된 앱 버전. 업데이트 완료 알림 판단에 사용.
     /// None이면 첫 설치 (환영 알림 대상).
     #[serde(default)]
@@ -223,6 +226,7 @@ impl Default for Config {
             notification_end: TimeOfDay { hour: 4, minute: 0 },
             debug_mode: false,
             welcome_notification_sent: false,
+            onboarding_completed: false,
             last_version: None,
             skip_attendance: None,
             skip_sunday: false,

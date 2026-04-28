@@ -337,6 +337,16 @@
         }
     }
 
+    async function complete() {
+        stopLoginRefresh();
+        try {
+            await invoke('complete_onboarding');
+        } catch (e) {
+            console.error('[onboarding] complete failed:', e);
+            window.close();
+        }
+    }
+
     function isNextDisabled() {
         if (step === LOGIN_STEP && (!loginDataLoaded || needsLogin)) return true;
         return false;
@@ -458,7 +468,7 @@
         if (isNextDisabled()) return;
         if (step === SCENARIO_STEP && moveScenario(1)) return;
         if (step < TOTAL - 1) { goToStep(step + 1); }
-        else close();
+        else complete();
     });
     skipBtn.addEventListener('click', () => {
         if (step < TOTAL - 1) { goToStep(step + 1); }

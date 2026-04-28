@@ -32,35 +32,43 @@ fn sync_auto_start_setting(app: &tauri::AppHandle, shared_state: &Arc<Mutex<AppS
 fn notify_startup_status(app: &tauri::AppHandle, shared_state: &Arc<Mutex<AppState>>) {
     use tauri_plugin_notification::NotificationExt;
 
-    let mut state = shared_state.try_lock().unwrap();
-    let current_version = app.package_info().version.to_string();
+    let should_open_onboarding = {
+        let mut state = shared_state.try_lock().unwrap();
+        let current_version = app.package_info().version.to_string();
 
-    match &state.config.last_version {
-        None => {
-            let _ = app
-                .notification()
-                .builder()
-                .title("Jungle Bell 설치 완료")
-                .body("트레이 아이콘에서 출석 창을 열고 LMS에 로그인해 주세요.")
-                .show();
-            log::info!("[app] 환영 알림 발송 (첫 설치)");
-            tray::open_onboarding_window(app);
+        let should_open_onboarding = !state.config.onboarding_completed;
+
+        match &state.config.last_version {
+            None => {
+                let _ = app
+                    .notification()
+                    .builder()
+                    .title("Jungle Bell 설치 완료")
+                    .body("트레이 아이콘에서 출석 창을 열고 LMS에 로그인해 주세요.")
+                    .show();
+                log::info!("[app] 환영 알림 발송 (첫 설치)");
+            }
+            Some(last) if last != &current_version => {
+                let _ = app
+                    .notification()
+                    .builder()
+                    .title("Jungle Bell 업데이트 완료")
+                    .body(&format!("v{} → v{}로 업데이트되었습니다.", last, current_version))
+                    .show();
+                log::info!("[app] 업데이트 완료 알림 발송: v{} → v{}", last, current_version);
+            }
+            _ => {}
         }
-        Some(last) if last != &current_version => {
-            let _ = app
-                .notification()
-                .builder()
-                .title("Jungle Bell 업데이트 완료")
-                .body(&format!("v{} → v{}로 업데이트되었습니다.", last, current_version))
-                .show();
-            log::info!("[app] 업데이트 완료 알림 발송: v{} → v{}", last, current_version);
-        }
-        _ => {}
+
+        state.config.last_version = Some(current_version);
+        state.config.welcome_notification_sent = true;
+        state.config.save();
+        should_open_onboarding
+    };
+
+    if should_open_onboarding {
+        tray::open_onboarding_window(app);
     }
-
-    state.config.last_version = Some(current_version);
-    state.config.welcome_notification_sent = true;
-    state.config.save();
 }
 
 fn build_checker_window(app: &tauri::AppHandle) -> tauri::Result<tauri::WebviewWindow> {
@@ -209,6 +217,7 @@ pub fn run() {
             commands::open_log_folder,
             commands::open_onboarding,
             commands::close_onboarding,
+            commands::complete_onboarding,
             commands::open_attendance_window,
             commands::get_login_status,
             commands::refresh_login_status,

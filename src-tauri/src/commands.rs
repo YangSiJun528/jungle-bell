@@ -355,6 +355,21 @@ pub fn close_onboarding(app: tauri::AppHandle) {
     tray::close_onboarding_window(&app);
 }
 
+/// Tauri 커맨드: 온보딩 완료를 저장한 뒤 창을 닫는다.
+#[tauri::command]
+pub async fn complete_onboarding(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+) -> Result<(), String> {
+    {
+        let mut state = state.lock().await;
+        state.config.onboarding_completed = true;
+        state.config.save();
+    }
+    tray::close_onboarding_window(&app);
+    Ok(())
+}
+
 /// Tauri 커맨드: 출석 페이지 창을 연다 (온보딩의 "출석 페이지 열기" 버튼용).
 /// 트레이 메뉴의 "출석 페이지 열기"와 동일한 동작.
 #[tauri::command]
