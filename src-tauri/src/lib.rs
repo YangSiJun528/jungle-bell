@@ -214,6 +214,8 @@ pub fn run() {
             commands::open_notification_settings,
             commands::get_debug_mode,
             commands::set_debug_mode,
+            commands::get_usage_analytics_enabled,
+            commands::set_usage_analytics_enabled,
             commands::open_log_folder,
             commands::open_onboarding,
             commands::close_onboarding,
@@ -233,7 +235,11 @@ pub fn run() {
 
             // 분석: PostHog 클라이언트 초기화.
             // app_opened 이벤트는 identity 설정 시(set_identity) 전송한다.
-            analytics::init();
+            let usage_analytics_enabled = {
+                let state = shared_state.try_lock().unwrap();
+                state.config.usage_analytics_enabled
+            };
+            analytics::init(usage_analytics_enabled);
 
             // 자동 시작: Config 값을 기준으로 OS 상태를 동기화.
             // 기본값이 true이므로 첫 설치 시 자동으로 등록됨.

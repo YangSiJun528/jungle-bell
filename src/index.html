@@ -187,6 +187,18 @@
             </td>
         </tr>
         <tr class="gap-field"></tr>
+        <tr>
+            <th>사용 통계</th>
+            <td>
+                <label class="toggle">
+                    <input type="checkbox" id="usage-analytics-toggle"/>
+                    <span class="toggle-slider"></span>
+                </label>
+            </td>
+        </tr>
+        <tr>
+            <td class="setting-hint" colspan="2">개인적인 내용 없이 사용 통계만 보내요. 앱 개선에만 사용돼요.</td>
+        </tr>
         <tr class="gap-field"></tr>
         <tr>
             <th>디버그 모드</th>
@@ -278,6 +290,17 @@
 
             document.getElementById('check-update-btn').addEventListener('click', () => {
                 invoke('check_and_notify_update').catch(console.error);
+            });
+
+            const usageAnalyticsToggle = document.getElementById('usage-analytics-toggle');
+            usageAnalyticsToggle.checked = await invoke('get_usage_analytics_enabled');
+            usageAnalyticsToggle.addEventListener('change', async () => {
+                try {
+                    await invoke('set_usage_analytics_enabled', {enabled: usageAnalyticsToggle.checked});
+                } catch (e) {
+                    console.error(e);
+                    usageAnalyticsToggle.checked = !usageAnalyticsToggle.checked;
+                }
             });
 
             const debugToggle = document.getElementById('debug-mode-toggle');

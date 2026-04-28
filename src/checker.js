@@ -51,17 +51,23 @@
   }
   // ─────────────────────────────────────────────────────────────────────────
 
-  // /api/v2/me에서 사용자 ID를 가져와 Rust에 보고 (한 번만).
-  // PostHog distinct_id로 사용하기 위해 SHA-256 해시됨.
+  // 사용 통계가 켜져 있으면 /api/v2/me에서 사용자 ID를 가져와 Rust에 보고한다.
+  // Rust에서 SHA-256 해시 후 PostHog distinct_id로 사용한다.
   function reportIdentityOnce() {
     if (identityReported) return;
-    identityReported = true;
 
-    fetch('https://jungle-lms.krafton.com/api/v2/me', {
-      credentials: 'include',
-      headers: { accept: 'application/json' },
-    })
+    window.__TAURI__.core.invoke('get_usage_analytics_enabled')
+      .then(function (enabled) {
+        if (!enabled || identityReported) return null;
+        identityReported = true;
+
+        return fetch('https://jungle-lms.krafton.com/api/v2/me', {
+          credentials: 'include',
+          headers: { accept: 'application/json' },
+        });
+      })
       .then(function (res) {
+        if (!res) return null;
         if (!res.ok) return null;
         return res.json();
       })

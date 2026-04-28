@@ -54,6 +54,9 @@ pub struct Config {
     /// 디버그 모드 — 활성화 시 상세 로그 출력
     #[serde(default)]
     pub debug_mode: bool,
+    /// 사용 통계 전송 여부
+    #[serde(default = "default_true")]
+    pub usage_analytics_enabled: bool,
     /// 환영 알림 발송 완료 여부
     /// 기존 config에 필드가 없으면 false → 신규/기존 사용자 모두 한 번 알림 수신.
     #[serde(default)]
@@ -225,6 +228,7 @@ impl Default for Config {
             notification_start: TimeOfDay { hour: 9, minute: 0 },
             notification_end: TimeOfDay { hour: 4, minute: 0 },
             debug_mode: false,
+            usage_analytics_enabled: true,
             welcome_notification_sent: false,
             onboarding_completed: false,
             last_version: None,

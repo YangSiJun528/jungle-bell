@@ -315,6 +315,26 @@ pub async fn set_debug_mode(state: tauri::State<'_, Arc<Mutex<AppState>>>, enabl
     Ok(())
 }
 
+/// Tauri 커맨드: 사용 통계 전송 설정 조회.
+#[tauri::command]
+pub async fn get_usage_analytics_enabled(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<bool, String> {
+    Ok(state.lock().await.config.usage_analytics_enabled)
+}
+
+/// Tauri 커맨드: 사용 통계 전송 설정 변경 및 저장.
+#[tauri::command]
+pub async fn set_usage_analytics_enabled(
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    enabled: bool,
+) -> Result<(), String> {
+    log::info!("[settings] 사용 통계 전송 변경: {}", enabled);
+    let mut s = state.lock().await;
+    s.config.usage_analytics_enabled = enabled;
+    s.config.save();
+    analytics::set_user_enabled(enabled);
+    Ok(())
+}
+
 // ── 업데이트 ─────────────────────────────────────────────
 
 /// Tauri 커맨드: 주기적 체크에서 발견된 업데이트 버전 반환. None이면 최신 버전.
