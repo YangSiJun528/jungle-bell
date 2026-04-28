@@ -1,5 +1,8 @@
 blank_issues_enabled: true
 contact_links:
-  - name: "공개하기 어려운 문의"
-    url: "mailto:yangsijun5528@gmail.com"
-    about: "공개 이슈로 남기기 어려운 질문이나 이야기는 크래프톤 정글 슬랙의 양시준(정글12기-32) 또는 이메일로 연락해 주세요."
+  - name: "Slack으로 문의하기"
+    url: "https://krafton-aliens.slack.com/team/U0AHGCT20DQ"
+    about: "GitHub 이슈로 남기기 어려운 질문이나 이야기는 크래프톤 정글 슬랙의 양시준(정글12기-32)에게 보내 주세요."
+  - name: "이메일로 문의하기"
+    url: "https://mail.google.com/mail/?view=cm&fs=1&to=yangsijun5528%40gmail.com"
+    about: "Slack 사용이 어렵다면 이메일로 보내 주세요."
