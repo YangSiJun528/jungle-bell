@@ -201,14 +201,30 @@ fn build_settings_window(app: &tauri::AppHandle) {
 }
 
 fn build_onboarding_window(app: &tauri::AppHandle) {
-    let _ = tauri::WebviewWindowBuilder::new(app, "onboarding", tauri::WebviewUrl::App("onboarding.html".into()))
-        .title("Jungle Bell 시작하기")
-        .inner_size(480.0, 680.0)
-        .resizable(false)
-        .minimizable(false)
-        .maximizable(false)
-        .focused(true)
-        .build();
+    if let Ok(window) =
+        tauri::WebviewWindowBuilder::new(app, "onboarding", tauri::WebviewUrl::App("onboarding.html".into()))
+            .title("Jungle Bell 시작하기")
+            .inner_size(480.0, 680.0)
+            .resizable(false)
+            .minimizable(false)
+            .maximizable(false)
+            .focused(true)
+            .build()
+    {
+        crate::analytics::track_onboarding_started();
+        let app_handle = app.clone();
+        window.on_window_event(move |event| {
+            if let tauri::WindowEvent::Destroyed = event {
+                let app_handle = app_handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    let state = app_handle.state::<Arc<TokioMutex<AppState>>>();
+                    if !state.lock().await.config.onboarding_completed {
+                        crate::analytics::track_onboarding_closed_before_complete();
+                    }
+                });
+            }
+        });
+    }
 }
 
 pub fn open_onboarding_window(app: &tauri::AppHandle) {
@@ -509,6 +525,8 @@ pub fn update_tray(app: &tauri::AppHandle, phase: DailyPhase, remaining: Option<
     // try_lock 사용 — 락이 잡혀 있으면 이번 갱신은 건너뜀.
     let tray_state: tauri::State<Arc<TokioMutex<TrayState>>> = app.state();
     if let Ok(ts) = tray_state.try_lock() {
-        let _ = ts.status_item.set_text(pad_to_min_width(&status_text, TRAY_STATUS_MIN_WIDTH));
+        let _ = ts
+            .status_item
+            .set_text(pad_to_min_width(&status_text, TRAY_STATUS_MIN_WIDTH));
     };
 }

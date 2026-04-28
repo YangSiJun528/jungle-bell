@@ -328,10 +328,26 @@ pub async fn set_usage_analytics_enabled(
     enabled: bool,
 ) -> Result<(), String> {
     log::info!("[settings] 사용 통계 전송 변경: {}", enabled);
-    let mut s = state.lock().await;
-    s.config.usage_analytics_enabled = enabled;
-    s.config.save();
-    analytics::set_user_enabled(enabled);
+    let previous = {
+        let mut s = state.lock().await;
+        let previous = s.config.usage_analytics_enabled;
+        s.config.usage_analytics_enabled = enabled;
+        s.config.save();
+        previous
+    };
+
+    if previous != enabled {
+        if enabled {
+            analytics::set_user_enabled(true);
+            analytics::track_usage_analytics_toggled(true);
+            analytics::track_startup_events();
+        } else {
+            analytics::track_usage_analytics_toggled(false);
+            analytics::set_user_enabled(false);
+        }
+    } else {
+        analytics::set_user_enabled(enabled);
+    }
     Ok(())
 }
 
@@ -381,10 +397,15 @@ pub async fn complete_onboarding(
     app: tauri::AppHandle,
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<(), String> {
-    {
+    let was_completed = {
         let mut state = state.lock().await;
+        let was_completed = state.config.onboarding_completed;
         state.config.onboarding_completed = true;
         state.config.save();
+        was_completed
+    };
+    if !was_completed {
+        analytics::track_onboarding_completed();
     }
     tray::close_onboarding_window(&app);
     Ok(())

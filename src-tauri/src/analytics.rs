@@ -6,6 +6,10 @@
 //! 추적 이벤트:
 //!   - `app_opened`: 앱 실행 후 LMS 사용자 식별자가 준비될 때
 //!   - `app_updated`: 앱 버전 변경 감지 후 LMS 사용자 식별자가 준비될 때
+//!   - `onboarding_started`: 온보딩 창이 열릴 때
+//!   - `onboarding_completed`: 온보딩 마지막 단계에서 시작하기를 누를 때
+//!   - `onboarding_closed_before_complete`: 온보딩 완료 전에 창을 닫을 때
+//!   - `usage_analytics_toggled`: 사용 통계 토글을 변경할 때
 //!   - `settings_opened`: 트레이에서 설정 창 열 때
 //!   - `attendance_page_opened`: 트레이에서 출석 페이지 열 때
 //!   - `attendance_completed`: 출석 상태가 false→true로 전이할 때 (period=morning|evening)
@@ -105,10 +109,7 @@ fn capture(event_name: &'static str, extra_props: &[(&'static str, &str)]) {
         return;
     }
 
-    let distinct_id = DISTINCT_ID
-        .get()
-        .cloned()
-        .unwrap_or_else(|| "anonymous".to_owned());
+    let distinct_id = DISTINCT_ID.get().cloned().unwrap_or_else(|| "anonymous".to_owned());
 
     let mut event = posthog_rs::Event::new(event_name, &distinct_id);
     if let Err(e) = event.insert_prop("app_version", APP_VERSION) {
@@ -155,6 +156,23 @@ pub fn track_app_updated(from_version: &str, to_version: &str) {
         "app_updated",
         &[("from_version", from_version), ("to_version", to_version)],
     );
+}
+
+pub fn track_onboarding_started() {
+    capture("onboarding_started", &[]);
+}
+
+pub fn track_onboarding_completed() {
+    capture("onboarding_completed", &[]);
+}
+
+pub fn track_onboarding_closed_before_complete() {
+    capture("onboarding_closed_before_complete", &[]);
+}
+
+pub fn track_usage_analytics_toggled(enabled: bool) {
+    let enabled = if enabled { "true" } else { "false" };
+    capture("usage_analytics_toggled", &[("enabled", enabled)]);
 }
 
 pub fn track_settings_opened() {
