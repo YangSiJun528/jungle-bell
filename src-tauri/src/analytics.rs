@@ -4,6 +4,8 @@
 //! 로그인 전에는 "anonymous" 고정값을 사용한다.
 //!
 //! 추적 이벤트:
+//!   - `app_opened`: 앱 실행 후 LMS 사용자 식별자가 준비될 때
+//!   - `app_updated`: 앱 버전 변경 감지 후 LMS 사용자 식별자가 준비될 때
 //!   - `settings_opened`: 트레이에서 설정 창 열 때
 //!   - `attendance_page_opened`: 트레이에서 출석 페이지 열 때
 //!   - `attendance_completed`: 출석 상태가 false→true로 전이할 때 (period=morning|evening)
@@ -17,7 +19,10 @@ use tokio::sync::OnceCell;
 static CLIENT: OnceCell<posthog_rs::Client> = OnceCell::const_new();
 static DISTINCT_ID: OnceLock<String> = OnceLock::new();
 static OS_NAME: OnceLock<String> = OnceLock::new();
+static PENDING_APP_UPDATED: OnceLock<(String, String)> = OnceLock::new();
 static USER_ENABLED: AtomicBool = AtomicBool::new(true);
+static APP_OPENED_SENT: AtomicBool = AtomicBool::new(false);
+static APP_UPDATED_SENT: AtomicBool = AtomicBool::new(false);
 
 /// PostHog 이벤트 수집용 Project API Key.
 ///
@@ -64,6 +69,10 @@ pub fn set_user_enabled(enabled: bool) {
     log::info!("[analytics] user setting changed: {}", enabled);
 }
 
+pub fn prepare_app_updated(from_version: String, to_version: String) {
+    let _ = PENDING_APP_UPDATED.set((from_version, to_version));
+}
+
 /// PostHog 클라이언트를 최초 호출 시 초기화하여 반환한다.
 /// 이후 호출은 캐시된 인스턴스를 그대로 반환한다.
 async fn get_client() -> Option<&'static posthog_rs::Client> {
@@ -85,6 +94,7 @@ pub fn set_identity(cms_user_id: &str) {
     if DISTINCT_ID.set(hash).is_ok() {
         log::info!("[analytics] identity prepared");
     }
+    track_startup_events();
 }
 
 /// 이벤트 전송 (fire-and-forget).
@@ -121,6 +131,30 @@ fn capture(event_name: &'static str, extra_props: &[(&'static str, &str)]) {
             log::warn!("[analytics] capture '{}' failed: {}", event_name, e);
         }
     });
+}
+
+pub fn track_startup_events() {
+    track_app_opened();
+    if let Some((from_version, to_version)) = PENDING_APP_UPDATED.get() {
+        track_app_updated(from_version, to_version);
+    }
+}
+
+pub fn track_app_opened() {
+    if !is_enabled() || APP_OPENED_SENT.swap(true, Ordering::Relaxed) {
+        return;
+    }
+    capture("app_opened", &[]);
+}
+
+pub fn track_app_updated(from_version: &str, to_version: &str) {
+    if !is_enabled() || APP_UPDATED_SENT.swap(true, Ordering::Relaxed) {
+        return;
+    }
+    capture(
+        "app_updated",
+        &[("from_version", from_version), ("to_version", to_version)],
+    );
 }
 
 pub fn track_settings_opened() {

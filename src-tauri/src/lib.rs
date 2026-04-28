@@ -56,6 +56,7 @@ fn notify_startup_status(app: &tauri::AppHandle, shared_state: &Arc<Mutex<AppSta
                     .body(&format!("v{} → v{}로 업데이트되었습니다.", last, current_version))
                     .show();
                 log::info!("[app] 업데이트 완료 알림 발송: v{} → v{}", last, current_version);
+                analytics::prepare_app_updated(last.clone(), current_version.clone());
             }
             _ => {}
         }
