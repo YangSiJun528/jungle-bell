@@ -1035,6 +1035,14 @@ tr.ob-end-field.disabled {
     margin-right: 0;
 }
 
+.scenario-bar-top .scenario-bar-cluster {
+    transform: translateY(2px);
+}
+
+.scenario-bar-bottom .scenario-bar-cluster {
+    transform: translateY(-2px);
+}
+
 .scenario-placeholder {
     width: 10px;
     height: 10px;
@@ -1055,6 +1063,32 @@ tr.ob-end-field.disabled {
     width: 14px;
     height: 14px;
     object-fit: contain;
+}
+
+.scenario-highlight {
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 24px;
+    border-radius: 999px;
+    border: 2px solid rgba(255, 255, 255, 0.82);
+    background: rgba(0, 122, 255, 0.72);
+    box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.28), 0 0 8px rgba(0, 122, 255, 0.52);
+    animation: scenario-highlight-blink 1.4s ease-in-out infinite;
+}
+
+@keyframes scenario-highlight-blink {
+    0%, 100% {
+        opacity: 0.86;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1.04);
+        box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.34), 0 0 10px rgba(0, 122, 255, 0.62);
+    }
 }
 
 /* Tray menu — common */

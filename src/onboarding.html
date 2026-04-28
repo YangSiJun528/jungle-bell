@@ -31,7 +31,8 @@
         <h2 class="onboarding-title">트레이에서 출석 상태를 확인해요</h2>
         <p class="onboarding-desc">
             아이콘을 클릭하면 출석 메뉴가 열려요.<br/>
-            다음 화면에서 LMS 로그인을 확인할게요.
+            아래 화면에서 깜빡이는 위치를 참고해<br/>
+            실제 컴퓨터의 <span data-os-only="mac">메뉴 바 오른쪽 아이콘</span><span data-os-only="win" hidden>작업 표시줄 오른쪽 트레이 아이콘</span>을 클릭해 보세요.
         </p>
 
         <div class="scenario-mock scenario-mock-macos welcome-mock" data-os="mac">
@@ -39,7 +40,9 @@
                 <div class="scenario-bar-cluster">
                     <span class="scenario-placeholder"></span>
                     <span class="scenario-placeholder"></span>
-                    <img class="scenario-tray-icon" src="assets/tray-mini-white.png" alt="메뉴 바 아이콘"/>
+                    <span class="scenario-highlight" aria-hidden="true">
+                        <img class="scenario-tray-icon" src="assets/tray-mini-white.png" alt=""/>
+                    </span>
                     <span class="scenario-placeholder scenario-placeholder-time">14:08</span>
                 </div>
             </div>
@@ -72,7 +75,9 @@
                 <div class="scenario-bar-cluster scenario-bar-cluster-right">
                     <span class="scenario-placeholder"></span>
                     <span class="scenario-placeholder"></span>
-                    <img class="scenario-tray-icon" src="assets/tray-mini-white.png" alt="트레이 아이콘"/>
+                    <span class="scenario-highlight" aria-hidden="true">
+                        <img class="scenario-tray-icon" src="assets/tray-mini-white.png" alt=""/>
+                    </span>
                     <span class="scenario-placeholder scenario-placeholder-time">14:08</span>
                 </div>
             </div>
