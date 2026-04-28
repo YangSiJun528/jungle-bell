@@ -101,11 +101,11 @@ cca7f92 docs: 특정 버전 설치 one-liner 안내 추가
 
 ### `install/jungle-bell.sh.tmpl`
 
-POSIX `sh`. `uname -m`으로 `arm64` → `aarch64`, `x86_64` → `x64` 매핑. `curl -fL`로 tar.gz 다운로드 → `tar -xzf` → `ditto`로 `/Applications`(쓰기 불가 시 `$HOME/Applications`)에 복사. `codesign --force --deep --sign -` + `xattr -cr` 후처리로 Gatekeeper 차단 회피. `--tag` / `--version` 인자와 `JUNGLE_BELL_ASSET_URL` 환경변수로 로컬 테스트 가능.
+POSIX `sh`. `uname -m`으로 `arm64` → `aarch64`, `x86_64` → `x64` 매핑. `curl -fL`로 tar.gz 다운로드 → `tar -xzf` → `ditto`로 `/Applications`(쓰기 불가 시 `$HOME/Applications`)에 복사. `codesign --force --deep --sign -` + `xattr -cr` 후처리로 Gatekeeper 차단 회피 후 `open`으로 실행. `--tag` / `--version` 인자와 `JUNGLE_BELL_ASSET_URL` 환경변수로 로컬 테스트 가능.
 
 ### `install/jungle-bell.ps1.tmpl`
 
-PowerShell 5.1+ / Core 양쪽 호환. TLS 1.2 강제, `Invoke-WebRequest -UseBasicParsing`으로 NSIS `.exe` 다운로드 후 `Start-Process -ArgumentList '/S' -Wait -PassThru`로 silent 실행. ExitCode 검사 + `finally` 블록에서 임시 파일 정리.
+PowerShell 5.1+ / Core 양쪽 호환. TLS 1.2 강제, `Invoke-WebRequest -UseBasicParsing`으로 NSIS `.exe` 다운로드 후 `Start-Process -ArgumentList '/S' -Wait -PassThru`로 silent 실행. 설치가 끝나면 설치 경로와 시작 메뉴 바로가기를 찾아 Jungle Bell을 실행한다. ExitCode 검사 + `finally` 블록에서 임시 파일 정리.
 
 ### `release.yml` 변경 요지
 
