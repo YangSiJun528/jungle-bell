@@ -405,7 +405,10 @@ pub async fn complete_onboarding(
         was_completed
     };
     if !was_completed {
+        log::info!("[onboarding] completed");
         analytics::track_onboarding_completed();
+    } else {
+        log::info!("[onboarding] completed command ignored; already completed");
     }
     tray::close_onboarding_window(&app);
     Ok(())

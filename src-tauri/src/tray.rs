@@ -219,6 +219,7 @@ fn build_onboarding_window(app: &tauri::AppHandle) {
                 tauri::async_runtime::spawn(async move {
                     let state = app_handle.state::<Arc<TokioMutex<AppState>>>();
                     if !state.lock().await.config.onboarding_completed {
+                        log::info!("[onboarding] closed before complete");
                         crate::analytics::track_onboarding_closed_before_complete();
                     }
                 });
