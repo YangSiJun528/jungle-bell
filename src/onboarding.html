@@ -329,6 +329,7 @@
     let loginDataLoaded = false;
     let needsLogin = true;
     let unlistenLogin = null;
+    let unlistenReset = null;
     let loginRefreshTimer = null;
 
     async function close() {
@@ -445,6 +446,16 @@
             applyScenario(scenarioName || SCENARIO_ORDER[0]);
         }
         render();
+    }
+
+    function resetOnboarding() {
+        stopLoginRefresh();
+        step = 0;
+        applyOs(currentOs);
+        applyScenario(SCENARIO_ORDER[0]);
+        updateLoginUi();
+        render();
+        syncLoginStatus();
     }
 
     function getActiveScenarioName() {
@@ -608,6 +619,9 @@
                 updateLoginUi();
                 render();
             });
+            unlistenReset = await listen('reset-onboarding', () => {
+                resetOnboarding();
+            });
             await syncLoginStatus();
 
             // 알림 토글/select — settings 창과 같은 커맨드 (현재 config 값을 로드)
@@ -656,6 +670,7 @@
     window.addEventListener('beforeunload', () => {
         stopLoginRefresh();
         if (unlistenLogin) try { unlistenLogin(); } catch (e) { /* noop */ }
+        if (unlistenReset) try { unlistenReset(); } catch (e) { /* noop */ }
     });
 </script>
 

@@ -13,7 +13,7 @@ use tauri::{
     image::Image,
     menu::{MenuBuilder, MenuItem, MenuItemBuilder},
     tray::TrayIconBuilder,
-    Manager, WebviewWindow,
+    Emitter, Manager, WebviewWindow,
 };
 
 const ATTENDANCE_URL: &str = "https://jungle-lms.krafton.com/check-in";
@@ -200,47 +200,67 @@ fn build_settings_window(app: &tauri::AppHandle) {
         .build();
 }
 
-fn build_onboarding_window(app: &tauri::AppHandle) {
-    if let Ok(window) =
-        tauri::WebviewWindowBuilder::new(app, "onboarding", tauri::WebviewUrl::App("onboarding.html".into()))
-            .title("Jungle Bell 시작하기")
-            .inner_size(480.0, 680.0)
-            .resizable(false)
-            .minimizable(false)
-            .maximizable(false)
-            .focused(true)
-            .build()
+fn track_onboarding_closed_before_complete(app: &tauri::AppHandle) {
+    let state: tauri::State<Arc<TokioMutex<AppState>>> = app.state();
+    match state.try_lock() {
+        Ok(state) if !state.config.onboarding_completed => {
+            log::info!("[onboarding] closed before complete");
+            crate::analytics::track_onboarding_closed_before_complete();
+        }
+        Ok(_) => {}
+        Err(e) => log::warn!("[onboarding] close state check skipped: {}", e),
+    };
+}
+
+fn build_onboarding_window(app: &tauri::AppHandle) -> bool {
+    let app_handle = app.clone();
+    match tauri::WebviewWindowBuilder::new(app, "onboarding", tauri::WebviewUrl::App("onboarding.html".into()))
+        .title("Jungle Bell 시작하기")
+        .inner_size(480.0, 680.0)
+        .resizable(false)
+        .minimizable(false)
+        .maximizable(false)
+        .focused(true)
+        .build()
     {
-        crate::analytics::track_onboarding_started();
-        let app_handle = app.clone();
-        window.on_window_event(move |event| {
-            if let tauri::WindowEvent::Destroyed = event {
-                let app_handle = app_handle.clone();
-                tauri::async_runtime::spawn(async move {
-                    let state = app_handle.state::<Arc<TokioMutex<AppState>>>();
-                    if !state.lock().await.config.onboarding_completed {
-                        log::info!("[onboarding] closed before complete");
-                        crate::analytics::track_onboarding_closed_before_complete();
+        Ok(window) => {
+            window.on_window_event(move |event| {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    track_onboarding_closed_before_complete(&app_handle);
+                    if let Some(window) = app_handle.get_webview_window("onboarding") {
+                        let _ = window.hide();
                     }
-                });
-            }
-        });
+                }
+            });
+            true
+        }
+        Err(e) => {
+            log::error!("[onboarding] window build failed: {}", e);
+            false
+        }
     }
 }
 
 pub fn open_onboarding_window(app: &tauri::AppHandle) {
     log::info!("[tray] onboarding window opened");
-    if let Some(window) = app.get_webview_window("onboarding") {
+    let opened = if let Some(window) = app.get_webview_window("onboarding") {
+        let _ = window.emit("reset-onboarding", ());
         focus_window(&window);
+        true
     } else {
-        build_onboarding_window(app);
+        build_onboarding_window(app)
+    };
+    if opened {
+        crate::analytics::track_onboarding_started();
     }
 }
 
 pub fn close_onboarding_window(app: &tauri::AppHandle) {
     log::info!("[tray] onboarding window closed");
+    track_onboarding_closed_before_complete(app);
     if let Some(window) = app.get_webview_window("onboarding") {
-        let _ = window.close();
+        let _ = window.hide();
     }
 }
 
