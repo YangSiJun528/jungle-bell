@@ -29,22 +29,83 @@ if ($env:JUNGLE_BELL_ASSET_URL) {
 }
 
 $tmp = Join-Path $env:TEMP ("jungle-bell-" + [guid]::NewGuid().ToString() + ".exe")
+
+function Normalize-PathValue {
+  param([string]$Value)
+
+  if ([string]::IsNullOrWhiteSpace($Value)) {
+    return $null
+  }
+
+  $path = [Environment]::ExpandEnvironmentVariables($Value.Trim())
+  if ($path.StartsWith('"')) {
+    $match = [regex]::Match($path, '^"([^"]+)"')
+    if ($match.Success) {
+      $path = $match.Groups[1].Value
+    } else {
+      $path = $path.Trim('"')
+    }
+  }
+
+  $path = ($path -replace ',\d+$', '').Trim().Trim('"')
+  if ([string]::IsNullOrWhiteSpace($path)) {
+    return $null
+  }
+  return $path
+}
+
+function Join-ChildPath {
+  param(
+    [string]$Parent,
+    [string]$Child
+  )
+
+  $parentPath = Normalize-PathValue $Parent
+  if (-not $parentPath) {
+    return $null
+  }
+
+  try {
+    return Join-Path -Path $parentPath -ChildPath $Child -ErrorAction Stop
+  } catch {
+    return $null
+  }
+}
+
+function Try-StartJungleBellPath {
+  param([string]$Path)
+
+  $candidate = Normalize-PathValue $Path
+  if ($candidate -and (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+    Start-Process -FilePath $candidate
+    return $true
+  }
+  return $false
+}
+
 function Start-JungleBell {
   $candidates = @()
   if ($env:LOCALAPPDATA) {
-    $candidates += Join-Path $env:LOCALAPPDATA 'Programs\Jungle Bell\Jungle Bell.exe'
+    $candidate = Join-ChildPath $env:LOCALAPPDATA 'Programs\Jungle Bell\Jungle Bell.exe'
+    if ($candidate) { $candidates += $candidate }
+  }
+  $programW6432 = [Environment]::GetEnvironmentVariable('ProgramW6432')
+  if ($programW6432) {
+    $candidate = Join-ChildPath $programW6432 'Jungle Bell\Jungle Bell.exe'
+    if ($candidate) { $candidates += $candidate }
   }
   if ($env:ProgramFiles) {
-    $candidates += Join-Path $env:ProgramFiles 'Jungle Bell\Jungle Bell.exe'
+    $candidate = Join-ChildPath $env:ProgramFiles 'Jungle Bell\Jungle Bell.exe'
+    if ($candidate) { $candidates += $candidate }
   }
   $programFilesX86 = [Environment]::GetEnvironmentVariable('ProgramFiles(x86)')
   if ($programFilesX86) {
-    $candidates += Join-Path $programFilesX86 'Jungle Bell\Jungle Bell.exe'
+    $candidate = Join-ChildPath $programFilesX86 'Jungle Bell\Jungle Bell.exe'
+    if ($candidate) { $candidates += $candidate }
   }
 
-  foreach ($candidate in $candidates) {
-    if (Test-Path -LiteralPath $candidate) {
-      Start-Process -FilePath $candidate
+  foreach ($candidate in ($candidates | Select-Object -Unique)) {
+    if (Try-StartJungleBellPath $candidate) {
       return $true
     }
   }
@@ -64,31 +125,40 @@ function Start-JungleBell {
       Where-Object { $_.DisplayName -eq 'Jungle Bell' } |
       Select-Object -First 1
     if ($app -and $app.InstallLocation) {
-      $candidate = Join-Path $app.InstallLocation 'Jungle Bell.exe'
-      if (Test-Path -LiteralPath $candidate) {
-        Start-Process -FilePath $candidate
+      $candidate = Join-ChildPath $app.InstallLocation 'Jungle Bell.exe'
+      if ($candidate -and (Try-StartJungleBellPath $candidate)) {
         return $true
       }
     }
     if ($app -and $app.DisplayIcon) {
-      $candidate = $app.DisplayIcon.Trim('"') -replace ',\d+$', ''
-      if (Test-Path -LiteralPath $candidate) {
-        Start-Process -FilePath $candidate
+      if (Try-StartJungleBellPath $app.DisplayIcon) {
         return $true
+      }
+    }
+    if ($app -and $app.UninstallString) {
+      $uninstaller = Normalize-PathValue $app.UninstallString
+      if ($uninstaller) {
+        $installDir = Split-Path -Parent $uninstaller -ErrorAction SilentlyContinue
+        $candidate = Join-ChildPath $installDir 'Jungle Bell.exe'
+        if ($candidate -and (Try-StartJungleBellPath $candidate)) {
+          return $true
+        }
       }
     }
   }
 
   $shortcutCandidates = @()
   if ($env:APPDATA) {
-    $shortcutCandidates += Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Jungle Bell.lnk'
+    $shortcut = Join-ChildPath $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Jungle Bell.lnk'
+    if ($shortcut) { $shortcutCandidates += $shortcut }
   }
   if ($env:ProgramData) {
-    $shortcutCandidates += Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\Jungle Bell.lnk'
+    $shortcut = Join-ChildPath $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\Jungle Bell.lnk'
+    if ($shortcut) { $shortcutCandidates += $shortcut }
   }
 
-  foreach ($shortcut in $shortcutCandidates) {
-    if (Test-Path -LiteralPath $shortcut) {
+  foreach ($shortcut in ($shortcutCandidates | Select-Object -Unique)) {
+    if (Test-Path -LiteralPath $shortcut -PathType Leaf) {
       Start-Process -FilePath $shortcut
       return $true
     }
@@ -96,12 +166,14 @@ function Start-JungleBell {
 
   $startMenuRoots = @()
   if ($env:APPDATA) {
-    $startMenuRoots += Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs'
+    $root = Join-ChildPath $env:APPDATA 'Microsoft\Windows\Start Menu\Programs'
+    if ($root) { $startMenuRoots += $root }
   }
   if ($env:ProgramData) {
-    $startMenuRoots += Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs'
+    $root = Join-ChildPath $env:ProgramData 'Microsoft\Windows\Start Menu\Programs'
+    if ($root) { $startMenuRoots += $root }
   }
-  foreach ($root in $startMenuRoots) {
+  foreach ($root in ($startMenuRoots | Select-Object -Unique)) {
     if (-not (Test-Path -LiteralPath $root)) {
       continue
     }
