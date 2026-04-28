@@ -241,5 +241,7 @@
     runCheck('rust-trigger');
   });
 
-  jsLog('info', 'checker.js loaded, waiting for Rust trigger');
+  // 초기화 시 즉시 첫 체크 실행 — Rust page-load 이벤트 유실 시에도 초기 상태를 갱신.
+  jsLog('info', 'checker.js loaded, running initial check');
+  runCheck('initial-load');
 })();
