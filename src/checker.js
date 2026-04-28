@@ -27,6 +27,7 @@
 (function () {
   var cachedCohortId = null;
   var identityReported = false;
+  var checkInFlight = false;
 
   function jsLog(level, message) {
     window.__TAURI__.core.invoke('log_from_js', { level: level, message: message });
@@ -219,9 +220,25 @@
     });
   }
 
+  function runCheck(reason) {
+    if (checkInFlight) {
+      jsLog('debug', 'check skipped, already running: ' + reason);
+      return;
+    }
+
+    checkInFlight = true;
+    jsLog('debug', 'check started: ' + reason);
+
+    checkAttendance()
+      .then(reportResult)
+      .finally(function () {
+        checkInFlight = false;
+      });
+  }
+
   // Rust의 trigger-check 이벤트를 수신하면 API 조회 후 invoke로 반환
   window.__TAURI__.event.listen('trigger-check', function () {
-    checkAttendance().then(reportResult);
+    runCheck('rust-trigger');
   });
 
   jsLog('info', 'checker.js loaded, waiting for Rust trigger');
