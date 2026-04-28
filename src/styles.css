@@ -338,21 +338,6 @@ a, area, button, input, label, select, summary, textarea, [tabindex] {
     --transition: 0.2s;
 }
 
-@media (prefers-color-scheme: dark) {
-    :root {
-        --color-bg: #1e1e1e;
-        --color-text: #e0e0e0;
-        --color-th: #aaaaaa;
-        --color-td: #bbbbbb;
-        --color-text-muted: #999999;
-        --color-text-faint: #666666;
-        --color-accent: #4da3ff;
-        --color-border: #444444;
-        --color-pill-bg: #2c2c2e;
-    }
-}
-
-
 /* ==========================================================================
    App styles
    ========================================================================== */
@@ -1161,47 +1146,4 @@ tr.ob-end-field.disabled {
 
 .scenario-menu-windows .scenario-menu-sep {
     margin: 2px 6px;
-}
-
-/* Dark mode */
-@media (prefers-color-scheme: dark) {
-    .scenario-mock {
-        border-color: #333;
-    }
-
-    .scenario-menu {
-        background: rgba(45, 45, 48, 0.96);
-        color: #e0e0e0;
-        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), 0 0 0 0.5px rgba(255, 255, 255, 0.1);
-    }
-
-    .scenario-menu-item {
-        color: #e0e0e0;
-    }
-
-    .scenario-menu-disabled {
-        color: rgba(255, 255, 255, 0.3);
-    }
-
-    .scenario-menu-status {
-        color: rgba(255, 255, 255, 0.5);
-    }
-
-    .scenario-menu-sep {
-        background: rgba(255, 255, 255, 0.08);
-    }
-
-    .scenario-menu-windows {
-        background: rgba(40, 40, 42, 0.98);
-        border-color: rgba(255, 255, 255, 0.08);
-    }
-
-    .scenario-menu-windows .scenario-menu-item:hover:not(.scenario-menu-disabled):not(.scenario-menu-status) {
-        background: rgba(255, 255, 255, 0.08);
-        color: #e0e0e0;
-    }
-
-    .scenario-tab.active {
-        background: var(--color-bg);
-    }
 }
