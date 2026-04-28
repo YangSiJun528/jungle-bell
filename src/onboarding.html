@@ -308,6 +308,8 @@
 
     const TOTAL = 6;
     const LOGIN_STEP = 1;
+    const SCENARIO_STEP = 4;
+    const SCENARIO_ORDER = ['morning', 'day', 'night'];
 
     const card = document.querySelector('.onboarding-card');
     const slides = document.querySelectorAll('.onboarding-slide');
@@ -423,17 +425,43 @@
         if (step === LOGIN_STEP) nextBtn.disabled = isNextDisabled();
     }
 
+    function goToStep(nextStep, scenarioName) {
+        step = nextStep;
+        if (step === SCENARIO_STEP) {
+            applyScenario(scenarioName || SCENARIO_ORDER[0]);
+        }
+        render();
+    }
+
+    function getActiveScenarioName() {
+        return scenarioSlide.querySelector('.scenario-time-tabs .scenario-tab.active')?.dataset.scenario || SCENARIO_ORDER[0];
+    }
+
+    function moveScenario(delta) {
+        const currentIndex = SCENARIO_ORDER.indexOf(getActiveScenarioName());
+        const nextScenario = SCENARIO_ORDER[currentIndex + delta];
+        if (!nextScenario) return false;
+        applyScenario(nextScenario);
+        return true;
+    }
+
     // ── 슬라이드 네비게이션 ────────────────────────────
     prevBtn.addEventListener('click', () => {
-        if (step > 0) { step -= 1; render(); }
+        if (step === SCENARIO_STEP && moveScenario(-1)) return;
+        if (step > 0) {
+            const nextStep = step - 1;
+            const scenarioName = nextStep === SCENARIO_STEP ? SCENARIO_ORDER[SCENARIO_ORDER.length - 1] : undefined;
+            goToStep(nextStep, scenarioName);
+        }
     });
     nextBtn.addEventListener('click', () => {
         if (isNextDisabled()) return;
-        if (step < TOTAL - 1) { step += 1; render(); }
+        if (step === SCENARIO_STEP && moveScenario(1)) return;
+        if (step < TOTAL - 1) { goToStep(step + 1); }
         else close();
     });
     skipBtn.addEventListener('click', () => {
-        if (step < TOTAL - 1) { step += 1; render(); }
+        if (step < TOTAL - 1) { goToStep(step + 1); }
     });
 
     document.addEventListener('keydown', (e) => {
