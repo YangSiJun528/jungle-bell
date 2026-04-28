@@ -85,4 +85,7 @@ ditto "$TMP/Jungle Bell.app" "$DEST/Jungle Bell.app"
 codesign --force --deep --sign - "$DEST/Jungle Bell.app" 2>/dev/null || true
 xattr -cr "$DEST/Jungle Bell.app" 2>/dev/null || true
 
-echo "Installed: $DEST/Jungle Bell.app"
+echo "Opening Jungle Bell..."
+open "$DEST/Jungle Bell.app"
+
+echo "Installed and opened: $DEST/Jungle Bell.app"
