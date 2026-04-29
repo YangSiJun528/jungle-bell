@@ -192,7 +192,7 @@ pub fn open_attendance_window(app: &tauri::AppHandle) {
 fn build_settings_window(app: &tauri::AppHandle) {
     let _ = tauri::WebviewWindowBuilder::new(app, "settings", tauri::WebviewUrl::App("index.html".into()))
         .title("설정")
-        .inner_size(380.0, 520.0)
+        .inner_size(448.0, 608.0)
         .resizable(false)
         .minimizable(false)
         .maximizable(false)
@@ -216,7 +216,7 @@ fn build_onboarding_window(app: &tauri::AppHandle) -> bool {
     let app_handle = app.clone();
     match tauri::WebviewWindowBuilder::new(app, "onboarding", tauri::WebviewUrl::App("onboarding.html".into()))
         .title("Jungle Bell 시작하기")
-        .inner_size(480.0, 680.0)
+        .inner_size(560.0, 784.0)
         .resizable(false)
         .minimizable(false)
         .maximizable(false)

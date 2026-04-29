@@ -306,33 +306,33 @@ a, area, button, input, label, select, summary, textarea, [tabindex] {
 
     /* --- Typography (px only) --- */
     --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans KR', sans-serif;
-    --font-size-base: 12px;
-    --font-size-h1: 14px;
-    --font-size-subtext: 12px;
-    --font-size-table: 12px;
-    --font-size-hint: 10px;
-    --font-size-tab: 12px;
-    --font-size-footer: 11px;
+    --font-size-base: 14px;
+    --font-size-h1: 17px;
+    --font-size-subtext: 14px;
+    --font-size-table: 14px;
+    --font-size-hint: 12px;
+    --font-size-tab: 14px;
+    --font-size-footer: 12px;
 
     /* --- Spacing --- */
     --space-page-x: 16px;
-    --space-page-top: 14px;
-    --space-page-bottom: 14px;
-    --space-header-gap: 10px;
-    --space-header-mb: 12px;
+    --space-page-top: 16px;
+    --space-page-bottom: 16px;
+    --space-header-gap: 12px;
+    --space-header-mb: 16px;
     --space-cell-v: 4px;
     --space-gap-row: 4px;
     --space-section-gap: 16px;
-    --space-footer-v: 7px;
-    --space-row-ctrl-gap: 6px;
+    --space-footer-v: 8px;
+    --space-row-ctrl-gap: 8px;
 
     /* --- Component sizes --- */
-    --size-logo: 56px;
-    --size-logo-radius: 12px;
-    --size-toggle-w: 36px;
-    --size-toggle-h: 20px;
-    --size-toggle-knob: 16px;
-    --size-th-width: 120px;
+    --size-logo: 64px;
+    --size-logo-radius: 16px;
+    --size-toggle-w: 40px;
+    --size-toggle-h: 24px;
+    --size-toggle-knob: 20px;
+    --size-th-width: 144px;
 
     /* --- Motion --- */
     --transition: 0.2s;
@@ -982,9 +982,9 @@ tr.ob-end-field.disabled {
     position: absolute;
     top: 6px;
     left: 8px;
-    font-size: 9px;
+    font-size: 11px;
     color: rgba(255, 255, 255, 0.7);
-    letter-spacing: 0.3px;
+    letter-spacing: 0;
     text-transform: uppercase;
     pointer-events: none;
 }
@@ -1040,23 +1040,23 @@ tr.ob-end-field.disabled {
     height: auto;
     background: none;
     color: rgba(255, 255, 255, 0.85);
-    font-size: 10px;
+    font-size: 12px;
     font-variant-numeric: tabular-nums;
 }
 
 .scenario-tray-icon {
-    width: 14px;
-    height: 14px;
+    width: 17px;
+    height: 17px;
     object-fit: contain;
 }
 
 .scenario-highlight {
-    width: 24px;
-    height: 24px;
+    width: 30px;
+    height: 30px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    flex: 0 0 24px;
+    flex: 0 0 30px;
     border-radius: 999px;
     border: 2px solid rgba(255, 255, 255, 0.82);
     background: rgba(0, 122, 255, 0.72);
@@ -1083,9 +1083,9 @@ tr.ob-end-field.disabled {
     padding: 4px 0;
     background: rgba(245, 245, 247, 0.96);
     border-radius: 8px;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25), 0 0 0 0.5px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.15);
     color: #222;
-    font-size: 11px;
+    font-size: 13px;
     text-align: left;
     overflow: hidden;
 }
@@ -1111,7 +1111,7 @@ tr.ob-end-field.disabled {
 
 .scenario-menu-status {
     color: rgba(0, 0, 0, 0.55);
-    font-size: 10.5px;
+    font-size: 12px;
     padding-bottom: 2px;
 }
 
@@ -1136,7 +1136,7 @@ tr.ob-end-field.disabled {
 
 .scenario-menu-windows .scenario-menu-item {
     padding: 3px 14px;
-    font-size: 11px;
+    font-size: 13px;
 }
 
 .scenario-menu-windows .scenario-menu-item:hover:not(.scenario-menu-disabled):not(.scenario-menu-status) {
