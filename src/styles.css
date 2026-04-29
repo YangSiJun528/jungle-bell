@@ -736,6 +736,66 @@ tr.ob-end-field.disabled {
     font-weight: 600;
 }
 
+.onboarding-icon-line {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.onboarding-inline-icon {
+    width: 20px;
+    height: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 20px;
+    border-radius: 5px;
+    background: var(--color-text);
+}
+
+.onboarding-inline-icon img {
+    width: 13px;
+    height: 13px;
+    object-fit: contain;
+}
+
+.onboarding-icon-legend {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 10px 0 4px;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-hint);
+}
+
+.onboarding-icon-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+}
+
+.onboarding-legend-icon {
+    width: 18px;
+    height: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 18px;
+    border-radius: 5px;
+    background: var(--color-text);
+}
+
+.onboarding-legend-icon img {
+    width: 12px;
+    height: 12px;
+    object-fit: contain;
+}
+
 .onboarding-note {
     display: block;
     margin-top: 10px;
