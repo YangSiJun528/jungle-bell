@@ -772,6 +772,40 @@ tr.ob-end-field.disabled {
     display: block;
 }
 
+.onboarding-task-area {
+    width: min(100%, 360px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: 14px auto 0;
+    padding-top: 14px;
+    border-top: 1px solid var(--color-border);
+}
+
+.onboarding-task-area-compact {
+    width: min(100%, 320px);
+}
+
+.onboarding-task-area .onboarding-action-row {
+    margin: 0 0 6px;
+}
+
+.onboarding-task-area .scenario-tabs {
+    margin-top: 0;
+}
+
+.onboarding-task-area .scenario-mock {
+    margin: 0 auto;
+}
+
+.onboarding-task-area .onboarding-note {
+    margin-top: 8px;
+}
+
+.onboarding-task-area > .onboarding-note:first-child {
+    margin-top: 0;
+}
+
 .onboarding-dots {
     flex-shrink: 0;
     display: flex;
@@ -902,8 +936,7 @@ tr.ob-end-field.disabled {
 
 .onboarding-form {
     text-align: left;
-    margin: 12px auto 0;
-    max-width: 360px;
+    align-items: stretch;
 }
 
 .onboarding-form table {
@@ -966,6 +999,8 @@ tr.ob-end-field.disabled {
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
+    pointer-events: none;
+    user-select: none;
 }
 
 .scenario-mock[hidden] {
@@ -1100,11 +1135,6 @@ tr.ob-end-field.disabled {
     text-overflow: ellipsis;
 }
 
-.scenario-menu-item:hover:not(.scenario-menu-disabled):not(.scenario-menu-status) {
-    background: var(--color-accent);
-    color: #ffffff;
-}
-
 .scenario-menu-disabled {
     color: rgba(0, 0, 0, 0.35);
 }
@@ -1137,11 +1167,6 @@ tr.ob-end-field.disabled {
 .scenario-menu-windows .scenario-menu-item {
     padding: 3px 14px;
     font-size: 13px;
-}
-
-.scenario-menu-windows .scenario-menu-item:hover:not(.scenario-menu-disabled):not(.scenario-menu-status) {
-    background: rgba(0, 0, 0, 0.06);
-    color: #222;
 }
 
 .scenario-menu-windows .scenario-menu-sep {

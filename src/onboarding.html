@@ -35,61 +35,63 @@
             실제 컴퓨터의 <span data-os-only="mac">메뉴 바 오른쪽 아이콘</span><span data-os-only="win" hidden>작업 표시줄 오른쪽 트레이 아이콘</span>을 클릭해 보세요.
         </p>
 
-        <div class="scenario-mock scenario-mock-macos welcome-mock" data-os="mac">
-            <div class="scenario-bar scenario-bar-top">
-                <div class="scenario-bar-cluster">
-                    <span class="scenario-placeholder"></span>
-                    <span class="scenario-placeholder"></span>
-                    <span class="scenario-highlight" aria-hidden="true">
-                        <img class="scenario-tray-icon" src="assets/tray-mini-white.png" alt=""/>
-                    </span>
-                    <span class="scenario-placeholder scenario-placeholder-time">14:08</span>
+        <div class="onboarding-task-area">
+            <div class="scenario-mock scenario-mock-macos welcome-mock" data-os="mac">
+                <div class="scenario-bar scenario-bar-top">
+                    <div class="scenario-bar-cluster">
+                        <span class="scenario-placeholder"></span>
+                        <span class="scenario-placeholder"></span>
+                        <span class="scenario-highlight" aria-hidden="true">
+                            <img class="scenario-tray-icon" src="assets/tray-mini-white.png" alt=""/>
+                        </span>
+                        <span class="scenario-placeholder scenario-placeholder-time">14:08</span>
+                    </div>
+                </div>
+                <div class="scenario-menu scenario-menu-macos">
+                    <div class="scenario-menu-item scenario-menu-status">학습 중</div>
+                    <div class="scenario-menu-item">출석 페이지 열기</div>
+                    <div class="scenario-menu-sep"></div>
+                    <div class="scenario-menu-item">식단표 보러가기</div>
+                    <div class="scenario-menu-sep"></div>
+                    <div class="scenario-menu-item scenario-menu-disabled">v0.2.6</div>
+                    <div class="scenario-menu-item">피드백 보내기</div>
+                    <div class="scenario-menu-item">설정...</div>
+                    <div class="scenario-menu-item">종료</div>
                 </div>
             </div>
-            <div class="scenario-menu scenario-menu-macos">
-                <div class="scenario-menu-item scenario-menu-status">학습 중</div>
-                <div class="scenario-menu-item">출석 페이지 열기</div>
-                <div class="scenario-menu-sep"></div>
-                <div class="scenario-menu-item">식단표 보러가기</div>
-                <div class="scenario-menu-sep"></div>
-                <div class="scenario-menu-item scenario-menu-disabled">v0.2.6</div>
-                <div class="scenario-menu-item">피드백 보내기</div>
-                <div class="scenario-menu-item">설정...</div>
-                <div class="scenario-menu-item">종료</div>
-            </div>
-        </div>
 
-        <div class="scenario-mock scenario-mock-windows welcome-mock" data-os="win" hidden>
-            <div class="scenario-menu scenario-menu-windows">
-                <div class="scenario-menu-item scenario-menu-status">학습 중</div>
-                <div class="scenario-menu-item">출석 페이지 열기</div>
-                <div class="scenario-menu-sep"></div>
-                <div class="scenario-menu-item">식단표 보러가기</div>
-                <div class="scenario-menu-sep"></div>
-                <div class="scenario-menu-item scenario-menu-disabled">v0.2.6</div>
-                <div class="scenario-menu-item">피드백 보내기</div>
-                <div class="scenario-menu-item">설정...</div>
-                <div class="scenario-menu-item">종료</div>
-            </div>
-            <div class="scenario-bar scenario-bar-bottom">
-                <div class="scenario-bar-cluster scenario-bar-cluster-right">
-                    <span class="scenario-placeholder"></span>
-                    <span class="scenario-placeholder"></span>
-                    <span class="scenario-highlight" aria-hidden="true">
-                        <img class="scenario-tray-icon" src="assets/tray-mini-white.png" alt=""/>
-                    </span>
-                    <span class="scenario-placeholder scenario-placeholder-time">14:08</span>
+            <div class="scenario-mock scenario-mock-windows welcome-mock" data-os="win" hidden>
+                <div class="scenario-menu scenario-menu-windows">
+                    <div class="scenario-menu-item scenario-menu-status">학습 중</div>
+                    <div class="scenario-menu-item">출석 페이지 열기</div>
+                    <div class="scenario-menu-sep"></div>
+                    <div class="scenario-menu-item">식단표 보러가기</div>
+                    <div class="scenario-menu-sep"></div>
+                    <div class="scenario-menu-item scenario-menu-disabled">v0.2.6</div>
+                    <div class="scenario-menu-item">피드백 보내기</div>
+                    <div class="scenario-menu-item">설정...</div>
+                    <div class="scenario-menu-item">종료</div>
+                </div>
+                <div class="scenario-bar scenario-bar-bottom">
+                    <div class="scenario-bar-cluster scenario-bar-cluster-right">
+                        <span class="scenario-placeholder"></span>
+                        <span class="scenario-placeholder"></span>
+                        <span class="scenario-highlight" aria-hidden="true">
+                            <img class="scenario-tray-icon" src="assets/tray-mini-white.png" alt=""/>
+                        </span>
+                        <span class="scenario-placeholder scenario-placeholder-time">14:08</span>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <small class="onboarding-note onboarding-os-note" data-os-only="win" hidden>
-            <span class="onboarding-note-icon" aria-hidden="true">💡</span>
-            <span class="onboarding-note-copy">
-                <span class="onboarding-note-line">처음엔 작업 표시줄 오른쪽의 <strong>숨겨진 아이콘 메뉴</strong>(∧)에 있을 수 있어요.</span>
-                <span class="onboarding-note-line">아이콘을 작업 표시줄로 끌어두면 항상 보여요.</span>
-            </span>
-        </small>
+            <small class="onboarding-note onboarding-os-note" data-os-only="win" hidden>
+                <span class="onboarding-note-icon" aria-hidden="true">💡</span>
+                <span class="onboarding-note-copy">
+                    <span class="onboarding-note-line">처음엔 작업 표시줄 오른쪽의 <strong>숨겨진 아이콘 메뉴</strong>(∧)에 있을 수 있어요.</span>
+                    <span class="onboarding-note-line">아이콘을 작업 표시줄로 끌어두면 항상 보여요.</span>
+                </span>
+            </small>
+        </div>
     </section>
 
     <!-- 1: LMS 로그인 -->
@@ -99,16 +101,18 @@
         <p class="onboarding-desc">
             로그인되어 있어야 출석 상태를 확인할 수 있어요.
         </p>
-        <div class="onboarding-action-row">
-            <button type="button" class="onboarding-btn onboarding-btn-primary onboarding-btn-inline" id="open-attendance-btn">
-                출석 페이지 열기
-            </button>
-            <span class="onboarding-status-badge" id="login-status-badge" hidden>✓ 로그인 완료</span>
-            <span class="onboarding-status-pending" id="login-status-pending">로그인 확인 중</span>
+        <div class="onboarding-task-area onboarding-task-area-compact">
+            <div class="onboarding-action-row">
+                <button type="button" class="onboarding-btn onboarding-btn-primary onboarding-btn-inline" id="open-attendance-btn">
+                    출석 페이지 열기
+                </button>
+                <span class="onboarding-status-badge" id="login-status-badge" hidden>✓ 로그인 완료</span>
+                <span class="onboarding-status-pending" id="login-status-pending">로그인 확인 중</span>
+            </div>
+            <small class="onboarding-note">
+                출석은 페이지에서 직접 진행해 주세요.
+            </small>
         </div>
-        <small class="onboarding-note">
-            출석은 페이지에서 직접 진행해 주세요.
-        </small>
     </section>
 
     <!-- 2: 알림 시간 설정 -->
@@ -118,7 +122,7 @@
             필요한 알림만 켜도 돼요.<br/>
             알림을 꺼도 아이콘 색으로 상태를 볼 수 있어요.
         </p>
-        <div class="onboarding-form">
+        <div class="onboarding-task-area onboarding-form">
             <table>
                 <tr>
                     <th>시작 출석 알림</th>
@@ -213,70 +217,74 @@
             알림을 받으려면 시스템 설정에서 <strong>Jungle Bell</strong>을 허용해 주세요.<br/>
             사용자 기기의 설정에 따라 비활성화 되어있을 수 있어요.
         </p>
-        <div class="onboarding-action-row">
-            <button type="button" class="onboarding-btn onboarding-btn-primary onboarding-btn-inline" id="ob-open-notif-settings">
-                시스템 알림 설정 열기
-            </button>
+        <div class="onboarding-task-area onboarding-task-area-compact">
+            <div class="onboarding-action-row">
+                <button type="button" class="onboarding-btn onboarding-btn-primary onboarding-btn-inline" id="ob-open-notif-settings">
+                    시스템 알림 설정 열기
+                </button>
+            </div>
         </div>
     </section>
 
     <!-- 4: 하루 시나리오 -->
     <section class="onboarding-slide" data-slide="4">
         <h2 class="onboarding-title">아이콘 색으로 상태를 봐요</h2>
-        <div class="scenario-tabs scenario-time-tabs" role="tablist" aria-label="출석 상태 선택">
-            <button type="button" class="scenario-tab active" data-scenario="morning">시작 전</button>
-            <button type="button" class="scenario-tab" data-scenario="day">학습 중</button>
-            <button type="button" class="scenario-tab" data-scenario="night">종료 전</button>
-        </div>
+        <div class="onboarding-task-area">
+            <div class="scenario-tabs scenario-time-tabs" role="tablist" aria-label="출석 상태 선택">
+                <button type="button" class="scenario-tab active" data-scenario="morning">시작 전</button>
+                <button type="button" class="scenario-tab" data-scenario="day">학습 중</button>
+                <button type="button" class="scenario-tab" data-scenario="night">종료 전</button>
+            </div>
 
-        <div class="scenario-mock scenario-mock-macos" id="scenario-mock-macos" data-os="mac">
-            <div class="scenario-bar scenario-bar-top">
-                <div class="scenario-bar-cluster">
-                    <span class="scenario-placeholder"></span>
-                    <span class="scenario-placeholder"></span>
-                    <img class="scenario-tray-icon" data-tray="mac" src="assets/tray-mini-red.png" alt="메뉴 바 아이콘"/>
-                    <span class="scenario-placeholder scenario-placeholder-time">09:24</span>
+            <div class="scenario-mock scenario-mock-macos" id="scenario-mock-macos" data-os="mac">
+                <div class="scenario-bar scenario-bar-top">
+                    <div class="scenario-bar-cluster">
+                        <span class="scenario-placeholder"></span>
+                        <span class="scenario-placeholder"></span>
+                        <img class="scenario-tray-icon" data-tray="mac" src="assets/tray-mini-red.png" alt="메뉴 바 아이콘"/>
+                        <span class="scenario-placeholder scenario-placeholder-time">09:24</span>
+                    </div>
+                </div>
+                <div class="scenario-menu scenario-menu-macos">
+                    <div class="scenario-menu-item scenario-menu-status" data-status="mac">출석 시작 가능</div>
+                    <div class="scenario-menu-item">출석 페이지 열기</div>
+                    <div class="scenario-menu-sep"></div>
+                    <div class="scenario-menu-item">식단표 보러가기</div>
+                    <div class="scenario-menu-sep"></div>
+                    <div class="scenario-menu-item scenario-menu-disabled">v0.2.6</div>
+                    <div class="scenario-menu-item">피드백 보내기</div>
+                    <div class="scenario-menu-item">설정...</div>
+                    <div class="scenario-menu-item">종료</div>
                 </div>
             </div>
-            <div class="scenario-menu scenario-menu-macos">
-                <div class="scenario-menu-item scenario-menu-status" data-status="mac">출석 시작 가능</div>
-                <div class="scenario-menu-item">출석 페이지 열기</div>
-                <div class="scenario-menu-sep"></div>
-                <div class="scenario-menu-item">식단표 보러가기</div>
-                <div class="scenario-menu-sep"></div>
-                <div class="scenario-menu-item scenario-menu-disabled">v0.2.6</div>
-                <div class="scenario-menu-item">피드백 보내기</div>
-                <div class="scenario-menu-item">설정...</div>
-                <div class="scenario-menu-item">종료</div>
-            </div>
-        </div>
 
-        <div class="scenario-mock scenario-mock-windows" id="scenario-mock-windows" data-os="win" hidden>
-            <div class="scenario-menu scenario-menu-windows">
-                <div class="scenario-menu-item scenario-menu-status" data-status="win">출석 시작 가능</div>
-                <div class="scenario-menu-item">출석 페이지 열기</div>
-                <div class="scenario-menu-sep"></div>
-                <div class="scenario-menu-item">식단표 보러가기</div>
-                <div class="scenario-menu-sep"></div>
-                <div class="scenario-menu-item scenario-menu-disabled">v0.2.6</div>
-                <div class="scenario-menu-item">피드백 보내기</div>
-                <div class="scenario-menu-item">설정...</div>
-                <div class="scenario-menu-item">종료</div>
-            </div>
-            <div class="scenario-bar scenario-bar-bottom">
-                <div class="scenario-bar-cluster scenario-bar-cluster-right">
-                    <span class="scenario-placeholder"></span>
-                    <span class="scenario-placeholder"></span>
-                    <img class="scenario-tray-icon" data-tray="win" src="assets/tray-mini-red.png" alt="트레이 아이콘"/>
-                    <span class="scenario-placeholder scenario-placeholder-time">09:24</span>
+            <div class="scenario-mock scenario-mock-windows" id="scenario-mock-windows" data-os="win" hidden>
+                <div class="scenario-menu scenario-menu-windows">
+                    <div class="scenario-menu-item scenario-menu-status" data-status="win">출석 시작 가능</div>
+                    <div class="scenario-menu-item">출석 페이지 열기</div>
+                    <div class="scenario-menu-sep"></div>
+                    <div class="scenario-menu-item">식단표 보러가기</div>
+                    <div class="scenario-menu-sep"></div>
+                    <div class="scenario-menu-item scenario-menu-disabled">v0.2.6</div>
+                    <div class="scenario-menu-item">피드백 보내기</div>
+                    <div class="scenario-menu-item">설정...</div>
+                    <div class="scenario-menu-item">종료</div>
+                </div>
+                <div class="scenario-bar scenario-bar-bottom">
+                    <div class="scenario-bar-cluster scenario-bar-cluster-right">
+                        <span class="scenario-placeholder"></span>
+                        <span class="scenario-placeholder"></span>
+                        <img class="scenario-tray-icon" data-tray="win" src="assets/tray-mini-red.png" alt="트레이 아이콘"/>
+                        <span class="scenario-placeholder scenario-placeholder-time">09:24</span>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <p class="onboarding-note" id="scenario-caption">
-            <span class="onboarding-note-line">빨간 종은 출석 시작이 필요한 상태예요.</span>
-            <span class="onboarding-note-line">출석 페이지를 열어 체크인해 주세요.</span>
-        </p>
+            <p class="onboarding-note" id="scenario-caption">
+                <span class="onboarding-note-line">빨간 종은 출석 시작이 필요한 상태예요.</span>
+                <span class="onboarding-note-line">출석 페이지를 열어 체크인해 주세요.</span>
+            </p>
+        </div>
     </section>
 
     <!-- 5: 준비 끝 -->
@@ -284,10 +292,12 @@
         <div class="onboarding-illust onboarding-illust-emoji" aria-hidden="true">🎉</div>
         <h2 class="onboarding-title">준비됐어요</h2>
         <p class="onboarding-desc">시작하기를 누르면 창이 닫혀요.</p>
-        <small class="onboarding-note">
-            <span class="onboarding-note-line">앱 개선을 위해 사용 통계를 보내요.</span>
-            <span class="onboarding-note-line">설정에서 언제든 끌 수 있어요.</span>
-        </small>
+        <div class="onboarding-task-area onboarding-task-area-compact">
+            <small class="onboarding-note">
+                <span class="onboarding-note-line">앱 개선을 위해 사용 통계를 보내요.</span>
+                <span class="onboarding-note-line">설정에서 언제든 끌 수 있어요.</span>
+            </small>
+        </div>
     </section>
 
     <div class="onboarding-dots" role="tablist" aria-label="진행 단계">
