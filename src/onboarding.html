@@ -368,14 +368,9 @@
     let unlistenLogin = null;
     let unlistenReset = null;
     let loginRefreshTimer = null;
-    const detectedOs = /Mac/i.test(navigator.userAgent) ? 'mac'
-                     : /Win/i.test(navigator.userAgent) ? 'win'
-                     : 'mac';
-    let currentOs = detectedOs;
 
     async function close() {
         stopLoginRefresh();
-        resetOnboarding({sync: false});
         try {
             await invoke('close_onboarding');
         } catch (e) {
@@ -388,7 +383,6 @@
         stopLoginRefresh();
         try {
             await invoke('complete_onboarding');
-            resetOnboarding({sync: false});
         } catch (e) {
             console.error('[onboarding] complete failed:', e);
             window.close();
@@ -491,16 +485,14 @@
         render();
     }
 
-    function resetOnboarding({sync = true} = {}) {
+    function resetOnboarding() {
         stopLoginRefresh();
         step = 0;
-        loginDataLoaded = false;
-        needsLogin = true;
-        applyOs(detectedOs);
+        applyOs(currentOs);
         applyScenario(SCENARIO_ORDER[0]);
         updateLoginUi();
         render();
-        if (sync) syncLoginStatus();
+        syncLoginStatus();
     }
 
     function getActiveScenarioName() {
@@ -626,6 +618,10 @@
     }
 
     // ── 글로벌 OS 토글 — 모든 mockup, 모든 hint에 영향 ──
+    let currentOs = /Mac/i.test(navigator.userAgent) ? 'mac'
+                  : /Win/i.test(navigator.userAgent) ? 'win'
+                  : 'mac';
+
     function applyOs(os) {
         currentOs = os;
         // 모든 mockup (welcome + scenario) 토글
@@ -660,7 +656,9 @@
                 updateLoginUi();
                 render();
             });
-            unlistenReset = await listen('reset-onboarding', () => resetOnboarding());
+            unlistenReset = await listen('reset-onboarding', () => {
+                resetOnboarding();
+            });
             await syncLoginStatus();
 
             // 알림 토글/select — settings 창과 같은 커맨드 (현재 config 값을 로드)

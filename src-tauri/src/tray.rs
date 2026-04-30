@@ -230,7 +230,6 @@ fn build_onboarding_window(app: &tauri::AppHandle) -> bool {
                     track_onboarding_closed_before_complete(&app_handle);
                     if let Some(window) = app_handle.get_webview_window("onboarding") {
                         let _ = window.hide();
-                        let _ = window.emit("reset-onboarding", ());
                     }
                 }
             });
@@ -262,7 +261,6 @@ pub fn close_onboarding_window(app: &tauri::AppHandle) {
     track_onboarding_closed_before_complete(app);
     if let Some(window) = app.get_webview_window("onboarding") {
         let _ = window.hide();
-        let _ = window.emit("reset-onboarding", ());
     }
 }
 
