@@ -140,10 +140,22 @@ impl Config {
     pub fn load() -> Self {
         if let Some(path) = config_path() {
             if let Ok(data) = std::fs::read_to_string(&path) {
+                let had_onboarding_completed = config_data_has_field(&data, "onboarding_completed");
                 match serde_json::from_str::<Config>(&data) {
                     Ok(mut config) => {
                         log::info!("[config] loaded from {}", path.display());
+                        let mut changed = false;
+                        if !had_onboarding_completed {
+                            config.onboarding_completed = true;
+                            changed = true;
+                            log::info!(
+                                "[config] 기존 설정 파일에 온보딩 필드가 없어 완료 상태로 마이그레이션"
+                            );
+                        }
                         if config.normalize_loaded_values() {
+                            changed = true;
+                        }
+                        if changed {
                             config.save();
                         }
                         return config;
@@ -210,6 +222,13 @@ impl Config {
 
         changed
     }
+}
+
+fn config_data_has_field(data: &str, field_name: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(data)
+        .ok()
+        .and_then(|value| value.as_object().map(|object| object.contains_key(field_name)))
+        .unwrap_or(false)
 }
 
 impl Default for Config {
@@ -435,5 +454,12 @@ mod tests {
         assert_eq!(config.notification_end.minute, 0);
         assert_eq!(config.start_notification_interval_mins, 1);
         assert_eq!(config.end_notification_interval_mins, 30);
+    }
+
+    #[test]
+    fn config_data_has_field_detects_existing_onboarding_flag() {
+        assert!(config_data_has_field(r#"{"onboarding_completed":false}"#, "onboarding_completed"));
+        assert!(!config_data_has_field(r#"{"auto_start":true}"#, "onboarding_completed"));
+        assert!(!config_data_has_field("not json", "onboarding_completed"));
     }
 }
