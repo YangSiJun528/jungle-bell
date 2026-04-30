@@ -56,7 +56,7 @@
 
 ## 설치
 
-한 줄로 최신 버전을 설치하고 바로 열 수 있습니다. 자동 설치가 어려운 환경이라면 [수동 다운로드](#수동-다운로드)를 참고하세요.
+한 줄로 최신 버전을 설치하고 바로 열 수 있습니다. 자동 설치가 어렵다면 [Release 페이지](https://github.com/YangSiJun528/jungle-bell/releases/latest)의 안내를 참고하세요.
 
 ### macOS
 
@@ -84,80 +84,50 @@ curl -fsSL "https://install.sijun-yang.com/jungle-bell.sh?tag=v0.2.5" | sh
 irm "https://install.sijun-yang.com/jungle-bell.ps1?tag=v0.2.5" | iex
 ```
 
-### 수동 다운로드
-
-자동 설치가 어렵다면 [Releases](https://github.com/YangSiJun528/jungle-bell/releases)에서 직접 받을 수 있습니다.
-
-| 파일명 | 대상                            |
-|--------|-------------------------------|
-| `Jungle Bell_x.x.x_aarch64.dmg` | macOS (Apple Silicon) — M 시리즈 |
-| `Jungle Bell_x.x.x_x64.dmg` | macOS (Intel)                 |
-| `Jungle Bell_x.x.x_x64-setup.exe` | Windows                       |
-
-모델을 모르겠다면 Mac에서 왼쪽 상단  → **이 Mac에 관하여**에서 확인할 수 있습니다.
-
-#### macOS 수동 설치
-
-> [!WARNING]    
-> Jungle Bell은 Apple 공인 인증서로 서명되지 않은 앱입니다.     
-> `.dmg`로 직접 설치하면 macOS 첫 실행 시 **"손상되었기 때문에 열 수 없습니다"** 오류가 표시됩니다.     
-> 아래 명령으로 격리 속성을 제거하면 실행할 수 있습니다. (자동 설치 스크립트는 이 과정을 대신 수행합니다.)
->   
-> ~~Apple Developer Program 비용이 $99라 너무 비싸요. 😭~~
-
-`.dmg` 파일을 다운로드한 후, 클릭하여 Applications 폴더에 설치해주세요.
-
-이후 다음 명령어를 실행하면 문제없이 실행이 가능합니다.
-
-```bash
-xattr -cr "/Applications/Jungle Bell.app"
-```
-
-#### Windows 수동 설치
-
-`-setup.exe` 파일을 다운로드하여 실행하세요.
-
-"Windows의 PC 보호" 경고가 표시되면 **추가 정보** → **실행** 을 클릭하면 됩니다.
-
 ## 처음 실행 시
 
-1. 앱을 실행하면 메뉴 막대(macOS) 또는 시스템 트레이(Windows)에 아이콘이 나타납니다.
-2. 아이콘을 클릭해 **출석 페이지 열기** 를 선택하세요.
-3. 열린 창에서 **Jungle Campus에 로그인** 하세요. 로그인 이후부터 출석 상태를 자동으로 불러옵니다.
+1. 앱을 실행하고 온보딩 안내를 확인하세요.
+2. 온보딩에서 **출석 페이지 열기** 를 눌러 Jungle Campus에 로그인하세요.
+3. 메뉴 바(macOS) 또는 작업 표시줄(Windows)의 Jungle Bell 아이콘 색으로 출석 상태를 확인하세요.
+4. 아이콘을 클릭해 출석 페이지 열기, 설정 같은 기능을 사용할 수 있어요.
 
-## FAQ
+## 문제가 생겼나요?
 
-**Q. 트레이 아이콘 색상이 바뀌지 않아요.**
+#### 아이콘이 안 보여요.
 
-앱은 주기적으로 출석 상태를 확인합니다. 최초 실행 후 상태를 불러오는 데 수 초가 걸릴 수 있으며, 이후에는 상태에 따라 최대 2분 간격으로 갱신됩니다. 잠시 기다린 후 변경 여부를 확인해 주세요.
+macOS는 메뉴 바 오른쪽을 확인해 주세요.
 
-아이콘이 오렌지색이라면 Jungle Campus 로그인이 필요한 상태입니다. **출석 페이지 열기** 를 통해 로그인하면 상태가 갱신됩니다.
+Windows는 작업 표시줄 오른쪽을 확인해 주세요. 처음에는 숨겨진 아이콘 메뉴(∧)에 있을 수 있어요.
 
-**Q. 알림이 오지 않아요.**
+#### 로그인이 필요하다고 떠요.
 
-설정 > 알림 탭에서 알림이 켜져 있는지 확인해 주세요. 또한 운영체제의 알림 설정에서 Jungle Bell의 알림이 허용되어 있어야 합니다. **알림 설정 열기** 버튼으로 바로 이동할 수 있습니다.
+Jungle Bell 안에서 **출석 페이지 열기** 를 눌러 Jungle Campus에 로그인해 주세요.
 
-**Q. macOS에서 "손상되었기 때문에 열 수 없습니다" 오류가 떠요.**
+#### 알림이 오지 않아요.
 
-자동 설치 스크립트(`curl ... | sh`)를 사용했다면 발생하지 않습니다. `.dmg`로 수동 설치한 경우 [macOS 수동 설치](#macos-수동-설치) 의 `xattr` 명령을 실행해 주세요.
+설정의 알림 탭에서 필요한 알림이 켜져 있는지 확인해 주세요.
 
-**Q. Windows에서 "Windows의 PC 보호" 경고가 떠요.**
+알림을 꺼도 메뉴 바나 작업 표시줄의 Jungle Bell 아이콘 색으로 상태를 볼 수 있어요.
 
-[Windows 설치 방법](#windows) 을 참고하세요.
+#### 설치 중 경고가 떠요.
 
-**Q. 출석 상태가 실제와 다르게 표시돼요.**
+자동 설치 명령을 사용하는 것을 권장합니다.
+직접 다운로드해서 설치하다 막히면 [Release 페이지](https://github.com/YangSiJun528/jungle-bell/releases/latest)의 안내를 확인해 주세요.
 
-앱 내부의 **출석 페이지 열기** 창을 통해 Jungle Campus에 로그인된 상태여야 합니다. 외부 브라우저에서의 로그인 상태는 앱과 공유되지 않습니다.
+#### 출석 상태가 실제와 달라요.
+
+**출석 페이지 열기** 를 눌러 로그인 상태를 다시 확인해 주세요. 계속 다르면 [문의](#문의하기)해 주세요.
 
 ## 라이선스
 
 [Apache License 2.0](LICENSE)
 
-## 문의 시 함께 보내 주세요
+## 문의하기
 
-버그 이슈나 사용 중 문의를 남길 때 로그 파일을 함께 보내주시면 문제 해결에 도움이 됩니다.
+버그나 사용 중 막힌 부분은 아래 경로로 알려주세요.
 
-설정 > 정보 탭에서 **로그 폴더 열기** 버튼으로 바로 열 수 있습니다.
+- [GitHub Issue](https://github.com/YangSiJun528/jungle-bell/issues/new/choose)
+- [크래프톤 정글 Slack](https://krafton-aliens.slack.com/team/U0AHGCT20DQ)
+- [이메일](mailto:yangsijun5528@gmail.com)
 
-- macOS: `~/Library/Logs/dev.sijun-yang.jungle-bell/`
-- Windows: `%APPDATA%\dev.sijun-yang.jungle-bell\logs\`
+문의할 때 사용 중인 OS, 막힌 화면, 가능하면 스크린샷을 함께 보내주시면 좋아요.
