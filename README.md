@@ -63,19 +63,19 @@ irm https://install.sijun-yang.com/jungle-bell.ps1 | iex
 
 <table>
   <tr>
-    <td align="center" bgcolor="#444444" width="52">
+    <td align="center" bgcolor="#111111" width="52">
       <img src="src/assets/tray-mini-red.png" width="32" alt="빨간 아이콘">
     </td>
     <td><strong>출석 시작/종료 가능</strong><br>출석 페이지를 열어 체크인/체크아웃해 주세요.</td>
   </tr>
   <tr>
-    <td align="center" bgcolor="#444444" width="52">
+    <td align="center" bgcolor="#111111" width="52">
       <img src="src/assets/tray-mini-white.png" width="32" alt="흰색 아이콘">
     </td>
     <td><strong>학습 중 / 출석 완료</strong><br>출석이 완료된 상태에요.</td>
   </tr>
   <tr>
-    <td align="center" bgcolor="#444444" width="52">
+    <td align="center" bgcolor="#111111" width="52">
       <img src="src/assets/tray-mini-orange.png" width="32" alt="주황 아이콘">
     </td>
     <td><strong>로그인 필요</strong><br>Jungle Campus에 로그인해 주세요.</td>
