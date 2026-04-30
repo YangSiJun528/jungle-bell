@@ -47,11 +47,22 @@ Only run this step if the version has **no** prerelease identifiers (`-alpha`, `
    git log {prev_tag}..HEAD --oneline --no-merges
    ```
 
-3. Write a human-readable changelog **in Korean** based on the commit list. Group by type:
-   - `feat:` commits → **새 기능**
-   - `fix:` commits → **버그 수정**
-   - `chore:`, `ci:`, `refactor:`, etc. → **기타**
-   - Summarize each item concisely in one line in Korean.
+3. Write a human-readable changelog **in Korean**, describing the **net difference** a user upgrading from the previous stable version will experience. The commit log between the two stable tags is just source material — do **not** narrate the development history.
+
+   **Frame the changelog from the previous-stable user's perspective.** Ignore intermediate beta churn:
+   - If a feature was introduced in beta-1 and iterated/refactored across later betas, describe only the **final shape** that ships in this release.
+   - If a change was introduced in beta and later reverted before this release, omit it entirely.
+   - A bug fix that only affected a beta build (the bug never reached the previous stable version) is **not** user-facing — exclude it.
+   - A migration/compatibility fix added during beta to handle upgrades from the previous stable is part of the upgrade experience and may be omitted (silent migrations) or briefly noted if user-visible.
+   - Default-value changes apply to new installs only; mention this nuance if relevant.
+   - Pure internal refactors, doc-only commits, and CI/release-tooling changes generally do **not** belong in user-facing notes unless they produce a visible behavior change.
+
+   Group the surviving items as:
+   - **새 기능** — user-visible feature additions (final shape only)
+   - **버그 수정** — fixes for issues that existed in the previous stable version
+   - **기타** — remaining user-relevant changes (e.g., default value changes, deprecations)
+
+   Each item is one concise Korean line. Bold a short label at the start when it helps scanning.
 
 4. Use `AskUserQuestion` to present the drafted changelog **in Korean** and ask (in Korean) whether to proceed. If the user wants edits, apply them. If they decline, abort.
 
