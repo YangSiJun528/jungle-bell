@@ -13,7 +13,7 @@ use tauri::{
     image::Image,
     menu::{MenuBuilder, MenuItem, MenuItemBuilder},
     tray::TrayIconBuilder,
-    Manager, WebviewWindow,
+    Emitter, Manager, WebviewWindow,
 };
 
 const ATTENDANCE_URL: &str = "https://jungle-lms.krafton.com/check-in";
@@ -225,8 +225,13 @@ fn build_onboarding_window(app: &tauri::AppHandle) -> bool {
     {
         Ok(window) => {
             window.on_window_event(move |event| {
-                if let tauri::WindowEvent::CloseRequested { .. } = event {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
                     track_onboarding_closed_before_complete(&app_handle);
+                    if let Some(window) = app_handle.get_webview_window("onboarding") {
+                        let _ = window.hide();
+                        let _ = window.emit("reset-onboarding", ());
+                    }
                 }
             });
             true
@@ -241,6 +246,7 @@ fn build_onboarding_window(app: &tauri::AppHandle) -> bool {
 pub fn open_onboarding_window(app: &tauri::AppHandle) {
     log::info!("[tray] onboarding window opened");
     let opened = if let Some(window) = app.get_webview_window("onboarding") {
+        let _ = window.emit("reset-onboarding", ());
         focus_window(&window);
         true
     } else {
@@ -255,9 +261,8 @@ pub fn close_onboarding_window(app: &tauri::AppHandle) {
     log::info!("[tray] onboarding window closed");
     track_onboarding_closed_before_complete(app);
     if let Some(window) = app.get_webview_window("onboarding") {
-        if let Err(e) = window.destroy() {
-            log::warn!("[onboarding] window destroy failed: {}", e);
-        }
+        let _ = window.hide();
+        let _ = window.emit("reset-onboarding", ());
     }
 }
 
