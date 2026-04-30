@@ -135,15 +135,37 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.get-release-info.outputs.tag }}
+
       - name: Publish release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
+
           TAG="${{ needs.get-release-info.outputs.tag }}"
           IS_PRERELEASE="${{ needs.get-release-info.outputs.is_prerelease }}"
+          REPO="${{ github.repository }}"
 
           if [ "$IS_PRERELEASE" = "true" ]; then
-            gh release edit "$TAG" --repo ${{ github.repository }} --draft=false
+            gh release edit "$TAG" --repo "$REPO" --draft=false
           else
-            gh release edit "$TAG" --repo ${{ github.repository }} --draft=false --latest
+            BODY_FILE="$(mktemp)"
+            CLEAN_BODY_FILE="$(mktemp)"
+            NOTES_FILE="$(mktemp)"
+
+            gh release view "$TAG" --repo "$REPO" --json body --jq '.body // ""' > "$BODY_FILE"
+            sed '/<!-- jungle-bell-install-help:start -->/,/<!-- jungle-bell-install-help:end -->/d' "$BODY_FILE" > "$CLEAN_BODY_FILE"
+
+            {
+              cat "$CLEAN_BODY_FILE"
+              if [ -s "$CLEAN_BODY_FILE" ]; then
+                printf '\n\n'
+              fi
+              cat install/release-install-help.md
+            } > "$NOTES_FILE"
+
+            gh release edit "$TAG" --repo "$REPO" --notes-file "$NOTES_FILE" --draft=false --latest
           fi
