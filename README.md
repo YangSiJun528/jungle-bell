@@ -43,6 +43,8 @@ curl -fsSL https://install.sijun-yang.com/jungle-bell.sh | sh
 
 ### Windows
 
+PowerShell에서 실행해 주세요.
+
 ```powershell
 irm https://install.sijun-yang.com/jungle-bell.ps1 | iex
 ```
