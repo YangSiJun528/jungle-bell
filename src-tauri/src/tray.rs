@@ -143,11 +143,7 @@ fn activate_login_retry_window(app_handle: &tauri::AppHandle) {
 }
 
 fn reload_checker(app_handle: &tauri::AppHandle) {
-    if let Some(checker) = app_handle.get_webview_window("checker") {
-        if let Err(e) = checker.navigate(ATTENDANCE_URL.parse().unwrap()) {
-            log::warn!("[checker] reload failed: {}", e);
-        }
-    }
+    crate::checker::refresh_webview(app_handle, "attendance window closed");
 }
 
 pub fn refresh_login_status(app_handle: &tauri::AppHandle) {

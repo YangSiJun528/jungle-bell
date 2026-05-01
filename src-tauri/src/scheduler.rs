@@ -147,10 +147,7 @@ fn apply_tick_effects(app_handle: &tauri::AppHandle, phase: DailyPhase, result: 
     }
 
     if result.should_reload {
-        if let Some(checker) = app_handle.get_webview_window("checker") {
-            log::info!("[checker] webview reloaded for session refresh");
-            let _ = checker.navigate("https://jungle-lms.krafton.com/check-in".parse().unwrap());
-        }
+        checker::refresh_webview(app_handle, "session refresh");
     }
 }
 
@@ -168,19 +165,7 @@ fn refresh_checker_after_delayed_tick(app_handle: &tauri::AppHandle, elapsed_sec
         expected_interval_secs,
     );
 
-    if let Some(checker) = app_handle.get_webview_window("checker") {
-        log::info!("[checker] webview reloaded after delayed tick");
-        return match checker.navigate("https://jungle-lms.krafton.com/check-in".parse().unwrap()) {
-            Ok(_) => true,
-            Err(e) => {
-                log::warn!("[checker] delayed tick reload failed: {}", e);
-                false
-            }
-        };
-    }
-
-    log::warn!("[checker] delayed tick reload skipped: checker window not found");
-    false
+    checker::refresh_webview(app_handle, "delayed tick")
 }
 
 fn log_tick_state(now: DateTime<Utc>, state: &AppState, result: &TickResult) {

@@ -6,11 +6,13 @@
 //! 이 모듈은 반환된 결과를 처리하고 공유 앱 상태를 갱신한다.
 
 use serde::Deserialize;
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 
 use chrono::{DateTime, Utc};
 
 use crate::state::{self, AppState, DailyPhase};
+
+const ATTENDANCE_URL: &str = "https://jungle-lms.krafton.com/check-in";
 
 /// checker.js의 API 조회 결과.
 /// JS invoke 호출의 JSON 페이로드에서 역직렬화됨.
@@ -56,6 +58,40 @@ pub fn trigger_check(app: &tauri::AppHandle) {
         "trigger-check",
         (),
     );
+}
+
+/// checker WebView를 출석 페이지 기준으로 갱신한다.
+///
+/// 이미 출석 페이지에 있으면 `navigate()` 대신 `reload()`를 사용한다.
+/// 같은 URL로 `navigate()`하면 WebView가 page-load를 만들지 않을 수 있기 때문이다.
+/// 로그인 페이지 등 다른 URL이면 출석 페이지로 이동시킨다.
+pub fn refresh_webview(app: &tauri::AppHandle, reason: &str) -> bool {
+    let Some(checker) = app.get_webview_window("checker") else {
+        log::warn!("[checker] refresh skipped: checker window not found ({})", reason);
+        return false;
+    };
+
+    let target = ATTENDANCE_URL.parse().unwrap();
+    let current = checker.url().ok();
+    let result = if current.as_ref().is_some_and(|url| same_url_without_trailing_slash(url.as_str(), ATTENDANCE_URL)) {
+        log::info!("[checker] webview reloaded ({})", reason);
+        checker.reload()
+    } else {
+        log::info!("[checker] webview navigated ({})", reason);
+        checker.navigate(target)
+    };
+
+    match result {
+        Ok(_) => true,
+        Err(e) => {
+            log::warn!("[checker] refresh failed ({}): {}", reason, e);
+            false
+        }
+    }
+}
+
+fn same_url_without_trailing_slash(left: &str, right: &str) -> bool {
+    left.trim_end_matches('/') == right.trim_end_matches('/')
 }
 
 /// 순수 로직: 체커 보고를 앱 상태에 반영하고 phase를 재계산.
