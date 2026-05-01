@@ -8,7 +8,7 @@ use std::process::Command;
 use std::sync::Arc;
 
 use serde::Serialize;
-use tauri::{Emitter, Manager, WebviewWindow};
+use tauri::{Emitter, Manager};
 use tokio::sync::Mutex;
 
 use crate::analytics;
@@ -382,19 +382,7 @@ pub async fn open_log_folder(app: tauri::AppHandle) -> Result<(), String> {
 /// Tauri 커맨드: 온보딩(시작하기) 창을 연다.
 #[tauri::command]
 pub fn open_onboarding(app: tauri::AppHandle) {
-    tray::replay_onboarding_window(&app);
-}
-
-/// Tauri 커맨드: 온보딩(시작하기) 창을 닫는다.
-#[tauri::command]
-pub fn close_onboarding(app: tauri::AppHandle, window: WebviewWindow) {
-    tray::close_onboarding_window(&app, &window);
-}
-
-/// Tauri 커맨드: 완료된 온보딩 창을 숨긴다.
-#[tauri::command]
-pub fn finish_onboarding(window: WebviewWindow) {
-    tray::finish_onboarding_window(&window);
+    tray::open_onboarding_window(&app);
 }
 
 /// Tauri 커맨드: 온보딩 완료 상태를 저장한다.

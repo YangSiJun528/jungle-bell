@@ -219,8 +219,6 @@ pub fn run() {
             commands::set_usage_analytics_enabled,
             commands::open_log_folder,
             commands::open_onboarding,
-            commands::close_onboarding,
-            commands::finish_onboarding,
             commands::complete_onboarding,
             commands::open_attendance_window,
             commands::get_login_status,

@@ -5,10 +5,7 @@
 //!   - 오렌지 (경고): 로그인 필요
 //!   - 빨간색 (긴급): NeedStart, StartOverdue, NeedEnd
 
-use std::sync::{
-    atomic::{AtomicU64, Ordering},
-    Arc,
-};
+use std::sync::Arc;
 use tokio::sync::Mutex as TokioMutex;
 
 use crate::state::{AppState, DailyPhase};
@@ -22,8 +19,6 @@ use tauri::{
 const ATTENDANCE_URL: &str = "https://jungle-lms.krafton.com/check-in";
 const MEAL_PLAN_URL: &str = "https://pf.kakao.com/_xhzNjn/posts";
 const FEEDBACK_URL: &str = "https://github.com/YangSiJun528/jungle-bell/issues/new/choose";
-const ONBOARDING_LABEL_PREFIX: &str = "onboarding";
-static NEXT_ONBOARDING_ID: AtomicU64 = AtomicU64::new(1);
 
 /// 출석 페이지 닫힌 후 로그인 재시도 윈도우 (초). 3분간 빠르게 재확인.
 const LOGIN_RETRY_WINDOW_SECS: u64 = 180;
@@ -140,32 +135,6 @@ fn focus_window(window: &WebviewWindow<tauri::Wry>) {
     let _ = window.set_focus();
 }
 
-fn hide_window(window: &WebviewWindow<tauri::Wry>, label: &str, reason: &str) {
-    if let Err(e) = window.hide() {
-        log::warn!("[{}] hide failed ({}): {}", label, reason, e);
-    }
-}
-
-fn is_onboarding_label(label: &str) -> bool {
-    label == ONBOARDING_LABEL_PREFIX || label.starts_with("onboarding-")
-}
-
-fn next_onboarding_label() -> String {
-    let id = NEXT_ONBOARDING_ID.fetch_add(1, Ordering::Relaxed);
-    format!("onboarding-{}", id)
-}
-
-fn destroy_onboarding_windows(app: &tauri::AppHandle, reason: &str) {
-    for (label, window) in app.webview_windows() {
-        if is_onboarding_label(&label) {
-            log::info!("[onboarding] destroying existing window ({}, {})", label, reason);
-            if let Err(e) = window.destroy() {
-                log::warn!("[onboarding] destroy failed ({}, {}): {}", label, reason, e);
-            }
-        }
-    }
-}
-
 fn emit_reset_onboarding(window: &WebviewWindow<tauri::Wry>) {
     if let Err(e) = window.emit("reset-onboarding", ()) {
         log::warn!("[onboarding] reset emit failed ({}): {}", window.label(), e);
@@ -247,8 +216,7 @@ fn track_onboarding_closed_before_complete(app: &tauri::AppHandle) {
 
 fn build_onboarding_window(app: &tauri::AppHandle) -> bool {
     let app_handle = app.clone();
-    let label = next_onboarding_label();
-    match tauri::WebviewWindowBuilder::new(app, label.clone(), tauri::WebviewUrl::App("onboarding.html".into()))
+    match tauri::WebviewWindowBuilder::new(app, "onboarding", tauri::WebviewUrl::App("onboarding.html".into()))
         .title("Jungle Bell 시작하기")
         .inner_size(560.0, 784.0)
         .resizable(false)
@@ -258,13 +226,11 @@ fn build_onboarding_window(app: &tauri::AppHandle) -> bool {
         .build()
     {
         Ok(window) => {
-            log::info!("[onboarding] window built ({})", label);
-            let window_for_close = window.clone();
+            log::info!("[onboarding] window built");
             window.on_window_event(move |event| {
-                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                    api.prevent_close();
+                if let tauri::WindowEvent::CloseRequested { api: _, .. } = event {
+                    log::info!("[onboarding] window close requested");
                     track_onboarding_closed_before_complete(&app_handle);
-                    hide_window(&window_for_close, window_for_close.label(), "close requested");
                 }
             });
             true
@@ -278,42 +244,16 @@ fn build_onboarding_window(app: &tauri::AppHandle) -> bool {
 
 pub fn open_onboarding_window(app: &tauri::AppHandle) {
     log::info!("[tray] onboarding window opened");
-    let visible_onboarding = app
-        .webview_windows()
-        .into_iter()
-        .find(|(label, window)| is_onboarding_label(label) && window.is_visible().unwrap_or(false))
-        .map(|(_, window)| window);
-
-    let opened = if let Some(window) = visible_onboarding {
+    let opened = if let Some(window) = app.get_webview_window("onboarding") {
         focus_window(&window);
         emit_reset_onboarding(&window);
         true
     } else {
-        destroy_onboarding_windows(app, "open fresh");
         build_onboarding_window(app)
     };
     if opened {
         crate::analytics::track_onboarding_started();
     }
-}
-
-pub fn replay_onboarding_window(app: &tauri::AppHandle) {
-    log::info!("[tray] onboarding window replay requested");
-    destroy_onboarding_windows(app, "replay");
-    if build_onboarding_window(app) {
-        crate::analytics::track_onboarding_started();
-    }
-}
-
-pub fn close_onboarding_window(app: &tauri::AppHandle, window: &WebviewWindow<tauri::Wry>) {
-    log::info!("[tray] onboarding window closed ({})", window.label());
-    track_onboarding_closed_before_complete(app);
-    hide_window(window, window.label(), "close command");
-}
-
-pub fn finish_onboarding_window(window: &WebviewWindow<tauri::Wry>) {
-    log::info!("[tray] onboarding window finished ({})", window.label());
-    hide_window(window, window.label(), "finish command");
 }
 
 fn open_settings_window(app: &tauri::AppHandle) {
