@@ -256,6 +256,14 @@
 
     window.addEventListener('DOMContentLoaded', async () => {
         try {
+            document.getElementById('open-log-folder-btn').addEventListener('click', () => {
+                invoke('open_log_folder').catch(console.error);
+            });
+
+            document.getElementById('open-onboarding-btn').addEventListener('click', () => {
+                invoke('open_onboarding').catch(console.error);
+            });
+
             document.querySelectorAll('.tab-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
                     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -318,14 +326,6 @@
                     }
                 }
                 invoke('set_debug_mode', {enabled: debugToggle.checked}).catch(console.error);
-            });
-
-            document.getElementById('open-log-folder-btn').addEventListener('click', () => {
-                invoke('open_log_folder').catch(console.error);
-            });
-
-            document.getElementById('open-onboarding-btn').addEventListener('click', () => {
-                invoke('open_onboarding').catch(console.error);
             });
 
             // --- 이번 출석 알림 끄기 ---
