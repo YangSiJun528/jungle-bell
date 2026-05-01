@@ -135,6 +135,12 @@ fn focus_window(window: &WebviewWindow<tauri::Wry>) {
     let _ = window.set_focus();
 }
 
+fn hide_window(window: &WebviewWindow<tauri::Wry>, label: &str, reason: &str) {
+    if let Err(e) = window.hide() {
+        log::warn!("[{}] hide failed ({}): {}", label, reason, e);
+    }
+}
+
 fn activate_login_retry_window(app_handle: &tauri::AppHandle) {
     let state: tauri::State<Arc<TokioMutex<AppState>>> = app_handle.state();
     if let Ok(mut s) = state.try_lock() {
@@ -220,12 +226,13 @@ fn build_onboarding_window(app: &tauri::AppHandle) -> bool {
         .build()
     {
         Ok(window) => {
+            log::info!("[onboarding] window built");
             window.on_window_event(move |event| {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
                     track_onboarding_closed_before_complete(&app_handle);
                     if let Some(window) = app_handle.get_webview_window("onboarding") {
-                        let _ = window.hide();
+                        hide_window(&window, "onboarding", "close requested");
                     }
                 }
             });
@@ -241,8 +248,10 @@ fn build_onboarding_window(app: &tauri::AppHandle) -> bool {
 pub fn open_onboarding_window(app: &tauri::AppHandle) {
     log::info!("[tray] onboarding window opened");
     let opened = if let Some(window) = app.get_webview_window("onboarding") {
-        let _ = window.emit("reset-onboarding", ());
         focus_window(&window);
+        if let Err(e) = window.emit("reset-onboarding", ()) {
+            log::warn!("[onboarding] reset emit failed: {}", e);
+        }
         true
     } else {
         build_onboarding_window(app)
@@ -256,7 +265,7 @@ pub fn close_onboarding_window(app: &tauri::AppHandle) {
     log::info!("[tray] onboarding window closed");
     track_onboarding_closed_before_complete(app);
     if let Some(window) = app.get_webview_window("onboarding") {
-        let _ = window.hide();
+        hide_window(&window, "onboarding", "close command");
     }
 }
 
