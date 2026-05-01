@@ -202,58 +202,26 @@ fn build_settings_window(app: &tauri::AppHandle) {
         .build();
 }
 
-fn track_onboarding_closed_before_complete(app: &tauri::AppHandle) {
-    let state: tauri::State<Arc<TokioMutex<AppState>>> = app.state();
-    match state.try_lock() {
-        Ok(state) if !state.config.onboarding_completed => {
-            log::info!("[onboarding] closed before complete");
-            crate::analytics::track_onboarding_closed_before_complete();
-        }
-        Ok(_) => {}
-        Err(e) => log::warn!("[onboarding] close state check skipped: {}", e),
-    };
-}
-
-fn build_onboarding_window(app: &tauri::AppHandle) -> bool {
-    let app_handle = app.clone();
-    match tauri::WebviewWindowBuilder::new(app, "onboarding", tauri::WebviewUrl::App("onboarding.html".into()))
+fn build_onboarding_window(app: &tauri::AppHandle) {
+    let _ = tauri::WebviewWindowBuilder::new(app, "onboarding", tauri::WebviewUrl::App("onboarding.html".into()))
         .title("Jungle Bell 시작하기")
         .inner_size(560.0, 784.0)
         .resizable(false)
         .minimizable(false)
         .maximizable(false)
         .focused(true)
-        .build()
-    {
-        Ok(window) => {
-            log::info!("[onboarding] window built");
-            window.on_window_event(move |event| {
-                if let tauri::WindowEvent::CloseRequested { api: _, .. } = event {
-                    log::info!("[onboarding] window close requested");
-                    track_onboarding_closed_before_complete(&app_handle);
-                }
-            });
-            true
-        }
-        Err(e) => {
-            log::error!("[onboarding] window build failed: {}", e);
-            false
-        }
-    }
+        .build();
 }
 
 pub fn open_onboarding_window(app: &tauri::AppHandle) {
     log::info!("[tray] onboarding window opened");
-    let opened = if let Some(window) = app.get_webview_window("onboarding") {
+    if let Some(window) = app.get_webview_window("onboarding") {
         focus_window(&window);
         emit_reset_onboarding(&window);
-        true
     } else {
-        build_onboarding_window(app)
-    };
-    if opened {
-        crate::analytics::track_onboarding_started();
+        build_onboarding_window(app);
     }
+    crate::analytics::track_onboarding_started();
 }
 
 fn open_settings_window(app: &tauri::AppHandle) {

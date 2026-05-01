@@ -7,8 +7,7 @@
 //!   - `app_opened`: 앱 실행 후 LMS 사용자 식별자가 준비될 때
 //!   - `app_updated`: 앱 버전 변경 감지 후 LMS 사용자 식별자가 준비될 때
 //!   - `onboarding_started`: 온보딩 창이 열릴 때
-//!   - `onboarding_completed`: 온보딩 마지막 단계에서 시작하기를 누를 때
-//!   - `onboarding_closed_before_complete`: 온보딩 완료 전에 창을 닫을 때
+//!   - `onboarding_completed`: 온보딩 마지막 화면에 도달할 때
 //!   - `usage_analytics_toggled`: 사용 통계 토글을 변경할 때
 //!   - `settings_opened`: 트레이에서 설정 창 열 때
 //!   - `attendance_page_opened`: 트레이에서 출석 페이지 열 때
@@ -164,10 +163,6 @@ pub fn track_onboarding_started() {
 
 pub fn track_onboarding_completed() {
     capture("onboarding_completed", &[]);
-}
-
-pub fn track_onboarding_closed_before_complete() {
-    capture("onboarding_closed_before_complete", &[]);
 }
 
 pub fn track_usage_analytics_toggled(enabled: bool) {
