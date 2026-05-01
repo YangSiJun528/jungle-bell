@@ -161,7 +161,7 @@ fn tick_delayed(previous_tick: DateTime<Utc>, expected_interval_secs: u64, now: 
     (elapsed > threshold).then_some(elapsed)
 }
 
-fn refresh_checker_after_delayed_tick(app_handle: &tauri::AppHandle, elapsed_secs: i64, expected_interval_secs: u64) {
+fn refresh_checker_after_delayed_tick(app_handle: &tauri::AppHandle, elapsed_secs: i64, expected_interval_secs: u64) -> bool {
     log::info!(
         "[scheduler] delayed tick detected: elapsed={}s expected={}s",
         elapsed_secs,
@@ -170,8 +170,17 @@ fn refresh_checker_after_delayed_tick(app_handle: &tauri::AppHandle, elapsed_sec
 
     if let Some(checker) = app_handle.get_webview_window("checker") {
         log::info!("[checker] webview reloaded after delayed tick");
-        let _ = checker.navigate("https://jungle-lms.krafton.com/check-in".parse().unwrap());
+        return match checker.navigate("https://jungle-lms.krafton.com/check-in".parse().unwrap()) {
+            Ok(_) => true,
+            Err(e) => {
+                log::warn!("[checker] delayed tick reload failed: {}", e);
+                false
+            }
+        };
     }
+
+    log::warn!("[checker] delayed tick reload skipped: checker window not found");
+    false
 }
 
 fn log_tick_state(now: DateTime<Utc>, state: &AppState, result: &TickResult) {
@@ -472,8 +481,7 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
                 .and_then(|(previous_tick, interval)| tick_delayed(previous_tick, interval, now).map(|elapsed| (elapsed, interval)));
 
             if let Some((elapsed, interval)) = delayed_tick {
-                refresh_checker_after_delayed_tick(&app_handle, elapsed, interval);
-                {
+                if refresh_checker_after_delayed_tick(&app_handle, elapsed, interval) {
                     let mut s = shared_state.lock().await;
                     s.last_reload = Some(now);
                 }
