@@ -13,7 +13,7 @@ use tauri::{
     image::Image,
     menu::{MenuBuilder, MenuItem, MenuItemBuilder},
     tray::TrayIconBuilder,
-    Emitter, Manager, WebviewWindow,
+    Manager, WebviewWindow,
 };
 
 const ATTENDANCE_URL: &str = "https://jungle-lms.krafton.com/check-in";
@@ -135,12 +135,6 @@ fn focus_window(window: &WebviewWindow<tauri::Wry>) {
     let _ = window.set_focus();
 }
 
-fn emit_reset_onboarding(window: &WebviewWindow<tauri::Wry>) {
-    if let Err(e) = window.emit("reset-onboarding", ()) {
-        log::warn!("[onboarding] reset emit failed ({}): {}", window.label(), e);
-    }
-}
-
 fn activate_login_retry_window(app_handle: &tauri::AppHandle) {
     let state: tauri::State<Arc<TokioMutex<AppState>>> = app_handle.state();
     if let Ok(mut s) = state.try_lock() {
@@ -217,7 +211,6 @@ pub fn open_onboarding_window(app: &tauri::AppHandle) {
     log::info!("[tray] onboarding window opened");
     if let Some(window) = app.get_webview_window("onboarding") {
         focus_window(&window);
-        emit_reset_onboarding(&window);
     } else {
         build_onboarding_window(app);
     }
