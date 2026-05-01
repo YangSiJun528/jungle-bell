@@ -31,6 +31,10 @@ const TICK_INTERVAL_IDLE: u64 = 300;
 /// 체커 WebView 리로드 간격 (초). 세션/토큰 갱신 목적.
 /// 액세스 토큰이 1시간 만료이므로 15분 간격으로 리로드하여 갱신.
 const RELOAD_INTERVAL_NORMAL: u64 = 15 * 60; // 15분
+/// OS 절전/복귀 등으로 틱이 예상보다 크게 밀렸을 때 checker를 다시 깨운다.
+const TICK_DELAY_REFRESH_GRACE_SECS: u64 = 60;
+/// 지연된 틱에서는 stale 상태로 알림을 보내지 않고 checker 결과를 짧게 기다린다.
+const DELAYED_TICK_RECHECK_INTERVAL_SECS: u64 = 10;
 
 /// 알림 판단 결과.
 pub(crate) struct NotificationDecision {
@@ -147,6 +151,26 @@ fn apply_tick_effects(app_handle: &tauri::AppHandle, phase: DailyPhase, result: 
             log::info!("[checker] webview reloaded for session refresh");
             let _ = checker.navigate("https://jungle-lms.krafton.com/check-in".parse().unwrap());
         }
+    }
+}
+
+fn tick_delayed(previous_tick: DateTime<Utc>, expected_interval_secs: u64, now: DateTime<Utc>) -> Option<i64> {
+    let elapsed = (now - previous_tick).num_seconds();
+    let threshold = expected_interval_secs.saturating_add(TICK_DELAY_REFRESH_GRACE_SECS) as i64;
+
+    (elapsed > threshold).then_some(elapsed)
+}
+
+fn refresh_checker_after_delayed_tick(app_handle: &tauri::AppHandle, elapsed_secs: i64, expected_interval_secs: u64) {
+    log::info!(
+        "[scheduler] delayed tick detected: elapsed={}s expected={}s",
+        elapsed_secs,
+        expected_interval_secs,
+    );
+
+    if let Some(checker) = app_handle.get_webview_window("checker") {
+        log::info!("[checker] webview reloaded after delayed tick");
+        let _ = checker.navigate("https://jungle-lms.krafton.com/check-in".parse().unwrap());
     }
 }
 
@@ -437,9 +461,25 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
                 s.config.evening_end.minute,
             );
         }
+
+        let mut previous_tick: Option<DateTime<Utc>> = None;
+        let mut previous_interval_secs: Option<u64> = None;
+
         loop {
+            let now = Utc::now();
+            let delayed_tick = previous_tick
+                .zip(previous_interval_secs)
+                .and_then(|(previous_tick, interval)| tick_delayed(previous_tick, interval, now).map(|elapsed| (elapsed, interval)));
+
+            if let Some((elapsed, interval)) = delayed_tick {
+                refresh_checker_after_delayed_tick(&app_handle, elapsed, interval);
+                previous_tick = Some(now);
+                previous_interval_secs = Some(DELAYED_TICK_RECHECK_INTERVAL_SECS);
+                tokio::time::sleep(tokio::time::Duration::from_secs(DELAYED_TICK_RECHECK_INTERVAL_SECS)).await;
+                continue;
+            }
+
             let tick_result = {
-                let now = Utc::now();
                 let mut s = shared_state.lock().await;
                 let attendance_open = app_handle.get_webview_window("attendance").is_some();
 
@@ -460,6 +500,9 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
             if !tick_result.should_reload {
                 checker::trigger_check(&app_handle);
             }
+
+            previous_tick = Some(now);
+            previous_interval_secs = Some(tick_result.tick_interval);
 
             tokio::time::sleep(tokio::time::Duration::from_secs(tick_result.tick_interval)).await;
         }
@@ -1006,6 +1049,32 @@ mod tests {
         // then: 리로드 발생
         assert!(result_16min.should_reload);
         assert_eq!(state.last_reload, Some(t2));
+    }
+
+    #[test]
+    fn 틱_지연이_허용_범위_안이면_감지하지_않는다() {
+        // given
+        let previous = kst_utc(9, 0, 0);
+        let now = previous + chrono::Duration::seconds(120);
+
+        // when
+        let delayed = tick_delayed(previous, 60, now);
+
+        // then
+        assert_eq!(delayed, None);
+    }
+
+    #[test]
+    fn 틱_지연이_허용_범위를_넘으면_감지한다() {
+        // given
+        let previous = kst_utc(9, 0, 0);
+        let now = previous + chrono::Duration::seconds(121);
+
+        // when
+        let delayed = tick_delayed(previous, 60, now);
+
+        // then
+        assert_eq!(delayed, Some(121));
     }
 
     #[test]
