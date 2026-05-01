@@ -318,7 +318,7 @@
     <section class="onboarding-slide" data-slide="5">
         <div class="onboarding-illust onboarding-illust-emoji" aria-hidden="true">🎉</div>
         <h2 class="onboarding-title">준비됐어요</h2>
-        <p class="onboarding-desc">시작하기를 누르면 창이 닫혀요.</p>
+        <p class="onboarding-desc" id="onboarding-final-desc">마지막 화면까지 확인하면 완료돼요.</p>
         <div class="onboarding-task-area onboarding-task-area-compact">
             <small class="onboarding-note">
                 <span class="onboarding-note-line">앱 개선을 위해 사용 통계를 보내요.</span>
@@ -368,49 +368,28 @@
     let unlistenLogin = null;
     let unlistenReset = null;
     let loginRefreshTimer = null;
-
-    async function hideCurrentWindow() {
-        const getCurrentWindow = window.__TAURI__?.window?.getCurrentWindow;
-        if (!getCurrentWindow) return;
-        try {
-            await getCurrentWindow().hide();
-        } catch (e) {
-            console.error('[onboarding] fallback hide failed:', e);
-        }
-    }
-
-    async function closeOnboardingWindow() {
-        try {
-            await invoke('close_onboarding');
-        } catch (e) {
-            console.error('[onboarding] close failed:', e);
-            await hideCurrentWindow();
-        }
-    }
-
-    async function finishOnboardingWindow() {
-        try {
-            await invoke('finish_onboarding');
-        } catch (e) {
-            console.error('[onboarding] finish failed:', e);
-            await hideCurrentWindow();
-        }
-    }
-
-    async function close() {
-        stopLoginRefresh();
-        await closeOnboardingWindow();
-    }
+    let onboardingCompleted = false;
+    let onboardingCompletionPending = false;
+    let onboardingCompletionFailed = false;
 
     async function complete() {
+        if (onboardingCompleted || onboardingCompletionPending) return;
+        onboardingCompletionPending = true;
+        onboardingCompletionFailed = false;
+        render();
         stopLoginRefresh();
         try {
             await invoke('complete_onboarding');
         } catch (e) {
             console.error('[onboarding] complete failed:', e);
+            onboardingCompletionPending = false;
+            onboardingCompletionFailed = true;
+            render();
             return;
         }
-        await finishOnboardingWindow();
+        onboardingCompletionPending = false;
+        onboardingCompleted = true;
+        render();
     }
 
     function isNextDisabled() {
@@ -424,8 +403,18 @@
         dots.forEach((el, i) => el.classList.toggle('active', i === step));
         prevBtn.disabled = step === 0;
         const isLast = step === TOTAL - 1;
-        nextBtn.textContent = isLast ? '시작하기' : '다음';
-        nextBtn.disabled = isNextDisabled();
+        nextBtn.textContent = isLast
+            ? (onboardingCompleted ? '완료됨' : onboardingCompletionFailed ? '다시 시도' : '완료 중')
+            : '다음';
+        nextBtn.disabled = isLast ? !onboardingCompletionFailed : isNextDisabled();
+        const finalDesc = document.getElementById('onboarding-final-desc');
+        if (finalDesc) {
+            finalDesc.textContent = onboardingCompleted
+                ? '완료됐어요. 창을 직접 닫아주세요.'
+                : onboardingCompletionFailed
+                    ? '완료 저장에 실패했어요. 다시 시도해 주세요.'
+                    : '완료 처리 중이에요.';
+        }
         skipBtn.classList.toggle('is-placeholder', isLast);
         skipBtn.disabled = isLast;
         skipBtn.setAttribute('aria-hidden', String(isLast));
@@ -434,6 +423,9 @@
             startLoginRefresh();
         } else if (step !== LOGIN_STEP) {
             stopLoginRefresh();
+        }
+        if (isLast && !onboardingCompleted && !onboardingCompletionPending && !onboardingCompletionFailed) {
+            complete();
         }
     }
 
@@ -512,6 +504,9 @@
     function resetOnboarding() {
         stopLoginRefresh();
         step = 0;
+        onboardingCompleted = false;
+        onboardingCompletionPending = false;
+        onboardingCompletionFailed = false;
         applyOs(currentOs);
         applyScenario(SCENARIO_ORDER[0]);
         updateLoginUi();
@@ -544,15 +539,14 @@
         if (isNextDisabled()) return;
         if (step === SCENARIO_STEP && moveScenario(1)) return;
         if (step < TOTAL - 1) { goToStep(step + 1); }
-        else complete();
+        else if (onboardingCompletionFailed) complete();
     });
     skipBtn.addEventListener('click', () => {
         if (step < TOTAL - 1) { goToStep(step + 1); }
     });
 
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') close();
-        else if (e.key === 'ArrowRight' && !nextBtn.disabled) nextBtn.click();
+        if (e.key === 'ArrowRight' && !nextBtn.disabled) nextBtn.click();
         else if (e.key === 'ArrowLeft' && !prevBtn.disabled) prevBtn.click();
     });
 
