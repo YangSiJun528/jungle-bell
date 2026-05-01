@@ -112,10 +112,7 @@ fn compute_notification_for_phase(
 
 fn should_reload_checker(state: &mut AppState, now: DateTime<Utc>) -> bool {
     match state.last_reload {
-        Some(last) if (now - last).num_seconds() as u64 >= RELOAD_INTERVAL_NORMAL => {
-            state.last_reload = Some(now);
-            true
-        }
+        Some(last) if (now - last).num_seconds() as u64 >= RELOAD_INTERVAL_NORMAL => true,
         Some(_) => false,
         None => {
             state.last_reload = Some(now);
@@ -130,7 +127,7 @@ fn expire_login_retry_window(state: &mut AppState, now: DateTime<Utc>) {
     }
 }
 
-fn apply_tick_effects(app_handle: &tauri::AppHandle, phase: DailyPhase, result: &TickResult) {
+fn apply_tick_effects(app_handle: &tauri::AppHandle, phase: DailyPhase, result: &TickResult) -> bool {
     if let Some((phase, remaining, needs_login)) = result.tray_update {
         tray::update_tray(app_handle, phase, remaining, needs_login);
     }
@@ -147,8 +144,10 @@ fn apply_tick_effects(app_handle: &tauri::AppHandle, phase: DailyPhase, result: 
     }
 
     if result.should_reload {
-        checker::refresh_webview(app_handle, "session refresh");
+        return checker::refresh_webview(app_handle, "session refresh");
     }
+
+    false
 }
 
 fn tick_delayed(previous_tick: DateTime<Utc>, expected_interval_secs: u64, now: DateTime<Utc>) -> Option<i64> {
@@ -484,7 +483,9 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
                 let phase = s.phase;
 
                 log_tick_state(now, &s, &result);
-                apply_tick_effects(&app_handle, phase, &result);
+                if apply_tick_effects(&app_handle, phase, &result) {
+                    s.last_reload = Some(now);
+                }
 
                 result
             };
@@ -1045,7 +1046,27 @@ mod tests {
 
         // then: 리로드 발생
         assert!(result_16min.should_reload);
-        assert_eq!(state.last_reload, Some(t2));
+        assert_eq!(state.last_reload, Some(t0));
+    }
+
+    #[test]
+    fn 리로드_필요_판단은_성공_전까지_마지막_리로드_시각을_유지한다() {
+        // given
+        let mut state = default_state();
+        state.data_loaded = true;
+        let t0 = kst_utc(9, 0, 0);
+        state.last_reload = Some(t0);
+
+        // when
+        let t1 = kst_utc(9, 16, 0);
+        let first = compute_tick(&mut state, t1, false);
+        let t2 = kst_utc(9, 17, 0);
+        let second = compute_tick(&mut state, t2, false);
+
+        // then
+        assert!(first.should_reload);
+        assert!(second.should_reload);
+        assert_eq!(state.last_reload, Some(t0));
     }
 
     #[test]
