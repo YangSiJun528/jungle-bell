@@ -473,6 +473,10 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
 
             if let Some((elapsed, interval)) = delayed_tick {
                 refresh_checker_after_delayed_tick(&app_handle, elapsed, interval);
+                {
+                    let mut s = shared_state.lock().await;
+                    s.last_reload = Some(now);
+                }
                 previous_tick = Some(now);
                 previous_interval_secs = Some(DELAYED_TICK_RECHECK_INTERVAL_SECS);
                 tokio::time::sleep(tokio::time::Duration::from_secs(DELAYED_TICK_RECHECK_INTERVAL_SECS)).await;
