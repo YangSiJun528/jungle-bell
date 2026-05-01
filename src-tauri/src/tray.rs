@@ -228,9 +228,17 @@ fn open_settings_window(app: &tauri::AppHandle) {
     }
 }
 
+fn run_window_task<F>(app: &tauri::AppHandle, task: F)
+where
+    F: FnOnce(tauri::AppHandle) + Send + 'static,
+{
+    let app = app.clone();
+    std::thread::spawn(move || task(app));
+}
+
 fn handle_menu_event(app: &tauri::AppHandle, event_id: &str) {
     match event_id {
-        "open_page" => open_attendance_window(app),
+        "open_page" => run_window_task(app, |app| open_attendance_window(&app)),
         "meal_plan" => {
             crate::analytics::track_meal_plan_opened();
             let _ = tauri_plugin_opener::open_url(MEAL_PLAN_URL, None::<&str>);
@@ -239,7 +247,7 @@ fn handle_menu_event(app: &tauri::AppHandle, event_id: &str) {
             crate::analytics::track_feedback_opened();
             let _ = tauri_plugin_opener::open_url(FEEDBACK_URL, None::<&str>);
         }
-        "settings" => open_settings_window(app),
+        "settings" => run_window_task(app, |app| open_settings_window(&app)),
         "version" => {
             let app = app.clone();
             tauri::async_runtime::spawn(async move {

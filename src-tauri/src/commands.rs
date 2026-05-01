@@ -381,7 +381,7 @@ pub async fn open_log_folder(app: tauri::AppHandle) -> Result<(), String> {
 
 /// Tauri 커맨드: 온보딩(시작하기) 창을 연다.
 #[tauri::command]
-pub fn open_onboarding(app: tauri::AppHandle) {
+pub async fn open_onboarding(app: tauri::AppHandle) {
     tray::open_onboarding_window(&app);
 }
 
@@ -409,7 +409,7 @@ pub async fn complete_onboarding(
 /// Tauri 커맨드: 출석 페이지 창을 연다 (온보딩의 "출석 페이지 열기" 버튼용).
 /// 트레이 메뉴의 "출석 페이지 열기"와 동일한 동작.
 #[tauri::command]
-pub fn open_attendance_window(app: tauri::AppHandle) {
+pub async fn open_attendance_window(app: tauri::AppHandle) {
     tray::open_attendance_window(&app);
     tray::refresh_login_status(&app);
 }
