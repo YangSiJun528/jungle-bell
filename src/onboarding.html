@@ -369,14 +369,28 @@
     let unlistenReset = null;
     let loginRefreshTimer = null;
 
-    async function close() {
-        stopLoginRefresh();
+    async function hideCurrentWindow() {
+        const getCurrentWindow = window.__TAURI__?.window?.getCurrentWindow;
+        if (!getCurrentWindow) return;
+        try {
+            await getCurrentWindow().hide();
+        } catch (e) {
+            console.error('[onboarding] fallback hide failed:', e);
+        }
+    }
+
+    async function closeOnboardingWindow() {
         try {
             await invoke('close_onboarding');
         } catch (e) {
             console.error('[onboarding] close failed:', e);
-            window.close();
+            await hideCurrentWindow();
         }
+    }
+
+    async function close() {
+        stopLoginRefresh();
+        await closeOnboardingWindow();
     }
 
     async function complete() {
@@ -385,8 +399,9 @@
             await invoke('complete_onboarding');
         } catch (e) {
             console.error('[onboarding] complete failed:', e);
-            window.close();
+            return;
         }
+        await closeOnboardingWindow();
     }
 
     function isNextDisabled() {

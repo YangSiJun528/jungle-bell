@@ -391,10 +391,9 @@ pub fn close_onboarding(app: tauri::AppHandle) {
     tray::close_onboarding_window(&app);
 }
 
-/// Tauri 커맨드: 온보딩 완료를 저장한 뒤 창을 닫는다.
+/// Tauri 커맨드: 온보딩 완료 상태를 저장한다.
 #[tauri::command]
 pub async fn complete_onboarding(
-    app: tauri::AppHandle,
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<(), String> {
     let was_completed = {
@@ -410,7 +409,6 @@ pub async fn complete_onboarding(
     } else {
         log::info!("[onboarding] completed command ignored; already completed");
     }
-    tray::close_onboarding_window(&app);
     Ok(())
 }
 
