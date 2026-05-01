@@ -269,6 +269,13 @@ pub fn close_onboarding_window(app: &tauri::AppHandle) {
     }
 }
 
+pub fn finish_onboarding_window(app: &tauri::AppHandle) {
+    log::info!("[tray] onboarding window finished");
+    if let Some(window) = app.get_webview_window("onboarding") {
+        hide_window(&window, "onboarding", "finish command");
+    }
+}
+
 fn open_settings_window(app: &tauri::AppHandle) {
     log::info!("[tray] settings window opened");
     crate::analytics::track_settings_opened();

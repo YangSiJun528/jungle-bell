@@ -391,6 +391,12 @@ pub fn close_onboarding(app: tauri::AppHandle) {
     tray::close_onboarding_window(&app);
 }
 
+/// Tauri 커맨드: 완료된 온보딩 창을 숨긴다.
+#[tauri::command]
+pub fn finish_onboarding(app: tauri::AppHandle) {
+    tray::finish_onboarding_window(&app);
+}
+
 /// Tauri 커맨드: 온보딩 완료 상태를 저장한다.
 #[tauri::command]
 pub async fn complete_onboarding(

@@ -388,6 +388,15 @@
         }
     }
 
+    async function finishOnboardingWindow() {
+        try {
+            await invoke('finish_onboarding');
+        } catch (e) {
+            console.error('[onboarding] finish failed:', e);
+            await hideCurrentWindow();
+        }
+    }
+
     async function close() {
         stopLoginRefresh();
         await closeOnboardingWindow();
@@ -401,7 +410,7 @@
             console.error('[onboarding] complete failed:', e);
             return;
         }
-        await closeOnboardingWindow();
+        await finishOnboardingWindow();
     }
 
     function isNextDisabled() {
