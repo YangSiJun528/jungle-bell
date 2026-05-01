@@ -370,6 +370,7 @@
     let onboardingCompleted = false;
     let onboardingCompletionPending = false;
     let onboardingCompletionFailed = false;
+    let onboardingCompletionScheduled = false;
 
     async function complete() {
         if (onboardingCompleted || onboardingCompletionPending) return;
@@ -389,6 +390,15 @@
         onboardingCompletionPending = false;
         onboardingCompleted = true;
         render();
+    }
+
+    function scheduleComplete() {
+        if (onboardingCompleted || onboardingCompletionPending || onboardingCompletionFailed || onboardingCompletionScheduled) return;
+        onboardingCompletionScheduled = true;
+        window.setTimeout(() => {
+            onboardingCompletionScheduled = false;
+            complete();
+        }, 0);
     }
 
     function isNextDisabled() {
@@ -424,7 +434,7 @@
             stopLoginRefresh();
         }
         if (isLast && !onboardingCompleted && !onboardingCompletionPending && !onboardingCompletionFailed) {
-            complete();
+            scheduleComplete();
         }
     }
 
@@ -543,7 +553,7 @@
     });
 
     // ── 알림/옵션 헬퍼 ─────────────────────────────────
-    function setupNotifToggleField(toggleId, fieldClass, getCmd, setCmd) {
+    function setupNotifToggleField(toggleId, fieldClass, setCmd) {
         const toggle = document.getElementById(toggleId);
         const fields = document.querySelectorAll('.' + fieldClass);
         const updateFields = (enabled) => {
@@ -651,59 +661,88 @@
         tab.addEventListener('click', () => applyScenario(tab.dataset.scenario));
     });
 
-    // ── 초기화 ────────────────────────────────────────
-    (async () => {
+    const startNotif = setupNotifToggleField('ob-start-toggle', 'ob-start-field', 'set_start_notification_enabled');
+    const endNotif = setupNotifToggleField('ob-end-toggle', 'ob-end-field', 'set_end_notification_enabled');
+    const notifStartEl = bindSelect('ob-notif-start', 'set_notification_start', 'time');
+    const startIntervalEl = bindSelect('ob-start-interval', 'set_start_notification_interval', 'value');
+    const notifEndEl = bindSelect('ob-notif-end', 'set_notification_end', 'time');
+    const endIntervalEl = bindSelect('ob-end-interval', 'set_end_notification_interval', 'value');
+
+    startNotif.updateFields(startNotif.toggle.checked);
+    endNotif.updateFields(endNotif.toggle.checked);
+
+    document.getElementById('ob-open-notif-settings').addEventListener('click', async () => {
         try {
-            // 로그인 — 이벤트를 먼저 구독한 뒤 현재 상태를 조회해 초기/전이 모두 반영
+            await invoke('open_notification_settings');
+        } catch (e) {
+            console.error(e);
+            await window.__TAURI__.dialog.message('시스템 알림 설정을 열지 못했습니다.\n' + e, {title: '알림 설정'});
+        }
+    });
+
+    // OS, 시나리오 초기 상태 — 사용자 OS 자동 감지
+    applyOs(currentOs);
+    applyScenario('morning');
+    updateLoginUi();
+    render();
+
+    async function hydrateLoginStatus() {
+        try {
             unlistenLogin = await listen('login-status-changed', (e) => {
                 applyLoginStatus(e.payload);
                 updateLoginUi();
                 render();
             });
             await syncLoginStatus();
+        } catch (e) {
+            console.error('[onboarding] login initialization failed:', e);
+        }
+    }
 
-            // 알림 토글/select — settings 창과 같은 커맨드 (현재 config 값을 로드)
-            const startNotif = setupNotifToggleField('ob-start-toggle', 'ob-start-field', 'get_start_notification_enabled', 'set_start_notification_enabled');
+    async function hydrateNotificationSettings() {
+        try {
             startNotif.toggle.checked = await invoke('get_start_notification_enabled');
             startNotif.updateFields(startNotif.toggle.checked);
+        } catch (e) {
+            console.error('[onboarding] start notification enabled load failed:', e);
+        }
 
-            const endNotif = setupNotifToggleField('ob-end-toggle', 'ob-end-field', 'get_end_notification_enabled', 'set_end_notification_enabled');
+        try {
             endNotif.toggle.checked = await invoke('get_end_notification_enabled');
             endNotif.updateFields(endNotif.toggle.checked);
-
-            const notifStart = await invoke('get_notification_start');
-            const notifStartEl = bindSelect('ob-notif-start', 'set_notification_start', 'time');
-            notifStartEl.value = notifStart.hour;
-
-            const startIntervalEl = bindSelect('ob-start-interval', 'set_start_notification_interval', 'value');
-            startIntervalEl.value = await invoke('get_start_notification_interval');
-
-            const notifEnd = await invoke('get_notification_end');
-            const notifEndEl = bindSelect('ob-notif-end', 'set_notification_end', 'time');
-            notifEndEl.value = notifEnd.hour;
-
-            const endIntervalEl = bindSelect('ob-end-interval', 'set_end_notification_interval', 'value');
-            endIntervalEl.value = await invoke('get_end_notification_interval');
-
-            // 시스템 알림 설정 열기
-            document.getElementById('ob-open-notif-settings').addEventListener('click', async () => {
-                try { await invoke('open_notification_settings'); }
-                catch (e) {
-                    console.error(e);
-                    await window.__TAURI__.dialog.message('시스템 알림 설정을 열지 못했습니다.\n' + e, {title: '알림 설정'});
-                }
-            });
-
-            // OS, 시나리오 초기 상태 — 사용자 OS 자동 감지
-            applyOs(currentOs);
-            applyScenario('morning');
-
-            render();
         } catch (e) {
-            console.error('[onboarding] 초기화 오류:', e);
-            render();
+            console.error('[onboarding] end notification enabled load failed:', e);
         }
-    })();
+
+        try {
+            const notifStart = await invoke('get_notification_start');
+            notifStartEl.value = notifStart.hour;
+        } catch (e) {
+            console.error('[onboarding] notification start load failed:', e);
+        }
+
+        try {
+            startIntervalEl.value = await invoke('get_start_notification_interval');
+        } catch (e) {
+            console.error('[onboarding] start interval load failed:', e);
+        }
+
+        try {
+            const notifEnd = await invoke('get_notification_end');
+            notifEndEl.value = notifEnd.hour;
+        } catch (e) {
+            console.error('[onboarding] notification end load failed:', e);
+        }
+
+        try {
+            endIntervalEl.value = await invoke('get_end_notification_interval');
+        } catch (e) {
+            console.error('[onboarding] end interval load failed:', e);
+        }
+    }
+
+    hydrateLoginStatus();
+    hydrateNotificationSettings();
 
     window.addEventListener('beforeunload', () => {
         stopLoginRefresh();
