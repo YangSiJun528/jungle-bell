@@ -23,12 +23,12 @@
 
 <br/>
 
-> [!CAUTION]  
-> Jungle Bell은 크래프톤 정글 공식 앱이 아니며, 자동 출석 기능을 제공하지 않습니다.
-
 <p align="center">
   <img src="docs/files/readme-tray-menu.png" alt="Jungle Bell tray menu" width="760">
 </p>
+
+> [!CAUTION]  
+> Jungle Bell은 크래프톤 정글 공식 앱이 아니며, 자동 출석 기능을 제공하지 않습니다.
 
 ## 설치
 
