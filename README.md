@@ -16,14 +16,13 @@
     <a href="https://github.com/YangSiJun528/jungle-bell/actions/workflows/release.yml">
         <img src="https://img.shields.io/github/actions/workflow/status/YangSiJun528/jungle-bell/release.yml" alt="Release">
     </a>
-    <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey" alt="Platform">
+    <a href="https://github.com/YangSiJun528/jungle-bell">
+        <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey" alt="Platform">
+    </a>
+    <img src="docs/files/readme-tray-menu.png" alt="Jungle Bell tray menu" width="760">
 </div>
 
 <br/>
-
-<p align="center">
-  <img src="docs/files/readme-tray-menu.png" alt="Jungle Bell tray menu" width="760">
-</p>
 
 <hr>
 
