@@ -1,0 +1,659 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Jungle Bell A4 Poster</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 0;
+    }
+
+    :root {
+      --ink: #1d1d1f;
+      --muted: #6e6e73;
+      --canvas: #ffffff;
+      --paper: #ffffff;
+      --hairline: #e5e5ea;
+      --primary: #0066cc;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      background: #ececec;
+      color: var(--ink);
+      font-family:
+        -apple-system,
+        BlinkMacSystemFont,
+        "SF Pro Display",
+        "SF Pro Text",
+        Pretendard,
+        "Apple SD Gothic Neo",
+        "Noto Sans KR",
+        "Segoe UI",
+        sans-serif;
+    }
+
+    body {
+      display: grid;
+      place-items: start center;
+      padding: 18px;
+    }
+
+    .sheet {
+      width: 210mm;
+      min-height: 297mm;
+      background: var(--canvas);
+      box-shadow: 0 12px 36px rgb(0 0 0 / 16%);
+    }
+
+    .poster {
+      position: relative;
+      height: 99mm;
+      padding: 0;
+      overflow: hidden;
+      background: var(--paper);
+      border-bottom: 1px dashed #e5e5ea;
+    }
+
+    .poster:last-child {
+      border-bottom: 0;
+    }
+
+    .copy {
+      position: absolute;
+      left: 12mm;
+      top: 15mm;
+      width: 74mm;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      min-width: 0;
+      z-index: 2;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin-bottom: 6mm;
+    }
+
+    .logo {
+      width: 9.5mm;
+      height: 9.5mm;
+      display: block;
+    }
+
+    .app-name {
+      font-size: 19px;
+      font-weight: 600;
+      line-height: 1;
+      letter-spacing: -0.2px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.08;
+      font-weight: 600;
+      letter-spacing: -0.32px;
+      word-break: keep-all;
+      white-space: nowrap;
+    }
+
+    .desc {
+      margin: 3.2mm 0 0;
+      color: #3a3a3c;
+      font-size: 10.8px;
+      line-height: 1.58;
+      font-weight: 400;
+      letter-spacing: -0.1px;
+      word-break: keep-all;
+    }
+
+    .desc span {
+      display: block;
+      white-space: nowrap;
+    }
+
+    .preview {
+      position: absolute;
+      right: 7mm;
+      bottom: 8mm;
+      width: 118mm;
+      height: auto;
+      border-radius: 6px;
+      overflow: hidden;
+      box-shadow: rgb(0 0 0 / 22%) 3px 5px 30px 0;
+      z-index: 1;
+    }
+
+    .screenshot {
+      width: 100%;
+      display: block;
+    }
+
+    .qr-panel {
+      position: absolute;
+      left: 12mm;
+      bottom: 12mm;
+      width: 28mm;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      z-index: 3;
+    }
+
+    .qr-wrap {
+      width: 28mm;
+      height: 28mm;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--hairline);
+      border-radius: 18px;
+      background: #fff;
+    }
+
+    .qr-canvas {
+      width: 26.2mm;
+      height: 26.2mm;
+      display: block;
+      image-rendering: pixelated;
+    }
+
+
+    @media print {
+      html,
+      body {
+        width: 210mm;
+        height: 297mm;
+        background: #fff;
+      }
+
+      body {
+        display: block;
+        padding: 0;
+      }
+
+      .sheet {
+        width: 210mm;
+        height: 297mm;
+        box-shadow: none;
+      }
+
+      .poster {
+        break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="sheet" aria-label="Jungle Bell 홍보 포스터 A4 3분할">
+    <section class="poster">
+      <div class="copy">
+        <div class="brand">
+          <img class="logo" src="files/logo.png" alt="" />
+          <div class="app-name">Jungle Bell</div>
+        </div>
+        <h1>정글 출석 체크 리마인더</h1>
+        <p class="desc">
+          <span>출석 체크를 놓치지 않게 도와줍니다.</span>
+          <span>출석 상태를 바로 확인하고, 알림을 받을 수 있어요.</span>
+          <span>macOS와 Windows를 지원합니다.</span>
+        </p>
+      </div>
+
+      <div class="preview">
+        <img class="screenshot" src="files/readme-tray-menu.png" alt="Jungle Bell 앱 화면" />
+      </div>
+
+      <div class="qr-panel">
+        <div class="qr-wrap">
+          <canvas class="qr-canvas" width="360" height="360" data-url="https://github.com/YangSiJun528/jungle-bell"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <section class="poster">
+      <div class="copy">
+        <div class="brand">
+          <img class="logo" src="files/logo.png" alt="" />
+          <div class="app-name">Jungle Bell</div>
+        </div>
+        <h1>정글 출석 체크 리마인더</h1>
+        <p class="desc">
+          <span>출석 체크를 놓치지 않게 도와줍니다.</span>
+          <span>출석 상태를 바로 확인하고, 알림을 받을 수 있어요.</span>
+          <span>macOS와 Windows를 지원합니다.</span>
+        </p>
+      </div>
+
+      <div class="preview">
+        <img class="screenshot" src="files/readme-tray-menu.png" alt="Jungle Bell 앱 화면" />
+      </div>
+
+      <div class="qr-panel">
+        <div class="qr-wrap">
+          <canvas class="qr-canvas" width="360" height="360" data-url="https://github.com/YangSiJun528/jungle-bell"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <section class="poster">
+      <div class="copy">
+        <div class="brand">
+          <img class="logo" src="files/logo.png" alt="" />
+          <div class="app-name">Jungle Bell</div>
+        </div>
+        <h1>정글 출석 체크 리마인더</h1>
+        <p class="desc">
+          <span>출석 체크를 놓치지 않게 도와줍니다.</span>
+          <span>출석 상태를 바로 확인하고, 알림을 받을 수 있어요.</span>
+          <span>macOS와 Windows를 지원합니다.</span>
+        </p>
+      </div>
+
+      <div class="preview">
+        <img class="screenshot" src="files/readme-tray-menu.png" alt="Jungle Bell 앱 화면" />
+      </div>
+
+      <div class="qr-panel">
+        <div class="qr-wrap">
+          <canvas class="qr-canvas" width="360" height="360" data-url="https://github.com/YangSiJun528/jungle-bell"></canvas>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      const VERSION = 4;
+      const SIZE = VERSION * 4 + 17;
+      const DATA_CODEWORDS = 64;
+      const BLOCKS = 2;
+      const DATA_PER_BLOCK = 32;
+      const ECC_PER_BLOCK = 18;
+      const ECL_M = 0b00;
+
+      function makeQr(text) {
+        const data = makeDataCodewords(text);
+        const allCodewords = addErrorCorrection(data);
+        const base = makeBaseMatrix();
+        let best = null;
+        let bestPenalty = Infinity;
+
+        for (let mask = 0; mask < 8; mask += 1) {
+          const modules = cloneGrid(base.modules);
+          drawData(modules, base.reserved, allCodewords, mask);
+          drawFormatBits(modules, mask);
+          const penalty = scoreMatrix(modules);
+          if (penalty < bestPenalty) {
+            bestPenalty = penalty;
+            best = modules;
+          }
+        }
+
+        return best;
+      }
+
+      function makeDataCodewords(text) {
+        const bytes = Array.from(new TextEncoder().encode(text));
+        const bits = [];
+        appendBits(bits, 0x4, 4);
+        appendBits(bits, bytes.length, 8);
+        bytes.forEach((byte) => appendBits(bits, byte, 8));
+
+        const maxBits = DATA_CODEWORDS * 8;
+        appendBits(bits, 0, Math.min(4, maxBits - bits.length));
+        while (bits.length % 8 !== 0) bits.push(0);
+
+        const codewords = [];
+        for (let i = 0; i < bits.length; i += 8) {
+          let value = 0;
+          for (let j = 0; j < 8; j += 1) value = (value << 1) | bits[i + j];
+          codewords.push(value);
+        }
+
+        const pads = [0xec, 0x11];
+        let padIndex = 0;
+        while (codewords.length < DATA_CODEWORDS) {
+          codewords.push(pads[padIndex % 2]);
+          padIndex += 1;
+        }
+
+        if (codewords.length > DATA_CODEWORDS) {
+          throw new Error("QR text is too long for the fixed poster QR version.");
+        }
+
+        return codewords;
+      }
+
+      function appendBits(bits, value, length) {
+        for (let i = length - 1; i >= 0; i -= 1) bits.push((value >>> i) & 1);
+      }
+
+      function addErrorCorrection(data) {
+        const blocks = [];
+        for (let i = 0; i < BLOCKS; i += 1) {
+          const start = i * DATA_PER_BLOCK;
+          const block = data.slice(start, start + DATA_PER_BLOCK);
+          blocks.push({
+            data: block,
+            ecc: reedSolomonRemainder(block, ECC_PER_BLOCK),
+          });
+        }
+
+        const result = [];
+        for (let i = 0; i < DATA_PER_BLOCK; i += 1) {
+          blocks.forEach((block) => result.push(block.data[i]));
+        }
+        for (let i = 0; i < ECC_PER_BLOCK; i += 1) {
+          blocks.forEach((block) => result.push(block.ecc[i]));
+        }
+        return result;
+      }
+
+      const GF_EXP = new Array(512);
+      const GF_LOG = new Array(256);
+      (() => {
+        let value = 1;
+        for (let i = 0; i < 255; i += 1) {
+          GF_EXP[i] = value;
+          GF_LOG[value] = i;
+          value <<= 1;
+          if (value & 0x100) value ^= 0x11d;
+        }
+        for (let i = 255; i < 512; i += 1) GF_EXP[i] = GF_EXP[i - 255];
+      })();
+
+      function gfMul(a, b) {
+        return a === 0 || b === 0 ? 0 : GF_EXP[GF_LOG[a] + GF_LOG[b]];
+      }
+
+      function reedSolomonDivisor(degree) {
+        let result = [1];
+        for (let i = 0; i < degree; i += 1) {
+          const next = new Array(result.length + 1).fill(0);
+          for (let j = 0; j < result.length; j += 1) {
+            next[j] ^= result[j];
+            next[j + 1] ^= gfMul(result[j], GF_EXP[i]);
+          }
+          result = next;
+        }
+        return result;
+      }
+
+      function reedSolomonRemainder(data, degree) {
+        const divisor = reedSolomonDivisor(degree);
+        const result = data.concat(new Array(degree).fill(0));
+        for (let i = 0; i < data.length; i += 1) {
+          const factor = result[i];
+          if (factor === 0) continue;
+          for (let j = 0; j < divisor.length; j += 1) {
+            result[i + j] ^= gfMul(divisor[j], factor);
+          }
+        }
+        return result.slice(data.length);
+      }
+
+      function makeBaseMatrix() {
+        const modules = Array.from({ length: SIZE }, () => new Array(SIZE).fill(null));
+        const reserved = Array.from({ length: SIZE }, () => new Array(SIZE).fill(false));
+        const set = (x, y, dark, markReserved = true) => {
+          if (x < 0 || y < 0 || x >= SIZE || y >= SIZE) return;
+          modules[y][x] = dark;
+          if (markReserved) reserved[y][x] = true;
+        };
+
+        drawFinder(set, 0, 0);
+        drawFinder(set, SIZE - 7, 0);
+        drawFinder(set, 0, SIZE - 7);
+
+        for (let i = 8; i < SIZE - 8; i += 1) {
+          set(i, 6, i % 2 === 0);
+          set(6, i, i % 2 === 0);
+        }
+
+        drawAlignment(set, 26, 26);
+        set(8, VERSION * 4 + 9, true);
+        reserveFormatAreas(reserved);
+
+        return { modules, reserved };
+      }
+
+      function drawFinder(set, left, top) {
+        for (let y = -1; y <= 7; y += 1) {
+          for (let x = -1; x <= 7; x += 1) {
+            const xx = left + x;
+            const yy = top + y;
+            const inCore = x >= 0 && x <= 6 && y >= 0 && y <= 6;
+            const dark =
+              inCore &&
+              (x === 0 || x === 6 || y === 0 || y === 6 || (x >= 2 && x <= 4 && y >= 2 && y <= 4));
+            set(xx, yy, dark);
+          }
+        }
+      }
+
+      function drawAlignment(set, cx, cy) {
+        for (let y = -2; y <= 2; y += 1) {
+          for (let x = -2; x <= 2; x += 1) {
+            const dark = Math.max(Math.abs(x), Math.abs(y)) !== 1;
+            set(cx + x, cy + y, dark);
+          }
+        }
+      }
+
+      function reserveFormatAreas(reserved) {
+        const reserve = (x, y) => {
+          if (x >= 0 && y >= 0 && x < SIZE && y < SIZE) reserved[y][x] = true;
+        };
+
+        for (let i = 0; i <= 5; i += 1) {
+          reserve(8, i);
+          reserve(i, 8);
+        }
+        reserve(8, 7);
+        reserve(8, 8);
+        reserve(7, 8);
+
+        for (let i = 0; i < 8; i += 1) reserve(SIZE - 1 - i, 8);
+        for (let i = 8; i < 15; i += 1) reserve(8, SIZE - 15 + i);
+      }
+
+      function cloneGrid(grid) {
+        return grid.map((row) => row.slice());
+      }
+
+      function drawData(modules, reserved, codewords, mask) {
+        const bits = [];
+        codewords.forEach((codeword) => appendBits(bits, codeword, 8));
+
+        let bitIndex = 0;
+        let upward = true;
+        for (let right = SIZE - 1; right > 0; right -= 2) {
+          if (right === 6) right -= 1;
+
+          for (let vertical = 0; vertical < SIZE; vertical += 1) {
+            const y = upward ? SIZE - 1 - vertical : vertical;
+            for (let dx = 0; dx < 2; dx += 1) {
+              const x = right - dx;
+              if (reserved[y][x]) continue;
+
+              let dark = bitIndex < bits.length ? bits[bitIndex] === 1 : false;
+              if (maskApplies(mask, x, y)) dark = !dark;
+              modules[y][x] = dark;
+              bitIndex += 1;
+            }
+          }
+
+          upward = !upward;
+        }
+      }
+
+      function maskApplies(mask, x, y) {
+        switch (mask) {
+          case 0:
+            return (x + y) % 2 === 0;
+          case 1:
+            return y % 2 === 0;
+          case 2:
+            return x % 3 === 0;
+          case 3:
+            return (x + y) % 3 === 0;
+          case 4:
+            return (Math.floor(y / 2) + Math.floor(x / 3)) % 2 === 0;
+          case 5:
+            return ((x * y) % 2) + ((x * y) % 3) === 0;
+          case 6:
+            return (((x * y) % 2) + ((x * y) % 3)) % 2 === 0;
+          case 7:
+            return (((x + y) % 2) + ((x * y) % 3)) % 2 === 0;
+          default:
+            return false;
+        }
+      }
+
+      function drawFormatBits(modules, mask) {
+        const bits = getFormatBits(ECL_M, mask);
+        const bit = (i) => ((bits >>> i) & 1) === 1;
+        const set = (x, y, dark) => {
+          modules[y][x] = dark;
+        };
+
+        for (let i = 0; i <= 5; i += 1) {
+          set(8, i, bit(i));
+          set(i, 8, bit(i));
+        }
+        set(8, 7, bit(6));
+        set(8, 8, bit(7));
+        set(7, 8, bit(8));
+        for (let i = 9; i < 15; i += 1) set(14 - i, 8, bit(i));
+
+        for (let i = 0; i < 8; i += 1) set(SIZE - 1 - i, 8, bit(i));
+        for (let i = 8; i < 15; i += 1) set(8, SIZE - 15 + i, bit(i));
+        set(8, SIZE - 8, true);
+      }
+
+      function getFormatBits(errorCorrectionLevel, mask) {
+        const data = (errorCorrectionLevel << 3) | mask;
+        let remainder = data << 10;
+        for (let i = 14; i >= 10; i -= 1) {
+          if (((remainder >>> i) & 1) !== 0) remainder ^= 0x537 << (i - 10);
+        }
+        return ((data << 10) | remainder) ^ 0x5412;
+      }
+
+      function scoreMatrix(modules) {
+        let penalty = 0;
+
+        for (let y = 0; y < SIZE; y += 1) {
+          penalty += scoreLine(modules[y]);
+        }
+        for (let x = 0; x < SIZE; x += 1) {
+          const column = [];
+          for (let y = 0; y < SIZE; y += 1) column.push(modules[y][x]);
+          penalty += scoreLine(column);
+        }
+
+        for (let y = 0; y < SIZE - 1; y += 1) {
+          for (let x = 0; x < SIZE - 1; x += 1) {
+            const color = modules[y][x];
+            if (color === modules[y][x + 1] && color === modules[y + 1][x] && color === modules[y + 1][x + 1]) {
+              penalty += 3;
+            }
+          }
+        }
+
+        penalty += scoreFinderLikePatterns(modules);
+
+        let dark = 0;
+        modules.forEach((row) => row.forEach((cell) => {
+          if (cell) dark += 1;
+        }));
+        penalty += Math.floor(Math.abs((dark * 100) / (SIZE * SIZE) - 50) / 5) * 10;
+
+        return penalty;
+      }
+
+      function scoreLine(line) {
+        let penalty = 0;
+        let runColor = line[0];
+        let runLength = 1;
+        for (let i = 1; i < line.length; i += 1) {
+          if (line[i] === runColor) {
+            runLength += 1;
+          } else {
+            if (runLength >= 5) penalty += runLength - 2;
+            runColor = line[i];
+            runLength = 1;
+          }
+        }
+        if (runLength >= 5) penalty += runLength - 2;
+        return penalty;
+      }
+
+      function scoreFinderLikePatterns(modules) {
+        const pattern = [true, false, true, true, true, false, true];
+        let penalty = 0;
+
+        const checkLine = (line) => {
+          let score = 0;
+          for (let i = 0; i <= line.length - 7; i += 1) {
+            const matches = pattern.every((value, j) => line[i + j] === value);
+            if (!matches) continue;
+
+            const beforeLight = i >= 4 && line.slice(i - 4, i).every((value) => value === false);
+            const afterLight = i + 11 <= line.length && line.slice(i + 7, i + 11).every((value) => value === false);
+            if (beforeLight || afterLight) score += 40;
+          }
+          return score;
+        };
+
+        for (let y = 0; y < SIZE; y += 1) penalty += checkLine(modules[y]);
+        for (let x = 0; x < SIZE; x += 1) {
+          const column = [];
+          for (let y = 0; y < SIZE; y += 1) column.push(modules[y][x]);
+          penalty += checkLine(column);
+        }
+        return penalty;
+      }
+
+      function drawQr(canvas, matrix) {
+        const context = canvas.getContext("2d");
+        const size = canvas.width;
+        const quiet = 4;
+        const scale = Math.floor(size / (SIZE + quiet * 2));
+        const offset = Math.floor((size - scale * (SIZE + quiet * 2)) / 2) + quiet * scale;
+
+        context.fillStyle = "#ffffff";
+        context.fillRect(0, 0, size, size);
+        context.fillStyle = "#111111";
+
+        for (let y = 0; y < SIZE; y += 1) {
+          for (let x = 0; x < SIZE; x += 1) {
+            if (matrix[y][x]) context.fillRect(offset + x * scale, offset + y * scale, scale, scale);
+          }
+        }
+      }
+
+      document.querySelectorAll(".qr-canvas").forEach((canvas) => {
+        try {
+          drawQr(canvas, makeQr(canvas.dataset.url));
+        } catch (error) {
+          canvas.replaceWith(document.createTextNode(canvas.dataset.url));
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
