@@ -6,8 +6,6 @@
 <p>크래프톤 정글 출석 상태를 메뉴 바와 작업 표시줄에서 확인해요.<br>출석이 필요할 때 알림을 받고, 아이콘 색으로 현재 상태를 볼 수 있어요.</p>
 </div>
 
-<hr>
-
 <div align="center">
     <a href="https://github.com/YangSiJun528/jungle-bell/releases">
         <img src="https://img.shields.io/github/v/release/YangSiJun528/jungle-bell?include_prereleases" alt="GitHub Release">
@@ -26,6 +24,8 @@
 <p align="center">
   <img src="docs/files/readme-tray-menu.png" alt="Jungle Bell tray menu" width="760">
 </p>
+
+<hr>
 
 > [!CAUTION]  
 > Jungle Bell은 크래프톤 정글 공식 앱이 아니며, 자동 출석 기능을 제공하지 않습니다.
