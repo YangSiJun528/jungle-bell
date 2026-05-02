@@ -3,28 +3,22 @@
 
 <div>
 <h3>Jungle Bell</h3>
-<p>크래프톤 정글 출석 상태를 메뉴 바와 작업 표시줄에서 확인해요.<br>출석이 필요할 때 알림을 받고, 아이콘 색으로 현재 상태를 볼 수 있어요.</p>
-</div>
-
-<div align="center">
-    <a href="https://github.com/YangSiJun528/jungle-bell/releases">
-        <img src="https://img.shields.io/github/v/release/YangSiJun528/jungle-bell?include_prereleases" alt="GitHub Release">
-    </a>
-    <a href="LICENSE">
-        <img src="https://img.shields.io/github/license/YangSiJun528/jungle-bell" alt="License">
-    </a>
-    <a href="https://github.com/YangSiJun528/jungle-bell/actions/workflows/release.yml">
-        <img src="https://img.shields.io/github/actions/workflow/status/YangSiJun528/jungle-bell/release.yml" alt="Release">
-    </a>
-    <a href="https://github.com/YangSiJun528/jungle-bell">
-        <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey" alt="Platform">
-    </a>
-    <img src="docs/files/readme-tray-menu.png" alt="Jungle Bell tray menu" width="760">
+<p>크래프톤 정글 출석 상태를 메뉴 바와 작업 표시줄에서 바로 확인해요.<br>출석이 필요한 시점에는 알림을 받고, 아이콘 색으로 현재 상태를 한눈에 볼 수 있어요.</p>
 </div>
 
 <br/>
 
+<div align="center">
+    <a href="https://github.com/YangSiJun528/jungle-bell/releases"><img src="https://img.shields.io/github/v/release/YangSiJun528/jungle-bell?include_prereleases" alt="GitHub Release"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/github/license/YangSiJun528/jungle-bell" alt="License"></a>
+    <a href="https://github.com/YangSiJun528/jungle-bell"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey" alt="Platform"></a>
+    <br/>
+    <img src="docs/files/readme-tray-menu.png" alt="Jungle Bell tray menu" width="760">
+</div>
+
 <hr>
+
+</div>
 
 > [!CAUTION]  
 > Jungle Bell은 크래프톤 정글 공식 앱이 아니며, 자동 출석 기능을 제공하지 않습니다.
