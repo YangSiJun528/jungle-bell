@@ -1,4 +1,4 @@
-use chrono::{DateTime, FixedOffset, Timelike, Utc};
+use chrono::{DateTime, FixedOffset, NaiveDate, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
@@ -13,6 +13,8 @@ pub struct AppState {
     pub evening_checked: bool,
     /// 현재 일일 상태 (스케줄러가 계산)
     pub phase: DailyPhase,
+    /// 현재 코호트 종료일 기반 D-Day 상태
+    pub dday_status: DdayStatus,
     /// 로그인이 필요한 상태 (API 401 또는 로그인 페이지)
     pub needs_login: bool,
     /// 체커로부터 첫 보고를 받았는지 여부.
@@ -38,6 +40,7 @@ impl AppState {
             morning_checked: false,
             evening_checked: false,
             phase: DailyPhase::Idle,
+            dday_status: DdayStatus::Unknown,
             needs_login: false,
             data_loaded: false,
             last_reset_day: None,
@@ -46,6 +49,27 @@ impl AppState {
             last_notification: None,
             pending_update: None,
         }
+    }
+}
+
+/// 현재 코호트 종료일 기반 D-Day 표시 상태.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DdayStatus {
+    /// 아직 checker 보고를 받지 못했거나 API 오류로 최신 상태를 알 수 없음.
+    Unknown,
+    /// 현재 날짜가 코호트 기간 안에 있고 종료일을 알고 있음.
+    Active { end_date: NaiveDate },
+    /// 소속 코호트가 있으나 현재 날짜 기준 진행 중인 코호트가 없음.
+    Ended,
+    /// 코호트 데이터가 비어 있거나 종료일을 판단할 수 없음.
+    NoCohort,
+    /// LMS 로그인이 필요함.
+    LoginRequired,
+}
+
+impl DdayStatus {
+    pub fn suppress_attendance_phase(&self) -> bool {
+        matches!(self, Self::Ended | Self::NoCohort)
     }
 }
 
