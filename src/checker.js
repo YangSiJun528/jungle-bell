@@ -64,8 +64,12 @@
 
   function compareCohortDesc(a, b) {
     if (a.start_date !== b.start_date) return a.start_date < b.start_date ? 1 : -1;
-    if (a.end_date !== b.end_date) return a.end_date < b.end_date ? 1 : -1;
+    if ((a.end_date || '') !== (b.end_date || '')) return (a.end_date || '') < (b.end_date || '') ? 1 : -1;
     return 0;
+  }
+
+  function parseActiveFlag(value) {
+    return value === true || value === 'true';
   }
 
   /** @param {Cohort[]} cohorts */
@@ -78,16 +82,25 @@
       .map(function (cohort) {
         return {
           id: cohort && cohort.id,
-          is_active: !!(cohort && cohort.isActive === true),
+          is_active: parseActiveFlag(cohort && cohort.isActive),
           start_date: normalizeDateString(cohort && cohort.startDate),
           end_date: normalizeDateString(cohort && cohort.endDate),
         };
       })
       .filter(function (cohort) {
-        return cohort.id && cohort.start_date && cohort.end_date;
+        return cohort.id && cohort.start_date;
       });
 
-    var active = normalized
+    if (normalized.length === 0) {
+      return { cohort_id: null, cohort_status: 'none', cohort_end_date: null };
+    }
+
+    var fallback = normalized.slice().sort(compareCohortDesc)[0];
+    var dated = normalized.filter(function (cohort) {
+      return cohort.end_date;
+    });
+
+    var active = dated
       .filter(function (cohort) {
         return cohort.is_active && cohort.start_date <= today && today <= cohort.end_date;
       })
@@ -101,7 +114,29 @@
       };
     }
 
-    var ended = normalized
+    var inRange = dated
+      .filter(function (cohort) {
+        return cohort.start_date <= today && today <= cohort.end_date;
+      })
+      .sort(compareCohortDesc);
+
+    if (inRange.length > 0) {
+      return {
+        cohort_id: inRange[0].id,
+        cohort_status: 'unknown',
+        cohort_end_date: null,
+      };
+    }
+
+    if (fallback && !fallback.end_date) {
+      return {
+        cohort_id: fallback.id,
+        cohort_status: 'unknown',
+        cohort_end_date: null,
+      };
+    }
+
+    var ended = dated
       .filter(function (cohort) {
         return cohort.end_date < today;
       })
@@ -110,10 +145,18 @@
         return compareCohortDesc(a, b);
       });
 
+    if (ended.length > 0) {
+      return {
+        cohort_id: null,
+        cohort_status: 'ended',
+        cohort_end_date: ended[0].end_date,
+      };
+    }
+
     return {
-      cohort_id: null,
-      cohort_status: ended.length > 0 ? 'ended' : 'none',
-      cohort_end_date: ended.length > 0 ? ended[0].end_date : null,
+      cohort_id: fallback ? fallback.id : null,
+      cohort_status: fallback ? 'unknown' : 'none',
+      cohort_end_date: null,
     };
   }
 
@@ -281,7 +324,7 @@
 
       cachedCohortSelection = selection;
 
-      if (selection.cohort_status !== 'active' || !selection.cohort_id) {
+      if (!selection.cohort_id) {
         return {
           needs_login: false,
           morning_done: false,
@@ -302,6 +345,8 @@
             morning_done: false,
             evening_done: false,
             api_error: true,
+            cohort_status: selection.cohort_status,
+            cohort_end_date: selection.cohort_end_date,
           };
         }
         if (data.needs_login) {
