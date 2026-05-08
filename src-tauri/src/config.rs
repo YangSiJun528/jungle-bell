@@ -57,6 +57,9 @@ pub struct Config {
     /// 사용 통계 전송 여부
     #[serde(default = "default_true")]
     pub usage_analytics_enabled: bool,
+    /// 트레이 메뉴 D-Day 표시 여부
+    #[serde(default = "default_true")]
+    pub show_dday: bool,
     /// 환영 알림 발송 완료 여부
     /// 기존 config에 필드가 없으면 false → 신규/기존 사용자 모두 한 번 알림 수신.
     #[serde(default)]
@@ -248,6 +251,7 @@ impl Default for Config {
             notification_end: TimeOfDay { hour: 4, minute: 0 },
             debug_mode: false,
             usage_analytics_enabled: true,
+            show_dday: true,
             welcome_notification_sent: false,
             onboarding_completed: false,
             last_version: None,
@@ -454,6 +458,11 @@ mod tests {
         assert_eq!(config.notification_end.minute, 0);
         assert_eq!(config.start_notification_interval_mins, 1);
         assert_eq!(config.end_notification_interval_mins, 30);
+    }
+
+    #[test]
+    fn dday_표시는_기본적으로_켜져있다() {
+        assert!(Config::default().show_dday);
     }
 
     #[test]
