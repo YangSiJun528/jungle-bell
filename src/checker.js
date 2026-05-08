@@ -12,8 +12,8 @@
 //
 // GET /api/v2/me/cohorts
 /**
- * @typedef {{ id: string, startDate: string }} Cohort
- * 사용 필드: id, startDate (ISO 8601)
+ * @typedef {{ id: string, isActive: boolean, startDate: string, endDate: string|null }} Cohort
+ * 사용 필드: id, isActive, startDate, endDate (ISO 8601 또는 YYYY-MM-DD)
  */
 //
 // GET /api/v2/me/cohorts/{cohortId}/attendance/today
@@ -25,7 +25,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 (function () {
-  var cachedCohortId = null;
+  var cachedCohortSelection = null;
   var identityReported = false;
   var checkInFlight = false;
 
@@ -36,11 +36,85 @@
   // ─── API 응답 파싱 함수 ──────────────────────────────────────────────────
   // fetch 결과를 앱 내부 표현으로 변환. 외부 API 의존성을 여기에 격리.
 
+  function kstDateStringFromTimestamp(timestamp) {
+    return new Date(timestamp + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  }
+
+  function currentKstDateString() {
+    return kstDateStringFromTimestamp(Date.now());
+  }
+
+  function normalizeDateString(value) {
+    if (!value) return null;
+
+    var text = String(value);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+
+    var match = text.match(/^(\d{4}-\d{2}-\d{2})/);
+    var hasExplicitTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/.test(text);
+    if (match && !hasExplicitTimezone) return match[1];
+
+    var parsed = new Date(text);
+    if (!isNaN(parsed.getTime())) {
+      return kstDateStringFromTimestamp(parsed.getTime());
+    }
+
+    return match ? match[1] : null;
+  }
+
+  function compareCohortDesc(a, b) {
+    if (a.start_date !== b.start_date) return a.start_date < b.start_date ? 1 : -1;
+    if (a.end_date !== b.end_date) return a.end_date < b.end_date ? 1 : -1;
+    return 0;
+  }
+
   /** @param {Cohort[]} cohorts */
-  function parseCohorts(cohorts) {
-    if (!Array.isArray(cohorts) || cohorts.length === 0) return null;
-    cohorts.sort(function (a, b) { return new Date(b.startDate) - new Date(a.startDate); });
-    return cohorts[0].id || null;
+  function parseCohorts(cohorts, today) {
+    if (!Array.isArray(cohorts) || cohorts.length === 0) {
+      return { cohort_id: null, cohort_status: 'none', cohort_end_date: null };
+    }
+
+    var normalized = cohorts
+      .map(function (cohort) {
+        return {
+          id: cohort && cohort.id,
+          is_active: !!(cohort && cohort.isActive === true),
+          start_date: normalizeDateString(cohort && cohort.startDate),
+          end_date: normalizeDateString(cohort && cohort.endDate),
+        };
+      })
+      .filter(function (cohort) {
+        return cohort.id && cohort.start_date && cohort.end_date;
+      });
+
+    var active = normalized
+      .filter(function (cohort) {
+        return cohort.is_active && cohort.start_date <= today && today <= cohort.end_date;
+      })
+      .sort(compareCohortDesc);
+
+    if (active.length > 0) {
+      return {
+        cohort_id: active[0].id,
+        cohort_status: 'active',
+        cohort_end_date: active[0].end_date,
+      };
+    }
+
+    var ended = normalized
+      .filter(function (cohort) {
+        return cohort.end_date < today;
+      })
+      .sort(function (a, b) {
+        if (a.end_date !== b.end_date) return a.end_date < b.end_date ? 1 : -1;
+        return compareCohortDesc(a, b);
+      });
+
+    return {
+      cohort_id: null,
+      cohort_status: ended.length > 0 ? 'ended' : 'none',
+      cohort_end_date: ended.length > 0 ? ended[0].end_date : null,
+    };
   }
 
   /** @param {AttendanceTodayResponse} data */
@@ -84,42 +158,46 @@
       });
   }
 
-  // /api/v2/me/cohorts에서 cohort 목록을 가져와
-  // startDate가 가장 최신인 cohort의 ID를 반환.
-  function fetchCohortId() {
+  // /api/v2/me/cohorts에서 현재 날짜 기준 진행 중인 cohort를 선택한다.
+  function fetchCohortSelection() {
     var url = 'https://jungle-lms.krafton.com/api/v2/me/cohorts';
-    jsLog('debug', 'fetchCohortId: GET ' + url);
+    jsLog('debug', 'fetchCohortSelection: GET ' + url);
     return fetch(url, {
       credentials: 'include',
       headers: { accept: 'application/json' },
     })
       .then(function (res) {
-        jsLog('debug', 'fetchCohortId: response status=' + res.status + ' statusText=' + res.statusText);
+        jsLog('debug', 'fetchCohortSelection: response status=' + res.status + ' statusText=' + res.statusText);
         if (res.status === 401) {
-          jsLog('info', 'fetchCohortId: status=401 (login required)');
-          return null;
+          jsLog('info', 'fetchCohortSelection: status=401 (login required)');
+          return { needs_login: true, cohort_id: null, cohort_status: 'unknown', cohort_end_date: null };
         }
         if (!res.ok) {
-          jsLog('warn', 'fetchCohortId: status=' + res.status);
+          jsLog('warn', 'fetchCohortSelection: status=' + res.status);
           return res.text().then(function (body) {
-            jsLog('debug', 'fetchCohortId: error body=' + body.substring(0, 500));
-            return null;
+            jsLog('debug', 'fetchCohortSelection: error body=' + body.substring(0, 500));
+            return { api_error: true, cohort_id: null, cohort_status: 'unknown', cohort_end_date: null };
           });
         }
         return res.json().then(function (data) {
-          jsLog('debug', 'fetchCohortId: raw response=' + JSON.stringify(data).substring(0, 1000));
+          jsLog('debug', 'fetchCohortSelection: raw response=' + JSON.stringify(data).substring(0, 1000));
           return data;
         });
       })
       .then(function (data) {
-        if (!data) return null;
-        var id = parseCohorts(data);
-        jsLog('debug', 'fetchCohortId: selected cohortId=' + id + ' (total=' + (data.length || 0) + ')');
-        return id;
+        if (!data || data.needs_login || data.api_error) return data;
+        var today = currentKstDateString();
+        var selection = parseCohorts(data, today);
+        selection.fetched_date = today;
+        jsLog('debug', 'fetchCohortSelection: selected cohortId=' + selection.cohort_id +
+          ' status=' + selection.cohort_status +
+          ' endDate=' + selection.cohort_end_date +
+          ' (total=' + (data.length || 0) + ')');
+        return selection;
       })
       .catch(function (e) {
-        jsLog('error', 'fetchCohortId failed: ' + (e.message || e));
-        return null;
+        jsLog('error', 'fetchCohortSelection failed: ' + (e.message || e));
+        return { api_error: true, cohort_id: null, cohort_status: 'unknown', cohort_end_date: null };
       });
   }
 
@@ -170,21 +248,52 @@
         needs_login: true,
         morning_done: false,
         evening_done: false,
+        cohort_status: 'unknown',
+        cohort_end_date: null,
       });
     }
 
-    var cohortPromise = cachedCohortId
-      ? Promise.resolve(cachedCohortId)
-      : fetchCohortId();
+    var today = currentKstDateString();
+    var cohortPromise = cachedCohortSelection && cachedCohortSelection.fetched_date === today
+      ? Promise.resolve(cachedCohortSelection)
+      : fetchCohortSelection();
 
-    return cohortPromise.then(function (cohortId) {
-      if (!cohortId) {
-        return { needs_login: true, morning_done: false, evening_done: false };
+    return cohortPromise.then(function (selection) {
+      if (!selection || selection.api_error) {
+        return {
+          needs_login: false,
+          morning_done: false,
+          evening_done: false,
+          api_error: true,
+        };
       }
-      cachedCohortId = cohortId;
+
+      if (selection.needs_login) {
+        cachedCohortSelection = null;
+        return {
+          needs_login: true,
+          morning_done: false,
+          evening_done: false,
+          cohort_status: 'unknown',
+          cohort_end_date: null,
+        };
+      }
+
+      cachedCohortSelection = selection;
+
+      if (selection.cohort_status !== 'active' || !selection.cohort_id) {
+        return {
+          needs_login: false,
+          morning_done: false,
+          evening_done: false,
+          cohort_status: selection.cohort_status,
+          cohort_end_date: selection.cohort_end_date,
+        };
+      }
+
       reportIdentityOnce();
 
-      return fetchAttendance(cohortId).then(function (data) {
+      return fetchAttendance(selection.cohort_id).then(function (data) {
         if (!data) {
           jsLog('debug', 'checkAttendance: fetchAttendance returned null → api_error');
           // API 오류 — 상태 갱신하지 않도록 표시
@@ -197,14 +306,22 @@
         }
         if (data.needs_login) {
           jsLog('debug', 'checkAttendance: needs_login flag set, clearing cohort cache');
-          cachedCohortId = null;
-          return { needs_login: true, morning_done: false, evening_done: false };
+          cachedCohortSelection = null;
+          return {
+            needs_login: true,
+            morning_done: false,
+            evening_done: false,
+            cohort_status: 'unknown',
+            cohort_end_date: null,
+          };
         }
         jsLog('debug', 'checkAttendance: morning_done=' + data.morning_done + ' evening_done=' + data.evening_done);
         return {
           needs_login: false,
           morning_done: data.morning_done,
           evening_done: data.evening_done,
+          cohort_status: selection.cohort_status,
+          cohort_end_date: selection.cohort_end_date,
         };
       });
     });
@@ -214,6 +331,8 @@
     jsLog('debug', 'result: needs_login=' + result.needs_login +
       ' morning=' + result.morning_done +
       ' evening=' + result.evening_done +
+      ' cohort_status=' + result.cohort_status +
+      ' cohort_end_date=' + result.cohort_end_date +
       (result.api_error ? ' api_error=true' : ''));
     window.__TAURI__.core.invoke('report_attendance_status', {
       status: result,

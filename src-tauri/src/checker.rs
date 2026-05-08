@@ -8,9 +8,9 @@
 use serde::Deserialize;
 use tauri::{Emitter, Manager};
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 
-use crate::state::{self, AppState, DailyPhase};
+use crate::state::{self, AppState, DailyPhase, DdayStatus};
 
 const ATTENDANCE_URL: &str = "https://jungle-lms.krafton.com/check-in";
 
@@ -29,6 +29,50 @@ pub struct AttendanceReport {
     /// API 호출 실패 여부 (true이면 상태 갱신 건너뜀)
     #[serde(default)]
     pub api_error: bool,
+    /// /api/v2/me/cohorts 기준 현재 코호트 상태.
+    #[serde(default)]
+    pub cohort_status: CohortReportStatus,
+    /// 현재 코호트 종료일 (YYYY-MM-DD).
+    #[serde(default)]
+    pub cohort_end_date: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CohortReportStatus {
+    Active,
+    Ended,
+    #[serde(rename = "none")]
+    NoCohort,
+    Unknown,
+}
+
+impl Default for CohortReportStatus {
+    fn default() -> Self {
+        Self::Unknown
+    }
+}
+
+fn parse_report_date(value: &str) -> Option<NaiveDate> {
+    NaiveDate::parse_from_str(value, "%Y-%m-%d").ok()
+}
+
+fn dday_status_from_report(report: &AttendanceReport) -> DdayStatus {
+    if report.needs_login {
+        return DdayStatus::LoginRequired;
+    }
+
+    match report.cohort_status {
+        CohortReportStatus::Active => report
+            .cohort_end_date
+            .as_deref()
+            .and_then(parse_report_date)
+            .map(|end_date| DdayStatus::Active { end_date })
+            .unwrap_or(DdayStatus::NoCohort),
+        CohortReportStatus::Ended => DdayStatus::Ended,
+        CohortReportStatus::NoCohort => DdayStatus::NoCohort,
+        CohortReportStatus::Unknown => DdayStatus::Unknown,
+    }
 }
 
 /// 체커 보고를 공유 앱 상태에 반영.
@@ -37,6 +81,7 @@ pub fn apply_report(state: &mut AppState, report: &AttendanceReport) {
 
     if report.needs_login {
         state.needs_login = true;
+        state.dday_status = DdayStatus::LoginRequired;
         return;
     }
 
@@ -44,6 +89,7 @@ pub fn apply_report(state: &mut AppState, report: &AttendanceReport) {
     state.login_retry_until = None; // 로그인 성공 시 재시도 윈도우 해제
     state.morning_checked = report.morning_done;
     state.evening_checked = report.evening_done;
+    state.dday_status = dday_status_from_report(report);
 }
 
 /// checker WebView에 trigger-check 이벤트를 발송.
@@ -111,6 +157,11 @@ pub(crate) fn process_report(
 
     apply_report(state, report);
 
+    if state.dday_status.suppress_attendance_phase() {
+        state.phase = DailyPhase::Idle;
+        return Some((DailyPhase::Idle, None));
+    }
+
     let (phase, remaining) =
         state::compute_daily_phase(&state.config, now, state.morning_checked, state.evening_checked);
     state.phase = phase;
@@ -145,6 +196,8 @@ mod tests {
             morning_done: false,
             evening_done: false,
             api_error: true,
+            cohort_status: CohortReportStatus::Unknown,
+            cohort_end_date: None,
         };
 
         // when
@@ -164,6 +217,8 @@ mod tests {
             morning_done: false,
             evening_done: false,
             api_error: false,
+            cohort_status: CohortReportStatus::Unknown,
+            cohort_end_date: None,
         };
 
         // when
@@ -175,6 +230,7 @@ mod tests {
         assert_eq!(phase, DailyPhase::NeedStart);
         assert!(remaining.is_some());
         assert!(state.needs_login);
+        assert_eq!(state.dday_status, DdayStatus::LoginRequired);
     }
 
     #[test]
@@ -186,6 +242,8 @@ mod tests {
             morning_done: true,
             evening_done: false,
             api_error: false,
+            cohort_status: CohortReportStatus::Active,
+            cohort_end_date: Some("2026-03-31".into()),
         };
 
         // when: KST 12:00 — 체크인 완료, 체크아웃 전
@@ -196,6 +254,12 @@ mod tests {
         assert_eq!(phase, DailyPhase::Studying);
         assert!(state.morning_checked);
         assert!(!state.evening_checked);
+        assert_eq!(
+            state.dday_status,
+            DdayStatus::Active {
+                end_date: NaiveDate::from_ymd_opt(2026, 3, 31).unwrap()
+            }
+        );
     }
 
     #[test]
@@ -207,6 +271,8 @@ mod tests {
             morning_done: true,
             evening_done: true,
             api_error: false,
+            cohort_status: CohortReportStatus::Active,
+            cohort_end_date: Some("2026-03-31".into()),
         };
 
         // when
@@ -226,6 +292,8 @@ mod tests {
             morning_done: false,
             evening_done: false,
             api_error: false,
+            cohort_status: CohortReportStatus::Active,
+            cohort_end_date: Some("2026-03-31".into()),
         };
 
         // when: KST 11:00 — morning_end(10:00) 지남, 미체크인
@@ -234,5 +302,51 @@ mod tests {
         // then
         let (phase, _) = result.unwrap();
         assert_eq!(phase, DailyPhase::StartOverdue);
+    }
+
+    #[test]
+    fn 진행중인_코호트가_없으면_idle_상태가_된다() {
+        // given
+        let mut state = default_state();
+        let report = AttendanceReport {
+            needs_login: false,
+            morning_done: false,
+            evening_done: false,
+            api_error: false,
+            cohort_status: CohortReportStatus::NoCohort,
+            cohort_end_date: None,
+        };
+
+        // when
+        let result = process_report(&mut state, &report, kst_time(9, 0, 0));
+
+        // then
+        let (phase, remaining) = result.unwrap();
+        assert_eq!(phase, DailyPhase::Idle);
+        assert!(remaining.is_none());
+        assert_eq!(state.dday_status, DdayStatus::NoCohort);
+    }
+
+    #[test]
+    fn 종료된_코호트는_idle_상태가_된다() {
+        // given
+        let mut state = default_state();
+        let report = AttendanceReport {
+            needs_login: false,
+            morning_done: false,
+            evening_done: false,
+            api_error: false,
+            cohort_status: CohortReportStatus::Ended,
+            cohort_end_date: Some("2026-03-01".into()),
+        };
+
+        // when
+        let result = process_report(&mut state, &report, kst_time(9, 0, 0));
+
+        // then
+        let (phase, remaining) = result.unwrap();
+        assert_eq!(phase, DailyPhase::Idle);
+        assert!(remaining.is_none());
+        assert_eq!(state.dday_status, DdayStatus::Ended);
     }
 }
