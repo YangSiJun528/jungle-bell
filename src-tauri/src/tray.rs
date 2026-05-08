@@ -614,6 +614,16 @@ pub fn update_tray_version(app: &tauri::AppHandle, pending_update: Option<String
     };
 }
 
+pub fn update_tray_dday(app: &tauri::AppHandle, dday_status: &DdayStatus) {
+    let dday_text = build_dday_text(dday_status, Utc::now());
+    let tray_state: tauri::State<Arc<TokioMutex<TrayState>>> = app.state();
+    if let Ok(ts) = tray_state.try_lock() {
+        let _ = ts
+            .dday_item
+            .set_text(pad_to_min_width(&dday_text, TRAY_STATUS_MIN_WIDTH));
+    };
+}
+
 /// 트레이 아이콘, 툴팁, 상태/D-Day 메뉴 텍스트 갱신.
 /// 스케줄러(주기적)와 체커(보고 시) 양쪽에서 호출됨.
 pub fn update_tray(
@@ -639,8 +649,6 @@ pub fn update_tray(
         let _ = ts
             .status_item
             .set_text(pad_to_min_width(&status_text, TRAY_STATUS_MIN_WIDTH));
-        let _ = ts
-            .dday_item
-            .set_text(pad_to_min_width(&dday_text, TRAY_STATUS_MIN_WIDTH));
+        let _ = ts.dday_item.set_text(pad_to_min_width(&dday_text, TRAY_STATUS_MIN_WIDTH));
     };
 }

@@ -92,6 +92,13 @@ pub fn apply_report(state: &mut AppState, report: &AttendanceReport) {
     state.dday_status = dday_status_from_report(report);
 }
 
+pub fn apply_dday_from_report(state: &mut AppState, report: &AttendanceReport) {
+    let dday_status = dday_status_from_report(report);
+    if !matches!(dday_status, DdayStatus::Unknown) {
+        state.dday_status = dday_status;
+    }
+}
+
 /// checker WebView에 trigger-check 이벤트를 발송.
 /// JS가 이벤트를 수신하면 API를 조회해
 /// `report_attendance_status` invoke로 반환한다.
@@ -152,6 +159,7 @@ pub(crate) fn process_report(
 ) -> Option<(DailyPhase, Option<i64>)> {
     if report.api_error {
         state.data_loaded = true;
+        apply_dday_from_report(state, report);
         return None;
     }
 
@@ -206,6 +214,32 @@ mod tests {
         // then
         assert!(result.is_none());
         assert!(state.data_loaded);
+    }
+
+    #[test]
+    fn 출석_api_에러여도_코호트_dday는_반영한다() {
+        // given
+        let mut state = default_state();
+        let report = AttendanceReport {
+            needs_login: false,
+            morning_done: false,
+            evening_done: false,
+            api_error: true,
+            cohort_status: CohortReportStatus::Active,
+            cohort_end_date: Some("2026-03-31".into()),
+        };
+
+        // when
+        let result = process_report(&mut state, &report, kst_time(9, 0, 0));
+
+        // then
+        assert!(result.is_none());
+        assert_eq!(
+            state.dday_status,
+            DdayStatus::Active {
+                end_date: NaiveDate::from_ymd_opt(2026, 3, 31).unwrap()
+            }
+        );
     }
 
     #[test]

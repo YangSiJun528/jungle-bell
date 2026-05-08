@@ -71,8 +71,11 @@ pub async fn report_attendance_status(
     let prev_evening = s.evening_checked;
     let prev_needs_login = s.needs_login;
 
-    if let Some((phase, remaining)) = checker::process_report(&mut s, &status, now) {
+    let phase_update = checker::process_report(&mut s, &status, now);
+    if let Some((phase, remaining)) = phase_update {
         tray::update_tray(&app, phase, remaining, s.needs_login, &s.dday_status);
+    } else if status.api_error {
+        tray::update_tray_dday(&app, &s.dday_status);
     }
     let curr_needs_login = s.needs_login;
     let curr_data_loaded = s.data_loaded;
@@ -365,12 +368,19 @@ pub async fn set_show_dday(
     enabled: bool,
 ) -> Result<(), String> {
     log::info!("[settings] D-Day 표시 변경: {}", enabled);
+    let previous = state.lock().await.config.show_dday;
+    if previous == enabled {
+        return Ok(());
+    }
+
+    tray::sync_dday_menu_visibility(&app, enabled).await?;
+
     {
         let mut s = state.lock().await;
         s.config.show_dday = enabled;
         s.config.save();
     }
-    tray::sync_dday_menu_visibility(&app, enabled).await
+    Ok(())
 }
 
 // ── 업데이트 ─────────────────────────────────────────────
