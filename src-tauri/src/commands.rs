@@ -72,7 +72,7 @@ pub async fn report_attendance_status(
     let prev_needs_login = s.needs_login;
 
     if let Some((phase, remaining)) = checker::process_report(&mut s, &status, now) {
-        tray::update_tray(&app, phase, remaining, s.needs_login);
+        tray::update_tray(&app, phase, remaining, s.needs_login, &s.dday_status);
     }
     let curr_needs_login = s.needs_login;
     let curr_data_loaded = s.data_loaded;
@@ -349,6 +349,28 @@ pub async fn set_usage_analytics_enabled(
         analytics::set_user_enabled(enabled);
     }
     Ok(())
+}
+
+/// Tauri 커맨드: 트레이 D-Day 표시 설정 조회.
+#[tauri::command]
+pub async fn get_show_dday(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<bool, String> {
+    Ok(state.lock().await.config.show_dday)
+}
+
+/// Tauri 커맨드: 트레이 D-Day 표시 설정 변경 및 저장.
+#[tauri::command]
+pub async fn set_show_dday(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    enabled: bool,
+) -> Result<(), String> {
+    log::info!("[settings] D-Day 표시 변경: {}", enabled);
+    {
+        let mut s = state.lock().await;
+        s.config.show_dday = enabled;
+        s.config.save();
+    }
+    tray::sync_dday_menu_visibility(&app, enabled).await
 }
 
 // ── 업데이트 ─────────────────────────────────────────────

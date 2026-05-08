@@ -217,6 +217,8 @@ pub fn run() {
             commands::set_debug_mode,
             commands::get_usage_analytics_enabled,
             commands::set_usage_analytics_enabled,
+            commands::get_show_dday,
+            commands::set_show_dday,
             commands::open_log_folder,
             commands::open_onboarding,
             commands::complete_onboarding,

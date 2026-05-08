@@ -223,6 +223,15 @@
                 <button id="open-onboarding-btn" class="link-btn">다시 보기</button>
             </td>
         </tr>
+        <tr>
+            <th>D-Day 표시</th>
+            <td>
+                <label class="toggle">
+                    <input type="checkbox" id="show-dday-toggle"/>
+                    <span class="toggle-slider"></span>
+                </label>
+            </td>
+        </tr>
     </table>
 </div>
 
@@ -298,6 +307,17 @@
 
             document.getElementById('check-update-btn').addEventListener('click', () => {
                 invoke('check_and_notify_update').catch(console.error);
+            });
+
+            const showDdayToggle = document.getElementById('show-dday-toggle');
+            showDdayToggle.checked = await invoke('get_show_dday');
+            showDdayToggle.addEventListener('change', async () => {
+                try {
+                    await invoke('set_show_dday', {enabled: showDdayToggle.checked});
+                } catch (e) {
+                    console.error(e);
+                    showDdayToggle.checked = !showDdayToggle.checked;
+                }
             });
 
             const usageAnalyticsToggle = document.getElementById('usage-analytics-toggle');

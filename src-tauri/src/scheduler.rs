@@ -20,7 +20,7 @@ use tauri_plugin_notification::NotificationExt;
 use crate::attendance_day;
 use crate::checker;
 use crate::config::Config;
-use crate::state::{self, kst, AppState, DailyPhase};
+use crate::state::{self, kst, AppState, DailyPhase, DdayStatus};
 use crate::tray;
 
 /// 액션 필요 시 틱 간격 (초). API 호출 빈도를 줄이기 위해 60초.
@@ -54,7 +54,7 @@ pub(crate) struct TickResult {
     /// 발송할 알림 (제목, 본문). None이면 발송하지 않음.
     pub notification: Option<(&'static str, String)>,
     /// 트레이 갱신 정보. None이면 갱신하지 않음 (data_loaded 전).
-    pub tray_update: Option<(DailyPhase, Option<i64>, bool)>,
+    pub tray_update: Option<(DailyPhase, Option<i64>, bool, DdayStatus)>,
     /// 일일 리셋이 수행되었는지 여부.
     pub daily_reset: bool,
 }
@@ -69,6 +69,11 @@ fn is_phase_actionable(phase: DailyPhase) -> bool {
 fn compute_phase_update(state: &mut AppState, now: DateTime<Utc>) -> Option<(DailyPhase, Option<i64>)> {
     if !state.data_loaded {
         return None;
+    }
+
+    if state.dday_status.suppress_attendance_phase() {
+        state.phase = DailyPhase::Idle;
+        return Some((DailyPhase::Idle, None));
     }
 
     let (phase, remaining) =
@@ -128,8 +133,8 @@ fn expire_login_retry_window(state: &mut AppState, now: DateTime<Utc>) {
 }
 
 fn apply_tick_effects(app_handle: &tauri::AppHandle, phase: DailyPhase, result: &TickResult) -> bool {
-    if let Some((phase, remaining, needs_login)) = result.tray_update {
-        tray::update_tray(app_handle, phase, remaining, needs_login);
+    if let Some((phase, remaining, needs_login, dday_status)) = &result.tray_update {
+        tray::update_tray(app_handle, *phase, *remaining, *needs_login, dday_status);
     }
 
     if let Some((title, body)) = &result.notification {
@@ -400,7 +405,8 @@ pub(crate) fn compute_tick(state: &mut AppState, now: DateTime<Utc>, attendance_
     let phase_update = compute_phase_update(state, now);
     let remaining = phase_update.map(|(_, remaining)| remaining).unwrap_or(None);
     let phase_changed = phase_update.map(|(phase, _)| phase != previous_phase).unwrap_or(false);
-    let tray_update = phase_update.map(|(phase, remaining)| (phase, remaining, state.needs_login));
+    let tray_update =
+        phase_update.map(|(phase, remaining)| (phase, remaining, state.needs_login, state.dday_status.clone()));
     let notification = phase_update
         .and_then(|(phase, remaining)| compute_notification_for_phase(state, now, kst_now, phase, remaining));
 
@@ -1019,6 +1025,22 @@ mod tests {
 
         // then
         assert_eq!(state.phase, DailyPhase::Studying);
+        assert!(result.notification.is_none());
+        assert!(result.tray_update.is_some());
+    }
+
+    #[test]
+    fn 진행중인_코호트가_없으면_idle로_처리하고_알림을_보내지_않는다() {
+        // given
+        let mut state = default_state();
+        state.data_loaded = true;
+        state.dday_status = DdayStatus::NoCohort;
+
+        // when
+        let result = compute_tick(&mut state, kst_utc(9, 30, 0), false);
+
+        // then
+        assert_eq!(state.phase, DailyPhase::Idle);
         assert!(result.notification.is_none());
         assert!(result.tray_update.is_some());
     }

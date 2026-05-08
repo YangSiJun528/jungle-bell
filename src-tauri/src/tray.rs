@@ -8,10 +8,12 @@
 use std::sync::Arc;
 use tokio::sync::Mutex as TokioMutex;
 
-use crate::state::{AppState, DailyPhase};
+use chrono::{DateTime, NaiveDate, Utc};
+
+use crate::state::{AppState, DailyPhase, DdayStatus};
 use tauri::{
     image::Image,
-    menu::{MenuBuilder, MenuItem, MenuItemBuilder},
+    menu::{Menu, MenuBuilder, MenuItem, MenuItemBuilder},
     tray::TrayIconBuilder,
     Manager, WebviewWindow,
 };
@@ -26,6 +28,7 @@ const LOGIN_RETRY_WINDOW_SECS: u64 = 180;
 /// 트레이 메뉴 최소 가로 폭(문자 수). 상태 아이템 텍스트에 non-breaking space로
 /// 패딩을 채워 메뉴 전체 폭을 보장한다.
 const TRAY_STATUS_MIN_WIDTH: usize = 26;
+const DDAY_MENU_POSITION: usize = 1;
 
 // 트레이 아이콘 — 컴파일 시 include_bytes!로 바이너리에 포함
 const ICON_DEFAULT: &[u8] = include_bytes!("../icons/tray-white.png");
@@ -35,8 +38,11 @@ const ICON_WARNING: &[u8] = include_bytes!("../icons/tray-orange.png");
 /// 상태 메뉴 아이템 참조 보관용. 텍스트 동적 갱신에 사용.
 /// Tauri managed state로 저장: `Arc<TokioMutex<TrayState>>`.
 pub struct TrayState {
+    pub menu: Menu<tauri::Wry>,
     pub status_item: MenuItem<tauri::Wry>,
+    pub dday_item: MenuItem<tauri::Wry>,
     pub version_item: MenuItem<tauri::Wry>,
+    pub dday_visible: bool,
 }
 
 /// 상태에 따라 트레이 아이콘 선택.
@@ -100,6 +106,28 @@ fn build_status_text(phase: DailyPhase, remaining: Option<i64>, needs_login: boo
 fn build_tooltip(phase: DailyPhase, remaining: Option<i64>, needs_login: bool) -> String {
     let status = build_status_text(phase, remaining, needs_login);
     format!("Jungle Bell - {}", status)
+}
+
+fn build_dday_text_for_date(status: &DdayStatus, today: NaiveDate) -> String {
+    match status {
+        DdayStatus::Unknown => "D-day 확인 중...".to_string(),
+        DdayStatus::LoginRequired => "로그인 후 D-day 표시".to_string(),
+        DdayStatus::Ended | DdayStatus::NoCohort => "진행 중인 코스 없음".to_string(),
+        DdayStatus::Active { end_date } => {
+            let days = end_date.signed_duration_since(today).num_days();
+            if days > 0 {
+                format!("수료까지 D-{}", days)
+            } else if days == 0 {
+                "수료 D-Day".to_string()
+            } else {
+                "진행 중인 코스 없음".to_string()
+            }
+        }
+    }
+}
+
+fn build_dday_text(status: &DdayStatus, now: DateTime<Utc>) -> String {
+    build_dday_text_for_date(status, now.with_timezone(&crate::state::kst()).date_naive())
 }
 
 /// 문자열 뒤에 non-breaking space(U+00A0)를 채워 최소 폭을 보장.
@@ -261,8 +289,17 @@ fn handle_menu_event(app: &tauri::AppHandle, event_id: &str) {
 
 /// 시스템 트레이 생성: 아이콘, 메뉴, 이벤트 핸들러 설정.
 pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    let show_dday = {
+        let state: tauri::State<Arc<TokioMutex<AppState>>> = app.state();
+        state.try_lock().map(|s| s.config.show_dday).unwrap_or(true)
+    };
+
     // 전체에 다 pad_to_min_width해도 되지만, 항상 띄워지는거 하나만 있어도 괜찮음.
     let status_item = MenuItemBuilder::with_id("status", pad_to_min_width("로딩 중...", TRAY_STATUS_MIN_WIDTH))
+        .enabled(false)
+        .build(app)?;
+
+    let dday_item = MenuItemBuilder::with_id("dday", pad_to_min_width("D-day 확인 중...", TRAY_STATUS_MIN_WIDTH))
         .enabled(false)
         .build(app)?;
 
@@ -281,8 +318,12 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     let quit = MenuItemBuilder::with_id("quit", "종료").build(app)?;
 
-    let menu = MenuBuilder::new(app)
-        .item(&status_item)
+    let mut menu_builder = MenuBuilder::new(app).item(&status_item);
+    if show_dday {
+        menu_builder = menu_builder.item(&dday_item);
+    }
+
+    let menu = menu_builder
         .item(&open_page)
         .separator()
         .item(&meal_plan)
@@ -295,8 +336,11 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     // 상태 아이템을 Tauri managed state에 저장해서 update_tray()에서 접근 가능하게 함.
     let tray_state = Arc::new(TokioMutex::new(TrayState {
+        menu: menu.clone(),
         status_item: status_item.clone(),
+        dday_item: dday_item.clone(),
         version_item: version_item.clone(),
+        dday_visible: show_dday,
     }));
     app.manage(tray_state);
 
@@ -442,6 +486,62 @@ mod tests {
         assert_eq!(build_status_text(DailyPhase::Complete, None, false), "오늘 출석 완료");
     }
 
+    // --- build_dday_text ---
+
+    #[test]
+    fn dday_종료전_남은일수를_표시한다() {
+        let today = NaiveDate::from_ymd_opt(2026, 3, 17).unwrap();
+        let status = DdayStatus::Active {
+            end_date: NaiveDate::from_ymd_opt(2026, 3, 31).unwrap(),
+        };
+        assert_eq!(build_dday_text_for_date(&status, today), "수료까지 D-14");
+    }
+
+    #[test]
+    fn dday_종료당일을_표시한다() {
+        let today = NaiveDate::from_ymd_opt(2026, 3, 31).unwrap();
+        let status = DdayStatus::Active {
+            end_date: NaiveDate::from_ymd_opt(2026, 3, 31).unwrap(),
+        };
+        assert_eq!(build_dday_text_for_date(&status, today), "수료 D-Day");
+    }
+
+    #[test]
+    fn dday_종료후에는_기본문구를_표시한다() {
+        let today = NaiveDate::from_ymd_opt(2026, 4, 1).unwrap();
+        let status = DdayStatus::Active {
+            end_date: NaiveDate::from_ymd_opt(2026, 3, 31).unwrap(),
+        };
+        assert_eq!(build_dday_text_for_date(&status, today), "진행 중인 코스 없음");
+    }
+
+    #[test]
+    fn dday_로그인필요를_표시한다() {
+        let today = NaiveDate::from_ymd_opt(2026, 3, 17).unwrap();
+        assert_eq!(
+            build_dday_text_for_date(&DdayStatus::LoginRequired, today),
+            "로그인 후 D-day 표시"
+        );
+    }
+
+    #[test]
+    fn dday_코호트없음을_표시한다() {
+        let today = NaiveDate::from_ymd_opt(2026, 3, 17).unwrap();
+        assert_eq!(
+            build_dday_text_for_date(&DdayStatus::NoCohort, today),
+            "진행 중인 코스 없음"
+        );
+    }
+
+    #[test]
+    fn dday_로딩중을_표시한다() {
+        let today = NaiveDate::from_ymd_opt(2026, 3, 17).unwrap();
+        assert_eq!(
+            build_dday_text_for_date(&DdayStatus::Unknown, today),
+            "D-day 확인 중..."
+        );
+    }
+
     // --- build_tooltip ---
 
     #[test]
@@ -474,6 +574,28 @@ mod tests {
     }
 }
 
+pub async fn sync_dday_menu_visibility(app: &tauri::AppHandle, visible: bool) -> Result<(), String> {
+    let tray_state: tauri::State<Arc<TokioMutex<TrayState>>> = app.state();
+    let mut ts = tray_state.lock().await;
+    if visible == ts.dday_visible {
+        return Ok(());
+    }
+
+    let result = if visible {
+        ts.menu.insert(&ts.dday_item, DDAY_MENU_POSITION)
+    } else {
+        ts.menu.remove(&ts.dday_item)
+    };
+
+    if let Err(e) = result {
+        log::warn!("[tray] D-day 메뉴 표시 상태 변경 실패: {}", e);
+        return Err(e.to_string());
+    }
+
+    ts.dday_visible = visible;
+    Ok(())
+}
+
 /// 트레이 버전 메뉴 아이템 갱신.
 ///
 /// - `pending_update` = Some(version): "v{current} (업데이트 가능)" — 클릭 가능
@@ -492,10 +614,17 @@ pub fn update_tray_version(app: &tauri::AppHandle, pending_update: Option<String
     };
 }
 
-/// 트레이 아이콘, 툴팁, 상태 메뉴 텍스트 갱신.
+/// 트레이 아이콘, 툴팁, 상태/D-Day 메뉴 텍스트 갱신.
 /// 스케줄러(주기적)와 체커(보고 시) 양쪽에서 호출됨.
-pub fn update_tray(app: &tauri::AppHandle, phase: DailyPhase, remaining: Option<i64>, needs_login: bool) {
+pub fn update_tray(
+    app: &tauri::AppHandle,
+    phase: DailyPhase,
+    remaining: Option<i64>,
+    needs_login: bool,
+    dday_status: &DdayStatus,
+) {
     let status_text = build_status_text(phase, remaining, needs_login);
+    let dday_text = build_dday_text(dday_status, Utc::now());
     let tooltip = build_tooltip(phase, remaining, needs_login);
 
     if let Some(tray) = app.tray_by_id("main-tray") {
@@ -510,5 +639,8 @@ pub fn update_tray(app: &tauri::AppHandle, phase: DailyPhase, remaining: Option<
         let _ = ts
             .status_item
             .set_text(pad_to_min_width(&status_text, TRAY_STATUS_MIN_WIDTH));
+        let _ = ts
+            .dday_item
+            .set_text(pad_to_min_width(&dday_text, TRAY_STATUS_MIN_WIDTH));
     };
 }
