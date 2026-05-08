@@ -126,7 +126,10 @@ pub fn refresh_webview(app: &tauri::AppHandle, reason: &str) -> bool {
 
     let target = ATTENDANCE_URL.parse().unwrap();
     let current = checker.url().ok();
-    let result = if current.as_ref().is_some_and(|url| same_url_without_trailing_slash(url.as_str(), ATTENDANCE_URL)) {
+    let result = if current
+        .as_ref()
+        .is_some_and(|url| same_url_without_trailing_slash(url.as_str(), ATTENDANCE_URL))
+    {
         log::info!("[checker] webview reloaded ({})", reason);
         checker.reload()
     } else {
@@ -179,8 +182,8 @@ pub(crate) fn process_report(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{FixedOffset, TimeZone};
     use crate::config::Config;
+    use chrono::{FixedOffset, TimeZone};
 
     /// KST 시각을 UTC DateTime으로 변환하는 헬퍼.
     fn kst_time(h: u32, m: u32, s: u32) -> DateTime<Utc> {

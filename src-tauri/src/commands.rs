@@ -419,9 +419,7 @@ pub async fn open_onboarding(app: tauri::AppHandle) {
 
 /// Tauri 커맨드: 온보딩 완료 상태를 저장한다.
 #[tauri::command]
-pub async fn complete_onboarding(
-    state: tauri::State<'_, Arc<Mutex<AppState>>>,
-) -> Result<(), String> {
+pub async fn complete_onboarding(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<(), String> {
     let was_completed = {
         let mut state = state.lock().await;
         let was_completed = state.config.onboarding_completed;

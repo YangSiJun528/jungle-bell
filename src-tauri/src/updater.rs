@@ -46,7 +46,9 @@ pub(crate) async fn prompt_and_install_update(app: tauri::AppHandle, silent: boo
                 });
             if rx.await.unwrap_or(false) {
                 app.dialog()
-                    .message("업데이트를 다운로드 중입니다.\n완료될 때까지 앱을 종료하지 마세요. (이 창은 닫아도 됩니다.)")
+                    .message(
+                        "업데이트를 다운로드 중입니다.\n완료될 때까지 앱을 종료하지 마세요. (이 창은 닫아도 됩니다.)",
+                    )
                     .title("업데이트 중")
                     .show(|_| {});
                 match update.download_and_install(|_, _| {}, || {}).await {

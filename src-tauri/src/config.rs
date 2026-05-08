@@ -151,9 +151,7 @@ impl Config {
                         if !had_onboarding_completed {
                             config.onboarding_completed = true;
                             changed = true;
-                            log::info!(
-                                "[config] 기존 설정 파일에 온보딩 필드가 없어 완료 상태로 마이그레이션"
-                            );
+                            log::info!("[config] 기존 설정 파일에 온보딩 필드가 없어 완료 상태로 마이그레이션");
                         }
                         if config.normalize_loaded_values() {
                             changed = true;
@@ -467,7 +465,10 @@ mod tests {
 
     #[test]
     fn config_data_has_field_detects_existing_onboarding_flag() {
-        assert!(config_data_has_field(r#"{"onboarding_completed":false}"#, "onboarding_completed"));
+        assert!(config_data_has_field(
+            r#"{"onboarding_completed":false}"#,
+            "onboarding_completed"
+        ));
         assert!(!config_data_has_field(r#"{"auto_start":true}"#, "onboarding_completed"));
         assert!(!config_data_has_field("not json", "onboarding_completed"));
     }

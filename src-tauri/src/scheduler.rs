@@ -162,7 +162,11 @@ fn tick_delayed(previous_tick: DateTime<Utc>, expected_interval_secs: u64, now: 
     (elapsed > threshold).then_some(elapsed)
 }
 
-fn refresh_checker_after_delayed_tick(app_handle: &tauri::AppHandle, elapsed_secs: i64, expected_interval_secs: u64) -> bool {
+fn refresh_checker_after_delayed_tick(
+    app_handle: &tauri::AppHandle,
+    elapsed_secs: i64,
+    expected_interval_secs: u64,
+) -> bool {
     log::info!(
         "[scheduler] delayed tick detected: elapsed={}s expected={}s",
         elapsed_secs,
@@ -468,7 +472,9 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
             let now = Utc::now();
             let delayed_tick = previous_tick
                 .zip(previous_interval_secs)
-                .and_then(|(previous_tick, interval)| tick_delayed(previous_tick, interval, now).map(|elapsed| (elapsed, interval)));
+                .and_then(|(previous_tick, interval)| {
+                    tick_delayed(previous_tick, interval, now).map(|elapsed| (elapsed, interval))
+                });
 
             if let Some((elapsed, interval)) = delayed_tick {
                 if refresh_checker_after_delayed_tick(&app_handle, elapsed, interval) {

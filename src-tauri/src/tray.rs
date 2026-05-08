@@ -649,6 +649,8 @@ pub fn update_tray(
         let _ = ts
             .status_item
             .set_text(pad_to_min_width(&status_text, TRAY_STATUS_MIN_WIDTH));
-        let _ = ts.dday_item.set_text(pad_to_min_width(&dday_text, TRAY_STATUS_MIN_WIDTH));
+        let _ = ts
+            .dday_item
+            .set_text(pad_to_min_width(&dday_text, TRAY_STATUS_MIN_WIDTH));
     };
 }

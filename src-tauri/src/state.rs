@@ -143,7 +143,11 @@ pub fn compute_daily_phase(
             if remaining_to_goal <= 0 {
                 // 10분 유예 구간 (morning_end ~ morning_end+10분)
                 let grace_remaining = goal_secs + 600 - now_secs;
-                let rem = if grace_remaining > 0 { Some(grace_remaining) } else { None };
+                let rem = if grace_remaining > 0 {
+                    Some(grace_remaining)
+                } else {
+                    None
+                };
                 return (DailyPhase::StartOverdue, rem);
             }
 
