@@ -1,0 +1,4 @@
+interface:
+  display_name: "Tauri"
+  short_description: "Secure Tauri desktop app guidance"
+  default_prompt: "Use $tauri to implement or review a secure Tauri desktop feature."
