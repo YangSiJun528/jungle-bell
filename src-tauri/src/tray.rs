@@ -37,7 +37,7 @@ const ICON_ALERT: &[u8] = include_bytes!("../icons/tray-red.png");
 const ICON_WARNING: &[u8] = include_bytes!("../icons/tray-orange.png");
 
 #[cfg(target_os = "macos")]
-const FOREGROUND_WINDOW_LABELS: [&str; 3] = ["attendance", "settings", "onboarding"];
+const FOREGROUND_WINDOW_LABELS: [&str; 4] = ["attendance", "settings", "onboarding", "meal_plan"];
 
 /// 상태 메뉴 아이템 참조 보관용. 텍스트 동적 갱신에 사용.
 /// Tauri managed state로 저장: `Arc<TokioMutex<TrayState>>`.
@@ -273,6 +273,41 @@ pub fn open_attendance_window(app: &tauri::AppHandle) {
     }
 }
 
+fn build_meal_plan_window(app: &tauri::AppHandle) {
+    show_foreground_app(app);
+    if let Ok(window) = tauri::WebviewWindowBuilder::new(
+        app,
+        "meal_plan",
+        tauri::WebviewUrl::External(MEAL_PLAN_URL.parse().unwrap()),
+    )
+    .title("식단표")
+    .inner_size(560.0, 820.0)
+    .resizable(true)
+    .focused(true)
+    .build()
+    {
+        focus_window(&window);
+        let app_handle = app.clone();
+        window.on_window_event(move |event| {
+            if let tauri::WindowEvent::Destroyed = event {
+                sync_foreground_app_visibility_soon(app_handle.clone());
+            }
+        });
+    }
+}
+
+fn open_meal_plan_window(app: &tauri::AppHandle) {
+    log::info!("[tray] meal plan window opened");
+    crate::analytics::track_meal_plan_opened();
+
+    if let Some(window) = app.get_webview_window("meal_plan") {
+        show_foreground_app(app);
+        focus_window(&window);
+    } else {
+        build_meal_plan_window(app);
+    }
+}
+
 fn build_settings_window(app: &tauri::AppHandle) {
     show_foreground_app(app);
     if let Ok(window) = tauri::WebviewWindowBuilder::new(app, "settings", tauri::WebviewUrl::App("index.html".into()))
@@ -352,10 +387,7 @@ where
 fn handle_menu_event(app: &tauri::AppHandle, event_id: &str) {
     match event_id {
         "open_page" => run_window_task(app, |app| open_attendance_window(&app)),
-        "meal_plan" => {
-            crate::analytics::track_meal_plan_opened();
-            let _ = tauri_plugin_opener::open_url(MEAL_PLAN_URL, None::<&str>);
-        }
+        "meal_plan" => run_window_task(app, |app| open_meal_plan_window(&app)),
         "feedback" => {
             crate::analytics::track_feedback_opened();
             let _ = tauri_plugin_opener::open_url(FEEDBACK_URL, None::<&str>);
