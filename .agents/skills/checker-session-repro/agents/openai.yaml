@@ -1,0 +1,4 @@
+interface:
+  display_name: "Checker Session Repro"
+  short_description: "수동 로그인 없이 checker 세션 재현"
+  default_prompt: "$checker-session-repro를 사용해 jungle-bell checker를 수동 로그인/로그아웃 없이 세션 없음/세션 복구 상태로 반복 재현하고 검증해줘."

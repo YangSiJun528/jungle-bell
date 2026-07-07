@@ -9,8 +9,7 @@
 - 앱: Jungle Bell `v0.3.7-beta.0`
 - 작업 디렉터리: `/Users/sijun-yang/Documents/GitHub/jungle-bell`
 - 로그 파일: `~/Library/Logs/dev.sijun-yang.jungle-bell/Jungle Bell.log`
-- 우선 참고 문서: `docs/guide_checker_session_repro.md`
-- git 상태: `docs/guide_checker_session_repro.md`가 기존 untracked 문서로 존재한다.
+- 우선 참고 절차: `.agents/skills/checker-session-repro/references/session-repro-guide.md`
 
 ## 재현 절차
 
