@@ -109,7 +109,7 @@ pub(crate) async fn auto_install_update(app: tauri::AppHandle) {
                 .notification()
                 .builder()
                 .title("Jungle Bell 업데이트")
-                .body(&format!("v{}로 업데이트합니다. 잠시 후 재시작됩니다.", version))
+                .body(format!("v{}로 업데이트합니다. 잠시 후 재시작됩니다.", version))
                 .show();
             match update.download_and_install(|_, _| {}, || {}).await {
                 Ok(_) => {

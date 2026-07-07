@@ -37,20 +37,15 @@ pub struct AttendanceReport {
     pub cohort_end_date: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum CohortReportStatus {
     Active,
     Ended,
     #[serde(rename = "none")]
     NoCohort,
+    #[default]
     Unknown,
-}
-
-impl Default for CohortReportStatus {
-    fn default() -> Self {
-        Self::Unknown
-    }
 }
 
 fn parse_report_date(value: &str) -> Option<NaiveDate> {

@@ -263,11 +263,7 @@ fn normalize_notification_start(time: &mut TimeOfDay) -> bool {
     let original_hour = time.hour;
     let original_minute = time.minute;
 
-    if time.hour < 4 {
-        time.hour = 4;
-    } else if time.hour > 9 {
-        time.hour = 9;
-    }
+    time.hour = time.hour.clamp(4, 9);
     time.minute = 0;
 
     let changed = time.hour != original_hour || time.minute != original_minute;

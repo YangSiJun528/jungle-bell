@@ -9,7 +9,7 @@ pub fn calendar_date_string(kst_now: DateTime<FixedOffset>) -> String {
 
 /// 자정~morning_start 사이는 전날 출석일로 간주한다.
 pub fn effective_attendance_date(config: &Config, kst_now: DateTime<FixedOffset>) -> String {
-    if kst_now.hour() < config.morning_start.hour as u32 {
+    if kst_now.hour() < config.morning_start.hour {
         return calendar_date_string(kst_now - Duration::days(1));
     }
 
