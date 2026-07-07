@@ -1,0 +1,4 @@
+interface:
+  display_name: "Bump Version"
+  short_description: "Bump jungle-bell versions consistently"
+  default_prompt: "Use $bump-version to bump jungle-bell to the requested version."

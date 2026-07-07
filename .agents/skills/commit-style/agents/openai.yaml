@@ -1,0 +1,4 @@
+interface:
+  display_name: "Commit Style"
+  short_description: "Draft Korean Conventional Commit messages"
+  default_prompt: "Use $commit-style to commit the current jungle-bell changes."

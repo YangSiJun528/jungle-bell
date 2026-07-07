@@ -1,0 +1,4 @@
+interface:
+  display_name: "Release"
+  short_description: "Create jungle-bell GitHub releases"
+  default_prompt: "Use $release to create a jungle-bell GitHub release from the current version."
