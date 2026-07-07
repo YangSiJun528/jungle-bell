@@ -236,6 +236,7 @@ pub fn refresh_login_status(app_handle: &tauri::AppHandle) {
 }
 
 fn build_attendance_window(app: &tauri::AppHandle) {
+    show_foreground_app(app);
     let app_handle = app.clone();
     if let Ok(window) = tauri::WebviewWindowBuilder::new(
         app,
@@ -248,7 +249,7 @@ fn build_attendance_window(app: &tauri::AppHandle) {
     .focused(true)
     .build()
     {
-        show_foreground_app(app);
+        focus_window(&window);
         window.on_window_event(move |event| {
             if let tauri::WindowEvent::Destroyed = event {
                 log::info!("[tray] attendance page closed, reloading checker + activating login retry");
@@ -273,6 +274,7 @@ pub fn open_attendance_window(app: &tauri::AppHandle) {
 }
 
 fn build_settings_window(app: &tauri::AppHandle) {
+    show_foreground_app(app);
     if let Ok(window) = tauri::WebviewWindowBuilder::new(app, "settings", tauri::WebviewUrl::App("index.html".into()))
         .title("설정")
         .inner_size(448.0, 608.0)
@@ -282,7 +284,7 @@ fn build_settings_window(app: &tauri::AppHandle) {
         .focused(true)
         .build()
     {
-        show_foreground_app(app);
+        focus_window(&window);
         let app_handle = app.clone();
         window.on_window_event(move |event| {
             if let tauri::WindowEvent::Destroyed = event {
@@ -293,6 +295,7 @@ fn build_settings_window(app: &tauri::AppHandle) {
 }
 
 fn build_onboarding_window(app: &tauri::AppHandle) {
+    show_foreground_app(app);
     if let Ok(window) =
         tauri::WebviewWindowBuilder::new(app, "onboarding", tauri::WebviewUrl::App("onboarding.html".into()))
             .title("Jungle Bell 시작하기")
@@ -303,7 +306,7 @@ fn build_onboarding_window(app: &tauri::AppHandle) {
             .focused(true)
             .build()
     {
-        show_foreground_app(app);
+        focus_window(&window);
         let app_handle = app.clone();
         window.on_window_event(move |event| {
             if let tauri::WindowEvent::Destroyed = event {
@@ -340,8 +343,10 @@ fn run_window_task<F>(app: &tauri::AppHandle, task: F)
 where
     F: FnOnce(tauri::AppHandle) + Send + 'static,
 {
-    let app = app.clone();
-    std::thread::spawn(move || task(app));
+    let app_handle = app.clone();
+    if let Err(e) = app.run_on_main_thread(move || task(app_handle)) {
+        log::warn!("[tray] window task scheduling failed: {}", e);
+    }
 }
 
 fn handle_menu_event(app: &tauri::AppHandle, event_id: &str) {
