@@ -33,6 +33,12 @@
     window.__TAURI__.core.invoke('log_from_js', { level: level, message: message });
   }
 
+  function reportCheckerReady() {
+    window.__TAURI__.core.invoke('report_checker_ready').catch(function (e) {
+      jsLog('warn', 'report_checker_ready failed: ' + (e.message || e));
+    });
+  }
+
   // ─── API 응답 파싱 함수 ──────────────────────────────────────────────────
   // fetch 결과를 앱 내부 표현으로 변환. 외부 API 의존성을 여기에 격리.
 
@@ -406,6 +412,7 @@
   });
 
   // 초기화 시 즉시 첫 체크 실행 — Rust page-load 이벤트 유실 시에도 초기 상태를 갱신.
+  reportCheckerReady();
   jsLog('info', 'checker.js loaded, running initial check');
   runCheck('initial-load');
 })();

@@ -462,8 +462,8 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(tray_state);
 
     let _tray = TrayIconBuilder::with_id("main-tray")
-        .icon(Image::from_bytes(ICON_WARNING).expect("invalid icon PNG"))
-        .tooltip("Jungle Bell")
+        .icon(Image::from_bytes(ICON_DEFAULT).expect("invalid icon PNG"))
+        .tooltip("Jungle Bell - 로딩 중...")
         .menu(&menu)
         .on_menu_event(move |app, event| handle_menu_event(app, event.id().as_ref()))
         .build(app)?;

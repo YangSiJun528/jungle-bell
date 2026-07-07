@@ -61,6 +61,8 @@ pub async fn report_attendance_status(
 
     let mut s = state.lock().await;
     let now = chrono::Utc::now();
+    let checker_generation = checker::record_checker_report(&mut s);
+    log::debug!("[checker] report received for generation={}", checker_generation);
 
     // 전이 감지를 위해 이전 상태 보존.
     // `was_loaded`가 false인 최초 보고는 "앱 재시작 후 오늘 이미 완료된 출석"일 수 있으므로
@@ -87,6 +89,13 @@ pub async fn report_attendance_status(
         let _ = app.emit("login-status-changed", login_status);
     }
 
+    if !was_loaded {
+        let app_for_task = app.clone();
+        if let Err(e) = app.run_on_main_thread(move || tray::sync_foreground_app_visibility(&app_for_task)) {
+            log::warn!("[checker] foreground visibility sync scheduling failed: {}", e);
+        }
+    }
+
     // 출석 완료 이벤트: false → true 전이 시점에만 한 번 발사한다.
     // 스케줄러의 일일 리셋(자정) 이후 첫 완료 시에도 정상적으로 전이로 감지된다.
     if was_loaded && !status.api_error && !status.needs_login {
@@ -98,6 +107,15 @@ pub async fn report_attendance_status(
         }
     }
 
+    Ok(())
+}
+
+/// Tauri 커맨드: checker.js initialization script가 로드됐음을 수신.
+#[tauri::command]
+pub async fn report_checker_ready(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<(), String> {
+    let mut s = state.lock().await;
+    let generation = checker::record_checker_ready(&mut s);
+    log::info!("[checker] checker.js ready: generation={}", generation);
     Ok(())
 }
 

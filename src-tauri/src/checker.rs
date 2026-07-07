@@ -13,6 +13,7 @@ use chrono::{DateTime, NaiveDate, Utc};
 use crate::state::{self, AppState, DailyPhase, DdayStatus};
 
 const ATTENDANCE_URL: &str = "https://jungle-lms.krafton.com/check-in";
+pub(crate) const CHECKER_NO_REPORT_RECREATE_LIMIT: u32 = 3;
 
 /// checker.js의 API 조회 결과.
 /// JS invoke 호출의 JSON 페이로드에서 역직렬화됨.
@@ -46,6 +47,47 @@ pub enum CohortReportStatus {
     NoCohort,
     #[default]
     Unknown,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CheckerWatchdogAction {
+    Wait,
+    Recreate { attempt: u32 },
+    GiveUp,
+}
+
+pub(crate) fn record_checker_page_load(state: &mut AppState) -> u64 {
+    state.checker_page_load_generation = state.checker_page_load_generation.saturating_add(1);
+    state.checker_page_load_generation
+}
+
+pub(crate) fn record_checker_ready(state: &mut AppState) -> u64 {
+    state.checker_ready_generation = state.checker_page_load_generation;
+    state.checker_ready_generation
+}
+
+pub(crate) fn record_checker_report(state: &mut AppState) -> u64 {
+    state.checker_report_generation = state.checker_page_load_generation;
+    state.checker_no_report_recreates = 0;
+    state.checker_report_generation
+}
+
+pub(crate) fn decide_checker_watchdog_action(state: &AppState, generation: u64) -> CheckerWatchdogAction {
+    if state.checker_page_load_generation != generation || state.checker_report_generation >= generation {
+        return CheckerWatchdogAction::Wait;
+    }
+
+    if state.checker_no_report_recreates >= CHECKER_NO_REPORT_RECREATE_LIMIT {
+        CheckerWatchdogAction::GiveUp
+    } else {
+        CheckerWatchdogAction::Recreate {
+            attempt: state.checker_no_report_recreates + 1,
+        }
+    }
+}
+
+pub(crate) fn record_checker_recreate(state: &mut AppState) {
+    state.checker_no_report_recreates = state.checker_no_report_recreates.saturating_add(1);
 }
 
 fn parse_report_date(value: &str) -> Option<NaiveDate> {
@@ -191,6 +233,66 @@ mod tests {
 
     fn default_state() -> AppState {
         AppState::new(Config::default())
+    }
+
+    #[test]
+    fn checker_page_load_세대가_증가한다() {
+        let mut state = default_state();
+
+        let first = record_checker_page_load(&mut state);
+        let second = record_checker_page_load(&mut state);
+
+        assert_eq!(first, 1);
+        assert_eq!(second, 2);
+        assert_eq!(state.checker_page_load_generation, 2);
+    }
+
+    #[test]
+    fn checker_report가_오면_watchdog은_대기한다() {
+        let mut state = default_state();
+        let generation = record_checker_page_load(&mut state);
+
+        record_checker_report(&mut state);
+
+        assert_eq!(
+            decide_checker_watchdog_action(&state, generation),
+            CheckerWatchdogAction::Wait
+        );
+    }
+
+    #[test]
+    fn checker_report가_없으면_watchdog은_재생성을_요구한다() {
+        let mut state = default_state();
+        let generation = record_checker_page_load(&mut state);
+
+        assert_eq!(
+            decide_checker_watchdog_action(&state, generation),
+            CheckerWatchdogAction::Recreate { attempt: 1 }
+        );
+    }
+
+    #[test]
+    fn 오래된_checker_watchdog은_무시한다() {
+        let mut state = default_state();
+        let stale_generation = record_checker_page_load(&mut state);
+        record_checker_page_load(&mut state);
+
+        assert_eq!(
+            decide_checker_watchdog_action(&state, stale_generation),
+            CheckerWatchdogAction::Wait
+        );
+    }
+
+    #[test]
+    fn checker_재생성_한도에_도달하면_중단한다() {
+        let mut state = default_state();
+        let generation = record_checker_page_load(&mut state);
+        state.checker_no_report_recreates = CHECKER_NO_REPORT_RECREATE_LIMIT;
+
+        assert_eq!(
+            decide_checker_watchdog_action(&state, generation),
+            CheckerWatchdogAction::GiveUp
+        );
     }
 
     #[test]

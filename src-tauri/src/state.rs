@@ -24,6 +24,14 @@ pub struct AppState {
     pub last_reset_day: Option<u32>,
     /// 체커 WebView 마지막 리로드 시각
     pub last_reload: Option<DateTime<Utc>>,
+    /// checker WebView page-load 세대. no-report watchdog이 stale callback을 구분하는 데 사용.
+    pub checker_page_load_generation: u64,
+    /// checker.js initialization script 로드가 확인된 최신 세대.
+    pub checker_ready_generation: u64,
+    /// `report_attendance_status`가 도착한 최신 checker 세대.
+    pub checker_report_generation: u64,
+    /// report 없이 checker WebView를 재생성한 연속 횟수.
+    pub checker_no_report_recreates: u32,
     /// 로그인 재시도 윈도우 마감 시각.
     /// 출석 페이지가 닫힌 후 일정 시간 동안만 로그인 상태를 재확인.
     pub login_retry_until: Option<DateTime<Utc>>,
@@ -45,6 +53,10 @@ impl AppState {
             data_loaded: false,
             last_reset_day: None,
             last_reload: None,
+            checker_page_load_generation: 0,
+            checker_ready_generation: 0,
+            checker_report_generation: 0,
+            checker_no_report_recreates: 0,
             login_retry_until: None,
             last_notification: None,
             pending_update: None,
