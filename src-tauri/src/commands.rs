@@ -61,7 +61,7 @@ pub async fn report_attendance_status(
 
     let mut s = state.lock().await;
     let now = chrono::Utc::now();
-    let checker_generation = checker::record_checker_report(&mut s);
+    let checker_generation = checker::record_checker_report(&mut s, status.api_error);
     log::debug!("[checker] report received for generation={}", checker_generation);
 
     // 전이 감지를 위해 이전 상태 보존.
@@ -74,15 +74,19 @@ pub async fn report_attendance_status(
     let prev_needs_login = s.needs_login;
 
     let phase_update = checker::process_report(&mut s, &status, now);
-    if let Some((phase, remaining)) = phase_update {
-        tray::update_tray(&app, phase, remaining, s.needs_login, &s.dday_status);
-    } else if status.api_error {
-        tray::update_tray_dday(&app, &s.dday_status);
-    }
+    let tray_snapshot = match phase_update {
+        Some((_, remaining)) => Some(s.tray_snapshot(remaining)),
+        None if status.api_error => Some(s.tray_snapshot(None)),
+        None => None,
+    };
     let curr_needs_login = s.needs_login;
     let curr_data_loaded = s.data_loaded;
     let login_status = LoginStatus::from_state(&s);
     drop(s);
+
+    if let Some(snapshot) = tray_snapshot {
+        tray::update_tray(&app, &snapshot);
+    }
 
     // 로그인 상태/초기 로드 상태 전이 시 이벤트 발사 — 온보딩 슬라이드가 ✓ 표시 갱신용으로 listen.
     if prev_needs_login != curr_needs_login || prev_data_loaded != curr_data_loaded {

@@ -10,7 +10,7 @@ use tauri::{Emitter, Manager};
 
 use chrono::{DateTime, NaiveDate, Utc};
 
-use crate::state::{self, AppState, DailyPhase, DdayStatus};
+use crate::state::{self, AppState, CheckerRuntimeStatus, DailyPhase, DdayStatus};
 
 const ATTENDANCE_URL: &str = "https://jungle-lms.krafton.com/check-in";
 pub(crate) const CHECKER_NO_REPORT_RECREATE_LIMIT: u32 = 3;
@@ -57,37 +57,57 @@ pub(crate) enum CheckerWatchdogAction {
 }
 
 pub(crate) fn record_checker_page_load(state: &mut AppState) -> u64 {
-    state.checker_page_load_generation = state.checker_page_load_generation.saturating_add(1);
-    state.checker_page_load_generation
+    state.checker.page_load_generation = state.checker.page_load_generation.saturating_add(1);
+    state.checker.status = CheckerRuntimeStatus::PageLoaded {
+        generation: state.checker.page_load_generation,
+    };
+    state.checker.page_load_generation
 }
 
 pub(crate) fn record_checker_ready(state: &mut AppState) -> u64 {
-    state.checker_ready_generation = state.checker_page_load_generation;
-    state.checker_ready_generation
+    state.checker.ready_generation = state.checker.page_load_generation;
+    state.checker.status = CheckerRuntimeStatus::Ready {
+        generation: state.checker.ready_generation,
+    };
+    state.checker.ready_generation
 }
 
-pub(crate) fn record_checker_report(state: &mut AppState) -> u64 {
-    state.checker_report_generation = state.checker_page_load_generation;
-    state.checker_no_report_recreates = 0;
-    state.checker_report_generation
+pub(crate) fn record_checker_report(state: &mut AppState, api_error: bool) -> u64 {
+    state.checker.report_generation = state.checker.page_load_generation;
+    state.checker.no_report_recreates = 0;
+    state.checker.status = if api_error {
+        CheckerRuntimeStatus::Offline {
+            generation: state.checker.report_generation,
+        }
+    } else {
+        CheckerRuntimeStatus::Healthy {
+            generation: state.checker.report_generation,
+        }
+    };
+    state.checker.report_generation
 }
 
 pub(crate) fn decide_checker_watchdog_action(state: &AppState, generation: u64) -> CheckerWatchdogAction {
-    if state.checker_page_load_generation != generation || state.checker_report_generation >= generation {
+    if state.checker.page_load_generation != generation || state.checker.report_generation >= generation {
         return CheckerWatchdogAction::Wait;
     }
 
-    if state.checker_no_report_recreates >= CHECKER_NO_REPORT_RECREATE_LIMIT {
+    if state.checker.no_report_recreates >= CHECKER_NO_REPORT_RECREATE_LIMIT {
         CheckerWatchdogAction::GiveUp
     } else {
         CheckerWatchdogAction::Recreate {
-            attempt: state.checker_no_report_recreates + 1,
+            attempt: state.checker.no_report_recreates + 1,
         }
     }
 }
 
-pub(crate) fn record_checker_recreate(state: &mut AppState) {
-    state.checker_no_report_recreates = state.checker_no_report_recreates.saturating_add(1);
+pub(crate) fn record_checker_recreate(state: &mut AppState, generation: u64, attempt: u32) {
+    state.checker.no_report_recreates = state.checker.no_report_recreates.saturating_add(1);
+    state.checker.status = CheckerRuntimeStatus::Recreating { generation, attempt };
+}
+
+pub(crate) fn record_checker_give_up(state: &mut AppState, generation: u64) {
+    state.checker.status = CheckerRuntimeStatus::Offline { generation };
 }
 
 fn parse_report_date(value: &str) -> Option<NaiveDate> {
@@ -199,6 +219,9 @@ pub(crate) fn process_report(
 ) -> Option<(DailyPhase, Option<i64>)> {
     if report.api_error {
         state.data_loaded = true;
+        state.checker.status = CheckerRuntimeStatus::Offline {
+            generation: state.checker.report_generation,
+        };
         apply_dday_from_report(state, report);
         return None;
     }
@@ -244,7 +267,8 @@ mod tests {
 
         assert_eq!(first, 1);
         assert_eq!(second, 2);
-        assert_eq!(state.checker_page_load_generation, 2);
+        assert_eq!(state.checker.page_load_generation, 2);
+        assert_eq!(state.checker.status, CheckerRuntimeStatus::PageLoaded { generation: 2 });
     }
 
     #[test]
@@ -252,12 +276,13 @@ mod tests {
         let mut state = default_state();
         let generation = record_checker_page_load(&mut state);
 
-        record_checker_report(&mut state);
+        record_checker_report(&mut state, false);
 
         assert_eq!(
             decide_checker_watchdog_action(&state, generation),
             CheckerWatchdogAction::Wait
         );
+        assert_eq!(state.checker.status, CheckerRuntimeStatus::Healthy { generation });
     }
 
     #[test]
@@ -287,12 +312,36 @@ mod tests {
     fn checker_재생성_한도에_도달하면_중단한다() {
         let mut state = default_state();
         let generation = record_checker_page_load(&mut state);
-        state.checker_no_report_recreates = CHECKER_NO_REPORT_RECREATE_LIMIT;
+        state.checker.no_report_recreates = CHECKER_NO_REPORT_RECREATE_LIMIT;
 
         assert_eq!(
             decide_checker_watchdog_action(&state, generation),
             CheckerWatchdogAction::GiveUp
         );
+    }
+
+    #[test]
+    fn checker_재생성은_상태에_attempt를_남긴다() {
+        let mut state = default_state();
+        let generation = record_checker_page_load(&mut state);
+
+        record_checker_recreate(&mut state, generation, 1);
+
+        assert_eq!(state.checker.no_report_recreates, 1);
+        assert_eq!(
+            state.checker.status,
+            CheckerRuntimeStatus::Recreating { generation, attempt: 1 }
+        );
+    }
+
+    #[test]
+    fn checker_give_up은_offline_상태로_남긴다() {
+        let mut state = default_state();
+        let generation = record_checker_page_load(&mut state);
+
+        record_checker_give_up(&mut state, generation);
+
+        assert_eq!(state.checker.status, CheckerRuntimeStatus::Offline { generation });
     }
 
     #[test]

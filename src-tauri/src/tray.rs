@@ -1,7 +1,8 @@
 //! 시스템 트레이 모듈 — 아이콘, 메뉴, 툴팁, 메뉴 이벤트 처리.
 //!
 //! 트레이 아이콘은 현재 상태에 따라 색상이 변경됨:
-//!   - 흰색 (기본): Idle, Studying, Complete
+//!   - 회색 (오프라인/확인 중): checker 미보고, 복구 중, 확인 불가
+//!   - 흰색 (정상): Idle, Studying, Complete
 //!   - 오렌지 (경고): 로그인 필요
 //!   - 빨간색 (긴급): NeedStart, StartOverdue, NeedEnd
 
@@ -11,7 +12,7 @@ use tokio::sync::Mutex as TokioMutex;
 
 use chrono::{DateTime, NaiveDate, Utc};
 
-use crate::state::{AppState, DailyPhase, DdayStatus};
+use crate::state::{AppState, CheckerRuntimeStatus, DailyPhase, DdayStatus, TraySnapshot};
 use tauri::{
     image::Image,
     menu::{Menu, MenuBuilder, MenuItem, MenuItemBuilder},
@@ -32,7 +33,8 @@ const TRAY_STATUS_MIN_WIDTH: usize = 26;
 const DDAY_MENU_POSITION: usize = 1;
 
 // 트레이 아이콘 — 컴파일 시 include_bytes!로 바이너리에 포함
-const ICON_DEFAULT: &[u8] = include_bytes!("../icons/tray-white.png");
+const ICON_OFFLINE: &[u8] = include_bytes!("../icons/tray-gray.png");
+const ICON_NORMAL: &[u8] = include_bytes!("../icons/tray-white.png");
 const ICON_ALERT: &[u8] = include_bytes!("../icons/tray-red.png");
 const ICON_WARNING: &[u8] = include_bytes!("../icons/tray-orange.png");
 
@@ -49,24 +51,60 @@ pub struct TrayState {
     pub dday_visible: bool,
 }
 
-/// 상태에 따라 트레이 아이콘 선택.
-/// - 오렌지 (경고): 로그인 필요
-/// - 빨간색 (긴급): 출석 액션 필요
-/// - 흰색 (기본): 대기/학습 중/완료
-fn icon_for_phase(phase: DailyPhase, needs_login: bool) -> Image<'static> {
-    let bytes = if needs_login {
-        ICON_WARNING
-    } else {
-        match phase {
-            DailyPhase::NeedStart | DailyPhase::StartOverdue | DailyPhase::NeedEnd => ICON_ALERT,
-            _ => ICON_DEFAULT,
-        }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TrayIconKind {
+    Offline,
+    Normal,
+    Warning,
+    Alert,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct TrayViewModel {
+    icon: TrayIconKind,
+    status_text: String,
+    dday_text: String,
+    tooltip: String,
+}
+
+fn icon_for_kind(kind: TrayIconKind) -> Image<'static> {
+    let bytes = match kind {
+        TrayIconKind::Offline => ICON_OFFLINE,
+        TrayIconKind::Normal => ICON_NORMAL,
+        TrayIconKind::Warning => ICON_WARNING,
+        TrayIconKind::Alert => ICON_ALERT,
     };
     Image::from_bytes(bytes).expect("invalid icon PNG")
 }
 
-/// 트레이 메뉴에 표시할 상태 텍스트 생성.
-fn build_status_text(phase: DailyPhase, remaining: Option<i64>, needs_login: bool) -> String {
+fn icon_kind_for_snapshot(snapshot: &TraySnapshot) -> TrayIconKind {
+    if !snapshot.data_loaded || snapshot.checker_status.is_recovering_or_offline() {
+        return TrayIconKind::Offline;
+    }
+
+    if snapshot.needs_login {
+        return TrayIconKind::Warning;
+    }
+
+    match snapshot.phase {
+        DailyPhase::NeedStart | DailyPhase::StartOverdue | DailyPhase::NeedEnd => TrayIconKind::Alert,
+        _ => TrayIconKind::Normal,
+    }
+}
+
+fn checker_status_text(status: CheckerRuntimeStatus) -> &'static str {
+    match status {
+        CheckerRuntimeStatus::Loading
+        | CheckerRuntimeStatus::PageLoaded { .. }
+        | CheckerRuntimeStatus::Ready { .. } => "상태 확인 중...",
+        CheckerRuntimeStatus::Recreating { .. } => "상태 재확인 중...",
+        CheckerRuntimeStatus::Offline { .. } => "상태 확인 불가",
+        CheckerRuntimeStatus::Healthy { .. } => "대기 중",
+    }
+}
+
+/// 출석 phase 기준 상태 텍스트 생성.
+fn build_attendance_status_text(phase: DailyPhase, remaining: Option<i64>, needs_login: bool) -> String {
     if needs_login {
         return "⚠️ 로그인 필요".to_string();
     }
@@ -106,9 +144,22 @@ fn build_status_text(phase: DailyPhase, remaining: Option<i64>, needs_login: boo
     }
 }
 
+/// 트레이 메뉴에 표시할 상태 텍스트 생성.
+fn build_status_text(snapshot: &TraySnapshot) -> String {
+    if snapshot.checker_status.is_recovering_or_offline() {
+        return checker_status_text(snapshot.checker_status).to_string();
+    }
+
+    if !snapshot.data_loaded {
+        return "상태 확인 중...".to_string();
+    }
+
+    build_attendance_status_text(snapshot.phase, snapshot.remaining, snapshot.needs_login)
+}
+
 /// 툴팁 텍스트 생성 (트레이 아이콘에 마우스 올릴 때 표시).
-fn build_tooltip(phase: DailyPhase, remaining: Option<i64>, needs_login: bool) -> String {
-    let status = build_status_text(phase, remaining, needs_login);
+fn build_tooltip(status_text: &str) -> String {
+    let status = status_text;
     format!("Jungle Bell - {}", status)
 }
 
@@ -132,6 +183,16 @@ fn build_dday_text_for_date(status: &DdayStatus, today: NaiveDate) -> String {
 
 fn build_dday_text(status: &DdayStatus, now: DateTime<Utc>) -> String {
     build_dday_text_for_date(status, now.with_timezone(&crate::state::kst()).date_naive())
+}
+
+fn build_tray_view_model(snapshot: &TraySnapshot, now: DateTime<Utc>) -> TrayViewModel {
+    let status_text = build_status_text(snapshot);
+    TrayViewModel {
+        icon: icon_kind_for_snapshot(snapshot),
+        dday_text: build_dday_text(&snapshot.dday_status, now),
+        tooltip: build_tooltip(&status_text),
+        status_text,
+    }
 }
 
 /// 문자열 뒤에 non-breaking space(U+00A0)를 채워 최소 폭을 보장.
@@ -412,7 +473,7 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // 전체에 다 pad_to_min_width해도 되지만, 항상 띄워지는거 하나만 있어도 괜찮음.
-    let status_item = MenuItemBuilder::with_id("status", pad_to_min_width("로딩 중...", TRAY_STATUS_MIN_WIDTH))
+    let status_item = MenuItemBuilder::with_id("status", pad_to_min_width("상태 확인 중...", TRAY_STATUS_MIN_WIDTH))
         .enabled(false)
         .build(app)?;
 
@@ -462,8 +523,8 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(tray_state);
 
     let _tray = TrayIconBuilder::with_id("main-tray")
-        .icon(Image::from_bytes(ICON_DEFAULT).expect("invalid icon PNG"))
-        .tooltip("Jungle Bell - 로딩 중...")
+        .icon(Image::from_bytes(ICON_OFFLINE).expect("invalid icon PNG"))
+        .tooltip("Jungle Bell - 상태 확인 중...")
         .menu(&menu)
         .on_menu_event(move |app, event| handle_menu_event(app, event.id().as_ref()))
         .build(app)?;
@@ -475,132 +536,114 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 mod tests {
     use super::*;
 
-    // --- build_status_text ---
-
-    #[test]
-    fn 로그인_필요시_로그인_메시지를_표시한다() {
-        assert_eq!(build_status_text(DailyPhase::Idle, None, true), "⚠️ 로그인 필요");
+    fn snapshot(
+        phase: DailyPhase,
+        remaining: Option<i64>,
+        data_loaded: bool,
+        needs_login: bool,
+        checker_status: CheckerRuntimeStatus,
+    ) -> TraySnapshot {
+        TraySnapshot {
+            phase,
+            remaining,
+            dday_status: DdayStatus::Unknown,
+            data_loaded,
+            needs_login,
+            checker_status,
+        }
     }
 
+    fn healthy_snapshot(phase: DailyPhase, remaining: Option<i64>, needs_login: bool) -> TraySnapshot {
+        snapshot(
+            phase,
+            remaining,
+            true,
+            needs_login,
+            CheckerRuntimeStatus::Healthy { generation: 1 },
+        )
+    }
+
+    // --- TrayViewModel ---
+
     #[test]
-    fn 로그인_필요시_phase와_무관하게_로그인_메시지를_표시한다() {
-        assert_eq!(
-            build_status_text(DailyPhase::NeedStart, Some(3600), true),
-            "⚠️ 로그인 필요"
+    fn 데이터_미로드는_회색_확인중으로_표시한다() {
+        let view = build_tray_view_model(
+            &snapshot(DailyPhase::Idle, None, false, false, CheckerRuntimeStatus::Loading),
+            Utc::now(),
         );
+
+        assert_eq!(view.icon, TrayIconKind::Offline);
+        assert_eq!(view.status_text, "상태 확인 중...");
+        assert_eq!(view.tooltip, "Jungle Bell - 상태 확인 중...");
     }
 
     #[test]
-    fn 대기중_상태를_표시한다() {
-        assert_eq!(build_status_text(DailyPhase::Idle, None, false), "대기 중");
-    }
-
-    #[test]
-    fn 학습시작_시간_분_형식을_표시한다() {
-        assert_eq!(
-            build_status_text(DailyPhase::NeedStart, Some(5400), false),
-            "학습 시작 가능 (1h 30m 남음)"
+    fn checker_재생성중은_회색_재확인으로_표시한다() {
+        let view = build_tray_view_model(
+            &snapshot(
+                DailyPhase::NeedStart,
+                Some(3600),
+                true,
+                false,
+                CheckerRuntimeStatus::Recreating {
+                    generation: 2,
+                    attempt: 1,
+                },
+            ),
+            Utc::now(),
         );
+
+        assert_eq!(view.icon, TrayIconKind::Offline);
+        assert_eq!(view.status_text, "상태 재확인 중...");
     }
 
     #[test]
-    fn 학습시작_분만_표시한다() {
-        assert_eq!(
-            build_status_text(DailyPhase::NeedStart, Some(1800), false),
-            "학습 시작 가능 (30분 남음)"
+    fn checker_offline은_회색_확인불가로_표시한다() {
+        let view = build_tray_view_model(
+            &snapshot(
+                DailyPhase::NeedStart,
+                Some(3600),
+                true,
+                false,
+                CheckerRuntimeStatus::Offline { generation: 2 },
+            ),
+            Utc::now(),
         );
+
+        assert_eq!(view.icon, TrayIconKind::Offline);
+        assert_eq!(view.status_text, "상태 확인 불가");
     }
 
     #[test]
-    fn 학습시작_잔여시간_없으면_시간_생략한다() {
-        assert_eq!(build_status_text(DailyPhase::NeedStart, None, false), "학습 시작 가능");
+    fn 로그인_필요시_주황_로그인_메시지를_표시한다() {
+        let view = build_tray_view_model(&healthy_snapshot(DailyPhase::NeedStart, Some(3600), true), Utc::now());
+
+        assert_eq!(view.icon, TrayIconKind::Warning);
+        assert_eq!(view.status_text, "⚠️ 로그인 필요");
     }
 
     #[test]
-    fn 학습시작_정확히_1시간이면_시간_분_형식을_표시한다() {
-        assert_eq!(
-            build_status_text(DailyPhase::NeedStart, Some(3600), false),
-            "학습 시작 가능 (1h 0m 남음)"
-        );
+    fn 출석_액션_필요시_빨간_아이콘을_표시한다() {
+        let view = build_tray_view_model(&healthy_snapshot(DailyPhase::NeedStart, Some(1800), false), Utc::now());
+
+        assert_eq!(view.icon, TrayIconKind::Alert);
+        assert_eq!(view.status_text, "학습 시작 가능 (30분 남음)");
     }
 
     #[test]
-    fn 학습시작_59초면_1분으로_올림_표시한다() {
-        assert_eq!(
-            build_status_text(DailyPhase::NeedStart, Some(59), false),
-            "학습 시작 가능 (1분 남음)"
-        );
-    }
+    fn 정상_학습중은_흰색_아이콘을_표시한다() {
+        let view = build_tray_view_model(&healthy_snapshot(DailyPhase::Studying, Some(5400), false), Utc::now());
 
-    #[test]
-    fn 지각임박_잔여분을_표시한다() {
-        assert_eq!(
-            build_status_text(DailyPhase::StartOverdue, Some(300), false),
-            "지각 임박 (5분 남음)"
-        );
-    }
-
-    #[test]
-    fn 지각_잔여0이면_지각_메시지를_표시한다() {
-        assert_eq!(
-            build_status_text(DailyPhase::StartOverdue, Some(0), false),
-            "학습 시작 지각!"
-        );
-    }
-
-    #[test]
-    fn 지각_잔여없으면_지각_메시지를_표시한다() {
-        assert_eq!(
-            build_status_text(DailyPhase::StartOverdue, None, false),
-            "학습 시작 지각!"
-        );
-    }
-
-    #[test]
-    fn 학습중_시간_분_형식을_표시한다() {
-        assert_eq!(
-            build_status_text(DailyPhase::Studying, Some(5400), false),
-            "학습 중 (종료 가능까지 1h 30m)"
-        );
-    }
-
-    #[test]
-    fn 학습중_분만_표시한다() {
-        assert_eq!(
-            build_status_text(DailyPhase::Studying, Some(1800), false),
-            "학습 중 (종료 가능까지 30분)"
-        );
-    }
-
-    #[test]
-    fn 학습중_잔여시간_없으면_시간_생략한다() {
-        assert_eq!(build_status_text(DailyPhase::Studying, None, false), "학습 중");
-    }
-
-    #[test]
-    fn 종료가능_시간_분_형식을_표시한다() {
-        assert_eq!(
-            build_status_text(DailyPhase::NeedEnd, Some(5400), false),
-            "학습 종료 가능 (1h 30m 남음)"
-        );
-    }
-
-    #[test]
-    fn 종료가능_분만_표시한다() {
-        assert_eq!(
-            build_status_text(DailyPhase::NeedEnd, Some(1800), false),
-            "학습 종료 가능 (30분 남음)"
-        );
-    }
-
-    #[test]
-    fn 종료가능_잔여시간_없으면_시간_생략한다() {
-        assert_eq!(build_status_text(DailyPhase::NeedEnd, None, false), "학습 종료 가능");
+        assert_eq!(view.icon, TrayIconKind::Normal);
+        assert_eq!(view.status_text, "학습 중 (종료 가능까지 1h 30m)");
     }
 
     #[test]
     fn 출석완료_상태를_표시한다() {
-        assert_eq!(build_status_text(DailyPhase::Complete, None, false), "오늘 출석 완료");
+        let view = build_tray_view_model(&healthy_snapshot(DailyPhase::Complete, None, false), Utc::now());
+
+        assert_eq!(view.icon, TrayIconKind::Normal);
+        assert_eq!(view.status_text, "오늘 출석 완료");
     }
 
     // --- build_dday_text ---
@@ -662,32 +705,8 @@ mod tests {
     // --- build_tooltip ---
 
     #[test]
-    fn 툴팁_대기중을_표시한다() {
-        assert_eq!(build_tooltip(DailyPhase::Idle, None, false), "Jungle Bell - 대기 중");
-    }
-
-    #[test]
-    fn 툴팁_학습시작_잔여시간을_표시한다() {
-        assert_eq!(
-            build_tooltip(DailyPhase::NeedStart, Some(1800), false),
-            "Jungle Bell - 학습 시작 가능 (30분 남음)"
-        );
-    }
-
-    #[test]
-    fn 툴팁_로그인_필요를_표시한다() {
-        assert_eq!(
-            build_tooltip(DailyPhase::Idle, None, true),
-            "Jungle Bell - ⚠️ 로그인 필요"
-        );
-    }
-
-    #[test]
-    fn 툴팁_출석완료를_표시한다() {
-        assert_eq!(
-            build_tooltip(DailyPhase::Complete, None, false),
-            "Jungle Bell - 오늘 출석 완료"
-        );
+    fn 툴팁은_상태문구를_감싼다() {
+        assert_eq!(build_tooltip("오늘 출석 완료"), "Jungle Bell - 오늘 출석 완료");
     }
 }
 
@@ -731,32 +750,14 @@ pub fn update_tray_version(app: &tauri::AppHandle, pending_update: Option<String
     };
 }
 
-pub fn update_tray_dday(app: &tauri::AppHandle, dday_status: &DdayStatus) {
-    let dday_text = build_dday_text(dday_status, Utc::now());
-    let tray_state: tauri::State<Arc<TokioMutex<TrayState>>> = app.state();
-    if let Ok(ts) = tray_state.try_lock() {
-        let _ = ts
-            .dday_item
-            .set_text(pad_to_min_width(&dday_text, TRAY_STATUS_MIN_WIDTH));
-    };
-}
-
 /// 트레이 아이콘, 툴팁, 상태/D-Day 메뉴 텍스트 갱신.
 /// 스케줄러(주기적)와 체커(보고 시) 양쪽에서 호출됨.
-pub fn update_tray(
-    app: &tauri::AppHandle,
-    phase: DailyPhase,
-    remaining: Option<i64>,
-    needs_login: bool,
-    dday_status: &DdayStatus,
-) {
-    let status_text = build_status_text(phase, remaining, needs_login);
-    let dday_text = build_dday_text(dday_status, Utc::now());
-    let tooltip = build_tooltip(phase, remaining, needs_login);
+pub fn update_tray(app: &tauri::AppHandle, snapshot: &TraySnapshot) {
+    let view = build_tray_view_model(snapshot, Utc::now());
 
     if let Some(tray) = app.tray_by_id("main-tray") {
-        let _ = tray.set_icon(Some(icon_for_phase(phase, needs_login)));
-        let _ = tray.set_tooltip(Some(&tooltip));
+        let _ = tray.set_icon(Some(icon_for_kind(view.icon)));
+        let _ = tray.set_tooltip(Some(&view.tooltip));
     }
 
     // 상태 메뉴 아이템 텍스트 갱신.
@@ -765,9 +766,9 @@ pub fn update_tray(
     if let Ok(ts) = tray_state.try_lock() {
         let _ = ts
             .status_item
-            .set_text(pad_to_min_width(&status_text, TRAY_STATUS_MIN_WIDTH));
+            .set_text(pad_to_min_width(&view.status_text, TRAY_STATUS_MIN_WIDTH));
         let _ = ts
             .dday_item
-            .set_text(pad_to_min_width(&dday_text, TRAY_STATUS_MIN_WIDTH));
+            .set_text(pad_to_min_width(&view.dday_text, TRAY_STATUS_MIN_WIDTH));
     };
 }

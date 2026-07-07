@@ -57,6 +57,12 @@ irm https://install.sijun-yang.com/jungle-bell.ps1 | iex
 <table>
   <tr>
     <td align="center" width="58">
+      <img src="docs/files/readme-status-gray.svg" width="52" alt="회색 아이콘">
+    </td>
+    <td><strong>상태 확인 중 / 확인 불가</strong><br>로그인 세션이나 네트워크 상태를 다시 확인하고 있어요.</td>
+  </tr>
+  <tr>
+    <td align="center" width="58">
       <img src="docs/files/readme-status-red.svg" width="52" alt="빨간 아이콘">
     </td>
     <td><strong>출석 시작/종료 가능</strong><br>출석 페이지를 열어 체크인/체크아웃해 주세요.</td>

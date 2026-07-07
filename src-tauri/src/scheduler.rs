@@ -20,7 +20,7 @@ use tauri_plugin_notification::NotificationExt;
 use crate::attendance_day;
 use crate::checker;
 use crate::config::Config;
-use crate::state::{self, kst, AppState, DailyPhase, DdayStatus};
+use crate::state::{self, kst, AppState, DailyPhase, TraySnapshot};
 use crate::tray;
 
 /// 액션 필요 시 틱 간격 (초). API 호출 빈도를 줄이기 위해 60초.
@@ -54,7 +54,7 @@ pub(crate) struct TickResult {
     /// 발송할 알림 (제목, 본문). None이면 발송하지 않음.
     pub notification: Option<(&'static str, String)>,
     /// 트레이 갱신 정보. None이면 갱신하지 않음 (data_loaded 전).
-    pub tray_update: Option<(DailyPhase, Option<i64>, bool, DdayStatus)>,
+    pub tray_update: Option<TraySnapshot>,
     /// 일일 리셋이 수행되었는지 여부.
     pub daily_reset: bool,
 }
@@ -133,8 +133,8 @@ fn expire_login_retry_window(state: &mut AppState, now: DateTime<Utc>) {
 }
 
 fn apply_tick_effects(app_handle: &tauri::AppHandle, phase: DailyPhase, result: &TickResult) -> bool {
-    if let Some((phase, remaining, needs_login, dday_status)) = &result.tray_update {
-        tray::update_tray(app_handle, *phase, *remaining, *needs_login, dday_status);
+    if let Some(snapshot) = &result.tray_update {
+        tray::update_tray(app_handle, snapshot);
     }
 
     if let Some((title, body)) = &result.notification {
@@ -188,7 +188,7 @@ fn log_tick_state(now: DateTime<Utc>, state: &AppState, result: &TickResult) {
             state.phase,
             state.morning_checked,
             state.evening_checked,
-            result.tray_update.as_ref().and_then(|t| t.1),
+            result.tray_update.as_ref().and_then(|snapshot| snapshot.remaining),
             state.needs_login,
         );
     }
@@ -409,8 +409,7 @@ pub(crate) fn compute_tick(state: &mut AppState, now: DateTime<Utc>, attendance_
     let phase_update = compute_phase_update(state, now);
     let remaining = phase_update.map(|(_, remaining)| remaining).unwrap_or(None);
     let phase_changed = phase_update.map(|(phase, _)| phase != previous_phase).unwrap_or(false);
-    let tray_update =
-        phase_update.map(|(phase, remaining)| (phase, remaining, state.needs_login, state.dday_status.clone()));
+    let tray_update = phase_update.map(|(_, remaining)| state.tray_snapshot(remaining));
     let notification = phase_update
         .and_then(|(phase, remaining)| compute_notification_for_phase(state, now, kst_now, phase, remaining));
 
@@ -523,6 +522,7 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
 mod tests {
     use super::*;
     use crate::config::Config;
+    use crate::state::DdayStatus;
     use chrono::TimeZone;
 
     fn kst_dt(h: u32, m: u32, s: u32) -> DateTime<FixedOffset> {

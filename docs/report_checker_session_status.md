@@ -140,7 +140,8 @@ hidden checker WebView의 initialization script가 특정 실행에서 실행되
 - checker page-load 후 7초 안에 해당 세대의 report가 없으면 watchdog이 checker WebView를 `destroy()` 후 재생성한다.
 - watchdog 재생성은 연속 3회까지 수행하고, 이후에는 오류 로그로 중단한다.
 - macOS Dock/ActivationPolicy 숨김 동기화를 `build_checker_window()` 직후가 아니라 첫 checker report 이후로 늦췄다.
-- 첫 report 전 트레이 아이콘을 warning orange가 아닌 default white icon과 `로딩 중...` tooltip으로 시작하게 했다.
+- 당시 수정에서는 첫 report 전 트레이 아이콘을 warning orange가 아닌 default white icon과 `로딩 중...` tooltip으로 시작하게 했다.
+- 후속 수정에서는 상태 미확인/오프라인 표현을 흰색 정상 아이콘과 분리하기 위해 별도 gray icon과 `상태 확인 중...`/`상태 확인 불가` 상태를 추가했다.
 
 ### 자동 테스트 결과
 
@@ -213,9 +214,31 @@ hidden checker WebView의 initialization script가 특정 실행에서 실행되
 ### 트레이 아이콘 개선
 
 - 수정 전에는 `setup_tray()`가 초기 아이콘을 warning orange로 생성했다. 첫 report가 없으면 노란 아이콘이 stale 상태로 남았다.
-- 수정 후에는 초기 아이콘이 default white이고 tooltip이 `Jungle Bell - 로딩 중...`이다.
+- 당시 수정 후에는 초기 아이콘이 default white이고 tooltip이 `Jungle Bell - 로딩 중...`이었다.
+- 후속 수정 후에는 초기/복구중/확인불가 상태가 gray icon으로 표시되고 tooltip은 `Jungle Bell - 상태 확인 중...`, `Jungle Bell - 상태 재확인 중...`, `Jungle Bell - 상태 확인 불가` 중 하나가 된다.
 - 세션 없음 수동 검증에서는 report가 도착한 뒤 로그인 필요 상태로 전환된다.
 - 세션 복구 수동 검증에서는 report가 도착한 뒤 실제 출석 phase 기반 아이콘으로 전환된다.
+
+### 후속 실제 앱 실행 검증
+
+검증 시각:
+
+- 2026-07-08 01:13:51 KST 시작
+- 2026-07-08 01:14:56 KST 주기 재확인
+
+실행 명령:
+
+- `RUST_LOG=info cargo tauri dev`
+
+관찰 결과:
+
+- 앱이 실제 GUI 프로세스로 실행됐다.
+- hidden checker WebView가 `/check-in`을 로드했다.
+- 시작 약 2초 안에 `checker.js loaded`, `checker.js ready`, `report: needs_login=false`가 기록됐다.
+- report 이후 `data_loaded=true`로 전환됐고 scheduler phase는 `NeedEnd`로 계산됐다.
+- 60초 뒤 scheduler tick에서 `trigger_check`가 다시 실행됐고 같은 `needs_login=false` report가 도착했다.
+- no-report watchdog recreate/give-up 로그는 발생하지 않았다.
+- 로그 검토 시 인증 cookie, WebKit storage, binarycookies 내용은 출력하거나 문서화하지 않았다. API 응답의 내부 식별자는 이 리포트에 기록하지 않았다.
 
 ### 남은 리스크
 
@@ -228,4 +251,4 @@ hidden checker WebView의 initialization script가 특정 실행에서 실행되
 
 - no-report 상태를 강제로 만드는 테스트 전용 flag를 추가해 watchdog의 WebView destroy/recreate 통합 경로를 재현한다.
 - checker ready/report 이벤트에 page-load generation을 JS에서 직접 전달하도록 보강해 세대 로그를 더 정확하게 만든다.
-- watchdog give-up 이후 사용자에게 상태 확인 실패를 별도 메뉴 텍스트로 표시한다.
+- watchdog give-up 상태를 실제 장애 주입으로 검증하고, 회색 `상태 확인 불가`가 사용자에게 충분히 명확한지 확인한다.

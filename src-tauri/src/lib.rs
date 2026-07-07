@@ -151,14 +151,31 @@ fn spawn_checker_report_watchdog(app: tauri::AppHandle, generation: u64, page_ur
         tokio::time::sleep(CHECKER_REPORT_TIMEOUT).await;
 
         let state: tauri::State<Arc<Mutex<AppState>>> = app.state();
-        let (action, ready_generation, report_generation) = {
+        let (action, ready_generation, report_generation, tray_snapshot) = {
             let mut s = state.lock().await;
             let action = checker::decide_checker_watchdog_action(&s, generation);
-            if matches!(action, checker::CheckerWatchdogAction::Recreate { .. }) {
-                checker::record_checker_recreate(&mut s);
-            }
-            (action, s.checker_ready_generation, s.checker_report_generation)
+            let tray_snapshot = match action {
+                checker::CheckerWatchdogAction::Recreate { attempt } => {
+                    checker::record_checker_recreate(&mut s, generation, attempt);
+                    Some(s.tray_snapshot(None))
+                }
+                checker::CheckerWatchdogAction::GiveUp => {
+                    checker::record_checker_give_up(&mut s, generation);
+                    Some(s.tray_snapshot(None))
+                }
+                checker::CheckerWatchdogAction::Wait => None,
+            };
+            (
+                action,
+                s.checker.ready_generation,
+                s.checker.report_generation,
+                tray_snapshot,
+            )
         };
+
+        if let Some(snapshot) = tray_snapshot {
+            tray::update_tray(&app, &snapshot);
+        }
 
         match action {
             checker::CheckerWatchdogAction::Wait => {}

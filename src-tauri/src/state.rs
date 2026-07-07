@@ -24,14 +24,8 @@ pub struct AppState {
     pub last_reset_day: Option<u32>,
     /// 체커 WebView 마지막 리로드 시각
     pub last_reload: Option<DateTime<Utc>>,
-    /// checker WebView page-load 세대. no-report watchdog이 stale callback을 구분하는 데 사용.
-    pub checker_page_load_generation: u64,
-    /// checker.js initialization script 로드가 확인된 최신 세대.
-    pub checker_ready_generation: u64,
-    /// `report_attendance_status`가 도착한 최신 checker 세대.
-    pub checker_report_generation: u64,
-    /// report 없이 checker WebView를 재생성한 연속 횟수.
-    pub checker_no_report_recreates: u32,
+    /// hidden checker WebView readiness/report 상태.
+    pub checker: CheckerRuntime,
     /// 로그인 재시도 윈도우 마감 시각.
     /// 출석 페이지가 닫힌 후 일정 시간 동안만 로그인 상태를 재확인.
     pub login_retry_until: Option<DateTime<Utc>>,
@@ -53,15 +47,70 @@ impl AppState {
             data_loaded: false,
             last_reset_day: None,
             last_reload: None,
-            checker_page_load_generation: 0,
-            checker_ready_generation: 0,
-            checker_report_generation: 0,
-            checker_no_report_recreates: 0,
+            checker: CheckerRuntime::default(),
             login_retry_until: None,
             last_notification: None,
             pending_update: None,
         }
     }
+
+    pub fn tray_snapshot(&self, remaining: Option<i64>) -> TraySnapshot {
+        TraySnapshot {
+            phase: self.phase,
+            remaining,
+            dday_status: self.dday_status.clone(),
+            data_loaded: self.data_loaded,
+            needs_login: self.needs_login,
+            checker_status: self.checker.status,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CheckerRuntimeStatus {
+    Loading,
+    PageLoaded { generation: u64 },
+    Ready { generation: u64 },
+    Healthy { generation: u64 },
+    Recreating { generation: u64, attempt: u32 },
+    Offline { generation: u64 },
+}
+
+impl CheckerRuntimeStatus {
+    pub fn is_recovering_or_offline(self) -> bool {
+        matches!(self, Self::Recreating { .. } | Self::Offline { .. })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckerRuntime {
+    pub page_load_generation: u64,
+    pub ready_generation: u64,
+    pub report_generation: u64,
+    pub no_report_recreates: u32,
+    pub status: CheckerRuntimeStatus,
+}
+
+impl Default for CheckerRuntime {
+    fn default() -> Self {
+        Self {
+            page_load_generation: 0,
+            ready_generation: 0,
+            report_generation: 0,
+            no_report_recreates: 0,
+            status: CheckerRuntimeStatus::Loading,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TraySnapshot {
+    pub phase: DailyPhase,
+    pub remaining: Option<i64>,
+    pub dday_status: DdayStatus,
+    pub data_loaded: bool,
+    pub needs_login: bool,
+    pub checker_status: CheckerRuntimeStatus,
 }
 
 /// 현재 코호트 종료일 기반 D-Day 표시 상태.
