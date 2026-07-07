@@ -6,6 +6,7 @@
 //!   - 빨간색 (긴급): NeedStart, StartOverdue, NeedEnd
 
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::Mutex as TokioMutex;
 
 use chrono::{DateTime, NaiveDate, Utc};
@@ -34,6 +35,9 @@ const DDAY_MENU_POSITION: usize = 1;
 const ICON_DEFAULT: &[u8] = include_bytes!("../icons/tray-white.png");
 const ICON_ALERT: &[u8] = include_bytes!("../icons/tray-red.png");
 const ICON_WARNING: &[u8] = include_bytes!("../icons/tray-orange.png");
+
+#[cfg(target_os = "macos")]
+const FOREGROUND_WINDOW_LABELS: [&str; 3] = ["attendance", "settings", "onboarding"];
 
 /// 상태 메뉴 아이템 참조 보관용. 텍스트 동적 갱신에 사용.
 /// Tauri managed state로 저장: `Arc<TokioMutex<TrayState>>`.
@@ -163,6 +167,58 @@ fn focus_window(window: &WebviewWindow<tauri::Wry>) {
     let _ = window.set_focus();
 }
 
+#[cfg(target_os = "macos")]
+fn has_foreground_window(app: &tauri::AppHandle) -> bool {
+    FOREGROUND_WINDOW_LABELS
+        .iter()
+        .any(|label| app.get_webview_window(label).is_some())
+}
+
+#[cfg(target_os = "macos")]
+fn set_macos_foreground_visibility(app: &tauri::AppHandle, visible: bool) {
+    let policy = if visible {
+        tauri::ActivationPolicy::Regular
+    } else {
+        tauri::ActivationPolicy::Accessory
+    };
+
+    if let Err(e) = app.set_activation_policy(policy) {
+        log::warn!("[tray] macOS activation policy 변경 실패: {}", e);
+    }
+    if let Err(e) = app.set_dock_visibility(visible) {
+        log::warn!("[tray] macOS Dock 표시 변경 실패: {}", e);
+    }
+}
+
+pub fn sync_foreground_app_visibility(app: &tauri::AppHandle) {
+    #[cfg(target_os = "macos")]
+    {
+        set_macos_foreground_visibility(app, has_foreground_window(app));
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app;
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn show_foreground_app(app: &tauri::AppHandle) {
+    set_macos_foreground_visibility(app, true);
+}
+
+#[cfg(not(target_os = "macos"))]
+fn show_foreground_app(app: &tauri::AppHandle) {
+    let _ = app;
+}
+
+fn sync_foreground_app_visibility_soon(app: tauri::AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        sync_foreground_app_visibility(&app);
+    });
+}
+
 fn activate_login_retry_window(app_handle: &tauri::AppHandle) {
     let state: tauri::State<Arc<TokioMutex<AppState>>> = app_handle.state();
     if let Ok(mut s) = state.try_lock() {
@@ -192,11 +248,13 @@ fn build_attendance_window(app: &tauri::AppHandle) {
     .focused(true)
     .build()
     {
+        show_foreground_app(app);
         window.on_window_event(move |event| {
             if let tauri::WindowEvent::Destroyed = event {
                 log::info!("[tray] attendance page closed, reloading checker + activating login retry");
                 reload_checker(&app_handle);
                 activate_login_retry_window(&app_handle);
+                sync_foreground_app_visibility_soon(app_handle.clone());
             }
         });
     }
@@ -207,6 +265,7 @@ pub fn open_attendance_window(app: &tauri::AppHandle) {
     crate::analytics::track_attendance_page_opened();
 
     if let Some(window) = app.get_webview_window("attendance") {
+        show_foreground_app(app);
         focus_window(&window);
     } else {
         build_attendance_window(app);
@@ -214,30 +273,50 @@ pub fn open_attendance_window(app: &tauri::AppHandle) {
 }
 
 fn build_settings_window(app: &tauri::AppHandle) {
-    let _ = tauri::WebviewWindowBuilder::new(app, "settings", tauri::WebviewUrl::App("index.html".into()))
+    if let Ok(window) = tauri::WebviewWindowBuilder::new(app, "settings", tauri::WebviewUrl::App("index.html".into()))
         .title("설정")
         .inner_size(448.0, 608.0)
         .resizable(false)
         .minimizable(false)
         .maximizable(false)
         .focused(true)
-        .build();
+        .build()
+    {
+        show_foreground_app(app);
+        let app_handle = app.clone();
+        window.on_window_event(move |event| {
+            if let tauri::WindowEvent::Destroyed = event {
+                sync_foreground_app_visibility_soon(app_handle.clone());
+            }
+        });
+    }
 }
 
 fn build_onboarding_window(app: &tauri::AppHandle) {
-    let _ = tauri::WebviewWindowBuilder::new(app, "onboarding", tauri::WebviewUrl::App("onboarding.html".into()))
-        .title("Jungle Bell 시작하기")
-        .inner_size(560.0, 784.0)
-        .resizable(false)
-        .minimizable(false)
-        .maximizable(false)
-        .focused(true)
-        .build();
+    if let Ok(window) =
+        tauri::WebviewWindowBuilder::new(app, "onboarding", tauri::WebviewUrl::App("onboarding.html".into()))
+            .title("Jungle Bell 시작하기")
+            .inner_size(560.0, 784.0)
+            .resizable(false)
+            .minimizable(false)
+            .maximizable(false)
+            .focused(true)
+            .build()
+    {
+        show_foreground_app(app);
+        let app_handle = app.clone();
+        window.on_window_event(move |event| {
+            if let tauri::WindowEvent::Destroyed = event {
+                sync_foreground_app_visibility_soon(app_handle.clone());
+            }
+        });
+    }
 }
 
 pub fn open_onboarding_window(app: &tauri::AppHandle) {
     log::info!("[tray] onboarding window opened");
     if let Some(window) = app.get_webview_window("onboarding") {
+        show_foreground_app(app);
         focus_window(&window);
     } else {
         build_onboarding_window(app);
@@ -250,6 +329,7 @@ fn open_settings_window(app: &tauri::AppHandle) {
     crate::analytics::track_settings_opened();
 
     if let Some(window) = app.get_webview_window("settings") {
+        show_foreground_app(app);
         focus_window(&window);
     } else {
         build_settings_window(app);

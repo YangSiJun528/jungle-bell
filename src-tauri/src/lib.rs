@@ -248,6 +248,7 @@ pub fn run() {
             sync_auto_start_setting(app.handle(), &shared_state);
             tray::setup_tray(app)?;
             build_checker_window(app.handle())?;
+            tray::sync_foreground_app_visibility(app.handle());
             notify_startup_status(app.handle(), &shared_state);
             spawn_startup_update_check(app.handle().clone(), shared_state.clone());
             spawn_periodic_update_check(app.handle().clone(), shared_state.clone());
