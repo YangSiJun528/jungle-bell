@@ -337,3 +337,81 @@ hidden checker WebView의 initialization script가 특정 실행에서 실행되
 
 - 실제 no-report 장애 주입은 수행하지 않았다. watchdog recreate/give-up은 단위 테스트로만 검증됐다.
 - `/private/tmp`의 snapshot과 rollback 디렉터리는 인증 세션을 포함할 수 있으므로 외부 공유 금지다.
+
+## 2026-07-08 React/Vite 전환 후 세션 재현
+
+검증 시각:
+
+- 2026-07-08 11:17-11:20 KST
+
+실행 명령:
+
+- `RUST_LOG=info cargo tauri dev`
+
+재현 root:
+
+- `/private/tmp/jungle-bell-session-repro-20260708-111759`
+
+세션 snapshot 메타데이터:
+
+- archive: `/private/tmp/jungle-bell-session-repro-20260708-111759/session-backups/live-session.tgz`
+- size: `9,453,066` bytes
+- entries: `955`
+- sha256: `edc686dcc3ec479bf954eeb939718525cf28138474b7a4fdf2ce9f4c5aa1e0a7`
+
+세션 archive와 WebKit/HTTPStorages/Caches 파일 내용은 확인하거나 출력하지 않았다.
+
+### 세션 없음 결과
+
+절차:
+
+1. live WebKit/HTTPStorages/Caches 후보를 rollback 위치로 이동했다.
+2. 앱을 실행했다.
+3. checker 로그 신호만 집계했다.
+
+관찰 신호:
+
+- app starting: 1회
+- web content process terminated: 1회
+- checker.js loaded: 1회
+- checker.js ready: 1회
+- trigger_check emitted: 3회
+- report: `needs_login=true` 3회
+- report: `needs_login=false` 0회
+- watchdog/recreate: 0회
+
+판정:
+
+- 로그인 없음 상태가 정상적으로 `needs_login=true`로 보고됐다.
+- report가 정상 도착했으므로 no-report watchdog recreate/give-up은 발동하지 않았다.
+
+### 세션 복구 결과
+
+절차:
+
+1. no-session 실행 중 생성된 live session 후보를 별도 위치로 이동했다.
+2. snapshot archive를 live 위치로 복구했다.
+3. 앱을 실행했다.
+4. 첫 복구 실행은 이전 앱 프로세스 정리 패턴이 좁아 앱 로그가 시작되지 않아, 프로세스 정리 패턴을 보강하고 archive에서 다시 복구한 뒤 재실행했다.
+
+관찰 신호:
+
+- app starting: 1회
+- web content process terminated: 1회
+- checker.js loaded: 1회
+- checker.js ready: 1회
+- trigger_check emitted: 3회
+- report: `needs_login=true` 0회
+- report: `needs_login=false` 2회
+- watchdog/recreate: 0회
+
+판정:
+
+- 세션 복구 상태가 정상적으로 `needs_login=false`로 보고됐다.
+- React/Vite 전환 후 onboarding의 로그인 상태 UI가 기존 `login-status-changed`/`get_login_status` 흐름과 호환되는 전제 신호가 유지됐다.
+- 검증 후 live session은 archive 기준으로 복구했다.
+
+### 남은 리스크
+
+- 실제 no-report 장애 주입은 수행하지 않았다. watchdog recreate/give-up은 기존 단위 테스트와 정상 report 경로로만 확인했다.
+- `/private/tmp`의 snapshot과 rollback 디렉터리는 인증 세션을 포함할 수 있으므로 외부 공유 금지다.

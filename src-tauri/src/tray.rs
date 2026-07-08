@@ -249,8 +249,13 @@ fn pad_to_min_width(s: &str, min: usize) -> String {
 }
 
 fn focus_window(window: &WebviewWindow<tauri::Wry>) {
-    let _ = window.show();
-    let _ = window.unminimize();
+    let label = window.label();
+    if let Err(e) = window.show() {
+        log::warn!("[tray] window show failed ({}): {}", label, e);
+    }
+    if let Err(e) = window.unminimize() {
+        log::warn!("[tray] window unminimize failed ({}): {}", label, e);
+    }
 
     #[cfg(target_os = "macos")]
     {
@@ -259,11 +264,23 @@ fn focus_window(window: &WebviewWindow<tauri::Wry>) {
 
         if let Some(mtm) = MainThreadMarker::new() {
             let ns_app = NSApplication::sharedApplication(mtm);
-            ns_app.activate();
+            #[allow(deprecated)]
+            ns_app.activateIgnoringOtherApps(true);
         }
     }
 
-    let _ = window.set_focus();
+    if let Err(e) = window.center() {
+        log::warn!("[tray] window center failed ({}): {}", label, e);
+    }
+    if let Err(e) = window.set_always_on_top(true) {
+        log::warn!("[tray] window always_on_top enable failed ({}): {}", label, e);
+    }
+    if let Err(e) = window.set_focus() {
+        log::warn!("[tray] window focus failed ({}): {}", label, e);
+    }
+    if let Err(e) = window.set_always_on_top(false) {
+        log::warn!("[tray] window always_on_top disable failed ({}): {}", label, e);
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -409,44 +426,63 @@ fn open_meal_plan_window(app: &tauri::AppHandle) {
 
 fn build_settings_window(app: &tauri::AppHandle) {
     show_foreground_app(app);
-    if let Ok(window) = tauri::WebviewWindowBuilder::new(app, "settings", tauri::WebviewUrl::App("index.html".into()))
+    match tauri::WebviewWindowBuilder::new(app, "settings", tauri::WebviewUrl::App("index.html".into()))
         .title("설정")
         .inner_size(448.0, 608.0)
+        .center()
         .resizable(false)
         .minimizable(false)
         .maximizable(false)
         .focused(true)
+        .visible(false)
+        .on_page_load(|_, payload| {
+            log::info!("[settings] page loaded: url={}", payload.url());
+        })
         .build()
     {
-        focus_window(&window);
-        let app_handle = app.clone();
-        window.on_window_event(move |event| {
-            if let tauri::WindowEvent::Destroyed = event {
-                sync_foreground_app_visibility_soon(app_handle.clone());
-            }
-        });
+        Ok(window) => {
+            log::info!("[tray] settings window built");
+            focus_window(&window);
+            let app_handle = app.clone();
+            window.on_window_event(move |event| {
+                if let tauri::WindowEvent::Destroyed = event {
+                    log::info!("[tray] settings window destroyed");
+                    sync_foreground_app_visibility_soon(app_handle.clone());
+                }
+            });
+        }
+        Err(e) => log::warn!("[tray] settings window build failed: {}", e),
     }
 }
 
 fn build_onboarding_window(app: &tauri::AppHandle) {
     show_foreground_app(app);
-    if let Ok(window) =
-        tauri::WebviewWindowBuilder::new(app, "onboarding", tauri::WebviewUrl::App("onboarding.html".into()))
-            .title("Jungle Bell 시작하기")
-            .inner_size(560.0, 784.0)
-            .resizable(false)
-            .minimizable(false)
-            .maximizable(false)
-            .focused(true)
-            .build()
+    match tauri::WebviewWindowBuilder::new(app, "onboarding", tauri::WebviewUrl::App("onboarding.html".into()))
+        .title("Jungle Bell 시작하기")
+        .inner_size(560.0, 784.0)
+        .center()
+        .resizable(false)
+        .minimizable(false)
+        .maximizable(false)
+        .focused(true)
+        .visible(false)
+        .on_page_load(|_, payload| {
+            log::info!("[onboarding] page loaded: url={}", payload.url());
+        })
+        .build()
     {
-        focus_window(&window);
-        let app_handle = app.clone();
-        window.on_window_event(move |event| {
-            if let tauri::WindowEvent::Destroyed = event {
-                sync_foreground_app_visibility_soon(app_handle.clone());
-            }
-        });
+        Ok(window) => {
+            log::info!("[tray] onboarding window built");
+            focus_window(&window);
+            let app_handle = app.clone();
+            window.on_window_event(move |event| {
+                if let tauri::WindowEvent::Destroyed = event {
+                    log::info!("[tray] onboarding window destroyed");
+                    sync_foreground_app_visibility_soon(app_handle.clone());
+                }
+            });
+        }
+        Err(e) => log::warn!("[tray] onboarding window build failed: {}", e),
     }
 }
 
@@ -454,6 +490,9 @@ pub fn open_onboarding_window(app: &tauri::AppHandle) {
     log::info!("[tray] onboarding window opened");
     if let Some(window) = app.get_webview_window("onboarding") {
         show_foreground_app(app);
+        if let Err(e) = window.reload() {
+            log::warn!("[tray] onboarding window reload failed: {}", e);
+        }
         focus_window(&window);
     } else {
         build_onboarding_window(app);
