@@ -36,26 +36,6 @@ impl LoginStatus {
     }
 }
 
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SettingsSnapshot {
-    pub app_version: String,
-    pub pending_update: Option<String>,
-    pub auto_start: bool,
-    pub auto_update: bool,
-    pub show_dday: bool,
-    pub usage_analytics_enabled: bool,
-    pub debug_mode: bool,
-    pub skip_attendance: bool,
-    pub skip_sunday: bool,
-    pub start_notification_enabled: bool,
-    pub end_notification_enabled: bool,
-    pub notification_start: TimeOfDay,
-    pub notification_end: TimeOfDay,
-    pub start_notification_interval: u32,
-    pub end_notification_interval: u32,
-}
-
 // ── 출석 보고 ────────────────────────────────────────────
 
 /// Tauri 커맨드: API 조회 결과를 수신.
@@ -225,35 +205,6 @@ setting_bool!(
 setting_bool!(get_skip_sunday, set_skip_sunday, skip_sunday, "일요일 알림 끄기");
 
 // ── 커스텀 설정 커맨드 ───────────────────────────────────
-
-/// Tauri 커맨드: 설정 화면 초기 렌더에 필요한 값을 한 번에 반환한다.
-#[tauri::command]
-pub async fn get_settings(
-    app: tauri::AppHandle,
-    state: tauri::State<'_, Arc<Mutex<AppState>>>,
-) -> Result<SettingsSnapshot, String> {
-    let app_version = app.package_info().version.to_string();
-    let kst_now = chrono::Utc::now().with_timezone(&state::kst());
-    let s = state.lock().await;
-
-    Ok(SettingsSnapshot {
-        app_version,
-        pending_update: s.pending_update.clone(),
-        auto_start: s.config.auto_start,
-        auto_update: s.config.auto_update,
-        show_dday: s.config.show_dday,
-        usage_analytics_enabled: s.config.usage_analytics_enabled,
-        debug_mode: s.config.debug_mode,
-        skip_attendance: attendance_day::is_skip_attendance_active(&s.config, kst_now),
-        skip_sunday: s.config.skip_sunday,
-        start_notification_enabled: s.config.start_notification_enabled,
-        end_notification_enabled: s.config.end_notification_enabled,
-        notification_start: s.config.notification_start.clone(),
-        notification_end: s.config.notification_end.clone(),
-        start_notification_interval: s.config.start_notification_interval_mins,
-        end_notification_interval: s.config.end_notification_interval_mins,
-    })
-}
 
 #[tauri::command]
 pub async fn get_start_notification_interval(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<u32, String> {

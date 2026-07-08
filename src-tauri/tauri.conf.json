@@ -4,10 +4,7 @@
   "version": "0.3.7-beta.0",
   "identifier": "dev.sijun-yang.jungle-bell",
   "build": {
-    "beforeDevCommand": "npm run dev",
-    "devUrl": "http://127.0.0.1:1420",
-    "beforeBuildCommand": "npm run build",
-    "frontendDist": "../dist"
+    "frontendDist": "../src"
   },
   "app": {
     "withGlobalTauri": true,

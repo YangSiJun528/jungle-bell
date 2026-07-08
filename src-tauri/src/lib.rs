@@ -108,13 +108,7 @@ pub fn run() {
     };
     let shared_state = Arc::new(Mutex::new(AppState::new(config)));
 
-    let builder = tauri::Builder::default();
-    #[cfg(target_os = "macos")]
-    let builder = builder.on_web_content_process_terminate(|webview| {
-        log::warn!("[webview] content process terminated: label={}", webview.label());
-    });
-
-    builder
+    tauri::Builder::default()
         // single-instance 플러그인: 공식 문서 권장대로 가장 먼저 등록한다.
         // 이미 실행 중인 인스턴스가 있으면 두 번째 실행을 차단한다.
         .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {
@@ -164,7 +158,6 @@ pub fn run() {
             commands::report_checker_ready,
             commands::report_cms_identity,
             commands::log_from_js,
-            commands::get_settings,
             commands::get_auto_update,
             commands::set_auto_update,
             commands::get_app_version,
