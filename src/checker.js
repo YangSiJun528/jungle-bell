@@ -28,13 +28,14 @@
   var cachedCohortSelection = null;
   var identityReported = false;
   var checkInFlight = false;
+  var currentGeneration = 0;
 
   function jsLog(level, message) {
     window.__TAURI__.core.invoke('log_from_js', { level: level, message: message });
   }
 
   function reportCheckerReady() {
-    window.__TAURI__.core.invoke('report_checker_ready').catch(function (e) {
+    window.__TAURI__.core.invoke('report_checker_ready', { generation: currentGeneration }).catch(function (e) {
       jsLog('warn', 'report_checker_ready failed: ' + (e.message || e));
     });
   }
@@ -224,12 +225,12 @@
         if (!res.ok) {
           jsLog('warn', 'fetchCohortSelection: status=' + res.status);
           return res.text().then(function (body) {
-            jsLog('debug', 'fetchCohortSelection: error body=' + body.substring(0, 500));
+            jsLog('debug', 'fetchCohortSelection: error body length=' + body.length);
             return { api_error: true, cohort_id: null, cohort_status: 'unknown', cohort_end_date: null };
           });
         }
         return res.json().then(function (data) {
-          jsLog('debug', 'fetchCohortSelection: raw response=' + JSON.stringify(data).substring(0, 1000));
+          jsLog('debug', 'fetchCohortSelection: cohorts count=' + (Array.isArray(data) ? data.length : 0));
           return data;
         });
       })
@@ -238,8 +239,7 @@
         var today = currentKstDateString();
         var selection = parseCohorts(data, today);
         selection.fetched_date = today;
-        jsLog('debug', 'fetchCohortSelection: selected cohortId=' + selection.cohort_id +
-          ' status=' + selection.cohort_status +
+        jsLog('debug', 'fetchCohortSelection: selected cohort status=' + selection.cohort_status +
           ' endDate=' + selection.cohort_end_date +
           ' (total=' + (data.length || 0) + ')');
         return selection;
@@ -254,7 +254,7 @@
   function fetchAttendance(cohortId) {
     var url = 'https://jungle-lms.krafton.com/api/v2/me/cohorts/' +
       cohortId + '/attendance/today';
-    jsLog('debug', 'fetchAttendance: GET ' + url);
+    jsLog('debug', 'fetchAttendance: GET attendance today');
     return fetch(url, {
         credentials: 'include',
         headers: { accept: 'application/json' },
@@ -269,7 +269,7 @@
         if (!res.ok) {
           jsLog('warn', 'fetchAttendance: status=' + res.status);
           return res.text().then(function (body) {
-            jsLog('debug', 'fetchAttendance: error body=' + body.substring(0, 500));
+            jsLog('debug', 'fetchAttendance: error body length=' + body.length);
             return null;
           });
         }
@@ -279,7 +279,7 @@
             return parseAttendanceToday({ checkedAt: null, checkedOutAt: null });
           }
           var data = JSON.parse(body);
-          jsLog('debug', 'fetchAttendance: raw response=' + JSON.stringify(data).substring(0, 1000));
+          jsLog('debug', 'fetchAttendance: response body received');
           return parseAttendanceToday(data);
         });
       })
@@ -379,7 +379,9 @@
   }
 
   function reportResult(result) {
+    result.generation = currentGeneration;
     jsLog('debug', 'result: needs_login=' + result.needs_login +
+      ' generation=' + result.generation +
       ' morning=' + result.morning_done +
       ' evening=' + result.evening_done +
       ' cohort_status=' + result.cohort_status +
@@ -407,7 +409,10 @@
   }
 
   // Rust의 trigger-check 이벤트를 수신하면 API 조회 후 invoke로 반환
-  window.__TAURI__.event.listen('trigger-check', function () {
+  window.__TAURI__.event.listen('trigger-check', function (event) {
+    if (event && event.payload && typeof event.payload.generation === 'number') {
+      currentGeneration = event.payload.generation;
+    }
     runCheck('rust-trigger');
   });
 

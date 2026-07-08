@@ -1,54 +1,25 @@
-//! 체커 모듈 — API 기반 출석 상태 수신·처리.
+//! 체커 모듈 — hidden checker WebView supervisor와 runtime adapter.
 //!
 //! checker.js가 WebView에 주입되어 LMS REST API를 호출한다.
 //! Rust가 `trigger_check()`로 이벤트를 발송하면,
 //! JS가 API를 조회해 `report_attendance_status` invoke로 반환한다.
-//! 이 모듈은 반환된 결과를 처리하고 공유 앱 상태를 갱신한다.
+//! 이 모듈은 WebView generation/readiness/report watchdog을 관리한다.
 
-use serde::Deserialize;
-use tauri::{Emitter, Manager};
+use std::sync::Arc;
+use std::time::Duration;
 
-use chrono::{DateTime, NaiveDate, Utc};
+use serde::Serialize;
+use tauri::{webview::PageLoadEvent, Emitter, Manager};
+use tokio::sync::Mutex;
 
-use crate::state::{self, AppState, CheckerRuntimeStatus, DailyPhase, DdayStatus};
+use crate::state::{AppState, CheckerRuntime, CheckerRuntimeStatus};
+use crate::tray;
 
 const ATTENDANCE_URL: &str = "https://jungle-lms.krafton.com/check-in";
 pub(crate) const CHECKER_NO_REPORT_RECREATE_LIMIT: u32 = 3;
+const CHECKER_REPORT_TIMEOUT: Duration = Duration::from_secs(7);
 
-/// checker.js의 API 조회 결과.
-/// JS invoke 호출의 JSON 페이로드에서 역직렬화됨.
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
-pub struct AttendanceReport {
-    /// 로그인이 필요한 상태 (401 또는 로그인 페이지)
-    pub needs_login: bool,
-    /// 출석(체크인) 완료 여부
-    #[serde(default)]
-    pub morning_done: bool,
-    /// 퇴실(체크아웃) 완료 여부
-    #[serde(default)]
-    pub evening_done: bool,
-    /// API 호출 실패 여부 (true이면 상태 갱신 건너뜀)
-    #[serde(default)]
-    pub api_error: bool,
-    /// /api/v2/me/cohorts 기준 현재 코호트 상태.
-    #[serde(default)]
-    pub cohort_status: CohortReportStatus,
-    /// 현재 코호트 종료일 (YYYY-MM-DD).
-    #[serde(default)]
-    pub cohort_end_date: Option<String>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum CohortReportStatus {
-    Active,
-    Ended,
-    #[serde(rename = "none")]
-    NoCohort,
-    #[default]
-    Unknown,
-}
-
+#[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CheckerWatchdogAction {
     Wait,
@@ -56,37 +27,98 @@ pub(crate) enum CheckerWatchdogAction {
     GiveUp,
 }
 
-pub(crate) fn record_checker_page_load(state: &mut AppState) -> u64 {
-    state.checker.page_load_generation = state.checker.page_load_generation.saturating_add(1);
-    state.checker.status = CheckerRuntimeStatus::PageLoaded {
-        generation: state.checker.page_load_generation,
-    };
-    state.checker.page_load_generation
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CheckerEvent {
+    PageLoaded,
+    Ready { generation: u64 },
+    Report { generation: u64, api_error: bool },
+    ReportTimeout { generation: u64 },
 }
 
-pub(crate) fn record_checker_ready(state: &mut AppState) -> u64 {
-    state.checker.ready_generation = state.checker.page_load_generation;
-    state.checker.status = CheckerRuntimeStatus::Ready {
-        generation: state.checker.ready_generation,
-    };
-    state.checker.ready_generation
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CheckerAction {
+    TriggerCheck { generation: u64 },
+    StartReportWatchdog { generation: u64 },
+    Recreate { generation: u64, attempt: u32 },
+    GiveUp { generation: u64 },
+    IgnoreStale { generation: u64, current_generation: u64 },
 }
 
-pub(crate) fn record_checker_report(state: &mut AppState, api_error: bool) -> u64 {
-    state.checker.report_generation = state.checker.page_load_generation;
-    state.checker.no_report_recreates = 0;
-    state.checker.status = if api_error {
-        CheckerRuntimeStatus::Offline {
-            generation: state.checker.report_generation,
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CheckerTriggerPayload {
+    generation: u64,
+}
+
+pub(crate) fn apply_supervisor_event(runtime: &mut CheckerRuntime, event: CheckerEvent) -> Vec<CheckerAction> {
+    match event {
+        CheckerEvent::PageLoaded => {
+            runtime.page_load_generation = runtime.page_load_generation.saturating_add(1);
+            let generation = runtime.page_load_generation;
+            runtime.status = CheckerRuntimeStatus::PageLoaded { generation };
+            vec![
+                CheckerAction::TriggerCheck { generation },
+                CheckerAction::StartReportWatchdog { generation },
+            ]
         }
-    } else {
-        CheckerRuntimeStatus::Healthy {
-            generation: state.checker.report_generation,
+        CheckerEvent::Ready { generation } => {
+            if generation != runtime.page_load_generation {
+                return vec![CheckerAction::IgnoreStale {
+                    generation,
+                    current_generation: runtime.page_load_generation,
+                }];
+            }
+            runtime.ready_generation = generation;
+            runtime.status = CheckerRuntimeStatus::Ready { generation };
+            vec![]
         }
-    };
-    state.checker.report_generation
+        CheckerEvent::Report { generation, api_error } => {
+            if generation != runtime.page_load_generation {
+                return vec![CheckerAction::IgnoreStale {
+                    generation,
+                    current_generation: runtime.page_load_generation,
+                }];
+            }
+            runtime.report_generation = generation;
+            runtime.no_report_recreates = 0;
+            runtime.status = if api_error {
+                CheckerRuntimeStatus::Offline { generation }
+            } else {
+                CheckerRuntimeStatus::Healthy { generation }
+            };
+            vec![]
+        }
+        CheckerEvent::ReportTimeout { generation } => {
+            if runtime.page_load_generation != generation || runtime.report_generation >= generation {
+                return vec![];
+            }
+            if runtime.no_report_recreates >= CHECKER_NO_REPORT_RECREATE_LIMIT {
+                runtime.status = CheckerRuntimeStatus::Offline { generation };
+                return vec![CheckerAction::GiveUp { generation }];
+            }
+
+            let attempt = runtime.no_report_recreates.saturating_add(1);
+            runtime.no_report_recreates = attempt;
+            runtime.status = CheckerRuntimeStatus::Recreating { generation, attempt };
+            vec![CheckerAction::Recreate { generation, attempt }]
+        }
+    }
 }
 
+pub(crate) fn record_checker_page_load(state: &mut AppState) -> (u64, Vec<CheckerAction>) {
+    let actions = apply_supervisor_event(&mut state.checker, CheckerEvent::PageLoaded);
+    (state.checker.page_load_generation, actions)
+}
+
+pub(crate) fn record_checker_ready(state: &mut AppState, generation: u64) -> Vec<CheckerAction> {
+    apply_supervisor_event(&mut state.checker, CheckerEvent::Ready { generation })
+}
+
+pub(crate) fn record_checker_report(state: &mut AppState, generation: u64, api_error: bool) -> Vec<CheckerAction> {
+    apply_supervisor_event(&mut state.checker, CheckerEvent::Report { generation, api_error })
+}
+
+#[cfg(test)]
 pub(crate) fn decide_checker_watchdog_action(state: &AppState, generation: u64) -> CheckerWatchdogAction {
     if state.checker.page_load_generation != generation || state.checker.report_generation >= generation {
         return CheckerWatchdogAction::Wait;
@@ -101,73 +133,39 @@ pub(crate) fn decide_checker_watchdog_action(state: &AppState, generation: u64) 
     }
 }
 
+#[cfg(test)]
 pub(crate) fn record_checker_recreate(state: &mut AppState, generation: u64, attempt: u32) {
     state.checker.no_report_recreates = state.checker.no_report_recreates.saturating_add(1);
     state.checker.status = CheckerRuntimeStatus::Recreating { generation, attempt };
 }
 
+#[cfg(test)]
 pub(crate) fn record_checker_give_up(state: &mut AppState, generation: u64) {
     state.checker.status = CheckerRuntimeStatus::Offline { generation };
-}
-
-fn parse_report_date(value: &str) -> Option<NaiveDate> {
-    NaiveDate::parse_from_str(value, "%Y-%m-%d").ok()
-}
-
-fn dday_status_from_report(report: &AttendanceReport) -> DdayStatus {
-    if report.needs_login {
-        return DdayStatus::LoginRequired;
-    }
-
-    match report.cohort_status {
-        CohortReportStatus::Active => report
-            .cohort_end_date
-            .as_deref()
-            .and_then(parse_report_date)
-            .map(|end_date| DdayStatus::Active { end_date })
-            .unwrap_or(DdayStatus::NoCohort),
-        CohortReportStatus::Ended => DdayStatus::Ended,
-        CohortReportStatus::NoCohort => DdayStatus::NoCohort,
-        CohortReportStatus::Unknown => DdayStatus::Unknown,
-    }
-}
-
-/// 체커 보고를 공유 앱 상태에 반영.
-pub fn apply_report(state: &mut AppState, report: &AttendanceReport) {
-    state.data_loaded = true;
-
-    if report.needs_login {
-        state.needs_login = true;
-        state.dday_status = DdayStatus::LoginRequired;
-        return;
-    }
-
-    state.needs_login = false;
-    state.login_retry_until = None; // 로그인 성공 시 재시도 윈도우 해제
-    state.morning_checked = report.morning_done;
-    state.evening_checked = report.evening_done;
-    state.dday_status = dday_status_from_report(report);
-}
-
-pub fn apply_dday_from_report(state: &mut AppState, report: &AttendanceReport) {
-    let dday_status = dday_status_from_report(report);
-    if !matches!(dday_status, DdayStatus::Unknown) {
-        state.dday_status = dday_status;
-    }
 }
 
 /// checker WebView에 trigger-check 이벤트를 발송.
 /// JS가 이벤트를 수신하면 API를 조회해
 /// `report_attendance_status` invoke로 반환한다.
-pub fn trigger_check(app: &tauri::AppHandle) {
-    log::debug!("[checker] trigger_check emitted");
+pub fn trigger_check(app: &tauri::AppHandle, generation: u64) -> bool {
+    log::debug!("[checker] trigger_check emitted: generation={}", generation);
     let _ = app.emit_to(
         tauri::EventTarget::WebviewWindow {
             label: "checker".into(),
         },
         "trigger-check",
-        (),
+        CheckerTriggerPayload { generation },
     );
+    true
+}
+
+pub fn trigger_current_check(app: &tauri::AppHandle) -> bool {
+    let state: tauri::State<Arc<Mutex<AppState>>> = app.state();
+    let Ok(s) = state.try_lock() else {
+        log::warn!("[checker] trigger_check skipped: state locked");
+        return false;
+    };
+    trigger_check(app, s.checker.page_load_generation)
 }
 
 /// checker WebView를 출석 페이지 기준으로 갱신한다.
@@ -207,43 +205,155 @@ fn same_url_without_trailing_slash(left: &str, right: &str) -> bool {
     left.trim_end_matches('/') == right.trim_end_matches('/')
 }
 
-/// 순수 로직: 체커 보고를 앱 상태에 반영하고 phase를 재계산.
-///
-/// API 에러 시 `data_loaded`만 설정하고 `None` 반환.
-/// 그 외에는 `apply_report` + `compute_daily_phase`를 수행하고
-/// `Some((phase, remaining))` 반환.
-pub(crate) fn process_report(
-    state: &mut AppState,
-    report: &AttendanceReport,
-    now: DateTime<Utc>,
-) -> Option<(DailyPhase, Option<i64>)> {
-    if report.api_error {
-        state.data_loaded = true;
-        state.checker.status = CheckerRuntimeStatus::Offline {
-            generation: state.checker.report_generation,
+pub(crate) fn build_webview(app: &tauri::AppHandle) -> tauri::Result<tauri::WebviewWindow> {
+    let checker_script = include_str!("../../src/checker.js");
+    let checker = tauri::WebviewWindowBuilder::new(
+        app,
+        "checker",
+        tauri::WebviewUrl::External(ATTENDANCE_URL.parse().unwrap()),
+    )
+    .title("Jungle Bell")
+    .visible(false)
+    .focused(false)
+    .skip_taskbar(true)
+    .initialization_script(checker_script)
+    .on_page_load(|window, payload| {
+        if payload.event() == PageLoadEvent::Finished {
+            let app_handle = window.app_handle().clone();
+            let page_url = payload.url().to_string();
+            tauri::async_runtime::spawn(async move {
+                let state: tauri::State<Arc<Mutex<AppState>>> = app_handle.state();
+                let (generation, actions) = {
+                    let mut s = state.lock().await;
+                    record_checker_page_load(&mut s)
+                };
+
+                log::debug!(
+                    "[checker] page loaded, triggering check: generation={} url={}",
+                    generation,
+                    page_url,
+                );
+                for action in actions {
+                    match action {
+                        CheckerAction::TriggerCheck { generation } => {
+                            trigger_check(&app_handle, generation);
+                        }
+                        CheckerAction::StartReportWatchdog { generation } => {
+                            spawn_report_watchdog(app_handle.clone(), generation, page_url.clone());
+                        }
+                        CheckerAction::Recreate { .. }
+                        | CheckerAction::GiveUp { .. }
+                        | CheckerAction::IgnoreStale { .. } => {}
+                    }
+                }
+            });
+        }
+    })
+    .build()?;
+
+    let app_handle = app.clone();
+    checker.on_window_event(move |event| {
+        if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+            api.prevent_close();
+            if let Some(window) = app_handle.get_webview_window("checker") {
+                let _ = window.hide();
+            }
+        }
+    });
+
+    Ok(checker)
+}
+
+fn recreate_webview(app: &tauri::AppHandle, reason: &str) -> tauri::Result<()> {
+    if let Some(checker) = app.get_webview_window("checker") {
+        log::warn!("[checker] destroying checker WebView ({})", reason);
+        if let Err(e) = checker.destroy() {
+            log::warn!("[checker] checker WebView destroy failed ({}): {}", reason, e);
+        }
+    }
+
+    build_webview(app)?;
+    log::info!("[checker] checker WebView recreated ({})", reason);
+    Ok(())
+}
+
+fn recreate_webview_on_main_thread(app: tauri::AppHandle, reason: String) {
+    let app_for_task = app.clone();
+    if let Err(e) = app.run_on_main_thread(move || {
+        if let Err(e) = recreate_webview(&app_for_task, &reason) {
+            log::warn!("[checker] checker WebView recreate failed ({}): {}", reason, e);
+        }
+    }) {
+        log::warn!("[checker] checker WebView recreate scheduling failed: {}", e);
+    }
+}
+
+fn spawn_report_watchdog(app: tauri::AppHandle, generation: u64, page_url: String) {
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(CHECKER_REPORT_TIMEOUT).await;
+
+        let state: tauri::State<Arc<Mutex<AppState>>> = app.state();
+        let (actions, ready_generation, report_generation, tray_snapshot) = {
+            let mut s = state.lock().await;
+            let actions = apply_supervisor_event(&mut s.checker, CheckerEvent::ReportTimeout { generation });
+            let tray_snapshot = if actions
+                .iter()
+                .any(|action| matches!(action, CheckerAction::Recreate { .. } | CheckerAction::GiveUp { .. }))
+            {
+                Some(s.tray_snapshot(None))
+            } else {
+                None
+            };
+            (
+                actions,
+                s.checker.ready_generation,
+                s.checker.report_generation,
+                tray_snapshot,
+            )
         };
-        apply_dday_from_report(state, report);
-        return None;
-    }
 
-    apply_report(state, report);
+        if let Some(snapshot) = tray_snapshot {
+            tray::update_tray(&app, &snapshot);
+        }
 
-    if state.dday_status.suppress_attendance_phase() {
-        state.phase = DailyPhase::Idle;
-        return Some((DailyPhase::Idle, None));
-    }
-
-    let (phase, remaining) =
-        state::compute_daily_phase(&state.config, now, state.morning_checked, state.evening_checked);
-    state.phase = phase;
-    Some((phase, remaining))
+        for action in actions {
+            match action {
+                CheckerAction::Recreate { attempt, .. } => {
+                    let reason = format!("no report after page load generation={generation} attempt={attempt}");
+                    log::warn!(
+                        "[checker] watchdog: {} url={} ready_generation={} report_generation={}",
+                        reason,
+                        page_url,
+                        ready_generation,
+                        report_generation,
+                    );
+                    recreate_webview_on_main_thread(app.clone(), reason);
+                }
+                CheckerAction::GiveUp { .. } => {
+                    log::error!(
+                        "[checker] watchdog: no report after page load generation={} url={} ready_generation={} report_generation={} recreate_limit={}",
+                        generation,
+                        page_url,
+                        ready_generation,
+                        report_generation,
+                        CHECKER_NO_REPORT_RECREATE_LIMIT,
+                    );
+                }
+                CheckerAction::TriggerCheck { .. }
+                | CheckerAction::StartReportWatchdog { .. }
+                | CheckerAction::IgnoreStale { .. } => {}
+            }
+        }
+    });
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::attendance::{apply_attendance_report, AttendanceReport, CohortReportStatus};
     use crate::config::Config;
-    use chrono::{FixedOffset, TimeZone};
+    use crate::state::{DailyPhase, DdayStatus};
+    use chrono::{DateTime, FixedOffset, NaiveDate, TimeZone, Utc};
 
     /// KST 시각을 UTC DateTime으로 변환하는 헬퍼.
     fn kst_time(h: u32, m: u32, s: u32) -> DateTime<Utc> {
@@ -258,12 +368,20 @@ mod tests {
         AppState::new(Config::default())
     }
 
+    fn process_report(
+        state: &mut AppState,
+        report: &AttendanceReport,
+        now: DateTime<Utc>,
+    ) -> Option<(DailyPhase, Option<i64>)> {
+        apply_attendance_report(state, report, now).map(|update| (update.phase, update.remaining))
+    }
+
     #[test]
     fn checker_page_load_세대가_증가한다() {
         let mut state = default_state();
 
-        let first = record_checker_page_load(&mut state);
-        let second = record_checker_page_load(&mut state);
+        let (first, _) = record_checker_page_load(&mut state);
+        let (second, _) = record_checker_page_load(&mut state);
 
         assert_eq!(first, 1);
         assert_eq!(second, 2);
@@ -274,9 +392,9 @@ mod tests {
     #[test]
     fn checker_report가_오면_watchdog은_대기한다() {
         let mut state = default_state();
-        let generation = record_checker_page_load(&mut state);
+        let (generation, _) = record_checker_page_load(&mut state);
 
-        record_checker_report(&mut state, false);
+        record_checker_report(&mut state, generation, false);
 
         assert_eq!(
             decide_checker_watchdog_action(&state, generation),
@@ -288,7 +406,7 @@ mod tests {
     #[test]
     fn checker_report가_없으면_watchdog은_재생성을_요구한다() {
         let mut state = default_state();
-        let generation = record_checker_page_load(&mut state);
+        let (generation, _) = record_checker_page_load(&mut state);
 
         assert_eq!(
             decide_checker_watchdog_action(&state, generation),
@@ -299,7 +417,7 @@ mod tests {
     #[test]
     fn 오래된_checker_watchdog은_무시한다() {
         let mut state = default_state();
-        let stale_generation = record_checker_page_load(&mut state);
+        let (stale_generation, _) = record_checker_page_load(&mut state);
         record_checker_page_load(&mut state);
 
         assert_eq!(
@@ -311,7 +429,7 @@ mod tests {
     #[test]
     fn checker_재생성_한도에_도달하면_중단한다() {
         let mut state = default_state();
-        let generation = record_checker_page_load(&mut state);
+        let (generation, _) = record_checker_page_load(&mut state);
         state.checker.no_report_recreates = CHECKER_NO_REPORT_RECREATE_LIMIT;
 
         assert_eq!(
@@ -323,7 +441,7 @@ mod tests {
     #[test]
     fn checker_재생성은_상태에_attempt를_남긴다() {
         let mut state = default_state();
-        let generation = record_checker_page_load(&mut state);
+        let (generation, _) = record_checker_page_load(&mut state);
 
         record_checker_recreate(&mut state, generation, 1);
 
@@ -337,7 +455,7 @@ mod tests {
     #[test]
     fn checker_give_up은_offline_상태로_남긴다() {
         let mut state = default_state();
-        let generation = record_checker_page_load(&mut state);
+        let (generation, _) = record_checker_page_load(&mut state);
 
         record_checker_give_up(&mut state, generation);
 
@@ -349,6 +467,7 @@ mod tests {
         // given
         let mut state = default_state();
         let report = AttendanceReport {
+            generation: 1,
             needs_login: false,
             morning_done: false,
             evening_done: false,
@@ -370,6 +489,7 @@ mod tests {
         // given
         let mut state = default_state();
         let report = AttendanceReport {
+            generation: 1,
             needs_login: false,
             morning_done: false,
             evening_done: false,
@@ -396,6 +516,7 @@ mod tests {
         // given
         let mut state = default_state();
         let report = AttendanceReport {
+            generation: 1,
             needs_login: true,
             morning_done: false,
             evening_done: false,
@@ -421,6 +542,7 @@ mod tests {
         // given
         let mut state = default_state();
         let report = AttendanceReport {
+            generation: 1,
             needs_login: false,
             morning_done: true,
             evening_done: false,
@@ -450,6 +572,7 @@ mod tests {
         // given
         let mut state = default_state();
         let report = AttendanceReport {
+            generation: 1,
             needs_login: false,
             morning_done: true,
             evening_done: true,
@@ -471,6 +594,7 @@ mod tests {
         // given
         let mut state = default_state();
         let report = AttendanceReport {
+            generation: 1,
             needs_login: false,
             morning_done: false,
             evening_done: false,
@@ -492,6 +616,7 @@ mod tests {
         // given
         let mut state = default_state();
         let report = AttendanceReport {
+            generation: 1,
             needs_login: false,
             morning_done: false,
             evening_done: false,
@@ -515,6 +640,7 @@ mod tests {
         // given
         let mut state = default_state();
         let report = AttendanceReport {
+            generation: 1,
             needs_login: false,
             morning_done: false,
             evening_done: false,
@@ -531,5 +657,95 @@ mod tests {
         assert_eq!(phase, DailyPhase::Idle);
         assert!(remaining.is_none());
         assert_eq!(state.dday_status, DdayStatus::Ended);
+    }
+
+    #[test]
+    fn supervisor는_page_load_ready_report를_generation으로_전이한다() {
+        let mut runtime = crate::state::CheckerRuntime::default();
+
+        let actions = apply_supervisor_event(&mut runtime, CheckerEvent::PageLoaded);
+
+        assert_eq!(
+            actions,
+            vec![
+                CheckerAction::TriggerCheck { generation: 1 },
+                CheckerAction::StartReportWatchdog { generation: 1 },
+            ]
+        );
+        assert_eq!(runtime.status, CheckerRuntimeStatus::PageLoaded { generation: 1 });
+
+        assert_eq!(
+            apply_supervisor_event(&mut runtime, CheckerEvent::Ready { generation: 1 }),
+            vec![]
+        );
+        assert_eq!(runtime.status, CheckerRuntimeStatus::Ready { generation: 1 });
+
+        assert_eq!(
+            apply_supervisor_event(
+                &mut runtime,
+                CheckerEvent::Report {
+                    generation: 1,
+                    api_error: false,
+                },
+            ),
+            vec![]
+        );
+        assert_eq!(runtime.status, CheckerRuntimeStatus::Healthy { generation: 1 });
+        assert_eq!(runtime.report_generation, 1);
+    }
+
+    #[test]
+    fn supervisor는_이전_generation_report를_무시한다() {
+        let mut runtime = crate::state::CheckerRuntime::default();
+
+        apply_supervisor_event(&mut runtime, CheckerEvent::PageLoaded);
+        apply_supervisor_event(&mut runtime, CheckerEvent::PageLoaded);
+
+        let actions = apply_supervisor_event(
+            &mut runtime,
+            CheckerEvent::Report {
+                generation: 1,
+                api_error: false,
+            },
+        );
+
+        assert_eq!(
+            actions,
+            vec![CheckerAction::IgnoreStale {
+                generation: 1,
+                current_generation: 2,
+            }]
+        );
+        assert_eq!(runtime.report_generation, 0);
+        assert_eq!(runtime.status, CheckerRuntimeStatus::PageLoaded { generation: 2 });
+    }
+
+    #[test]
+    fn supervisor_watchdog는_recreate와_give_up을_명시한다() {
+        let mut runtime = crate::state::CheckerRuntime::default();
+        apply_supervisor_event(&mut runtime, CheckerEvent::PageLoaded);
+
+        assert_eq!(
+            apply_supervisor_event(&mut runtime, CheckerEvent::ReportTimeout { generation: 1 }),
+            vec![CheckerAction::Recreate {
+                generation: 1,
+                attempt: 1,
+            }]
+        );
+        assert_eq!(
+            runtime.status,
+            CheckerRuntimeStatus::Recreating {
+                generation: 1,
+                attempt: 1,
+            }
+        );
+
+        runtime.no_report_recreates = CHECKER_NO_REPORT_RECREATE_LIMIT;
+
+        assert_eq!(
+            apply_supervisor_event(&mut runtime, CheckerEvent::ReportTimeout { generation: 1 }),
+            vec![CheckerAction::GiveUp { generation: 1 }]
+        );
+        assert_eq!(runtime.status, CheckerRuntimeStatus::Offline { generation: 1 });
     }
 }

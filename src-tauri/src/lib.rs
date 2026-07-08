@@ -1,26 +1,25 @@
 mod analytics;
+mod attendance;
 mod attendance_day;
 mod autostart;
 mod checker;
 mod commands;
 mod config;
+mod interval_tasks;
+mod runtime;
 mod scheduler;
 mod state;
 mod tray;
 mod updater;
 
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::sync::Mutex;
-
-use tauri::{webview::PageLoadEvent, Manager};
 
 use config::Config;
 use state::AppState;
 
 /// 로그 파일 최대 크기 (5 MB). 초과 시 이전 파일 삭제 후 새 파일 시작.
 const MAX_LOG_FILE_SIZE: u128 = 5_000_000;
-const CHECKER_REPORT_TIMEOUT: Duration = Duration::from_secs(7);
 
 fn sync_auto_start_setting(app: &tauri::AppHandle, shared_state: &Arc<Mutex<AppState>>) {
     let auto_start = shared_state.try_lock().map(|s| s.config.auto_start).unwrap_or(true);
@@ -72,136 +71,6 @@ fn notify_startup_status(app: &tauri::AppHandle, shared_state: &Arc<Mutex<AppSta
     if should_open_onboarding {
         tray::open_onboarding_window(app);
     }
-}
-
-fn build_checker_window(app: &tauri::AppHandle) -> tauri::Result<tauri::WebviewWindow> {
-    let checker_script = include_str!("../../src/checker.js");
-    let checker = tauri::WebviewWindowBuilder::new(
-        app,
-        "checker",
-        tauri::WebviewUrl::External("https://jungle-lms.krafton.com/check-in".parse().unwrap()),
-    )
-    .title("Jungle Bell")
-    .visible(false)
-    .focused(false)
-    .skip_taskbar(true)
-    .initialization_script(checker_script)
-    .on_page_load(|window, payload| {
-        if payload.event() == PageLoadEvent::Finished {
-            let app_handle = window.app_handle().clone();
-            let page_url = payload.url().to_string();
-            tauri::async_runtime::spawn(async move {
-                let state: tauri::State<Arc<Mutex<AppState>>> = app_handle.state();
-                let generation = {
-                    let mut s = state.lock().await;
-                    checker::record_checker_page_load(&mut s)
-                };
-
-                log::debug!(
-                    "[checker] page loaded, triggering check: generation={} url={}",
-                    generation,
-                    page_url,
-                );
-                checker::trigger_check(&app_handle);
-                spawn_checker_report_watchdog(app_handle, generation, page_url);
-            });
-        }
-    })
-    .build()?;
-
-    let app_handle = app.clone();
-    checker.on_window_event(move |event| {
-        if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-            api.prevent_close();
-            if let Some(window) = app_handle.get_webview_window("checker") {
-                let _ = window.hide();
-            }
-        }
-    });
-
-    Ok(checker)
-}
-
-fn recreate_checker_window(app: &tauri::AppHandle, reason: &str) -> tauri::Result<()> {
-    if let Some(checker) = app.get_webview_window("checker") {
-        log::warn!("[checker] destroying checker WebView ({})", reason);
-        if let Err(e) = checker.destroy() {
-            log::warn!("[checker] checker WebView destroy failed ({}): {}", reason, e);
-        }
-    }
-
-    build_checker_window(app)?;
-    log::info!("[checker] checker WebView recreated ({})", reason);
-    Ok(())
-}
-
-fn recreate_checker_window_on_main_thread(app: tauri::AppHandle, reason: String) {
-    let app_for_task = app.clone();
-    if let Err(e) = app.run_on_main_thread(move || {
-        if let Err(e) = recreate_checker_window(&app_for_task, &reason) {
-            log::warn!("[checker] checker WebView recreate failed ({}): {}", reason, e);
-        }
-    }) {
-        log::warn!("[checker] checker WebView recreate scheduling failed: {}", e);
-    }
-}
-
-fn spawn_checker_report_watchdog(app: tauri::AppHandle, generation: u64, page_url: String) {
-    tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(CHECKER_REPORT_TIMEOUT).await;
-
-        let state: tauri::State<Arc<Mutex<AppState>>> = app.state();
-        let (action, ready_generation, report_generation, tray_snapshot) = {
-            let mut s = state.lock().await;
-            let action = checker::decide_checker_watchdog_action(&s, generation);
-            let tray_snapshot = match action {
-                checker::CheckerWatchdogAction::Recreate { attempt } => {
-                    checker::record_checker_recreate(&mut s, generation, attempt);
-                    Some(s.tray_snapshot(None))
-                }
-                checker::CheckerWatchdogAction::GiveUp => {
-                    checker::record_checker_give_up(&mut s, generation);
-                    Some(s.tray_snapshot(None))
-                }
-                checker::CheckerWatchdogAction::Wait => None,
-            };
-            (
-                action,
-                s.checker.ready_generation,
-                s.checker.report_generation,
-                tray_snapshot,
-            )
-        };
-
-        if let Some(snapshot) = tray_snapshot {
-            tray::update_tray(&app, &snapshot);
-        }
-
-        match action {
-            checker::CheckerWatchdogAction::Wait => {}
-            checker::CheckerWatchdogAction::Recreate { attempt } => {
-                let reason = format!("no report after page load generation={generation} attempt={attempt}");
-                log::warn!(
-                    "[checker] watchdog: {} url={} ready_generation={} report_generation={}",
-                    reason,
-                    page_url,
-                    ready_generation,
-                    report_generation,
-                );
-                recreate_checker_window_on_main_thread(app, reason);
-            }
-            checker::CheckerWatchdogAction::GiveUp => {
-                log::error!(
-                    "[checker] watchdog: no report after page load generation={} url={} ready_generation={} report_generation={} recreate_limit={}",
-                    generation,
-                    page_url,
-                    ready_generation,
-                    report_generation,
-                    checker::CHECKER_NO_REPORT_RECREATE_LIMIT,
-                );
-            }
-        }
-    });
 }
 
 fn spawn_startup_update_check(app: tauri::AppHandle, shared_state: Arc<Mutex<AppState>>) {
@@ -347,7 +216,7 @@ pub fn run() {
             // 기본값이 true이므로 첫 설치 시 자동으로 등록됨.
             sync_auto_start_setting(app.handle(), &shared_state);
             tray::setup_tray(app)?;
-            build_checker_window(app.handle())?;
+            checker::build_webview(app.handle())?;
             notify_startup_status(app.handle(), &shared_state);
             spawn_startup_update_check(app.handle().clone(), shared_state.clone());
             spawn_periodic_update_check(app.handle().clone(), shared_state.clone());

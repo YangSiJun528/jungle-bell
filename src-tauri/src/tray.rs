@@ -59,8 +59,20 @@ enum TrayIconKind {
     Alert,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TrayStatusKind {
+    Loading,
+    Recovering,
+    Offline,
+    NeedsLogin,
+    Active,
+    Complete,
+    Normal,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct TrayViewModel {
+    status: TrayStatusKind,
     icon: TrayIconKind,
     status_text: String,
     dday_text: String,
@@ -89,6 +101,31 @@ fn icon_kind_for_snapshot(snapshot: &TraySnapshot) -> TrayIconKind {
     match snapshot.phase {
         DailyPhase::NeedStart | DailyPhase::StartOverdue | DailyPhase::NeedEnd => TrayIconKind::Alert,
         _ => TrayIconKind::Normal,
+    }
+}
+
+fn status_kind_for_snapshot(snapshot: &TraySnapshot) -> TrayStatusKind {
+    match snapshot.checker_status {
+        CheckerRuntimeStatus::Recreating { .. } => return TrayStatusKind::Recovering,
+        CheckerRuntimeStatus::Offline { .. } => return TrayStatusKind::Offline,
+        CheckerRuntimeStatus::Loading
+        | CheckerRuntimeStatus::PageLoaded { .. }
+        | CheckerRuntimeStatus::Ready { .. } => return TrayStatusKind::Loading,
+        CheckerRuntimeStatus::Healthy { .. } => {}
+    }
+
+    if !snapshot.data_loaded {
+        return TrayStatusKind::Loading;
+    }
+
+    if snapshot.needs_login {
+        return TrayStatusKind::NeedsLogin;
+    }
+
+    match snapshot.phase {
+        DailyPhase::NeedStart | DailyPhase::StartOverdue | DailyPhase::NeedEnd => TrayStatusKind::Active,
+        DailyPhase::Complete => TrayStatusKind::Complete,
+        DailyPhase::Idle | DailyPhase::Studying => TrayStatusKind::Normal,
     }
 }
 
@@ -188,6 +225,7 @@ fn build_dday_text(status: &DdayStatus, now: DateTime<Utc>) -> String {
 fn build_tray_view_model(snapshot: &TraySnapshot, now: DateTime<Utc>) -> TrayViewModel {
     let status_text = build_status_text(snapshot);
     TrayViewModel {
+        status: status_kind_for_snapshot(snapshot),
         icon: icon_kind_for_snapshot(snapshot),
         dday_text: build_dday_text(&snapshot.dday_status, now),
         tooltip: build_tooltip(&status_text),
@@ -644,6 +682,47 @@ mod tests {
 
         assert_eq!(view.icon, TrayIconKind::Normal);
         assert_eq!(view.status_text, "오늘 출석 완료");
+    }
+
+    #[test]
+    fn view_model은_표시상태를_명시적으로_분리한다() {
+        let loading = build_tray_view_model(
+            &snapshot(DailyPhase::Idle, None, false, false, CheckerRuntimeStatus::Loading),
+            Utc::now(),
+        );
+        let recovering = build_tray_view_model(
+            &snapshot(
+                DailyPhase::NeedStart,
+                Some(3600),
+                true,
+                false,
+                CheckerRuntimeStatus::Recreating {
+                    generation: 2,
+                    attempt: 1,
+                },
+            ),
+            Utc::now(),
+        );
+        let offline = build_tray_view_model(
+            &snapshot(
+                DailyPhase::NeedStart,
+                Some(3600),
+                true,
+                false,
+                CheckerRuntimeStatus::Offline { generation: 2 },
+            ),
+            Utc::now(),
+        );
+        let needs_login = build_tray_view_model(&healthy_snapshot(DailyPhase::NeedStart, Some(3600), true), Utc::now());
+        let active = build_tray_view_model(&healthy_snapshot(DailyPhase::NeedEnd, Some(1800), false), Utc::now());
+        let complete = build_tray_view_model(&healthy_snapshot(DailyPhase::Complete, None, false), Utc::now());
+
+        assert_eq!(loading.status, TrayStatusKind::Loading);
+        assert_eq!(recovering.status, TrayStatusKind::Recovering);
+        assert_eq!(offline.status, TrayStatusKind::Offline);
+        assert_eq!(needs_login.status, TrayStatusKind::NeedsLogin);
+        assert_eq!(active.status, TrayStatusKind::Active);
+        assert_eq!(complete.status, TrayStatusKind::Complete);
     }
 
     // --- build_dday_text ---

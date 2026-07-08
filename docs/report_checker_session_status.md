@@ -251,3 +251,89 @@ hidden checker WebView의 initialization script가 특정 실행에서 실행되
 - no-report 상태를 강제로 만드는 테스트 전용 flag를 추가해 watchdog의 WebView destroy/recreate 통합 경로를 재현한다.
 - checker ready/report 이벤트에 page-load generation을 JS에서 직접 전달하도록 보강해 세대 로그를 더 정확하게 만든다.
 - watchdog give-up 상태를 실제 장애 주입으로 검증하고, 회색 `상태 확인 불가`가 사용자에게 충분히 명확한지 확인한다.
+
+## 2026-07-08 리뉴얼 후 실제 세션 재현
+
+검증 시각:
+
+- 2026-07-08 10:01-10:03 KST
+
+실행 명령:
+
+- `RUST_LOG=info cargo tauri dev`
+
+재현 root:
+
+- `/private/tmp/jungle-bell-session-repro-20260708-095955`
+
+세션 snapshot 메타데이터:
+
+- archive: `/private/tmp/jungle-bell-session-repro-20260708-095955/session-backups/live-session.tgz`
+- size: `9,333,467` bytes
+- entries: `954`
+- sha256: `954a42d3f37ee7773f5c38af1e525c2b6ed93fb1d7d0f6bf35a1795b638830dd`
+
+세션 archive와 WebKit/HTTPStorages/Caches 파일 내용은 확인하거나 출력하지 않았다.
+
+### 세션 없음 결과
+
+절차:
+
+1. live WebKit/HTTPStorages/Caches 후보 6개를 rollback 위치로 이동했다.
+2. 앱을 실행했다.
+3. 시작 직후 `/login` 상태에서 checker 보고를 확인했다.
+
+관찰 신호:
+
+- app starting
+- web content process terminated
+- checker.js loaded
+- checker.js ready: generation=0
+- report: needs_login=true generation=0
+- page loaded: `/login` generation=1
+- trigger_check emitted: generation=1
+- report: needs_login=true generation=1
+- scheduler tick 이후 generation=1 재보고 수신
+
+판정:
+
+- 로그인 없음 상태가 정상적으로 `needs_login=true`로 보고됐다.
+- 첫 report 전 stale warning icon으로 굳는 경로는 관찰되지 않았다.
+- report가 정상 도착했으므로 no-report watchdog recreate/give-up은 발동하지 않았다.
+
+### 세션 복구 결과
+
+절차:
+
+1. 세션 없음 실행 중 새로 생긴 live session 후보를 별도 rollback 위치로 이동했다.
+2. snapshot archive를 live WebKit/HTTPStorages/Caches 위치로 복구했다.
+3. 앱을 실행했다.
+
+관찰 신호:
+
+- app starting
+- checker.js loaded
+- checker.js ready: generation=0
+- page loaded: `/check-in` generation=1
+- trigger_check emitted: generation=1
+- stale generation=0 report ignored
+- report: needs_login=false generation=1
+- scheduler tick 이후 generation=1 재보고 수신
+
+판정:
+
+- 세션 복구 상태가 정상적으로 `needs_login=false`로 보고됐다.
+- generation=0 stale report가 상태에 반영되지 않고 무시됐다.
+- report 이후 실제 출석 phase 기반으로 scheduler가 `StartOverdue`를 계산했다.
+- report가 정상 도착했으므로 no-report watchdog recreate/give-up은 발동하지 않았다.
+
+### 추가 관찰
+
+- `commands::report_attendance_status`가 stale report를 무시하기 전에 info report 로그를 먼저 찍는 문제가 있었다.
+- 수정 후 재실행에서 유효 generation report만 `report:` 로그로 남고, stale report는 `stale report ignored`로만 남는 것을 확인했다.
+- attendance window open/close 이후 checker WebView reload가 발생했고 generation=2 report가 정상 수신됐다.
+
+### 남은 리스크
+
+- 실제 no-report 장애 주입은 수행하지 않았다. watchdog recreate/give-up은 단위 테스트로만 검증됐다.
+- `/private/tmp`의 snapshot과 rollback 디렉터리는 인증 세션을 포함할 수 있으므로 외부 공유 금지다.

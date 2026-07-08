@@ -12,6 +12,7 @@ use tauri::{Emitter, Manager};
 use tokio::sync::Mutex;
 
 use crate::analytics;
+use crate::attendance;
 use crate::attendance_day;
 use crate::autostart;
 use crate::checker;
@@ -43,12 +44,25 @@ impl LoginStatus {
 pub async fn report_attendance_status(
     app: tauri::AppHandle,
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
-    status: checker::AttendanceReport,
+    status: attendance::AttendanceReport,
 ) -> Result<(), String> {
+    let mut s = state.lock().await;
+    let now = chrono::Utc::now();
+    let checker_actions = checker::record_checker_report(&mut s, status.generation, status.api_error);
+    if checker_actions
+        .iter()
+        .any(|action| matches!(action, checker::CheckerAction::IgnoreStale { .. }))
+    {
+        log::warn!(
+            "[checker] stale report ignored: generation={} current_generation={}",
+            status.generation,
+            s.checker.page_load_generation,
+        );
+        return Ok(());
+    }
     if status.api_error {
         log::info!("[checker] API error received, skipping state update");
     } else {
-        let s = state.lock().await;
         log::info!(
             "[checker] report: needs_login={} morning={} evening={} current_phase={:?}",
             status.needs_login,
@@ -56,13 +70,8 @@ pub async fn report_attendance_status(
             status.evening_done,
             s.phase,
         );
-        drop(s);
     }
-
-    let mut s = state.lock().await;
-    let now = chrono::Utc::now();
-    let checker_generation = checker::record_checker_report(&mut s, status.api_error);
-    log::debug!("[checker] report received for generation={}", checker_generation);
+    log::debug!("[checker] report received for generation={}", status.generation);
 
     // 전이 감지를 위해 이전 상태 보존.
     // `was_loaded`가 false인 최초 보고는 "앱 재시작 후 오늘 이미 완료된 출석"일 수 있으므로
@@ -73,10 +82,10 @@ pub async fn report_attendance_status(
     let prev_evening = s.evening_checked;
     let prev_needs_login = s.needs_login;
 
-    let phase_update = checker::process_report(&mut s, &status, now);
+    let phase_update = attendance::apply_attendance_report(&mut s, &status, now);
     let tray_snapshot = match phase_update {
-        Some((_, remaining)) => Some(s.tray_snapshot(remaining)),
-        None if status.api_error => Some(s.tray_snapshot(None)),
+        Some(update) => Some(attendance::build_tray_snapshot(&s, update.remaining)),
+        None if status.api_error => Some(attendance::build_tray_snapshot(&s, None)),
         None => None,
     };
     let curr_needs_login = s.needs_login;
@@ -116,9 +125,24 @@ pub async fn report_attendance_status(
 
 /// Tauri 커맨드: checker.js initialization script가 로드됐음을 수신.
 #[tauri::command]
-pub async fn report_checker_ready(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<(), String> {
+pub async fn report_checker_ready(
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    generation: Option<u64>,
+) -> Result<(), String> {
     let mut s = state.lock().await;
-    let generation = checker::record_checker_ready(&mut s);
+    let generation = generation.unwrap_or(s.checker.page_load_generation);
+    let actions = checker::record_checker_ready(&mut s, generation);
+    if actions
+        .iter()
+        .any(|action| matches!(action, checker::CheckerAction::IgnoreStale { .. }))
+    {
+        log::warn!(
+            "[checker] stale checker.js ready ignored: generation={} current_generation={}",
+            generation,
+            s.checker.page_load_generation,
+        );
+        return Ok(());
+    }
     log::info!("[checker] checker.js ready: generation={}", generation);
     Ok(())
 }

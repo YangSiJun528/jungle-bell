@@ -11,17 +11,18 @@
 
 use std::sync::Arc;
 
-use chrono::{DateTime, Datelike, FixedOffset, Timelike, Utc, Weekday};
+use chrono::{DateTime, Datelike, FixedOffset, Timelike, Utc};
 use tokio::sync::Mutex;
 
 use tauri::Manager;
-use tauri_plugin_notification::NotificationExt;
 
-use crate::attendance_day;
-use crate::checker;
-use crate::config::Config;
-use crate::state::{self, kst, AppState, DailyPhase, TraySnapshot};
-use crate::tray;
+use crate::attendance;
+use crate::interval_tasks::{self, JobAction, JobActionReason, JobFailureDecision, JobKind, JobSpec};
+use crate::runtime;
+use crate::state::{kst, AppState, DailyPhase, TraySnapshot};
+
+#[cfg(test)]
+use crate::state;
 
 /// 액션 필요 시 틱 간격 (초). API 호출 빈도를 줄이기 위해 60초.
 const TICK_INTERVAL_ACTIVE: u64 = 60;
@@ -31,24 +32,48 @@ const TICK_INTERVAL_IDLE: u64 = 300;
 /// 체커 WebView 리로드 간격 (초). 세션/토큰 갱신 목적.
 /// 액세스 토큰이 1시간 만료이므로 15분 간격으로 리로드하여 갱신.
 const RELOAD_INTERVAL_NORMAL: u64 = 15 * 60; // 15분
+const CHECKER_SESSION_REFRESH_JOB: JobSpec = JobSpec::new(JobKind::CheckerSessionRefresh, RELOAD_INTERVAL_NORMAL)
+    .initial_delay_secs(RELOAD_INTERVAL_NORMAL)
+    .backoff_secs(30, 5 * 60)
+    .max_failures(3);
+const INTERVAL_JOBS: [JobSpec; 1] = [CHECKER_SESSION_REFRESH_JOB];
 /// OS 절전/복귀 등으로 틱이 예상보다 크게 밀렸을 때 checker를 다시 깨운다.
 const TICK_DELAY_REFRESH_GRACE_SECS: u64 = 60;
 /// 지연된 틱에서는 stale 상태로 알림을 보내지 않고 checker 결과를 짧게 기다린다.
 const DELAYED_TICK_RECHECK_INTERVAL_SECS: u64 = 10;
 
-/// 알림 판단 결과.
-pub(crate) struct NotificationDecision {
-    pub send: bool,
-    pub reason: &'static str,
-    pub message: Option<(&'static str, String)>,
+fn interval_job_spec(kind: JobKind) -> Option<&'static JobSpec> {
+    INTERVAL_JOBS.iter().find(|spec| spec.kind == kind)
+}
+
+fn record_job_result(state: &mut AppState, action: JobAction, succeeded: bool, now: DateTime<Utc>) {
+    let Some(spec) = interval_job_spec(action.kind()) else {
+        return;
+    };
+
+    if succeeded {
+        state.interval_jobs.mark_success(spec, now);
+        return;
+    }
+
+    match state.interval_jobs.mark_failure(spec, now) {
+        JobFailureDecision::RetryAt(next_due_at) => log::warn!(
+            "[scheduler] job failed: kind={} next_retry_at={}",
+            action.kind().name(),
+            next_due_at.with_timezone(&kst()).format("%Y-%m-%d %H:%M:%S"),
+        ),
+        JobFailureDecision::GiveUp { kind } => {
+            log::error!("[scheduler] job give-up: kind={}", kind.name());
+        }
+    }
 }
 
 /// 틱 한 번의 순수 계산 결과. 부수효과는 호출자가 수행.
 pub(crate) struct TickResult {
     /// 다음 틱까지 대기할 초.
     pub tick_interval: u64,
-    /// 체커 WebView를 리로드해야 하는지 여부.
-    pub should_reload: bool,
+    /// 이번 틱에 실행할 job 목록.
+    pub job_actions: Vec<JobAction>,
     /// phase가 변경되었는지 여부.
     pub phase_changed: bool,
     /// 발송할 알림 (제목, 본문). None이면 발송하지 않음.
@@ -59,6 +84,13 @@ pub(crate) struct TickResult {
     pub daily_reset: bool,
 }
 
+impl TickResult {
+    #[cfg(test)]
+    pub(crate) fn has_job_action(&self, kind: JobKind) -> bool {
+        self.job_actions.iter().any(|action| action.kind() == kind)
+    }
+}
+
 fn is_phase_actionable(phase: DailyPhase) -> bool {
     matches!(
         phase,
@@ -67,20 +99,7 @@ fn is_phase_actionable(phase: DailyPhase) -> bool {
 }
 
 fn compute_phase_update(state: &mut AppState, now: DateTime<Utc>) -> Option<(DailyPhase, Option<i64>)> {
-    if !state.data_loaded {
-        return None;
-    }
-
-    if state.dday_status.suppress_attendance_phase() {
-        state.phase = DailyPhase::Idle;
-        return Some((DailyPhase::Idle, None));
-    }
-
-    let (phase, remaining) =
-        state::compute_daily_phase(&state.config, now, state.morning_checked, state.evening_checked);
-    state.phase = phase;
-
-    Some((phase, remaining))
+    attendance::compute_phase_update(state, now).map(|update| (update.phase, update.remaining))
 }
 
 fn compute_notification_for_phase(
@@ -93,7 +112,7 @@ fn compute_notification_for_phase(
     let secs_since_last = state
         .last_notification
         .map(|last| (now - last).num_seconds().max(0) as u64);
-    let decision = should_notify(
+    let decision = attendance::notification_decision(
         &state.config,
         phase,
         remaining,
@@ -115,15 +134,15 @@ fn compute_notification_for_phase(
     message
 }
 
-fn should_reload_checker(state: &mut AppState, now: DateTime<Utc>) -> bool {
-    match state.last_reload {
-        Some(last) if (now - last).num_seconds() as u64 >= RELOAD_INTERVAL_NORMAL => true,
-        Some(_) => false,
-        None => {
-            state.last_reload = Some(now);
-            false
-        }
+fn compute_job_actions(state: &mut AppState, now: DateTime<Utc>) -> Vec<JobAction> {
+    let mut actions = state.interval_jobs.collect_due_actions(now, &INTERVAL_JOBS);
+    if !actions
+        .iter()
+        .any(|action| action.kind() == JobKind::CheckerSessionRefresh)
+    {
+        actions.push(JobAction::new(JobKind::AttendanceStatusCheck, JobActionReason::Tick));
     }
+    actions
 }
 
 fn expire_login_retry_window(state: &mut AppState, now: DateTime<Utc>) {
@@ -132,38 +151,21 @@ fn expire_login_retry_window(state: &mut AppState, now: DateTime<Utc>) {
     }
 }
 
-fn apply_tick_effects(app_handle: &tauri::AppHandle, phase: DailyPhase, result: &TickResult) -> bool {
-    if let Some(snapshot) = &result.tray_update {
-        tray::update_tray(app_handle, snapshot);
-    }
-
-    if let Some((title, body)) = &result.notification {
-        match app_handle.notification().builder().title(*title).body(body).show() {
-            Ok(_) => log::info!("[scheduler] notification sent: phase={:?}", phase),
-            Err(e) => log::error!("[scheduler] notification show failed: {e}"),
-        }
-    }
-
-    if result.phase_changed {
-        let _ = tauri::Emitter::emit(app_handle, "phase-changed", &phase);
-    }
-
-    if result.should_reload {
-        return checker::refresh_webview(app_handle, "session refresh");
-    }
-
-    false
-}
-
+#[cfg(test)]
 fn tick_delayed(previous_tick: DateTime<Utc>, expected_interval_secs: u64, now: DateTime<Utc>) -> Option<i64> {
-    let elapsed = (now - previous_tick).num_seconds();
-    let threshold = expected_interval_secs.saturating_add(TICK_DELAY_REFRESH_GRACE_SECS) as i64;
-
-    (elapsed > threshold).then_some(elapsed)
+    interval_tasks::delayed_tick_action(
+        previous_tick,
+        expected_interval_secs,
+        now,
+        TICK_DELAY_REFRESH_GRACE_SECS,
+        JobKind::CheckerSessionRefresh,
+    )
+    .map(|_| (now - previous_tick).num_seconds())
 }
 
 fn refresh_checker_after_delayed_tick(
     app_handle: &tauri::AppHandle,
+    action: JobAction,
     elapsed_secs: i64,
     expected_interval_secs: u64,
 ) -> bool {
@@ -173,7 +175,7 @@ fn refresh_checker_after_delayed_tick(
         expected_interval_secs,
     );
 
-    checker::refresh_webview(app_handle, "delayed tick")
+    runtime::run_job_action(app_handle, action)
 }
 
 fn log_tick_state(now: DateTime<Utc>, state: &AppState, result: &TickResult) {
@@ -225,108 +227,16 @@ pub(crate) fn check_daily_reset(state: &mut AppState, kst_now: DateTime<FixedOff
     false
 }
 
-/// 알림 발송 여부 판단 (순수 함수).
-///
-/// `secs_since_last`: 마지막 알림 이후 경과 초. `None`이면 알림 미발송 상태.
+#[cfg(test)]
 pub(crate) fn should_notify(
-    config: &Config,
+    config: &crate::config::Config,
     phase: DailyPhase,
     remaining: Option<i64>,
     needs_login: bool,
     kst_now: DateTime<FixedOffset>,
     secs_since_last: Option<u64>,
-) -> NotificationDecision {
-    if needs_login {
-        return NotificationDecision {
-            send: false,
-            reason: "needs_login",
-            message: None,
-        };
-    }
-
-    // 일요일 알림 끄기
-    if config.skip_sunday && kst_now.weekday() == Weekday::Sun {
-        return NotificationDecision {
-            send: false,
-            reason: "skip_sunday",
-            message: None,
-        };
-    }
-
-    if attendance_day::is_skip_attendance_active(config, kst_now) {
-        return NotificationDecision {
-            send: false,
-            reason: "skip_attendance",
-            message: None,
-        };
-    }
-
-    // 시작/종료 출석별 알림 활성화 여부 확인
-    let enabled = match phase {
-        DailyPhase::NeedStart | DailyPhase::StartOverdue => config.start_notification_enabled,
-        DailyPhase::NeedEnd => config.end_notification_enabled,
-        _ => false,
-    };
-    if !enabled {
-        return NotificationDecision {
-            send: false,
-            reason: "disabled",
-            message: None,
-        };
-    }
-
-    let kst_secs = (kst_now.hour() as i64) * 3600 + (kst_now.minute() as i64) * 60 + (kst_now.second() as i64);
-    let notif_start_secs = config.notification_start.to_secs();
-    let notif_end_secs = config.notification_end.to_secs();
-    let evening_start_secs = config.evening_start.to_secs();
-
-    let in_window = match phase {
-        DailyPhase::NeedStart | DailyPhase::StartOverdue => kst_secs >= notif_start_secs,
-        DailyPhase::NeedEnd => {
-            if notif_end_secs <= evening_start_secs {
-                // 자정을 넘기는 알림 윈도우
-                kst_secs >= evening_start_secs || kst_secs < notif_end_secs
-            } else {
-                kst_secs >= evening_start_secs && kst_secs < notif_end_secs
-            }
-        }
-        _ => false,
-    };
-
-    if !in_window {
-        return NotificationDecision {
-            send: false,
-            reason: "outside_window",
-            message: None,
-        };
-    }
-
-    // 쓰로틀링
-    let interval_mins = match phase {
-        DailyPhase::NeedStart | DailyPhase::StartOverdue => config.start_notification_interval_mins,
-        DailyPhase::NeedEnd => config.end_notification_interval_mins,
-        _ => config.start_notification_interval_mins,
-    };
-    let interval_secs = interval_mins as u64 * 60;
-    let throttled = match secs_since_last {
-        Some(elapsed) => elapsed < interval_secs,
-        None => false, // 첫 알림
-    };
-
-    if throttled {
-        return NotificationDecision {
-            send: false,
-            reason: "throttled",
-            message: None,
-        };
-    }
-
-    let (title, body) = notification_message(phase, remaining);
-    NotificationDecision {
-        send: true,
-        reason: "send",
-        message: Some((title, body)),
-    }
+) -> attendance::NotificationDecision {
+    attendance::notification_decision(config, phase, remaining, needs_login, kst_now, secs_since_last)
 }
 
 /// 적응형 틱 간격 계산 (순수 함수).
@@ -359,39 +269,9 @@ pub(crate) fn compute_tick_interval(
     }
 }
 
-/// phase와 남은 시간으로 알림 제목·본문 생성.
+#[cfg(test)]
 pub(crate) fn notification_message(phase: DailyPhase, remaining: Option<i64>) -> (&'static str, String) {
-    let format_remaining = |secs: i64| {
-        let mins = (secs + 59) / 60;
-        if mins >= 60 {
-            format!("마감까지 {}시간 {}분 남았습니다.", mins / 60, mins % 60)
-        } else {
-            format!("마감까지 {}분 남았습니다.", mins)
-        }
-    };
-
-    match phase {
-        DailyPhase::NeedStart => (
-            "출석 체크 시간입니다",
-            remaining
-                .map(&format_remaining)
-                .unwrap_or_else(|| "출석 체크를 해주세요.".into()),
-        ),
-        DailyPhase::StartOverdue => match remaining {
-            Some(r) if r > 0 => (
-                "출석 체크 지각 임박!",
-                format!("마감까지 {}분 남았습니다.", (r + 59) / 60),
-            ),
-            _ => ("출석 체크 지각!", "빨리 체크인하세요.".into()),
-        },
-        DailyPhase::NeedEnd => (
-            "학습 종료 체크가 필요합니다",
-            remaining
-                .map(&format_remaining)
-                .unwrap_or_else(|| "학습 종료 체크를 해주세요.".into()),
-        ),
-        _ => ("Jungle Bell", "출석 상태를 확인하세요.".into()),
-    }
+    attendance::notification_message(phase, remaining)
 }
 
 /// 스케줄러 틱 한 번의 순수 계산.
@@ -413,14 +293,10 @@ pub(crate) fn compute_tick(state: &mut AppState, now: DateTime<Utc>, attendance_
     let notification = phase_update
         .and_then(|(phase, remaining)| compute_notification_for_phase(state, now, kst_now, phase, remaining));
 
-    // --- 체커 WebView 주기적 리로드 ---
-    // API 호출은 WebView 쿠키를 사용하므로 세션/토큰 갱신을 위해
-    // 주기적으로 출석 페이지로 다시 이동시킴 (15분 간격).
-    // needs_login 상태에서도 리로드하여 사용자가 attendance 창에서
-    // 로그인한 경우 세션이 자동 복구되도록 함.
-    // 리로드 시 checker WebView의 page-load handler가 상태 확인을 트리거하므로
-    // trigger_check를 건너뛰어 "Load failed" 레이스 컨디션을 방지.
-    let should_reload = should_reload_checker(state, now);
+    // --- 주기 job ---
+    // API 호출은 WebView 쿠키를 사용하므로 checker session refresh를
+    // interval job으로 등록한다. 나중에 급식/빨래 API도 같은 형태로 추가한다.
+    let job_actions = compute_job_actions(state, now);
 
     // --- 로그인 재시도 윈도우 만료 확인 ---
     expire_login_retry_window(state, now);
@@ -438,7 +314,7 @@ pub(crate) fn compute_tick(state: &mut AppState, now: DateTime<Utc>, attendance_
 
     TickResult {
         tick_interval,
-        should_reload,
+        job_actions,
         phase_changed,
         notification,
         tray_update,
@@ -472,21 +348,27 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
             let delayed_tick = previous_tick
                 .zip(previous_interval_secs)
                 .and_then(|(previous_tick, interval)| {
-                    tick_delayed(previous_tick, interval, now).map(|elapsed| (elapsed, interval))
+                    let action = interval_tasks::delayed_tick_action(
+                        previous_tick,
+                        interval,
+                        now,
+                        TICK_DELAY_REFRESH_GRACE_SECS,
+                        JobKind::CheckerSessionRefresh,
+                    )?;
+                    Some(((now - previous_tick).num_seconds(), interval, action))
                 });
 
-            if let Some((elapsed, interval)) = delayed_tick {
-                if refresh_checker_after_delayed_tick(&app_handle, elapsed, interval) {
-                    let mut s = shared_state.lock().await;
-                    s.last_reload = Some(now);
-                }
+            if let Some((elapsed, interval, action)) = delayed_tick {
+                let succeeded = refresh_checker_after_delayed_tick(&app_handle, action, elapsed, interval);
+                let mut s = shared_state.lock().await;
+                record_job_result(&mut s, action, succeeded, now);
                 previous_tick = Some(now);
                 previous_interval_secs = Some(DELAYED_TICK_RECHECK_INTERVAL_SECS);
                 tokio::time::sleep(tokio::time::Duration::from_secs(DELAYED_TICK_RECHECK_INTERVAL_SECS)).await;
                 continue;
             }
 
-            let tick_result = {
+            let (tick_result, phase) = {
                 let mut s = shared_state.lock().await;
                 let attendance_open = app_handle.get_webview_window("attendance").is_some();
 
@@ -494,21 +376,25 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
                 let phase = s.phase;
 
                 log_tick_state(now, &s, &result);
-                if apply_tick_effects(&app_handle, phase, &result) {
-                    s.last_reload = Some(now);
-                }
-
-                result
+                (result, phase)
             };
 
-            log::debug!("[scheduler] tick: interval={}s", tick_result.tick_interval,);
-
-            // Rust가 오케스트레이터: 매 틱마다 JS 스냅샷 수집을 트리거.
-            // 결과는 report_attendance_status 커맨드를 통해 비동기로 돌아온다.
-            // 리로드한 틱에서는 건너뜀 — page-load handler가 새 페이지에서 체크를 수행.
-            if !tick_result.should_reload {
-                checker::trigger_check(&app_handle);
+            let job_results = runtime::apply_tick_side_effects(
+                &app_handle,
+                phase,
+                tick_result.tray_update.as_ref(),
+                tick_result.notification.as_ref(),
+                tick_result.phase_changed,
+                &tick_result.job_actions,
+            );
+            if !job_results.is_empty() {
+                let mut s = shared_state.lock().await;
+                for (action, succeeded) in job_results {
+                    record_job_result(&mut s, action, succeeded, now);
+                }
             }
+
+            log::debug!("[scheduler] tick: interval={}s", tick_result.tick_interval,);
 
             previous_tick = Some(now);
             previous_interval_secs = Some(tick_result.tick_interval);
@@ -979,7 +865,8 @@ mod tests {
         assert_eq!(result.tick_interval, 5);
         assert!(result.tray_update.is_none());
         assert!(result.notification.is_none());
-        assert!(!result.should_reload);
+        assert!(result.has_job_action(JobKind::AttendanceStatusCheck));
+        assert!(!result.has_job_action(JobKind::CheckerSessionRefresh));
     }
 
     #[test]
@@ -1058,23 +945,29 @@ mod tests {
         state.data_loaded = true;
         let t0 = kst_utc(9, 0, 0);
         let result = compute_tick(&mut state, t0, false);
-        assert!(!result.should_reload);
-        assert_eq!(state.last_reload, Some(t0));
+        assert!(!result.has_job_action(JobKind::CheckerSessionRefresh));
+        assert_eq!(
+            state.interval_jobs.last_success_at(JobKind::CheckerSessionRefresh),
+            None
+        );
 
         // when: 14분 후
         let t1 = kst_utc(9, 14, 0);
         let result_14min = compute_tick(&mut state, t1, false);
 
         // then: 아직 리로드 안 함
-        assert!(!result_14min.should_reload);
+        assert!(!result_14min.has_job_action(JobKind::CheckerSessionRefresh));
 
         // when: 16분 후
         let t2 = kst_utc(9, 16, 0);
         let result_16min = compute_tick(&mut state, t2, false);
 
         // then: 리로드 발생
-        assert!(result_16min.should_reload);
-        assert_eq!(state.last_reload, Some(t0));
+        assert!(result_16min.has_job_action(JobKind::CheckerSessionRefresh));
+        assert_eq!(
+            state.interval_jobs.last_success_at(JobKind::CheckerSessionRefresh),
+            None
+        );
     }
 
     #[test]
@@ -1083,7 +976,7 @@ mod tests {
         let mut state = default_state();
         state.data_loaded = true;
         let t0 = kst_utc(9, 0, 0);
-        state.last_reload = Some(t0);
+        state.interval_jobs.mark_success(&CHECKER_SESSION_REFRESH_JOB, t0);
 
         // when
         let t1 = kst_utc(9, 16, 0);
@@ -1092,9 +985,12 @@ mod tests {
         let second = compute_tick(&mut state, t2, false);
 
         // then
-        assert!(first.should_reload);
-        assert!(second.should_reload);
-        assert_eq!(state.last_reload, Some(t0));
+        assert!(first.has_job_action(JobKind::CheckerSessionRefresh));
+        assert!(second.has_job_action(JobKind::CheckerSessionRefresh));
+        assert_eq!(
+            state.interval_jobs.last_success_at(JobKind::CheckerSessionRefresh),
+            Some(t0)
+        );
     }
 
     #[test]

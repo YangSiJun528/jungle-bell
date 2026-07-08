@@ -1,7 +1,7 @@
 use chrono::{DateTime, FixedOffset, NaiveDate, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::config::Config;
+use crate::{config::Config, interval_tasks::JobStore};
 
 /// 앱 전역 상태. scheduler, checker, tray 모듈에서 공유.
 /// `Arc<Mutex<AppState>>`로 보호되며 Tauri managed state로 접근.
@@ -22,8 +22,8 @@ pub struct AppState {
     pub data_loaded: bool,
     /// 마지막으로 확인한 KST 날짜 (day-of-year), 일일 리셋 감지용
     pub last_reset_day: Option<u32>,
-    /// 체커 WebView 마지막 리로드 시각
-    pub last_reload: Option<DateTime<Utc>>,
+    /// 주기 실행 작업별 마지막 성공 시각.
+    pub interval_jobs: JobStore,
     /// hidden checker WebView readiness/report 상태.
     pub checker: CheckerRuntime,
     /// 로그인 재시도 윈도우 마감 시각.
@@ -46,7 +46,7 @@ impl AppState {
             needs_login: false,
             data_loaded: false,
             last_reset_day: None,
-            last_reload: None,
+            interval_jobs: JobStore::default(),
             checker: CheckerRuntime::default(),
             login_retry_until: None,
             last_notification: None,
