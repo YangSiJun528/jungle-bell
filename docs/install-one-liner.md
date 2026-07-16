@@ -26,8 +26,8 @@
 | **자가 기술형(self-describing) 스크립트** | 릴리스마다 워크플로가 `__VERSION__`을 실제 버전으로 치환해 에셋으로 업로드. 사용자가 받은 시점에 어느 버전을 설치할지 결정돼 있어 Worker나 클라이언트 로직이 단순해짐. |
 | **macOS는 tar.gz** | `.app` 디렉터리를 그대로 압축. `ditto`로 `/Applications`에 복사하는 방식이 가장 무난. DMG는 수동 다운로드용으로만 유지. |
 | **Windows는 NSIS `/S`** | 이미 발급되는 NSIS `.exe`에 silent 플래그를 줘 설치 마법사 없이 끝남. SmartScreen / UAC 팝업은 수용. |
-| **Worker는 극단적으로 단순화** | GitHub API 호출 0, 캐시 0, 태그 정규식 0. `releases/latest/download/...`로 redirect만 하고 `?tag=vX.Y.Z` 쿼리로 특정 버전 처리. |
-| **README에 버전 하드코딩 안 함** | `?tag=vX.Y.Z` 패턴으로 사용자가 직접 태그를 넣게 해 `bump-version` 스킬이 README를 손댈 필요가 없게 만듦. |
+| **Worker는 극단적으로 단순화** | GitHub API 호출 0, 캐시 0, 태그 정규식 0. `/latest`와 `/{version}` 경로를 GitHub Releases URL로 redirect. |
+| **README에 버전 하드코딩 안 함** | 최신 버전은 `/latest`, 특정 버전은 `/{version}` 경로로 구분해 `bump-version` 스킬이 README를 손댈 필요가 없게 만듦. |
 | **ad-hoc 코드 서명 + `xattr -cr`** | Apple Developer ID가 없으므로 `codesign --sign -`로 로컬 검증 가능한 서명만 붙이고, 격리 속성을 제거해 Gatekeeper "손상" 다이얼로그를 회피. |
 
 ---
@@ -41,7 +41,7 @@ YangSiJun528/jungle-bell
   install/jungle-bell.sh.tmpl, install/jungle-bell.ps1.tmpl
   src-tauri/tauri.conf.json (bundle targets에 app 명시)
   .github/workflows/release.yml (tar.gz 생성 + 템플릿 치환 업로드)
-  README.md (one-liner + ?tag= 안내)
+  README.md (latest one-liner 안내)
 
 YangSiJun528/install.sijun-yang.com
   Cloudflare Worker — redirect 전용
@@ -51,10 +51,11 @@ YangSiJun528/install.sijun-yang.com
 
 | URL | 동작 |
 |---|---|
-| `https://install.sijun-yang.com/` | 랜딩 페이지 |
-| `https://install.sijun-yang.com/jungle-bell.sh` | `releases/latest/download/jungle-bell.sh`로 302 |
-| `https://install.sijun-yang.com/jungle-bell.ps1` | 동일 패턴 |
-| `https://install.sijun-yang.com/jungle-bell.sh?tag=vX.Y.Z` | `releases/download/vX.Y.Z/jungle-bell.sh`로 302 (stable/prerelease 모두) |
+| `https://install.sijun-yang.com/` | Worker 저장소로 302 |
+| `https://install.sijun-yang.com/jungle-bell.sh/latest` | `releases/latest/download/jungle-bell.sh`로 302 |
+| `https://install.sijun-yang.com/jungle-bell.ps1/latest` | 동일 패턴 |
+| `https://install.sijun-yang.com/jungle-bell.sh/vX.Y.Z` | `releases/download/vX.Y.Z/jungle-bell.sh`로 302 (stable/prerelease 모두) |
+| `https://install.sijun-yang.com/info` | 현재 경로와 리다이렉트 설정 반환 |
 | `https://install.sijun-yang.com/healthz` | 200 헬스 체크 |
 
 ### 한 릴리스에 포함되는 에셋
@@ -79,10 +80,10 @@ YangSiJun528/install.sijun-yang.com
 | 2 | `install/jungle-bell.sh.tmpl`, `install/jungle-bell.ps1.tmpl` 작성 | sh는 `sh -n` syntax 통과 + `JUNGLE_BELL_ASSET_URL=file://…`로 실 install 경로 검증. ps1은 시뮬레이션 환경 부재로 후속 Windows 실기 검증 보류 | `f7d4559` |
 | 3 | `release.yml`에 macOS tar.gz archive step + `publish-installer-scripts` job 추가, `publish-release` `needs` 확장 | YAML lint 통과 | `064b6af` |
 | 4 | `v0.2.6-beta.1` prerelease 만들어 워크플로 검증 | 13개 에셋 정상 업로드, 스크립트의 `VERSION="0.2.6-beta.1"` 치환 확인 | `4625529` (bump) + 태그 `v0.2.6-beta.1` |
-| 5 | `install.sijun-yang.com` Worker 갱신 | 별도 repo (`YangSiJun528/install.sijun-yang.com`)에서 처리. `?tag=` 쿼리, `/healthz`까지 지원 | — |
+| 5 | `install.sijun-yang.com` Worker 갱신 | 별도 repo (`YangSiJun528/install.sijun-yang.com`)에서 처리. `/latest`, `/{version}`, `/healthz` 지원 | — |
 | 6a | macOS Apple Silicon에서 직접 GitHub URL로 `curl \| sh` E2E | 정상 설치 + ad-hoc 서명 + xattr clean + `open` 기동 확인 | — |
-| 7 | README 설치 섹션 재편 + `?tag=vX.Y.Z` 특정 버전 섹션 추가 | one-liner를 1차 경로로 노출, 수동 다운로드는 fallback | `bec1ca6`, `cca7f92` |
-| 8 | `bump-version` 스킬 확장 | `?tag=` 패턴 채택으로 **불필요**. 종결. | — |
+| 7 | README 설치 섹션 재편 | one-liner를 1차 경로로 노출, 수동 다운로드는 fallback | `bec1ca6`, `cca7f92` |
+| 8 | `bump-version` 스킬 확장 | 버전 경로를 동적으로 처리하므로 **불필요**. 종결. | — |
 
 전체 커밋 (베이스 `53c50fd` 이후):
 
@@ -129,7 +130,7 @@ publish-release:
 
 ### Worker 동작
 
-- 모든 GET/HEAD: `redirects.json`의 매핑에 따라 latest 또는 `?tag=` 지정 태그의 GitHub Releases asset URL로 302
+- 모든 GET/HEAD: `redirects.json`의 매핑에 따라 `/latest` 또는 `/{version}`의 GitHub Releases asset URL로 302
 - 그 외 path: 404
 - 비-GET/HEAD: 405
 
@@ -160,14 +161,14 @@ publish-release:
 
 - **Intel Mac**: 실기기 없음 → best-effort. 베타 사용자 리포트로 보강.
 - **Windows E2E**: 실기기 없음 → 베타 사용자 리포트 또는 다음 워크스테이션에서 검증.
-- **install.sijun-yang.com latest 회귀**: 다음 stable 릴리스 시점에 `curl -fsSL https://install.sijun-yang.com/jungle-bell.sh | sh`가 끝까지 동작하는지 1회 확인 필요 (현재는 v0.2.5가 latest로 잡혀 있어 새 스크립트가 없음 → 404).
+- **install.sijun-yang.com latest 회귀**: 다음 stable 릴리스 시점에 `curl -fsSL https://install.sijun-yang.com/jungle-bell.sh/latest | sh`가 끝까지 동작하는지 1회 확인 필요 (현재는 v0.2.5가 latest로 잡혀 있어 새 스크립트가 없음 → 404).
 
 ---
 
 ## 7. 운영 노트
 
 - 다음 stable 릴리스(예: `v0.2.6`) 직후 한 번:
-  - `curl -I https://install.sijun-yang.com/jungle-bell.sh` 가 302로 새 스크립트로 가는지
-  - `curl -fsSL .../jungle-bell.sh | sh`로 끝까지 설치되는지
+  - `curl -I https://install.sijun-yang.com/jungle-bell.sh/latest`가 302로 새 스크립트로 가는지
+  - `curl -fsSL .../jungle-bell.sh/latest | sh`로 끝까지 설치되는지
 - README는 버전과 무관하므로 릴리스마다 손댈 일 없음.
 - SmartScreen / Apple Developer ID 코드 서명 도입은 별도 과제. 비용/유지보수 부담이 커서 베타 사용자 수가 더 늘어난 뒤에 재검토.
