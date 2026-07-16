@@ -1,0 +1,24 @@
+{
+  "baseUrl": "https://jungle-lms.krafton.com",
+  "entryPath": "/check-in",
+  "routes": [],
+  "relativeApiBasePath": "/api/v2",
+  "apiPathPrefixes": [
+    "/api/"
+  ],
+  "appDependencies": {
+    "GET /api/v2/me": [
+      "id"
+    ],
+    "GET /api/v2/me/cohorts": [
+      "endDate",
+      "id",
+      "isActive",
+      "startDate"
+    ],
+    "GET /api/v2/me/cohorts/{cohortId}/attendance/today": [
+      "checkedAt",
+      "checkedOutAt"
+    ]
+  }
+}

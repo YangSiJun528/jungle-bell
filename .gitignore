@@ -19,7 +19,10 @@ jungle-campus-analyzer/output/
 # config
 .cargo/config.toml
 
-# Webcrack snapshots (로컬 참조용, 커밋 제외)
+# API observer snapshots (로컬 참조용, 커밋 제외)
+campus/api-observer/logs/
+
+# Legacy Webcrack snapshots
 campus/webcrack/logs/
 
 # Editor directories and files

@@ -1,102 +1,117 @@
-# Jungle Campus API 모델 추출기
+# Jungle Campus API 변경 관찰하기
 
-Jungle Campus(jungle-lms.krafton.com) 프론트엔드 JS 번들을 정적 분석하여 API 엔드포인트와 ENUM을 자동 추출.
+이 도구는 테스트를 통과시키는 용도가 아니다. Jungle Campus 프론트엔드와 실제 GET 응답을 관찰해 다음 변경 후보를 만들고, 사람이 직접 의미를 확인하는 용도다.
 
-## 설치
+- API 경로, 메서드, 요청 필드
+- 정적 클라이언트 오류 조건과 사용자 메시지
+- 실제로 관찰한 응답 필드·타입·ENUM 후보
+- 익명화한 오류 응답 코드·메시지
+- Jungle Bell이 의존하는 응답 필드의 변경 영향
+
+기본 실행은 API 원본 값과 JS 번들을 저장하지 않는다. 보고서에는 응답의 구조만 남는다.
+
+## 준비
+
+Node.js 24.12 이상이 필요하다.
 
 ```bash
 cd jungle-campus-analyzer
-npm install                      # postinstall이 prettier ESM 패치 자동 적용
+npm install
 npx playwright install chromium
 ```
 
-## 사용법
+최초 한 번 로그인 세션을 저장한다.
 
 ```bash
-# 최초 로그인 (1회) — 브라우저에서 구글 로그인 후 닫기
-node analyze.mjs --login --url https://jungle-lms.krafton.com/check-in
-
-# 분석 실행
-node analyze.mjs --url https://jungle-lms.krafton.com/check-in
-
-# 옵션: --filter <apis>       특정 API만 필터링
-#        --verbose              상세 로그
-#        --snapshot-root <dir>  스냅샷 저장 디렉터리 지정 (아래 참고)
+npm run login
 ```
 
-## 스냅샷 & 변경 추적
+열린 브라우저에서 로그인한 뒤 창을 닫는다. 세션은 `.browser-data/`에 로컬로만 저장되고 Git에서 제외된다.
 
-`--snapshot-root` 옵션을 지정하면 실행 결과를 파일로 저장하고 이전 결과와 비교합니다.
+## 변경 관찰 실행
+
+저장소 루트의 `campus/api-observer`에 검토 이력을 남기려면 다음처럼 실행한다.
 
 ```bash
-# 저장소 루트 기준으로 실행
-node analyze.mjs --url https://jungle-lms.krafton.com/check-in --snapshot-root ../campus/webcrack
+npm run analyze -- --snapshot-root ../campus/api-observer
 ```
 
-**저장 구조:**
+한 번의 실행은 다음 순서로 진행된다.
 
-```
-campus/webcrack/
-  logs/      ← 매 실행 결과 전체 저장 (gitignore, 로컬 참조용)
-               파일명: YYYY-MM-DDTHH-MM-SS.json
-  changes/   ← 변경 있을 때만 저장 (git 추적)
-               파일명: YYYY-MM-DDTHH-MM-SS.json
-```
+1. Playwright가 설정된 페이지를 방문해 그 실행에서 받은 번들과 API 응답만 수집한다.
+2. Oxc가 압축된 번들을 직접 파싱해 HTTP 호출, ENUM 후보, 클라이언트 오류 처리를 찾는다.
+3. 실제 응답 값은 저장하지 않고 JSON 필드·타입·필수 여부·상태 코드만 추론한다.
+4. 이전 스냅샷과 의미 기반으로 비교한다.
 
-- `logs/`: 실행할 때마다 `report.json` 스냅샷이 쌓임. git에 포함되지 않음.
-- `changes/`: 이전 로그와 diff 했을 때 변경이 감지된 경우에만 생성. 자동 커밋 대상.
+결과 파일은 다음 위치에 생긴다.
 
-**스킬로 실행** (Claude Code):
-
-```
-/webcrack-snapshot                                          # 기본 URL 사용
-/webcrack-snapshot https://jungle-lms.krafton.com/check-in # 명시적 URL
+```text
+jungle-campus-analyzer/output/report.json   현재 결과
+campus/api-observer/logs/                    매 실행 기준 스냅샷, Git 제외
+campus/api-observer/changes/                 변경이 있을 때만 생성되는 검토 파일
 ```
 
-파이프라인 실행 → 스냅샷 저장 → 변경 감지 시 아래 형식으로 자동 커밋:
+첫 실행은 기준만 저장하고 `changes/` 파일을 만들지 않는다.
 
-```
-[webcrack] 2026-04-01: 3건 변경 (api_added, enum_removed)
-```
+## 결과 검토
 
-변경 커밋 히스토리 확인:
+먼저 `changes/*.json`의 `changes`를 확인한다.
 
-```bash
-git log --oneline | grep '\[webcrack\]'
-```
+- `response_field_removed`, `response_type_changed`: 응답 필드 계약 후보
+- `enum_value_added`, `enum_value_removed`: ENUM 후보
+- `client_*`: 프론트엔드가 처리하는 오류 조건·메시지 후보
+- `observed_error_*`: 실제 오류 응답에서 관찰한 코드·익명화 메시지 후보
+- `appImpact: true`: Jungle Bell이 쓰는 필드와 겹치는 변경
 
-## 파이프라인
+그 다음 `output/report.json`에서 해당 엔드포인트의 근거를 확인한다.
 
-1. **수집** — Playwright로 JS 번들 수집 (인증 세션 필요)
-2. **디번들링** — Turbopack(AST) / webpack(webcrack) → 개별 모듈 분리
-3. **Unminify** — wakaru로 가독성 복원
-4. **추출** — `httpV2.*()` 패턴으로 API 엔드포인트 + ENUM 자동 감지
+- `sources`: `static`, `runtime`, `app-dependency` 중 어떤 근거인지 표시한다.
+- `responses`: 상태 코드별 응답 스키마 목록이다.
+- `errors`: 번들에서 찾은 클라이언트 오류 처리다.
+- `observedErrors`: 실제 응답에서 찾은 오류 코드와 익명화 메시지다.
+- `enums[].evidence`: 후보를 찾은 번들 위치 또는 런타임 엔드포인트다.
 
-결과: `output/api-modules/report.json`
+런타임 결과는 방문한 화면과 당시 데이터에 한정된다. `미관찰`은 삭제가 확정됐다는 뜻이 아니므로 직접 확인해야 한다.
 
-## report.json 예시
+## Jungle Bell 의존 필드 관리
+
+[`observer.config.json`](./observer.config.json)의 `appDependencies`에 앱이 실제 사용하는 필드를 적는다.
 
 ```json
 {
-  "apis": {
-    "GET /api/v2/me/cohorts": {
-      "method": "GET",
-      "pathParams": null,
-      "queryParams": null,
-      "errorMessages": { "generic": "소속 기수 목록을 불러오는데 실패했어요." },
-      "source": "22586.js:L7"
-    }
-  },
-  "enums": {
-    "attendance_status": ["ABSENT", "LATE", "PRESENT", "SELF_STUDY"],
-    "leave_request_status": ["APPROVED", "PENDING", "REJECTED", "RETURNED"]
+  "appDependencies": {
+    "GET /api/v2/me/cohorts": ["id", "isActive", "startDate", "endDate"],
+    "GET /api/v2/me/cohorts/{cohortId}/attendance/today": ["checkedAt", "checkedOutAt"]
   }
 }
 ```
 
-## 참고
+페이지 로드 중 호출되지 않은, 경로 변수가 없는 GET 의존 API는 같은 로그인 세션으로 추가 관찰한다. POST·PATCH·DELETE 요청은 자동 실행하지 않는다.
 
-- **런타임 응답 캡처**: 현재는 정적 분석만 수행. API 응답 JSON이 필요하면 `collector.mjs`에서 `page.on('response')`로 `/api/v2/` 응답을 캡처하는 방식으로 확장 가능.
-- **Unminify 경고**: `prettier Invalid left-hand side`, `lebab markModified` 등은 React 내부 코드 복원 실패로 발생하며, API 모듈에는 영향 없음. 무시 가능.
-- **세션 만료**: `--login`으로 재로그인.
-- **prettier ESM 패치**: `node_modules` 삭제 후 반드시 `npm install` 재실행.
+다른 화면에서만 호출되는 API까지 관찰하려면 설정의 `routes`에 경로를 추가하거나 실행할 때 반복해서 지정한다.
+
+```bash
+npm run analyze -- --route /learning --route /leave
+```
+
+## 진단과 검증
+
+현재 실행의 번들만 별도로 보관해야 할 때만 `--artifacts`를 사용한다.
+
+```bash
+npm run analyze -- --artifacts /tmp/jungle-campus-bundles
+```
+
+이미 받은 번들의 정적 추출만 확인할 수도 있다. 이 모드에는 실제 응답 스키마가 없다.
+
+```bash
+npm run analyze -- --bundle-dir /path/to/bundles
+```
+
+코드 검증은 다음 명령으로 실행한다.
+
+```bash
+npm run verify
+```
+
+세션이 만료되면 `npm run login`을 다시 실행한다. 현재 번들에서 API를 하나도 찾지 못하면 오래된 결과를 재사용하지 않고 오류로 종료한다.

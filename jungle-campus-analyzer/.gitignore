@@ -12,7 +12,7 @@ dist
 dist-ssr
 *.local
 
-# Analyzer output
+# Observer state and output
 .browser-data/
 output/
 

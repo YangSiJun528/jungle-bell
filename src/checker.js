@@ -6,9 +6,9 @@
 // 아래 JSDoc은 현재 의존하는 필드를 문서화한 것.
 // API 변경 시 대응 파싱 함수(parseCohorts / parseAttendanceToday)만 수정하면 됨.
 //
-// API 변경 감지 및 응답 형식 분석은 jungle-campus-analyzer 프로젝트로 관리.
-// JS 번들을 역디번들링·정적 분석하여 엔드포인트·ENUM을 추출하고,
-// 변경이 감지되면 campus/webcrack/changes/ 에 스냅샷을 저장한다.
+// API 변경 후보와 응답 형식은 jungle-campus-analyzer 프로젝트로 관찰.
+// 현재 JS 번들의 API·ENUM·오류 처리와 실제 응답 스키마를 비교하고,
+// 변경 후보는 campus/api-observer/changes/ 에 저장한다.
 //
 // GET /api/v2/me/cohorts
 /**

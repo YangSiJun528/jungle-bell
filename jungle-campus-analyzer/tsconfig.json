@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "noEmit": true,
+    "noUncheckedIndexedAccess": true,
+    "rewriteRelativeImportExtensions": true,
+    "strict": true,
+    "target": "es2024",
+    "types": ["node"]
+  },
+  "include": ["analyze.ts", "lib/**/*.ts", "test/**/*.ts"]
+}

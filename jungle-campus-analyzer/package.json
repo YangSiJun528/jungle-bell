@@ -1,20 +1,24 @@
 {
-  "name": "jungle-campus-analyzer",
+  "name": "jungle-campus-observer",
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=24.12 <27"
+  },
   "scripts": {
-    "postinstall": "node scripts/patch-prettier.mjs",
-    "analyze": "node analyze.mjs",
-    "login": "node analyze.mjs --login --url https://jungle-lms.krafton.com/check-in"
+    "analyze": "node analyze.ts",
+    "login": "node analyze.ts --login",
+    "test": "node --test",
+    "typecheck": "tsc --noEmit",
+    "verify": "npm run typecheck && npm test"
   },
   "dependencies": {
-    "playwright": "^1.50",
-    "webcrack": "^2.15",
-    "@wakaru/unminify": "^0.2",
-    "@wakaru/unpacker": "^0.1"
+    "oxc-parser": "0.139.0",
+    "playwright": "^1.61.0"
   },
-  "overrides": {
-    "isolated-vm": "^6.0.0"
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^7.0.2"
   }
 }
