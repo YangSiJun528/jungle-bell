@@ -11,7 +11,7 @@
 자동 설치:
 
 ```bash
-curl -fsSL https://install.sijun-yang.com/jungle-bell.sh | sh
+curl -fsSL https://install.sijun-yang.com/jungle-bell.sh/latest | sh
 ```
 
 수동 설치:
@@ -33,7 +33,7 @@ Mac 종류를 모르겠다면 왼쪽 상단 Apple 메뉴에서 `이 Mac에 관�
 자동 설치:
 
 ```powershell
-irm https://install.sijun-yang.com/jungle-bell.ps1 | iex
+irm https://install.sijun-yang.com/jungle-bell.ps1/latest | iex
 ```
 
 수동 설치:

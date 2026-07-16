@@ -29,7 +29,7 @@
 ### macOS
 
 ```bash
-curl -fsSL https://install.sijun-yang.com/jungle-bell.sh | sh
+curl -fsSL https://install.sijun-yang.com/jungle-bell.sh/latest | sh
 ```
 
 ### Windows
@@ -37,7 +37,7 @@ curl -fsSL https://install.sijun-yang.com/jungle-bell.sh | sh
 PowerShell에서 실행해 주세요.
 
 ```powershell
-irm https://install.sijun-yang.com/jungle-bell.ps1 | iex
+irm https://install.sijun-yang.com/jungle-bell.ps1/latest | iex
 ```
 
 ## 스크린샷
