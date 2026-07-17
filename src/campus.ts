@@ -124,6 +124,11 @@ const PROJECTION_LABELS: Record<string, string> = {
     CONFIRMED_COMPLETED: '완료', PAUSED: '일시 정지', ERROR: '오류', IDLE: '사용 가능', UNKNOWN: '확인 불가',
 };
 
+function machineNumber(id: string): number | null {
+    const match = String(id ?? '').trim().match(/(?:워시타워[_\s-]*)?(\d+)$/);
+    return match?.[1] ? Number(match[1]) : null;
+}
+
 declare global {
     interface Window {
         setCampusTab?: (tab: string) => void;
@@ -271,8 +276,16 @@ function campus(): Record<string, unknown> {
                     if (this.laundryFilter === 'available') return appliances.some((item) => this.applianceIsAvailable(item));
                     return true;
                 })
-                .sort((left, right) => this.machineRank(left) - this.machineRank(right)
-                    || String(left.id).localeCompare(String(right.id), 'ko', {numeric: true}));
+                .sort((left, right) => {
+                    const leftNumber = machineNumber(left.id);
+                    const rightNumber = machineNumber(right.id);
+                    if (leftNumber !== null && rightNumber !== null && leftNumber !== rightNumber) {
+                        return leftNumber - rightNumber;
+                    }
+                    if (leftNumber !== null) return -1;
+                    if (rightNumber !== null) return 1;
+                    return String(left.id).localeCompare(String(right.id), 'ko', {numeric: true});
+                });
         },
 
         laundryEmptyMessage(this: any) {
@@ -303,18 +316,10 @@ function campus(): Record<string, unknown> {
                 || appliance.operationalStatus === 'PAUSED'));
         },
 
-        machineRank(this: any, machine: Machine) {
-            const appliances = [machine.washer, machine.dryer].filter(Boolean) as Appliance[];
-            if (appliances.some((item) => this.applianceNeedsAttention(item))) return 0;
-            if (appliances.some((item) => this.applianceIsActive(item))) return 1;
-            if (appliances.some((item) => this.applianceIsAvailable(item))) return 2;
-            return 3;
-        },
-
         machineName(id: string) {
             const text = String(id ?? '').trim();
-            const number = text.match(/(?:워시타워[_\s-]*)?(\d+)$/)?.[1];
-            return number ? `${number}번 워시타워` : text.replaceAll('_', ' ');
+            const number = machineNumber(text);
+            return number !== null ? `${number}번 워시타워` : text.replaceAll('_', ' ');
         },
 
         machineSummary(this: any, machine: Machine) {
