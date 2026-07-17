@@ -1,38 +1,32 @@
 import { z } from "zod";
 
-const mediaSchema = z
-  .object({
-    id: z.union([z.number(), z.string()]),
-    type: z.string().optional(),
-    url: z.string().url().optional(),
-    xlarge_url: z.string().url().optional(),
-    filename: z.string().optional(),
-    mimetype: z.string().optional(),
-    width: z.number().int().nonnegative().optional(),
-    height: z.number().int().nonnegative().optional(),
-  })
-  .passthrough();
+const mediaSchema = z.looseObject({
+  id: z.union([z.number(), z.string()]),
+  type: z.string().optional(),
+  url: z.url().optional(),
+  xlarge_url: z.url().optional(),
+  filename: z.string().optional(),
+  mimetype: z.string().optional(),
+  width: z.number().int().nonnegative().optional(),
+  height: z.number().int().nonnegative().optional(),
+});
 
-const postSchema = z
-  .object({
-    id: z.union([z.number(), z.string()]),
-    pinned: z.boolean().default(false),
-    title: z.string().nullable().optional(),
-    contents: z.array(z.unknown()).default([]),
-    media: z.array(mediaSchema).default([]),
-    published_at: z.number().nullable().optional(),
-    updated_at: z.number().nullable().optional(),
-    permalink: z.string().nullable().optional(),
-    status: z.string().nullable().optional(),
-  })
-  .passthrough();
+const postSchema = z.looseObject({
+  id: z.union([z.number(), z.string()]),
+  pinned: z.boolean().default(false),
+  title: z.string().nullable().optional(),
+  contents: z.array(z.unknown()).default([]),
+  media: z.array(mediaSchema).default([]),
+  published_at: z.number().nullable().optional(),
+  updated_at: z.number().nullable().optional(),
+  permalink: z.string().nullable().optional(),
+  status: z.string().nullable().optional(),
+});
 
-const postsResponseSchema = z
-  .object({
-    has_next: z.boolean().default(false),
-    items: z.array(postSchema),
-  })
-  .passthrough();
+const postsResponseSchema = z.looseObject({
+  has_next: z.boolean().default(false),
+  items: z.array(postSchema),
+});
 
 export interface MealImageCandidate {
   postId: string;
