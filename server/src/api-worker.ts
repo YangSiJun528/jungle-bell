@@ -3,19 +3,19 @@ import { configure, getLogger } from "@logtape/logtape";
 import { Hono, type Env as HonoEnvironment } from "hono";
 import { cors } from "hono/cors";
 import { z } from "zod";
-import { canonicalJsonSha256 } from "../../../packages/collector-core/src/hash";
-import type { LaundryVersion } from "../../../packages/collector-core/src/laundry";
-import type { MealsVersion } from "../../../packages/collector-core/src/meals";
-import { projectLaundry, withLaundryEventLabelKo } from "../../../packages/collector-core/src/projection";
+import { canonicalJsonSha256 } from "./hash";
+import { toPublicLaundryVersion, type LaundryVersion } from "./laundry";
+import type { MealsVersion } from "./meals";
+import { projectLaundry } from "./projection";
 import {
   compactUtcMinute,
   floorToMinute,
   minuteEpoch,
   parseCompactUtcMinute,
-} from "../../../packages/collector-core/src/time";
-import { SOURCE_NAMES, type SourceState } from "../../../packages/collector-core/src/types";
-import { getCloudflareConsoleSink } from "../../../packages/logging/src";
-import { CloudflareStorage } from "../../../packages/storage-cloudflare/src";
+} from "./time";
+import { SOURCE_NAMES, type SourceState } from "./types";
+import { getCloudflareConsoleSink } from "./logging";
+import { CloudflareStorage } from "./storage";
 
 interface Env {
   DB: D1Database;
@@ -35,6 +35,10 @@ const shaParamSchema = z.object({ sha: z.string().regex(/^[a-f0-9]{64}$/) });
 const eventsQuerySchema = z.object({
   since: rfc3339Schema.optional(),
   limit: z.coerce.number().int().min(1).max(500).default(100),
+});
+const mealHistoryQuerySchema = z.object({
+  before: rfc3339Schema.optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(30),
 });
 const assetParamSchema = z.object({ asset: z.string().regex(/^[a-f0-9]{64}\.[a-z0-9]{1,8}$/) });
 const edgeCache = (caches as unknown as {
@@ -104,15 +108,19 @@ function historicalState(observation: Awaited<ReturnType<CloudflareStorage["read
   };
 }
 
-function withAssetUrls(meals: MealsVersion, requestUrl: string): MealsVersion {
+function withPostAssetUrls<T extends MealsVersion["dailyMenus"][number]>(post: T, requestUrl: string): T {
   const origin = new URL(requestUrl).origin;
-  const mapPost = (post: MealsVersion["pinnedMenus"][number]) => ({
+  return {
     ...post,
     images: post.images.map((image) => ({
       ...image,
       url: `${origin}/v1/assets/${image.sha}.${image.extension}`,
     })),
-  });
+  };
+}
+
+function withAssetUrls(meals: MealsVersion, requestUrl: string): MealsVersion {
+  const mapPost = (post: MealsVersion["pinnedMenus"][number]) => withPostAssetUrls(post, requestUrl);
   return {
     ...meals,
     pinnedMenus: meals.pinnedMenus.map(mapPost),
@@ -235,13 +243,13 @@ app.get("/v1/laundry/versions/:sha", zValidator("param", shaParamSchema, validat
   const sha = context.req.valid("param").sha;
   const version = await context.var.storage.readJson<LaundryVersion>(`versions/laundry/${sha}.json`);
   if (!version) return jsonResponse(context.req.raw, { error: "VERSION_NOT_FOUND" }, { status: 404 });
-  return jsonResponse(context.req.raw, version, { cacheControl: IMMUTABLE_CACHE, etag: sha });
+  return jsonResponse(context.req.raw, toPublicLaundryVersion(version), { cacheControl: IMMUTABLE_CACHE, etag: sha });
 });
 
 app.get("/v1/laundry/events", zValidator("query", eventsQuerySchema, validationHook), async (context) => {
   const { since = null, limit } = context.req.valid("query");
   const events = await context.var.storage.listLaundryEvents(since, limit);
-  const body = { events: events.map(withLaundryEventLabelKo) };
+  const body = { events };
   return jsonResponse(context.req.raw, body, {
     cacheControl: LATEST_CACHE,
     etag: await canonicalJsonSha256(body),
@@ -254,10 +262,28 @@ app.get("/v1/meals", async (context) => {
   const version = await context.var.storage.readJson<MealsVersion>(state.lastNormalizedKey)
     ?? await context.var.storage.readJson<MealsVersion>("latest/meals.json");
   if (!version) return jsonResponse(context.req.raw, { error: "DATA_OBJECT_MISSING" }, { status: 503 });
+  const recentMenus = await context.var.storage.listMealPosts(null, 30);
   const body = {
     asOf: currentCacheSlice().toISOString(),
     lastCheckedAt: state.lastSuccessAt,
-    data: withAssetUrls(version, context.req.url),
+    data: {
+      ...withAssetUrls(version, context.req.url),
+      recentMenus: recentMenus.map((post) => withPostAssetUrls(post, context.req.url)),
+    },
+  };
+  return jsonResponse(context.req.raw, body, {
+    cacheControl: LATEST_CACHE,
+    etag: await canonicalJsonSha256(body),
+  });
+});
+
+app.get("/v1/meals/history", zValidator("query", mealHistoryQuerySchema, validationHook), async (context) => {
+  const { before = null, limit } = context.req.valid("query");
+  const posts = await context.var.storage.listMealPosts(before, limit);
+  const last = posts.at(-1);
+  const body = {
+    posts: posts.map((post) => withPostAssetUrls(post, context.req.url)),
+    nextBefore: posts.length === limit && last ? last.publishedAt ?? last.firstSeenAt : null,
   };
   return jsonResponse(context.req.raw, body, {
     cacheControl: LATEST_CACHE,

@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  collectAll,
-  type BinaryObject,
-  type CollectionCommit,
-  type CollectorOptions,
-  type CollectorStorage,
-  type SourceName,
-  type SourceState,
-} from "../packages/collector-core/src";
+import { collectAll } from "../src/collector";
+import type {
+  BinaryObject,
+  CollectionCommit,
+  CollectorOptions,
+  CollectorStorage,
+  SourceName,
+  SourceState,
+} from "../src/types";
 
 class MemoryStorage implements CollectorStorage {
   states = new Map<SourceName, SourceState>();
@@ -78,7 +78,20 @@ describe("collectAll", () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = input instanceof Request ? input.url : String(input);
       order.push(url);
-      const value = url.includes("laundry") ? laundry() : { has_next: false, items: [] };
+      const value = url.includes("laundry")
+        ? laundry()
+        : url.includes("pinned=true")
+          ? {
+              has_next: false,
+              items: [{
+                id: 10,
+                pinned: false,
+                title: "7월 17일 중식 메뉴",
+                contents: [{ t: "text", v: "밥\n국" }],
+                media: [],
+              }],
+            }
+          : { has_next: false, items: [] };
       return new Response(JSON.stringify(value), { status: 200, headers: { "Content-Type": "application/json" } });
     });
 
@@ -98,6 +111,8 @@ describe("collectAll", () => {
     expect(second.results.every((result) => !result.changed)).toBe(true);
     expect(storage.rawWrites).toHaveLength(6);
     expect(storage.commits).toHaveLength(6);
+    expect(storage.commits.find((commit) => commit.state.source === "meals-include-pinned")?.mealPosts)
+      .toEqual([expect.objectContaining({ id: "10", text: "밥\n국" })]);
     expect(storage.commits.slice(3).map((commit) => commit.observation.changed)).toEqual([false, false, false]);
     expect(storage.commits.slice(3).map((commit) => commit.observation.minuteEpoch)).toEqual([
       Date.parse("2026-07-17T00:01:00.000Z") / 60_000,

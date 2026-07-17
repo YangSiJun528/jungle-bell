@@ -6,7 +6,8 @@ import type {
   MinuteObservation,
   SourceName,
   SourceState,
-} from "../../collector-core/src/types";
+} from "./types";
+import type { ArchivedMealPost, MealImageAsset, MealPost } from "./meals";
 
 interface SourceStateRow {
   source: SourceName;
@@ -48,6 +49,36 @@ interface EventRow {
   previous_state: string | null;
   current_state: string;
   detail_json: string;
+}
+
+interface MealPostRow {
+  id: string;
+  kind: MealPost["kind"];
+  title: string | null;
+  text: string;
+  pinned: number;
+  published_at: string | null;
+  updated_at: string | null;
+  permalink: string | null;
+  status: string | null;
+  first_seen_at: string;
+  last_seen_at: string;
+}
+
+interface MealImageRow {
+  post_id: string;
+  media_id: string;
+  position: number;
+  source_url: string;
+  declared_content_type: string | null;
+  filename: string | null;
+  width: number | null;
+  height: number | null;
+  sha: string;
+  object_key: string;
+  content_type: string;
+  extension: string;
+  byte_length: number;
 }
 
 function toSourceState(row: SourceStateRow): SourceState {
@@ -98,6 +129,23 @@ function toEvent(row: EventRow): LaundryEvent {
   };
 }
 
+function toMealImage(row: MealImageRow): MealImageAsset {
+  return {
+    postId: row.post_id,
+    mediaId: row.media_id,
+    sourceUrl: row.source_url,
+    declaredContentType: row.declared_content_type,
+    filename: row.filename,
+    width: row.width,
+    height: row.height,
+    sha: row.sha,
+    objectKey: row.object_key,
+    contentType: row.content_type,
+    extension: row.extension,
+    byteLength: row.byte_length,
+  };
+}
+
 export class CloudflareStorage implements CollectorStorage {
   constructor(
     readonly db: D1Database,
@@ -135,6 +183,51 @@ export class CloudflareStorage implements CollectorStorage {
     return result.results.map(toEvent);
   }
 
+  async listMealPosts(before: string | null, limit: number): Promise<ArchivedMealPost[]> {
+    const statement = before
+      ? this.db.prepare(`
+          SELECT * FROM meal_post
+          WHERE kind = 'DAILY_MENU' AND COALESCE(published_at, first_seen_at) < ?
+          ORDER BY COALESCE(published_at, first_seen_at) DESC
+          LIMIT ?
+        `).bind(before, limit)
+      : this.db.prepare(`
+          SELECT * FROM meal_post
+          WHERE kind = 'DAILY_MENU'
+          ORDER BY COALESCE(published_at, first_seen_at) DESC
+          LIMIT ?
+        `).bind(limit);
+    const posts = (await statement.all<MealPostRow>()).results;
+    if (posts.length === 0) return [];
+
+    const placeholders = posts.map(() => "?").join(", ");
+    const imageResult = await this.db
+      .prepare(`SELECT * FROM meal_image WHERE post_id IN (${placeholders}) ORDER BY post_id, position`)
+      .bind(...posts.map((post) => post.id))
+      .all<MealImageRow>();
+    const imagesByPost = new Map<string, MealImageAsset[]>();
+    for (const row of imageResult.results) {
+      const images = imagesByPost.get(row.post_id) ?? [];
+      images.push(toMealImage(row));
+      imagesByPost.set(row.post_id, images);
+    }
+
+    return posts.map((post) => ({
+      id: post.id,
+      kind: post.kind,
+      title: post.title,
+      text: post.text,
+      pinned: post.pinned === 1,
+      publishedAt: post.published_at,
+      updatedAt: post.updated_at,
+      permalink: post.permalink,
+      status: post.status,
+      images: imagesByPost.get(post.id) ?? [],
+      firstSeenAt: post.first_seen_at,
+      lastSeenAt: post.last_seen_at,
+    }));
+  }
+
   async readJson<T>(key: string): Promise<T | null> {
     const object = await this.bucket.get(key);
     if (!object) return null;
@@ -169,7 +262,14 @@ export class CloudflareStorage implements CollectorStorage {
   }
 
   async commit(commit: CollectionCommit): Promise<void> {
-    const { state, observation, version, laundryEvents = [] } = commit;
+    const {
+      state,
+      observation,
+      version,
+      laundryEvents = [],
+      mealPosts = [],
+      mealObservedAt = observation.collectedAt,
+    } = commit;
     const statements: D1PreparedStatement[] = [
       this.db
         .prepare(`
@@ -257,6 +357,68 @@ export class CloudflareStorage implements CollectorStorage {
           event.currentState,
           JSON.stringify(event.detail),
         ));
+    }
+
+    for (const post of mealPosts) {
+      statements.push(this.db
+        .prepare(`
+          INSERT INTO meal_post (
+            id, kind, title, text, pinned, published_at, updated_at, permalink,
+            status, first_seen_at, last_seen_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            kind = CASE
+              WHEN meal_post.kind = 'PINNED_MENU' THEN meal_post.kind
+              ELSE excluded.kind
+            END,
+            title = excluded.title,
+            text = excluded.text,
+            pinned = excluded.pinned,
+            published_at = excluded.published_at,
+            updated_at = excluded.updated_at,
+            permalink = excluded.permalink,
+            status = excluded.status,
+            last_seen_at = excluded.last_seen_at
+        `)
+        .bind(
+          post.id,
+          post.kind,
+          post.title,
+          post.text,
+          post.pinned ? 1 : 0,
+          post.publishedAt,
+          post.updatedAt,
+          post.permalink,
+          post.status,
+          mealObservedAt,
+          mealObservedAt,
+        ));
+      statements.push(this.db.prepare("DELETE FROM meal_image WHERE post_id = ?").bind(post.id));
+      for (const [position, image] of post.images.entries()) {
+        statements.push(this.db
+          .prepare(`
+            INSERT INTO meal_image (
+              post_id, media_id, position, source_url, declared_content_type,
+              filename, width, height, sha, object_key, content_type, extension,
+              byte_length
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `)
+          .bind(
+            post.id,
+            image.mediaId,
+            position,
+            image.sourceUrl,
+            image.declaredContentType,
+            image.filename,
+            image.width,
+            image.height,
+            image.sha,
+            image.objectKey,
+            image.contentType,
+            image.extension,
+            image.byteLength,
+          ));
+      }
     }
 
     await this.db.batch(statements);

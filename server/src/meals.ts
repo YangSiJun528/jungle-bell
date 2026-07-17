@@ -65,6 +65,11 @@ export interface MealPost {
   images: MealImageAsset[];
 }
 
+export interface ArchivedMealPost extends MealPost {
+  firstSeenAt: string;
+  lastSeenAt: string;
+}
+
 export interface MealsVersion {
   schemaVersion: 1;
   sourceVersionSha: string;

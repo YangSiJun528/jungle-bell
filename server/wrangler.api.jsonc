@@ -1,15 +1,14 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "jungle-bell-api",
-  "main": "src/index.ts",
+  "main": "src/api-worker.ts",
   "compatibility_date": "2026-07-14",
   "observability": { "enabled": true },
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "jungle-bell-data",
-      "database_id": "5b1d4841-3dbe-44a9-84f8-9fd032bd0d46",
-      "migrations_dir": "../../migrations"
+      "database_id": "5b1d4841-3dbe-44a9-84f8-9fd032bd0d46"
     }
   ],
   "r2_buckets": [

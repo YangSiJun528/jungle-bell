@@ -2,7 +2,7 @@ import { getLogger } from "@logtape/logtape";
 import { canonicalJsonSha256, sha256Bytes } from "./hash";
 import { fetchBinary, fetchJson } from "./http";
 import { normalizeLaundry, type LaundryVersion } from "./laundry";
-import { normalizeMeals, type MealImageAsset, type MealImageCandidate } from "./meals";
+import { normalizeMeals, type MealImageAsset, type MealImageCandidate, type MealPost } from "./meals";
 import { floorToMinute, minuteEpoch, snapshotPath } from "./time";
 import type {
   CollectAllResult,
@@ -25,6 +25,8 @@ interface MediaMapping extends MealImageAsset {
 interface ChangedArtifacts {
   normalizedKey: string | null;
   laundryEvents?: CollectionCommit["laundryEvents"];
+  mealPosts?: MealPost[];
+  mealObservedAt?: string;
 }
 
 function occurrenceId(observedAt: string): string {
@@ -172,7 +174,11 @@ async function writeChangedArtifacts(
     const normalizedKey = `versions/meals/${sha}/${occurrenceId(response.fetchedAt)}.json`;
     await storage.writeJson(normalizedKey, normalized);
     await storage.writeJson("latest/meals.json", normalized);
-    return { normalizedKey };
+    return {
+      normalizedKey,
+      mealPosts: [...normalized.pinnedMenus, ...normalized.dailyMenus, ...normalized.otherPosts],
+      mealObservedAt: normalized.observedAt,
+    };
   }
 
   return { normalizedKey: null };
@@ -245,6 +251,10 @@ async function collectSource(
       version,
       observation: minuteObservation(source, scheduledAt, response, state, true),
       ...(artifacts.laundryEvents ? { laundryEvents: artifacts.laundryEvents } : {}),
+      ...(artifacts.mealPosts ? {
+        mealPosts: artifacts.mealPosts,
+        mealObservedAt: artifacts.mealObservedAt,
+      } : {}),
     });
     logger.info("Stored new source version", { source, sha, rawKey, normalizedKey: artifacts.normalizedKey });
     return { source, status: "SUCCESS", changed: true, sha, error: null };
