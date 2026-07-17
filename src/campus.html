@@ -65,8 +65,16 @@
             </section>
 
             <div class="section-heading filter-heading">
-                <div class="laundry-list-title"><h2 id="laundry-title">워시타워</h2><span x-text="`${laundry?.machines.length ?? 0}대`"></span></div>
-                <div class="segmented-control" role="group" aria-label="세탁기 필터">
+                <div class="laundry-list-title"><h2 id="laundry-title">워시타워</h2><span x-text="`${filteredMachines().length}대`"></span></div>
+            </div>
+            <div class="laundry-filter-toolbar">
+                <div class="segmented-control zone-control" role="group" aria-label="워시타워 구역 필터">
+                    <template x-for="zone in [{value:'all', label:'전체'}, {value:'men', label:'남성 · 1–5'}, {value:'common', label:'공용 · 6–7'}, {value:'women', label:'여성 · 8–9'}]" :key="zone.value">
+                        <button type="button" class="segment" :class="{active: laundryZone === zone.value}"
+                                :aria-pressed="laundryZone === zone.value" @click="laundryZone = zone.value" x-text="zone.label"></button>
+                    </template>
+                </div>
+                <div class="segmented-control status-control" role="group" aria-label="워시타워 상태 필터">
                     <template x-for="filter in [{value:'all', label:'전체'}, {value:'active', label:'작동 중'}, {value:'available', label:'사용 가능'}]" :key="filter.value">
                         <button type="button" class="segment" :class="{active: laundryFilter === filter.value}"
                                 :aria-pressed="laundryFilter === filter.value" @click="laundryFilter = filter.value" x-text="filter.label"></button>
@@ -78,7 +86,10 @@
                 <template x-if="filteredMachines().length === 0"><div class="inline-empty" x-text="laundryEmptyMessage()"></div></template>
                 <template x-for="machine in filteredMachines()" :key="machine.id">
                     <article class="laundry-card">
-                        <div class="laundry-card-header"><h3 x-text="machineName(machine.id)"></h3><span x-text="machineSummary(machine)"></span></div>
+                        <div class="laundry-card-header">
+                            <div class="laundry-card-title"><h3 x-text="machineName(machine.id)"></h3><span class="zone-badge" x-text="machineZoneLabel(machine.id)"></span></div>
+                            <span x-text="machineSummary(machine)"></span>
+                        </div>
                         <div class="appliance-grid">
                             <template x-for="entry in [{kind:'washer', appliance:machine.washer}, {kind:'dryer', appliance:machine.dryer}]" :key="entry.kind">
                                 <section class="appliance-row" :data-tone="projectionView(entry.appliance).tone">

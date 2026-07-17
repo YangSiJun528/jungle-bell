@@ -1221,6 +1221,14 @@ tr.ob-end-field.disabled {
     gap: 7px;
 }
 
+.laundry-filter-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
 .segmented-control {
     display: inline-grid;
     grid-template-columns: repeat(3, auto);
@@ -1228,6 +1236,16 @@ tr.ob-end-field.disabled {
     padding: 2px;
     border-radius: 8px;
     background: var(--color-pill-bg);
+}
+
+.zone-control {
+    grid-template-columns: repeat(4, auto);
+}
+
+.zone-control .segment {
+    min-width: 0;
+    padding-right: 8px;
+    padding-left: 8px;
 }
 
 .segment {
@@ -1267,6 +1285,15 @@ tr.ob-end-field.disabled {
     gap: 10px;
 }
 
+.laundry-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+}
+
+.laundry-list > .inline-empty {
+    grid-column: 1 / -1;
+}
+
 .laundry-card,
 .meal-card,
 .recent-meal-row {
@@ -1274,6 +1301,10 @@ tr.ob-end-field.disabled {
     border: 1px solid var(--color-border);
     border-radius: 8px;
     background: var(--color-surface);
+}
+
+.laundry-card {
+    min-width: 0;
 }
 
 .laundry-card-header,
@@ -1301,17 +1332,34 @@ tr.ob-end-field.disabled {
     font-size: var(--font-size-hint);
 }
 
+.laundry-card-title {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.zone-badge {
+    flex: 0 0 auto;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: var(--color-pill-bg);
+    color: var(--color-text-muted);
+    font-size: 10px;
+    line-height: 1.5;
+}
+
 .appliance-grid {
     display: block;
 }
 
 .appliance-row {
     min-width: 0;
-    min-height: 92px;
+    min-height: 82px;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 6px 10px;
-    padding: 10px 12px 10px 9px;
+    padding: 8px 10px 8px 7px;
     border-left: 3px solid transparent;
 }
 
@@ -1736,11 +1784,21 @@ tr.ob-end-field.disabled {
         grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
+    .laundry-filter-toolbar {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .zone-control {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
     .segment {
         min-width: 0;
     }
 
     .laundry-type-summary-grid,
+    .laundry-list,
     .today-meals {
         grid-template-columns: minmax(0, 1fr);
     }

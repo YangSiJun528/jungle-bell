@@ -5,6 +5,8 @@ import {openUrl} from '@tauri-apps/plugin-opener';
 
 type CampusTab = 'laundry' | 'meals';
 type LaundryFilter = 'all' | 'active' | 'available';
+type LaundryZone = 'all' | 'men' | 'common' | 'women';
+type MachineZone = Exclude<LaundryZone, 'all'> | 'other';
 type ApplianceKind = 'washer' | 'dryer';
 type Tone = 'neutral' | 'normal' | 'success' | 'warning' | 'danger' | 'complete';
 
@@ -134,6 +136,14 @@ function machineNumber(id: string): number | null {
     return match?.[1] ? Number(match[1]) : null;
 }
 
+function machineZone(id: string): MachineZone {
+    const number = machineNumber(id);
+    if (number !== null && number >= 1 && number <= 5) return 'men';
+    if (number !== null && number >= 6 && number <= 7) return 'common';
+    if (number !== null && number >= 8 && number <= 9) return 'women';
+    return 'other';
+}
+
 declare global {
     interface Window {
         setCampusTab?: (tab: string) => void;
@@ -148,6 +158,7 @@ function campus(): Record<string, unknown> {
     return {
         activeTab: initialTab() as CampusTab,
         laundryFilter: 'all' as LaundryFilter,
+        laundryZone: 'all' as LaundryZone,
         laundry: null as LaundryData | null,
         meals: null as MealsPayload | null,
         refreshing: false,
@@ -276,6 +287,7 @@ function campus(): Record<string, unknown> {
             if (!this.laundry) return [];
             return [...this.laundry.machines]
                 .filter((machine) => {
+                    if (this.laundryZone !== 'all' && machineZone(machine.id) !== this.laundryZone) return false;
                     const appliances = [machine.washer, machine.dryer].filter(Boolean) as Appliance[];
                     if (this.laundryFilter === 'active') return appliances.some((item) => this.applianceIsActive(item));
                     if (this.laundryFilter === 'available') return appliances.some((item) => this.applianceIsAvailable(item));
@@ -294,9 +306,12 @@ function campus(): Record<string, unknown> {
         },
 
         laundryEmptyMessage(this: any) {
+            if (this.laundryZone !== 'all') return '선택한 구역에서 조건에 맞는 워시타워가 없습니다.';
             return this.laundryFilter === 'active'
                 ? '현재 작동 중인 기기가 없습니다.'
-                : '현재 사용 가능한 기기가 없습니다.';
+                : this.laundryFilter === 'available'
+                    ? '현재 사용 가능한 기기가 없습니다.'
+                    : '표시할 워시타워가 없습니다.';
         },
 
         laundryInfo(this: any): string | null {
@@ -325,6 +340,10 @@ function campus(): Record<string, unknown> {
             const text = String(id ?? '').trim();
             const number = machineNumber(text);
             return number !== null ? `${number}번 워시타워` : text.replaceAll('_', ' ');
+        },
+
+        machineZoneLabel(id: string) {
+            return ({men: '남성', common: '공용', women: '여성', other: '기타'} as Record<MachineZone, string>)[machineZone(id)];
         },
 
         machineSummary(this: any, machine: Machine) {
