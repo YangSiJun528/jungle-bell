@@ -401,7 +401,7 @@ function campus(): Record<string, unknown> {
             if (kind === 'dryer' && appliance?.errorCode?.trim().toUpperCase() === 'EMPTY_WATER_ALERT_ERROR') {
                 return {
                     title: '⚠ 배관 에러 발생 시',
-                    detail: '건조기에 배관 에러가 표시될 경우, 대부분 필터 먼지 과다가 원인입니다. 아래 순서대로 필터를 청소하면 해결됩니다.',
+                    detail: '건조기에 배관 에러가 표시될 경우, 필터 먼지 과다가 원인일 수 있습니다. 필터를 청소해보세요.',
                 };
             }
             const adjustment = this.adjustmentMessage(appliance);
