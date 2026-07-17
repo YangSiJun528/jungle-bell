@@ -114,7 +114,7 @@ impl CampusCache {
 
 pub struct CampusService {
     client: Client,
-    base_url: Result<String, String>,
+    base_url: String,
     cache: Mutex<CampusCache>,
     request_times: Mutex<RequestTimes>,
     laundry_request: Mutex<()>,
@@ -167,12 +167,11 @@ impl CampusService {
     }
 
     async fn fetch_and_cache(&self, app: &tauri::AppHandle, kind: CampusDataKind) -> Result<CampusSnapshot, String> {
-        let base_url = self.base_url.as_ref().map_err(Clone::clone)?;
         let etag = self.cache.lock().await.entry(kind).and_then(|entry| entry.etag.clone());
 
         let mut request = self
             .client
-            .get(format!("{base_url}{}", kind.path()))
+            .get(format!("{}{}", self.base_url, kind.path()))
             .header(ACCEPT, "application/json");
         if let Some(etag) = etag {
             request = request.header(IF_NONE_MATCH, etag);
