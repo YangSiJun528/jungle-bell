@@ -68,10 +68,10 @@
                 <div class="laundry-list-title"><h2 id="laundry-title">워시타워</h2><span x-text="`${filteredMachines().length}대`"></span></div>
             </div>
             <div class="laundry-filter-toolbar">
-                <div class="segmented-control zone-control" role="group" aria-label="워시타워 구역 필터">
-                    <template x-for="zone in [{value:'all', label:'전체'}, {value:'men', label:'남성 · 1–5'}, {value:'common', label:'공용 · 6–7'}, {value:'women', label:'여성 · 8–9'}]" :key="zone.value">
-                        <button type="button" class="segment" :class="{active: laundryZone === zone.value}"
-                                :aria-pressed="laundryZone === zone.value" @click="laundryZone = zone.value" x-text="zone.label"></button>
+                <div class="segmented-control zone-control" role="group" aria-label="워시타워 이용 구역 필터">
+                    <template x-for="access in [{value:'all', label:'전체'}, {value:'men', label:'남성 가능'}, {value:'women', label:'여성 가능'}]" :key="access.value">
+                        <button type="button" class="segment" :class="{active: laundryAccess === access.value}"
+                                :aria-pressed="laundryAccess === access.value" @click="laundryAccess = access.value" x-text="access.label"></button>
                     </template>
                 </div>
                 <div class="segmented-control status-control" role="group" aria-label="워시타워 상태 필터">
@@ -110,10 +110,11 @@
                                         <span class="progress-fill" :style="`width: ${progress(entry.appliance) ?? 0}%`"></span>
                                     </div>
                                     <div class="appliance-meta" x-show="entry.appliance">
+                                        <span class="error-code" x-show="entry.appliance?.errorCode"
+                                              :title="`오류 코드 ${entry.appliance?.errorCode}`" x-text="`오류 코드 ${entry.appliance?.errorCode}`"></span>
                                         <span x-show="entry.appliance?.estimatedFinishAt && applianceIsActive(entry.appliance)"
                                               x-text="`예상 종료 ${formatClock(entry.appliance?.estimatedFinishAt)}`"></span>
                                         <span x-text="`원격 관측 ${relativeTime(entry.appliance?.observedAt)}`"></span>
-                                        <span class="error-code" x-show="entry.appliance?.errorCode" x-text="`오류 코드 ${entry.appliance?.errorCode}`"></span>
                                     </div>
                                     <div class="inline-info" x-data="{expanded:false, hovered:false}"
                                          x-show="applianceInfo(entry.appliance, entry.kind)"

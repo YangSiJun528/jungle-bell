@@ -5,8 +5,8 @@ import {openUrl} from '@tauri-apps/plugin-opener';
 
 type CampusTab = 'laundry' | 'meals';
 type LaundryFilter = 'all' | 'active' | 'available';
-type LaundryZone = 'all' | 'men' | 'common' | 'women';
-type MachineZone = Exclude<LaundryZone, 'all'> | 'other';
+type LaundryAccess = 'all' | 'men' | 'women';
+type MachineZone = 'men' | 'common' | 'women' | 'other';
 type ApplianceKind = 'washer' | 'dryer';
 type Tone = 'neutral' | 'normal' | 'success' | 'warning' | 'danger' | 'complete';
 
@@ -158,7 +158,7 @@ function campus(): Record<string, unknown> {
     return {
         activeTab: initialTab() as CampusTab,
         laundryFilter: 'all' as LaundryFilter,
-        laundryZone: 'all' as LaundryZone,
+        laundryAccess: 'all' as LaundryAccess,
         laundry: null as LaundryData | null,
         meals: null as MealsPayload | null,
         refreshing: false,
@@ -287,7 +287,9 @@ function campus(): Record<string, unknown> {
             if (!this.laundry) return [];
             return [...this.laundry.machines]
                 .filter((machine) => {
-                    if (this.laundryZone !== 'all' && machineZone(machine.id) !== this.laundryZone) return false;
+                    const zone = machineZone(machine.id);
+                    if (this.laundryAccess === 'men' && zone !== 'men' && zone !== 'common') return false;
+                    if (this.laundryAccess === 'women' && zone !== 'women' && zone !== 'common') return false;
                     const appliances = [machine.washer, machine.dryer].filter(Boolean) as Appliance[];
                     if (this.laundryFilter === 'active') return appliances.some((item) => this.applianceIsActive(item));
                     if (this.laundryFilter === 'available') return appliances.some((item) => this.applianceIsAvailable(item));
@@ -306,7 +308,7 @@ function campus(): Record<string, unknown> {
         },
 
         laundryEmptyMessage(this: any) {
-            if (this.laundryZone !== 'all') return '선택한 구역에서 조건에 맞는 워시타워가 없습니다.';
+            if (this.laundryAccess !== 'all') return '선택한 이용 구역에서 조건에 맞는 워시타워가 없습니다.';
             return this.laundryFilter === 'active'
                 ? '현재 작동 중인 기기가 없습니다.'
                 : this.laundryFilter === 'available'
