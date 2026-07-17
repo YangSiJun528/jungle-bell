@@ -21,7 +21,6 @@ use tauri::{
 };
 
 const ATTENDANCE_URL: &str = "https://jungle-lms.krafton.com/check-in";
-const MEAL_PLAN_URL: &str = "https://pf.kakao.com/_xhzNjn/posts";
 const FEEDBACK_URL: &str = "https://github.com/YangSiJun528/jungle-bell/issues/new/choose";
 
 /// 출석 페이지 닫힌 후 로그인 재시도 윈도우 (초). 3분간 빠르게 재확인.
@@ -39,7 +38,22 @@ const ICON_ALERT: &[u8] = include_bytes!("../icons/tray-red.png");
 const ICON_WARNING: &[u8] = include_bytes!("../icons/tray-orange.png");
 
 #[cfg(target_os = "macos")]
-const FOREGROUND_WINDOW_LABELS: [&str; 4] = ["attendance", "settings", "onboarding", "meal_plan"];
+const FOREGROUND_WINDOW_LABELS: [&str; 4] = ["attendance", "settings", "onboarding", "campus"];
+
+#[derive(Debug, Clone, Copy)]
+enum CampusTab {
+    Laundry,
+    Meals,
+}
+
+impl CampusTab {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Laundry => "laundry",
+            Self::Meals => "meals",
+        }
+    }
+}
 
 /// 상태 메뉴 아이템 참조 보관용. 텍스트 동적 갱신에 사용.
 /// Tauri managed state로 저장: `Arc<TokioMutex<TrayState>>`.
@@ -372,15 +386,23 @@ pub fn open_attendance_window(app: &tauri::AppHandle) {
     }
 }
 
-fn build_meal_plan_window(app: &tauri::AppHandle) {
+fn select_campus_tab(window: &WebviewWindow<tauri::Wry>, tab: CampusTab) {
+    let script = format!("window.setCampusTab && window.setCampusTab('{}')", tab.as_str());
+    if let Err(error) = window.eval(&script) {
+        log::warn!("[tray] campus tab selection failed: {}", error);
+    }
+}
+
+fn build_campus_window(app: &tauri::AppHandle, tab: CampusTab) {
     show_foreground_app(app);
     if let Ok(window) = tauri::WebviewWindowBuilder::new(
         app,
-        "meal_plan",
-        tauri::WebviewUrl::External(MEAL_PLAN_URL.parse().unwrap()),
+        "campus",
+        tauri::WebviewUrl::App(format!("campus.html?tab={}", tab.as_str()).into()),
     )
-    .title("식단표")
-    .inner_size(560.0, 820.0)
+    .title("생활 정보")
+    .inner_size(640.0, 780.0)
+    .min_inner_size(480.0, 600.0)
     .resizable(true)
     .focused(true)
     .build()
@@ -395,15 +417,19 @@ fn build_meal_plan_window(app: &tauri::AppHandle) {
     }
 }
 
-fn open_meal_plan_window(app: &tauri::AppHandle) {
-    log::info!("[tray] meal plan window opened");
-    crate::analytics::track_meal_plan_opened();
+fn open_campus_window(app: &tauri::AppHandle, tab: CampusTab) {
+    log::info!("[tray] campus window opened: {}", tab.as_str());
+    match tab {
+        CampusTab::Laundry => crate::analytics::track_laundry_status_opened(),
+        CampusTab::Meals => crate::analytics::track_meal_plan_opened(),
+    }
 
-    if let Some(window) = app.get_webview_window("meal_plan") {
+    if let Some(window) = app.get_webview_window("campus") {
         show_foreground_app(app);
+        select_campus_tab(&window, tab);
         focus_window(&window);
     } else {
-        build_meal_plan_window(app);
+        build_campus_window(app, tab);
     }
 }
 
@@ -486,7 +512,8 @@ where
 fn handle_menu_event(app: &tauri::AppHandle, event_id: &str) {
     match event_id {
         "open_page" => run_window_task(app, |app| open_attendance_window(&app)),
-        "meal_plan" => run_window_task(app, |app| open_meal_plan_window(&app)),
+        "laundry" => run_window_task(app, |app| open_campus_window(&app, CampusTab::Laundry)),
+        "meals" => run_window_task(app, |app| open_campus_window(&app, CampusTab::Meals)),
         "feedback" => {
             crate::analytics::track_feedback_opened();
             let _ = tauri_plugin_opener::open_url(FEEDBACK_URL, None::<&str>);
@@ -521,7 +548,9 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     let open_page = MenuItemBuilder::with_id("open_page", "출석 페이지 열기").build(app)?;
 
-    let meal_plan = MenuItemBuilder::with_id("meal_plan", "식단표 보러가기").build(app)?;
+    let laundry = MenuItemBuilder::with_id("laundry", "세탁기 현황").build(app)?;
+
+    let meals = MenuItemBuilder::with_id("meals", "오늘의 식단").build(app)?;
 
     let settings = MenuItemBuilder::with_id("settings", "설정...").build(app)?;
 
@@ -542,7 +571,8 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let menu = menu_builder
         .item(&open_page)
         .separator()
-        .item(&meal_plan)
+        .item(&laundry)
+        .item(&meals)
         .separator()
         .item(&version_item)
         .item(&feedback)

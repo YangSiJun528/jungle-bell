@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <link rel="stylesheet" href="styles.css"/>
+    <title>생활 정보</title>
+</head>
+<body class="campus-body">
+<main class="campus-shell">
+    <header class="header campus-header">
+        <img src="assets/logo.png" alt="Jungle Bell" class="logo"/>
+        <div class="campus-heading">
+            <h1>생활 정보</h1>
+            <p>크래프톤 정글</p>
+        </div>
+        <button type="button" id="refresh-btn" class="icon-btn" title="새로고침" aria-label="현재 탭 새로고침">
+            <span aria-hidden="true">↻</span>
+        </button>
+    </header>
+
+    <nav class="tabs campus-tabs" aria-label="생활 정보 종류">
+        <button type="button" class="tab-btn active" data-campus-tab="laundry" aria-controls="tab-laundry">세탁</button>
+        <button type="button" class="tab-btn" data-campus-tab="meals" aria-controls="tab-meals">급식</button>
+    </nav>
+
+    <section id="tab-laundry" class="tab-content campus-panel active" aria-labelledby="laundry-title">
+        <div id="laundry-source" class="source-state" data-tone="neutral" role="status">
+            <span class="source-dot" aria-hidden="true"></span>
+            <div class="source-copy">
+                <strong id="laundry-source-title">세탁기 상태 확인 중</strong>
+                <span id="laundry-source-detail">데이터를 불러오고 있습니다.</span>
+            </div>
+        </div>
+
+        <div id="laundry-view" hidden>
+            <section class="laundry-overview" aria-labelledby="laundry-overview-title">
+                <div class="laundry-overview-heading">
+                    <div>
+                        <h2 id="laundry-overview-title">현재 사용 현황</h2>
+                        <span id="laundry-updated-at">확인 중</span>
+                    </div>
+                    <button type="button" id="laundry-info-btn" class="info-icon-btn" title="잔여 시간 안내"
+                            aria-label="잔여 시간 안내 보기" aria-expanded="false" aria-controls="laundry-note" hidden>
+                        <span aria-hidden="true">i</span>
+                    </button>
+                </div>
+
+                <div class="laundry-type-summary-grid">
+                    <div class="laundry-type-summary" data-kind="washer">
+                        <div class="laundry-type-summary-main">
+                            <strong>세탁기</strong>
+                            <span><b id="washer-available">0</b>/<span id="washer-total">0</span>대 사용 가능</span>
+                        </div>
+                        <div class="availability-track" role="progressbar" aria-label="사용 가능한 세탁기 비율"
+                             aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                            <span id="washer-availability-fill" class="availability-fill"></span>
+                        </div>
+                        <div class="laundry-type-breakdown">
+                            <span><i data-tone="active"></i><b id="washer-active">0</b> 작동 중</span>
+                            <span><i data-tone="issue"></i><b id="washer-issue">0</b> 확인 필요</span>
+                        </div>
+                    </div>
+                    <div class="laundry-type-summary" data-kind="dryer">
+                        <div class="laundry-type-summary-main">
+                            <strong>건조기</strong>
+                            <span><b id="dryer-available">0</b>/<span id="dryer-total">0</span>대 사용 가능</span>
+                        </div>
+                        <div class="availability-track" role="progressbar" aria-label="사용 가능한 건조기 비율"
+                             aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                            <span id="dryer-availability-fill" class="availability-fill"></span>
+                        </div>
+                        <div class="laundry-type-breakdown">
+                            <span><i data-tone="active"></i><b id="dryer-active">0</b> 작동 중</span>
+                            <span><i data-tone="issue"></i><b id="dryer-issue">0</b> 확인 필요</span>
+                        </div>
+                    </div>
+                </div>
+                <p id="laundry-note" class="data-note" hidden></p>
+            </section>
+
+            <div class="section-heading filter-heading">
+                <div class="laundry-list-title">
+                    <h2 id="laundry-title">워시타워</h2>
+                    <span id="laundry-tower-count">0대</span>
+                </div>
+                <div class="segmented-control" role="group" aria-label="세탁기 필터">
+                    <button type="button" class="segment active" data-laundry-filter="all" aria-pressed="true">전체</button>
+                    <button type="button" class="segment" data-laundry-filter="active" aria-pressed="false">작동 중</button>
+                    <button type="button" class="segment" data-laundry-filter="available" aria-pressed="false">사용 가능</button>
+                </div>
+            </div>
+            <div id="laundry-list" class="laundry-list" aria-live="polite"></div>
+        </div>
+
+        <div id="laundry-state" class="content-state" aria-live="polite">
+            <span class="loading-spinner" aria-hidden="true"></span>
+            <strong>세탁기 현황을 불러오는 중입니다.</strong>
+        </div>
+    </section>
+
+    <section id="tab-meals" class="tab-content campus-panel" aria-labelledby="today-meals-title">
+        <div id="meals-source" class="source-state" data-tone="neutral" role="status">
+            <span class="source-dot" aria-hidden="true"></span>
+            <div class="source-copy">
+                <strong id="meals-source-title">식단 확인 중</strong>
+                <span id="meals-source-detail">데이터를 불러오고 있습니다.</span>
+            </div>
+        </div>
+
+        <div id="meals-view" hidden>
+            <div class="section-heading meal-date-heading">
+                <div>
+                    <h2 id="today-meals-title">오늘의 식단</h2>
+                    <p id="today-date"></p>
+                </div>
+            </div>
+            <div id="today-meals" class="today-meals"></div>
+
+            <div class="section-heading">
+                <h2>이번 주 식단표</h2>
+            </div>
+            <div id="weekly-meals" class="weekly-meals"></div>
+
+            <div class="section-heading">
+                <h2>최근 식단</h2>
+            </div>
+            <div id="recent-meals" class="recent-meals"></div>
+        </div>
+
+        <div id="meals-state" class="content-state" aria-live="polite">
+            <span class="loading-spinner" aria-hidden="true"></span>
+            <strong>식단을 불러오는 중입니다.</strong>
+        </div>
+    </section>
+</main>
+
+<dialog id="image-dialog" class="image-dialog" aria-labelledby="image-dialog-caption">
+    <div class="image-dialog-bar">
+        <strong id="image-dialog-caption"></strong>
+        <button type="button" id="image-dialog-close" class="icon-btn dialog-close" title="닫기" aria-label="이미지 닫기">
+            <span aria-hidden="true">×</span>
+        </button>
+    </div>
+    <img id="image-dialog-img" alt=""/>
+</dialog>
+
+<script src="campus.js"></script>
+</body>
+</html>
