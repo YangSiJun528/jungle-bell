@@ -11,6 +11,8 @@ use chrono::{DateTime, Duration, Utc};
 pub(crate) enum JobKind {
     AttendanceStatusCheck,
     CheckerSessionRefresh,
+    LaundryRefresh,
+    MealsRefresh,
 }
 
 impl JobKind {
@@ -18,6 +20,8 @@ impl JobKind {
         match self {
             Self::AttendanceStatusCheck => "attendance_status_check",
             Self::CheckerSessionRefresh => "checker_session_refresh",
+            Self::LaundryRefresh => "laundry_refresh",
+            Self::MealsRefresh => "meals_refresh",
         }
     }
 }

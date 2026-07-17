@@ -15,28 +15,11 @@ use crate::analytics;
 use crate::attendance;
 use crate::attendance_day;
 use crate::autostart;
+use crate::campus::{CampusDataKind, CampusService};
 use crate::checker;
 use crate::config::{self, TimeOfDay};
 use crate::state::{self, AppState};
 use crate::tray;
-
-const LOCAL_DATA_API_URL: &str = "http://127.0.0.1:8787";
-
-fn normalize_data_api_base_url(value: &str, allow_local_http: bool) -> Result<String, String> {
-    let value = value.trim().trim_end_matches('/');
-    if value.is_empty() {
-        return Err("데이터 API 주소가 설정되지 않았습니다.".into());
-    }
-
-    let is_https = value.starts_with("https://");
-    let is_local_http =
-        allow_local_http && (value.starts_with("http://127.0.0.1:") || value.starts_with("http://localhost:"));
-    if !is_https && !is_local_http {
-        return Err("데이터 API 주소는 HTTPS URL이어야 합니다.".into());
-    }
-
-    Ok(value.to_owned())
-}
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -331,16 +314,24 @@ pub fn get_app_version(app: tauri::AppHandle) -> String {
     app.package_info().version.to_string()
 }
 
-/// 세탁/급식 API의 빌드 시 설정 주소를 반환한다.
-/// 개발 빌드는 로컬 Wrangler 기본 포트를 사용하고, 릴리스 빌드는 명시적 설정을 요구한다.
+/// 생활정보 창이 이벤트 구독을 마쳤음을 보고한다.
 #[tauri::command]
-pub fn get_data_api_base_url() -> Result<String, String> {
-    let configured = option_env!("JUNGLE_BELL_DATA_API_URL").unwrap_or_default();
-    if configured.trim().is_empty() && cfg!(debug_assertions) {
-        return Ok(LOCAL_DATA_API_URL.into());
-    }
+pub async fn report_campus_ready(
+    app: tauri::AppHandle,
+    service: tauri::State<'_, Arc<CampusService>>,
+) -> Result<(), String> {
+    service.emit_cached_snapshots(&app).await;
+    Ok(())
+}
 
-    normalize_data_api_base_url(configured, cfg!(debug_assertions))
+/// 사용자가 누른 수동 새로고침을 즉시 실행한다.
+#[tauri::command]
+pub async fn refresh_campus_data(
+    app: tauri::AppHandle,
+    service: tauri::State<'_, Arc<CampusService>>,
+    kind: CampusDataKind,
+) -> Result<(), String> {
+    service.refresh(&app, kind).await
 }
 
 /// Tauri 커맨드: 자동 시작 설정 조회.
@@ -576,32 +567,5 @@ pub async fn open_notification_settings() -> Result<(), String> {
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         Err("이 플랫폼에서는 시스템 알림 설정 바로가기를 지원하지 않습니다.".into())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::normalize_data_api_base_url;
-
-    #[test]
-    fn data_api_url_removes_trailing_slashes() {
-        assert_eq!(
-            normalize_data_api_base_url(" https://data.example.com/// ", false).unwrap(),
-            "https://data.example.com"
-        );
-    }
-
-    #[test]
-    fn data_api_url_rejects_plain_http_in_release_mode() {
-        assert!(normalize_data_api_base_url("http://data.example.com", false).is_err());
-    }
-
-    #[test]
-    fn data_api_url_allows_loopback_http_in_debug_mode() {
-        assert_eq!(
-            normalize_data_api_base_url("http://127.0.0.1:8787/", true).unwrap(),
-            "http://127.0.0.1:8787"
-        );
-        assert!(normalize_data_api_base_url("http://192.168.0.10:8787", true).is_err());
     }
 }

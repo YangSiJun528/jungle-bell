@@ -2,9 +2,11 @@ mod analytics;
 mod attendance;
 mod attendance_day;
 mod autostart;
+mod campus;
 mod checker;
 mod commands;
 mod config;
+mod data_api;
 mod interval_tasks;
 mod runtime;
 mod scheduler;
@@ -107,6 +109,7 @@ pub fn run() {
         log::LevelFilter::Info
     };
     let shared_state = Arc::new(Mutex::new(AppState::new(config)));
+    let campus_service = Arc::new(campus::CampusService::new());
 
     tauri::Builder::default()
         // single-instance 플러그인: 공식 문서 권장대로 가장 먼저 등록한다.
@@ -152,6 +155,7 @@ pub fn run() {
         // AppState를 Tauri의 managed state로 등록.
         // 핸들러에서 `tauri::State<Arc<Mutex<AppState>>>`로 받아 사용.
         .manage(shared_state.clone())
+        .manage(campus_service.clone())
         // JS에서 `window.__TAURI__.core.invoke()`로 호출할 수 있는 Tauri 커맨드 등록.
         .invoke_handler(tauri::generate_handler![
             commands::report_attendance_status,
@@ -161,7 +165,8 @@ pub fn run() {
             commands::get_auto_update,
             commands::set_auto_update,
             commands::get_app_version,
-            commands::get_data_api_base_url,
+            commands::report_campus_ready,
+            commands::refresh_campus_data,
             commands::get_pending_update,
             commands::check_and_notify_update,
             commands::get_auto_start,
