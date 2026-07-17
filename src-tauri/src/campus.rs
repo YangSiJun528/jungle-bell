@@ -306,6 +306,11 @@ mod tests {
     }
 
     #[test]
+    fn campus_service_builds_http_client() {
+        let _service = CampusService::new();
+    }
+
+    #[test]
     fn meals_poll_every_minute_during_pre_meal_windows() {
         assert_eq!(request_interval_secs(CampusDataKind::Meals, kst_time(10, 0, 0)), 60);
         assert_eq!(request_interval_secs(CampusDataKind::Meals, kst_time(11, 59, 59)), 60);
