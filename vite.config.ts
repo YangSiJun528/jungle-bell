@@ -45,6 +45,7 @@ function checkerInjectionScript(): Plugin {
 export default defineConfig({
     plugins: [checkerInjectionScript()],
     root: 'src',
+    base: './',
     clearScreen: false,
     publicDir: false,
     server: {
