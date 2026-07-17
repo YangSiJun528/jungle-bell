@@ -3,19 +3,19 @@ import { configure, getLogger } from "@logtape/logtape";
 import { Hono, type Env as HonoEnvironment } from "hono";
 import { cors } from "hono/cors";
 import { z } from "zod";
-import { canonicalJsonSha256 } from "./hash";
-import { toPublicLaundryVersion, type LaundryVersion } from "./laundry";
-import type { MealsVersion } from "./meals";
-import { projectLaundry } from "./projection";
+import { canonicalJsonSha256 } from "../collector/hash";
+import { toPublicLaundryVersion, type LaundryVersion } from "../collector/laundry";
+import type { MealsVersion } from "../collector/meals";
+import { projectLaundry } from "../collector/projection";
 import {
   compactUtcMinute,
   floorToMinute,
   minuteEpoch,
   parseCompactUtcMinute,
-} from "./time";
-import { SOURCE_NAMES, type SourceState } from "./types";
+} from "../collector/time";
+import { SOURCE_NAMES, type SourceState } from "../collector/types";
+import { CloudflareStorage } from "./cloudflare-storage";
 import { getCloudflareConsoleSink } from "./logging";
-import { CloudflareStorage } from "./storage";
 
 interface Env {
   DB: D1Database;

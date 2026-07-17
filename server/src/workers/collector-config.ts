@@ -1,4 +1,4 @@
-import type { CollectorOptions } from "./types";
+import type { CollectorOptions } from "../collector/types";
 import { z } from "zod";
 
 export const DEFAULT_COLLECTOR_URLS = {

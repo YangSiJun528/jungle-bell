@@ -6,8 +6,8 @@ import type {
   MinuteObservation,
   SourceName,
   SourceState,
-} from "./types";
-import type { ArchivedMealPost, MealImageAsset, MealPost } from "./meals";
+} from "../collector/types";
+import type { ArchivedMealPost, MealImageAsset, MealPost } from "../collector/meals";
 
 interface SourceStateRow {
   source: SourceName;

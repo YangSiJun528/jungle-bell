@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { collectorOptionsFromEnv, DEFAULT_COLLECTOR_URLS } from "../src/config";
+import { collectorOptionsFromEnv, DEFAULT_COLLECTOR_URLS } from "../src/workers/collector-config";
 
 describe("collectorOptionsFromEnv", () => {
   it("applies validated defaults", () => {

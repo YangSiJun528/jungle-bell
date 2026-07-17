@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { collectAll } from "../src/collector";
+import { collectAll } from "../src/collector/collector";
 import type {
   BinaryObject,
   CollectionCommit,
@@ -7,7 +7,7 @@ import type {
   CollectorStorage,
   SourceName,
   SourceState,
-} from "../src/types";
+} from "../src/collector/types";
 
 class MemoryStorage implements CollectorStorage {
   states = new Map<SourceName, SourceState>();

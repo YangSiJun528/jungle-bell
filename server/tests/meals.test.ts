@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { normalizeMeals, type MealImageAsset } from "../src/meals";
+import { normalizeMeals, type MealImageAsset } from "../src/collector/meals";
 
 describe("normalizeMeals", () => {
   it("keeps pinned and daily posts separate and delegates image storage", async () => {
