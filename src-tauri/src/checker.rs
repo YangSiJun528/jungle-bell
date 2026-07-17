@@ -1,6 +1,6 @@
 //! 체커 모듈 — hidden checker WebView supervisor와 runtime adapter.
 //!
-//! checker.js가 WebView에 주입되어 LMS REST API를 호출한다.
+//! Vite가 생성한 checker script가 WebView에 주입되어 LMS REST API를 호출한다.
 //! Rust가 `trigger_check()`로 이벤트를 발송하면,
 //! JS가 API를 조회해 `report_attendance_status` invoke로 반환한다.
 //! 이 모듈은 WebView generation/readiness/report watchdog을 관리한다.
@@ -206,7 +206,7 @@ fn same_url_without_trailing_slash(left: &str, right: &str) -> bool {
 }
 
 pub(crate) fn build_webview(app: &tauri::AppHandle) -> tauri::Result<tauri::WebviewWindow> {
-    let checker_script = include_str!("../../src/checker.js");
+    let checker_script = include_str!("../../dist/injected/checker.js");
     let checker = tauri::WebviewWindowBuilder::new(
         app,
         "checker",
