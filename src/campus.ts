@@ -101,6 +101,11 @@ interface StatusView {
     tone: Tone;
 }
 
+interface ApplianceInfo {
+    title: string;
+    detail: string;
+}
+
 interface TypeSummary {
     total: number;
     available: number;
@@ -390,6 +395,17 @@ function campus(): Record<string, unknown> {
                     ? `전체 시간이 ${previous}분에서 ${next}분으로 조정됐습니다.` : '전체 시간이 조정됐습니다.';
             }
             return ({ERROR_ENTERED: '기기 오류가 감지됐습니다.', ERROR_CLEARED: '기기 오류가 해제됐습니다.', COMPLETED: '작동 완료가 확인됐습니다.', STARTED: '작동 시작이 확인됐습니다.'} as Record<string, string>)[current.type] ?? null;
+        },
+
+        applianceInfo(this: any, appliance: Appliance | null | undefined, kind: ApplianceKind): ApplianceInfo | null {
+            if (kind === 'dryer' && appliance?.errorCode?.trim().toUpperCase() === 'EMPTY_WATER_ALERT_ERROR') {
+                return {
+                    title: '⚠ 배관 에러 발생 시',
+                    detail: '건조기에 배관 에러가 표시될 경우, 대부분 필터 먼지 과다가 원인입니다. 아래 순서대로 필터를 청소하면 해결됩니다.',
+                };
+            }
+            const adjustment = this.adjustmentMessage(appliance);
+            return adjustment ? {title: '상태 변경 안내', detail: adjustment} : null;
         },
 
         freshnessView(freshness?: string, labelKo?: string): SourceState {

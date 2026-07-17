@@ -1468,6 +1468,15 @@ tr.ob-end-field.disabled {
     line-height: 1.4;
 }
 
+.inline-info-detail strong,
+.inline-info-detail span {
+    display: block;
+}
+
+.inline-info-detail strong {
+    margin-bottom: 4px;
+}
+
 .appliance-unavailable {
     margin: 0;
     color: var(--color-text-muted);

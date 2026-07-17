@@ -104,10 +104,19 @@
                                         <span x-text="`원격 관측 ${relativeTime(entry.appliance?.observedAt)}`"></span>
                                         <span class="error-code" x-show="entry.appliance?.errorCode" x-text="`오류 코드 ${entry.appliance?.errorCode}`"></span>
                                     </div>
-                                    <div class="inline-info" x-data="{expanded:false}" x-show="adjustmentMessage(entry.appliance)">
-                                        <button type="button" class="info-icon-btn" title="상태 변경 안내" aria-label="상태 변경 안내"
-                                                :aria-expanded="expanded" @click="expanded = !expanded"><span aria-hidden="true">i</span></button>
-                                        <p class="inline-info-detail" x-show="expanded" x-text="adjustmentMessage(entry.appliance)"></p>
+                                    <div class="inline-info" x-data="{expanded:false, hovered:false}"
+                                         x-show="applianceInfo(entry.appliance, entry.kind)"
+                                         @mouseenter="hovered = true" @mouseleave="hovered = false"
+                                         @keydown.escape="expanded = false">
+                                        <button type="button" class="info-icon-btn"
+                                                :title="applianceInfo(entry.appliance, entry.kind)?.title ?? '기기 상태 안내'"
+                                                :aria-label="applianceInfo(entry.appliance, entry.kind)?.title ?? '기기 상태 안내'"
+                                                :aria-expanded="expanded || hovered" @click="expanded = !expanded"
+                                                @focus="hovered = true" @blur="hovered = false"><span aria-hidden="true">i</span></button>
+                                        <p class="inline-info-detail" role="note" x-show="expanded || hovered">
+                                            <strong x-text="applianceInfo(entry.appliance, entry.kind)?.title"></strong>
+                                            <span x-text="applianceInfo(entry.appliance, entry.kind)?.detail"></span>
+                                        </p>
                                     </div>
                                 </section>
                             </template>
