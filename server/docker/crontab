@@ -1,0 +1,1 @@
+* * * * * node /app/dist/local/index.js collect --data-dir /data
