@@ -4,7 +4,7 @@ import {listen, type UnlistenFn} from '@tauri-apps/api/event';
 import {openUrl} from '@tauri-apps/plugin-opener';
 
 type CampusTab = 'laundry' | 'meals';
-type LaundryFilter = 'all' | 'active' | 'bothAvailable' | 'washerAvailable' | 'dryerAvailable';
+type LaundryFilter = 'all' | 'washerAvailable' | 'dryerAvailable';
 type LaundryAccess = 'all' | 'men' | 'women';
 type MachineZone = 'men' | 'common' | 'women' | 'other';
 type ApplianceKind = 'washer' | 'dryer';
@@ -302,11 +302,6 @@ function campus(): Record<string, unknown> {
                     const zone = machineZone(machine.id);
                     if (this.laundryAccess === 'men' && zone !== 'men' && zone !== 'common') return false;
                     if (this.laundryAccess === 'women' && zone !== 'women' && zone !== 'common') return false;
-                    const appliances = [machine.washer, machine.dryer].filter(Boolean) as Appliance[];
-                    if (this.laundryFilter === 'active') return appliances.some((item) => this.applianceIsActive(item));
-                    if (this.laundryFilter === 'bothAvailable') {
-                        return this.applianceIsAvailable(machine.washer) && this.applianceIsAvailable(machine.dryer);
-                    }
                     if (this.laundryFilter === 'washerAvailable') return this.applianceIsAvailable(machine.washer);
                     if (this.laundryFilter === 'dryerAvailable') return this.applianceIsAvailable(machine.dryer);
                     return true;
@@ -325,11 +320,9 @@ function campus(): Record<string, unknown> {
 
         laundryEmptyMessage(this: any) {
             if (this.laundryAccess !== 'all') return '선택한 이용 구역에서 조건에 맞는 워시타워가 없습니다.';
-            return this.laundryFilter === 'active'
-                ? '현재 작동 중인 기기가 없습니다.'
-                : this.laundryFilter !== 'all'
-                    ? '선택한 조건에 맞는 사용 가능한 워시타워가 없습니다.'
-                    : '표시할 워시타워가 없습니다.';
+            return this.laundryFilter === 'all'
+                ? '표시할 워시타워가 없습니다.'
+                : '선택한 조건에 맞는 사용 가능한 워시타워가 없습니다.';
         },
 
         applianceIsActive(appliance?: Appliance | null) {

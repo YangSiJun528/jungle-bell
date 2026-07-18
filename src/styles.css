@@ -1231,7 +1231,7 @@ tr.ob-end-field.disabled {
 }
 
 .status-control {
-    grid-template-columns: repeat(5, auto);
+    grid-template-columns: repeat(3, auto);
 }
 
 .zone-control .segment {
@@ -1817,7 +1817,7 @@ tr.ob-end-field.disabled {
     }
 
     .status-control {
-        grid-template-columns: repeat(5, minmax(0, 1fr));
+        grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
     .segment {

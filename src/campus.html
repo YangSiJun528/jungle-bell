@@ -67,7 +67,7 @@
                     </template>
                 </div>
                 <div class="segmented-control status-control" role="group" aria-label="워시타워 상태 필터">
-                    <template x-for="filter in [{value:'all', label:'전체'}, {value:'active', label:'작동 중'}, {value:'bothAvailable', label:'둘 다 가능'}, {value:'washerAvailable', label:'세탁 가능'}, {value:'dryerAvailable', label:'건조 가능'}]" :key="filter.value">
+                    <template x-for="filter in [{value:'all', label:'전체'}, {value:'washerAvailable', label:'세탁 가능'}, {value:'dryerAvailable', label:'건조 가능'}]" :key="filter.value">
                         <button type="button" class="segment" :class="{active: laundryFilter === filter.value}"
                                 :aria-pressed="laundryFilter === filter.value" @click="laundryFilter = filter.value" x-text="filter.label"></button>
                     </template>
