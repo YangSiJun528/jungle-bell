@@ -33,14 +33,7 @@
         <div x-show="laundry">
             <section class="laundry-overview" aria-labelledby="laundry-overview-title">
                 <div class="laundry-overview-heading">
-                    <div>
-                        <h2 id="laundry-overview-title">현재 사용 현황</h2>
-                        <span x-text="`LG ThinQ ${relativeTime(laundry?.quality?.lastCheckedAt)}`"></span>
-                    </div>
-                    <button type="button" class="info-icon-btn" title="잔여 시간 안내" aria-label="잔여 시간 안내 보기"
-                            x-show="laundryInfo()" :aria-expanded="infoExpanded" @click="infoExpanded = !infoExpanded">
-                        <span aria-hidden="true">i</span>
-                    </button>
+                    <h2 id="laundry-overview-title">현재 사용 현황</h2>
                 </div>
 
                 <div class="laundry-type-summary-grid">
@@ -61,7 +54,6 @@
                         </div>
                     </template>
                 </div>
-                <p class="data-note" x-show="infoExpanded && laundryInfo()" x-text="laundryInfo()"></p>
             </section>
 
             <div class="section-heading filter-heading">

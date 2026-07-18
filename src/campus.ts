@@ -162,7 +162,6 @@ function campus(): Record<string, unknown> {
         laundry: null as LaundryData | null,
         meals: null as MealsPayload | null,
         refreshing: false,
-        infoExpanded: false,
         source: {
             laundry: {title: '세탁기 상태 확인 중', detail: '데이터를 불러오고 있습니다.', tone: 'neutral'},
             meals: {title: '식단 확인 중', detail: '데이터를 불러오고 있습니다.', tone: 'neutral'},
@@ -314,17 +313,6 @@ function campus(): Record<string, unknown> {
                 : this.laundryFilter === 'available'
                     ? '현재 사용 가능한 기기가 없습니다.'
                     : '표시할 워시타워가 없습니다.';
-        },
-
-        laundryInfo(this: any): string | null {
-            const appliances = this.appliances();
-            if (appliances.some((item: Appliance) => item.projection?.status === 'AWAITING_COMPLETION_CONFIRMATION')) {
-                return '0분이어도 LG ThinQ에서 완료 상태가 확인될 때까지 완료 확인 중으로 표시합니다.';
-            }
-            if (appliances.some((item: Appliance) => item.projection?.estimated)) {
-                return '잔여 시간과 종료 시각은 마지막 LG ThinQ 관측값을 기준으로 계산한 추정치입니다.';
-            }
-            return null;
         },
 
         applianceIsActive(appliance?: Appliance | null) {

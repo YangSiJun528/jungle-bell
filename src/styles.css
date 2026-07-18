@@ -1057,18 +1057,7 @@ tr.ob-end-field.disabled {
 }
 
 .laundry-overview-heading {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
     margin-bottom: 12px;
-}
-
-.laundry-overview-heading > div {
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
 }
 
 .laundry-overview-heading h2 {
@@ -1077,7 +1066,6 @@ tr.ob-end-field.disabled {
     font-weight: 600;
 }
 
-.laundry-overview-heading > div > span,
 .laundry-list-title > span {
     color: var(--color-text-muted);
     font-size: var(--font-size-hint);
@@ -1265,17 +1253,6 @@ tr.ob-end-field.disabled {
     background: var(--color-surface);
     color: var(--color-text);
     font-weight: 600;
-}
-
-.data-note {
-    margin: 10px 0 0;
-    padding: 9px 10px;
-    border: 1px solid var(--color-border);
-    border-radius: 6px;
-    background: var(--color-surface-subtle);
-    color: var(--color-text-muted);
-    font-size: var(--font-size-hint);
-    line-height: 1.45;
 }
 
 .laundry-list,
