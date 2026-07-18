@@ -27,6 +27,7 @@ interface Appliance {
     totalMinutes?: number;
     estimatedFinishAt?: string;
     observedAt?: string;
+    sessionId?: string | null;
     errorCode?: string;
 }
 
@@ -39,6 +40,7 @@ interface Machine {
 interface LaundryEvent {
     machineId?: string;
     appliance?: string;
+    sessionId?: string | null;
     observedAt: string;
     type: string;
     etaDeltaMinutes?: number;
@@ -123,7 +125,9 @@ interface TypeSummary {
 }
 
 const ACTIVE_STATUSES = new Set(['RUNNING', 'PAUSED', 'SCHEDULED']);
-const ISSUE_PROJECTIONS = new Set(['AWAITING_COMPLETION_CONFIRMATION', 'ERROR', 'UNKNOWN']);
+const ISSUE_PROJECTIONS = new Set(['ERROR', 'UNKNOWN']);
+const SIGNIFICANT_ETA_CHANGE_MINUTES = 5;
+const COMPLETION_CONFIRMATION_GRACE_MS = 2 * 60_000;
 const KST_TIME_ZONE = 'Asia/Seoul';
 const APPLIANCE_ERROR_LABELS: Record<string, string> = {
     EMPTY_WATER_ALERT_ERROR: '배관 에러',
@@ -334,9 +338,16 @@ function campus(): Record<string, unknown> {
         },
 
         applianceIsAvailable(appliance?: Appliance | null) { return appliance?.operationalStatus === 'IDLE'; },
-        applianceNeedsAttention(appliance?: Appliance | null) {
+        applianceNeedsAttention(this: any, appliance?: Appliance | null) {
             return Boolean(appliance && (ISSUE_PROJECTIONS.has(appliance.projection?.status ?? '')
-                || appliance.operationalStatus === 'PAUSED'));
+                || appliance.operationalStatus === 'PAUSED'
+                || this.completionConfirmationDelayed(appliance)));
+        },
+
+        completionConfirmationDelayed(this: any, appliance?: Appliance | null) {
+            if (appliance?.projection?.status !== 'AWAITING_COMPLETION_CONFIRMATION') return false;
+            const finishAt = this.parseDate(appliance.estimatedFinishAt);
+            return Boolean(finishAt && Date.now() - finishAt.getTime() >= COMPLETION_CONFIRMATION_GRACE_MS);
         },
 
         machineName(id: string) {
@@ -377,7 +388,9 @@ function campus(): Record<string, unknown> {
             if (!appliance) return {label: '정보 없음', tone: 'neutral'};
             const status = appliance.projection?.status;
             const label = appliance.projection?.statusLabelKo ?? PROJECTION_LABELS[status ?? ''];
-            if (status === 'AWAITING_COMPLETION_CONFIRMATION') return {label: '완료 확인 중', tone: 'warning'};
+            if (status === 'AWAITING_COMPLETION_CONFIRMATION') {
+                return {label: '완료 확인 중', tone: this.completionConfirmationDelayed(appliance) ? 'warning' : 'normal'};
+            }
             if (status === 'CONFIRMED_COMPLETED') return {label: label ?? '완료', tone: 'complete'};
             if (status === 'PAUSED') return {label: label ?? '일시 정지', tone: 'warning'};
             if (status === 'ERROR') return {label: this.applianceError(appliance)?.label ?? label ?? '오류', tone: 'danger'};
@@ -418,12 +431,22 @@ function campus(): Record<string, unknown> {
         },
 
         adjustmentMessage(this: any, appliance?: Appliance | null) {
-            if (!appliance || !this.laundry) return null;
+            if (!appliance?.sessionId || !this.laundry) return null;
             const matching = (this.laundry.events ?? [])
-                .filter((event: LaundryEvent) => event.machineId === appliance.machineId && event.appliance === appliance.appliance)
+                .filter((event: LaundryEvent) => event.machineId === appliance.machineId
+                    && event.appliance === appliance.appliance
+                    && event.sessionId === appliance.sessionId)
                 .sort((left: LaundryEvent, right: LaundryEvent) => Date.parse(right.observedAt) - Date.parse(left.observedAt));
-            const priority = ['ERROR_ENTERED', 'ETA_EXTENDED', 'ETA_REDUCED', 'TOTAL_TIME_ADJUSTED', 'ERROR_CLEARED', 'COMPLETED', 'STARTED'];
-            const current = priority.map((type) => matching.find((event: LaundryEvent) => event.type === type)).find(Boolean) as LaundryEvent | undefined;
+            const current = matching.find((event: LaundryEvent) => {
+                if (event.type === 'ETA_EXTENDED' || event.type === 'ETA_REDUCED') {
+                    return Math.abs(event.etaDeltaMinutes ?? 0) >= SIGNIFICANT_ETA_CHANGE_MINUTES;
+                }
+                if (event.type !== 'TOTAL_TIME_ADJUSTED') return false;
+                const previous = event.detail?.previousTotalMinutes;
+                const next = event.detail?.currentTotalMinutes;
+                return Number.isFinite(previous) && Number.isFinite(next)
+                    && Math.abs((next as number) - (previous as number)) >= SIGNIFICANT_ETA_CHANGE_MINUTES;
+            });
             if (!current) return null;
             const delta = Math.abs(Math.round(current.etaDeltaMinutes ?? 0));
             if (current.type === 'ETA_EXTENDED') return `예상 종료가 ${delta}분 늦어졌습니다.`;
@@ -434,7 +457,7 @@ function campus(): Record<string, unknown> {
                 return Number.isFinite(previous) && Number.isFinite(next)
                     ? `전체 시간이 ${previous}분에서 ${next}분으로 조정됐습니다.` : '전체 시간이 조정됐습니다.';
             }
-            return ({ERROR_ENTERED: '기기 오류가 감지됐습니다.', ERROR_CLEARED: '기기 오류가 해제됐습니다.', COMPLETED: '작동 완료가 확인됐습니다.', STARTED: '작동 시작이 확인됐습니다.'} as Record<string, string>)[current.type] ?? null;
+            return null;
         },
 
         applianceInfo(this: any, appliance: Appliance | null | undefined, kind: ApplianceKind): ApplianceInfo | null {
@@ -445,13 +468,14 @@ function campus(): Record<string, unknown> {
                 };
             }
             if (appliance?.projection?.status === 'AWAITING_COMPLETION_CONFIRMATION') {
+                if (!this.completionConfirmationDelayed(appliance)) return null;
                 return {
-                    title: '완료 확인 중',
+                    title: '완료 확인 지연',
                     detail: '예상 잔여 시간은 지났지만 LG ThinQ에서 완료 상태가 아직 확인되지 않았습니다. 완료가 확인될 때까지 사용 중으로 표시합니다.',
                 };
             }
             const adjustment = this.adjustmentMessage(appliance);
-            return adjustment ? {title: '상태 변경 안내', detail: adjustment} : null;
+            return adjustment ? {title: '예상 시간 변경', detail: adjustment} : null;
         },
 
         freshnessView(freshness?: string, labelKo?: string): SourceState {

@@ -42,6 +42,36 @@ describe("laundry change detection", () => {
     });
   });
 
+  it.each([
+    { currentRemaining: 28, delta: 3 },
+    { currentRemaining: 22, delta: -3 },
+  ])("treats a $delta-minute ETA shift as normal jitter", ({ currentRemaining }) => {
+    const previous = normalizeLaundry(laundry("WASHING", 30), "a".repeat(64), "2026-07-17T00:00:00.000Z", null);
+    const current = normalizeLaundry(
+      laundry("WASHING", currentRemaining),
+      "b".repeat(64),
+      "2026-07-17T00:05:00.000Z",
+      previous,
+    );
+
+    expect(current.events.find((candidate) => candidate.type === "COUNTDOWN_NORMAL")?.etaDeltaMinutes)
+      .toBe(currentRemaining - 25);
+  });
+
+  it("does not compare ETAs across a collection gap", () => {
+    const previous = normalizeLaundry(laundry("WASHING", 30), "a".repeat(64), "2026-07-17T00:00:00.000Z", null);
+    const current = normalizeLaundry(
+      laundry("WASHING", 30),
+      "b".repeat(64),
+      "2026-07-17T00:05:00.000Z",
+      previous,
+      { timingContinuity: false },
+    );
+
+    expect(current.events.filter((candidate) => candidate.type.startsWith("ETA_") || candidate.type === "COUNTDOWN_NORMAL"))
+      .toHaveLength(0);
+  });
+
   it("preserves an unknown LG profile value", () => {
     const version = normalizeLaundry(laundry("MODEL_SPECIFIC_STATE", 10), "a".repeat(64), "2026-07-17T00:00:00.000Z", null);
     expect(version.machines[0]?.washer?.state).toEqual({

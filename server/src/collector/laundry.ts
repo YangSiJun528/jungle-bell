@@ -119,7 +119,10 @@ export function toPublicLaundryVersion(version: LaundryVersion): LaundryVersion 
 
 export interface NormalizeLaundryOptions {
   knownRunStates?: readonly string[];
+  timingContinuity?: boolean;
 }
+
+const SIGNIFICANT_ETA_CHANGE_MINUTES = 5;
 
 function minutes(timer: z.infer<typeof timerSchema>, prefix: "remain" | "total"): number {
   return timer[`${prefix}Hour`] * 60 + timer[`${prefix}Minute`];
@@ -239,7 +242,11 @@ function event(
   };
 }
 
-function detectEvents(previous: LaundryApplianceSnapshot | null, current: LaundryApplianceSnapshot): LaundryEvent[] {
+function detectEvents(
+  previous: LaundryApplianceSnapshot | null,
+  current: LaundryApplianceSnapshot,
+  timingContinuity: boolean,
+): LaundryEvent[] {
   if (!previous) return current.state.known ? [] : [{
     id: eventId(current, "UNKNOWN_STATE"),
     machineId: current.machineId,
@@ -281,10 +288,14 @@ function detectEvents(previous: LaundryApplianceSnapshot | null, current: Laundr
     events.push(event("STATE_CHANGED", previous, current));
   }
 
-  if (wasRunning && isRunning && previous.sessionId === current.sessionId) {
+  if (timingContinuity && wasRunning && isRunning && previous.sessionId === current.sessionId) {
     const elapsedMinutes = (Date.parse(current.observedAt) - Date.parse(previous.observedAt)) / 60_000;
     const etaDelta = Math.round((current.remainingMinutes - previous.remainingMinutes + elapsedMinutes) * 10) / 10;
-    const etaType = etaDelta > 1 ? "ETA_EXTENDED" : etaDelta < -1 ? "ETA_REDUCED" : "COUNTDOWN_NORMAL";
+    const etaType = etaDelta >= SIGNIFICANT_ETA_CHANGE_MINUTES
+      ? "ETA_EXTENDED"
+      : etaDelta <= -SIGNIFICANT_ETA_CHANGE_MINUTES
+        ? "ETA_REDUCED"
+        : "COUNTDOWN_NORMAL";
     events.push(event(etaType, previous, current, etaDelta, {
       elapsedMinutes,
       previousRemainingMinutes: previous.remainingMinutes,
@@ -310,6 +321,7 @@ export function normalizeLaundry(
 ): LaundryVersion {
   const parsed = laundryResponseSchema.parse(rawValue);
   const knownStates = new Set<string>([...LG_RUN_STATE_BASELINE, ...(options.knownRunStates ?? [])]);
+  const timingContinuity = options.timingContinuity ?? true;
   const unknownEnums: UnknownEnumObservation[] = [];
   const events: LaundryEvent[] = [];
 
@@ -324,8 +336,8 @@ export function normalizeLaundry(
       const dryer = tower.dryer
         ? normalizeAppliance(machineId, "dryer", tower.dryer, observedAt, knownStates, previousDryer, unknownEnums)
         : null;
-      if (washer) events.push(...detectEvents(previousWasher, washer));
-      if (dryer) events.push(...detectEvents(previousDryer, dryer));
+      if (washer) events.push(...detectEvents(previousWasher, washer, timingContinuity));
+      if (dryer) events.push(...detectEvents(previousDryer, dryer, timingContinuity));
       return { id: machineId, washer, dryer };
     });
 
