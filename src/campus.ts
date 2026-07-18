@@ -359,7 +359,7 @@ function campus(): Record<string, unknown> {
             if (!appliance) return {label: '정보 없음', tone: 'neutral'};
             const status = appliance.projection?.status;
             const label = appliance.projection?.statusLabelKo ?? PROJECTION_LABELS[status ?? ''];
-            if (status === 'AWAITING_COMPLETION_CONFIRMATION') return {label: label ?? '완료 확인 중', tone: 'warning'};
+            if (status === 'AWAITING_COMPLETION_CONFIRMATION') return {label: '완료 확인 중', tone: 'warning'};
             if (status === 'CONFIRMED_COMPLETED') return {label: label ?? '완료', tone: 'complete'};
             if (status === 'PAUSED') return {label: label ?? '일시 정지', tone: 'warning'};
             if (status === 'ERROR') return {label: label ?? '오류', tone: 'danger'};
@@ -423,6 +423,12 @@ function campus(): Record<string, unknown> {
                 return {
                     title: '⚠ 배관 에러 발생 시',
                     detail: '건조기에 배관 에러가 표시될 경우, 필터 먼지 과다가 원인일 수 있습니다. 필터를 청소해보세요.',
+                };
+            }
+            if (appliance?.projection?.status === 'AWAITING_COMPLETION_CONFIRMATION') {
+                return {
+                    title: '완료 확인 중',
+                    detail: '예상 잔여 시간은 지났지만 LG ThinQ에서 완료 상태가 아직 확인되지 않았습니다. 완료가 확인될 때까지 사용 중으로 표시합니다.',
                 };
             }
             const adjustment = this.adjustmentMessage(appliance);
