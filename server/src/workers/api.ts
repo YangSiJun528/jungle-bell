@@ -14,8 +14,11 @@ import {
   minuteEpoch,
   parseCompactUtcMinute,
 } from "../collector/time";
-import { SOURCE_NAMES, type SourceState } from "../collector/types";
-import { CloudflareStorage } from "./cloudflare-storage";
+import { SOURCE_NAMES, type CollectionCommit, type SourceState } from "../collector/types";
+import {
+  CloudflareApiStorage,
+  latestCollectionCommitKey,
+} from "./cloudflare-storage";
 import { getCloudflareConsoleSink } from "./logging";
 
 interface Env {
@@ -23,10 +26,10 @@ interface Env {
   DATA_BUCKET: R2Bucket;
 }
 
-type Variables = { storage: CloudflareStorage };
+type Variables = { storage: CloudflareApiStorage };
 type AppEnvironment = { Bindings: Env; Variables: Variables };
 
-const app = new Hono<AppEnvironment>();
+export const app = new Hono<AppEnvironment>();
 const LATEST_CACHE = "public, max-age=15, s-maxage=30, stale-while-revalidate=120";
 const IMMUTABLE_CACHE = "public, max-age=31536000, immutable";
 const rfc3339Schema = z.iso.datetime({ offset: true });
@@ -56,6 +59,28 @@ function configureLogging(): Promise<void> {
   return loggingConfigured;
 }
 
+async function syncLatestCollections(env: Env): Promise<void> {
+  await configureLogging();
+  const logger = getLogger(["jungle-bell", "api-indexer"]);
+  const storage = new CloudflareApiStorage(env.DB, env.DATA_BUCKET);
+  const synced: Array<{ source: string; minuteEpoch: number }> = [];
+
+  for (const source of SOURCE_NAMES) {
+    const commit = await storage.readJson<CollectionCommit>(latestCollectionCommitKey(source));
+    if (!commit) {
+      logger.warn("Collector commit is not available", { source });
+      continue;
+    }
+    if (commit.state.source !== source || commit.observation.source !== source) {
+      throw new Error(`Collector commit source mismatch for ${source}`);
+    }
+    await storage.applyCommit(commit);
+    synced.push({ source, minuteEpoch: commit.observation.minuteEpoch });
+  }
+
+  logger.info("API database sync completed", { synced });
+}
+
 function currentCacheSlice(): Date {
   return new Date(Math.floor(Date.now() / 30_000) * 30_000);
 }
@@ -71,7 +96,7 @@ const validationHook: Hook<unknown, HonoEnvironment, string> = (result, context)
   }, 400);
 };
 
-function historicalState(observation: Awaited<ReturnType<CloudflareStorage["readObservation"]>>): SourceState | null {
+function historicalState(observation: Awaited<ReturnType<CloudflareApiStorage["readObservation"]>>): SourceState | null {
   if (!observation) return null;
   return {
     source: "laundry",
@@ -126,7 +151,7 @@ app.use("*", async (context, next) => {
 });
 
 app.use("*", async (context, next) => {
-  context.set("storage", new CloudflareStorage(context.env.DB, context.env.DATA_BUCKET));
+  context.set("storage", new CloudflareApiStorage(context.env.DB, context.env.DATA_BUCKET));
   await next();
 });
 
@@ -276,4 +301,12 @@ app.onError((error, context) => {
   return context.json({ error: "INTERNAL_ERROR" }, 500);
 });
 
-export default app;
+export default {
+  fetch(request: Request, env: Env, context: ExecutionContext): Response | Promise<Response> {
+    return app.fetch(request, env, context);
+  },
+
+  scheduled(_controller: ScheduledController, env: Env, context: ExecutionContext): void {
+    context.waitUntil(syncLatestCollections(env));
+  },
+} satisfies ExportedHandler<Env>;

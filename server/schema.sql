@@ -1,4 +1,12 @@
-CREATE TABLE IF NOT EXISTS source_state (
+-- This project supports only the current schema. Applying this file deletes all D1 data.
+DROP TABLE IF EXISTS meal_image;
+DROP TABLE IF EXISTS meal_post;
+DROP TABLE IF EXISTS laundry_event;
+DROP TABLE IF EXISTS minute_observation;
+DROP TABLE IF EXISTS source_version;
+DROP TABLE IF EXISTS source_state;
+
+CREATE TABLE source_state (
   source TEXT PRIMARY KEY CHECK (source IN ('laundry', 'meals-include-pinned', 'meals-default')),
   last_attempt_at TEXT NOT NULL,
   last_success_at TEXT,
@@ -10,16 +18,7 @@ CREATE TABLE IF NOT EXISTS source_state (
   last_error TEXT
 );
 
-CREATE TABLE IF NOT EXISTS source_version (
-  source TEXT NOT NULL,
-  sha TEXT NOT NULL,
-  first_observed_at TEXT NOT NULL,
-  raw_key TEXT NOT NULL,
-  normalized_key TEXT,
-  PRIMARY KEY (source, sha)
-);
-
-CREATE TABLE IF NOT EXISTS minute_observation (
+CREATE TABLE minute_observation (
   source TEXT NOT NULL,
   minute_epoch INTEGER NOT NULL,
   scheduled_at TEXT NOT NULL,
@@ -36,10 +35,10 @@ CREATE TABLE IF NOT EXISTS minute_observation (
   PRIMARY KEY (source, minute_epoch)
 );
 
-CREATE INDEX IF NOT EXISTS minute_observation_collected_at
+CREATE INDEX minute_observation_collected_at
   ON minute_observation (collected_at);
 
-CREATE TABLE IF NOT EXISTS laundry_event (
+CREATE TABLE laundry_event (
   id TEXT PRIMARY KEY,
   machine_id TEXT NOT NULL,
   appliance TEXT NOT NULL CHECK (appliance IN ('washer', 'dryer')),
@@ -53,13 +52,13 @@ CREATE TABLE IF NOT EXISTS laundry_event (
   detail_json TEXT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS laundry_event_observed_at
+CREATE INDEX laundry_event_observed_at
   ON laundry_event (observed_at DESC);
 
-CREATE INDEX IF NOT EXISTS laundry_event_machine_session
+CREATE INDEX laundry_event_machine_session
   ON laundry_event (machine_id, appliance, session_id, observed_at);
 
-CREATE TABLE IF NOT EXISTS meal_post (
+CREATE TABLE meal_post (
   id TEXT PRIMARY KEY,
   kind TEXT NOT NULL CHECK (kind IN ('PINNED_MENU', 'DAILY_MENU', 'OTHER')),
   title TEXT,
@@ -73,13 +72,13 @@ CREATE TABLE IF NOT EXISTS meal_post (
   last_seen_at TEXT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS meal_post_published_at
+CREATE INDEX meal_post_published_at
   ON meal_post (published_at DESC);
 
-CREATE INDEX IF NOT EXISTS meal_post_kind_published_at
+CREATE INDEX meal_post_kind_published_at
   ON meal_post (kind, published_at DESC);
 
-CREATE TABLE IF NOT EXISTS meal_image (
+CREATE TABLE meal_image (
   post_id TEXT NOT NULL,
   media_id TEXT NOT NULL,
   position INTEGER NOT NULL,
@@ -97,5 +96,5 @@ CREATE TABLE IF NOT EXISTS meal_image (
   FOREIGN KEY (post_id) REFERENCES meal_post(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS meal_image_post_position
+CREATE INDEX meal_image_post_position
   ON meal_image (post_id, position);

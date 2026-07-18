@@ -3,11 +3,10 @@ import { Hono } from "hono";
 import { collectAll } from "../collector/collector";
 import { datedObjectPath } from "../collector/time";
 import { collectorOptionsFromEnv, type CollectorEnvironment } from "./collector-config";
-import { CloudflareStorage } from "./cloudflare-storage";
+import { CloudflareCollectorStorage } from "./cloudflare-storage";
 import { getCloudflareConsoleSink } from "./logging";
 
 interface Env extends CollectorEnvironment {
-  DB: D1Database;
   DATA_BUCKET: R2Bucket;
 }
 
@@ -32,7 +31,7 @@ function configureLogging(): Promise<void> {
 async function runCollection(env: Env, scheduledAt: Date): Promise<void> {
   await configureLogging();
   const logger = getLogger(["jungle-bell", "collector-worker"]);
-  const storage = new CloudflareStorage(env.DB, env.DATA_BUCKET);
+  const storage = new CloudflareCollectorStorage(env.DATA_BUCKET);
   const startedAt = new Date();
   try {
     const result = await collectAll(storage, collectorOptionsFromEnv(env), scheduledAt);
