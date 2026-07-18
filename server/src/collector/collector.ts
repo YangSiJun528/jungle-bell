@@ -2,7 +2,13 @@ import { getLogger } from "@logtape/logtape";
 import { canonicalJsonSha256, sha256Bytes } from "./hash";
 import { fetchBinary, fetchJson } from "./http";
 import { normalizeLaundry, type LaundryVersion } from "./laundry";
-import { normalizeMeals, type MealImageAsset, type MealImageCandidate, type MealPost } from "./meals";
+import {
+  mealImageExtension,
+  normalizeMeals,
+  type MealImageAsset,
+  type MealImageCandidate,
+  type MealPost,
+} from "./meals";
 import {
   datedObjectPath,
   floorToMinute,
@@ -91,20 +97,6 @@ function hasTimingContinuity(state: SourceState, fetchedAt: string): boolean {
   return gap >= 0 && gap <= MAX_TIMING_CONTINUITY_GAP_MS;
 }
 
-function extensionFor(contentType: string, filename: string | null): string {
-  const byContentType: Record<string, string> = {
-    "image/avif": "avif",
-    "image/gif": "gif",
-    "image/jpeg": "jpg",
-    "image/png": "png",
-    "image/webp": "webp",
-  };
-  const mapped = byContentType[contentType.toLowerCase()];
-  if (mapped) return mapped;
-  const filenameExtension = filename?.match(/\.([a-zA-Z0-9]{1,8})$/)?.[1]?.toLowerCase();
-  return filenameExtension ?? "bin";
-}
-
 function minuteObservation(
   source: SourceName,
   scheduledAt: Date,
@@ -153,7 +145,7 @@ async function archiveMealImage(
     throw new Error(`Media ${candidate.mediaId} returned ${contentType}, not an image`);
   }
   const sha = await sha256Bytes(response.body);
-  const extension = extensionFor(contentType, candidate.filename);
+  const extension = mealImageExtension(contentType, candidate.filename);
   const objectKey = `assets/${sha.slice(0, 2)}/${sha}.${extension}`;
   if (!await bucket.head(objectKey)) {
     await bucket.put(objectKey, response.body, {

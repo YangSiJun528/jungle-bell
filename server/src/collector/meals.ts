@@ -94,7 +94,20 @@ function contentText(contents: unknown[]): string {
 
 function postKind(title: string | null, pinned: boolean): MealPost["kind"] {
   if (pinned) return "PINNED_MENU";
-  return title && /(중식|석식)\s*메뉴/.test(title) ? "DAILY_MENU" : "OTHER";
+  return title && /(중식|석식)\s*메[뉴누]/.test(title) ? "DAILY_MENU" : "OTHER";
+}
+
+export function mealImageExtension(contentType: string, filename: string | null): string {
+  const byContentType: Record<string, string> = {
+    "image/avif": "avif",
+    "image/gif": "gif",
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+  };
+  const mapped = byContentType[contentType.toLowerCase()];
+  if (mapped) return mapped;
+  return filename?.match(/\.([a-zA-Z0-9]{1,8})$/)?.[1]?.toLowerCase() ?? "bin";
 }
 
 function secureUrl(url: string): string {
