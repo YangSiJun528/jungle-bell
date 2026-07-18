@@ -102,9 +102,9 @@
                                         <span class="progress-fill" :style="`width: ${progress(entry.appliance) ?? 0}%`"></span>
                                     </div>
                                     <div class="appliance-meta"
-                                         x-show="entry.appliance?.errorCode || (entry.appliance?.estimatedFinishAt && applianceIsActive(entry.appliance))">
-                                        <span class="error-code" x-show="entry.appliance?.errorCode"
-                                              :title="`오류 코드 ${entry.appliance?.errorCode}`" x-text="`오류 코드 ${entry.appliance?.errorCode}`"></span>
+                                         x-show="applianceError(entry.appliance) || (entry.appliance?.estimatedFinishAt && applianceIsActive(entry.appliance))">
+                                        <span class="error-code" x-show="applianceError(entry.appliance)"
+                                              :title="applianceError(entry.appliance)?.text" x-text="applianceError(entry.appliance)?.text"></span>
                                         <span x-show="entry.appliance?.estimatedFinishAt && applianceIsActive(entry.appliance)"
                                               x-text="`예상 종료 ${formatClock(entry.appliance?.estimatedFinishAt)}`"></span>
                                     </div>

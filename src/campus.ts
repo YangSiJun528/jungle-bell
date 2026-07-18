@@ -108,6 +108,12 @@ interface ApplianceInfo {
     detail: string;
 }
 
+interface ApplianceError {
+    code: string;
+    label: string;
+    text: string;
+}
+
 interface TypeSummary {
     total: number;
     available: number;
@@ -119,6 +125,9 @@ interface TypeSummary {
 const ACTIVE_STATUSES = new Set(['RUNNING', 'PAUSED', 'SCHEDULED']);
 const ISSUE_PROJECTIONS = new Set(['AWAITING_COMPLETION_CONFIRMATION', 'ERROR', 'UNKNOWN']);
 const KST_TIME_ZONE = 'Asia/Seoul';
+const APPLIANCE_ERROR_LABELS: Record<string, string> = {
+    EMPTY_WATER_ALERT_ERROR: '배관 에러',
+};
 const LG_STATE_LABELS: Record<string, string> = {
     POWER_OFF: '전원 꺼짐', INITIAL: '사용 가능', RESERVED: '예약됨', DETECTING: '세탁량 감지 중',
     DISPENSING: '세제 투입 중', SOAKING: '불림 중', WASHING: '세탁 중', RINSING: '헹굼 중',
@@ -343,14 +352,21 @@ function campus(): Record<string, unknown> {
             return active ? `${active}대 작동 중` : available ? `${available}대 사용 가능` : '상태 확인 필요';
         },
 
-        projectionView(appliance?: Appliance | null): StatusView {
+        applianceError(appliance?: Appliance | null): ApplianceError | null {
+            const code = appliance?.errorCode?.trim().toUpperCase();
+            if (!code) return null;
+            const label = APPLIANCE_ERROR_LABELS[code] ?? '기기 오류';
+            return {code, label, text: `${label}(코드: ${code})`};
+        },
+
+        projectionView(this: any, appliance?: Appliance | null): StatusView {
             if (!appliance) return {label: '정보 없음', tone: 'neutral'};
             const status = appliance.projection?.status;
             const label = appliance.projection?.statusLabelKo ?? PROJECTION_LABELS[status ?? ''];
             if (status === 'AWAITING_COMPLETION_CONFIRMATION') return {label: '완료 확인 중', tone: 'warning'};
             if (status === 'CONFIRMED_COMPLETED') return {label: label ?? '완료', tone: 'complete'};
             if (status === 'PAUSED') return {label: label ?? '일시 정지', tone: 'warning'};
-            if (status === 'ERROR') return {label: label ?? '오류', tone: 'danger'};
+            if (status === 'ERROR') return {label: this.applianceError(appliance)?.label ?? label ?? '오류', tone: 'danger'};
             if (status === 'UNKNOWN') return {label: label ?? '확인 불가', tone: 'neutral'};
             if (appliance.operationalStatus === 'SCHEDULED') return {label: appliance.operationalStatusLabelKo ?? '예약됨', tone: 'normal'};
             if (status === 'IDLE') return {label: label ?? '사용 가능', tone: 'success'};
@@ -407,7 +423,7 @@ function campus(): Record<string, unknown> {
         },
 
         applianceInfo(this: any, appliance: Appliance | null | undefined, kind: ApplianceKind): ApplianceInfo | null {
-            if (kind === 'dryer' && appliance?.errorCode?.trim().toUpperCase() === 'EMPTY_WATER_ALERT_ERROR') {
+            if (kind === 'dryer' && this.applianceError(appliance)?.code === 'EMPTY_WATER_ALERT_ERROR') {
                 return {
                     title: '⚠ 배관 에러 발생 시',
                     detail: '건조기에 배관 에러가 표시될 경우, 필터 먼지 과다가 원인일 수 있습니다. 필터를 청소해보세요.',
