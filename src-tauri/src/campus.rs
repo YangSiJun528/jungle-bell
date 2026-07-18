@@ -17,6 +17,7 @@ const MEALS_ACTIVE_INTERVAL_SECS: u64 = 60;
 const MEALS_IDLE_INTERVAL_SECS: u64 = 5 * 60;
 const CAMPUS_DATA_UPDATED_EVENT: &str = "campus-data-updated";
 const CAMPUS_DATA_ERROR_EVENT: &str = "campus-data-error";
+const MEAL_HISTORY_UPDATED_EVENT: &str = "meal-history-updated";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -60,6 +61,13 @@ struct CampusDataUpdate {
 struct CampusDataError {
     kind: CampusDataKind,
     message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MealHistoryPage {
+    posts: Vec<Value>,
+    next_before: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -119,6 +127,7 @@ pub struct CampusService {
     request_times: Mutex<RequestTimes>,
     laundry_request: Mutex<()>,
     meals_request: Mutex<()>,
+    meal_history_request: Mutex<()>,
 }
 
 impl CampusService {
@@ -135,6 +144,7 @@ impl CampusService {
             request_times: Mutex::new(RequestTimes::default()),
             laundry_request: Mutex::new(()),
             meals_request: Mutex::new(()),
+            meal_history_request: Mutex::new(()),
         }
     }
 
@@ -229,6 +239,36 @@ impl CampusService {
 
     pub async fn refresh_scheduled(&self, app: &tauri::AppHandle, kind: CampusDataKind) -> Result<(), String> {
         self.refresh_inner(app, kind, true).await.map(|_| ())
+    }
+
+    pub async fn load_meal_history(
+        &self,
+        app: &tauri::AppHandle,
+        before: Option<String>,
+    ) -> Result<(), String> {
+        let _request_guard = self.meal_history_request.lock().await;
+        let mut url = reqwest::Url::parse(&format!("{}/v1/meals/history", self.base_url))
+            .map_err(|error| format!("meal history URL was invalid: {error}"))?;
+        if let Some(before) = before.as_deref() {
+            let mut query = url.query_pairs_mut();
+            query.append_pair("before", before);
+        }
+
+        let page = self
+            .client
+            .get(url)
+            .header(ACCEPT, "application/json")
+            .send()
+            .await
+            .map_err(|error| format!("meal history request failed: {error}"))?
+            .error_for_status()
+            .map_err(|error| format!("meal history request failed: {error}"))?
+            .json::<MealHistoryPage>()
+            .await
+            .map_err(|error| format!("meal history response was invalid: {error}"))?;
+
+        app.emit(MEAL_HISTORY_UPDATED_EVENT, page)
+            .map_err(|error| format!("meal history event could not be emitted: {error}"))
     }
 
     pub async fn emit_cached_snapshots(&self, app: &tauri::AppHandle) {

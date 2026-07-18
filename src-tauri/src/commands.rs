@@ -334,6 +334,16 @@ pub async fn refresh_campus_data(
     service.refresh(&app, kind).await
 }
 
+/// 오래된 급식 게시물 한 페이지를 불러와 생활정보 창에 전달한다.
+#[tauri::command]
+pub async fn load_meal_history(
+    app: tauri::AppHandle,
+    service: tauri::State<'_, Arc<CampusService>>,
+    before: Option<String>,
+) -> Result<(), String> {
+    service.load_meal_history(&app, before).await
+}
+
 /// Tauri 커맨드: 자동 시작 설정 조회.
 #[tauri::command]
 pub async fn get_auto_start(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<bool, String> {

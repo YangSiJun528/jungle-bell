@@ -167,6 +167,7 @@ pub fn run() {
             commands::get_app_version,
             commands::report_campus_ready,
             commands::refresh_campus_data,
+            commands::load_meal_history,
             commands::get_pending_update,
             commands::check_and_notify_update,
             commands::get_auto_start,
