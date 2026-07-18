@@ -186,6 +186,12 @@ function onboarding(): OnboardingComponent {
         },
 
         handleKey(event) {
+            const target = event.target;
+            if (target instanceof HTMLInputElement
+                || target instanceof HTMLSelectElement
+                || target instanceof HTMLButtonElement
+                || target instanceof HTMLAnchorElement
+                || (target instanceof HTMLElement && target.isContentEditable)) return;
             if (event.key === 'ArrowRight' && !this.nextDisabled) this.next();
             if (event.key === 'ArrowLeft' && this.step > 0) this.previous();
         },
