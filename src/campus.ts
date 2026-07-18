@@ -4,7 +4,7 @@ import {listen, type UnlistenFn} from '@tauri-apps/api/event';
 import {openUrl} from '@tauri-apps/plugin-opener';
 
 type CampusTab = 'laundry' | 'meals';
-type LaundryFilter = 'all' | 'active' | 'available';
+type LaundryFilter = 'all' | 'active' | 'bothAvailable' | 'washerAvailable' | 'dryerAvailable';
 type LaundryAccess = 'all' | 'men' | 'women';
 type MachineZone = 'men' | 'common' | 'women' | 'other';
 type ApplianceKind = 'washer' | 'dryer';
@@ -300,7 +300,11 @@ function campus(): Record<string, unknown> {
                     if (this.laundryAccess === 'women' && zone !== 'women' && zone !== 'common') return false;
                     const appliances = [machine.washer, machine.dryer].filter(Boolean) as Appliance[];
                     if (this.laundryFilter === 'active') return appliances.some((item) => this.applianceIsActive(item));
-                    if (this.laundryFilter === 'available') return appliances.some((item) => this.applianceIsAvailable(item));
+                    if (this.laundryFilter === 'bothAvailable') {
+                        return this.applianceIsAvailable(machine.washer) && this.applianceIsAvailable(machine.dryer);
+                    }
+                    if (this.laundryFilter === 'washerAvailable') return this.applianceIsAvailable(machine.washer);
+                    if (this.laundryFilter === 'dryerAvailable') return this.applianceIsAvailable(machine.dryer);
                     return true;
                 })
                 .sort((left, right) => {
@@ -319,8 +323,8 @@ function campus(): Record<string, unknown> {
             if (this.laundryAccess !== 'all') return '선택한 이용 구역에서 조건에 맞는 워시타워가 없습니다.';
             return this.laundryFilter === 'active'
                 ? '현재 작동 중인 기기가 없습니다.'
-                : this.laundryFilter === 'available'
-                    ? '현재 사용 가능한 기기가 없습니다.'
+                : this.laundryFilter !== 'all'
+                    ? '선택한 조건에 맞는 사용 가능한 워시타워가 없습니다.'
                     : '표시할 워시타워가 없습니다.';
         },
 
@@ -345,11 +349,21 @@ function campus(): Record<string, unknown> {
             return ({men: '남성', common: '공용', women: '여성', other: '기타'} as Record<MachineZone, string>)[machineZone(id)];
         },
 
+        machineZone(id: string) { return machineZone(id); },
+
         machineSummary(this: any, machine: Machine) {
-            const appliances = [machine.washer, machine.dryer].filter(Boolean) as Appliance[];
-            const active = appliances.filter((item) => this.applianceIsActive(item)).length;
-            const available = appliances.filter((item) => this.applianceIsAvailable(item)).length;
-            return active ? `${active}대 작동 중` : available ? `${available}대 사용 가능` : '상태 확인 필요';
+            const washerAvailable = this.applianceIsAvailable(machine.washer);
+            const dryerAvailable = this.applianceIsAvailable(machine.dryer);
+            if (washerAvailable && dryerAvailable) return '둘 다 사용 가능';
+            if (washerAvailable) return '세탁기 사용 가능';
+            if (dryerAvailable) return '건조기 사용 가능';
+
+            const washerActive = this.applianceIsActive(machine.washer);
+            const dryerActive = this.applianceIsActive(machine.dryer);
+            if (washerActive && dryerActive) return '둘 다 작동 중';
+            if (washerActive) return '세탁기 작동 중';
+            if (dryerActive) return '건조기 작동 중';
+            return '상태 확인 필요';
         },
 
         applianceError(appliance?: Appliance | null): ApplianceError | null {
@@ -370,9 +384,10 @@ function campus(): Record<string, unknown> {
             if (status === 'UNKNOWN') return {label: label ?? '확인 불가', tone: 'neutral'};
             if (appliance.operationalStatus === 'SCHEDULED') return {label: appliance.operationalStatusLabelKo ?? '예약됨', tone: 'normal'};
             if (status === 'IDLE') return {label: label ?? '사용 가능', tone: 'success'};
+            const stateLabel = appliance.state?.labelKo ?? LG_STATE_LABELS[appliance.state?.code ?? ''];
+            if (appliance.operationalStatus === 'RUNNING') return {label: stateLabel ?? '작동 중', tone: 'normal'};
             return {
-                label: appliance.state?.labelKo ?? LG_STATE_LABELS[appliance.state?.code ?? '']
-                    ?? label ?? appliance.operationalStatusLabelKo ?? '작동 중',
+                label: stateLabel ?? label ?? appliance.operationalStatusLabelKo ?? '작동 중',
                 tone: 'normal',
             };
         },

@@ -67,7 +67,7 @@
                     </template>
                 </div>
                 <div class="segmented-control status-control" role="group" aria-label="워시타워 상태 필터">
-                    <template x-for="filter in [{value:'all', label:'전체'}, {value:'active', label:'작동 중'}, {value:'available', label:'사용 가능'}]" :key="filter.value">
+                    <template x-for="filter in [{value:'all', label:'전체'}, {value:'active', label:'작동 중'}, {value:'bothAvailable', label:'둘 다 가능'}, {value:'washerAvailable', label:'세탁 가능'}, {value:'dryerAvailable', label:'건조 가능'}]" :key="filter.value">
                         <button type="button" class="segment" :class="{active: laundryFilter === filter.value}"
                                 :aria-pressed="laundryFilter === filter.value" @click="laundryFilter = filter.value" x-text="filter.label"></button>
                     </template>
@@ -77,7 +77,7 @@
             <div class="laundry-list" aria-live="polite">
                 <template x-if="filteredMachines().length === 0"><div class="inline-empty" x-text="laundryEmptyMessage()"></div></template>
                 <template x-for="machine in filteredMachines()" :key="machine.id">
-                    <article class="laundry-card">
+                    <article class="laundry-card" :data-zone="machineZone(machine.id)">
                         <div class="laundry-card-header">
                             <div class="laundry-card-title"><h3 x-text="machineName(machine.id)"></h3><span class="zone-badge" x-text="machineZoneLabel(machine.id)"></span></div>
                             <span x-text="machineSummary(machine)"></span>
@@ -93,7 +93,6 @@
                                         <p class="appliance-unavailable" x-show="!entry.appliance">기기 정보 없음</p>
                                         <div class="appliance-time-row" x-show="entry.appliance">
                                             <strong class="remaining-time" x-text="remainingText(entry.appliance)"></strong>
-                                            <span class="estimate-label" x-text="entry.appliance?.projection?.estimated ? '추정' : '관측'"></span>
                                         </div>
                                     </div>
                                     <div class="progress-track" role="progressbar" x-show="progress(entry.appliance) !== null"
