@@ -4,290 +4,196 @@
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <link rel="stylesheet" href="styles.css"/>
-    <link rel="stylesheet" href="campus.css"/>
-    <title>생활 정보</title>
+    <link rel="stylesheet" href="ui.css"/>
+    <title>Jungle Bell 생활 정보</title>
 </head>
-<body class="campus-body" x-data="campus">
-<main class="campus-shell">
-    <header class="header campus-header">
-        <img src="assets/logo.png" alt="Jungle Bell" class="logo"/>
-        <div class="campus-heading"><h1>생활 정보</h1><p>크래프톤 정글</p></div>
-        <button type="button" class="icon-btn" title="새로고침" aria-label="현재 탭 새로고침"
+<body class="ui-page campus-page" x-data="campus">
+<main class="ui-shell ui-shell-campus">
+    <header class="ui-app-header campus-header">
+        <img src="assets/logo.png" alt="" class="ui-app-logo"/>
+        <hgroup class="min-w-0 flex-1">
+            <h1>생활 정보</h1>
+            <p>크래프톤 정글</p>
+        </hgroup>
+        <button type="button" class="ui-icon-button refresh-button" title="새로고침" aria-label="현재 화면 새로고침"
                 :disabled="refreshing" :class="{'is-refreshing': refreshing}" :aria-busy="refreshing" @click="refresh()">
-            <span aria-hidden="true">↻</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5M4 18v-5h5M6.1 9a7 7 0 0 1 11.8-2L20 11M4 13l2.1 4A7 7 0 0 0 18 15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
     </header>
 
-    <nav class="tabs campus-tabs" aria-label="생활 정보 종류">
-        <button type="button" class="tab-btn" :class="{active: activeTab === 'laundry'}"
-                :aria-selected="activeTab === 'laundry'" @click="selectTab('laundry')">세탁</button>
-        <button type="button" class="tab-btn" :class="{active: activeTab === 'meals'}"
-                :aria-selected="activeTab === 'meals'" @click="selectTab('meals')">급식</button>
+    <nav class="ui-tabs campus-tabs" aria-label="생활 정보 종류">
+        <ul>
+            <li><button type="button" :aria-current="activeTab === 'laundry' ? 'page' : undefined" aria-controls="laundry-panel" @click="selectTab('laundry')">세탁</button></li>
+            <li><button type="button" :aria-current="activeTab === 'meals' ? 'page' : undefined" aria-controls="meals-panel" @click="selectTab('meals')">급식</button></li>
+        </ul>
     </nav>
 
-    <section class="tab-content campus-panel" :class="{active: activeTab === 'laundry'}" aria-labelledby="laundry-title">
-        <div class="source-state" :data-tone="source.laundry.tone" role="status">
-            <span class="source-dot" aria-hidden="true"></span>
-            <div class="source-copy"><strong x-text="source.laundry.title"></strong><span x-text="source.laundry.detail"></span></div>
-        </div>
+    <section id="laundry-panel" class="campus-panel" x-show="activeTab === 'laundry'" x-cloak aria-labelledby="laundry-title">
+        <header class="source-state" :data-tone="source.laundry.tone" aria-live="polite">
+            <i aria-hidden="true"></i><span><strong x-text="source.laundry.title"></strong><small x-text="source.laundry.detail"></small></span>
+        </header>
 
         <div x-show="laundry">
             <section class="laundry-overview" aria-labelledby="laundry-overview-title">
-                <div class="laundry-overview-heading">
-                    <h2 id="laundry-overview-title">현재 사용 현황</h2>
+                <header><h2 id="laundry-overview-title">현재 사용 현황</h2></header>
+                <ul>
+                    <template x-for="kind in ['washer', 'dryer']" :key="kind">
+                        <li>
+                            <span><strong x-text="kind === 'washer' ? '세탁기' : '건조기'"></strong><small><b x-text="typeSummary(kind).available"></b>/<span x-text="typeSummary(kind).total"></span>대 가능</small></span>
+                            <progress class="ui-progress availability-progress" max="100" :value="typeSummary(kind).percent" :aria-label="`사용 가능한 ${kind === 'washer' ? '세탁기' : '건조기'} 비율`" x-text="`${typeSummary(kind).percent}%`"></progress>
+                            <span class="laundry-breakdown"><small><i data-tone="active"></i><b x-text="typeSummary(kind).active"></b> 작동 중</small><small><i data-tone="issue"></i><b x-text="typeSummary(kind).issue"></b> 확인 필요</small></span>
+                        </li>
+                    </template>
+                </ul>
+            </section>
+
+            <section class="laundry-directory" aria-labelledby="laundry-title">
+                <header class="ui-section-heading laundry-heading">
+                    <div><h2 id="laundry-title">워시타워</h2><p><span x-text="filteredMachines().length"></span>대 표시</p></div>
+                    <label class="duration-control"><span>잔여 시간</span><select class="ui-select compact" x-model="durationFormat" @change="saveDurationFormat()"><option value="hoursMinutes">시간·분</option><option value="minutes">분</option></select></label>
+                </header>
+
+                <div class="laundry-filters">
+                    <fieldset class="ui-choice-group zone-choice">
+                        <legend>이용 구역</legend>
+                        <template x-for="access in [{value:'all', label:'전체'}, {value:'men', label:'남성 가능'}, {value:'women', label:'여성 가능'}]" :key="access.value">
+                            <label><input type="radio" name="laundry-access" :value="access.value" x-model="laundryAccess"/><span x-text="access.label"></span></label>
+                        </template>
+                    </fieldset>
+                    <fieldset class="ui-choice-group status-choice">
+                        <legend>사용 가능 상태</legend>
+                        <template x-for="filter in [{value:'all', label:'전체'}, {value:'washerAvailable', label:'세탁 가능'}, {value:'dryerAvailable', label:'건조 가능'}]" :key="filter.value">
+                            <label><input type="radio" name="laundry-status" :value="filter.value" x-model="laundryFilter"/><span x-text="filter.label"></span></label>
+                        </template>
+                    </fieldset>
                 </div>
 
-                <div class="laundry-type-summary-grid">
-                    <template x-for="kind in ['washer', 'dryer']" :key="kind">
-                        <div class="laundry-type-summary" :data-kind="kind">
-                            <div class="laundry-type-summary-main">
-                                <strong x-text="kind === 'washer' ? '세탁기' : '건조기'"></strong>
-                                <span><b x-text="typeSummary(kind).available"></b>/<span x-text="typeSummary(kind).total"></span>대 사용 가능</span>
+                <p class="ui-empty-state compact" x-show="filteredMachines().length === 0" x-text="laundryEmptyMessage()"></p>
+                <div class="laundry-grid" aria-live="polite">
+                    <template x-for="machine in filteredMachines()" :key="machine.id">
+                        <article class="laundry-card" :data-zone="machineZone(machine.id)">
+                            <header>
+                                <h3 x-text="machineName(machine.id)"></h3>
+                                <span class="zone-badge" x-text="machineZoneLabel(machine.id)"></span>
+                            </header>
+                            <div class="appliance-stack">
+                                <template x-for="entry in [{kind:'washer', appliance:machine.washer}, {kind:'dryer', appliance:machine.dryer}]" :key="entry.kind">
+                                    <section class="appliance-row" :data-tone="projectionView(entry.appliance).tone">
+                                        <progress class="ui-progress appliance-progress" x-show="progress(entry.appliance) !== null" max="100" :value="progress(entry.appliance) ?? 0" :aria-label="`${entry.kind === 'washer' ? '세탁' : '건조'} 진행률`" x-text="`${Math.round(progress(entry.appliance) ?? 0)}%`"></progress>
+                                        <header><h4 x-text="entry.kind === 'washer' ? '세탁기' : '건조기'"></h4><span class="status-badge" :data-tone="projectionView(entry.appliance).tone" x-text="projectionView(entry.appliance).label"></span></header>
+                                        <p class="appliance-main"><strong x-text="entry.appliance ? remainingText(entry.appliance) : '--'"></strong><small x-show="!entry.appliance">기기 정보 없음</small><small x-show="entry.appliance?.estimatedFinishAt && applianceIsActive(entry.appliance)"><time :datetime="entry.appliance?.estimatedFinishAt" x-text="`예상 종료 ${formatClock(entry.appliance?.estimatedFinishAt)}`"></time></small></p>
+                                        <p class="appliance-error" x-show="applianceError(entry.appliance)" x-text="applianceError(entry.appliance)?.text"></p>
+                                        <details class="ui-tooltip" x-show="applianceInfo(entry.appliance, entry.kind)">
+                                            <summary :aria-label="applianceInfo(entry.appliance, entry.kind)?.title ?? '기기 상태 안내'">i</summary>
+                                            <aside><strong x-text="applianceInfo(entry.appliance, entry.kind)?.title"></strong><span x-text="applianceInfo(entry.appliance, entry.kind)?.detail"></span></aside>
+                                        </details>
+                                    </section>
+                                </template>
                             </div>
-                            <progress
-                                class="my-[7px] h-[7px] w-full appearance-none overflow-hidden rounded bg-transparent align-middle [&::-moz-progress-bar]:rounded [&::-moz-progress-bar]:bg-[var(--color-success)] [&::-webkit-progress-bar]:rounded [&::-webkit-progress-bar]:bg-[var(--color-pill-bg)] [&::-webkit-progress-value]:rounded [&::-webkit-progress-value]:bg-[var(--color-success)]"
-                                max="100" :value="typeSummary(kind).percent"
-                                :aria-label="`사용 가능한 ${kind === 'washer' ? '세탁기' : '건조기'} 비율`"
-                                x-text="`${typeSummary(kind).percent}%`"></progress>
-                            <div class="laundry-type-breakdown">
-                                <span><i data-tone="active"></i><b x-text="typeSummary(kind).active"></b> 작동 중</span>
-                                <span><i data-tone="issue"></i><b x-text="typeSummary(kind).issue"></b> 확인 필요</span>
-                            </div>
-                        </div>
+                        </article>
                     </template>
                 </div>
             </section>
-
-            <div class="section-heading filter-heading">
-                <div class="laundry-list-title"><h2 id="laundry-title">워시타워</h2><span x-text="`${filteredMachines().length}대`"></span></div>
-                <label class="duration-format-control">
-                    <span>시간 표시</span>
-                    <select x-model="durationFormat" @change="saveDurationFormat()" aria-label="잔여 시간 표시 형식">
-                        <option value="hoursMinutes">1시간 20분</option>
-                        <option value="minutes">80분</option>
-                    </select>
-                </label>
-            </div>
-            <div class="laundry-filter-toolbar">
-                <div class="segmented-control zone-control" role="group" aria-label="워시타워 이용 구역 필터">
-                    <template x-for="access in [{value:'all', label:'전체'}, {value:'men', label:'남성 가능'}, {value:'women', label:'여성 가능'}]" :key="access.value">
-                        <button type="button" class="segment" :class="{active: laundryAccess === access.value}"
-                                :aria-pressed="laundryAccess === access.value" @click="laundryAccess = access.value" x-text="access.label"></button>
-                    </template>
-                </div>
-                <div class="segmented-control status-control" role="group" aria-label="워시타워 상태 필터">
-                    <template x-for="filter in [{value:'all', label:'전체'}, {value:'washerAvailable', label:'세탁 가능'}, {value:'dryerAvailable', label:'건조 가능'}]" :key="filter.value">
-                        <button type="button" class="segment" :class="{active: laundryFilter === filter.value}"
-                                :aria-pressed="laundryFilter === filter.value" @click="laundryFilter = filter.value" x-text="filter.label"></button>
-                    </template>
-                </div>
-            </div>
-
-            <div class="laundry-list" aria-live="polite">
-                <template x-if="filteredMachines().length === 0"><div class="inline-empty" x-text="laundryEmptyMessage()"></div></template>
-                <template x-for="machine in filteredMachines()" :key="machine.id">
-                    <article class="laundry-card" :data-zone="machineZone(machine.id)">
-                        <div class="laundry-card-header">
-                            <div class="laundry-card-title"><h3 x-text="machineName(machine.id)"></h3><span class="zone-badge" x-text="machineZoneLabel(machine.id)"></span></div>
-                        </div>
-                        <div class="appliance-grid">
-                            <template x-for="entry in [{kind:'washer', appliance:machine.washer}, {kind:'dryer', appliance:machine.dryer}]" :key="entry.kind">
-                                <section class="appliance-row" :data-tone="projectionView(entry.appliance).tone">
-                                    <div class="appliance-row-main">
-                                        <div class="appliance-heading">
-                                            <h4 x-text="entry.kind === 'washer' ? '세탁기' : '건조기'"></h4>
-                                            <span class="status-badge" :data-tone="projectionView(entry.appliance).tone" x-text="projectionView(entry.appliance).label"></span>
-                                        </div>
-                                        <p class="appliance-unavailable" x-show="!entry.appliance">기기 정보 없음</p>
-                                        <div class="appliance-time-row" x-show="entry.appliance">
-                                            <strong class="remaining-time" x-text="remainingText(entry.appliance)"></strong>
-                                        </div>
-                                    </div>
-                                    <progress
-                                        class="appliance-progress absolute inset-x-0 top-0 h-[3px] w-full appearance-none overflow-hidden border-0 bg-transparent [&::-moz-progress-bar]:bg-[var(--color-accent)] [&::-webkit-progress-bar]:bg-[var(--color-pill-bg)] [&::-webkit-progress-value]:bg-[var(--color-accent)]"
-                                        x-show="progress(entry.appliance) !== null" max="100" :value="progress(entry.appliance) ?? 0"
-                                        :aria-label="`${entry.kind === 'washer' ? '세탁' : '건조'} 진행률`"
-                                        x-text="`${Math.round(progress(entry.appliance) ?? 0)}%`"></progress>
-                                    <div class="appliance-meta"
-                                         x-show="applianceError(entry.appliance) || (entry.appliance?.estimatedFinishAt && applianceIsActive(entry.appliance))">
-                                        <span class="error-code" x-show="applianceError(entry.appliance)"
-                                              :title="applianceError(entry.appliance)?.text" x-text="applianceError(entry.appliance)?.text"></span>
-                                        <span x-show="entry.appliance?.estimatedFinishAt && applianceIsActive(entry.appliance)"
-                                              x-text="`예상 종료 ${formatClock(entry.appliance?.estimatedFinishAt)}`"></span>
-                                    </div>
-                                    <div class="inline-info" x-data="{expanded:false, hovered:false}"
-                                         x-show="applianceInfo(entry.appliance, entry.kind)"
-                                         @mouseenter="hovered = true" @mouseleave="hovered = false"
-                                         @keydown.escape="expanded = false">
-                                        <button type="button" class="info-icon-btn"
-                                                :title="applianceInfo(entry.appliance, entry.kind)?.title ?? '기기 상태 안내'"
-                                                :aria-label="applianceInfo(entry.appliance, entry.kind)?.title ?? '기기 상태 안내'"
-                                                :aria-expanded="expanded || hovered" @click="expanded = !expanded"
-                                                @focus="hovered = true" @blur="hovered = false"><span aria-hidden="true">i</span></button>
-                                        <p class="inline-info-detail" role="note" x-show="expanded || hovered">
-                                            <strong x-text="applianceInfo(entry.appliance, entry.kind)?.title"></strong>
-                                            <span x-text="applianceInfo(entry.appliance, entry.kind)?.detail"></span>
-                                        </p>
-                                    </div>
-                                </section>
-                            </template>
-                        </div>
-                    </article>
-                </template>
-            </div>
         </div>
 
-        <div class="content-state" aria-live="polite" x-show="!laundry">
-            <span class="loading-spinner" aria-hidden="true" x-show="!errors.laundry"></span>
+        <section class="ui-content-state" aria-live="polite" x-show="!laundry">
+            <span class="ui-spinner" aria-hidden="true" x-show="!errors.laundry"></span>
             <strong x-text="errors.laundry ? '현재 정보를 불러올 수 없습니다.' : '세탁기 현황을 불러오는 중입니다.'"></strong>
-            <button type="button" class="secondary-btn" x-show="errors.laundry" @click="refresh()">다시 시도</button>
-        </div>
+            <button type="button" class="ui-button-secondary" x-show="errors.laundry" @click="refresh()">다시 시도</button>
+        </section>
     </section>
 
-    <section class="tab-content campus-panel" :class="{active: activeTab === 'meals'}" aria-labelledby="today-meals-title">
-        <div class="source-state" :data-tone="source.meals.tone" role="status">
-            <span class="source-dot" aria-hidden="true"></span>
-            <div class="source-copy"><strong x-text="source.meals.title"></strong><span x-text="source.meals.detail"></span></div>
-        </div>
+    <section id="meals-panel" class="campus-panel" x-show="activeTab === 'meals'" x-cloak aria-labelledby="today-meals-title">
+        <header class="source-state" :data-tone="source.meals.tone" aria-live="polite">
+            <i aria-hidden="true"></i><span><strong x-text="source.meals.title"></strong><small x-text="source.meals.detail"></small></span>
+        </header>
 
         <div x-show="meals">
-            <nav class="meal-view-tabs segmented-control" aria-label="급식 보기">
-                <button type="button" class="segment" :class="{active: mealView === 'current'}"
-                        :aria-pressed="mealView === 'current'" @click="selectMealView('current')">급식</button>
-                <button type="button" class="segment" :class="{active: mealView === 'history'}"
-                        :aria-pressed="mealView === 'history'" @click="selectMealView('history')">내역</button>
+            <nav class="ui-tabs sub-tabs" aria-label="급식 보기">
+                <ul><li><button type="button" :aria-current="mealView === 'current' ? 'page' : undefined" @click="selectMealView('current')">오늘·이번 주</button></li><li><button type="button" :aria-current="mealView === 'history' ? 'page' : undefined" @click="selectMealView('history')">지난 식단</button></li></ul>
             </nav>
 
             <div x-show="mealView === 'current'">
-            <div class="section-heading meal-date-heading"><div><h2 id="today-meals-title">오늘의 식단</h2><p x-text="formatToday()"></p></div></div>
-            <div class="today-meals">
-                <template x-for="period in ['lunch', 'dinner']" :key="period">
-                    <article class="meal-card today-meal-card" :class="{'meal-card-empty': !todayMeal(period)}">
-                        <div class="meal-card-header">
-                            <h3 x-text="period === 'lunch' ? '중식' : '석식'"></h3>
-                            <span class="status-badge" :data-tone="todayMeal(period) ? 'success' : 'neutral'" x-text="todayMeal(period) ? '게시됨' : '게시 전'"></span>
-                        </div>
-                        <p x-show="!todayMeal(period)" x-text="`오늘 ${period === 'lunch' ? '중식' : '석식'} 식단이 아직 게시되지 않았습니다.`"></p>
-                        <div class="today-meal-content" x-show="todayMeal(period)">
-                            <button type="button" class="today-meal-image meal-image-btn" x-show="imageUrl(todayMeal(period))"
-                                    :aria-label="`${todayMeal(period)?.title ?? '식단'} 이미지 크게 보기`" @click="openImage(todayMeal(period), $refs.imageDialog)">
-                                <img :src="imageUrl(todayMeal(period))" :alt="todayMeal(period)?.title ?? '식단 이미지'" loading="lazy"/>
-                            </button>
-                            <div class="today-meal-image meal-image-empty" x-show="!imageUrl(todayMeal(period))">이미지 없음</div>
-                            <div class="meal-card-copy">
-                                <p class="meal-menu-text" x-text="todayMeal(period)?.text || '메뉴 내용이 없습니다.'"></p>
-                                <div class="meal-card-footer">
-                                    <span x-show="todayMeal(period)?.publishedAt" x-text="`게시 ${relativeTime(todayMeal(period)?.publishedAt)}`"></span>
-                                    <button type="button" class="link-btn meal-post-link" x-show="safeKakaoUrl(todayMeal(period)?.permalink)" @click="openPost(todayMeal(period))">원문 보기</button>
+                <section aria-labelledby="today-meals-title">
+                    <header class="ui-section-heading"><div><h2 id="today-meals-title">오늘의 식단</h2><p><time :datetime="mealSelectedDate" x-text="formatToday()"></time></p></div></header>
+                    <div class="today-meals">
+                        <template x-for="period in ['lunch', 'dinner']" :key="period">
+                            <article class="meal-card today-meal-card" :class="{'is-empty': !todayMeal(period)}">
+                                <header><h3 x-text="period === 'lunch' ? '중식' : '석식'"></h3><span class="status-badge" :data-tone="todayMeal(period) ? 'success' : 'neutral'" x-text="todayMeal(period) ? '게시됨' : '게시 전'"></span></header>
+                                <p class="meal-empty-copy" x-show="!todayMeal(period)" x-text="`오늘 ${period === 'lunch' ? '중식' : '석식'} 식단이 아직 게시되지 않았습니다.`"></p>
+                                <div class="today-meal-content" x-show="todayMeal(period)">
+                                    <button type="button" class="meal-image-button today-meal-image" x-show="imageUrl(todayMeal(period))" :aria-label="`${todayMeal(period)?.title ?? '식단'} 이미지 크게 보기`" @click="openImage(todayMeal(period), $refs.imageDialog)"><img :src="imageUrl(todayMeal(period))" :alt="todayMeal(period)?.title ?? '식단 이미지'" loading="lazy"/></button>
+                                    <span class="meal-image-empty today-meal-image" x-show="!imageUrl(todayMeal(period))">이미지 없음</span>
+                                    <section class="meal-copy"><p x-text="todayMeal(period)?.text || '메뉴 내용이 없습니다.'"></p><footer><time x-show="todayMeal(period)?.publishedAt" :datetime="todayMeal(period)?.publishedAt" x-text="`게시 ${relativeTime(todayMeal(period)?.publishedAt)}`"></time><button type="button" class="ui-text-button" x-show="safeKakaoUrl(todayMeal(period)?.permalink)" @click="openPost(todayMeal(period))">원문 보기</button></footer></section>
                                 </div>
-                            </div>
-                        </div>
-                    </article>
-                </template>
-            </div>
-
-            <div class="section-heading"><h2>이번 주 식단표</h2></div>
-            <div class="weekly-meals">
-                <div class="inline-empty" x-show="meals?.data.pinnedMenus.length === 0">게시된 주간 식단표가 없습니다.</div>
-                <template x-for="(post, index) in meals?.data.pinnedMenus ?? []" :key="postKey(post, index)">
-                    <article class="meal-card weekly-meal-card">
-                        <div class="meal-card-header"><h3 x-text="post.title ?? '주간 식단표'"></h3><button type="button" class="link-btn meal-post-link" x-show="safeKakaoUrl(post.permalink)" @click="openPost(post)">원문 보기</button></div>
-                        <button type="button" class="weekly-meal-image meal-image-btn" x-show="imageUrl(post)" :aria-label="`${post.title ?? '식단'} 이미지 크게 보기`" @click="openImage(post, $refs.imageDialog)">
-                            <img :src="imageUrl(post)" :alt="post.title ?? '식단 이미지'" loading="lazy"/>
-                        </button>
-                        <div class="weekly-meal-image meal-image-empty" x-show="!imageUrl(post)">이미지 없음</div>
-                        <p class="weekly-meal-text" x-show="post.text" x-text="post.text"></p>
-                    </article>
-                </template>
-            </div>
-            </div>
-
-            <div class="meal-history" x-show="mealView === 'history'">
-                <section class="overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]" aria-labelledby="meal-calendar-title">
-                    <header class="grid min-h-12 grid-cols-[36px_minmax(0,1fr)_36px] items-center border-b border-[var(--color-divider-subtle)] px-2 py-1">
-                        <button type="button" class="icon-btn calendar-nav-btn" title="이전 달" aria-label="이전 달"
-                                @click="moveMealMonth(-1)"><span aria-hidden="true">‹</span></button>
-                        <h2 id="meal-calendar-title" class="m-0 text-center text-[length:var(--font-size-h2)] font-semibold" x-text="mealCalendarLabel()"></h2>
-                        <button type="button" class="icon-btn calendar-nav-btn" title="다음 달" aria-label="다음 달"
-                                :disabled="!canMoveMealMonthNext()" @click="moveMealMonth(1)"><span aria-hidden="true">›</span></button>
-                    </header>
-                    <table class="campus-calendar w-full table-fixed border-collapse" aria-labelledby="meal-calendar-title">
-                        <caption class="sr-only" x-text="`${mealCalendarLabel()} 급식 달력`"></caption>
-                        <thead class="bg-[var(--color-surface-subtle)] text-[11px] text-[var(--color-text-muted)]">
-                        <tr>
-                            <template x-for="(weekday, index) in ['일', '월', '화', '수', '목', '금', '토']" :key="weekday">
-                                <th scope="col" class="h-7 p-0 text-center font-medium data-[weekday=0]:text-[var(--color-danger)]"
-                                    :data-weekday="index" x-text="weekday"></th>
-                            </template>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        <template x-for="week in mealCalendarWeeks()" :key="week[0]?.key">
-                            <tr>
-                                <template x-for="day in week" :key="day.key">
-                                    <td class="h-[54px] border-r border-t border-[var(--color-divider-subtle)] p-0 align-top last:border-r-0 max-[540px]:h-12">
-                                        <button type="button"
-                                                class="group relative block h-full min-h-[54px] w-full cursor-pointer border-0 bg-[var(--color-surface)] p-1.5 text-left text-[var(--color-text)] hover:bg-[var(--color-surface-subtle)] focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--color-accent)] data-[outside=true]:bg-[var(--color-surface-subtle)] data-[outside=true]:text-[var(--color-text-faint)] data-[weekday=0]:text-[var(--color-danger)] aria-pressed:ring-2 aria-pressed:ring-inset aria-pressed:ring-[var(--color-accent)] max-[540px]:min-h-12"
-                                                :data-outside="!day.inCurrentMonth" :data-weekday="day.weekday"
-                                                :aria-current="day.isToday ? 'date' : undefined"
-                                                :aria-label="`${day.key} 식단 ${day.posts.length}개`"
-                                                :aria-pressed="mealSelectedDate === day.key" @click="selectMealDate(day)">
-                                            <time class="block text-[11px] group-aria-[current=date]:font-bold group-aria-[current=date]:text-[var(--color-accent)]"
-                                                  :datetime="day.key" x-text="day.day"></time>
-                                            <ul class="absolute inset-x-1 bottom-1 m-0 flex list-none justify-center gap-1 p-0"
-                                                x-show="day.posts.length > 0" :aria-label="`${day.posts.length}개 식단`">
-                                                <template x-for="post in day.posts" :key="postIdentity(post, 0)">
-                                                    <li>
-                                                        <abbr class="flex size-4 items-center justify-center rounded-full bg-[var(--color-success-soft)] text-[9px] font-bold text-[var(--color-success)] no-underline data-[period=dinner]:bg-[var(--color-accent-soft)] data-[period=dinner]:text-[var(--color-accent)] max-[540px]:size-3.5 max-[540px]:text-[8px]"
-                                                              :data-period="mealPeriodKind(post)" :title="mealPeriodLabel(post)"
-                                                              x-text="mealPeriodLabel(post).slice(0, 1)"></abbr>
-                                                    </li>
-                                                </template>
-                                            </ul>
-                                        </button>
-                                    </td>
-                                </template>
-                            </tr>
-                        </template>
-                        </tbody>
-                    </table>
-                </section>
-
-                <section class="meal-calendar-selection">
-                    <div class="section-heading meal-history-heading">
-                        <h2 x-text="selectedMealDateLabel()"></h2>
-                        <span x-show="mealHistoryLoading">불러오는 중</span>
-                    </div>
-                    <div class="inline-empty" x-show="!mealHistoryLoading && selectedMealPosts().length === 0">이 날짜에 저장된 식단이 없습니다.</div>
-                    <div class="recent-meals">
-                        <template x-for="(post, index) in selectedMealPosts()" :key="postKey(post, index)">
-                            <article class="recent-meal-row">
-                                <button type="button" class="recent-meal-image meal-image-btn" x-show="imageUrl(post)" :aria-label="`${post.title ?? '식단'} 이미지 크게 보기`" @click="openImage(post, $refs.imageDialog)">
-                                    <img :src="imageUrl(post)" :alt="post.title ?? '식단 이미지'" loading="lazy"/>
-                                </button>
-                                <div class="recent-meal-image meal-image-empty" x-show="!imageUrl(post)">이미지 없음</div>
-                                <div class="recent-meal-copy"><h3 x-text="post.title ?? '식단'"></h3><p x-text="post.text || '메뉴 내용이 없습니다.'"></p></div>
-                                <button type="button" class="link-btn meal-post-link" x-show="safeKakaoUrl(post.permalink)" @click="openPost(post)">원문 보기</button>
                             </article>
                         </template>
                     </div>
-                    <p class="history-error" x-show="mealHistoryError">급식 내역을 불러오지 못했습니다.</p>
+                </section>
+
+                <section aria-labelledby="weekly-meals-title">
+                    <header class="ui-section-heading"><div><h2 id="weekly-meals-title">이번 주 식단표</h2><p>고정 게시물</p></div></header>
+                    <p class="ui-empty-state compact" x-show="meals?.data.pinnedMenus.length === 0">게시된 주간 식단표가 없습니다.</p>
+                    <div class="weekly-meals">
+                        <template x-for="(post, index) in meals?.data.pinnedMenus ?? []" :key="postKey(post, index)">
+                            <article class="meal-card weekly-meal-card">
+                                <header><h3 x-text="post.title ?? '주간 식단표'"></h3><button type="button" class="ui-text-button" x-show="safeKakaoUrl(post.permalink)" @click="openPost(post)">원문 보기</button></header>
+                                <button type="button" class="meal-image-button weekly-meal-image" x-show="imageUrl(post)" :aria-label="`${post.title ?? '식단'} 이미지 크게 보기`" @click="openImage(post, $refs.imageDialog)"><img :src="imageUrl(post)" :alt="post.title ?? '식단 이미지'" loading="lazy"/></button>
+                                <span class="meal-image-empty weekly-meal-image" x-show="!imageUrl(post)">이미지 없음</span>
+                                <p class="weekly-meal-copy" x-show="post.text" x-text="post.text"></p>
+                            </article>
+                        </template>
+                    </div>
+                </section>
+            </div>
+
+            <div class="meal-history" x-show="mealView === 'history'">
+                <section class="meal-calendar" aria-labelledby="meal-calendar-title">
+                    <header>
+                        <button type="button" class="ui-icon-button" title="이전 달" aria-label="이전 달" @click="moveMealMonth(-1)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                        <h2 id="meal-calendar-title" x-text="mealCalendarLabel()"></h2>
+                        <button type="button" class="ui-icon-button" title="다음 달" aria-label="다음 달" :disabled="!canMoveMealMonthNext()" @click="moveMealMonth(1)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                    </header>
+                    <table aria-labelledby="meal-calendar-title">
+                        <caption class="sr-only" x-text="`${mealCalendarLabel()} 급식 달력`"></caption>
+                        <thead><tr><template x-for="(weekday, index) in ['일', '월', '화', '수', '목', '금', '토']" :key="weekday"><th scope="col" :data-weekday="index" x-text="weekday"></th></template></tr></thead>
+                        <tbody><template x-for="week in mealCalendarWeeks()" :key="week[0]?.key"><tr><template x-for="day in week" :key="day.key"><td>
+                            <button type="button" :data-outside="!day.inCurrentMonth" :data-weekday="day.weekday" :aria-current="day.isToday ? 'date' : undefined" :aria-label="`${day.key} 식단 ${day.posts.length}개`" :aria-pressed="mealSelectedDate === day.key" @click="selectMealDate(day)">
+                                <time :datetime="day.key" x-text="day.day"></time>
+                                <ul x-show="day.posts.length > 0" :aria-label="`${day.posts.length}개 식단`"><template x-for="post in day.posts" :key="postIdentity(post, 0)"><li><abbr :data-period="mealPeriodKind(post)" :title="mealPeriodLabel(post)" x-text="mealPeriodLabel(post).slice(0, 1)"></abbr></li></template></ul>
+                            </button>
+                        </td></template></tr></template></tbody>
+                    </table>
+                </section>
+
+                <section class="meal-calendar-selection" aria-labelledby="selected-meal-date-title">
+                    <header class="ui-section-heading"><div><h2 id="selected-meal-date-title" x-text="selectedMealDateLabel()"></h2><p x-show="mealHistoryLoading">불러오는 중</p></div></header>
+                    <p class="ui-empty-state compact" x-show="!mealHistoryLoading && selectedMealPosts().length === 0">이 날짜에 저장된 식단이 없습니다.</p>
+                    <div class="recent-meals">
+                        <template x-for="(post, index) in selectedMealPosts()" :key="postKey(post, index)">
+                            <article class="recent-meal-row">
+                                <button type="button" class="meal-image-button recent-meal-image" x-show="imageUrl(post)" :aria-label="`${post.title ?? '식단'} 이미지 크게 보기`" @click="openImage(post, $refs.imageDialog)"><img :src="imageUrl(post)" :alt="post.title ?? '식단 이미지'" loading="lazy"/></button>
+                                <span class="meal-image-empty recent-meal-image" x-show="!imageUrl(post)">이미지 없음</span>
+                                <section><h3 x-text="post.title ?? '식단'"></h3><p x-text="post.text || '메뉴 내용이 없습니다.'"></p></section>
+                                <button type="button" class="ui-text-button" x-show="safeKakaoUrl(post.permalink)" @click="openPost(post)">원문 보기</button>
+                            </article>
+                        </template>
+                    </div>
+                    <p class="ui-alert" data-tone="danger" x-show="mealHistoryError">급식 내역을 불러오지 못했습니다.</p>
                 </section>
             </div>
         </div>
 
-        <div class="content-state" aria-live="polite" x-show="!meals">
-            <span class="loading-spinner" aria-hidden="true" x-show="!errors.meals"></span>
+        <section class="ui-content-state" aria-live="polite" x-show="!meals">
+            <span class="ui-spinner" aria-hidden="true" x-show="!errors.meals"></span>
             <strong x-text="errors.meals ? '현재 정보를 불러올 수 없습니다.' : '식단을 불러오는 중입니다.'"></strong>
-            <button type="button" class="secondary-btn" x-show="errors.meals" @click="refresh()">다시 시도</button>
-        </div>
+            <button type="button" class="ui-button-secondary" x-show="errors.meals" @click="refresh()">다시 시도</button>
+        </section>
     </section>
 </main>
 
-<dialog class="image-dialog" aria-labelledby="image-dialog-caption" x-ref="imageDialog" @click.self="closeImage($refs.imageDialog)">
-    <div class="image-dialog-bar"><strong id="image-dialog-caption" x-text="dialogCaption"></strong>
-        <button type="button" class="icon-btn dialog-close" title="닫기" aria-label="이미지 닫기" @click="closeImage($refs.imageDialog)"><span aria-hidden="true">×</span></button>
-    </div>
+<dialog class="image-dialog" aria-labelledby="image-dialog-caption" x-ref="imageDialog" @click.self="closeImage($refs.imageDialog)" @cancel.prevent="closeImage($refs.imageDialog)">
+    <header><strong id="image-dialog-caption" x-text="dialogCaption"></strong><button type="button" class="ui-icon-button" title="닫기" aria-label="이미지 닫기" @click="closeImage($refs.imageDialog)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button></header>
     <img :src="dialogImage" :alt="dialogCaption ? `${dialogCaption} 이미지` : ''"/>
 </dialog>
 
