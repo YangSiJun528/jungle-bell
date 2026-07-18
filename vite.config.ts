@@ -1,5 +1,6 @@
 import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {resolve} from 'node:path';
+import tailwindcss from '@tailwindcss/vite';
 import {defineConfig, transformWithOxc, type Plugin} from 'vite';
 
 const host = process.env.TAURI_DEV_HOST;
@@ -43,7 +44,7 @@ function checkerInjectionScript(): Plugin {
 }
 
 export default defineConfig({
-    plugins: [checkerInjectionScript()],
+    plugins: [tailwindcss(), checkerInjectionScript()],
     root: 'src',
     base: './',
     clearScreen: false,

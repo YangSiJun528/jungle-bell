@@ -86,6 +86,7 @@ interface MealHistoryPage {
 interface MealCalendarDay {
     key: string;
     day: number;
+    weekday: number;
     inCurrentMonth: boolean;
     isToday: boolean;
     posts: MealPost[];
@@ -427,11 +428,17 @@ function campus(): Record<string, unknown> {
                 return {
                     key,
                     day: date.getUTCDate(),
+                    weekday: date.getUTCDay(),
                     inCurrentMonth: date.getUTCMonth() === month - 1,
                     isToday: key === today,
                     posts: postsByDate.get(key) ?? [],
                 };
             });
+        },
+
+        mealCalendarWeeks(this: any): MealCalendarDay[][] {
+            const days = this.mealCalendarDays() as MealCalendarDay[];
+            return Array.from({length: 6}, (_, index) => days.slice(index * 7, index * 7 + 7));
         },
 
         selectMealDate(this: any, day: MealCalendarDay) {
@@ -461,6 +468,10 @@ function campus(): Record<string, unknown> {
             if (post.title?.includes('중식')) return '중식';
             if (post.title?.includes('석식')) return '석식';
             return '식단';
+        },
+
+        mealPeriodKind(post: MealPost) {
+            return post.title?.includes('석식') ? 'dinner' : 'lunch';
         },
 
         saveDurationFormat(this: any) {

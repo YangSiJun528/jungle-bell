@@ -1137,24 +1137,6 @@ tr.ob-end-field.disabled {
     font-size: 17px;
 }
 
-.availability-track {
-    width: 100%;
-    height: 7px;
-    overflow: hidden;
-    margin: 9px 0 7px;
-    border-radius: 4px;
-    background: var(--color-pill-bg);
-}
-
-.availability-fill {
-    display: block;
-    width: 0;
-    height: 100%;
-    border-radius: inherit;
-    background: var(--color-success);
-    transition: width 180ms ease;
-}
-
 .laundry-type-breakdown {
     justify-content: flex-start;
     gap: 12px;
@@ -1482,22 +1464,6 @@ tr.ob-end-field.disabled {
     overflow-wrap: anywhere;
 }
 
-.progress-track {
-    position: absolute;
-    inset: 0 0 auto;
-    width: auto;
-    height: 3px;
-    overflow: hidden;
-    margin: 0;
-    background: var(--color-pill-bg);
-}
-
-.progress-fill {
-    display: block;
-    height: 100%;
-    background: var(--color-accent);
-}
-
 .appliance-meta {
     min-width: 0;
     display: flex;
@@ -1777,126 +1743,12 @@ tr.ob-end-field.disabled {
     font-size: var(--font-size-hint);
 }
 
-.meal-calendar {
-    overflow: hidden;
-    border: 1px solid var(--color-border);
-    border-radius: 8px;
-    background: var(--color-surface);
-}
-
-.meal-calendar-header {
-    min-height: 46px;
-    display: grid;
-    grid-template-columns: 36px minmax(0, 1fr) 36px;
-    align-items: center;
-    padding: 4px 8px;
-    border-bottom: 1px solid var(--color-divider-subtle);
-}
-
-.meal-calendar-header h2 {
-    margin: 0;
-    font-size: var(--font-size-h2);
-    font-weight: 600;
-    text-align: center;
-}
-
 .calendar-nav-btn {
     min-width: 32px;
     min-height: 32px;
     border-color: transparent;
     font-size: 23px;
     line-height: 1;
-}
-
-.meal-calendar-weekdays,
-.meal-calendar-grid {
-    display: grid;
-    grid-template-columns: repeat(7, minmax(0, 1fr));
-}
-
-.meal-calendar-weekdays {
-    min-height: 28px;
-    align-items: center;
-    background: var(--color-surface-subtle);
-    color: var(--color-text-muted);
-    font-size: 11px;
-    text-align: center;
-}
-
-.meal-calendar-weekdays span:first-child {
-    color: var(--color-danger);
-}
-
-.meal-calendar-day {
-    position: relative;
-    min-width: 0;
-    height: 54px;
-    padding: 5px;
-    border: 0;
-    border-top: 1px solid var(--color-divider-subtle);
-    border-right: 1px solid var(--color-divider-subtle);
-    background: var(--color-surface);
-    color: var(--color-text);
-    font: inherit;
-    cursor: pointer;
-}
-
-.meal-calendar-day:nth-child(7n) {
-    border-right: 0;
-}
-
-.meal-calendar-day:hover {
-    background: var(--color-surface-subtle);
-}
-
-.meal-calendar-day.is-outside {
-    color: var(--color-text-faint);
-    background: var(--color-surface-subtle);
-}
-
-.meal-calendar-day.is-selected {
-    box-shadow: inset 0 0 0 2px var(--color-accent);
-}
-
-.meal-calendar-number {
-    position: absolute;
-    top: 5px;
-    left: 6px;
-    font-size: 11px;
-}
-
-.meal-calendar-day.is-today .meal-calendar-number {
-    color: var(--color-accent);
-    font-weight: 700;
-}
-
-.meal-calendar-markers {
-    position: absolute;
-    right: 4px;
-    bottom: 5px;
-    left: 4px;
-    display: flex;
-    justify-content: center;
-    gap: 3px;
-}
-
-.meal-calendar-markers i {
-    width: 16px;
-    height: 16px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    background: var(--color-success-soft);
-    color: var(--color-success);
-    font-size: 9px;
-    font-style: normal;
-    font-weight: 700;
-}
-
-.meal-calendar-markers i[data-period="석식"] {
-    background: var(--color-accent-soft);
-    color: var(--color-accent);
 }
 
 .meal-calendar-selection {
@@ -1984,16 +1836,6 @@ tr.ob-end-field.disabled {
 
     .meal-view-tabs {
         grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .meal-calendar-day {
-        height: 48px;
-    }
-
-    .meal-calendar-markers i {
-        width: 14px;
-        height: 14px;
-        font-size: 8px;
     }
 
     .segment {

@@ -1,0 +1,15 @@
+@layer theme, utilities;
+
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+@source "./campus.html";
+
+/* The legacy settings table rules are global; calendar cells own their sizing. */
+.campus-calendar th,
+.campus-calendar td {
+    width: auto;
+    padding: 0;
+    color: inherit;
+    text-align: inherit;
+}

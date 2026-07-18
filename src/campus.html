@@ -4,6 +4,7 @@
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <link rel="stylesheet" href="styles.css"/>
+    <link rel="stylesheet" href="campus.css"/>
     <title>생활 정보</title>
 </head>
 <body class="campus-body" x-data="campus">
@@ -43,10 +44,11 @@
                                 <strong x-text="kind === 'washer' ? '세탁기' : '건조기'"></strong>
                                 <span><b x-text="typeSummary(kind).available"></b>/<span x-text="typeSummary(kind).total"></span>대 사용 가능</span>
                             </div>
-                            <div class="availability-track" role="progressbar" :aria-label="`사용 가능한 ${kind === 'washer' ? '세탁기' : '건조기'} 비율`"
-                                 aria-valuemin="0" aria-valuemax="100" :aria-valuenow="typeSummary(kind).percent">
-                                <span class="availability-fill" :style="`width: ${typeSummary(kind).percent}%`"></span>
-                            </div>
+                            <progress
+                                class="my-[7px] h-[7px] w-full appearance-none overflow-hidden rounded bg-transparent align-middle [&::-moz-progress-bar]:rounded [&::-moz-progress-bar]:bg-[var(--color-success)] [&::-webkit-progress-bar]:rounded [&::-webkit-progress-bar]:bg-[var(--color-pill-bg)] [&::-webkit-progress-value]:rounded [&::-webkit-progress-value]:bg-[var(--color-success)]"
+                                max="100" :value="typeSummary(kind).percent"
+                                :aria-label="`사용 가능한 ${kind === 'washer' ? '세탁기' : '건조기'} 비율`"
+                                x-text="`${typeSummary(kind).percent}%`"></progress>
                             <div class="laundry-type-breakdown">
                                 <span><i data-tone="active"></i><b x-text="typeSummary(kind).active"></b> 작동 중</span>
                                 <span><i data-tone="issue"></i><b x-text="typeSummary(kind).issue"></b> 확인 필요</span>
@@ -101,11 +103,11 @@
                                             <strong class="remaining-time" x-text="remainingText(entry.appliance)"></strong>
                                         </div>
                                     </div>
-                                    <div class="progress-track appliance-progress" role="progressbar" x-show="progress(entry.appliance) !== null"
-                                         aria-valuemin="0" aria-valuemax="100" :aria-valuenow="Math.round(progress(entry.appliance) ?? 0)"
-                                         :aria-label="`${entry.kind === 'washer' ? '세탁' : '건조'} 진행률`">
-                                        <span class="progress-fill" :style="`width: ${progress(entry.appliance) ?? 0}%`"></span>
-                                    </div>
+                                    <progress
+                                        class="appliance-progress absolute inset-x-0 top-0 h-[3px] w-full appearance-none overflow-hidden border-0 bg-transparent [&::-moz-progress-bar]:bg-[var(--color-accent)] [&::-webkit-progress-bar]:bg-[var(--color-pill-bg)] [&::-webkit-progress-value]:bg-[var(--color-accent)]"
+                                        x-show="progress(entry.appliance) !== null" max="100" :value="progress(entry.appliance) ?? 0"
+                                        :aria-label="`${entry.kind === 'washer' ? '세탁' : '건조'} 진행률`"
+                                        x-text="`${Math.round(progress(entry.appliance) ?? 0)}%`"></progress>
                                     <div class="appliance-meta"
                                          x-show="applianceError(entry.appliance) || (entry.appliance?.estimatedFinishAt && applianceIsActive(entry.appliance))">
                                         <span class="error-code" x-show="applianceError(entry.appliance)"
@@ -201,35 +203,55 @@
             </div>
 
             <div class="meal-history" x-show="mealView === 'history'">
-                <div class="meal-calendar">
-                    <div class="meal-calendar-header">
+                <section class="overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]" aria-labelledby="meal-calendar-title">
+                    <header class="grid min-h-12 grid-cols-[36px_minmax(0,1fr)_36px] items-center border-b border-[var(--color-divider-subtle)] px-2 py-1">
                         <button type="button" class="icon-btn calendar-nav-btn" title="이전 달" aria-label="이전 달"
                                 @click="moveMealMonth(-1)"><span aria-hidden="true">‹</span></button>
-                        <h2 x-text="mealCalendarLabel()"></h2>
+                        <h2 id="meal-calendar-title" class="m-0 text-center text-[length:var(--font-size-h2)] font-semibold" x-text="mealCalendarLabel()"></h2>
                         <button type="button" class="icon-btn calendar-nav-btn" title="다음 달" aria-label="다음 달"
                                 :disabled="!canMoveMealMonthNext()" @click="moveMealMonth(1)"><span aria-hidden="true">›</span></button>
-                    </div>
-                    <div class="meal-calendar-weekdays" aria-hidden="true">
-                        <template x-for="weekday in ['일', '월', '화', '수', '목', '금', '토']" :key="weekday">
-                            <span x-text="weekday"></span>
+                    </header>
+                    <table class="campus-calendar w-full table-fixed border-collapse" aria-labelledby="meal-calendar-title">
+                        <caption class="sr-only" x-text="`${mealCalendarLabel()} 급식 달력`"></caption>
+                        <thead class="bg-[var(--color-surface-subtle)] text-[11px] text-[var(--color-text-muted)]">
+                        <tr>
+                            <template x-for="(weekday, index) in ['일', '월', '화', '수', '목', '금', '토']" :key="weekday">
+                                <th scope="col" class="h-7 p-0 text-center font-medium data-[weekday=0]:text-[var(--color-danger)]"
+                                    :data-weekday="index" x-text="weekday"></th>
+                            </template>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <template x-for="week in mealCalendarWeeks()" :key="week[0]?.key">
+                            <tr>
+                                <template x-for="day in week" :key="day.key">
+                                    <td class="h-[54px] border-r border-t border-[var(--color-divider-subtle)] p-0 align-top last:border-r-0 max-[540px]:h-12">
+                                        <button type="button"
+                                                class="group relative block h-full min-h-[54px] w-full cursor-pointer border-0 bg-[var(--color-surface)] p-1.5 text-left text-[var(--color-text)] hover:bg-[var(--color-surface-subtle)] focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--color-accent)] data-[outside=true]:bg-[var(--color-surface-subtle)] data-[outside=true]:text-[var(--color-text-faint)] data-[weekday=0]:text-[var(--color-danger)] aria-pressed:ring-2 aria-pressed:ring-inset aria-pressed:ring-[var(--color-accent)] max-[540px]:min-h-12"
+                                                :data-outside="!day.inCurrentMonth" :data-weekday="day.weekday"
+                                                :aria-current="day.isToday ? 'date' : undefined"
+                                                :aria-label="`${day.key} 식단 ${day.posts.length}개`"
+                                                :aria-pressed="mealSelectedDate === day.key" @click="selectMealDate(day)">
+                                            <time class="block text-[11px] group-aria-[current=date]:font-bold group-aria-[current=date]:text-[var(--color-accent)]"
+                                                  :datetime="day.key" x-text="day.day"></time>
+                                            <ul class="absolute inset-x-1 bottom-1 m-0 flex list-none justify-center gap-1 p-0"
+                                                x-show="day.posts.length > 0" :aria-label="`${day.posts.length}개 식단`">
+                                                <template x-for="post in day.posts" :key="postIdentity(post, 0)">
+                                                    <li>
+                                                        <abbr class="flex size-4 items-center justify-center rounded-full bg-[var(--color-success-soft)] text-[9px] font-bold text-[var(--color-success)] no-underline data-[period=dinner]:bg-[var(--color-accent-soft)] data-[period=dinner]:text-[var(--color-accent)] max-[540px]:size-3.5 max-[540px]:text-[8px]"
+                                                              :data-period="mealPeriodKind(post)" :title="mealPeriodLabel(post)"
+                                                              x-text="mealPeriodLabel(post).slice(0, 1)"></abbr>
+                                                    </li>
+                                                </template>
+                                            </ul>
+                                        </button>
+                                    </td>
+                                </template>
+                            </tr>
                         </template>
-                    </div>
-                    <div class="meal-calendar-grid">
-                        <template x-for="day in mealCalendarDays()" :key="day.key">
-                            <button type="button" class="meal-calendar-day"
-                                    :class="{'is-outside': !day.inCurrentMonth, 'is-today': day.isToday, 'is-selected': mealSelectedDate === day.key}"
-                                    :aria-label="`${day.key} 식단 ${day.posts.length}개`" :aria-pressed="mealSelectedDate === day.key"
-                                    @click="selectMealDate(day)">
-                                <span class="meal-calendar-number" x-text="day.day"></span>
-                                <span class="meal-calendar-markers" aria-hidden="true">
-                                    <template x-for="post in day.posts" :key="postIdentity(post, 0)">
-                                        <i :data-period="mealPeriodLabel(post)" x-text="mealPeriodLabel(post).slice(0, 1)"></i>
-                                    </template>
-                                </span>
-                            </button>
-                        </template>
-                    </div>
-                </div>
+                        </tbody>
+                    </table>
+                </section>
 
                 <section class="meal-calendar-selection">
                     <div class="section-heading meal-history-heading">
