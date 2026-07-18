@@ -1,14 +1,11 @@
 import type {
-  BinaryObject,
   CollectionCommit,
-  CollectorStorage,
   LaundryEvent,
   MinuteObservation,
   SourceName,
   SourceState,
 } from "../collector/types";
 import type { ArchivedMealPost, MealImageAsset, MealPost } from "../collector/meals";
-import { datedObjectPath } from "../collector/time";
 
 interface SourceStateRow {
   source: SourceName;
@@ -147,71 +144,19 @@ function toMealImage(row: MealImageRow): MealImageAsset {
   };
 }
 
-export function latestCollectionCommitKey(source: SourceName): string {
-  return `collector/latest/${source}.json`;
-}
-
-class CloudflareObjectStorage {
-  constructor(readonly bucket: R2Bucket) {}
+export class CloudflareApiStorage {
+  constructor(
+    readonly db: D1Database,
+    readonly bucket: R2Bucket,
+  ) {}
 
   async readJson<T>(key: string): Promise<T | null> {
     const object = await this.bucket.get(key);
-    if (!object) return null;
-    return JSON.parse(await object.text()) as T;
+    return object ? JSON.parse(await object.text()) as T : null;
   }
 
   async readObject(key: string): Promise<R2ObjectBody | null> {
     return this.bucket.get(key);
-  }
-
-  async writeJson(key: string, value: unknown): Promise<void> {
-    await this.bucket.put(key, JSON.stringify(value), {
-      httpMetadata: { contentType: "application/json; charset=utf-8" },
-    });
-  }
-
-  async writeRaw(key: string, raw: string): Promise<void> {
-    await this.bucket.put(key, raw, {
-      httpMetadata: { contentType: "application/json; charset=utf-8" },
-    });
-  }
-
-  async objectExists(key: string): Promise<boolean> {
-    return await this.bucket.head(key) !== null;
-  }
-
-  async writeBinary(key: string, object: BinaryObject): Promise<void> {
-    await this.bucket.put(key, object.body, {
-      httpMetadata: { contentType: object.contentType },
-      ...(object.etag ? { customMetadata: { sha256: object.etag } } : {}),
-    });
-  }
-}
-
-export class CloudflareCollectorStorage extends CloudflareObjectStorage implements CollectorStorage {
-  async readState(source: SourceName): Promise<SourceState | null> {
-    return this.readJson<SourceState>(`collector/state/${source}.json`);
-  }
-
-  async commit(commit: CollectionCommit): Promise<void> {
-    const { observation, state } = commit;
-    const commitKey = datedObjectPath(
-      `collector/commits/${observation.source}`,
-      new Date(observation.scheduledAt),
-      `${observation.minuteEpoch}.json`,
-    );
-    await this.writeJson(commitKey, commit);
-    await this.writeJson(latestCollectionCommitKey(observation.source), commit);
-    await this.writeJson(`collector/state/${state.source}.json`, state);
-  }
-}
-
-export class CloudflareApiStorage extends CloudflareObjectStorage {
-  constructor(
-    readonly db: D1Database,
-    bucket: R2Bucket,
-  ) {
-    super(bucket);
   }
 
   async readState(source: SourceName): Promise<SourceState | null> {

@@ -11,14 +11,12 @@ import { projectLaundry } from "../collector/projection";
 import {
   compactUtcMinute,
   floorToMinute,
+  latestCollectionCommitPath,
   minuteEpoch,
   parseCompactUtcMinute,
 } from "../collector/time";
 import { SOURCE_NAMES, type CollectionCommit, type SourceState } from "../collector/types";
-import {
-  CloudflareApiStorage,
-  latestCollectionCommitKey,
-} from "./cloudflare-storage";
+import { CloudflareApiStorage } from "./cloudflare-storage";
 import { getCloudflareConsoleSink } from "./logging";
 
 interface Env {
@@ -66,7 +64,7 @@ async function syncLatestCollections(env: Env): Promise<void> {
   const synced: Array<{ source: string; minuteEpoch: number }> = [];
 
   for (const source of SOURCE_NAMES) {
-    const commit = await storage.readJson<CollectionCommit>(latestCollectionCommitKey(source));
+    const commit = await storage.readJson<CollectionCommit>(latestCollectionCommitPath(source));
     if (!commit) {
       logger.warn("Collector commit is not available", { source });
       continue;

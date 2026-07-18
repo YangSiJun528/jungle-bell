@@ -2,12 +2,12 @@
 
 세탁기 상태와 카카오 채널 식단 데이터를 수집하고 공개 API로 제공하는 Cloudflare Workers 서버입니다.
 
-- `src/collector/`: 런타임에 독립적인 수집, 정규화, 투영 로직입니다.
+- `src/collector/`: 수집, 정규화, 투영 로직입니다.
 - `src/workers/collector.ts`: 매분 원본 3개를 순차 요청하고 원본, 이미지, 수집 commit을 R2에 백업합니다.
 - `src/workers/api.ts`: R2의 최신 commit을 D1 조회 모델에 반영하고 캐시 가능한 HTTP API를 제공합니다.
 - `src/workers/`: Cloudflare 환경 설정과 R2 백업/D1 조회 어댑터, 로깅을 관리합니다.
 
-Collector Worker에는 D1 바인딩이 없습니다. 수집 로직은 `CollectorStorage` 계약만 호출하고 `CloudflareCollectorStorage`가 R2 백업을 담당합니다. API Worker의 scheduled 핸들러는 R2의 `collector/latest/*.json` commit을 `CloudflareApiStorage`로 D1에 반영합니다. 따라서 API 배포나 D1 초기화 중에도 원본 수집은 중단되지 않습니다.
+Collector Worker에는 D1 바인딩이 없습니다. 수집 로직은 `R2Bucket`에 원본과 복구 데이터를 직접 저장합니다. API Worker의 scheduled 핸들러는 R2의 `collector/latest/*.json` commit을 `CloudflareApiStorage`로 D1에 반영합니다. 따라서 API 배포나 D1 초기화 중에도 원본 수집은 중단되지 않습니다.
 
 원본 전체 JSON은 RFC 8785 방식으로 정규화한 뒤 SHA-256을 계산합니다. 직전 SHA와 같으면 원본, 정규화본, 이미지는 다시 저장하지 않고 해당 분의 관측 결과와 실행 로그만 남깁니다. 카카오의 pinned 포함 API와 기본 API는 응답이 같아도 별도 소스로 기록합니다.
 

@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CollectionCommit, SourceState } from "../src/collector/types";
-import {
-  CloudflareApiStorage,
-  CloudflareCollectorStorage,
-  latestCollectionCommitKey,
-} from "../src/workers/cloudflare-storage";
+import { CloudflareApiStorage } from "../src/workers/cloudflare-storage";
 
 function state(): SourceState {
   return {
@@ -41,35 +37,7 @@ function commit(): CollectionCommit {
   };
 }
 
-function memoryBucket(): { bucket: R2Bucket; objects: Map<string, string> } {
-  const objects = new Map<string, string>();
-  const bucket = {
-    put: async (key: string, value: string) => {
-      objects.set(key, value);
-      return {};
-    },
-    get: async (key: string) => {
-      const value = objects.get(key);
-      return value === undefined ? null : { text: async () => value };
-    },
-    head: async (key: string) => objects.has(key) ? {} : null,
-  } as unknown as R2Bucket;
-  return { bucket, objects };
-}
-
-describe("Cloudflare storage boundaries", () => {
-  it("archives collector commits and state in R2 without D1", async () => {
-    const { bucket, objects } = memoryBucket();
-    const storage = new CloudflareCollectorStorage(bucket);
-    const value = commit();
-
-    await storage.commit(value);
-
-    expect(objects.has("collector/commits/laundry/2026/07/18/29738880.json")).toBe(true);
-    expect(objects.has(latestCollectionCommitKey("laundry"))).toBe(true);
-    await expect(storage.readState("laundry")).resolves.toEqual(value.state);
-  });
-
+describe("CloudflareApiStorage", () => {
   it("applies an archived commit only to the API query tables", async () => {
     const statements: Array<{ sql: string; values: unknown[] }> = [];
     const db = {
@@ -82,9 +50,7 @@ describe("Cloudflare storage boundaries", () => {
       }),
       batch: async () => [],
     } as unknown as D1Database;
-    const { bucket } = memoryBucket();
-
-    await new CloudflareApiStorage(db, bucket).applyCommit(commit());
+    await new CloudflareApiStorage(db, {} as R2Bucket).applyCommit(commit());
 
     expect(statements).toHaveLength(2);
     expect(statements.some(({ sql }) => sql.includes("minute_observation"))).toBe(true);
