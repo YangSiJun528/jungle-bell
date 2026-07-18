@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <link rel="stylesheet" href="styles.css"/>
     <link rel="stylesheet" href="ui.css"/>
     <title>Jungle Bell 설정</title>
 </head>
@@ -12,8 +11,8 @@
     <header class="ui-app-header">
         <img src="assets/logo.png" alt="" class="ui-app-logo"/>
         <hgroup class="min-w-0 flex-1">
-            <h1>Jungle Bell <small x-text="appVersion ? `v${appVersion}` : ''"></small></h1>
-            <p>출석 알림 설정</p>
+            <h1>설정</h1>
+            <p>Jungle Bell <span x-text="appVersion ? `v${appVersion}` : ''"></span></p>
         </hgroup>
     </header>
 
@@ -25,9 +24,13 @@
         </ul>
     </nav>
 
-    <section id="attendance-settings" class="ui-settings-panel" x-show="activeTab === 'attendance'" x-cloak>
+    <section id="attendance-settings" class="ui-settings-panel" x-show="activeTab === 'attendance'" x-cloak aria-labelledby="attendance-settings-title">
+        <header class="ui-page-heading">
+            <h2 id="attendance-settings-title">출석 설정</h2>
+            <p>기본 출석 시간과 이번 출석 알림을 관리합니다.</p>
+        </header>
         <header class="ui-section-heading">
-            <div><h2>출석 시간</h2><p>알림을 보내는 기본 출석 시간입니다.</p></div>
+            <div><h3>출석 시간</h3><p>알림을 보내는 기본 시간입니다.</p></div>
         </header>
         <dl class="ui-schedule">
             <div><dt>학습 시작</dt><dd><time datetime="04:00">04:00</time> - <time datetime="10:00">10:00</time></dd></div>
@@ -45,7 +48,11 @@
         </fieldset>
     </section>
 
-    <section id="notification-settings" class="ui-settings-panel" x-show="activeTab === 'notification'" x-cloak>
+    <section id="notification-settings" class="ui-settings-panel" x-show="activeTab === 'notification'" x-cloak aria-labelledby="notification-settings-title">
+        <header class="ui-page-heading">
+            <h2 id="notification-settings-title">알림 설정</h2>
+            <p>출석 알림 일정과 시스템 권한을 관리합니다.</p>
+        </header>
         <fieldset class="ui-settings-group">
             <legend>알림 일정</legend>
             <label class="ui-setting-row">
@@ -109,7 +116,11 @@
         </section>
     </section>
 
-    <section id="app-settings" class="ui-settings-panel" x-show="activeTab === 'app'" x-cloak>
+    <section id="app-settings" class="ui-settings-panel" x-show="activeTab === 'app'" x-cloak aria-labelledby="app-settings-title">
+        <header class="ui-page-heading">
+            <h2 id="app-settings-title">앱 설정</h2>
+            <p>실행, 업데이트, 데이터와 화면 옵션을 관리합니다.</p>
+        </header>
         <aside class="ui-alert" data-tone="info" x-show="pendingVersion" x-cloak>
             <span><strong>업데이트 가능</strong><small x-text="pendingVersion ? `v${pendingVersion} 버전을 설치할 수 있습니다.` : ''"></small></span>
             <button type="button" class="ui-button-primary" @click="command('check_and_notify_update')">업데이트</button>

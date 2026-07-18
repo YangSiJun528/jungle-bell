@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <link rel="stylesheet" href="styles.css"/>
     <link rel="stylesheet" href="ui.css"/>
     <title>Jungle Bell 생활 정보</title>
 </head>
@@ -54,17 +53,21 @@
                 </header>
 
                 <div class="laundry-filters">
-                    <fieldset class="ui-choice-group zone-choice">
+                    <fieldset class="laundry-filter-group">
                         <legend>이용 구역</legend>
-                        <template x-for="access in [{value:'all', label:'전체'}, {value:'men', label:'남성 가능'}, {value:'women', label:'여성 가능'}]" :key="access.value">
-                            <label><input type="radio" name="laundry-access" :value="access.value" x-model="laundryAccess"/><span x-text="access.label"></span></label>
-                        </template>
+                        <div class="ui-choice-group zone-choice">
+                            <template x-for="access in [{value:'all', label:'전체'}, {value:'men', label:'남성 가능'}, {value:'women', label:'여성 가능'}]" :key="access.value">
+                                <label><input type="radio" name="laundry-access" :value="access.value" x-model="laundryAccess"/><span x-text="access.label"></span></label>
+                            </template>
+                        </div>
                     </fieldset>
-                    <fieldset class="ui-choice-group status-choice">
+                    <fieldset class="laundry-filter-group">
                         <legend>사용 가능 상태</legend>
-                        <template x-for="filter in [{value:'all', label:'전체'}, {value:'washerAvailable', label:'세탁 가능'}, {value:'dryerAvailable', label:'건조 가능'}]" :key="filter.value">
-                            <label><input type="radio" name="laundry-status" :value="filter.value" x-model="laundryFilter"/><span x-text="filter.label"></span></label>
-                        </template>
+                        <div class="ui-choice-group status-choice">
+                            <template x-for="filter in [{value:'all', label:'전체'}, {value:'washerAvailable', label:'세탁 가능'}, {value:'dryerAvailable', label:'건조 가능'}]" :key="filter.value">
+                                <label><input type="radio" name="laundry-status" :value="filter.value" x-model="laundryFilter"/><span x-text="filter.label"></span></label>
+                            </template>
+                        </div>
                     </fieldset>
                 </div>
 
