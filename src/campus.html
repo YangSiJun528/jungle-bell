@@ -80,7 +80,6 @@
                     <article class="laundry-card" :data-zone="machineZone(machine.id)">
                         <div class="laundry-card-header">
                             <div class="laundry-card-title"><h3 x-text="machineName(machine.id)"></h3><span class="zone-badge" x-text="machineZoneLabel(machine.id)"></span></div>
-                            <span x-text="machineSummary(machine)"></span>
                         </div>
                         <div class="appliance-grid">
                             <template x-for="entry in [{kind:'washer', appliance:machine.washer}, {kind:'dryer', appliance:machine.dryer}]" :key="entry.kind">

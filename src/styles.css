@@ -1338,11 +1338,6 @@ tr.ob-end-field.disabled {
     color: var(--zone-color);
 }
 
-.laundry-card-header > span {
-    color: var(--color-text-muted);
-    font-size: var(--font-size-hint);
-}
-
 .laundry-card-title {
     min-width: 0;
     display: flex;

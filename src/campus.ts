@@ -355,21 +355,6 @@ function campus(): Record<string, unknown> {
 
         machineZone(id: string) { return machineZone(id); },
 
-        machineSummary(this: any, machine: Machine) {
-            const washerAvailable = this.applianceIsAvailable(machine.washer);
-            const dryerAvailable = this.applianceIsAvailable(machine.dryer);
-            if (washerAvailable && dryerAvailable) return '둘 다 사용 가능';
-            if (washerAvailable) return '세탁기 사용 가능';
-            if (dryerAvailable) return '건조기 사용 가능';
-
-            const washerActive = this.applianceIsActive(machine.washer);
-            const dryerActive = this.applianceIsActive(machine.dryer);
-            if (washerActive && dryerActive) return '둘 다 작동 중';
-            if (washerActive) return '세탁기 작동 중';
-            if (dryerActive) return '건조기 작동 중';
-            return '상태 확인 필요';
-        },
-
         applianceError(appliance?: Appliance | null): ApplianceError | null {
             const code = appliance?.errorCode?.trim().toUpperCase();
             if (!code) return null;
