@@ -152,7 +152,7 @@ export class CloudflareApiStorage {
 
   async readJson<T>(key: string): Promise<T | null> {
     const object = await this.bucket.get(key);
-    return object ? JSON.parse(await object.text()) as T : null;
+    return object ? object.json<T>() : null;
   }
 
   async readObject(key: string): Promise<R2ObjectBody | null> {

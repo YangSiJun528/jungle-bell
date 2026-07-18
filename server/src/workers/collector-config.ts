@@ -30,20 +30,23 @@ const environmentSchema = z.object({
   LG_RUN_STATES: z.string().optional(),
 });
 
+const runStatesSchema = z.array(z.string()).transform((states) => [
+  ...new Set(states.map((state) => state.trim().toUpperCase()).filter(Boolean)),
+]);
+
 function runStates(value: string | undefined): string[] | undefined {
   if (!value?.trim()) return undefined;
-  let parsed: unknown;
   try {
-    parsed = value.trim().startsWith("[")
+    const parsed: unknown = value.trim().startsWith("[")
       ? JSON.parse(value) as unknown
-      : value.split(",").map((item) => item.trim()).filter(Boolean);
-  } catch {
-    throw new Error("LG_RUN_STATES must be a JSON array or comma-separated list of strings");
+      : value.split(",");
+    return runStatesSchema.parse(parsed);
+  } catch (error) {
+    throw new Error(
+      "LG_RUN_STATES must be a JSON array or comma-separated list of strings",
+      { cause: error },
+    );
   }
-  if (!Array.isArray(parsed) || parsed.some((item) => typeof item !== "string")) {
-    throw new Error("LG_RUN_STATES must be a JSON array or comma-separated list of strings");
-  }
-  return [...new Set(parsed.map((item) => item.trim().toUpperCase()).filter(Boolean))];
 }
 
 export function collectorOptionsFromEnv(environment: CollectorEnvironment): CollectorOptions {

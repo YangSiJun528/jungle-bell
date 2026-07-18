@@ -16,8 +16,10 @@ class MemoryBucket {
   async get(key: string): Promise<object | null> {
     const value = this.objects.get(key);
     if (value === undefined) return null;
+    const text = typeof value === "string" ? value : new TextDecoder().decode(value);
     return {
-      text: async () => typeof value === "string" ? value : new TextDecoder().decode(value),
+      text: async () => text,
+      json: async <T>() => JSON.parse(text) as T,
     };
   }
 

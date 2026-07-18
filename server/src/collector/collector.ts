@@ -35,7 +35,7 @@ interface ChangedArtifacts {
 
 async function readJson<T>(bucket: R2Bucket, key: string): Promise<T | null> {
   const object = await bucket.get(key);
-  return object ? JSON.parse(await object.text()) as T : null;
+  return object ? object.json<T>() : null;
 }
 
 async function writeJson(bucket: R2Bucket, key: string, value: unknown): Promise<void> {
