@@ -18,7 +18,7 @@
 
 @layer base {
     :root {
-        --ui-scrollbar-size: 8px;
+        --ui-scrollbar-size: 10px;
         --ui-scrollbar-thumb: rgb(37 37 41 / 28%);
         --ui-scrollbar-thumb-hover: rgb(37 37 41 / 42%);
         --ui-scrollbar-thumb-active: rgb(37 37 41 / 54%);
