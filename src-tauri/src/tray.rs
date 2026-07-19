@@ -402,8 +402,9 @@ fn build_campus_window(app: &tauri::AppHandle, tab: CampusTab) {
     )
     .title("생활 정보")
     .inner_size(640.0, 780.0)
-    .min_inner_size(480.0, 600.0)
-    .resizable(true)
+    .resizable(false)
+    .minimizable(false)
+    .maximizable(false)
     .focused(true)
     .build()
     {
@@ -437,7 +438,7 @@ fn build_settings_window(app: &tauri::AppHandle) {
     show_foreground_app(app);
     if let Ok(window) = tauri::WebviewWindowBuilder::new(app, "settings", tauri::WebviewUrl::App("index.html".into()))
         .title("설정")
-        .inner_size(448.0, 608.0)
+        .inner_size(448.0, 680.0)
         .resizable(false)
         .minimizable(false)
         .maximizable(false)

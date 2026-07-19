@@ -1,4 +1,5 @@
 import Alpine from 'alpinejs';
+import './select-control';
 import {invoke} from '@tauri-apps/api/core';
 import {listen, type UnlistenFn} from '@tauri-apps/api/event';
 import {message} from '@tauri-apps/plugin-dialog';

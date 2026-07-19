@@ -4,20 +4,27 @@
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <link rel="stylesheet" href="ui.css"/>
+    <link rel="license" href="assets/fonts/Pretendard-LICENSE.txt"/>
     <title>Jungle Bell 생활 정보</title>
 </head>
 <body class="ui-page campus-page" x-data="campus">
 <main class="ui-shell ui-shell-campus">
     <header class="ui-app-header campus-header">
         <img src="assets/logo.png" alt="" class="ui-app-logo"/>
-        <hgroup class="min-w-0 flex-1">
-            <h1>생활 정보</h1>
-            <p>크래프톤 정글</p>
-        </hgroup>
-        <button type="button" class="ui-icon-button refresh-button" title="새로고침" aria-label="현재 화면 새로고침"
-                :disabled="refreshing" :class="{'is-refreshing': refreshing}" :aria-busy="refreshing" @click="refresh()">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5M4 18v-5h5M6.1 9a7 7 0 0 1 11.8-2L20 11M4 13l2.1 4A7 7 0 0 0 18 15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
+        <h1 class="min-w-0 flex-1">생활 정보</h1>
+        <aside class="header-source-state" :data-tone="source[activeTab].tone" aria-live="polite">
+            <i aria-hidden="true"></i><strong x-text="source[activeTab].label"></strong>
+            <details class="ui-info header-source-info" x-data="infoDisclosure" :open="visible"
+                     @mouseenter="enter()" @mouseleave="leave()" @focusin="focus()" @focusout="blur()"
+                     @keydown.escape.stop="dismiss()" @click.outside="dismiss()"
+                     @info-disclosure-open.window="handlePeer($event)" @info-disclosure-dismiss.window="dismiss()">
+                <summary x-ref="trigger" :aria-label="`${activeTab === 'laundry' ? '세탁기' : '식단'} 정보 갱신 안내`" @click.prevent="toggle()">i</summary>
+                <aside class="ui-info-popover" x-show="visible" x-anchor.fixed.offset.8="$refs.trigger">
+                    <strong x-text="sourceInfo(activeTab).title"></strong>
+                    <p x-text="sourceInfo(activeTab).detail"></p>
+                </aside>
+            </details>
+        </aside>
     </header>
 
     <nav class="ui-tabs campus-tabs" aria-label="생활 정보 종류">
@@ -28,33 +35,51 @@
     </nav>
 
     <section id="laundry-panel" class="campus-panel" x-show="activeTab === 'laundry'" x-cloak aria-labelledby="laundry-title">
-        <header class="source-state" :data-tone="source.laundry.tone" aria-live="polite">
-            <i aria-hidden="true"></i><span><strong x-text="source.laundry.title"></strong><small x-text="source.laundry.detail"></small></span>
-        </header>
-
         <div x-show="laundry">
             <section class="laundry-overview" aria-labelledby="laundry-overview-title">
-                <header><h2 id="laundry-overview-title">현재 사용 현황</h2></header>
-                <ul>
-                    <template x-for="kind in ['washer', 'dryer']" :key="kind">
-                        <li>
-                            <span><strong x-text="kind === 'washer' ? '세탁기' : '건조기'"></strong><small><b x-text="typeSummary(kind).available"></b>/<span x-text="typeSummary(kind).total"></span>대 가능</small></span>
-                            <progress class="ui-progress availability-progress" max="100" :value="typeSummary(kind).percent" :aria-label="`사용 가능한 ${kind === 'washer' ? '세탁기' : '건조기'} 비율`" x-text="`${typeSummary(kind).percent}%`"></progress>
-                            <span class="laundry-breakdown"><small><i data-tone="active"></i><b x-text="typeSummary(kind).active"></b> 작동 중</small><small><i data-tone="issue"></i><b x-text="typeSummary(kind).issue"></b> 확인 필요</small></span>
-                        </li>
+                <header>
+                    <h2 id="laundry-overview-title">현재 사용 현황</h2>
+                    <ul class="availability-key" aria-label="사용 가능 구역과 사용 불가 색상">
+                        <li data-zone="men"><i></i>남성</li>
+                        <li data-zone="common"><i></i>공용</li>
+                        <li data-zone="women"><i></i>여성</li>
+                        <li data-state="unavailable"><i></i>사용 불가</li>
+                    </ul>
+                </header>
+                <table class="availability-layout">
+                    <caption class="sr-only">워시타워 번호별 건조기와 세탁기 사용 가능 현황</caption>
+                    <thead>
+                    <tr>
+                        <th scope="col">기기</th>
+                        <template x-for="segment in availabilitySegments('washer')" :key="`heading-${segment.number}`">
+                            <th scope="col" :data-zone="segment.zone" x-text="segment.number"></th>
+                        </template>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <template x-for="row in [{kind:'dryer', label:'건조기'}, {kind:'washer', label:'세탁기'}]" :key="row.kind">
+                        <tr>
+                            <th scope="row"><span x-text="row.label"></span><small><b x-text="typeSummary(row.kind).available"></b>/<span x-text="typeSummary(row.kind).total"></span></small></th>
+                            <template x-for="segment in availabilitySegments(row.kind)" :key="segment.id">
+                                <td :data-zone="segment.zone" :data-state="segment.state" :title="segment.label">
+                                    <span class="availability-tower-state" aria-hidden="true"></span>
+                                    <span class="sr-only" x-text="segment.label"></span>
+                                </td>
+                            </template>
+                        </tr>
                     </template>
-                </ul>
+                    </tbody>
+                </table>
             </section>
 
             <section class="laundry-directory" aria-labelledby="laundry-title">
                 <header class="ui-section-heading laundry-heading">
-                    <div><h2 id="laundry-title">워시타워</h2><p><span x-text="filteredMachines().length"></span>대 표시</p></div>
-                    <label class="duration-control"><span>잔여 시간</span><select class="ui-select compact" x-model="durationFormat" @change="saveDurationFormat()"><option value="hoursMinutes">시간·분</option><option value="minutes">분</option></select></label>
+                    <div><h2 id="laundry-title">워시타워</h2></div>
                 </header>
 
                 <div class="laundry-filters">
                     <fieldset class="laundry-filter-group">
-                        <legend>이용 구역</legend>
+                        <legend class="laundry-filter-label">구역</legend>
                         <div class="ui-choice-group zone-choice">
                             <template x-for="access in [{value:'all', label:'전체'}, {value:'men', label:'남성 가능'}, {value:'women', label:'여성 가능'}]" :key="access.value">
                                 <label><input type="radio" name="laundry-access" :value="access.value" x-model="laundryAccess"/><span x-text="access.label"></span></label>
@@ -62,9 +87,9 @@
                         </div>
                     </fieldset>
                     <fieldset class="laundry-filter-group">
-                        <legend>사용 가능 상태</legend>
+                        <legend class="laundry-filter-label">상태</legend>
                         <div class="ui-choice-group status-choice">
-                            <template x-for="filter in [{value:'all', label:'전체'}, {value:'washerAvailable', label:'세탁 가능'}, {value:'dryerAvailable', label:'건조 가능'}]" :key="filter.value">
+                            <template x-for="filter in [{value:'all', label:'전체'}, {value:'washerAvailable', label:'세탁'}, {value:'dryerAvailable', label:'건조'}]" :key="filter.value">
                                 <label><input type="radio" name="laundry-status" :value="filter.value" x-model="laundryFilter"/><span x-text="filter.label"></span></label>
                             </template>
                         </div>
@@ -82,14 +107,25 @@
                             <div class="appliance-stack">
                                 <template x-for="entry in [{kind:'washer', appliance:machine.washer}, {kind:'dryer', appliance:machine.dryer}]" :key="entry.kind">
                                     <section class="appliance-row" :data-tone="projectionView(entry.appliance).tone">
-                                        <progress class="ui-progress appliance-progress" x-show="progress(entry.appliance) !== null" max="100" :value="progress(entry.appliance) ?? 0" :aria-label="`${entry.kind === 'washer' ? '세탁' : '건조'} 진행률`" x-text="`${Math.round(progress(entry.appliance) ?? 0)}%`"></progress>
-                                        <header><h4 x-text="entry.kind === 'washer' ? '세탁기' : '건조기'"></h4><span class="status-badge" :data-tone="projectionView(entry.appliance).tone" x-text="projectionView(entry.appliance).label"></span></header>
-                                        <p class="appliance-main"><strong x-text="entry.appliance ? remainingText(entry.appliance) : '--'"></strong><small x-show="!entry.appliance">기기 정보 없음</small><small x-show="entry.appliance?.estimatedFinishAt && applianceIsActive(entry.appliance)"><time :datetime="entry.appliance?.estimatedFinishAt" x-text="`예상 종료 ${formatClock(entry.appliance?.estimatedFinishAt)}`"></time></small></p>
-                                        <p class="appliance-error" x-show="applianceError(entry.appliance)" x-text="applianceError(entry.appliance)?.text"></p>
-                                        <details class="ui-tooltip" x-show="applianceInfo(entry.appliance, entry.kind)">
-                                            <summary :aria-label="applianceInfo(entry.appliance, entry.kind)?.title ?? '기기 상태 안내'">i</summary>
-                                            <aside><strong x-text="applianceInfo(entry.appliance, entry.kind)?.title"></strong><span x-text="applianceInfo(entry.appliance, entry.kind)?.detail"></span></aside>
-                                        </details>
+                                        <header>
+                                            <h4 x-text="entry.kind === 'washer' ? '세탁기' : '건조기'"></h4>
+                                            <div class="appliance-status">
+                                                <span class="status-badge" :data-tone="projectionView(entry.appliance).tone" x-text="projectionView(entry.appliance).label"></span>
+                                                <details class="ui-info appliance-info"
+                                                         x-show="applianceInfo(entry.appliance, entry.kind)" x-data="infoDisclosure" :open="visible"
+                                                         @mouseenter="enter()" @mouseleave="leave()" @focusin="focus()" @focusout="blur()"
+                                                         @keydown.escape.stop="dismiss()" @click.outside="dismiss()"
+                                                         @info-disclosure-open.window="handlePeer($event)" @info-disclosure-dismiss.window="dismiss()">
+                                                    <summary x-ref="trigger" :aria-label="applianceInfo(entry.appliance, entry.kind)?.title ?? '기기 상태 안내'" @click.prevent="toggle()">i</summary>
+                                                    <aside class="ui-info-popover" x-show="visible" x-anchor.fixed.offset.8="$refs.trigger">
+                                                        <strong x-text="applianceInfo(entry.appliance, entry.kind)?.title"></strong>
+                                                        <p x-text="applianceInfo(entry.appliance, entry.kind)?.detail"></p>
+                                                        <code x-show="applianceInfo(entry.appliance, entry.kind)?.code" x-text="applianceInfo(entry.appliance, entry.kind)?.code"></code>
+                                                    </aside>
+                                                </details>
+                                            </div>
+                                        </header>
+                                        <p class="appliance-main"><strong x-text="entry.appliance ? remainingText(entry.appliance) : '--'"></strong><small x-show="!entry.appliance">기기 정보 없음</small><small x-show="entry.appliance?.estimatedFinishAt && applianceIsActive(entry.appliance)"><time :datetime="entry.appliance?.estimatedFinishAt" x-text="`${formatClock(entry.appliance?.estimatedFinishAt)} 종료`"></time></small><progress class="ui-progress appliance-progress" x-show="progress(entry.appliance) !== null" max="100" :value="progress(entry.appliance) ?? 0" :aria-label="`${entry.kind === 'washer' ? '세탁' : '건조'} 진행률`" x-text="`${Math.round(progress(entry.appliance) ?? 0)}%`"></progress></p>
                                     </section>
                                 </template>
                             </div>
@@ -102,15 +138,11 @@
         <section class="ui-content-state" aria-live="polite" x-show="!laundry">
             <span class="ui-spinner" aria-hidden="true" x-show="!errors.laundry"></span>
             <strong x-text="errors.laundry ? '현재 정보를 불러올 수 없습니다.' : '세탁기 현황을 불러오는 중입니다.'"></strong>
-            <button type="button" class="ui-button-secondary" x-show="errors.laundry" @click="refresh()">다시 시도</button>
+            <button type="button" class="ui-button-secondary" x-show="errors.laundry" :disabled="retrying" :aria-busy="retrying" @click="retry()" x-text="retrying ? '다시 시도 중' : '다시 시도'"></button>
         </section>
     </section>
 
-    <section id="meals-panel" class="campus-panel" x-show="activeTab === 'meals'" x-cloak aria-labelledby="today-meals-title">
-        <header class="source-state" :data-tone="source.meals.tone" aria-live="polite">
-            <i aria-hidden="true"></i><span><strong x-text="source.meals.title"></strong><small x-text="source.meals.detail"></small></span>
-        </header>
-
+    <section id="meals-panel" class="campus-panel" x-show="activeTab === 'meals'" x-cloak aria-label="급식 정보">
         <div x-show="meals">
             <nav class="ui-tabs sub-tabs" aria-label="급식 보기">
                 <ul><li><button type="button" :aria-current="mealView === 'current' ? 'page' : undefined" @click="selectMealView('current')">오늘·이번 주</button></li><li><button type="button" :aria-current="mealView === 'history' ? 'page' : undefined" @click="selectMealView('history')">지난 식단</button></li></ul>
@@ -119,7 +151,8 @@
             <div x-show="mealView === 'current'">
                 <section aria-labelledby="today-meals-title">
                     <header class="ui-section-heading"><div><h2 id="today-meals-title">오늘의 식단</h2><p><time :datetime="mealSelectedDate" x-text="formatToday()"></time></p></div></header>
-                    <div class="today-meals">
+                    <p class="ui-empty-state compact" x-show="!mealsServedToday()">일요일에는 오늘의 식단이 없습니다.</p>
+                    <div class="today-meals" x-show="mealsServedToday()">
                         <template x-for="period in ['lunch', 'dinner']" :key="period">
                             <article class="meal-card today-meal-card" :class="{'is-empty': !todayMeal(period)}">
                                 <header><h3 x-text="period === 'lunch' ? '중식' : '석식'"></h3><span class="status-badge" :data-tone="todayMeal(period) ? 'success' : 'neutral'" x-text="todayMeal(period) ? '게시됨' : '게시 전'"></span></header>
@@ -135,15 +168,13 @@
                 </section>
 
                 <section aria-labelledby="weekly-meals-title">
-                    <header class="ui-section-heading"><div><h2 id="weekly-meals-title">이번 주 식단표</h2><p>고정 게시물</p></div></header>
+                    <header class="ui-section-heading"><div><h2 id="weekly-meals-title">이번 주 식단표</h2><p x-text="mealWeekLabel()"></p></div></header>
                     <p class="ui-empty-state compact" x-show="meals?.data.pinnedMenus.length === 0">게시된 주간 식단표가 없습니다.</p>
                     <div class="weekly-meals">
                         <template x-for="(post, index) in meals?.data.pinnedMenus ?? []" :key="postKey(post, index)">
                             <article class="meal-card weekly-meal-card">
-                                <header><h3 x-text="post.title ?? '주간 식단표'"></h3><button type="button" class="ui-text-button" x-show="safeKakaoUrl(post.permalink)" @click="openPost(post)">원문 보기</button></header>
-                                <button type="button" class="meal-image-button weekly-meal-image" x-show="imageUrl(post)" :aria-label="`${post.title ?? '식단'} 이미지 크게 보기`" @click="openImage(post, $refs.imageDialog)"><img :src="imageUrl(post)" :alt="post.title ?? '식단 이미지'" loading="lazy"/></button>
+                                <button type="button" class="meal-image-button weekly-meal-image" x-show="imageUrl(post)" :aria-label="`${post.title ?? '식단'} 이미지 크게 보기`" @click="openImage(post, $refs.imageDialog)"><img :src="imageUrl(post)" :alt="post.title ?? '식단 이미지'" :width="post.images?.[0]?.width" :height="post.images?.[0]?.height" loading="lazy"/></button>
                                 <span class="meal-image-empty weekly-meal-image" x-show="!imageUrl(post)">이미지 없음</span>
-                                <p class="weekly-meal-copy" x-show="post.text" x-text="post.text"></p>
                             </article>
                         </template>
                     </div>
@@ -171,7 +202,7 @@
 
                 <section class="meal-calendar-selection" aria-labelledby="selected-meal-date-title">
                     <header class="ui-section-heading"><div><h2 id="selected-meal-date-title" x-text="selectedMealDateLabel()"></h2><p x-show="mealHistoryLoading">불러오는 중</p></div></header>
-                    <p class="ui-empty-state compact" x-show="!mealHistoryLoading && selectedMealPosts().length === 0">이 날짜에 저장된 식단이 없습니다.</p>
+                    <p class="ui-empty-state compact" x-show="!mealHistoryLoading && selectedMealPosts().length === 0" x-text="selectedMealDateIsSunday() ? '일요일에는 식단이 없습니다.' : '이 날짜에 저장된 식단이 없습니다.'"></p>
                     <div class="recent-meals">
                         <template x-for="(post, index) in selectedMealPosts()" :key="postKey(post, index)">
                             <article class="recent-meal-row">
@@ -184,15 +215,34 @@
                     </div>
                     <p class="ui-alert" data-tone="danger" x-show="mealHistoryError">급식 내역을 불러오지 못했습니다.</p>
                 </section>
+
+                <section class="meal-calendar-selection" aria-labelledby="selected-meal-week-title">
+                    <header class="ui-section-heading"><div><h2 id="selected-meal-week-title">주간 식단표</h2><p x-text="selectedMealWeekLabel()"></p></div></header>
+                    <p class="ui-empty-state compact" x-show="!selectedWeeklyMenu()">이 주차에 저장된 식단표가 없습니다.</p>
+                    <div class="weekly-meals">
+                        <template x-for="post in selectedWeeklyMenu() ? [selectedWeeklyMenu()] : []" :key="postKey(post, 0)">
+                            <article class="meal-card weekly-meal-card">
+                                <button type="button" class="meal-image-button weekly-meal-image" x-show="imageUrl(post)" :aria-label="`${post.title ?? '식단'} 이미지 크게 보기`" @click="openImage(post, $refs.imageDialog)"><img :src="imageUrl(post)" :alt="post.title ?? '식단 이미지'" :width="post.images?.[0]?.width" :height="post.images?.[0]?.height" loading="lazy"/></button>
+                                <span class="meal-image-empty weekly-meal-image" x-show="!imageUrl(post)">이미지 없음</span>
+                            </article>
+                        </template>
+                    </div>
+                </section>
             </div>
         </div>
 
         <section class="ui-content-state" aria-live="polite" x-show="!meals">
             <span class="ui-spinner" aria-hidden="true" x-show="!errors.meals"></span>
             <strong x-text="errors.meals ? '현재 정보를 불러올 수 없습니다.' : '식단을 불러오는 중입니다.'"></strong>
-            <button type="button" class="ui-button-secondary" x-show="errors.meals" @click="refresh()">다시 시도</button>
+            <button type="button" class="ui-button-secondary" x-show="errors.meals" :disabled="retrying" :aria-busy="retrying" @click="retry()" x-text="retrying ? '다시 시도 중' : '다시 시도'"></button>
         </section>
     </section>
+
+    <footer class="ui-footer">
+        <nav aria-label="프로젝트 링크">
+            <ul><li><a href="https://github.com/YangSiJun528/jungle-bell" target="_blank" rel="noopener noreferrer">GitHub</a></li><li><a href="https://github.com/YangSiJun528/jungle-bell/releases" target="_blank" rel="noopener noreferrer">릴리즈</a></li><li><a href="https://github.com/YangSiJun528/jungle-bell/issues/new/choose" target="_blank" rel="noopener noreferrer">피드백</a></li></ul>
+        </nav>
+    </footer>
 </main>
 
 <dialog class="image-dialog" aria-labelledby="image-dialog-caption" x-ref="imageDialog" @click.self="closeImage($refs.imageDialog)" @cancel.prevent="closeImage($refs.imageDialog)">

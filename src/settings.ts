@@ -1,8 +1,9 @@
 import Alpine from 'alpinejs';
+import './select-control';
 import {invoke} from '@tauri-apps/api/core';
 import {confirm, message} from '@tauri-apps/plugin-dialog';
 
-type SettingsTab = 'attendance' | 'notification' | 'app';
+type SettingsTab = 'notification' | 'app';
 
 interface TimeOfDay {
     hour: number;
@@ -26,12 +27,16 @@ interface SettingsComponent {
     notificationEnd: number;
     startInterval: number;
     endInterval: number;
+    get attendanceNotificationEnabled(): boolean;
     get skipAttendanceHint(): string;
+    get startNotificationSummary(): string;
+    get endNotificationSummary(): string;
     init(): Promise<void>;
     selectTab(tab: SettingsTab): Promise<void>;
     refreshUpdateStatus(): Promise<void>;
     refreshSkipAttendance(): Promise<void>;
     onFocus(): Promise<void>;
+    setAttendanceNotification(enabled: boolean): Promise<void>;
     saveToggle(command: string, field: BooleanField): Promise<void>;
     saveStartTime(): Promise<void>;
     saveEndTime(): Promise<void>;
@@ -54,7 +59,7 @@ type BooleanField =
 
 function settings(): SettingsComponent {
     return {
-        activeTab: 'attendance',
+        activeTab: 'notification',
         appVersion: '',
         pendingVersion: null,
         autoStart: false,
@@ -71,12 +76,28 @@ function settings(): SettingsComponent {
         startInterval: 15,
         endInterval: 15,
 
+        get attendanceNotificationEnabled() {
+            return !this.skipAttendance;
+        },
+
         get skipAttendanceHint() {
             const tomorrow = new Date();
             tomorrow.setDate(tomorrow.getDate() + 1);
             const month = String(tomorrow.getMonth() + 1).padStart(2, '0');
             const day = String(tomorrow.getDate()).padStart(2, '0');
-            return `내일(${month}/${day}) 출석 시작 시각에 자동으로 해제됩니다.`;
+            return `내일(${month}/${day}) 출석 시작 시각에 자동으로 다시 켜집니다.`;
+        },
+
+        get startNotificationSummary() {
+            if (!this.startNotification) return '꺼짐';
+            const start = String(this.notificationStart).padStart(2, '0');
+            return `${start}:00–10:00 · ${this.startInterval}분마다`;
+        },
+
+        get endNotificationSummary() {
+            if (!this.endNotification) return '꺼짐';
+            const end = String(this.notificationEnd).padStart(2, '0');
+            return `23:00–다음 날 ${end}:00 · ${this.endInterval}분마다`;
         },
 
         async init() {
@@ -131,6 +152,17 @@ function settings(): SettingsComponent {
         async onFocus() {
             await invoke('log_from_js', {level: 'info', message: '[settings] window focus'}).catch(console.error);
             await Promise.all([this.refreshSkipAttendance(), this.refreshUpdateStatus()]);
+        },
+
+        async setAttendanceNotification(enabled) {
+            const previous = this.skipAttendance;
+            this.skipAttendance = !enabled;
+            try {
+                await invoke('set_skip_attendance', {enabled: this.skipAttendance});
+            } catch (error) {
+                console.error('[settings] set_skip_attendance failed', error);
+                this.skipAttendance = previous;
+            }
         },
 
         async saveToggle(command, field) {

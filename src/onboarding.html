@@ -4,6 +4,7 @@
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <link rel="stylesheet" href="ui.css"/>
+    <link rel="license" href="assets/fonts/Pretendard-LICENSE.txt"/>
     <title>Jungle Bell 시작하기</title>
 </head>
 <body class="ui-page onboarding-page" x-data="onboarding" @keydown.window="handleKey($event)">
@@ -85,12 +86,16 @@
                 <legend>시작 출석 알림</legend>
                 <label class="ui-setting-row compact"><span><strong>알림 사용</strong></span><input class="ui-switch" type="checkbox" x-model="startNotification" @change="saveToggle('set_start_notification_enabled', 'startNotification')"/></label>
                 <div class="ui-setting-controls" :class="{'is-disabled': !startNotification}">
-                    <label><span>시간</span><select class="ui-select" x-model.number="notificationStart" @change="saveTime('set_notification_start', notificationStart)" :disabled="!startNotification">
-                        <option value="4">04:00 - 10:00</option><option value="5">05:00 - 10:00</option><option value="6">06:00 - 10:00</option><option value="7">07:00 - 10:00</option><option value="8">08:00 - 10:00</option><option value="9">09:00 - 10:00</option>
-                    </select></label>
-                    <label><span>간격</span><select class="ui-select" x-model.number="startInterval" @change="saveInterval('set_start_notification_interval', startInterval)" :disabled="!startNotification">
-                        <option value="1">1분</option><option value="3">3분</option><option value="5">5분</option><option value="10">10분</option><option value="15">15분</option><option value="30">30분</option>
-                    </select></label>
+                    <div class="ui-field"><span>시간</span><div class="ui-select" x-data="selectControl" x-effect="syncValue(notificationStart)" @click.outside="close()">
+                        <select class="ui-select-native" hidden x-ref="native" tabindex="-1" aria-hidden="true" x-model.number="notificationStart" @change="saveTime('set_notification_start', notificationStart)" :disabled="!startNotification"><option value="4">04:00 - 10:00</option><option value="5">05:00 - 10:00</option><option value="6">06:00 - 10:00</option><option value="7">07:00 - 10:00</option><option value="8">08:00 - 10:00</option><option value="9">09:00 - 10:00</option></select>
+                        <button type="button" class="ui-select-trigger" role="combobox" aria-haspopup="listbox" x-ref="trigger" aria-label="시작 출석 알림 시간" :aria-expanded="open" :aria-controls="listboxId" :disabled="!startNotification" @click="toggle()" @keydown="handleTriggerKey($event)"><span x-text="selectedLabel"></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                        <div class="ui-select-popover" x-show="open" x-cloak :id="listboxId" role="listbox" @keydown="handleOptionKey($event)"><template x-for="option in options" :key="option.value"><button type="button" role="option" :data-value="option.value" :aria-selected="selectedValue === option.value" :disabled="option.disabled" @click="choose(option.value)" x-text="option.label"></button></template></div>
+                    </div></div>
+                    <div class="ui-field"><span>간격</span><div class="ui-select" x-data="selectControl" x-effect="syncValue(startInterval)" @click.outside="close()">
+                        <select class="ui-select-native" hidden x-ref="native" tabindex="-1" aria-hidden="true" x-model.number="startInterval" @change="saveInterval('set_start_notification_interval', startInterval)" :disabled="!startNotification"><option value="1">1분</option><option value="3">3분</option><option value="5">5분</option><option value="10">10분</option><option value="15">15분</option><option value="30">30분</option></select>
+                        <button type="button" class="ui-select-trigger" role="combobox" aria-haspopup="listbox" x-ref="trigger" aria-label="시작 출석 알림 간격" :aria-expanded="open" :aria-controls="listboxId" :disabled="!startNotification" @click="toggle()" @keydown="handleTriggerKey($event)"><span x-text="selectedLabel"></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                        <div class="ui-select-popover" x-show="open" x-cloak :id="listboxId" role="listbox" @keydown="handleOptionKey($event)"><template x-for="option in options" :key="option.value"><button type="button" role="option" :data-value="option.value" :aria-selected="selectedValue === option.value" :disabled="option.disabled" @click="choose(option.value)" x-text="option.label"></button></template></div>
+                    </div></div>
                 </div>
             </fieldset>
 
@@ -98,12 +103,16 @@
                 <legend>종료 출석 알림</legend>
                 <label class="ui-setting-row compact"><span><strong>알림 사용</strong></span><input class="ui-switch" type="checkbox" x-model="endNotification" @change="saveToggle('set_end_notification_enabled', 'endNotification')"/></label>
                 <div class="ui-setting-controls" :class="{'is-disabled': !endNotification}">
-                    <label><span>시간</span><select class="ui-select" x-model.number="notificationEnd" @change="saveTime('set_notification_end', notificationEnd)" :disabled="!endNotification">
-                        <option value="0">23:00 - 00:00</option><option value="1">23:00 - 01:00</option><option value="2">23:00 - 02:00</option><option value="3">23:00 - 03:00</option><option value="4">23:00 - 04:00</option>
-                    </select></label>
-                    <label><span>간격</span><select class="ui-select" x-model.number="endInterval" @change="saveInterval('set_end_notification_interval', endInterval)" :disabled="!endNotification">
-                        <option value="1">1분</option><option value="3">3분</option><option value="5">5분</option><option value="10">10분</option><option value="15">15분</option><option value="30">30분</option>
-                    </select></label>
+                    <div class="ui-field"><span>시간</span><div class="ui-select" x-data="selectControl" x-effect="syncValue(notificationEnd)" @click.outside="close()">
+                        <select class="ui-select-native" hidden x-ref="native" tabindex="-1" aria-hidden="true" x-model.number="notificationEnd" @change="saveTime('set_notification_end', notificationEnd)" :disabled="!endNotification"><option value="0">23:00 - 00:00</option><option value="1">23:00 - 01:00</option><option value="2">23:00 - 02:00</option><option value="3">23:00 - 03:00</option><option value="4">23:00 - 04:00</option></select>
+                        <button type="button" class="ui-select-trigger" role="combobox" aria-haspopup="listbox" x-ref="trigger" aria-label="종료 출석 알림 시간" :aria-expanded="open" :aria-controls="listboxId" :disabled="!endNotification" @click="toggle()" @keydown="handleTriggerKey($event)"><span x-text="selectedLabel"></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                        <div class="ui-select-popover" x-show="open" x-cloak :id="listboxId" role="listbox" @keydown="handleOptionKey($event)"><template x-for="option in options" :key="option.value"><button type="button" role="option" :data-value="option.value" :aria-selected="selectedValue === option.value" :disabled="option.disabled" @click="choose(option.value)" x-text="option.label"></button></template></div>
+                    </div></div>
+                    <div class="ui-field"><span>간격</span><div class="ui-select" x-data="selectControl" x-effect="syncValue(endInterval)" @click.outside="close()">
+                        <select class="ui-select-native" hidden x-ref="native" tabindex="-1" aria-hidden="true" x-model.number="endInterval" @change="saveInterval('set_end_notification_interval', endInterval)" :disabled="!endNotification"><option value="1">1분</option><option value="3">3분</option><option value="5">5분</option><option value="10">10분</option><option value="15">15분</option><option value="30">30분</option></select>
+                        <button type="button" class="ui-select-trigger" role="combobox" aria-haspopup="listbox" x-ref="trigger" aria-label="종료 출석 알림 간격" :aria-expanded="open" :aria-controls="listboxId" :disabled="!endNotification" @click="toggle()" @keydown="handleTriggerKey($event)"><span x-text="selectedLabel"></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                        <div class="ui-select-popover" x-show="open" x-cloak :id="listboxId" role="listbox" @keydown="handleOptionKey($event)"><template x-for="option in options" :key="option.value"><button type="button" role="option" :data-value="option.value" :aria-selected="selectedValue === option.value" :disabled="option.disabled" @click="choose(option.value)" x-text="option.label"></button></template></div>
+                    </div></div>
                 </div>
             </fieldset>
         </section>

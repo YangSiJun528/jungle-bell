@@ -4,9 +4,10 @@
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <link rel="stylesheet" href="ui.css"/>
+    <link rel="license" href="assets/fonts/Pretendard-LICENSE.txt"/>
     <title>Jungle Bell 설정</title>
 </head>
-<body class="ui-page" x-data="settings" @focus.window="onFocus()">
+<body class="ui-page settings-page" x-data="settings" @focus.window="onFocus()">
 <main class="ui-shell ui-shell-settings">
     <header class="ui-app-header">
         <img src="assets/logo.png" alt="" class="ui-app-logo"/>
@@ -18,133 +19,136 @@
 
     <nav class="ui-tabs" aria-label="설정 분류">
         <ul>
-            <li><button type="button" :aria-current="activeTab === 'attendance' ? 'page' : undefined" aria-controls="attendance-settings" @click="selectTab('attendance')">출석</button></li>
             <li><button type="button" :aria-current="activeTab === 'notification' ? 'page' : undefined" aria-controls="notification-settings" @click="selectTab('notification')">알림</button></li>
             <li><button type="button" :aria-current="activeTab === 'app' ? 'page' : undefined" aria-controls="app-settings" @click="selectTab('app')">앱</button></li>
         </ul>
     </nav>
 
-    <section id="attendance-settings" class="ui-settings-panel" x-show="activeTab === 'attendance'" x-cloak aria-labelledby="attendance-settings-title">
-        <header class="ui-page-heading">
-            <h2 id="attendance-settings-title">출석 설정</h2>
-            <p>기본 출석 시간과 이번 출석 알림을 관리합니다.</p>
-        </header>
-        <header class="ui-section-heading">
-            <div><h3>출석 시간</h3><p>알림을 보내는 기본 시간입니다.</p></div>
-        </header>
-        <dl class="ui-schedule">
-            <div><dt>학습 시작</dt><dd><time datetime="04:00">04:00</time> - <time datetime="10:00">10:00</time></dd></div>
-            <div><dt>학습 종료</dt><dd><time datetime="23:00">23:00</time> - <time datetime="04:00">다음 날 04:00</time></dd></div>
-        </dl>
-
-        <fieldset class="ui-settings-group">
+    <section id="notification-settings" class="ui-settings-panel" x-show="activeTab === 'notification'" x-cloak>
+        <fieldset class="ui-settings-group attendance-notification">
             <legend>이번 출석</legend>
             <label class="ui-setting-row">
-                <span><strong>이번 출석 알림 끄기</strong><small>현재 출석 주기의 알림만 잠시 끕니다.</small></span>
-                <input class="ui-switch" type="checkbox" x-model="skipAttendance"
-                       @change="saveToggle('set_skip_attendance', 'skipAttendance')"/>
+                <span><strong>이번 출석 알림</strong></span>
+                <input class="ui-switch" type="checkbox" :checked="attendanceNotificationEnabled"
+                       :aria-describedby="skipAttendance ? 'attendance-notification-hint' : undefined"
+                       @change="setAttendanceNotification($event.currentTarget.checked)"/>
             </label>
-            <p class="ui-setting-note" x-show="skipAttendance" x-cloak x-text="skipAttendanceHint"></p>
+            <p id="attendance-notification-hint" class="ui-setting-note" x-show="skipAttendance" x-cloak x-text="skipAttendanceHint"></p>
         </fieldset>
-    </section>
 
-    <section id="notification-settings" class="ui-settings-panel" x-show="activeTab === 'notification'" x-cloak aria-labelledby="notification-settings-title">
-        <header class="ui-page-heading">
-            <h2 id="notification-settings-title">알림 설정</h2>
-            <p>출석 알림 일정과 시스템 권한을 관리합니다.</p>
-        </header>
-        <fieldset class="ui-settings-group">
+        <fieldset class="ui-settings-group notification-schedule">
             <legend>알림 일정</legend>
+            <section class="notification-option" aria-labelledby="start-notification-title">
+                <label class="ui-setting-row notification-setting-toggle">
+                    <span><strong id="start-notification-title">시작 출석 알림</strong><small x-text="startNotificationSummary"></small></span>
+                    <input class="ui-switch" type="checkbox" x-model="startNotification"
+                           @change="saveToggle('set_start_notification_enabled', 'startNotification')"/>
+                </label>
+                <div class="ui-setting-controls" x-show="startNotification" x-cloak>
+                    <div class="ui-field"><span>알림 시간대</span>
+                        <div class="ui-select" x-data="selectControl" x-effect="syncValue(notificationStart)" @click.outside="close()">
+                        <select class="ui-select-native" hidden x-ref="native" tabindex="-1" aria-hidden="true" x-model.number="notificationStart" @change="saveStartTime()" :disabled="!startNotification">
+                            <option value="4">04:00 - 10:00</option><option value="5">05:00 - 10:00</option>
+                            <option value="6">06:00 - 10:00</option><option value="7">07:00 - 10:00</option>
+                            <option value="8">08:00 - 10:00</option><option value="9">09:00 - 10:00</option>
+                        </select>
+                        <button type="button" class="ui-select-trigger" role="combobox" aria-haspopup="listbox" x-ref="trigger" aria-label="시작 출석 알림 시간대" :aria-expanded="open" :aria-controls="listboxId" :disabled="!startNotification" @click="toggle()" @keydown="handleTriggerKey($event)"><span x-text="selectedLabel"></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                        <div class="ui-select-popover" x-show="open" x-cloak :id="listboxId" role="listbox" @keydown="handleOptionKey($event)"><template x-for="option in options" :key="option.value"><button type="button" role="option" :data-value="option.value" :aria-selected="selectedValue === option.value" :disabled="option.disabled" @click="choose(option.value)" x-text="option.label"></button></template></div>
+                        </div>
+                    </div>
+                    <div class="ui-field"><span>반복 간격</span>
+                        <div class="ui-select" x-data="selectControl" x-effect="syncValue(startInterval)" @click.outside="close()">
+                        <select class="ui-select-native" hidden x-ref="native" tabindex="-1" aria-hidden="true" x-model.number="startInterval" @change="saveStartInterval()" :disabled="!startNotification">
+                            <option value="1">1분</option><option value="3">3분</option><option value="5">5분</option>
+                            <option value="10">10분</option><option value="15">15분</option><option value="30">30분</option>
+                        </select>
+                        <button type="button" class="ui-select-trigger" role="combobox" aria-haspopup="listbox" x-ref="trigger" aria-label="시작 출석 알림 반복 간격" :aria-expanded="open" :aria-controls="listboxId" :disabled="!startNotification" @click="toggle()" @keydown="handleTriggerKey($event)"><span x-text="selectedLabel"></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                        <div class="ui-select-popover" x-show="open" x-cloak :id="listboxId" role="listbox" @keydown="handleOptionKey($event)"><template x-for="option in options" :key="option.value"><button type="button" role="option" :data-value="option.value" :aria-selected="selectedValue === option.value" :disabled="option.disabled" @click="choose(option.value)" x-text="option.label"></button></template></div>
+                        </div>
+                    </div>
+                </div>
+                <p class="notification-setting-note" x-show="startNotification" x-cloak>10:00까지 체크인하지 않으면 이후에도 알림이 계속됩니다.</p>
+            </section>
+
+            <section class="notification-option" aria-labelledby="end-notification-title">
+                <label class="ui-setting-row notification-setting-toggle">
+                    <span><strong id="end-notification-title">종료 출석 알림</strong><small x-text="endNotificationSummary"></small></span>
+                    <input class="ui-switch" type="checkbox" x-model="endNotification"
+                           @change="saveToggle('set_end_notification_enabled', 'endNotification')"/>
+                </label>
+                <div class="ui-setting-controls" x-show="endNotification" x-cloak>
+                    <div class="ui-field"><span>알림 시간대</span>
+                        <div class="ui-select" x-data="selectControl" x-effect="syncValue(notificationEnd)" @click.outside="close()">
+                        <select class="ui-select-native" hidden x-ref="native" tabindex="-1" aria-hidden="true" x-model.number="notificationEnd" @change="saveEndTime()" :disabled="!endNotification">
+                            <option value="0">23:00 - 00:00</option><option value="1">23:00 - 01:00</option>
+                            <option value="2">23:00 - 02:00</option><option value="3">23:00 - 03:00</option>
+                            <option value="4">23:00 - 04:00</option>
+                        </select>
+                        <button type="button" class="ui-select-trigger" role="combobox" aria-haspopup="listbox" x-ref="trigger" aria-label="종료 출석 알림 시간대" :aria-expanded="open" :aria-controls="listboxId" :disabled="!endNotification" @click="toggle()" @keydown="handleTriggerKey($event)"><span x-text="selectedLabel"></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                        <div class="ui-select-popover" x-show="open" x-cloak :id="listboxId" role="listbox" @keydown="handleOptionKey($event)"><template x-for="option in options" :key="option.value"><button type="button" role="option" :data-value="option.value" :aria-selected="selectedValue === option.value" :disabled="option.disabled" @click="choose(option.value)" x-text="option.label"></button></template></div>
+                        </div>
+                    </div>
+                    <div class="ui-field"><span>반복 간격</span>
+                        <div class="ui-select" x-data="selectControl" x-effect="syncValue(endInterval)" @click.outside="close()">
+                        <select class="ui-select-native" hidden x-ref="native" tabindex="-1" aria-hidden="true" x-model.number="endInterval" @change="saveEndInterval()" :disabled="!endNotification">
+                            <option value="1">1분</option><option value="3">3분</option><option value="5">5분</option>
+                            <option value="10">10분</option><option value="15">15분</option><option value="30">30분</option>
+                        </select>
+                        <button type="button" class="ui-select-trigger" role="combobox" aria-haspopup="listbox" x-ref="trigger" aria-label="종료 출석 알림 반복 간격" :aria-expanded="open" :aria-controls="listboxId" :disabled="!endNotification" @click="toggle()" @keydown="handleTriggerKey($event)"><span x-text="selectedLabel"></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                        <div class="ui-select-popover" x-show="open" x-cloak :id="listboxId" role="listbox" @keydown="handleOptionKey($event)"><template x-for="option in options" :key="option.value"><button type="button" role="option" :data-value="option.value" :aria-selected="selectedValue === option.value" :disabled="option.disabled" @click="choose(option.value)" x-text="option.label"></button></template></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
             <label class="ui-setting-row">
-                <span><strong>일요일 알림 끄기</strong><small>일요일에는 출석 알림을 보내지 않습니다.</small></span>
+                <span><strong>일요일에는 알림 보내지 않기</strong></span>
                 <input class="ui-switch" type="checkbox" x-model="skipSunday" @change="saveToggle('set_skip_sunday', 'skipSunday')"/>
             </label>
         </fieldset>
 
-        <fieldset class="ui-settings-group">
-            <legend>시작 출석</legend>
-            <label class="ui-setting-row">
-                <span><strong>시작 출석 알림</strong><small>체크인할 때까지 선택한 간격으로 알립니다.</small></span>
-                <input class="ui-switch" type="checkbox" x-model="startNotification"
-                       @change="saveToggle('set_start_notification_enabled', 'startNotification')"/>
-            </label>
-            <div class="ui-setting-controls" :class="{'is-disabled': !startNotification}">
-                <label><span>알림 시작</span>
-                    <select class="ui-select" x-model.number="notificationStart" @change="saveStartTime()" :disabled="!startNotification">
-                        <option value="4">04:00 - 10:00</option><option value="5">05:00 - 10:00</option>
-                        <option value="6">06:00 - 10:00</option><option value="7">07:00 - 10:00</option>
-                        <option value="8">08:00 - 10:00</option><option value="9">09:00 - 10:00</option>
-                    </select>
-                </label>
-                <label><span>알림 간격</span>
-                    <select class="ui-select" x-model.number="startInterval" @change="saveStartInterval()" :disabled="!startNotification">
-                        <option value="1">1분</option><option value="3">3분</option><option value="5">5분</option>
-                        <option value="10">10분</option><option value="15">15분</option><option value="30">30분</option>
-                    </select>
-                </label>
-            </div>
-            <p class="ui-setting-note">시작 체크를 하지 않으면 10:00 이후에도 알림이 발송됩니다.</p>
-        </fieldset>
-
-        <fieldset class="ui-settings-group">
-            <legend>종료 출석</legend>
-            <label class="ui-setting-row">
-                <span><strong>종료 출석 알림</strong><small>체크아웃할 때까지 선택한 간격으로 알립니다.</small></span>
-                <input class="ui-switch" type="checkbox" x-model="endNotification"
-                       @change="saveToggle('set_end_notification_enabled', 'endNotification')"/>
-            </label>
-            <div class="ui-setting-controls" :class="{'is-disabled': !endNotification}">
-                <label><span>알림 종료</span>
-                    <select class="ui-select" x-model.number="notificationEnd" @change="saveEndTime()" :disabled="!endNotification">
-                        <option value="0">23:00 - 00:00</option><option value="1">23:00 - 01:00</option>
-                        <option value="2">23:00 - 02:00</option><option value="3">23:00 - 03:00</option>
-                        <option value="4">23:00 - 04:00</option>
-                    </select>
-                </label>
-                <label><span>알림 간격</span>
-                    <select class="ui-select" x-model.number="endInterval" @change="saveEndInterval()" :disabled="!endNotification">
-                        <option value="1">1분</option><option value="3">3분</option><option value="5">5분</option>
-                        <option value="10">10분</option><option value="15">15분</option><option value="30">30분</option>
-                    </select>
-                </label>
-            </div>
-        </fieldset>
-
-        <section class="ui-action-row" aria-labelledby="system-notification-title">
-            <span><strong id="system-notification-title">시스템 알림</strong><small>알림이 오지 않으면 운영체제 설정에서 허용해 주세요.</small></span>
-            <button type="button" class="ui-button-secondary" @click="openNotificationSettings()">설정 열기</button>
-        </section>
+        <footer class="notification-actions">
+            <button type="button" class="ui-text-button" @click="openNotificationSettings()">시스템 알림 설정</button>
+        </footer>
     </section>
 
-    <section id="app-settings" class="ui-settings-panel" x-show="activeTab === 'app'" x-cloak aria-labelledby="app-settings-title">
-        <header class="ui-page-heading">
-            <h2 id="app-settings-title">앱 설정</h2>
-            <p>실행, 업데이트, 데이터와 화면 옵션을 관리합니다.</p>
-        </header>
+    <section id="app-settings" class="ui-settings-panel" x-show="activeTab === 'app'" x-cloak>
         <aside class="ui-alert" data-tone="info" x-show="pendingVersion" x-cloak>
             <span><strong>업데이트 가능</strong><small x-text="pendingVersion ? `v${pendingVersion} 버전을 설치할 수 있습니다.` : ''"></small></span>
             <button type="button" class="ui-button-primary" @click="command('check_and_notify_update')">업데이트</button>
         </aside>
 
         <fieldset class="ui-settings-group">
-            <legend>실행과 업데이트</legend>
-            <label class="ui-setting-row"><span><strong>자동 시작</strong><small>로그인할 때 Jungle Bell을 시작합니다.</small></span><input class="ui-switch" type="checkbox" x-model="autoStart" @change="saveToggle('set_auto_start', 'autoStart')"/></label>
-            <label class="ui-setting-row"><span><strong>자동 업데이트</strong><small>새 버전을 자동으로 확인합니다.</small></span><input class="ui-switch" type="checkbox" x-model="autoUpdate" @change="saveToggle('set_auto_update', 'autoUpdate')"/></label>
-            <section class="ui-action-row"><span><strong>앱 업데이트</strong><small>설치할 수 있는 새 버전을 확인합니다.</small></span><button type="button" class="ui-button-secondary" @click="command('check_and_notify_update')">확인</button></section>
+            <legend>앱 실행</legend>
+            <label class="ui-setting-row"><span><strong>자동 시작</strong></span><input class="ui-switch" type="checkbox" x-model="autoStart" @change="saveToggle('set_auto_start', 'autoStart')"/></label>
         </fieldset>
 
         <fieldset class="ui-settings-group">
-            <legend>데이터와 진단</legend>
-            <label class="ui-setting-row"><span><strong>사용 통계</strong><small>개인 정보 없이 앱 사용 통계만 전송합니다.</small></span><input class="ui-switch" type="checkbox" x-model="usageAnalytics" @change="saveToggle('set_usage_analytics_enabled', 'usageAnalytics')"/></label>
-            <label class="ui-setting-row"><span><strong>디버그 모드</strong><small>문제 진단에 필요한 상세 로그를 기록합니다.</small></span><input class="ui-switch" type="checkbox" x-model="debugMode" @change="toggleDebugMode()"/></label>
-            <section class="ui-action-row"><span><strong>로그 폴더</strong><small>저장된 진단 로그를 확인합니다.</small></span><button type="button" class="ui-button-secondary" @click="command('open_log_folder')">열기</button></section>
+            <legend class="ui-settings-legend-action"><span>업데이트</span><button type="button" class="ui-button-quiet" @click="command('check_and_notify_update')">확인</button></legend>
+            <label class="ui-setting-row"><span><strong>자동 업데이트</strong></span><input class="ui-switch" type="checkbox" x-model="autoUpdate" @change="saveToggle('set_auto_update', 'autoUpdate')"/></label>
         </fieldset>
 
         <fieldset class="ui-settings-group">
             <legend>화면</legend>
-            <label class="ui-setting-row"><span><strong>D-Day 표시</strong><small>트레이 메뉴에 과정 종료일까지 남은 날짜를 표시합니다.</small></span><input class="ui-switch" type="checkbox" x-model="showDday" @change="saveToggle('set_show_dday', 'showDday')"/></label>
-            <section class="ui-action-row"><span><strong>온보딩</strong><small>첫 실행 안내를 다시 확인합니다.</small></span><button type="button" class="ui-button-secondary" @click="command('open_onboarding')">다시 보기</button></section>
+            <label class="ui-setting-row"><span><strong>D-Day 표시</strong><small>트레이 메뉴에 남은 날짜를 표시합니다.</small></span><input class="ui-switch" type="checkbox" x-model="showDday" @change="saveToggle('set_show_dday', 'showDday')"/></label>
         </fieldset>
+
+        <fieldset class="ui-settings-group">
+            <legend>개인정보</legend>
+            <label class="ui-setting-row"><span><strong>사용 통계</strong><small>앱 기능 사용 기록을 서비스 개선에 사용합니다.</small></span><input class="ui-switch" type="checkbox" x-model="usageAnalytics" @change="saveToggle('set_usage_analytics_enabled', 'usageAnalytics')"/></label>
+        </fieldset>
+
+        <details class="ui-settings-advanced">
+            <summary>고급 설정</summary>
+            <fieldset class="ui-settings-group">
+                <legend class="sr-only">진단</legend>
+                <label class="ui-setting-row"><span><strong>디버그 모드</strong></span><input class="ui-switch" type="checkbox" x-model="debugMode" @change="toggleDebugMode()"/></label>
+                <section class="ui-action-row"><span><strong>로그 폴더</strong></span><button type="button" class="ui-button-secondary" @click="command('open_log_folder')">열기</button></section>
+            </fieldset>
+        </details>
+
+        <nav class="settings-support-actions" aria-label="설정 도움말">
+            <button type="button" class="ui-text-button" @click="command('open_onboarding')">온보딩 다시 보기</button>
+        </nav>
     </section>
 
     <footer class="ui-footer">
