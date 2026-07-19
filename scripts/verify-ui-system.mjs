@@ -90,6 +90,15 @@ for (const selector of requiredStateSelectors) {
     if (!uiCss.includes(selector)) errors.push(`Required interaction state ${selector} is missing`);
 }
 
+if (!/<nav class="ui-tabs sub-tabs" aria-label="급식 보기">[\s\S]*?>식단<\/button>[\s\S]*?>내역<\/button>/s.test(campusHtml)
+    || campusHtml.includes('오늘·이번 주')
+    || campusHtml.includes('지난 식단')) {
+    errors.push('Meal sub-tabs must use the concise 식단 and 내역 labels');
+}
+if (!/machineName\(id:\s*string\)[\s\S]*?return number !== null \? `\$\{number\}번`/s.test(campusTs)) {
+    errors.push('Wash-tower cards must use number-only titles within the titled directory');
+}
+
 if (!/\.laundry-grid\s*\{[^}]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)[^}]*gap:\s*var\(--space-4\)/s.test(uiCss)) {
     errors.push('The default wash-tower grid must show three columns');
 }

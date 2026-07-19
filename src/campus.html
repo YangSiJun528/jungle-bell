@@ -141,7 +141,7 @@
     <section id="meals-panel" class="campus-panel" x-show="activeTab === 'meals'" x-cloak aria-label="급식 정보">
         <div x-show="meals">
             <nav class="ui-tabs sub-tabs" aria-label="급식 보기">
-                <ul><li><button type="button" :aria-current="mealView === 'current' ? 'page' : undefined" @click="selectMealView('current')">오늘·이번 주</button></li><li><button type="button" :aria-current="mealView === 'history' ? 'page' : undefined" @click="selectMealView('history')">지난 식단</button></li></ul>
+                <ul><li><button type="button" :aria-current="mealView === 'current' ? 'page' : undefined" @click="selectMealView('current')">식단</button></li><li><button type="button" :aria-current="mealView === 'history' ? 'page' : undefined" @click="selectMealView('history')">내역</button></li></ul>
             </nav>
 
             <div x-show="mealView === 'current'">

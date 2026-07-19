@@ -599,7 +599,7 @@ function campus(): Record<string, unknown> {
         machineName(id: string) {
             const text = String(id ?? '').trim();
             const number = machineNumber(text);
-            return number !== null ? `${number}번 워시타워` : text.replaceAll('_', ' ');
+            return number !== null ? `${number}번` : text.replaceAll('_', ' ');
         },
 
         machineZoneLabel(id: string) {
