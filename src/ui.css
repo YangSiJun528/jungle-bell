@@ -823,9 +823,8 @@
     .campus-panel .ui-section-heading { min-height: var(--space-8); margin: var(--space-6) var(--space-0) var(--space-2); }
     .sub-tabs { margin-bottom: var(--space-4); }
 
-    .laundry-overview { padding: var(--space-4); border: var(--border-width) solid var(--color-border); border-radius: var(--radius-card); background: var(--color-surface); }
-    .laundry-overview > header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-4); }
-    .laundry-overview > header h2 { margin: var(--space-0); font-size: 18px; font-weight: 700; }
+    .laundry-overview { margin-bottom: var(--space-4); padding: var(--space-4); border: var(--border-width) solid var(--color-border); border-radius: var(--radius-card); background: var(--color-surface); }
+    .laundry-overview > .laundry-heading { min-height: var(--space-8); margin: var(--space-0) var(--space-0) var(--space-4); }
     .availability-key { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-0); padding: var(--space-0); color: var(--color-text-muted); font-size: 10px; list-style: none; }
     .availability-key li { display: inline-flex; align-items: center; gap: var(--space-1); white-space: nowrap; }
     .availability-key i { width: var(--space-2); height: var(--space-2); border-radius: 50%; background: var(--color-control); }
@@ -849,6 +848,9 @@
     .availability-layout th:nth-child(7), .availability-layout td:nth-child(7),
     .availability-layout th:nth-child(9), .availability-layout td:nth-child(9) { padding-left: var(--space-1); }
     .availability-tower-state { display: block; width: 100%; height: var(--space-6); border: var(--border-width) solid var(--color-border); border-radius: 4px; background: var(--color-text-faint); }
+    .laundry-overview :is(.availability-key [data-zone], .availability-layout [data-zone]) { transition: filter var(--motion-standard) var(--motion-ease), opacity var(--motion-standard) var(--motion-ease); }
+    .laundry-overview[data-access="men"] :is(.availability-key [data-zone="women"], .availability-layout [data-zone="women"]),
+    .laundry-overview[data-access="women"] :is(.availability-key [data-zone="men"], .availability-layout [data-zone="men"]) { filter: blur(2px); opacity: 0.24; }
     .availability-layout td[data-state="available"][data-zone="men"] .availability-tower-state { border-color: var(--color-men); background: var(--color-men); }
     .availability-layout td[data-state="available"][data-zone="common"] .availability-tower-state { border-color: var(--color-common); background: var(--color-common); }
     .availability-layout td[data-state="available"][data-zone="women"] .availability-tower-state { border-color: var(--color-women); background: var(--color-women); }

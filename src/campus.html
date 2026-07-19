@@ -36,46 +36,45 @@
 
     <section id="laundry-panel" class="campus-panel" x-show="activeTab === 'laundry'" x-cloak aria-labelledby="laundry-title">
         <div x-show="laundry">
-            <section class="laundry-overview" aria-labelledby="laundry-overview-title">
-                <header>
-                    <h2 id="laundry-overview-title">현재 사용 현황</h2>
-                    <ul class="availability-key" aria-label="사용 가능 구역과 사용 불가 색상">
-                        <li data-zone="men"><i></i>남성</li>
-                        <li data-zone="common"><i></i>공용</li>
-                        <li data-zone="women"><i></i>여성</li>
-                        <li data-state="unavailable"><i></i>사용 불가</li>
-                    </ul>
-                </header>
-                <table class="availability-layout">
-                    <caption class="sr-only">워시타워 번호별 건조기와 세탁기 사용 가능 현황</caption>
-                    <thead>
-                    <tr>
-                        <th scope="col">기기</th>
-                        <template x-for="segment in availabilitySegments('washer')" :key="`heading-${segment.number}`">
-                            <th scope="col" :data-zone="segment.zone" x-text="segment.number"></th>
-                        </template>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    <template x-for="row in [{kind:'dryer', label:'건조기'}, {kind:'washer', label:'세탁기'}]" :key="row.kind">
+            <section class="laundry-directory" aria-labelledby="laundry-title">
+                <div class="laundry-overview" :data-access="laundryAccess">
+                    <header class="ui-section-heading laundry-heading">
+                        <div>
+                            <h2 id="laundry-title">워시타워</h2>
+                            <p>번호별 세탁기·건조기 사용 가능 현황</p>
+                        </div>
+                        <ul class="availability-key" aria-label="사용 가능 구역과 사용 불가 색상">
+                            <li data-zone="men"><i></i>남성</li>
+                            <li data-zone="common"><i></i>공용</li>
+                            <li data-zone="women"><i></i>여성</li>
+                            <li data-state="unavailable"><i></i>사용 불가</li>
+                        </ul>
+                    </header>
+                    <table class="availability-layout">
+                        <caption class="sr-only">워시타워 번호별 건조기와 세탁기 사용 가능 현황</caption>
+                        <thead>
                         <tr>
-                            <th scope="row"><span x-text="row.label"></span><small><b x-text="typeSummary(row.kind).available"></b>/<span x-text="typeSummary(row.kind).total"></span></small></th>
-                            <template x-for="segment in availabilitySegments(row.kind)" :key="segment.id">
-                                <td :data-zone="segment.zone" :data-state="segment.state" :title="segment.label">
-                                    <span class="availability-tower-state" aria-hidden="true"></span>
-                                    <span class="sr-only" x-text="segment.label"></span>
-                                </td>
+                            <th scope="col">기기</th>
+                            <template x-for="segment in availabilitySegments('washer')" :key="`heading-${segment.number}`">
+                                <th scope="col" :data-zone="segment.zone" x-text="segment.number"></th>
                             </template>
                         </tr>
-                    </template>
-                    </tbody>
-                </table>
-            </section>
-
-            <section class="laundry-directory" aria-labelledby="laundry-title">
-                <header class="ui-section-heading laundry-heading">
-                    <div><h2 id="laundry-title">워시타워</h2></div>
-                </header>
+                        </thead>
+                        <tbody>
+                        <template x-for="row in [{kind:'dryer', label:'건조기'}, {kind:'washer', label:'세탁기'}]" :key="row.kind">
+                            <tr>
+                                <th scope="row"><span x-text="row.label"></span><small><b x-text="typeSummary(row.kind).available"></b>/<span x-text="typeSummary(row.kind).total"></span></small></th>
+                                <template x-for="segment in availabilitySegments(row.kind)" :key="segment.id">
+                                    <td :data-zone="segment.zone" :data-state="segment.state" :title="segment.label">
+                                        <span class="availability-tower-state" aria-hidden="true"></span>
+                                        <span class="sr-only" x-text="segment.label"></span>
+                                    </td>
+                                </template>
+                            </tr>
+                        </template>
+                        </tbody>
+                    </table>
+                </div>
 
                 <div class="laundry-filters">
                     <fieldset class="laundry-filter-group">
