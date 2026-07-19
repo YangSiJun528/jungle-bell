@@ -12,6 +12,7 @@ const htmlFiles = ['index.html', 'onboarding.html', 'campus.html'].map((name) =>
 }));
 const settingsHtml = htmlFiles.find(({name}) => name === 'index.html')?.source ?? '';
 const campusHtml = htmlFiles.find(({name}) => name === 'campus.html')?.source ?? '';
+const authoredStylesCss = stylesCss.split('END-SANITIZE')[1] ?? '';
 
 const errors = [];
 const lines = uiCss.split('\n');
@@ -28,6 +29,26 @@ for (const [index, line] of lines.entries()) {
 const expectedTokens = [0, 4, 8, 12, 16, 24, 32, 48, 64, 96];
 for (const value of expectedTokens) {
     if (!uiCss.includes(`: ${value}px;`)) errors.push(`Spacing token ${value}px is missing from src/ui.css`);
+}
+
+for (const [name, source] of [['src/ui.css', uiCss], ['src/styles.css', authoredStylesCss]]) {
+    for (const [index, line] of source.split('\n').entries()) {
+        for (const match of line.matchAll(/(-?\d+(?:\.\d+)?)px/g)) {
+            const value = Number(match[1]);
+            const isBorderToken = name === 'src/ui.css' && line.includes('--border-width: 1px');
+            if (Math.abs(value) % 2 !== 0 && !isBorderToken) {
+                errors.push(`${name}:${index + 1} uses an odd pixel value ${match[0]} in: ${line.trim()}`);
+            }
+        }
+    }
+}
+
+if (!uiCss.includes('--border-width: 1px;')
+    || /border(?:-(?:top|right|bottom|left))?:\s*1px/.test(uiCss)) {
+    errors.push('One-pixel borders must use the shared border-width token');
+}
+if (!/\*,\s*\n::before,\s*\n::after\s*\{[^}]*box-sizing:\s*border-box;/s.test(stylesCss)) {
+    errors.push('Global border-box sizing must keep one-pixel borders inside even component dimensions');
 }
 
 if (/transition\s*:\s*all\b/.test(uiCss)) errors.push('transition: all is forbidden');
@@ -144,7 +165,7 @@ if (!/\.ui-shell-settings \.ui-tabs button,[\s\S]*?min-height:\s*var\(--space-8\
 }
 if (!/<fieldset class="laundry-filter-group">\s*<legend class="laundry-filter-label">구역<\/legend>/s.test(campusHtml)
     || !/<fieldset class="laundry-filter-group">\s*<legend class="laundry-filter-label">상태<\/legend>/s.test(campusHtml)
-    || !/\.laundry-filters\s*\{[^}]*padding:\s*var\(--space-3\)[^}]*border:\s*1px solid var\(--color-border\)/s.test(uiCss)
+    || !/\.laundry-filters\s*\{[^}]*padding:\s*var\(--space-3\)[^}]*border:\s*var\(--border-width\) solid var\(--color-border\)/s.test(uiCss)
     || !/\.laundry-filter-group\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)[^}]*gap:\s*var\(--space-1\)/s.test(uiCss)
     || !/\.laundry-filters \.ui-choice-group\s*\{[^}]*gap:\s*var\(--space-2\)/s.test(uiCss)) {
     errors.push('Laundry filters must use compact, semantic controls inside one divided block');

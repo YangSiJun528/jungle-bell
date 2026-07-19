@@ -377,6 +377,10 @@ input[type="radio"] {
     outline: none;
 }
 
+:-moz-focusring {
+    outline: 2px dotted ButtonText;
+}
+
 button:focus-visible,
 summary:focus-visible,
 select:focus-visible,
