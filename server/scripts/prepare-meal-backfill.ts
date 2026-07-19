@@ -6,12 +6,12 @@ import { canonicalJsonSha256, sha256Bytes } from "../src/collector/hash.ts";
 import {
   mealImageExtension,
   normalizeMeals,
+  weeklyMealMenu,
   type MealImageAsset,
   type MealImageCandidate,
   type MealPost,
   type WeeklyMealMenu,
 } from "../src/collector/meals.ts";
-import { kstWeekKey } from "../src/collector/time.ts";
 
 interface NewPostEvent {
   observed_at: string;
@@ -152,7 +152,7 @@ async function loadWeeklyMenus(
   archiveMealImage: (candidate: MealImageCandidate) => Promise<MealImageAsset>,
 ): Promise<WeeklyMealMenu[]> {
   const versions = new Map<string, { post: unknown; observedAt: string }>();
-  const snapshots = new Set<string>();
+  const snapshots = new Map<string, string>();
   const addPosts = (value: unknown, observedAt: string) => {
     if (typeof value !== "object" || value === null) return;
     const items = (value as { items?: unknown }).items;
@@ -171,16 +171,17 @@ async function loadWeeklyMenus(
     const entry = JSON.parse(line) as ManifestEntry;
     const snapshot = entry.endpoints?.include_pinned?.snapshot ?? entry.posts_snapshot;
     const changed = entry.endpoints?.include_pinned?.changed ?? entry.posts_changed;
-    if (snapshot && changed !== false) snapshots.add(snapshot);
+    if (snapshot && changed !== false) snapshots.set(snapshot, entry.collected_at ?? fallbackObservedAt);
   }
 
-  for (const snapshot of snapshots) {
+  for (const [snapshot, observedAt] of snapshots) {
     const raw = await gunzip(await readFile(join(archive, snapshot)));
-    addPosts(JSON.parse(raw.toString("utf8")) as unknown, fallbackObservedAt);
+    addPosts(JSON.parse(raw.toString("utf8")) as unknown, observedAt);
   }
 
-  const byWeek = new Map<string, MealPost>();
-  for (const { post, observedAt } of versions.values()) {
+  const byWeek = new Map<string, WeeklyMealMenu>();
+  const orderedVersions = [...versions.values()].sort((left, right) => left.observedAt.localeCompare(right.observedAt));
+  for (const { post, observedAt } of orderedVersions) {
     const raw = { has_next: false, items: [post] };
     const normalized = await normalizeMeals(
       raw,
@@ -188,15 +189,13 @@ async function loadWeeklyMenus(
       observedAt,
       archiveMealImage,
     );
-    const menu = normalized.pinnedMenus[0];
-    if (!menu) continue;
-    const date = new Date(menu.updatedAt ?? observedAt);
-    if (Number.isNaN(date.getTime())) continue;
-    byWeek.set(kstWeekKey(date), menu);
+    const postVersion = normalized.pinnedMenus[0];
+    if (!postVersion) continue;
+    const menu = await weeklyMealMenu(postVersion, observedAt);
+    if (menu) byWeek.set(menu.weekKey, menu);
   }
 
-  return [...byWeek]
-    .map(([weekKey, post]) => ({ weekKey, post }))
+  return [...byWeek.values()]
     .sort((left, right) => right.weekKey.localeCompare(left.weekKey));
 }
 
@@ -217,15 +216,17 @@ function createSql(
     const seenAt = observedAtByPost.get(post.id) ?? fallbackObservedAt;
     statements.push(`
 INSERT INTO meal_post (
-  id, kind, title, text, pinned, published_at, updated_at, permalink,
-  status, first_seen_at, last_seen_at
+  id, kind, content_sha, title, text, pinned, published_at, updated_at,
+  permalink, status, first_seen_at, last_seen_at
 ) VALUES (
-  ${literal(post.id)}, ${literal(post.kind)}, ${literal(post.title)}, ${literal(post.text)},
+  ${literal(post.id)}, ${literal(post.kind)}, ${literal(post.contentSha)},
+  ${literal(post.title)}, ${literal(post.text)},
   ${post.pinned ? 1 : 0}, ${literal(post.publishedAt)}, ${literal(post.updatedAt)},
   ${literal(post.permalink)}, ${literal(post.status)}, ${literal(seenAt)}, ${literal(seenAt)}
 )
 ON CONFLICT(id) DO UPDATE SET
   kind = excluded.kind,
+  content_sha = excluded.content_sha,
   title = excluded.title,
   text = excluded.text,
   pinned = excluded.pinned,
@@ -263,15 +264,18 @@ ON CONFLICT(post_id, media_id) DO UPDATE SET
   }
   for (const menu of weeklyMenus) {
     statements.push(`
-INSERT INTO meal_weekly_menu (week_key, post_json, updated_at, observed_at)
+INSERT INTO meal_weekly_menu (week_key, content_sha, post_json, updated_at, observed_at)
 VALUES (
-  ${literal(menu.weekKey)}, ${literal(JSON.stringify(menu.post))},
+  ${literal(menu.weekKey)}, ${literal(menu.contentSha)}, ${literal(JSON.stringify(menu.post))},
   ${literal(menu.post.updatedAt)}, ${literal(menu.post.updatedAt ?? fallbackObservedAt)}
 )
 ON CONFLICT(week_key) DO UPDATE SET
+  content_sha = excluded.content_sha,
   post_json = excluded.post_json,
   updated_at = excluded.updated_at,
-  observed_at = excluded.observed_at;`);
+  observed_at = excluded.observed_at
+WHERE excluded.content_sha <> meal_weekly_menu.content_sha
+  AND excluded.observed_at >= meal_weekly_menu.observed_at;`);
   }
   statements.push("");
   return statements.join("\n");

@@ -49,6 +49,7 @@ function mealCommit(): CollectionCommit {
     mealPosts: [{
       id: "weekly",
       kind: "PINNED_MENU",
+      contentSha: "b".repeat(64),
       title: "7월 2주차 식단표",
       text: "",
       pinned: true,
@@ -99,6 +100,31 @@ describe("CloudflareApiStorage", () => {
 
     const weekly = statements.find(({ sql }) => sql.includes("INSERT INTO meal_weekly_menu"));
     expect(weekly?.values[0]).toBe("2026-07-13");
-    expect(weekly?.values[1]).toContain('"kind":"PINNED_MENU"');
+    expect(weekly?.values[1]).toMatch(/^[a-f0-9]{64}$/);
+    expect(weekly?.values[2]).toContain('"kind":"PINNED_MENU"');
+    expect(weekly?.sql).toContain("excluded.content_sha <> meal_weekly_menu.content_sha");
+  });
+
+  it("uses the provider title instead of a Sunday update timestamp", async () => {
+    const statements: Array<{ sql: string; values: unknown[] }> = [];
+    const db = {
+      prepare: (sql: string) => ({
+        bind: (...values: unknown[]) => {
+          const statement = { sql, values };
+          statements.push(statement);
+          return statement;
+        },
+      }),
+      batch: async () => [],
+    } as unknown as D1Database;
+    const weeklyCommit = mealCommit();
+    weeklyCommit.mealObservedAt = "2026-07-19T03:00:00.000Z";
+    weeklyCommit.mealPosts![0]!.title = "7월 3주차 식단표";
+    weeklyCommit.mealPosts![0]!.updatedAt = "2026-07-19T02:00:00.000Z";
+
+    await new CloudflareApiStorage(db, {} as R2Bucket).applyCommit(weeklyCommit);
+
+    const weekly = statements.find(({ sql }) => sql.includes("INSERT INTO meal_weekly_menu"));
+    expect(weekly?.values[0]).toBe("2026-07-20");
   });
 });

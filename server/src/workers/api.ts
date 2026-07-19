@@ -6,7 +6,13 @@ import { cors } from "hono/cors";
 import { etag } from "hono/etag";
 import { z } from "zod";
 import { toPublicLaundryVersion, type LaundryVersion } from "../collector/laundry";
-import type { MealsVersion, WeeklyMealMenu } from "../collector/meals";
+import {
+  currentWeeklyMealMenu,
+  weeklyMealMenu,
+  withMealPostContentSha,
+  type MealsVersion,
+  type WeeklyMealMenu,
+} from "../collector/meals";
 import { projectLaundry } from "../collector/projection";
 import {
   compactUtcMinute,
@@ -14,7 +20,6 @@ import {
   latestCollectionCommitPath,
   minuteEpoch,
   parseCompactUtcMinute,
-  kstWeekKey,
 } from "../collector/time";
 import { SOURCE_NAMES, type CollectionCommit, type SourceState } from "../collector/types";
 import { CloudflareApiStorage } from "./cloudflare-storage";
@@ -117,6 +122,16 @@ function withAssetUrls(meals: MealsVersion, requestUrl: string): MealsVersion {
     pinnedMenus: meals.pinnedMenus.map(mapPost),
     dailyMenus: meals.dailyMenus.map(mapPost),
     otherPosts: meals.otherPosts.map(mapPost),
+  };
+}
+
+async function withContentShas(meals: MealsVersion): Promise<MealsVersion> {
+  return {
+    ...meals,
+    schemaVersion: 2,
+    pinnedMenus: await Promise.all(meals.pinnedMenus.map(withMealPostContentSha)),
+    dailyMenus: await Promise.all(meals.dailyMenus.map(withMealPostContentSha)),
+    otherPosts: await Promise.all(meals.otherPosts.map(withMealPostContentSha)),
   };
 }
 
@@ -240,24 +255,29 @@ app.get("/v1/laundry/events", zValidator("query", eventsQuerySchema, validationH
 app.get("/v1/meals", async (context) => {
   const state = await context.var.storage.readState("meals-include-pinned");
   if (!state?.lastNormalizedKey) return context.json({ error: "NO_DATA" }, 503);
-  const version = await context.var.storage.readJson<MealsVersion>(state.lastNormalizedKey)
+  const storedVersion = await context.var.storage.readJson<MealsVersion>(state.lastNormalizedKey)
     ?? await context.var.storage.readJson<MealsVersion>("latest/meals.json");
-  if (!version) return context.json({ error: "DATA_OBJECT_MISSING" }, 503);
+  if (!storedVersion) return context.json({ error: "DATA_OBJECT_MISSING" }, 503);
+  const version = await withContentShas(storedVersion);
   const recentMenus = await context.var.storage.listMealPosts(null, MEAL_HISTORY_PAGE_SIZE);
   const archivedWeeklyMenus = await context.var.storage.listWeeklyMealMenus(100);
-  const currentWeeklyMenus: WeeklyMealMenu[] = version.pinnedMenus.map((post) => ({
-    weekKey: kstWeekKey(new Date(post.updatedAt ?? version.observedAt)),
-    post,
-  }));
+  const currentWeeklyMenus = (await Promise.all(
+    version.pinnedMenus.map((post) => weeklyMealMenu(post, version.observedAt)),
+  )).filter((menu): menu is WeeklyMealMenu => menu !== null);
   const weeklyMenus = [...new Map(
     [...archivedWeeklyMenus, ...currentWeeklyMenus].map((menu) => [menu.weekKey, menu]),
   ).values()].sort((left, right) => right.weekKey.localeCompare(left.weekKey));
+  const currentWeekly = currentWeeklyMealMenu(weeklyMenus, new Date());
   const lastRecentMenu = recentMenus.at(-1);
   const body = {
     asOf: currentCacheSlice().toISOString(),
     lastCheckedAt: state.lastSuccessAt,
     data: {
       ...withAssetUrls(version, context.req.url),
+      currentWeeklyMenu: {
+        ...currentWeekly,
+        post: currentWeekly.post ? withPostAssetUrls(currentWeekly.post, context.req.url) : null,
+      },
       recentMenus: recentMenus.map((post) => withPostAssetUrls(post, context.req.url)),
       weeklyMenus: weeklyMenus.map((menu) => ({
         ...menu,
