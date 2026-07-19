@@ -848,9 +848,11 @@
     .availability-layout th:nth-child(7), .availability-layout td:nth-child(7),
     .availability-layout th:nth-child(9), .availability-layout td:nth-child(9) { padding-left: var(--space-1); }
     .availability-tower-state { display: block; width: 100%; height: var(--space-6); border: var(--border-width) solid var(--color-border); border-radius: 4px; background: var(--color-text-faint); }
-    .laundry-overview :is(.availability-key [data-zone], .availability-layout [data-zone]) { transition: filter var(--motion-standard) var(--motion-ease), opacity var(--motion-standard) var(--motion-ease); }
+    .laundry-overview :is(.availability-key [data-zone], .availability-layout [data-zone], .availability-layout [data-kind]) { transition: filter var(--motion-standard) var(--motion-ease), opacity var(--motion-standard) var(--motion-ease); }
     .laundry-overview[data-access="men"] :is(.availability-key [data-zone="women"], .availability-layout [data-zone="women"]),
     .laundry-overview[data-access="women"] :is(.availability-key [data-zone="men"], .availability-layout [data-zone="men"]) { filter: blur(2px); opacity: 0.24; }
+    .laundry-overview[data-filter="washerAvailable"] .availability-layout [data-kind="dryer"],
+    .laundry-overview[data-filter="dryerAvailable"] .availability-layout [data-kind="washer"] { filter: blur(2px); opacity: 0.24; }
     .availability-layout td[data-state="available"][data-zone="men"] .availability-tower-state { border-color: var(--color-men); background: var(--color-men); }
     .availability-layout td[data-state="available"][data-zone="common"] .availability-tower-state { border-color: var(--color-common); background: var(--color-common); }
     .availability-layout td[data-state="available"][data-zone="women"] .availability-tower-state { border-color: var(--color-women); background: var(--color-women); }

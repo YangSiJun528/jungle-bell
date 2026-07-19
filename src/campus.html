@@ -37,7 +37,7 @@
     <section id="laundry-panel" class="campus-panel" x-show="activeTab === 'laundry'" x-cloak aria-labelledby="laundry-title">
         <div x-show="laundry">
             <section class="laundry-directory" aria-labelledby="laundry-title">
-                <div class="laundry-overview" :data-access="laundryAccess">
+                <div class="laundry-overview" :data-access="laundryAccess" :data-filter="laundryFilter">
                     <header class="ui-section-heading laundry-heading">
                         <div>
                             <h2 id="laundry-title">워시타워</h2>
@@ -62,7 +62,7 @@
                         </thead>
                         <tbody>
                         <template x-for="row in [{kind:'dryer', label:'건조기'}, {kind:'washer', label:'세탁기'}]" :key="row.kind">
-                            <tr>
+                            <tr :data-kind="row.kind">
                                 <th scope="row"><span x-text="row.label"></span><small><b x-text="typeSummary(row.kind).available"></b>/<span x-text="typeSummary(row.kind).total"></span></small></th>
                                 <template x-for="segment in availabilitySegments(row.kind)" :key="segment.id">
                                     <td :data-zone="segment.zone" :data-state="segment.state" :title="segment.label">
