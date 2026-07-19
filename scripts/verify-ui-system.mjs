@@ -90,7 +90,7 @@ for (const selector of requiredStateSelectors) {
     if (!uiCss.includes(selector)) errors.push(`Required interaction state ${selector} is missing`);
 }
 
-if (!/\.laundry-grid\s*\{[^}]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/s.test(uiCss)) {
+if (!/\.laundry-grid\s*\{[^}]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)[^}]*gap:\s*var\(--space-4\)/s.test(uiCss)) {
     errors.push('The default wash-tower grid must show three columns');
 }
 if (!/<ul class="availability-key"[^>]*>[\s\S]*?data-zone="men"[\s\S]*?data-zone="common"[\s\S]*?data-zone="women"[\s\S]*?data-state="unavailable"/s.test(campusHtml)
@@ -145,13 +145,13 @@ if (disclosureBindings.length < 2
 if (/@media[^{]*\{[\s\S]*?\.laundry-grid\s*\{/s.test(uiCss)) {
     errors.push('The fixed-size wash-tower window must keep a three-column grid');
 }
-if (!/\.laundry-card\s*\{[^}]*height:\s*248px[^}]*grid-template-rows:\s*var\(--space-12\)\s+minmax\(0,\s*1fr\)/s.test(uiCss)
+if (!/\.laundry-card\s*\{[^}]*height:\s*208px[^}]*grid-template-rows:\s*var\(--space-12\)\s+minmax\(0,\s*1fr\)/s.test(uiCss)
     || campusHtml.includes('appliance-error') || uiCss.includes('.appliance-error')
     || !/<div class="appliance-status">[\s\S]*?<span class="status-badge"[\s\S]*?<details class="ui-info appliance-info"/s.test(campusHtml)) {
     errors.push('Wash-tower cards must keep fixed geometry and place explanations beside the status badge');
 }
 if (!/\.ui-info summary\s*\{[^}]*width:\s*var\(--space-6\)[^}]*height:\s*var\(--space-6\)/s.test(uiCss)
-    || !/\.ui-info-popover\s*\{[^}]*position:\s*fixed[^}]*z-index:\s*40[^}]*max-height:\s*calc\(100vh - var\(--space-6\)\)[^}]*overflow-y:\s*auto/s.test(uiCss)
+    || !/\.ui-info-popover\s*\{[^}]*position:\s*fixed[^}]*z-index:\s*40[^}]*max-height:\s*calc\(100vh - var\(--space-6\)\)[^}]*overflow-y:\s*auto[^}]*word-break:\s*keep-all/s.test(uiCss)
     || (campusHtml.match(/x-anchor\.fixed\.offset\.8="\$refs\.trigger"/g) ?? []).length < 2
     || (campusHtml.match(/x-ref="trigger"/g) ?? []).length < 2
     || /\.appliance-info\.is-(?:above|below)/.test(uiCss)
@@ -164,14 +164,17 @@ if (!/fn build_campus_window[\s\S]*?\.inner_size\(640\.0,\s*780\.0\)[\s\S]*?\.re
 if (campusHtml.includes('durationFormat') || campusHtml.includes('duration-control')) {
     errors.push('Wash-tower time formatting must be automatic instead of user-configurable');
 }
-if (!/\.appliance-main\s*\{[^}]*display:\s*flex[^}]*height:\s*44px[^}]*flex-direction:\s*column/s.test(uiCss)) {
-    errors.push('Remaining time and finish time must use two fixed-height rows');
+if (!/\.appliance-main\s*\{[^}]*display:\s*grid[^}]*height:\s*var\(--space-8\)[^}]*grid-template-columns:\s*96px\s+64px[^}]*justify-content:\s*space-between/s.test(uiCss)
+    || !/\.appliance-main strong\s*\{[^}]*width:\s*96px[^}]*grid-column:\s*1[^}]*grid-row:\s*1[^}]*font-size:\s*16px/s.test(uiCss)
+    || !/\.appliance-main small\s*\{[^}]*width:\s*64px[^}]*grid-column:\s*2[^}]*grid-row:\s*1[^}]*text-align:\s*right/s.test(uiCss)) {
+    errors.push('Remaining time and finish time must share one fixed-width row');
 }
 const applianceTimeRules = uiCss.match(/\.appliance-main (?:strong|small)\s*\{[^}]*\}/g) ?? [];
 if (applianceTimeRules.length !== 2 || applianceTimeRules.some((rule) => /text-overflow:\s*ellipsis|overflow:\s*hidden/.test(rule))) {
     errors.push('Wash-tower time values must not be truncated');
 }
 if (!/<p class="appliance-main">[^<]*<strong[\s\S]*<progress class="ui-progress appliance-progress"/s.test(campusHtml)
+    || !/\.appliance-progress\s*\{[^}]*grid-column:\s*1\s*\/\s*-1[^}]*grid-row:\s*2/s.test(uiCss)
     || /\.appliance-progress\s*\{[^}]*position:\s*absolute/s.test(uiCss)) {
     errors.push('Appliance progress must appear below the time values instead of on the card edge');
 }

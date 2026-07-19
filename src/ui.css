@@ -811,7 +811,7 @@
     .ui-info summary { display: flex; width: var(--space-6); height: var(--space-6); align-items: center; justify-content: center; border: var(--border-width) solid var(--color-border); border-radius: 50%; background: var(--color-surface); color: var(--color-text-muted); font: 700 12px/1 var(--font-family); list-style: none; cursor: pointer; }
     .ui-info summary::-webkit-details-marker { display: none; }
     .ui-info summary:hover, .ui-info summary:focus-visible, .ui-info[open] summary { border-color: var(--color-accent); color: var(--color-accent); outline: 0; }
-    .ui-info-popover { position: fixed; z-index: 40; width: min(256px, calc(100vw - var(--space-6))); max-height: calc(100vh - var(--space-6)); padding: var(--space-2); overflow-y: auto; border: var(--border-width) solid var(--color-border-strong); border-radius: var(--radius-card); background: var(--color-surface-overlay); color: var(--color-text); font-size: 12px; line-height: 1.5; }
+    .ui-info-popover { position: fixed; z-index: 40; width: min(256px, calc(100vw - var(--space-6))); max-height: calc(100vh - var(--space-6)); padding: var(--space-2); overflow-y: auto; border: var(--border-width) solid var(--color-border-strong); border-radius: var(--radius-card); background: var(--color-surface-overlay); color: var(--color-text); font-size: 12px; line-height: 1.5; word-break: keep-all; }
     .ui-info-popover strong, .ui-info-popover p, .ui-info-popover code { display: block; }
     .ui-info-popover strong { margin-bottom: var(--space-1); font-size: 12px; }
     .ui-info-popover p { margin: var(--space-0); color: var(--color-text-muted); text-wrap: pretty; }
@@ -871,8 +871,8 @@
     .zone-choice input[value="men"]:checked + span { border-color: var(--color-men); background: var(--color-men-soft); color: var(--color-men); }
     .zone-choice input[value="women"]:checked + span { border-color: var(--color-women); background: var(--color-women-soft); color: var(--color-women); }
 
-    .laundry-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; gap: var(--space-6); }
-    .laundry-card { position: relative; display: grid; height: 248px; min-width: var(--space-0); grid-template-rows: var(--space-12) minmax(0, 1fr); overflow: visible; border: var(--border-width) solid var(--color-border); border-radius: var(--radius-card); background: var(--color-surface); }
+    .laundry-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; gap: var(--space-4); }
+    .laundry-card { position: relative; display: grid; height: 208px; min-width: var(--space-0); grid-template-rows: var(--space-12) minmax(0, 1fr); overflow: visible; border: var(--border-width) solid var(--color-border); border-radius: var(--radius-card); background: var(--color-surface); }
     .laundry-card[data-zone="men"] { --zone-color: var(--color-men); --zone-soft: var(--color-men-soft); }
     .laundry-card[data-zone="common"] { --zone-color: var(--color-common); --zone-soft: var(--color-common-soft); }
     .laundry-card[data-zone="women"] { --zone-color: var(--color-women); --zone-soft: var(--color-women-soft); }
@@ -896,10 +896,10 @@
     .status-badge[data-tone="danger"] { background: var(--color-danger-soft); color: var(--color-danger); }
     .status-badge[data-tone="complete"] { background: var(--color-control); color: var(--color-text-muted); }
 
-    .appliance-main { display: flex; width: 100%; height: 44px; min-width: var(--space-0); flex-direction: column; align-items: flex-start; gap: var(--space-1); margin: var(--space-2) var(--space-0) var(--space-0); }
-    .appliance-main strong { font-family: var(--font-data); font-size: 18px; font-variant-numeric: tabular-nums; line-height: 1.25; white-space: nowrap; }
-    .appliance-main small { color: var(--color-text-muted); font-family: var(--font-data); font-size: 10px; font-variant-numeric: tabular-nums; line-height: 1.4; white-space: nowrap; }
-    .appliance-progress { --progress-color: var(--color-accent); width: 100%; height: var(--space-1); flex: none; margin-top: auto; border-radius: var(--radius-pill); }
+    .appliance-main { display: grid; width: 100%; height: var(--space-8); min-width: var(--space-0); grid-template-columns: 96px 64px; grid-template-rows: var(--space-6) var(--space-1); align-items: center; justify-content: space-between; row-gap: var(--space-1); margin: var(--space-1) var(--space-0) var(--space-0); }
+    .appliance-main strong { width: 96px; grid-column: 1; grid-row: 1; font-family: var(--font-data); font-size: 16px; font-variant-numeric: tabular-nums; line-height: 1.25; white-space: nowrap; }
+    .appliance-main small { width: 64px; grid-column: 2; grid-row: 1; color: var(--color-text-muted); font-family: var(--font-data); font-size: 10px; font-variant-numeric: tabular-nums; line-height: 1.4; text-align: right; white-space: nowrap; }
+    .appliance-progress { --progress-color: var(--color-accent); width: 100%; height: var(--space-1); grid-column: 1 / -1; grid-row: 2; margin: var(--space-0); border-radius: var(--radius-pill); }
     .appliance-progress::-webkit-progress-bar, .appliance-progress::-webkit-progress-value, .appliance-progress::-moz-progress-bar { border-radius: var(--radius-pill); }
 
     /* Meals */
