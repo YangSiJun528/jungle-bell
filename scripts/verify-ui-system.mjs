@@ -1,6 +1,18 @@
 import {existsSync, readFileSync} from 'node:fs';
 
-const approvedSpacing = new Set([0, 4, 8, 12, 16, 24, 32, 48, 64, 96]);
+const spacingTokens = new Map([
+    ['--space-0', 0],
+    ['--space-half', 2],
+    ['--space-1', 4],
+    ['--space-2', 8],
+    ['--space-4', 16],
+    ['--space-6', 24],
+    ['--space-8', 32],
+    ['--space-12', 48],
+    ['--space-16', 64],
+    ['--space-24', 96],
+]);
+const approvedSpacing = new Set(spacingTokens.values());
 const uiCss = readFileSync(new URL('../src/ui.css', import.meta.url), 'utf8');
 const stylesCss = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const campusTs = readFileSync(new URL('../src/campus.ts', import.meta.url), 'utf8');
@@ -15,21 +27,24 @@ const campusHtml = htmlFiles.find(({name}) => name === 'campus.html')?.source ??
 const authoredStylesCss = stylesCss.split('END-SANITIZE')[1] ?? '';
 
 const errors = [];
-const lines = uiCss.split('\n');
-const spacingProperty = /^\s*(margin(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?|padding(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?|gap|row-gap|column-gap|inset|top|right|bottom|left)\s*:/;
+const spacingProperty = /^(?:margin(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?|padding(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?|gap|row-gap|column-gap|inset|top|right|bottom|left)$/;
 
-for (const [index, line] of lines.entries()) {
-    if (!spacingProperty.test(line)) continue;
-    for (const match of line.matchAll(/(-?\d+(?:\.\d+)?)px/g)) {
+for (const declaration of uiCss.matchAll(/([-\w]+)\s*:\s*([^;}{]+)/g)) {
+    const [, property, valueSource] = declaration;
+    if (!spacingProperty.test(property)) continue;
+    for (const match of valueSource.matchAll(/(-?\d+(?:\.\d+)?)px/g)) {
         const value = Number(match[1]);
-        if (!approvedSpacing.has(value)) errors.push(`src/ui.css:${index + 1} uses off-scale spacing ${match[0]} in: ${line.trim()}`);
+        if (!approvedSpacing.has(Math.abs(value))) {
+            const line = uiCss.slice(0, declaration.index).split('\n').length;
+            errors.push(`src/ui.css:${line} uses off-scale spacing ${match[0]} in ${property}: ${valueSource.trim()}`);
+        }
     }
 }
 
-const expectedTokens = [0, 4, 8, 12, 16, 24, 32, 48, 64, 96];
-for (const value of expectedTokens) {
-    if (!uiCss.includes(`: ${value}px;`)) errors.push(`Spacing token ${value}px is missing from src/ui.css`);
+for (const [token, value] of spacingTokens) {
+    if (!uiCss.includes(`${token}: ${value}px;`)) errors.push(`Spacing token ${token}: ${value}px is missing from src/ui.css`);
 }
+if (uiCss.includes('--space-3')) errors.push('The off-scale 12px spacing token must not be used');
 
 for (const [name, source] of [['src/ui.css', uiCss], ['src/styles.css', authoredStylesCss]]) {
     for (const [index, line] of source.split('\n').entries()) {
@@ -160,12 +175,12 @@ if (!/\.ui-settings-group\s*\{[^}]*margin:\s*var\(--space-0\)[^}]*padding:\s*var
     || !/\.ui-setting-row small,[^{]*\{[^}]*font-size:\s*12px/s.test(uiCss)) {
     errors.push('Settings groups must be unframed and use a 16px, 14px, and 12px hierarchy on the same left edge');
 }
-if (!/\.ui-shell-settings \.ui-tabs button,[\s\S]*?min-height:\s*var\(--space-8\)[^}]*padding:\s*var\(--space-2\)\s+var\(--space-3\)[^}]*font-size:\s*12px/s.test(uiCss)) {
+if (!/\.ui-shell-settings \.ui-tabs button,[\s\S]*?min-height:\s*var\(--space-8\)[^}]*padding:\s*var\(--space-2\)\s+var\(--space-2\)[^}]*font-size:\s*12px/s.test(uiCss)) {
     errors.push('Settings text buttons must use the compact 32px control size');
 }
 if (!/<fieldset class="laundry-filter-group">\s*<legend class="laundry-filter-label">구역<\/legend>/s.test(campusHtml)
     || !/<fieldset class="laundry-filter-group">\s*<legend class="laundry-filter-label">상태<\/legend>/s.test(campusHtml)
-    || !/\.laundry-filters\s*\{[^}]*padding:\s*var\(--space-3\)[^}]*border:\s*var\(--border-width\) solid var\(--color-border\)/s.test(uiCss)
+    || !/\.laundry-filters\s*\{[^}]*padding:\s*var\(--space-2\)[^}]*border:\s*var\(--border-width\) solid var\(--color-border\)/s.test(uiCss)
     || !/\.laundry-filter-group\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)[^}]*gap:\s*var\(--space-1\)/s.test(uiCss)
     || !/\.laundry-filters \.ui-choice-group\s*\{[^}]*gap:\s*var\(--space-2\)/s.test(uiCss)) {
     errors.push('Laundry filters must use compact, semantic controls inside one divided block');
