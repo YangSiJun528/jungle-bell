@@ -94,7 +94,8 @@ if (!/\.laundry-grid\s*\{[^}]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s
     errors.push('The default wash-tower grid must show three columns');
 }
 if (!/<ul class="availability-key"[^>]*>[\s\S]*?data-zone="men"[\s\S]*?data-zone="common"[\s\S]*?data-zone="women"[\s\S]*?data-state="unavailable"/s.test(campusHtml)
-    || !/<section class="laundry-directory" aria-labelledby="laundry-title">[\s\S]*?<div class="laundry-overview" :data-access="laundryAccess" :data-filter="laundryFilter">[\s\S]*?<h2 id="laundry-title">워시타워<\/h2>[\s\S]*?<p>번호별 세탁기·건조기 사용 가능 현황<\/p>/s.test(campusHtml)
+    || !/<section class="laundry-directory" aria-labelledby="laundry-title">[\s\S]*?<div class="laundry-overview" :data-access="laundryAccess" :data-filter="laundryFilter">[\s\S]*?<header class="ui-section-heading laundry-heading">\s*<h2 id="laundry-title">워시타워<\/h2>/s.test(campusHtml)
+    || campusHtml.includes('<p>번호별 세탁기·건조기 사용 가능 현황</p>')
     || campusHtml.includes('laundry-overview-title')
     || campusHtml.includes('>현재 사용 현황<')
     || !/<table class="availability-layout">[\s\S]*?<caption class="sr-only">[\s\S]*?row in \[\{kind:'dryer', label:'건조기'\}, \{kind:'washer', label:'세탁기'\}\]/s.test(campusHtml)
