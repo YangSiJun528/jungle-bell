@@ -5,7 +5,8 @@ import type {
   SourceName,
   SourceState,
 } from "../collector/types";
-import type { ArchivedMealPost, MealImageAsset, MealPost } from "../collector/meals";
+import type { ArchivedMealPost, MealImageAsset, MealPost, WeeklyMealMenu } from "../collector/meals";
+import { kstWeekKey } from "../collector/time";
 
 interface SourceStateRow {
   source: SourceName;
@@ -77,6 +78,11 @@ interface MealImageRow {
   content_type: string;
   extension: string;
   byte_length: number;
+}
+
+interface WeeklyMealMenuRow {
+  week_key: string;
+  post_json: string;
 }
 
 function toSourceState(row: SourceStateRow): SourceState {
@@ -235,6 +241,17 @@ export class CloudflareApiStorage {
     }));
   }
 
+  async listWeeklyMealMenus(limit: number): Promise<WeeklyMealMenu[]> {
+    const result = await this.db
+      .prepare("SELECT week_key, post_json FROM meal_weekly_menu ORDER BY week_key DESC LIMIT ?")
+      .bind(limit)
+      .all<WeeklyMealMenuRow>();
+    return result.results.map((row) => ({
+      weekKey: row.week_key,
+      post: JSON.parse(row.post_json) as MealPost,
+    }));
+  }
+
   async applyCommit(commit: CollectionCommit): Promise<void> {
     const {
       state,
@@ -323,6 +340,25 @@ export class CloudflareApiStorage {
     }
 
     for (const post of mealPosts) {
+      if (post.kind === "PINNED_MENU") {
+        const versionDate = new Date(post.updatedAt ?? mealObservedAt);
+        statements.push(this.db
+          .prepare(`
+            INSERT INTO meal_weekly_menu (week_key, post_json, updated_at, observed_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(week_key) DO UPDATE SET
+              post_json = excluded.post_json,
+              updated_at = excluded.updated_at,
+              observed_at = excluded.observed_at
+            WHERE excluded.observed_at >= meal_weekly_menu.observed_at
+          `)
+          .bind(
+            kstWeekKey(versionDate),
+            JSON.stringify(post),
+            post.updatedAt,
+            mealObservedAt,
+          ));
+      }
       statements.push(this.db
         .prepare(`
           INSERT INTO meal_post (

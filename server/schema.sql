@@ -1,5 +1,6 @@
 -- This project supports only the current schema. Applying this file deletes all D1 data.
 DROP TABLE IF EXISTS meal_image;
+DROP TABLE IF EXISTS meal_weekly_menu;
 DROP TABLE IF EXISTS meal_post;
 DROP TABLE IF EXISTS laundry_event;
 DROP TABLE IF EXISTS minute_observation;
@@ -77,6 +78,16 @@ CREATE INDEX meal_post_published_at
 
 CREATE INDEX meal_post_kind_published_at
   ON meal_post (kind, published_at DESC);
+
+CREATE TABLE meal_weekly_menu (
+  week_key TEXT PRIMARY KEY,
+  post_json TEXT NOT NULL,
+  updated_at TEXT,
+  observed_at TEXT NOT NULL
+);
+
+CREATE INDEX meal_weekly_menu_updated_at
+  ON meal_weekly_menu (updated_at DESC);
 
 CREATE TABLE meal_image (
   post_id TEXT NOT NULL,

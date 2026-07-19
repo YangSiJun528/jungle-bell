@@ -74,6 +74,11 @@ export interface MealsVersion {
   otherPosts: MealPost[];
 }
 
+export interface WeeklyMealMenu {
+  weekKey: string;
+  post: MealPost;
+}
+
 export type ArchiveMealImage = (candidate: MealImageCandidate) => Promise<MealImageAsset>;
 
 function epochMillisToIso(value: number | null | undefined): string | null {
