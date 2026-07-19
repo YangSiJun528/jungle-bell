@@ -207,6 +207,12 @@ if (!/<fieldset class="laundry-filter-group">\s*<legend class="laundry-filter-la
 if (!/\.weekly-meals\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/s.test(uiCss)) {
     errors.push('Pinned weekly menus must use a full-width single-column layout');
 }
+if (!campusHtml.includes('x-show="!currentWeeklyMenu()">이번 주 식단표가 아직 게시되지 않았습니다.')
+    || !campusHtml.includes('x-for="post in currentWeeklyMenu() ? [currentWeeklyMenu()] : []"')
+    || campusHtml.includes('meals?.data.pinnedMenus.length === 0')
+    || !campusTs.includes("return this.meals?.data.currentWeeklyMenu?.post ?? null;")) {
+    errors.push('The current weekly menu must use the server week verdict instead of the latest pinned post');
+}
 if (!/\.weekly-meal-image img\s*\{[^}]*height:\s*auto[^}]*object-fit:\s*contain/s.test(uiCss)) {
     errors.push('Pinned weekly menu images must preserve their full document aspect ratio');
 }

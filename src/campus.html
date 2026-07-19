@@ -165,9 +165,9 @@
 
                 <section aria-labelledby="weekly-meals-title">
                     <header class="ui-section-heading"><div><h2 id="weekly-meals-title">이번 주 식단표</h2><p x-text="mealWeekLabel()"></p></div></header>
-                    <p class="ui-empty-state compact" x-show="meals?.data.pinnedMenus.length === 0">게시된 주간 식단표가 없습니다.</p>
+                    <p class="ui-empty-state compact" x-show="!currentWeeklyMenu()">이번 주 식단표가 아직 게시되지 않았습니다.</p>
                     <div class="weekly-meals">
-                        <template x-for="(post, index) in meals?.data.pinnedMenus ?? []" :key="postKey(post, index)">
+                        <template x-for="post in currentWeeklyMenu() ? [currentWeeklyMenu()] : []" :key="postKey(post, 0)">
                             <article class="meal-card weekly-meal-card">
                                 <button type="button" class="meal-image-button weekly-meal-image" x-show="imageUrl(post)" :aria-label="`${post.title ?? '식단'} 이미지 크게 보기`" @click="openImage(post, $refs.imageDialog)"><img :src="imageUrl(post)" :alt="post.title ?? '식단 이미지'" :width="post.images?.[0]?.width" :height="post.images?.[0]?.height" loading="lazy"/></button>
                                 <span class="meal-image-empty weekly-meal-image" x-show="!imageUrl(post)">이미지 없음</span>
