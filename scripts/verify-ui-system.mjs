@@ -93,6 +93,9 @@ requireRule(/<footer class="grid min-h-12 flex-none grid-cols-3/.test(onboarding
 requireRule(campusHtml.includes('grid grid-cols-3 items-start gap-4'), 'Laundry cards must remain a three-column grid');
 requireRule(campusHtml.includes('grid-rows-[32px_96px_96px]'), 'Laundry cards must keep fixed header/appliance geometry');
 requireRule(/<table class="w-full table-fixed border-separate[^>]*>[\s\S]*?<caption class="sr-only">워시타워 번호별/s.test(campusHtml), 'Laundry overview must remain a semantic table');
+requireRule(campusTs.includes('laundryOverviewText(appliance)')
+    && campusHtml.includes('x-text="segment.overviewText"')
+    && campusHtml.includes("segment.state === 'error'"), 'Laundry overview must show only remaining time or Error for unavailable appliances');
 requireRule(campusHtml.includes("x-model=\"laundryAccess\"") && campusHtml.includes("x-model=\"laundryFilter\""), 'Laundry filter bindings are missing');
 for (const zone of ['men', 'common', 'women']) requireRule(campusHtml.includes(`bg-app-${zone}`), `Laundry ${zone} color is missing`);
 requireRule(campusHtml.includes("filteredMachines().length === 0") && campusHtml.includes('laundryEmptyMessage()'), 'Laundry filtered empty state is missing');

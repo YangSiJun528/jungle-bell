@@ -2,8 +2,35 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
     laundryAvailabilityState,
+    laundryOverviewText,
     summarizeLaundryAvailability,
 } from './laundry-status.ts';
+
+test('워시타워 요약은 사용 중인 기기의 잔여 시간을 HH:MM으로 표시한다', () => {
+    assert.equal(laundryOverviewText({
+        operationalStatus: 'RUNNING',
+        projection: {status: 'ESTIMATED_RUNNING', remainingMinutes: 5},
+    }), '00:05');
+    assert.equal(laundryOverviewText({
+        operationalStatus: 'RUNNING',
+        projection: {status: 'ESTIMATED_RUNNING', remainingMinutes: 65},
+    }), '01:05');
+});
+
+test('워시타워 요약은 오류와 정보 없음만 짧게 표시한다', () => {
+    assert.equal(laundryOverviewText({
+        operationalStatus: 'ERROR',
+        projection: {status: 'ERROR', remainingMinutes: 20},
+    }), 'Error');
+    assert.equal(laundryOverviewText(null), '--:--');
+});
+
+test('워시타워 요약은 사용 가능한 기기에 텍스트를 표시하지 않는다', () => {
+    assert.equal(laundryOverviewText({
+        operationalStatus: 'IDLE',
+        projection: {status: 'IDLE', remainingMinutes: 0},
+    }), '');
+});
 
 test('상세 projection이 완료이면 사용 가능 결과에 포함한다', () => {
     assert.equal(laundryAvailabilityState({
