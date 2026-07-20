@@ -184,6 +184,7 @@ const ACTIVE_STATUSES = new Set(['RUNNING', 'PAUSED', 'SCHEDULED']);
 const SIGNIFICANT_ETA_CHANGE_MINUTES = 5;
 const WASH_TOWER_COUNT = 9;
 const LAUNDRY_PREFERENCES_KEY = 'jungle-bell:campus:laundry-preferences';
+const CAMPUS_RECOVERY_INTERVAL_MS = 10_000;
 const KST_TIME_ZONE = 'Asia/Seoul';
 const APPLIANCE_ERROR_LABELS: Record<string, string> = {
     EMPTY_WATER_ALERT_ERROR: '배관 에러',
@@ -296,6 +297,9 @@ function campus(): Record<string, unknown> {
         retrying: false,
         clockNow: Date.now(),
         clockTimer: null as number | null,
+        recoveryTimer: null as number | null,
+        onlineRecoveryHandler: null as (() => void) | null,
+        refreshInFlight: {laundry: false, meals: false} as Record<CampusTab, boolean>,
         source: {
             laundry: {label: '세탁기 정보 확인 중', tone: 'neutral'},
             meals: {label: '식단 정보 확인 중', tone: 'neutral'},
@@ -307,6 +311,13 @@ function campus(): Record<string, unknown> {
             this.clockTimer = window.setInterval(() => {
                 this.clockNow = Date.now();
             }, 1000);
+            this.onlineRecoveryHandler = () => {
+                void this.recoverMissingData();
+            };
+            window.addEventListener('online', this.onlineRecoveryHandler);
+            this.recoveryTimer = window.setInterval(() => {
+                void this.recoverMissingData();
+            }, CAMPUS_RECOVERY_INTERVAL_MS);
             const rememberLaundryPreferences = () => saveLaundryPreferences({
                 access: this.laundryAccess,
                 filter: this.laundryFilter,
@@ -327,6 +338,7 @@ function campus(): Record<string, unknown> {
                     this.applyMealHistoryPage(event.payload);
                 }));
                 await invoke('report_campus_ready');
+                await this.recoverMissingData();
             } catch (error) {
                 console.error('[campus] Rust state connection failed', error);
                 this.applyError({kind: this.activeTab, message: String(error)});
@@ -336,6 +348,10 @@ function campus(): Record<string, unknown> {
         destroy(this: any) {
             if (this.clockTimer !== null) window.clearInterval(this.clockTimer);
             this.clockTimer = null;
+            if (this.recoveryTimer !== null) window.clearInterval(this.recoveryTimer);
+            this.recoveryTimer = null;
+            if (this.onlineRecoveryHandler) window.removeEventListener('online', this.onlineRecoveryHandler);
+            this.onlineRecoveryHandler = null;
             this.unlisteners.forEach((unlisten: UnlistenFn) => unlisten());
             this.unlisteners = [];
             delete window.setCampusTab;
@@ -347,6 +363,7 @@ function campus(): Record<string, unknown> {
             const url = new URL(window.location.href);
             url.searchParams.set('tab', tab);
             window.history.replaceState(null, '', url);
+            void this.recoverMissingData();
         },
 
         applySnapshot(this: any, update: CampusUpdate) {
@@ -388,14 +405,27 @@ function campus(): Record<string, unknown> {
 
         async retry(this: any) {
             if (this.retrying) return;
-            this.retrying = true;
+            await this.refreshCampusKind(this.activeTab, true);
+        },
+
+        async recoverMissingData(this: any) {
+            const kind = this.activeTab as CampusTab;
+            if (this.hasData(kind)) return;
+            await this.refreshCampusKind(kind, false);
+        },
+
+        async refreshCampusKind(this: any, kind: CampusTab, showRetrying: boolean) {
+            if (this.refreshInFlight[kind]) return;
+            this.refreshInFlight[kind] = true;
+            if (showRetrying) this.retrying = true;
             try {
-                await invoke('refresh_campus_data', {kind: this.activeTab});
+                await invoke('refresh_campus_data', {kind});
             } catch (error) {
-                console.error(`[campus] ${this.activeTab} retry failed`, error);
-                this.applyError({kind: this.activeTab, message: String(error)});
+                console.error(`[campus] ${kind} retry failed`, error);
+                this.applyError({kind, message: String(error)});
             } finally {
-                this.retrying = false;
+                this.refreshInFlight[kind] = false;
+                if (showRetrying) this.retrying = false;
             }
         },
 
