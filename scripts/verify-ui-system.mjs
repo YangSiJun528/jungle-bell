@@ -1,245 +1,135 @@
 import {existsSync, readFileSync} from 'node:fs';
 
-const spacingTokens = new Map([
-    ['--space-0', 0],
-    ['--space-half', 2],
-    ['--space-1', 4],
-    ['--space-2', 8],
-    ['--space-4', 16],
-    ['--space-6', 24],
-    ['--space-8', 32],
-    ['--space-12', 48],
-    ['--space-16', 64],
-    ['--space-24', 96],
-]);
-const approvedSpacing = new Set(spacingTokens.values());
-const uiCss = readFileSync(new URL('../src/ui.css', import.meta.url), 'utf8');
-const stylesCss = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
-const campusTs = readFileSync(new URL('../src/campus.ts', import.meta.url), 'utf8');
-const infoDisclosureTs = readFileSync(new URL('../src/info-disclosure.ts', import.meta.url), 'utf8');
-const trayRust = readFileSync(new URL('../src-tauri/src/tray.rs', import.meta.url), 'utf8');
-const htmlFiles = ['index.html', 'onboarding.html', 'campus.html'].map((name) => ({
-    name,
-    source: readFileSync(new URL(`../src/${name}`, import.meta.url), 'utf8'),
-}));
-const settingsHtml = htmlFiles.find(({name}) => name === 'index.html')?.source ?? '';
-const campusHtml = htmlFiles.find(({name}) => name === 'campus.html')?.source ?? '';
-const authoredStylesCss = stylesCss.split('END-SANITIZE')[1] ?? '';
-
+const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
+const uiCss = read('../src/ui.css');
+const stylesCss = read('../src/styles.css');
+const settingsHtml = read('../src/index.html');
+const onboardingHtml = read('../src/onboarding.html');
+const campusHtml = read('../src/campus.html');
+const campusTs = read('../src/campus.ts');
+const infoDisclosureTs = read('../src/info-disclosure.ts');
+const trayRust = read('../src-tauri/src/tray.rs');
+const htmlFiles = [
+    ['index.html', settingsHtml],
+    ['onboarding.html', onboardingHtml],
+    ['campus.html', campusHtml],
+];
 const errors = [];
-const spacingProperty = /^(?:margin(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?|padding(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?|gap|row-gap|column-gap|inset|top|right|bottom|left)$/;
+const requireRule = (condition, message) => { if (!condition) errors.push(message); };
 
+// The externally managed sanitize block and the small authored base layer must remain present.
+requireRule(stylesCss.includes('!! SANITIZE.CSS — DO NOT EDIT !!')
+    && stylesCss.includes('BEGIN-SANITIZE')
+    && stylesCss.includes('END-SANITIZE'), 'The managed sanitize.css block is missing or its boundary changed');
+requireRule(/\*,\s*\n::before,\s*\n::after\s*\{[^}]*box-sizing:\s*border-box;/s.test(stylesCss), 'Global border-box sizing is missing');
+requireRule(stylesCss.includes('@font-face') && stylesCss.includes('PretendardVariable.woff2'), 'Bundled Pretendard @font-face is missing');
+requireRule(stylesCss.includes('--font-family: "Pretendard", sans-serif;'), 'Pretendard must remain the exclusive UI font');
+requireRule(existsSync(new URL('../src/assets/fonts/Pretendard-LICENSE.txt', import.meta.url)), 'Pretendard license is missing');
+
+// Tailwind is the layout system. Only the explicitly permitted repeated patterns stay components.
+requireRule(uiCss.includes('@import "tailwindcss/utilities.css" layer(utilities);'), 'Tailwind utilities are not imported');
+const componentStart = uiCss.indexOf('@layer components {');
+const componentEnd = uiCss.indexOf('\n@media (prefers-reduced-motion', componentStart);
+const componentCss = componentStart >= 0 && componentEnd >= 0 ? uiCss.slice(componentStart, componentEnd) : '';
+const allowedComponents = new Set(['ui-button', 'ui-tab', 'ui-tooltip', 'ui-tooltip-popover']);
+for (const match of componentCss.matchAll(/\.(ui-[\w-]+)/g)) {
+    if (!allowedComponents.has(match[1])) errors.push(`Unexpected component class remains in @layer components: ${match[1]}`);
+}
+const legacyUiClass = /\bui-(?:page|shell|app-header|app-logo|page-heading|section-heading|settings|setting|action-row|field|select|choice|footer|info|alert|empty|content|spinner|eyebrow|note|state|onboarding)/;
+for (const [name, source] of htmlFiles) {
+    requireRule(!legacyUiClass.test(source), `src/${name} still uses a legacy ui-* layout class`);
+}
+requireRule(!/\.(?:laundry-grid|laundry-card|meal-card|meal-calendar|onboarding-panel)\s*\{/.test(uiCss), 'Page layout CSS must live in Tailwind utilities, not named selectors');
+
+// Global visual constraints.
+requireRule(!/@media\s*\(max-(?:width|height):/.test(uiCss), 'Fixed-size windows must not use viewport breakpoints');
+requireRule(!/transition\s*:\s*all\b/.test(uiCss), 'transition: all is forbidden');
+requireRule(!/#[0-9a-f]{3,8}\b/i.test(uiCss), 'ui.css contains a hardcoded hex color');
+requireRule(!/letter-spacing\s*:\s*-|tracking-\[\s*-/.test(`${uiCss}\n${htmlFiles.map(([, source]) => source).join('\n')}`), 'Negative letter spacing is forbidden');
+requireRule(!/rounded-(?:xl|2xl|3xl)/.test(htmlFiles.map(([, source]) => source).join('\n')), 'Cards and dialogs must not exceed an 8px radius');
+requireRule(!/--radius-(?:card|dialog)/.test(uiCss), 'Legacy card/dialog radius tokens must be removed');
+requireRule(/html\s*\{[^}]*overflow-y:\s*scroll[^}]*scrollbar-gutter:\s*stable/s.test(uiCss), 'Stable root scrollbar layout is missing');
+requireRule(/\*::\-webkit-scrollbar-thumb/.test(uiCss) && /scrollbar-width:\s*thin/.test(uiCss), 'Thin macOS-style scrollbar rules are missing');
+
+const spacingTokens = new Map([
+    ['--space-0', 0], ['--space-half', 2], ['--space-1', 4], ['--space-2', 8],
+    ['--space-4', 16], ['--space-6', 24], ['--space-8', 32], ['--space-12', 48],
+    ['--space-16', 64], ['--space-24', 96],
+]);
+for (const [token, value] of spacingTokens) requireRule(uiCss.includes(`${token}: ${value}px;`), `Spacing token ${token} is missing`);
+const spacingProperty = /^(?:margin(?:-(?:top|right|bottom|left))?|padding(?:-(?:top|right|bottom|left))?|gap|row-gap|column-gap|inset|top|right|bottom|left|width|height|min-width|min-height|max-width|max-height)$/;
+const approvedPixels = new Set([0, 2, 4, 8, 16, 24, 32, 48, 64, 96, 9998]);
 for (const declaration of uiCss.matchAll(/([-\w]+)\s*:\s*([^;}{]+)/g)) {
-    const [, property, valueSource] = declaration;
-    if (!spacingProperty.test(property)) continue;
-    for (const match of valueSource.matchAll(/(-?\d+(?:\.\d+)?)px/g)) {
-        const value = Number(match[1]);
-        if (!approvedSpacing.has(Math.abs(value))) {
-            const line = uiCss.slice(0, declaration.index).split('\n').length;
-            errors.push(`src/ui.css:${line} uses off-scale spacing ${match[0]} in ${property}: ${valueSource.trim()}`);
-        }
+    if (!spacingProperty.test(declaration[1])) continue;
+    for (const match of declaration[2].matchAll(/(-?\d+(?:\.\d+)?)px/g)) {
+        if (!approvedPixels.has(Math.abs(Number(match[1])))) errors.push(`src/ui.css uses off-scale fixed size ${match[0]} in ${declaration[1]}`);
     }
 }
 
-for (const [token, value] of spacingTokens) {
-    if (!uiCss.includes(`${token}: ${value}px;`)) errors.push(`Spacing token ${token}: ${value}px is missing from src/ui.css`);
+// Shared interaction primitives.
+for (const selector of [':hover', ':active', ':focus-visible', ':disabled', '[aria-current="page"]']) {
+    requireRule(uiCss.includes(selector), `Required interaction state ${selector} is missing`);
 }
-if (uiCss.includes('--space-3')) errors.push('The off-scale 12px spacing token must not be used');
+for (const [name, source] of htmlFiles) {
+    const selects = source.match(/<select\b/g) ?? [];
+    const hiddenSelects = source.match(/<select\s+hidden\b/g) ?? [];
+    const comboboxes = source.match(/role="combobox"\s+aria-haspopup="listbox"/g) ?? [];
+    requireRule(selects.length === hiddenSelects.length, `src/${name} contains a visible native select`);
+    requireRule(selects.length === comboboxes.length, `src/${name} has a custom select without combobox/listbox semantics`);
+}
+requireRule(/\.ui-switch::after/.test(uiCss) && /\.ui-progress::\-webkit-progress-value/.test(uiCss), 'Native switch/progress pseudo-element styling is missing');
 
-for (const [name, source] of [['src/ui.css', uiCss], ['src/styles.css', authoredStylesCss]]) {
-    for (const [index, line] of source.split('\n').entries()) {
-        for (const match of line.matchAll(/(-?\d+(?:\.\d+)?)px/g)) {
-            const value = Number(match[1]);
-            const isBorderToken = name === 'src/ui.css' && line.includes('--border-width: 1px');
-            if (Math.abs(value) % 2 !== 0 && !isBorderToken) {
-                errors.push(`${name}:${index + 1} uses an odd pixel value ${match[0]} in: ${line.trim()}`);
-            }
-        }
-    }
-}
+// Settings hierarchy and semantics.
+requireRule(/<nav[^>]*aria-label="설정 분류"/.test(settingsHtml), 'Settings tabs need a labelled nav');
+requireRule((settingsHtml.match(/<fieldset\b/g) ?? []).length >= 6 && (settingsHtml.match(/<legend\b/g) ?? []).length >= 6, 'Settings groups must use fieldset/legend');
+requireRule(settingsHtml.includes('text-base') && settingsHtml.includes('text-sm') && settingsHtml.includes('text-xs'), 'Settings text hierarchy is incomplete');
+requireRule(settingsHtml.includes('<details class="group') && settingsHtml.includes('온보딩 다시 보기'), 'Advanced diagnostics and onboarding action are missing');
+requireRule(/data-variant="text"/.test(settingsHtml), 'Settings text actions must use content-sized buttons');
 
-if (!uiCss.includes('--border-width: 1px;')
-    || /border(?:-(?:top|right|bottom|left))?:\s*1px/.test(uiCss)) {
-    errors.push('One-pixel borders must use the shared border-width token');
-}
-if (!/\*,\s*\n::before,\s*\n::after\s*\{[^}]*box-sizing:\s*border-box;/s.test(stylesCss)) {
-    errors.push('Global border-box sizing must keep one-pixel borders inside even component dimensions');
-}
+// Onboarding fixed skeleton and persistent actions.
+requireRule(onboardingHtml.includes('class="h-screen overflow-hidden') && onboardingHtml.includes('class="min-h-0 flex-1 overflow-hidden'), 'Onboarding must use a fixed non-scrolling frame');
+requireRule((onboardingHtml.match(/x-show="step === \d"/g) ?? []).length === 6, 'All six onboarding steps must remain present');
+requireRule(/<progress[^>]*aria-label="온보딩 진행률"/.test(onboardingHtml), 'Onboarding progress must use a labelled progress element');
+requireRule(/<footer class="grid min-h-12 flex-none grid-cols-3/.test(onboardingHtml), 'Onboarding actions must remain fixed below the step panel');
 
-if (/transition\s*:\s*all\b/.test(uiCss)) errors.push('transition: all is forbidden');
-if (/#[0-9a-f]{3,8}\b/i.test(uiCss)) errors.push('src/ui.css contains a hardcoded hex color');
-if (!/html\s*\{[^}]*background:\s*var\(--color-bg\)/s.test(uiCss)
-    || !/\*::\-webkit-scrollbar-corner\s*\{[^}]*background:\s*var\(--color-bg\)/s.test(uiCss)) {
-    errors.push('The root canvas and scrollbar corner must share the app background');
-}
-if (!stylesCss.includes('@font-face') || !stylesCss.includes('PretendardVariable.woff2')) errors.push('Bundled Pretendard @font-face is missing');
-if (!stylesCss.includes('--font-family: "Pretendard", sans-serif;')) errors.push('Pretendard is not the exclusive UI font family');
-if (!existsSync(new URL('../src/assets/fonts/Pretendard-LICENSE.txt', import.meta.url))) errors.push('Pretendard license is missing from the font assets');
+// Laundry structure, filtering, colors, fixed card geometry, and disclosures.
+requireRule(campusHtml.includes('grid grid-cols-3 items-start gap-4'), 'Laundry cards must remain a three-column grid');
+requireRule(campusHtml.includes('grid-rows-[32px_96px_96px]'), 'Laundry cards must keep fixed header/appliance geometry');
+requireRule(/<table class="w-full table-fixed border-separate[^>]*>[\s\S]*?<caption class="sr-only">워시타워 번호별/s.test(campusHtml), 'Laundry overview must remain a semantic table');
+requireRule(campusHtml.includes("x-model=\"laundryAccess\"") && campusHtml.includes("x-model=\"laundryFilter\""), 'Laundry filter bindings are missing');
+for (const zone of ['men', 'common', 'women']) requireRule(campusHtml.includes(`bg-app-${zone}`), `Laundry ${zone} color is missing`);
+requireRule(campusHtml.includes("filteredMachines().length === 0") && campusHtml.includes('laundryEmptyMessage()'), 'Laundry filtered empty state is missing');
+requireRule((campusHtml.match(/x-data="infoDisclosure"/g) ?? []).length >= 2
+    && campusHtml.includes('@keydown.escape.stop="dismiss()"')
+    && campusHtml.includes('@focusin="focus()"')
+    && campusHtml.includes('x-anchor.fixed.offset.8="$refs.trigger"'), 'Information tooltips must support focus, keyboard dismissal, and viewport anchoring');
+requireRule(/\.ui-tooltip-popover\s*\{[^}]*position:\s*fixed[^}]*max-height:\s*calc\(100vh - var\(--space-6\)\)[^}]*word-break:\s*keep-all/s.test(uiCss), 'Tooltip popovers must stay inside the viewport and preserve Korean words');
+requireRule(infoDisclosureTs.includes("const OPEN_EVENT = 'info-disclosure-open'") && infoDisclosureTs.includes('handlePeer(event:'), 'Shared information disclosure behavior is missing');
 
-for (const {name, source} of htmlFiles) {
-    for (const match of source.matchAll(/<select\b[^>]*>/g)) {
-        if (!/\shidden(?:\s|>)/.test(match[0])) errors.push(`src/${name} contains a visible native select: ${match[0]}`);
-    }
-    const triggerCount = (source.match(/class="ui-select-trigger"/g) ?? []).length;
-    const comboboxCount = (source.match(/class="ui-select-trigger" role="combobox" aria-haspopup="listbox"/g) ?? []).length;
-    if (triggerCount !== comboboxCount) errors.push(`src/${name} has a select trigger without combobox/listbox semantics`);
-}
+// Meal tabs, calendar, empty/error states, and dialog restoration.
+requireRule(/<nav[^>]*aria-label="급식 보기">[\s\S]*?>식단<\/button>[\s\S]*?>내역<\/button>/s.test(campusHtml), 'Meal tabs must retain 식단 and 내역');
+requireRule(/<table[^>]*aria-labelledby="meal-calendar-title">[\s\S]*?<caption class="sr-only"[^>]*급식 달력/s.test(campusHtml), 'Meal calendar must be a labelled table');
+requireRule(campusHtml.includes("['일', '월', '화', '수', '목', '금', '토']") && campusHtml.includes('table-fixed'), 'Meal calendar must keep seven fixed columns');
+requireRule(campusHtml.includes('이번 주 식단표가 아직 게시되지 않았습니다.') && campusHtml.includes('이 주차에 저장된 식단표가 없습니다.'), 'Weekly meal empty states are missing');
+requireRule(/<dialog class="image-dialog/.test(campusHtml) && campusHtml.includes('@cancel.prevent="closeImage'), 'Meal image viewer must use dialog with Escape handling');
+requireRule(campusTs.includes('imageDialogScroll = {left: window.scrollX, top: window.scrollY}')
+    && campusTs.includes('trigger?.focus({preventScroll: true})')
+    && campusTs.includes('window.scrollTo(scroll.left, scroll.top)'), 'Image dialog must restore trigger focus and scroll position');
 
-const requiredStateSelectors = [':hover', ':active', ':focus-visible', ':disabled', '[aria-selected="true"]', '[aria-current="page"]'];
-for (const selector of requiredStateSelectors) {
-    if (!uiCss.includes(selector)) errors.push(`Required interaction state ${selector} is missing`);
-}
+// Loading/error states, footer, and immutable window contracts.
+requireRule((campusHtml.match(/@click="retry\(\)"/g) ?? []).length === 2 && !campusHtml.includes('@click="refresh()"'), 'Campus retry controls must remain error-only');
+for (const [, source] of htmlFiles) requireRule(source.includes('aria-live="polite"') || source === onboardingHtml, 'Live loading/status feedback is missing');
+requireRule(settingsHtml.includes('aria-label="프로젝트 링크"') && campusHtml.includes('aria-label="프로젝트 링크"'), 'Shared project footer links are missing');
+requireRule(/const UTILITY_WINDOW_WIDTH:\s*f64\s*=\s*560\.0;/.test(trayRust)
+    && /const CONTENT_WINDOW_WIDTH:\s*f64\s*=\s*720\.0;/.test(trayRust)
+    && /const STANDARD_WINDOW_HEIGHT:\s*f64\s*=\s*720\.0;/.test(trayRust)
+    && /const ATTENDANCE_MIN_SIZE:\s*f64\s*=\s*640\.0;/.test(trayRust), 'Window size constants must remain 560/720/640');
+requireRule(/fn build_campus_window[\s\S]*?\.inner_size\(CONTENT_WINDOW_WIDTH, STANDARD_WINDOW_HEIGHT\)[\s\S]*?\.resizable\(false\)/s.test(trayRust), 'Campus window must remain fixed at 720x720');
+requireRule(/fn build_settings_window[\s\S]*?\.inner_size\(UTILITY_WINDOW_WIDTH, STANDARD_WINDOW_HEIGHT\)[\s\S]*?\.resizable\(false\)/s.test(trayRust), 'Settings window must remain fixed at 560x720');
+requireRule(/fn build_onboarding_window[\s\S]*?\.inner_size\(UTILITY_WINDOW_WIDTH, STANDARD_WINDOW_HEIGHT\)[\s\S]*?\.resizable\(false\)/s.test(trayRust), 'Onboarding window must remain fixed at 560x720');
+requireRule(/fn build_attendance_window[\s\S]*?\.inner_size\(CONTENT_WINDOW_WIDTH, STANDARD_WINDOW_HEIGHT\)[\s\S]*?\.min_inner_size\(ATTENDANCE_MIN_SIZE, ATTENDANCE_MIN_SIZE\)[\s\S]*?\.resizable\(true\)/s.test(trayRust), 'Attendance window size contract changed');
 
-if (!/<nav class="ui-tabs sub-tabs" aria-label="급식 보기">[\s\S]*?>식단<\/button>[\s\S]*?>내역<\/button>/s.test(campusHtml)
-    || campusHtml.includes('오늘·이번 주')
-    || campusHtml.includes('지난 식단')) {
-    errors.push('Meal sub-tabs must use the concise 식단 and 내역 labels');
-}
-if (!/machineName\(id:\s*string\)[\s\S]*?return number !== null \? `\$\{number\}번`/s.test(campusTs)) {
-    errors.push('Wash-tower cards must use number-only titles within the titled directory');
-}
-
-if (!/\.laundry-grid\s*\{[^}]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)[^}]*gap:\s*var\(--space-4\)/s.test(uiCss)) {
-    errors.push('The default wash-tower grid must show three columns');
-}
-if (!/<ul class="availability-key" aria-label="사용 가능한 구역과 이용 중 상태 색상">[\s\S]*?data-zone="men"[\s\S]*?data-zone="common"[\s\S]*?data-zone="women"[\s\S]*?<li data-state="unavailable"><i><\/i>이용 중<\/li>/s.test(campusHtml)
-    || campusHtml.includes('>사용 불가<')
-    || !/<section class="laundry-directory" aria-labelledby="laundry-title">[\s\S]*?<div class="laundry-overview" :data-access="laundryAccess" :data-filter="laundryFilter">[\s\S]*?<header class="ui-section-heading laundry-heading">\s*<h2 id="laundry-title">워시타워<\/h2>/s.test(campusHtml)
-    || campusHtml.includes('<p>번호별 세탁기·건조기 사용 가능 현황</p>')
-    || campusHtml.includes('laundry-overview-title')
-    || campusHtml.includes('>현재 사용 현황<')
-    || !/<table class="availability-layout">[\s\S]*?<caption class="sr-only">[\s\S]*?row in \[\{kind:'dryer', label:'건조기'\}, \{kind:'washer', label:'세탁기'\}\]/s.test(campusHtml)
-    || !/\.availability-layout td\[data-state="available"\]\[data-zone="men"\] \.availability-tower-state[^}]*background:\s*var\(--color-men\)/s.test(uiCss)
-    || !/\.availability-layout td\[data-state="available"\]\[data-zone="common"\] \.availability-tower-state[^}]*background:\s*var\(--color-common\)/s.test(uiCss)
-    || !/\.availability-layout td\[data-state="available"\]\[data-zone="women"\] \.availability-tower-state[^}]*background:\s*var\(--color-women\)/s.test(uiCss)
-    || !/\.availability-tower-state\s*\{[^}]*background:\s*var\(--color-text-faint\)/s.test(uiCss)
-    || !/\.laundry-overview\[data-access="men"\][^{]*\[data-zone="women"\][\s\S]*?\.laundry-overview\[data-access="women"\][^{]*\[data-zone="men"\][^}]*filter:\s*blur\(2px\)[^}]*opacity:\s*0\.24/s.test(uiCss)
-    || !/\.laundry-overview\[data-filter="washerAvailable"\][^{]*\[data-kind="dryer"\][\s\S]*?\.laundry-overview\[data-filter="dryerAvailable"\][^{]*\[data-kind="washer"\][^}]*filter:\s*blur\(2px\)[^}]*opacity:\s*0\.24/s.test(uiCss)
-    || /availability-layout td\[data-state="error"\][^}]*var\(--color-danger\)/s.test(uiCss)
-    || campusHtml.includes('availability-progress') || uiCss.includes('.availability-segments')) {
-    errors.push('Laundry overview must mirror the 1-9 tower layout and use zone colors only for available appliances');
-}
-if (!/<header class="ui-app-header campus-header">[\s\S]*?<aside class="header-source-state"\s+:data-tone="source\[activeTab\]\.tone"/s.test(campusHtml)
-    || /<header class="source-state"/.test(campusHtml)
-    || !/<details class="ui-info header-source-info"[^>]*x-data="infoDisclosure"[^>]*>[\s\S]*?<summary[^>]*@click\.prevent="toggle\(\)"[^>]*>i<\/summary>/s.test(campusHtml)
-    || !/\.header-source-state\s*\{[^}]*width:\s*240px[^}]*min-height:\s*var\(--space-12\)/s.test(uiCss)
-    || !/\.campus-tabs\s*\{[^}]*margin-bottom:\s*var\(--space-4\)/s.test(uiCss)) {
-    errors.push('Laundry and meal freshness must share the compact campus header status');
-}
-if (campusHtml.includes('refresh-button') || campusHtml.includes('@click="refresh()"')
-    || !campusHtml.includes('@click="retry()"') || !campusTs.includes('async retry(this: any)')) {
-    errors.push('Scheduled campus updates must not expose a manual refresh; retry is reserved for load failures');
-}
-if (!/completionConfirmationDelayed[\s\S]*?Date\.now\(\) > finishAt\.getTime\(\)/s.test(campusTs)
-    || !/status === 'AWAITING_COMPLETION_CONFIRMATION'[\s\S]*?\? \{label: '완료 확인 지연', tone: 'warning'\}[\s\S]*?: \{label: '작동 중', tone: 'normal'\}/s.test(campusTs)
-    || campusTs.includes('COMPLETION_CONFIRMATION_GRACE_MS')
-    || campusTs.includes('freshnessView(')
-    || !/label: this\.laundry\.quality\?\.lastCheckedAt[\s\S]*?`\$\{this\.relativeTime\([^)]*\)\} 갱신`/s.test(campusTs)) {
-    errors.push('Campus freshness must stay neutral and completion delay must begin immediately after the estimated finish time');
-}
-if (!infoDisclosureTs.includes("const OPEN_EVENT = 'info-disclosure-open'")
-    || !infoDisclosureTs.includes("const DISMISS_EVENT = 'info-disclosure-dismiss'")
-    || !/get visible\(\)[\s\S]*?this\.pinned/s.test(infoDisclosureTs)
-    || !/handlePeer[\s\S]*?event\.detail === this\.id/s.test(infoDisclosureTs)) {
-    errors.push('Information disclosures must share one Alpine interaction model');
-}
-const disclosureBindings = campusHtml.match(/x-data="infoDisclosure"/g) ?? [];
-if (disclosureBindings.length < 2
-    || !campusHtml.includes('@mouseenter="enter()"')
-    || !campusHtml.includes('@focusin="focus()"')
-    || !campusHtml.includes('@keydown.escape.stop="dismiss()"')
-    || !campusHtml.includes('@click.outside="dismiss()"')
-    || !campusHtml.includes('@info-disclosure-open.window="handlePeer($event)"')) {
-    errors.push('Header and appliance disclosures must support hover, focus, pinning, Escape, and mutual exclusion');
-}
-if (/@media[^{]*\{[\s\S]*?\.laundry-grid\s*\{/s.test(uiCss)) {
-    errors.push('The fixed-size wash-tower window must keep a three-column grid');
-}
-if (/@media\s*\(max-(?:width|height):/s.test(uiCss)) {
-    errors.push('Fixed-size app windows must not use viewport layout breakpoints');
-}
-if (!/\.laundry-card\s*\{[^}]*height:\s*208px[^}]*grid-template-rows:\s*var\(--space-8\)\s+minmax\(0,\s*1fr\)/s.test(uiCss)
-    || campusHtml.includes('appliance-error') || uiCss.includes('.appliance-error')
-    || !/<div class="appliance-status">[\s\S]*?<span class="status-badge"[\s\S]*?<details class="ui-info appliance-info"/s.test(campusHtml)) {
-    errors.push('Wash-tower cards must keep fixed geometry and place explanations beside the status badge');
-}
-if (!/\.ui-info summary\s*\{[^}]*width:\s*var\(--space-6\)[^}]*height:\s*var\(--space-6\)/s.test(uiCss)
-    || !/\.ui-info-popover\s*\{[^}]*position:\s*fixed[^}]*z-index:\s*40[^}]*max-height:\s*calc\(100vh - var\(--space-6\)\)[^}]*overflow-y:\s*auto[^}]*word-break:\s*keep-all/s.test(uiCss)
-    || (campusHtml.match(/x-anchor\.fixed\.offset\.8="\$refs\.trigger"/g) ?? []).length < 2
-    || (campusHtml.match(/x-ref="trigger"/g) ?? []).length < 2
-    || /\.appliance-info\.is-(?:above|below)/.test(uiCss)
-    || !/<code x-show="applianceInfo\([^)]*\)\?\.code"/s.test(campusHtml)) {
-    errors.push('Information buttons must be neutral 24px overlay disclosures with a separate technical code');
-}
-if (!/fn build_campus_window[\s\S]*?\.inner_size\(640\.0,\s*780\.0\)[\s\S]*?\.resizable\(false\)[\s\S]*?\.minimizable\(false\)[\s\S]*?\.maximizable\(false\)/s.test(trayRust)) {
-    errors.push('The campus WebView must use the fixed 640x780 layout');
-}
-if (campusHtml.includes('durationFormat') || campusHtml.includes('duration-control')) {
-    errors.push('Wash-tower time formatting must be automatic instead of user-configurable');
-}
-if (!/\.appliance-main\s*\{[^}]*display:\s*grid[^}]*height:\s*var\(--space-8\)[^}]*grid-template-columns:\s*96px\s+64px[^}]*justify-content:\s*space-between/s.test(uiCss)
-    || !/\.appliance-main strong\s*\{[^}]*width:\s*96px[^}]*grid-column:\s*1[^}]*grid-row:\s*1[^}]*font-size:\s*16px/s.test(uiCss)
-    || !/\.appliance-main small\s*\{[^}]*width:\s*64px[^}]*grid-column:\s*2[^}]*grid-row:\s*1[^}]*text-align:\s*right/s.test(uiCss)) {
-    errors.push('Remaining time and finish time must share one fixed-width row');
-}
-const applianceTimeRules = uiCss.match(/\.appliance-main (?:strong|small)\s*\{[^}]*\}/g) ?? [];
-if (applianceTimeRules.length !== 2 || applianceTimeRules.some((rule) => /text-overflow:\s*ellipsis|overflow:\s*hidden/.test(rule))) {
-    errors.push('Wash-tower time values must not be truncated');
-}
-if (!/<p class="appliance-main">[^<]*<strong[\s\S]*<progress class="ui-progress appliance-progress"/s.test(campusHtml)
-    || !/\.appliance-progress\s*\{[^}]*grid-column:\s*1\s*\/\s*-1[^}]*grid-row:\s*2/s.test(uiCss)
-    || /\.appliance-progress\s*\{[^}]*position:\s*absolute/s.test(uiCss)) {
-    errors.push('Appliance progress must appear below the time values instead of on the card edge');
-}
-if (!/\.ui-settings-group\s*\{[^}]*margin:\s*var\(--space-0\)[^}]*padding:\s*var\(--space-0\)[^}]*border:\s*var\(--space-0\)[^}]*background:\s*transparent/s.test(uiCss)
-    || !/\.ui-settings-group legend\s*\{[^}]*padding:\s*var\(--space-0\)[^}]*font-size:\s*16px[^}]*letter-spacing:\s*0/s.test(uiCss)
-    || !/\.ui-setting-row strong,[^{]*\{[^}]*font-size:\s*14px/s.test(uiCss)
-    || !/\.ui-setting-row small,[^{]*\{[^}]*font-size:\s*12px/s.test(uiCss)) {
-    errors.push('Settings groups must be unframed and use a 16px, 14px, and 12px hierarchy on the same left edge');
-}
-if (!/\.ui-shell-settings \.ui-tabs button,[\s\S]*?min-height:\s*var\(--space-8\)[^}]*padding:\s*var\(--space-2\)\s+var\(--space-2\)[^}]*font-size:\s*12px/s.test(uiCss)) {
-    errors.push('Settings text buttons must use the compact 32px control size');
-}
-if (!/<fieldset class="laundry-filter-group">\s*<legend class="laundry-filter-label">구역<\/legend>/s.test(campusHtml)
-    || !/<fieldset class="laundry-filter-group">\s*<legend class="laundry-filter-label">상태<\/legend>/s.test(campusHtml)
-    || !/\.laundry-filters\s*\{[^}]*padding:\s*var\(--space-2\)[^}]*border:\s*var\(--border-width\) solid var\(--color-border\)/s.test(uiCss)
-    || !/\.laundry-filter-group\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)[^}]*gap:\s*var\(--space-1\)/s.test(uiCss)
-    || !/\.laundry-filters \.ui-choice-group\s*\{[^}]*gap:\s*var\(--space-2\)/s.test(uiCss)) {
-    errors.push('Laundry filters must use compact, semantic controls inside one divided block');
-}
-if (!/\.weekly-meals\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/s.test(uiCss)) {
-    errors.push('Pinned weekly menus must use a full-width single-column layout');
-}
-if (!campusHtml.includes('x-show="!currentWeeklyMenu()">이번 주 식단표가 아직 게시되지 않았습니다.')
-    || !campusHtml.includes('x-for="post in currentWeeklyMenu() ? [currentWeeklyMenu()] : []"')
-    || campusHtml.includes('meals?.data.pinnedMenus.length === 0')
-    || !campusTs.includes("return this.meals?.data.currentWeeklyMenu?.post ?? null;")) {
-    errors.push('The current weekly menu must use the server week verdict instead of the latest pinned post');
-}
-if (!/\.weekly-meal-image img\s*\{[^}]*height:\s*auto[^}]*object-fit:\s*contain/s.test(uiCss)) {
-    errors.push('Pinned weekly menu images must preserve their full document aspect ratio');
-}
-if (!settingsHtml.includes('attendance-notification')
-    || !settingsHtml.includes('notification-schedule')
-    || !settingsHtml.includes('notification-actions')
-    || settingsHtml.includes('notification-exceptions')
-    || settingsHtml.includes('notification-permission')
-    || settingsHtml.includes('attendance-settings')) {
-    errors.push('Notification settings must combine attendance controls into one compact hierarchy');
-}
-if (!settingsHtml.includes('<details class="ui-settings-advanced">')
-    || !settingsHtml.includes('<legend>개인정보</legend>')
-    || !settingsHtml.includes('온보딩 다시 보기')) {
-    errors.push('App settings must keep privacy visible and diagnostics inside the advanced disclosure');
-}
-if (!settingsHtml.includes('<footer class="ui-footer">') || !campusHtml.includes('<footer class="ui-footer">')) {
-    errors.push('Project links must remain available through the shared footer');
-}
-if (!/fn build_settings_window[\s\S]*?\.inner_size\(448\.0,\s*680\.0\)[\s\S]*?\.resizable\(false\)/s.test(trayRust)) {
-    errors.push('The settings WebView must use the fixed 448x680 layout');
-}
-
-if (errors.length > 0) {
+if (errors.length) {
     console.error(errors.join('\n'));
     process.exitCode = 1;
 } else {
