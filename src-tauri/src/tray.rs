@@ -23,6 +23,11 @@ use tauri::{
 const ATTENDANCE_URL: &str = "https://jungle-lms.krafton.com/check-in";
 const FEEDBACK_URL: &str = "https://github.com/YangSiJun528/jungle-bell/issues/new/choose";
 
+const UTILITY_WINDOW_WIDTH: f64 = 560.0;
+const CONTENT_WINDOW_WIDTH: f64 = 720.0;
+const STANDARD_WINDOW_HEIGHT: f64 = 720.0;
+const ATTENDANCE_MIN_SIZE: f64 = 640.0;
+
 /// 출석 페이지 닫힌 후 로그인 재시도 윈도우 (초). 3분간 빠르게 재확인.
 const LOGIN_RETRY_WINDOW_SECS: u64 = 180;
 
@@ -357,7 +362,8 @@ fn build_attendance_window(app: &tauri::AppHandle) {
         tauri::WebviewUrl::External(ATTENDANCE_URL.parse().unwrap()),
     )
     .title("Jungle Compass")
-    .inner_size(660.0, 700.0)
+    .inner_size(CONTENT_WINDOW_WIDTH, STANDARD_WINDOW_HEIGHT)
+    .min_inner_size(ATTENDANCE_MIN_SIZE, ATTENDANCE_MIN_SIZE)
     .resizable(true)
     .focused(true)
     .build()
@@ -401,7 +407,7 @@ fn build_campus_window(app: &tauri::AppHandle, tab: CampusTab) {
         tauri::WebviewUrl::App(format!("campus.html?tab={}", tab.as_str()).into()),
     )
     .title("생활 정보")
-    .inner_size(640.0, 780.0)
+    .inner_size(CONTENT_WINDOW_WIDTH, STANDARD_WINDOW_HEIGHT)
     .resizable(false)
     .minimizable(false)
     .maximizable(false)
@@ -438,7 +444,7 @@ fn build_settings_window(app: &tauri::AppHandle) {
     show_foreground_app(app);
     if let Ok(window) = tauri::WebviewWindowBuilder::new(app, "settings", tauri::WebviewUrl::App("index.html".into()))
         .title("설정")
-        .inner_size(448.0, 680.0)
+        .inner_size(UTILITY_WINDOW_WIDTH, STANDARD_WINDOW_HEIGHT)
         .resizable(false)
         .minimizable(false)
         .maximizable(false)
@@ -460,7 +466,7 @@ fn build_onboarding_window(app: &tauri::AppHandle) {
     if let Ok(window) =
         tauri::WebviewWindowBuilder::new(app, "onboarding", tauri::WebviewUrl::App("onboarding.html".into()))
             .title("Jungle Bell 시작하기")
-            .inner_size(560.0, 784.0)
+            .inner_size(UTILITY_WINDOW_WIDTH, STANDARD_WINDOW_HEIGHT)
             .resizable(false)
             .minimizable(false)
             .maximizable(false)
