@@ -12,7 +12,6 @@ import {
     laundryStartAt,
     laundryZoneMatchesAccess,
     summarizeLaundryAvailability,
-    UNKNOWN_LAUNDRY_STARTED_AT,
 } from './laundry-status';
 import {sortMealPostsByPeriod} from './meal-display';
 
@@ -703,13 +702,6 @@ function campus(): Record<string, unknown> {
 
         startAt(appliance?: Appliance | null) {
             return laundryStartAt(appliance);
-        },
-
-        startText(this: any, appliance?: Appliance | null) {
-            const startedAt = this.startAt(appliance);
-            return startedAt === UNKNOWN_LAUNDRY_STARTED_AT
-                ? '1970년 시작'
-                : `${this.formatClock(startedAt)} 시작`;
         },
 
         progress(this: any, appliance?: Appliance | null) {

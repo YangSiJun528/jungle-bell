@@ -48,7 +48,7 @@ test('상세 화면은 수집기가 기록한 시작 시각만 사용한다', ()
         startedAt: '2026-07-20T05:50:02.020Z',
         projection: {status: 'ESTIMATED_RUNNING', remainingMinutes: 76},
     }), '2026-07-20T05:50:02.020Z');
-    assert.equal(laundryStartAt({estimatedFinishAt: '2026-07-20T07:26:02.020Z'}), '1970-01-01T00:00:00.000Z');
+    assert.equal(laundryStartAt({estimatedFinishAt: '2026-07-20T07:26:02.020Z'}), null);
 });
 
 test('세부 작동 상태를 우선하고 일반 RUNNING은 기기 종류에 맞게 표시한다', () => {
