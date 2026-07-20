@@ -99,7 +99,7 @@ requireRule(campusHtml.includes("filteredMachines().length === 0") && campusHtml
 requireRule((campusHtml.match(/x-data="infoDisclosure"/g) ?? []).length >= 2
     && campusHtml.includes('@keydown.escape.stop="dismiss()"')
     && campusHtml.includes('@focusin="focus()"')
-    && campusHtml.includes('x-anchor.fixed.offset.16="$refs.trigger"'), 'Information tooltips must support focus, keyboard dismissal, and spaced viewport anchoring');
+    && campusHtml.includes('x-anchor.fixed.bottom-end.offset.16="$refs.trigger"'), 'Information tooltips must support focus, keyboard dismissal, and inward viewport anchoring');
 requireRule(campusHtml.includes('fixed z-40 max-h-[calc(100vh-32px)] w-[min(40vw,calc(100vw-32px))]')
     && campusHtml.includes('[word-break:keep-all]')
     && campusHtml.includes('x-transition:enter="transition ease-out duration-200"'), 'Pines tooltips must stay inside the viewport, animate, and preserve Korean words');
