@@ -30,12 +30,15 @@ export function laundryAvailabilityState(
     }
 
     if (projectionStatus) {
-        return projectionStatus === 'IDLE' && operationalStatus !== 'SCHEDULED'
+        return projectionStatus === 'CONFIRMED_COMPLETED'
+            || (projectionStatus === 'IDLE' && operationalStatus !== 'SCHEDULED')
             ? 'available'
             : 'unavailable';
     }
 
-    return operationalStatus === 'IDLE' ? 'available' : 'unavailable';
+    return operationalStatus === 'IDLE' || operationalStatus === 'COMPLETED'
+        ? 'available'
+        : 'unavailable';
 }
 
 export function laundryZoneMatchesAccess(

@@ -5,11 +5,11 @@ import {
     summarizeLaundryAvailability,
 } from './laundry-status.ts';
 
-test('상세 projection이 완료이면 operationalStatus가 IDLE이어도 사용 가능으로 집계하지 않는다', () => {
+test('상세 projection이 완료이면 사용 가능 결과에 포함한다', () => {
     assert.equal(laundryAvailabilityState({
-        operationalStatus: 'IDLE',
+        operationalStatus: 'COMPLETED',
         projection: {status: 'CONFIRMED_COMPLETED'},
-    }), 'unavailable');
+    }), 'available');
 });
 
 test('상세 projection이 작동 중이면 operationalStatus가 IDLE이어도 사용 가능으로 집계하지 않는다', () => {
@@ -39,6 +39,7 @@ test('예약과 오류는 상세 상태와 동일하게 사용 불가 또는 오
 
 test('projection이 없는 구형 응답은 operationalStatus로 판정한다', () => {
     assert.equal(laundryAvailabilityState({operationalStatus: 'IDLE'}), 'available');
+    assert.equal(laundryAvailabilityState({operationalStatus: 'COMPLETED'}), 'available');
     assert.equal(laundryAvailabilityState({operationalStatus: 'RUNNING'}), 'unavailable');
 });
 
