@@ -88,6 +88,11 @@ pub struct CheckerRuntime {
     pub ready_generation: u64,
     pub report_generation: u64,
     pub no_report_recreates: u32,
+    /// 마지막으로 로드를 완료한 checker 페이지 URL.
+    ///
+    /// macOS WKWebView는 네트워크 오류 중 `URL()`이 `nil`일 수 있으므로,
+    /// 갱신 방식 결정에 네이티브 URL 조회를 사용하지 않는다.
+    pub last_loaded_url: Option<String>,
     pub status: CheckerRuntimeStatus,
 }
 
@@ -98,6 +103,7 @@ impl Default for CheckerRuntime {
             ready_generation: 0,
             report_generation: 0,
             no_report_recreates: 0,
+            last_loaded_url: None,
             status: CheckerRuntimeStatus::Loading,
         }
     }
