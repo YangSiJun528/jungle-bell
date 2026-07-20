@@ -45,15 +45,22 @@ describe("laundry change detection", () => {
     expect(adjusted.machines[0]?.washer?.startedAt).toBe("2026-07-17T00:05:00.000Z");
   });
 
-  it("does not invent a start time when the first snapshot is already running", () => {
+  it("uses an obvious historical sentinel when the start was not observed", () => {
     const first = normalizeLaundry(
       laundry("WASHING", 60),
       "a".repeat(64),
       "2026-07-17T00:05:00.000Z",
       null,
     );
+    const idle = normalizeLaundry(
+      laundry("POWER_OFF", 0),
+      "b".repeat(64),
+      "2026-07-17T00:10:00.000Z",
+      null,
+    );
 
-    expect(first.machines[0]?.washer?.startedAt).toBeNull();
+    expect(first.machines[0]?.washer?.startedAt).toBe("1970-01-01T00:00:00.000Z");
+    expect(idle.machines[0]?.washer?.startedAt).toBe("1970-01-01T00:00:00.000Z");
   });
 
   it.each([
