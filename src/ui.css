@@ -967,35 +967,6 @@
     to { transform: rotate(360deg); }
 }
 
-@media (max-width: 540px) {
-    .ui-page { padding: var(--space-2); }
-    .ui-page.settings-page { padding-bottom: var(--space-0); }
-    .today-meals { grid-template-columns: 1fr; }
-    .today-meal-content { grid-template-columns: 40% minmax(0, 1fr); }
-}
-
-@media (max-width: 420px) {
-    .ui-page { padding: var(--space-2); }
-    .ui-page.settings-page { padding-bottom: var(--space-0); }
-    .ui-tabs button { padding: var(--space-2); }
-    .ui-setting-controls { grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
-    .onboarding-slide { padding: var(--space-6); }
-    .onboarding-copy h2 { font-size: 22px; }
-    .tray-status-key li { flex-direction: column; }
-    .today-meal-content { grid-template-columns: 1fr; }
-    .today-meal-image { min-height: 192px; }
-    .recent-meal-row { grid-template-columns: var(--space-16) minmax(0, 1fr); }
-    .recent-meal-image { width: var(--space-16); height: var(--space-16); }
-    .recent-meal-row > .ui-text-button { grid-column: 2; justify-self: start; }
-}
-
-@media (max-height: 680px) {
-    .onboarding-slide { padding: var(--space-4); }
-    .onboarding-copy { margin-bottom: var(--space-4); }
-    .scenario-stage, .scenario-stage.compact { min-height: 224px; }
-    .scenario-mock { height: 224px; }
-}
-
 @media (prefers-reduced-motion: reduce) {
     *,
     *::before,

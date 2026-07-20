@@ -155,6 +155,9 @@ if (disclosureBindings.length < 2
 if (/@media[^{]*\{[\s\S]*?\.laundry-grid\s*\{/s.test(uiCss)) {
     errors.push('The fixed-size wash-tower window must keep a three-column grid');
 }
+if (/@media\s*\(max-(?:width|height):/s.test(uiCss)) {
+    errors.push('Fixed-size app windows must not use viewport layout breakpoints');
+}
 if (!/\.laundry-card\s*\{[^}]*height:\s*208px[^}]*grid-template-rows:\s*var\(--space-8\)\s+minmax\(0,\s*1fr\)/s.test(uiCss)
     || campusHtml.includes('appliance-error') || uiCss.includes('.appliance-error')
     || !/<div class="appliance-status">[\s\S]*?<span class="status-badge"[\s\S]*?<details class="ui-info appliance-info"/s.test(campusHtml)) {
