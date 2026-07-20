@@ -1,0 +1,1 @@
+* * * * * flock --nonblock /tmp/jungle-bell-collector.lock node /app/dist/collector/collector.js collect

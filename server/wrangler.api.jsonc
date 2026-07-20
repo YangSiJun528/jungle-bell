@@ -4,7 +4,6 @@
   "main": "src/workers/api.ts",
   "compatibility_date": "2026-07-14",
   "observability": { "enabled": true },
-  "triggers": { "crons": ["* * * * *"] },
   "d1_databases": [
     {
       "binding": "DB",

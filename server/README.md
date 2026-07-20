@@ -1,13 +1,14 @@
 # Jungle Bell server
 
-세탁기 상태와 카카오 채널 식단 데이터를 수집하고 공개 API로 제공하는 Cloudflare Workers 서버입니다.
+세탁기 상태와 카카오 채널 식단 데이터를 수집하고 Cloudflare API로 제공하는 서버입니다.
 
 - `src/collector/`: 수집, 정규화, 투영 로직입니다.
-- `src/workers/collector.ts`: 매분 원본 3개를 순차 요청하고 원본, 이미지, 수집 commit을 R2에 백업합니다.
-- `src/workers/api.ts`: R2의 최신 commit을 D1 조회 모델에 반영하고 캐시 가능한 HTTP API를 제공합니다.
-- `src/workers/`: Cloudflare 환경 설정과 R2 백업/D1 조회 어댑터, 로깅을 관리합니다.
+- `src/node/`: OCI에서 실행되는 Collector와 D1 REST/R2 S3 저장기입니다.
+- `src/storage/`: 수집 commit을 D1 조회 모델로 변환하는 공용 query builder입니다.
+- `src/workers/api.ts`: D1/R2를 읽어 캐시 가능한 HTTP API를 제공하는 Cloudflare Worker입니다.
+- `src/workers/`: API Worker의 D1/R2 조회 어댑터와 로깅을 관리합니다.
 
-Collector Worker에는 D1 바인딩이 없습니다. 수집 로직은 `R2Bucket`에 원본과 복구 데이터를 직접 저장합니다. API Worker의 scheduled 핸들러는 R2의 `collector/latest/*.json` commit을 `CloudflareApiStorage`로 D1에 반영합니다. 따라서 API 배포나 D1 초기화 중에도 원본 수집은 중단되지 않습니다.
+OCI Collector는 세탁실을 매분, 카카오 API 두 개를 5분마다 한 프로세스 안에서 순차 요청합니다. 원본 JSON, 정규화본, 이미지, 수집 commit은 R2 S3 API로 저장하고 상태, 분 단위 관측, 세탁 이벤트, 식단 인덱스는 D1 REST API batch로 직접 저장합니다. Cloudflare Collector Worker와 Ingest Worker는 사용하지 않습니다.
 
 원본 전체 JSON은 RFC 8785 방식으로 정규화한 뒤 SHA-256을 계산합니다. 직전 SHA와 같으면 원본, 정규화본, 이미지는 다시 저장하지 않고 해당 분의 관측 결과와 실행 로그만 남깁니다. 카카오의 pinned 포함 API와 기본 API는 응답이 같아도 별도 소스로 기록합니다.
 
@@ -16,6 +17,7 @@ Collector Worker에는 D1 바인딩이 없습니다. 수집 로직은 `R2Bucket`
 ## 문서
 
 - [Cloudflare 배포](docs/guide-deploy-cloudflare.md)
+- [OCI Collector 배포](docs/guide-deploy-oci-collector.md)
 - [HTTP API 레퍼런스](docs/api-reference.md)
 
 ## D1 초기화

@@ -1,45 +1,70 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { collectAll } from "../src/collector/collector";
-import type { CollectionCommit, CollectorOptions, SourceName, SourceState } from "../src/collector/types";
+import { collectAll, collectSources } from "../src/collector/collector";
+import type {
+  BinaryObject,
+  CollectionCommit,
+  CollectorOptions,
+  CollectorStorage,
+  SourceName,
+  SourceState,
+} from "../src/collector/types";
 
-class MemoryBucket {
-  readonly bucket = this as unknown as R2Bucket;
+class MemoryStorage implements CollectorStorage {
   objects = new Map<string, string | Uint8Array>();
+  states = new Map<SourceName, SourceState>();
   rawWrites: string[] = [];
+  committed: CollectionCommit[] = [];
 
-  async put(key: string, value: string | Uint8Array): Promise<object> {
-    this.objects.set(key, value);
-    if (key.startsWith("raw/") || key.startsWith("latest/raw/")) this.rawWrites.push(key);
-    return {};
+  async readState(source: SourceName): Promise<SourceState | null> {
+    return this.states.get(source) ?? null;
   }
 
-  async get(key: string): Promise<object | null> {
+  async readJson<T>(key: string): Promise<T | null> {
+    const value = this.objects.get(key);
+    if (typeof value !== "string") return null;
+    return JSON.parse(value) as T;
+  }
+
+  async writeJson(key: string, value: unknown): Promise<void> {
+    this.objects.set(key, JSON.stringify(value));
+  }
+
+  async writeRaw(key: string, value: string): Promise<void> {
+    this.objects.set(key, value);
+    this.rawWrites.push(key);
+  }
+
+  async objectExists(key: string): Promise<boolean> {
+    return this.objects.has(key);
+  }
+
+  async writeBinary(key: string, object: BinaryObject): Promise<void> {
+    this.objects.set(key, object.body);
+  }
+
+  async commit(commit: CollectionCommit): Promise<void> {
+    this.committed.push(structuredClone(commit));
+    this.states.set(commit.state.source, structuredClone(commit.state));
+  }
+
+  objectText(key: string): string | null {
     const value = this.objects.get(key);
     if (value === undefined) return null;
     const text = typeof value === "string" ? value : new TextDecoder().decode(value);
-    return {
-      text: async () => text,
-      json: async <T>() => JSON.parse(text) as T,
-    };
-  }
-
-  async head(key: string): Promise<object | null> {
-    return this.objects.has(key) ? {} : null;
+    return text;
   }
 
   json<T>(key: string): T | null {
-    const value = this.objects.get(key);
-    return typeof value === "string" ? JSON.parse(value) as T : null;
+    const value = this.objectText(key);
+    return value ? JSON.parse(value) as T : null;
   }
 
   state(source: SourceName): SourceState | null {
-    return this.json<SourceState>(`collector/state/${source}.json`);
+    return this.states.get(source) ?? null;
   }
 
   commits(): CollectionCommit[] {
-    return [...this.objects]
-      .filter(([key]) => key.startsWith("collector/commits/"))
-      .map(([, value]) => JSON.parse(value as string) as CollectionCommit);
+    return this.committed;
   }
 }
 
@@ -70,7 +95,7 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("collectAll", () => {
   it("requests sources sequentially and only stores new JSON versions", async () => {
-    const storage = new MemoryBucket();
+    const storage = new MemoryStorage();
     const order: string[] = [];
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = input instanceof Request ? input.url : String(input);
@@ -92,8 +117,8 @@ describe("collectAll", () => {
       return new Response(JSON.stringify(value), { status: 200, headers: { "Content-Type": "application/json" } });
     });
 
-    const first = await collectAll(storage.bucket, options, new Date("2026-07-17T00:00:30.000Z"));
-    const second = await collectAll(storage.bucket, options, new Date("2026-07-17T00:01:30.000Z"));
+    const first = await collectAll(storage, options, new Date("2026-07-17T00:00:30.000Z"));
+    const second = await collectAll(storage, options, new Date("2026-07-17T00:01:30.000Z"));
     const commits = storage.commits();
 
     expect(fetchMock).toHaveBeenCalledTimes(6);
@@ -120,7 +145,7 @@ describe("collectAll", () => {
   });
 
   it("does not overwrite an earlier normalized occurrence when a raw SHA returns", async () => {
-    const storage = new MemoryBucket();
+    const storage = new MemoryStorage();
     let call = 0;
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const run = Math.floor(call / 3);
@@ -133,10 +158,10 @@ describe("collectAll", () => {
       return new Response(JSON.stringify(value), { status: 200, headers: { "Content-Type": "application/json" } });
     });
 
-    await collectAll(storage.bucket, options, new Date("2026-07-17T00:00:00.000Z"));
+    await collectAll(storage, options, new Date("2026-07-17T00:00:00.000Z"));
     const firstKey = storage.state("laundry")?.lastNormalizedKey;
-    await collectAll(storage.bucket, options, new Date("2026-07-17T00:01:00.000Z"));
-    await collectAll(storage.bucket, options, new Date("2026-07-17T00:02:00.000Z"));
+    await collectAll(storage, options, new Date("2026-07-17T00:01:00.000Z"));
+    await collectAll(storage, options, new Date("2026-07-17T00:02:00.000Z"));
     const recurringKey = storage.state("laundry")?.lastNormalizedKey;
 
     expect(firstKey).toBeTruthy();
@@ -144,5 +169,28 @@ describe("collectAll", () => {
     expect(recurringKey).not.toBe(firstKey);
     expect(storage.objects.has(firstKey ?? "")).toBe(true);
     expect(storage.objects.has(recurringKey ?? "")).toBe(true);
+  });
+
+  it("collects only requested sources while preserving source order", async () => {
+    const storage = new MemoryStorage();
+    const order: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = input instanceof Request ? input.url : String(input);
+      order.push(url);
+      return new Response(JSON.stringify({ has_next: false, items: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+
+    const result = await collectSources(
+      storage,
+      options,
+      ["meals-include-pinned", "meals-default"],
+      new Date("2026-07-17T00:05:00.000Z"),
+    );
+
+    expect(order).toEqual([options.urls.mealsIncludePinned, options.urls.mealsDefault]);
+    expect(result.results.map(({ source }) => source)).toEqual(["meals-include-pinned", "meals-default"]);
   });
 });
