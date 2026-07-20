@@ -108,6 +108,7 @@ requireRule(infoDisclosureTs.includes("const OPEN_EVENT = 'info-disclosure-open'
 
 // Meal tabs, calendar, empty/error states, and dialog restoration.
 requireRule(/<nav[^>]*aria-label="급식 보기">[\s\S]*?>식단<\/button>[\s\S]*?>내역<\/button>/s.test(campusHtml), 'Meal tabs must retain 식단 and 내역');
+requireRule(campusHtml.includes('class="grid grid-cols-2 gap-4" x-show="mealsServedToday()"'), 'Today lunch and dinner cards must keep the compact 16px gap');
 requireRule(/<table[^>]*aria-labelledby="meal-calendar-title">[\s\S]*?<caption class="sr-only"[^>]*급식 달력/s.test(campusHtml), 'Meal calendar must be a labelled table');
 requireRule(campusHtml.includes("['일', '월', '화', '수', '목', '금', '토']") && campusHtml.includes('table-fixed'), 'Meal calendar must keep seven fixed columns');
 requireRule((campusTs.match(/sortMealPostsByPeriod\(/g) ?? []).length >= 2, 'Calendar meal indicators and selected posts must sort lunch before dinner');
