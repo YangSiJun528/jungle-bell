@@ -99,10 +99,11 @@ requireRule(campusHtml.includes("filteredMachines().length === 0") && campusHtml
 requireRule((campusHtml.match(/x-data="infoDisclosure"/g) ?? []).length >= 2
     && campusHtml.includes('@keydown.escape.stop="dismiss()"')
     && campusHtml.includes('@focusin="focus()"')
-    && campusHtml.includes('x-anchor.fixed.offset.8="$refs.trigger"'), 'Information tooltips must support focus, keyboard dismissal, and viewport anchoring');
-requireRule(campusHtml.includes('fixed z-40 max-h-[calc(100vh-24px)]')
+    && campusHtml.includes('x-anchor.fixed.offset.16="$refs.trigger"'), 'Information tooltips must support focus, keyboard dismissal, and spaced viewport anchoring');
+requireRule(campusHtml.includes('fixed z-40 max-h-[calc(100vh-32px)] w-[min(40vw,calc(100vw-32px))]')
     && campusHtml.includes('[word-break:keep-all]')
     && campusHtml.includes('x-transition:enter="transition ease-out duration-200"'), 'Pines tooltips must stay inside the viewport, animate, and preserve Korean words');
+requireRule(/<aside class="[^"]*pr-2[^"]*"[^>]*:data-tone="source\[activeTab\]\.tone"/.test(campusHtml), 'Header information control must keep extra distance from the scrollbar edge');
 requireRule(infoDisclosureTs.includes("const OPEN_EVENT = 'info-disclosure-open'") && infoDisclosureTs.includes('handlePeer(event:'), 'Shared information disclosure behavior is missing');
 
 // Meal tabs, calendar, empty/error states, and dialog restoration.
