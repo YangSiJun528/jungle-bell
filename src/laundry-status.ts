@@ -1,6 +1,7 @@
 export type LaundryAvailabilityState = 'available' | 'error' | 'unavailable';
 export type LaundryAccess = 'all' | 'men' | 'women';
 export type LaundryMachineZone = 'men' | 'common' | 'women' | 'other';
+export const UNKNOWN_LAUNDRY_STARTED_AT = '1970-01-01T00:00:00.000Z';
 
 export interface LaundryStatusAppliance {
     appliance?: string;
@@ -83,9 +84,9 @@ export function laundryRemainingText(appliance?: LaundryStatusAppliance | null):
     return `${value}분`;
 }
 
-export function laundryStartAt(appliance?: LaundryStatusAppliance | null): string | null {
+export function laundryStartAt(appliance?: LaundryStatusAppliance | null): string {
     const startedAt = appliance?.startedAt;
-    return startedAt && Number.isFinite(Date.parse(startedAt)) ? startedAt : null;
+    return startedAt && Number.isFinite(Date.parse(startedAt)) ? startedAt : UNKNOWN_LAUNDRY_STARTED_AT;
 }
 
 export function laundryOperationLabel(appliance?: LaundryStatusAppliance | null): string | undefined {

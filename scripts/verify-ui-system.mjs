@@ -99,8 +99,9 @@ requireRule(campusTs.includes('laundryOverviewText(appliance)')
     && !campusHtml.includes("'border-app-danger bg-app-danger': segment.state === 'error'"), 'Laundry overview must preserve available zone colors and use gray cells for remaining time or ERROR');
 requireRule(campusTs.includes('laundryRemainingText(appliance)')
     && campusTs.includes('laundryOperationLabel(appliance)')
+    && campusTs.includes("'1970년 시작'")
+    && campusTs.includes('`${this.formatClock(startedAt)} 시작`')
     && campusHtml.includes('x-show="startAt(entry.appliance)"')
-    && campusHtml.includes(' 시작`')
     && campusHtml.includes(' 종료`'), 'Laundry cards must show concrete states, available wording, and start/end times');
 requireRule(campusHtml.includes("x-model=\"laundryAccess\"") && campusHtml.includes("x-model=\"laundryFilter\""), 'Laundry filter bindings are missing');
 for (const zone of ['men', 'common', 'women']) requireRule(campusHtml.includes(`bg-app-${zone}`), `Laundry ${zone} color is missing`);
