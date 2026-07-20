@@ -21,6 +21,41 @@ function laundry(state: string, remainingMinutes: number, totalMinutes = 60): un
 }
 
 describe("laundry change detection", () => {
+  it("records the session start once even when the total time changes", () => {
+    const idle = normalizeLaundry(
+      laundry("POWER_OFF", 0),
+      "a".repeat(64),
+      "2026-07-17T00:00:00.000Z",
+      null,
+    );
+    const started = normalizeLaundry(
+      laundry("WASHING", 60),
+      "b".repeat(64),
+      "2026-07-17T00:05:00.000Z",
+      idle,
+    );
+    const adjusted = normalizeLaundry(
+      laundry("WASHING", 70, 90),
+      "c".repeat(64),
+      "2026-07-17T00:10:00.000Z",
+      started,
+    );
+
+    expect(started.machines[0]?.washer?.startedAt).toBe("2026-07-17T00:05:00.000Z");
+    expect(adjusted.machines[0]?.washer?.startedAt).toBe("2026-07-17T00:05:00.000Z");
+  });
+
+  it("does not invent a start time when the first snapshot is already running", () => {
+    const first = normalizeLaundry(
+      laundry("WASHING", 60),
+      "a".repeat(64),
+      "2026-07-17T00:05:00.000Z",
+      null,
+    );
+
+    expect(first.machines[0]?.washer?.startedAt).toBeNull();
+  });
+
   it.each([
     { currentRemaining: 30, type: "ETA_EXTENDED", delta: 5 },
     { currentRemaining: 25, type: "COUNTDOWN_NORMAL", delta: 0 },
