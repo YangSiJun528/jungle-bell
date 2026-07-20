@@ -110,6 +110,7 @@ requireRule(infoDisclosureTs.includes("const OPEN_EVENT = 'info-disclosure-open'
 requireRule(/<nav[^>]*aria-label="급식 보기">[\s\S]*?>식단<\/button>[\s\S]*?>내역<\/button>/s.test(campusHtml), 'Meal tabs must retain 식단 and 내역');
 requireRule(/<table[^>]*aria-labelledby="meal-calendar-title">[\s\S]*?<caption class="sr-only"[^>]*급식 달력/s.test(campusHtml), 'Meal calendar must be a labelled table');
 requireRule(campusHtml.includes("['일', '월', '화', '수', '목', '금', '토']") && campusHtml.includes('table-fixed'), 'Meal calendar must keep seven fixed columns');
+requireRule((campusTs.match(/sortMealPostsByPeriod\(/g) ?? []).length >= 2, 'Calendar meal indicators and selected posts must sort lunch before dinner');
 requireRule(campusHtml.includes('이번 주 식단표가 아직 게시되지 않았습니다.') && campusHtml.includes('이 주차에 저장된 식단표가 없습니다.'), 'Weekly meal empty states are missing');
 requireRule(/<dialog class="[^"]*backdrop:bg-app-shade/.test(campusHtml) && campusHtml.includes('@cancel.prevent="closeImage'), 'Meal image viewer must use a Tailwind-styled dialog with Escape handling');
 requireRule(campusTs.includes('imageDialogScroll = {left: window.scrollX, top: window.scrollY}')
