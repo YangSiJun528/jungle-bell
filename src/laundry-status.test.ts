@@ -21,7 +21,7 @@ test('워시타워 요약은 오류와 정보 없음만 짧게 표시한다', ()
     assert.equal(laundryOverviewText({
         operationalStatus: 'ERROR',
         projection: {status: 'ERROR', remainingMinutes: 20},
-    }), 'Error');
+    }), 'ERROR');
     assert.equal(laundryOverviewText(null), '--:--');
 });
 

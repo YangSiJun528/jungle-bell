@@ -44,7 +44,7 @@ export function laundryAvailabilityState(
 export function laundryOverviewText(appliance?: LaundryStatusAppliance | null): string {
     const state = laundryAvailabilityState(appliance);
     if (state === 'available') return '';
-    if (state === 'error') return 'Error';
+    if (state === 'error') return 'ERROR';
 
     const remainingMinutes = appliance?.projection?.remainingMinutes;
     if (!Number.isFinite(remainingMinutes)) return '--:--';
