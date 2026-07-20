@@ -4,10 +4,37 @@ import {
     laundryAvailabilityState,
     laundryOperationLabel,
     laundryOverviewText,
+    laundryProgress,
     laundryRemainingText,
     laundryStartAt,
     summarizeLaundryAvailability,
 } from './laundry-status.ts';
+
+test('작동 중 잔여 시간은 예상 종료 시각을 기준으로 매분 감소한다', () => {
+    const appliance = {
+        operationalStatus: 'RUNNING',
+        totalMinutes: 30,
+        estimatedFinishAt: '2026-07-20T06:30:00.000Z',
+        projection: {status: 'ESTIMATED_RUNNING', remainingMinutes: 30},
+    };
+
+    assert.equal(laundryRemainingText(appliance, Date.parse('2026-07-20T06:00:01.000Z')), '30분');
+    assert.equal(laundryRemainingText(appliance, Date.parse('2026-07-20T06:01:00.000Z')), '29분');
+    assert.equal(laundryOverviewText(appliance, Date.parse('2026-07-20T06:01:00.000Z')), '00:29');
+    assert.equal(laundryProgress(appliance, Date.parse('2026-07-20T06:01:00.000Z')), 100 / 30);
+});
+
+test('일시 정지 상태의 잔여 시간은 UI 시계가 흘러도 감소하지 않는다', () => {
+    const appliance = {
+        operationalStatus: 'PAUSED',
+        totalMinutes: 30,
+        estimatedFinishAt: '2026-07-20T06:30:00.000Z',
+        projection: {status: 'PAUSED', remainingMinutes: 12},
+    };
+
+    assert.equal(laundryRemainingText(appliance, Date.parse('2026-07-20T06:20:00.000Z')), '12분');
+    assert.equal(laundryRemainingText(appliance, Date.parse('2026-07-20T06:25:00.000Z')), '12분');
+});
 
 test('워시타워 요약은 사용 중인 기기의 잔여 시간을 HH:MM으로 표시한다', () => {
     assert.equal(laundryOverviewText({

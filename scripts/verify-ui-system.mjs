@@ -93,11 +93,11 @@ requireRule(/<footer class="grid min-h-12 flex-none grid-cols-3/.test(onboarding
 requireRule(campusHtml.includes('grid grid-cols-3 items-start gap-4'), 'Laundry cards must remain a three-column grid');
 requireRule(campusHtml.includes('grid-rows-[32px_96px_96px]'), 'Laundry cards must keep fixed header/appliance geometry');
 requireRule(/<table class="w-full table-fixed border-separate[^>]*>[\s\S]*?<caption class="sr-only">워시타워 번호별/s.test(campusHtml), 'Laundry overview must remain a semantic table');
-requireRule(campusTs.includes('laundryOverviewText(appliance)')
+requireRule(campusTs.includes('laundryOverviewText(appliance, this.clockNow)')
     && campusHtml.includes('x-text="segment.overviewText"')
     && campusHtml.includes("'border-app-border bg-app-faint': segment.state !== 'available'")
     && !campusHtml.includes("'border-app-danger bg-app-danger': segment.state === 'error'"), 'Laundry overview must preserve available zone colors and use gray cells for remaining time or ERROR');
-requireRule(campusTs.includes('laundryRemainingText(appliance)')
+requireRule(campusTs.includes('laundryRemainingText(appliance, this.clockNow)')
     && campusTs.includes('laundryOperationLabel(appliance)')
     && campusHtml.includes('x-show="startAt(entry.appliance)"')
     && campusHtml.includes(' 시작`')
@@ -112,7 +112,10 @@ requireRule((campusHtml.match(/x-data="infoDisclosure"/g) ?? []).length >= 2
 requireRule(campusHtml.includes('fixed z-40 max-h-[calc(100vh-32px)] w-[min(40vw,calc(100vw-32px))]')
     && campusHtml.includes('[word-break:keep-all]')
     && campusHtml.includes('x-transition:enter="transition ease-out duration-200"'), 'Pines tooltips must stay inside the viewport, animate, and preserve Korean words');
-requireRule(/<aside class="[^"]*pr-2[^"]*"[^>]*:data-tone="source\[activeTab\]\.tone"/.test(campusHtml), 'Header information control must keep extra distance from the scrollbar edge');
+requireRule(/<aside class="[^"]*pr-2[^"]*"[^>]*:data-tone="sourceView\(activeTab\)\.tone"/.test(campusHtml), 'Header information control must keep extra distance from the scrollbar edge');
+requireRule(campusTs.includes('window.setInterval(() =>')
+    && campusTs.includes('this.clockNow = Date.now()')
+    && campusTs.includes('window.clearInterval(this.clockTimer)'), 'Campus relative times and laundry countdown must use a cleaned-up live UI clock');
 requireRule(infoDisclosureTs.includes("const OPEN_EVENT = 'info-disclosure-open'") && infoDisclosureTs.includes('handlePeer(event:'), 'Shared information disclosure behavior is missing');
 
 // Meal tabs, calendar, empty/error states, and dialog restoration.

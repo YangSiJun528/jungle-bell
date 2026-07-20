@@ -7,6 +7,7 @@ export interface LaundryStatusAppliance {
     operationalStatus?: string;
     projection?: {status?: string; remainingMinutes?: number} | null;
     state?: {code?: string; labelKo?: string} | null;
+    totalMinutes?: number;
     startedAt?: string | null;
     estimatedFinishAt?: string | null;
     errorCode?: string | null;
@@ -21,6 +22,12 @@ export interface LaundryAvailabilitySummary {
     total: number;
     available: number;
 }
+
+const COUNTDOWN_PROJECTION_STATUSES = new Set([
+    'OBSERVED',
+    'ESTIMATED_RUNNING',
+    'AWAITING_COMPLETION_CONFIRMATION',
+]);
 
 const LG_STATE_LABELS: Record<string, string> = {
     POWER_OFF: '전원 꺼짐', INITIAL: '사용 가능', RESERVED: '예약됨', DETECTING: '세탁량 감지 중',
@@ -52,35 +59,66 @@ export function laundryAvailabilityState(
         : 'unavailable';
 }
 
-export function laundryOverviewText(appliance?: LaundryStatusAppliance | null): string {
+export function laundryRemainingMinutes(
+    appliance?: LaundryStatusAppliance | null,
+    nowMs = Date.now(),
+): number | null {
+    const fallback = appliance?.projection?.remainingMinutes;
+    if (!Number.isFinite(fallback)) return null;
+
+    const finishAt = Date.parse(appliance?.estimatedFinishAt ?? '');
+    const projectionStatus = appliance?.projection?.status;
+    const countsDown = appliance?.operationalStatus === 'RUNNING'
+        && COUNTDOWN_PROJECTION_STATUSES.has(projectionStatus ?? '')
+        && Number.isFinite(finishAt);
+    return countsDown
+        ? Math.max(0, Math.ceil((finishAt - nowMs) / 60_000))
+        : Math.max(0, Math.ceil(fallback as number));
+}
+
+export function laundryOverviewText(
+    appliance?: LaundryStatusAppliance | null,
+    nowMs = Date.now(),
+): string {
     const state = laundryAvailabilityState(appliance);
     if (state === 'available') return '';
     if (state === 'error') return 'ERROR';
 
-    const remainingMinutes = appliance?.projection?.remainingMinutes;
-    if (!Number.isFinite(remainingMinutes)) return '--:--';
-    const totalMinutes = Math.max(0, Math.ceil(remainingMinutes as number));
+    const totalMinutes = laundryRemainingMinutes(appliance, nowMs);
+    if (totalMinutes === null) return '--:--';
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
     return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
 
-export function laundryRemainingText(appliance?: LaundryStatusAppliance | null): string {
+export function laundryRemainingText(
+    appliance?: LaundryStatusAppliance | null,
+    nowMs = Date.now(),
+): string {
     if (!appliance) return '--';
     const status = appliance.projection?.status;
     if (status === 'CONFIRMED_COMPLETED') return '완료';
     if (status === 'ERROR') return '오류';
     if (status === 'IDLE') return appliance.operationalStatus === 'SCHEDULED' ? '예약' : '사용 가능';
     if (status === 'UNKNOWN') return '--';
-    const minutes = appliance.projection?.remainingMinutes;
-    if (!Number.isFinite(minutes)) return '--';
-    const value = minutes as number;
+    const value = laundryRemainingMinutes(appliance, nowMs);
+    if (value === null) return '--';
     if (value >= 60) {
         const hours = Math.floor(value / 60);
         const rest = value % 60;
         return rest ? `${hours}시간 ${rest}분` : `${hours}시간`;
     }
     return `${value}분`;
+}
+
+export function laundryProgress(
+    appliance?: LaundryStatusAppliance | null,
+    nowMs = Date.now(),
+): number | null {
+    const total = appliance?.totalMinutes ?? 0;
+    const remaining = laundryRemainingMinutes(appliance, nowMs);
+    if (!total || remaining === null || laundryAvailabilityState(appliance) === 'available') return null;
+    return Math.min(100, Math.max(0, ((total - remaining) / total) * 100));
 }
 
 export function laundryStartAt(appliance?: LaundryStatusAppliance | null): string | null {

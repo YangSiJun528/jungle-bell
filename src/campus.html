@@ -12,8 +12,8 @@
     <header class="mb-2 flex min-h-12 flex-none items-center gap-2">
         <img src="assets/logo.png" alt="" class="size-12 flex-none rounded-lg object-cover"/>
         <h1 class="m-0 min-w-0 flex-1 text-[22px] leading-[1.2] font-bold tracking-normal">생활 정보</h1>
-        <aside class="flex min-h-12 max-w-1/2 items-center justify-end gap-2 pr-2 text-xs text-app-muted" :data-tone="source[activeTab].tone" aria-live="polite">
-            <i class="size-2 flex-none rounded-full bg-app-faint data-[tone=success]:bg-app-success data-[tone=warning]:bg-app-warning data-[tone=danger]:bg-app-danger" aria-hidden="true"></i><strong class="min-w-0 truncate" x-text="source[activeTab].label"></strong>
+        <aside class="flex min-h-12 max-w-1/2 items-center justify-end gap-2 pr-2 text-xs text-app-muted" :data-tone="sourceView(activeTab).tone" aria-live="polite">
+            <i class="size-2 flex-none rounded-full bg-app-faint data-[tone=success]:bg-app-success data-[tone=warning]:bg-app-warning data-[tone=danger]:bg-app-danger" aria-hidden="true"></i><strong class="min-w-0 truncate" x-text="sourceView(activeTab).label"></strong>
             <details class="group relative flex-none" x-data="infoDisclosure" :open="visible"
                      @mouseenter="enter()" @mouseleave="leave()" @focusin="focus()" @focusout="blur()"
                      @keydown.escape.stop="dismiss()" @click.outside="dismiss()"
