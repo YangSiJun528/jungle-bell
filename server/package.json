@@ -4,7 +4,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "backfill:meals:prepare": "node scripts/prepare-meal-backfill.ts",
     "build": "tsup src/node/collector.ts --format esm --platform node --target node22 --out-dir dist/collector --clean",
     "check": "npm run typecheck && npm test",
     "collector:collect": "node dist/collector/collector.js collect",
