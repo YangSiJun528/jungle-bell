@@ -153,6 +153,11 @@ interface TypeSummary {
     available: number;
 }
 
+interface LaundryPreferences {
+    access: LaundryAccess;
+    filter: LaundryFilter;
+}
+
 interface AvailabilitySegment {
     id: string;
     number: number;
@@ -164,6 +169,7 @@ interface AvailabilitySegment {
 const ACTIVE_STATUSES = new Set(['RUNNING', 'PAUSED', 'SCHEDULED']);
 const SIGNIFICANT_ETA_CHANGE_MINUTES = 5;
 const WASH_TOWER_COUNT = 9;
+const LAUNDRY_PREFERENCES_KEY = 'jungle-bell:campus:laundry-preferences';
 const KST_TIME_ZONE = 'Asia/Seoul';
 const APPLIANCE_ERROR_LABELS: Record<string, string> = {
     EMPTY_WATER_ALERT_ERROR: '배관 에러',
@@ -191,6 +197,37 @@ function machineZone(id: string): MachineZone {
     if (number !== null && number >= 6 && number <= 7) return 'common';
     if (number !== null && number >= 8 && number <= 9) return 'women';
     return 'other';
+}
+
+function isLaundryAccess(value: unknown): value is LaundryAccess {
+    return value === 'all' || value === 'men' || value === 'women';
+}
+
+function isLaundryFilter(value: unknown): value is LaundryFilter {
+    return value === 'all' || value === 'washerAvailable' || value === 'dryerAvailable';
+}
+
+function loadLaundryPreferences(): LaundryPreferences {
+    const defaults: LaundryPreferences = {access: 'all', filter: 'all'};
+    try {
+        const raw = window.localStorage.getItem(LAUNDRY_PREFERENCES_KEY);
+        if (!raw) return defaults;
+        const value = JSON.parse(raw) as Partial<LaundryPreferences> | null;
+        return {
+            access: isLaundryAccess(value?.access) ? value.access : defaults.access,
+            filter: isLaundryFilter(value?.filter) ? value.filter : defaults.filter,
+        };
+    } catch {
+        return defaults;
+    }
+}
+
+function saveLaundryPreferences(preferences: LaundryPreferences): void {
+    try {
+        window.localStorage.setItem(LAUNDRY_PREFERENCES_KEY, JSON.stringify(preferences));
+    } catch {
+        // The filters remain usable for the current session when storage is unavailable.
+    }
 }
 
 declare global {
@@ -231,14 +268,15 @@ function sourceMealWeekLabel(post?: MealPost | null): string {
 }
 
 function campus(): Record<string, unknown> {
+    const laundryPreferences = loadLaundryPreferences();
     let imageDialogTrigger: HTMLElement | null = null;
     let imageDialogScroll = {left: 0, top: 0};
 
     return {
         activeTab: initialTab() as CampusTab,
         mealView: 'current' as MealView,
-        laundryFilter: 'all' as LaundryFilter,
-        laundryAccess: 'all' as LaundryAccess,
+        laundryFilter: laundryPreferences.filter,
+        laundryAccess: laundryPreferences.access,
         laundry: null as LaundryData | null,
         meals: null as MealsPayload | null,
         mealHistory: [] as MealPost[],
@@ -257,6 +295,12 @@ function campus(): Record<string, unknown> {
         unlisteners: [] as UnlistenFn[],
 
         async init(this: any) {
+            const rememberLaundryPreferences = () => saveLaundryPreferences({
+                access: this.laundryAccess,
+                filter: this.laundryFilter,
+            });
+            this.$watch('laundryAccess', rememberLaundryPreferences);
+            this.$watch('laundryFilter', rememberLaundryPreferences);
             window.setCampusTab = (tab) => {
                 if (tab === 'laundry' || tab === 'meals') this.selectTab(tab);
             };
