@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
     laundryAvailabilityState,
+    laundryOperationLabel,
     laundryOverviewText,
+    laundryRemainingText,
+    laundryStartAt,
     summarizeLaundryAvailability,
 } from './laundry-status.ts';
 
@@ -30,6 +33,29 @@ test('워시타워 요약은 사용 가능한 기기에 텍스트를 표시하�
         operationalStatus: 'IDLE',
         projection: {status: 'IDLE', remainingMinutes: 0},
     }), '');
+});
+
+test('상세 화면은 대기 대신 사용 가능을 표시한다', () => {
+    assert.equal(laundryRemainingText({
+        operationalStatus: 'IDLE',
+        projection: {status: 'IDLE', remainingMinutes: 0},
+    }), '사용 가능');
+});
+
+test('상세 화면은 수집기가 기록한 시작 시각만 사용한다', () => {
+    assert.equal(laundryStartAt({
+        operationalStatus: 'RUNNING',
+        startedAt: '2026-07-20T05:50:02.020Z',
+        projection: {status: 'ESTIMATED_RUNNING', remainingMinutes: 76},
+    }), '2026-07-20T05:50:02.020Z');
+    assert.equal(laundryStartAt({estimatedFinishAt: '2026-07-20T07:26:02.020Z'}), null);
+});
+
+test('세부 작동 상태를 우선하고 일반 RUNNING은 기기 종류에 맞게 표시한다', () => {
+    assert.equal(laundryOperationLabel({appliance: 'washer', state: {code: 'RINSING'}}), '헹굼 중');
+    assert.equal(laundryOperationLabel({appliance: 'washer', state: {code: 'SPINNING'}}), '탈수 중');
+    assert.equal(laundryOperationLabel({appliance: 'washer', state: {code: 'RUNNING'}}), '세탁 중');
+    assert.equal(laundryOperationLabel({appliance: 'dryer', state: {code: 'RUNNING'}}), '건조 중');
 });
 
 test('상세 projection이 완료이면 사용 가능 결과에 포함한다', () => {

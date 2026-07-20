@@ -6,7 +6,10 @@ import {openUrl} from '@tauri-apps/plugin-opener';
 import {dismissInfoDisclosures, infoDisclosure, type InfoDisclosure} from './info-disclosure';
 import {
     laundryAvailabilityState,
+    laundryOperationLabel,
     laundryOverviewText,
+    laundryRemainingText,
+    laundryStartAt,
     laundryZoneMatchesAccess,
     summarizeLaundryAvailability,
 } from './laundry-status';
@@ -36,9 +39,10 @@ interface Appliance {
     operationalStatus?: string;
     operationalStatusLabelKo?: string;
     projection?: Projection;
-    state?: {code?: string; labelKo?: string};
+    state?: {code?: string; labelKo?: string} | null;
     totalMinutes?: number;
-    estimatedFinishAt?: string;
+    startedAt?: string | null;
+    estimatedFinishAt?: string | null;
     observedAt?: string;
     sessionId?: string | null;
     errorCode?: string;
@@ -181,13 +185,6 @@ const LAUNDRY_PREFERENCES_KEY = 'jungle-bell:campus:laundry-preferences';
 const KST_TIME_ZONE = 'Asia/Seoul';
 const APPLIANCE_ERROR_LABELS: Record<string, string> = {
     EMPTY_WATER_ALERT_ERROR: '배관 에러',
-};
-const LG_STATE_LABELS: Record<string, string> = {
-    POWER_OFF: '전원 꺼짐', INITIAL: '사용 가능', RESERVED: '예약됨', DETECTING: '세탁량 감지 중',
-    DISPENSING: '세제 투입 중', SOAKING: '불림 중', WASHING: '세탁 중', RINSING: '헹굼 중',
-    SPINNING: '탈수 중', RUNNING: '작동 중', DRYING: '건조 중', COOLING: '식힘 중',
-    REFRESHING: '리프레시 중', WRINKLE_CARE: '구김 방지 중', PAUSE: '일시 정지', END: '완료',
-    ERROR: '오류', UNKNOWN: '알 수 없음',
 };
 const PROJECTION_LABELS: Record<string, string> = {
     OBSERVED: '관측값', ESTIMATED_RUNNING: '작동 중', AWAITING_COMPLETION_CONFIRMATION: '완료 확인 중',
@@ -683,7 +680,7 @@ function campus(): Record<string, unknown> {
             if (status === 'AWAITING_COMPLETION_CONFIRMATION') {
                 return this.completionConfirmationDelayed(appliance)
                     ? {label: '완료 확인 지연', tone: 'warning'}
-                    : {label: '작동 중', tone: 'normal'};
+                    : {label: '완료 확인 중', tone: 'normal'};
             }
             if (status === 'CONFIRMED_COMPLETED') return {label: label ?? '완료', tone: 'complete'};
             if (status === 'PAUSED') return {label: label ?? '일시 정지', tone: 'warning'};
@@ -691,7 +688,7 @@ function campus(): Record<string, unknown> {
             if (status === 'UNKNOWN') return {label: label ?? '확인 불가', tone: 'neutral'};
             if (appliance.operationalStatus === 'SCHEDULED') return {label: appliance.operationalStatusLabelKo ?? '예약됨', tone: 'normal'};
             if (status === 'IDLE') return {label: label ?? '사용 가능', tone: 'success'};
-            const stateLabel = appliance.state?.labelKo ?? LG_STATE_LABELS[appliance.state?.code ?? ''];
+            const stateLabel = laundryOperationLabel(appliance);
             if (appliance.operationalStatus === 'RUNNING') return {label: stateLabel ?? '작동 중', tone: 'normal'};
             return {
                 label: stateLabel ?? label ?? appliance.operationalStatusLabelKo ?? '작동 중',
@@ -700,21 +697,11 @@ function campus(): Record<string, unknown> {
         },
 
         remainingText(this: any, appliance?: Appliance | null) {
-            if (!appliance) return '--';
-            const status = appliance.projection?.status;
-            if (status === 'CONFIRMED_COMPLETED') return '완료';
-            if (status === 'ERROR') return '오류';
-            if (status === 'IDLE') return appliance.operationalStatus === 'SCHEDULED' ? '예약' : '대기';
-            if (status === 'UNKNOWN') return '--';
-            const minutes = appliance.projection?.remainingMinutes;
-            if (!Number.isFinite(minutes)) return '--';
-            const value = minutes as number;
-            if (value >= 60) {
-                const hours = Math.floor(value / 60);
-                const rest = value % 60;
-                return rest ? `${hours}시간 ${rest}분` : `${hours}시간`;
-            }
-            return `${value}분`;
+            return laundryRemainingText(appliance);
+        },
+
+        startAt(appliance?: Appliance | null) {
+            return laundryStartAt(appliance);
         },
 
         progress(this: any, appliance?: Appliance | null) {

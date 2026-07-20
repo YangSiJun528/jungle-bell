@@ -3,8 +3,12 @@ export type LaundryAccess = 'all' | 'men' | 'women';
 export type LaundryMachineZone = 'men' | 'common' | 'women' | 'other';
 
 export interface LaundryStatusAppliance {
+    appliance?: string;
     operationalStatus?: string;
     projection?: {status?: string; remainingMinutes?: number} | null;
+    state?: {code?: string; labelKo?: string} | null;
+    startedAt?: string | null;
+    estimatedFinishAt?: string | null;
     errorCode?: string | null;
 }
 
@@ -17,6 +21,13 @@ export interface LaundryAvailabilitySummary {
     total: number;
     available: number;
 }
+
+const LG_STATE_LABELS: Record<string, string> = {
+    POWER_OFF: '전원 꺼짐', INITIAL: '사용 가능', RESERVED: '예약됨', DETECTING: '세탁량 감지 중',
+    DISPENSING: '세제 투입 중', SOAKING: '불림 중', WASHING: '세탁 중', RINSING: '헹굼 중',
+    SPINNING: '탈수 중', DRYING: '건조 중', COOLING: '식힘 중', REFRESHING: '리프레시 중',
+    WRINKLE_CARE: '구김 방지 중', PAUSE: '일시 정지', END: '완료', ERROR: '오류', UNKNOWN: '알 수 없음',
+};
 
 export function laundryAvailabilityState(
     appliance?: LaundryStatusAppliance | null,
@@ -52,6 +63,38 @@ export function laundryOverviewText(appliance?: LaundryStatusAppliance | null): 
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
     return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+export function laundryRemainingText(appliance?: LaundryStatusAppliance | null): string {
+    if (!appliance) return '--';
+    const status = appliance.projection?.status;
+    if (status === 'CONFIRMED_COMPLETED') return '완료';
+    if (status === 'ERROR') return '오류';
+    if (status === 'IDLE') return appliance.operationalStatus === 'SCHEDULED' ? '예약' : '사용 가능';
+    if (status === 'UNKNOWN') return '--';
+    const minutes = appliance.projection?.remainingMinutes;
+    if (!Number.isFinite(minutes)) return '--';
+    const value = minutes as number;
+    if (value >= 60) {
+        const hours = Math.floor(value / 60);
+        const rest = value % 60;
+        return rest ? `${hours}시간 ${rest}분` : `${hours}시간`;
+    }
+    return `${value}분`;
+}
+
+export function laundryStartAt(appliance?: LaundryStatusAppliance | null): string | null {
+    const startedAt = appliance?.startedAt;
+    return startedAt && Number.isFinite(Date.parse(startedAt)) ? startedAt : null;
+}
+
+export function laundryOperationLabel(appliance?: LaundryStatusAppliance | null): string | undefined {
+    const code = appliance?.state?.code;
+    if (code === 'RUNNING') {
+        if (appliance?.appliance === 'washer') return '세탁 중';
+        if (appliance?.appliance === 'dryer') return '건조 중';
+    }
+    return appliance?.state?.labelKo ?? LG_STATE_LABELS[code ?? ''];
 }
 
 export function laundryZoneMatchesAccess(
