@@ -7,185 +7,94 @@
     <link rel="license" href="assets/fonts/Pretendard-LICENSE.txt"/>
     <title>Jungle Bell 시작하기</title>
 </head>
-<body class="ui-page onboarding-page" x-data="onboarding" @keydown.window="handleKey($event)">
-<main class="ui-shell ui-shell-onboarding">
-    <header class="ui-app-header onboarding-header">
-        <img src="assets/logo.png" alt="" class="ui-app-logo"/>
+<body class="h-screen overflow-hidden bg-app-bg p-4 text-app-text" x-data="onboarding" @keydown.window="handleKey($event)">
+<main class="mx-auto flex h-full w-full flex-col">
+    <header class="mb-2 flex min-h-12 flex-none items-center gap-2">
+        <img src="assets/logo.png" alt="" class="size-12 flex-none rounded-lg object-cover"/>
         <hgroup class="min-w-0 flex-1">
-            <h1>Jungle Bell</h1>
-            <p>시작하기</p>
+            <h1 class="m-0 text-[22px] leading-[1.2] font-bold tracking-normal">Jungle Bell</h1>
+            <p class="mt-1 text-xs font-medium text-app-muted">시작하기</p>
         </hgroup>
-        <strong class="ui-step-count"><span x-text="step + 1"></span><span aria-hidden="true">/</span><span x-text="totalSteps"></span></strong>
+        <strong class="flex flex-none items-baseline gap-1 font-data text-xs text-app-faint tabular-nums"><span class="text-lg text-app-text" x-text="step + 1"></span><span aria-hidden="true">/</span><span x-text="totalSteps"></span></strong>
     </header>
 
-    <progress class="ui-onboarding-progress" :max="totalSteps" :value="step + 1" aria-label="온보딩 진행률" x-text="`${step + 1}/${totalSteps}`"></progress>
+    <progress class="ui-progress mb-2 h-1 w-full flex-none" :max="totalSteps" :value="step + 1" aria-label="온보딩 진행률" x-text="`${step + 1}/${totalSteps}`"></progress>
 
-    <fieldset class="ui-choice-group onboarding-os-choice">
+    <fieldset class="mb-2 flex flex-none justify-end gap-1 border-0 p-0">
         <legend class="sr-only">운영체제 선택</legend>
-        <label><input type="radio" name="onboarding-os" value="mac" :checked="currentOs === 'mac'" @change="setOs('mac')"/><span>macOS</span></label>
-        <label><input type="radio" name="onboarding-os" value="win" :checked="currentOs === 'win'" @change="setOs('win')"/><span>Windows</span></label>
+        <label class="relative"><input class="peer sr-only" type="radio" name="onboarding-os" value="mac" :checked="currentOs === 'mac'" @change="setOs('mac')"/><span class="inline-flex min-h-8 cursor-pointer items-center rounded-lg border border-app-border bg-app-control px-2 text-xs font-semibold text-app-muted peer-checked:border-app-accent peer-checked:bg-app-accent-soft peer-checked:text-app-accent peer-focus-visible:ring-4 peer-focus-visible:ring-app-accent-soft">macOS</span></label>
+        <label class="relative"><input class="peer sr-only" type="radio" name="onboarding-os" value="win" :checked="currentOs === 'win'" @change="setOs('win')"/><span class="inline-flex min-h-8 cursor-pointer items-center rounded-lg border border-app-border bg-app-control px-2 text-xs font-semibold text-app-muted peer-checked:border-app-accent peer-checked:bg-app-accent-soft peer-checked:text-app-accent peer-focus-visible:ring-4 peer-focus-visible:ring-app-accent-soft">Windows</span></label>
     </fieldset>
 
-    <article class="onboarding-panel" :data-step="step">
-        <section class="onboarding-slide" x-show="step === 0" x-cloak aria-labelledby="onboarding-welcome-title">
-            <header class="onboarding-copy">
-                <p class="ui-eyebrow">트레이 메뉴</p>
+    <article class="min-h-0 flex-1 overflow-hidden rounded-lg border border-app-border bg-app-surface p-4" :data-step="step">
+        <section class="flex h-full flex-col" x-show="step === 0" x-cloak aria-labelledby="onboarding-welcome-title">
+            <header class="flex-none [&_h2]:m-0 [&_h2]:text-2xl [&_h2]:leading-[1.25] [&_h2]:font-bold [&_h2]:tracking-normal [&>p:last-child]:mt-2 [&>p:last-child]:max-w-[44ch] [&>p:last-child]:text-sm [&>p:last-child]:leading-[1.55] [&>p:last-child]:text-app-muted">
+                <p class="mb-2 text-xs font-bold tracking-normal text-app-accent">트레이 메뉴</p>
                 <h2 id="onboarding-welcome-title">출석 상태를 바로 확인하세요</h2>
                 <p><span x-show="currentOs === 'mac'">메뉴 막대 오른쪽</span><span x-show="currentOs === 'win'">작업 표시줄 오른쪽</span>의 Jungle Bell 아이콘을 누르면 출석 페이지와 생활 정보를 열 수 있습니다.</p>
             </header>
-            <section class="scenario-stage" aria-label="트레이 메뉴 예시">
-                <figure class="scenario-mock scenario-mock-macos" x-show="currentOs === 'mac'">
-                    <div class="scenario-bar scenario-bar-top"><span class="scenario-bar-cluster"><i></i><i></i><b class="scenario-highlight"><img src="assets/tray-mini-white.png" alt="Jungle Bell 트레이 아이콘"/></b><time>14:08</time></span></div>
-                    <div class="scenario-menu scenario-menu-macos">
-                        <strong>학습 중</strong><span>출석 페이지 열기</span><hr/><span>식단표 보러가기</span><hr/><small>v0.3.7</small><span>피드백 보내기</span><span>설정...</span><span>종료</span>
-                    </div>
+            <section class="relative mt-4 min-h-0 flex-1 overflow-hidden rounded-lg border border-app-border bg-app-control p-4" aria-label="트레이 메뉴 예시">
+                <figure class="relative m-0 h-full overflow-hidden rounded-lg border border-app-border-strong bg-app-surface-subtle" x-show="currentOs === 'mac'">
+                    <div class="flex h-8 items-center justify-end bg-app-text px-4 text-app-bg"><span class="flex items-center gap-2"><i class="size-2 rounded-full bg-app-bg"></i><i class="size-2 rounded-full bg-app-bg"></i><b class="flex size-8 items-center justify-center rounded-lg border border-app-accent"><img class="size-4" src="assets/tray-mini-white.png" alt="Jungle Bell 트레이 아이콘"/></b><time class="font-data text-xs">14:08</time></span></div>
+                    <div class="absolute top-12 right-16 grid w-1/2 gap-1 rounded-lg border border-app-border-strong bg-app-overlay p-2 text-xs"><strong class="p-1">학습 중</strong><span class="p-1">출석 페이지 열기</span><hr class="m-0 border-app-divider"/><span class="p-1">식단표 보러가기</span><hr class="m-0 border-app-divider"/><small class="px-1 text-app-faint">v0.3.7</small><span class="p-1">피드백 보내기</span><span class="p-1">설정...</span><span class="p-1">종료</span></div>
                 </figure>
-                <figure class="scenario-mock scenario-mock-windows" x-show="currentOs === 'win'">
-                    <div class="scenario-menu scenario-menu-windows">
-                        <strong>학습 중</strong><span>출석 페이지 열기</span><hr/><span>식단표 보러가기</span><hr/><small>v0.3.7</small><span>피드백 보내기</span><span>설정...</span><span>종료</span>
-                    </div>
-                    <div class="scenario-bar scenario-bar-bottom"><span class="scenario-bar-cluster"><i></i><i></i><b class="scenario-highlight"><img src="assets/tray-mini-white.png" alt="Jungle Bell 트레이 아이콘"/></b><time>14:08</time></span></div>
+                <figure class="relative m-0 h-full overflow-hidden rounded-lg border border-app-border-strong bg-app-surface-subtle" x-show="currentOs === 'win'">
+                    <div class="absolute top-4 right-16 grid w-1/2 gap-1 rounded-lg border border-app-border-strong bg-app-overlay p-2 text-xs"><strong class="p-1">학습 중</strong><span class="p-1">출석 페이지 열기</span><hr class="m-0 border-app-divider"/><span class="p-1">식단표 보러가기</span><hr class="m-0 border-app-divider"/><small class="px-1 text-app-faint">v0.3.7</small><span class="p-1">피드백 보내기</span><span class="p-1">설정...</span><span class="p-1">종료</span></div>
+                    <div class="absolute inset-x-0 bottom-0 flex h-8 items-center justify-end bg-app-text px-4 text-app-bg"><span class="flex items-center gap-2"><i class="size-2 rounded-full bg-app-bg"></i><i class="size-2 rounded-full bg-app-bg"></i><b class="flex size-8 items-center justify-center rounded-lg border border-app-accent"><img class="size-4" src="assets/tray-mini-white.png" alt="Jungle Bell 트레이 아이콘"/></b><time class="font-data text-xs">14:08</time></span></div>
                 </figure>
             </section>
-            <aside class="ui-note" x-show="currentOs === 'win'">
-                처음에는 숨겨진 아이콘 메뉴에 있을 수 있습니다. 아이콘을 작업 표시줄로 끌어두면 항상 표시됩니다.
-            </aside>
+            <aside class="mt-2 flex-none rounded-lg border border-app-border bg-app-accent-soft p-2 text-xs leading-6 text-app-muted" x-show="currentOs === 'win'">처음에는 숨겨진 아이콘 메뉴에 있을 수 있습니다. 아이콘을 작업 표시줄로 끌어두면 항상 표시됩니다.</aside>
         </section>
 
-        <section class="onboarding-slide" x-show="step === 1" x-cloak aria-labelledby="onboarding-login-title">
-            <header class="onboarding-copy">
-                <p class="ui-eyebrow">LMS 연결</p>
-                <h2 id="onboarding-login-title">로그인 상태를 확인합니다</h2>
-                <p>LMS에 로그인되어 있어야 Jungle Bell이 출석 상태를 확인할 수 있습니다. 출석 자체는 LMS 페이지에서 직접 진행합니다.</p>
-            </header>
-            <section class="onboarding-center-state" aria-live="polite">
-                <span class="ui-state-icon" :data-tone="loginDataLoaded && !needsLogin ? 'success' : 'info'" aria-hidden="true">
-                    <svg viewBox="0 0 24 24"><path d="M7 10V8a5 5 0 0 1 10 0v2M6 10h12v10H6z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                </span>
-                <strong x-show="!loginDataLoaded">로그인 확인 중</strong>
-                <strong x-show="loginDataLoaded && needsLogin">로그인이 필요합니다</strong>
-                <strong x-show="loginDataLoaded && !needsLogin">로그인 완료</strong>
-                <button type="button" class="ui-button-primary" @click="openAttendance()" x-show="!loginDataLoaded || needsLogin">출석 페이지 열기</button>
+        <section class="flex h-full flex-col" x-show="step === 1" x-cloak aria-labelledby="onboarding-login-title">
+            <header class="flex-none [&_h2]:m-0 [&_h2]:text-2xl [&_h2]:leading-[1.25] [&_h2]:font-bold [&_h2]:tracking-normal [&>p:last-child]:mt-2 [&>p:last-child]:text-sm [&>p:last-child]:leading-[1.55] [&>p:last-child]:text-app-muted"><p class="mb-2 text-xs font-bold text-app-accent">LMS 연결</p><h2 id="onboarding-login-title">로그인 상태를 확인합니다</h2><p>LMS에 로그인되어 있어야 Jungle Bell이 출석 상태를 확인할 수 있습니다. 출석 자체는 LMS 페이지에서 직접 진행합니다.</p></header>
+            <section class="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 text-center" aria-live="polite">
+                <span class="flex size-16 items-center justify-center rounded-lg border border-app-border bg-app-accent-soft text-app-accent" :class="{'border-app-success bg-app-success-soft text-app-success': loginDataLoaded && !needsLogin}" aria-hidden="true"><svg class="size-8" viewBox="0 0 24 24"><path d="M7 10V8a5 5 0 0 1 10 0v2M6 10h12v10H6z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+                <strong x-show="!loginDataLoaded">로그인 확인 중</strong><strong x-show="loginDataLoaded && needsLogin">로그인이 필요합니다</strong><strong x-show="loginDataLoaded && !needsLogin">로그인 완료</strong>
+                <button type="button" class="ui-button" data-variant="primary" @click="openAttendance()" x-show="!loginDataLoaded || needsLogin">출석 페이지 열기</button>
             </section>
         </section>
 
-        <section class="onboarding-slide" x-show="step === 2" x-cloak aria-labelledby="onboarding-notification-title">
-            <header class="onboarding-copy">
-                <p class="ui-eyebrow">알림 일정</p>
-                <h2 id="onboarding-notification-title">필요한 출석 알림을 정하세요</h2>
-                <p>알림을 꺼도 트레이 아이콘 색으로 현재 출석 상태를 확인할 수 있습니다.</p>
-            </header>
-
-            <ul class="tray-status-key" aria-label="트레이 아이콘 색상 의미">
-                <li><span><img src="assets/tray-mini-red.png" alt=""/></span><strong>출석 필요</strong></li>
-                <li><span><img src="assets/tray-mini-white.png" alt=""/></span><strong>출석 완료</strong></li>
-                <li><span><img src="assets/tray-mini-orange.png" alt=""/></span><strong>로그인 필요</strong></li>
-            </ul>
-
-            <fieldset class="onboarding-setting-group">
-                <legend>시작 출석 알림</legend>
-                <label class="ui-setting-row compact"><span><strong>알림 사용</strong></span><input class="ui-switch" type="checkbox" x-model="startNotification" @change="saveToggle('set_start_notification_enabled', 'startNotification')"/></label>
-                <div class="ui-setting-controls" :class="{'is-disabled': !startNotification}">
-                    <div class="ui-field"><span>시간</span><div class="ui-select" x-data="selectControl" x-effect="syncValue(notificationStart)" @click.outside="close()">
-                        <select class="ui-select-native" hidden x-ref="native" tabindex="-1" aria-hidden="true" x-model.number="notificationStart" @change="saveTime('set_notification_start', notificationStart)" :disabled="!startNotification"><option value="4">04:00 - 10:00</option><option value="5">05:00 - 10:00</option><option value="6">06:00 - 10:00</option><option value="7">07:00 - 10:00</option><option value="8">08:00 - 10:00</option><option value="9">09:00 - 10:00</option></select>
-                        <button type="button" class="ui-select-trigger" role="combobox" aria-haspopup="listbox" x-ref="trigger" aria-label="시작 출석 알림 시간" :aria-expanded="open" :aria-controls="listboxId" :disabled="!startNotification" @click="toggle()" @keydown="handleTriggerKey($event)"><span x-text="selectedLabel"></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-                        <div class="ui-select-popover" x-show="open" x-cloak :id="listboxId" role="listbox" @keydown="handleOptionKey($event)"><template x-for="option in options" :key="option.value"><button type="button" role="option" :data-value="option.value" :aria-selected="selectedValue === option.value" :disabled="option.disabled" @click="choose(option.value)" x-text="option.label"></button></template></div>
-                    </div></div>
-                    <div class="ui-field"><span>간격</span><div class="ui-select" x-data="selectControl" x-effect="syncValue(startInterval)" @click.outside="close()">
-                        <select class="ui-select-native" hidden x-ref="native" tabindex="-1" aria-hidden="true" x-model.number="startInterval" @change="saveInterval('set_start_notification_interval', startInterval)" :disabled="!startNotification"><option value="1">1분</option><option value="3">3분</option><option value="5">5분</option><option value="10">10분</option><option value="15">15분</option><option value="30">30분</option></select>
-                        <button type="button" class="ui-select-trigger" role="combobox" aria-haspopup="listbox" x-ref="trigger" aria-label="시작 출석 알림 간격" :aria-expanded="open" :aria-controls="listboxId" :disabled="!startNotification" @click="toggle()" @keydown="handleTriggerKey($event)"><span x-text="selectedLabel"></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-                        <div class="ui-select-popover" x-show="open" x-cloak :id="listboxId" role="listbox" @keydown="handleOptionKey($event)"><template x-for="option in options" :key="option.value"><button type="button" role="option" :data-value="option.value" :aria-selected="selectedValue === option.value" :disabled="option.disabled" @click="choose(option.value)" x-text="option.label"></button></template></div>
-                    </div></div>
-                </div>
-            </fieldset>
-
-            <fieldset class="onboarding-setting-group">
-                <legend>종료 출석 알림</legend>
-                <label class="ui-setting-row compact"><span><strong>알림 사용</strong></span><input class="ui-switch" type="checkbox" x-model="endNotification" @change="saveToggle('set_end_notification_enabled', 'endNotification')"/></label>
-                <div class="ui-setting-controls" :class="{'is-disabled': !endNotification}">
-                    <div class="ui-field"><span>시간</span><div class="ui-select" x-data="selectControl" x-effect="syncValue(notificationEnd)" @click.outside="close()">
-                        <select class="ui-select-native" hidden x-ref="native" tabindex="-1" aria-hidden="true" x-model.number="notificationEnd" @change="saveTime('set_notification_end', notificationEnd)" :disabled="!endNotification"><option value="0">23:00 - 00:00</option><option value="1">23:00 - 01:00</option><option value="2">23:00 - 02:00</option><option value="3">23:00 - 03:00</option><option value="4">23:00 - 04:00</option></select>
-                        <button type="button" class="ui-select-trigger" role="combobox" aria-haspopup="listbox" x-ref="trigger" aria-label="종료 출석 알림 시간" :aria-expanded="open" :aria-controls="listboxId" :disabled="!endNotification" @click="toggle()" @keydown="handleTriggerKey($event)"><span x-text="selectedLabel"></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-                        <div class="ui-select-popover" x-show="open" x-cloak :id="listboxId" role="listbox" @keydown="handleOptionKey($event)"><template x-for="option in options" :key="option.value"><button type="button" role="option" :data-value="option.value" :aria-selected="selectedValue === option.value" :disabled="option.disabled" @click="choose(option.value)" x-text="option.label"></button></template></div>
-                    </div></div>
-                    <div class="ui-field"><span>간격</span><div class="ui-select" x-data="selectControl" x-effect="syncValue(endInterval)" @click.outside="close()">
-                        <select class="ui-select-native" hidden x-ref="native" tabindex="-1" aria-hidden="true" x-model.number="endInterval" @change="saveInterval('set_end_notification_interval', endInterval)" :disabled="!endNotification"><option value="1">1분</option><option value="3">3분</option><option value="5">5분</option><option value="10">10분</option><option value="15">15분</option><option value="30">30분</option></select>
-                        <button type="button" class="ui-select-trigger" role="combobox" aria-haspopup="listbox" x-ref="trigger" aria-label="종료 출석 알림 간격" :aria-expanded="open" :aria-controls="listboxId" :disabled="!endNotification" @click="toggle()" @keydown="handleTriggerKey($event)"><span x-text="selectedLabel"></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-                        <div class="ui-select-popover" x-show="open" x-cloak :id="listboxId" role="listbox" @keydown="handleOptionKey($event)"><template x-for="option in options" :key="option.value"><button type="button" role="option" :data-value="option.value" :aria-selected="selectedValue === option.value" :disabled="option.disabled" @click="choose(option.value)" x-text="option.label"></button></template></div>
-                    </div></div>
-                </div>
-            </fieldset>
+        <section class="flex h-full flex-col" x-show="step === 2" x-cloak aria-labelledby="onboarding-notification-title">
+            <header class="flex-none [&_h2]:m-0 [&_h2]:text-2xl [&_h2]:leading-[1.25] [&_h2]:font-bold [&_h2]:tracking-normal [&>p:last-child]:mt-2 [&>p:last-child]:text-sm [&>p:last-child]:leading-[1.55] [&>p:last-child]:text-app-muted"><p class="mb-2 text-xs font-bold text-app-accent">알림 일정</p><h2 id="onboarding-notification-title">필요한 출석 알림을 정하세요</h2><p>알림을 꺼도 트레이 아이콘 색으로 현재 출석 상태를 확인할 수 있습니다.</p></header>
+            <ul class="my-4 grid list-none grid-cols-3 gap-2 p-0" aria-label="트레이 아이콘 색상 의미"><li class="flex min-h-12 items-center gap-2 rounded-lg bg-app-danger-soft p-2 text-xs"><span class="flex size-8 items-center justify-center rounded-lg bg-app-text"><img class="size-4" src="assets/tray-mini-red.png" alt=""/></span><strong>출석 필요</strong></li><li class="flex min-h-12 items-center gap-2 rounded-lg bg-app-success-soft p-2 text-xs"><span class="flex size-8 items-center justify-center rounded-lg bg-app-text"><img class="size-4" src="assets/tray-mini-white.png" alt=""/></span><strong>출석 완료</strong></li><li class="flex min-h-12 items-center gap-2 rounded-lg bg-app-warning-soft p-2 text-xs"><span class="flex size-8 items-center justify-center rounded-lg bg-app-text"><img class="size-4" src="assets/tray-mini-orange.png" alt=""/></span><strong>로그인 필요</strong></li></ul>
+            <div class="grid min-h-0 flex-1 grid-cols-2 gap-4">
+                <fieldset class="m-0 min-w-0 rounded-lg border border-app-border p-2"><legend class="px-1 text-xs font-bold">시작 출석 알림</legend><label class="flex min-h-12 items-center justify-between gap-2"><strong class="text-sm">알림 사용</strong><input class="ui-switch" type="checkbox" x-model="startNotification" @change="saveToggle('set_start_notification_enabled', 'startNotification')"/></label><div class="grid grid-cols-2 gap-2" :class="{'opacity-50': !startNotification}">
+                    <div class="min-w-0"><span class="mb-1 block text-xs text-app-muted">시간</span><div class="relative" x-data="selectControl" x-effect="syncValue(notificationStart)" @click.outside="close()"><select hidden x-ref="native" tabindex="-1" aria-hidden="true" x-model.number="notificationStart" @change="saveTime('set_notification_start', notificationStart)" :disabled="!startNotification"><option value="4">04:00 - 10:00</option><option value="5">05:00 - 10:00</option><option value="6">06:00 - 10:00</option><option value="7">07:00 - 10:00</option><option value="8">08:00 - 10:00</option><option value="9">09:00 - 10:00</option></select><button type="button" class="flex min-h-12 w-full items-center justify-between gap-1 rounded-lg border border-app-border bg-app-control p-2 text-left text-xs font-semibold" role="combobox" aria-haspopup="listbox" x-ref="trigger" aria-label="시작 출석 알림 시간" :aria-expanded="open" :aria-controls="listboxId" :disabled="!startNotification" @click="toggle()" @keydown="handleTriggerKey($event)"><span class="truncate" x-text="selectedLabel"></span><svg class="size-4 flex-none" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4" fill="none" stroke="currentColor" stroke-width="2"/></svg></button><div class="absolute inset-x-0 top-full z-30 mt-1 grid max-h-24 gap-1 overflow-y-auto rounded-lg border border-app-border-strong bg-app-overlay p-1" x-show="open" x-cloak :id="listboxId" role="listbox" @keydown="handleOptionKey($event)"><template x-for="option in options" :key="option.value"><button type="button" class="min-h-8 rounded-lg p-1 text-left text-xs aria-selected:bg-app-accent-soft aria-selected:text-app-accent" role="option" :data-value="option.value" :aria-selected="selectedValue === option.value" :disabled="option.disabled" @click="choose(option.value)" x-text="option.label"></button></template></div></div></div>
+                    <div class="min-w-0"><span class="mb-1 block text-xs text-app-muted">간격</span><div class="relative" x-data="selectControl" x-effect="syncValue(startInterval)" @click.outside="close()"><select hidden x-ref="native" tabindex="-1" aria-hidden="true" x-model.number="startInterval" @change="saveInterval('set_start_notification_interval', startInterval)" :disabled="!startNotification"><option value="1">1분</option><option value="3">3분</option><option value="5">5분</option><option value="10">10분</option><option value="15">15분</option><option value="30">30분</option></select><button type="button" class="flex min-h-12 w-full items-center justify-between gap-1 rounded-lg border border-app-border bg-app-control p-2 text-left text-xs font-semibold" role="combobox" aria-haspopup="listbox" x-ref="trigger" aria-label="시작 출석 알림 간격" :aria-expanded="open" :aria-controls="listboxId" :disabled="!startNotification" @click="toggle()" @keydown="handleTriggerKey($event)"><span x-text="selectedLabel"></span><svg class="size-4 flex-none" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4" fill="none" stroke="currentColor" stroke-width="2"/></svg></button><div class="absolute inset-x-0 top-full z-30 mt-1 grid max-h-24 gap-1 overflow-y-auto rounded-lg border border-app-border-strong bg-app-overlay p-1" x-show="open" x-cloak :id="listboxId" role="listbox" @keydown="handleOptionKey($event)"><template x-for="option in options" :key="option.value"><button type="button" class="min-h-8 rounded-lg p-1 text-left text-xs aria-selected:bg-app-accent-soft aria-selected:text-app-accent" role="option" :data-value="option.value" :aria-selected="selectedValue === option.value" :disabled="option.disabled" @click="choose(option.value)" x-text="option.label"></button></template></div></div></div>
+                </div></fieldset>
+                <fieldset class="m-0 min-w-0 rounded-lg border border-app-border p-2"><legend class="px-1 text-xs font-bold">종료 출석 알림</legend><label class="flex min-h-12 items-center justify-between gap-2"><strong class="text-sm">알림 사용</strong><input class="ui-switch" type="checkbox" x-model="endNotification" @change="saveToggle('set_end_notification_enabled', 'endNotification')"/></label><div class="grid grid-cols-2 gap-2" :class="{'opacity-50': !endNotification}">
+                    <div class="min-w-0"><span class="mb-1 block text-xs text-app-muted">시간</span><div class="relative" x-data="selectControl" x-effect="syncValue(notificationEnd)" @click.outside="close()"><select hidden x-ref="native" tabindex="-1" aria-hidden="true" x-model.number="notificationEnd" @change="saveTime('set_notification_end', notificationEnd)" :disabled="!endNotification"><option value="0">23:00 - 00:00</option><option value="1">23:00 - 01:00</option><option value="2">23:00 - 02:00</option><option value="3">23:00 - 03:00</option><option value="4">23:00 - 04:00</option></select><button type="button" class="flex min-h-12 w-full items-center justify-between gap-1 rounded-lg border border-app-border bg-app-control p-2 text-left text-xs font-semibold" role="combobox" aria-haspopup="listbox" x-ref="trigger" aria-label="종료 출석 알림 시간" :aria-expanded="open" :aria-controls="listboxId" :disabled="!endNotification" @click="toggle()" @keydown="handleTriggerKey($event)"><span class="truncate" x-text="selectedLabel"></span><svg class="size-4 flex-none" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4" fill="none" stroke="currentColor" stroke-width="2"/></svg></button><div class="absolute inset-x-0 top-full z-30 mt-1 grid max-h-24 gap-1 overflow-y-auto rounded-lg border border-app-border-strong bg-app-overlay p-1" x-show="open" x-cloak :id="listboxId" role="listbox" @keydown="handleOptionKey($event)"><template x-for="option in options" :key="option.value"><button type="button" class="min-h-8 rounded-lg p-1 text-left text-xs aria-selected:bg-app-accent-soft aria-selected:text-app-accent" role="option" :data-value="option.value" :aria-selected="selectedValue === option.value" :disabled="option.disabled" @click="choose(option.value)" x-text="option.label"></button></template></div></div></div>
+                    <div class="min-w-0"><span class="mb-1 block text-xs text-app-muted">간격</span><div class="relative" x-data="selectControl" x-effect="syncValue(endInterval)" @click.outside="close()"><select hidden x-ref="native" tabindex="-1" aria-hidden="true" x-model.number="endInterval" @change="saveInterval('set_end_notification_interval', endInterval)" :disabled="!endNotification"><option value="1">1분</option><option value="3">3분</option><option value="5">5분</option><option value="10">10분</option><option value="15">15분</option><option value="30">30분</option></select><button type="button" class="flex min-h-12 w-full items-center justify-between gap-1 rounded-lg border border-app-border bg-app-control p-2 text-left text-xs font-semibold" role="combobox" aria-haspopup="listbox" x-ref="trigger" aria-label="종료 출석 알림 간격" :aria-expanded="open" :aria-controls="listboxId" :disabled="!endNotification" @click="toggle()" @keydown="handleTriggerKey($event)"><span x-text="selectedLabel"></span><svg class="size-4 flex-none" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4" fill="none" stroke="currentColor" stroke-width="2"/></svg></button><div class="absolute inset-x-0 top-full z-30 mt-1 grid max-h-24 gap-1 overflow-y-auto rounded-lg border border-app-border-strong bg-app-overlay p-1" x-show="open" x-cloak :id="listboxId" role="listbox" @keydown="handleOptionKey($event)"><template x-for="option in options" :key="option.value"><button type="button" class="min-h-8 rounded-lg p-1 text-left text-xs aria-selected:bg-app-accent-soft aria-selected:text-app-accent" role="option" :data-value="option.value" :aria-selected="selectedValue === option.value" :disabled="option.disabled" @click="choose(option.value)" x-text="option.label"></button></template></div></div></div>
+                </div></fieldset>
+            </div>
         </section>
 
-        <section class="onboarding-slide" x-show="step === 3" x-cloak aria-labelledby="onboarding-permission-title">
-            <header class="onboarding-copy">
-                <p class="ui-eyebrow">시스템 권한</p>
-                <h2 id="onboarding-permission-title">알림 허용 여부를 확인하세요</h2>
-                <p>알림을 받으려면 운영체제 설정에서 <strong>Jungle Bell</strong> 알림을 허용해야 합니다.</p>
-            </header>
-            <section class="onboarding-center-state">
-                <span class="ui-state-icon" data-tone="info" aria-hidden="true">
-                    <svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                </span>
-                <strong>시스템 알림 설정</strong>
-                <small>Jungle Bell의 알림 허용이 켜져 있는지 확인합니다.</small>
-                <button type="button" class="ui-button-primary" @click="openNotificationSettings()">알림 설정 열기</button>
-            </section>
+        <section class="flex h-full flex-col" x-show="step === 3" x-cloak aria-labelledby="onboarding-permission-title">
+            <header class="flex-none [&_h2]:m-0 [&_h2]:text-2xl [&_h2]:leading-[1.25] [&_h2]:font-bold [&_h2]:tracking-normal [&>p:last-child]:mt-2 [&>p:last-child]:text-sm [&>p:last-child]:leading-[1.55] [&>p:last-child]:text-app-muted"><p class="mb-2 text-xs font-bold text-app-accent">시스템 권한</p><h2 id="onboarding-permission-title">알림 허용 여부를 확인하세요</h2><p>알림을 받으려면 운영체제 설정에서 <strong>Jungle Bell</strong> 알림을 허용해야 합니다.</p></header>
+            <section class="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 text-center"><span class="flex size-16 items-center justify-center rounded-lg border border-app-border bg-app-accent-soft text-app-accent" aria-hidden="true"><svg class="size-8" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><strong>시스템 알림 설정</strong><small class="text-xs text-app-muted">Jungle Bell의 알림 허용이 켜져 있는지 확인합니다.</small><button type="button" class="ui-button" data-variant="primary" @click="openNotificationSettings()">알림 설정 열기</button></section>
         </section>
 
-        <section class="onboarding-slide" x-show="step === 4" x-cloak aria-labelledby="onboarding-scenario-title">
-            <header class="onboarding-copy">
-                <p class="ui-eyebrow">상태 확인</p>
-                <h2 id="onboarding-scenario-title">아이콘 색으로 상태를 구분합니다</h2>
-            </header>
-            <fieldset class="ui-choice-group scenario-choice">
-                <legend class="sr-only">출석 상태 예시</legend>
-                <label><input type="radio" name="scenario" value="morning" :checked="scenarioName === 'morning'" @change="setScenario('morning')"/><span>시작 전</span></label>
-                <label><input type="radio" name="scenario" value="day" :checked="scenarioName === 'day'" @change="setScenario('day')"/><span>학습 중</span></label>
-                <label><input type="radio" name="scenario" value="night" :checked="scenarioName === 'night'" @change="setScenario('night')"/><span>종료 전</span></label>
-            </fieldset>
-            <section class="scenario-stage compact" aria-label="선택한 출석 상태 예시">
-                <figure class="scenario-mock scenario-mock-macos" x-show="currentOs === 'mac'">
-                    <div class="scenario-bar scenario-bar-top"><span class="scenario-bar-cluster"><i></i><i></i><img :src="scenarioIcon" alt="선택한 상태의 메뉴 막대 아이콘"/><time x-text="scenario.time"></time></span></div>
-                    <div class="scenario-menu scenario-menu-macos"><strong x-text="scenario.status"></strong><span>출석 페이지 열기</span><hr/><span>식단표 보러가기</span><hr/><small>v0.3.7</small><span>피드백 보내기</span><span>설정...</span><span>종료</span></div>
-                </figure>
-                <figure class="scenario-mock scenario-mock-windows" x-show="currentOs === 'win'">
-                    <div class="scenario-menu scenario-menu-windows"><strong x-text="scenario.status"></strong><span>출석 페이지 열기</span><hr/><span>식단표 보러가기</span><hr/><small>v0.3.7</small><span>피드백 보내기</span><span>설정...</span><span>종료</span></div>
-                    <div class="scenario-bar scenario-bar-bottom"><span class="scenario-bar-cluster"><i></i><i></i><img :src="scenarioIcon" alt="선택한 상태의 작업 표시줄 아이콘"/><time x-text="scenario.time"></time></span></div>
-                </figure>
+        <section class="flex h-full flex-col" x-show="step === 4" x-cloak aria-labelledby="onboarding-scenario-title">
+            <header class="flex-none [&_h2]:m-0 [&_h2]:text-2xl [&_h2]:leading-[1.25] [&_h2]:font-bold [&_h2]:tracking-normal"><p class="mb-2 text-xs font-bold text-app-accent">상태 확인</p><h2 id="onboarding-scenario-title">아이콘 색으로 상태를 구분합니다</h2></header>
+            <fieldset class="my-4 flex justify-center gap-2 border-0 p-0"><legend class="sr-only">출석 상태 예시</legend><template x-for="option in [{value:'morning',label:'시작 전'},{value:'day',label:'학습 중'},{value:'night',label:'종료 전'}]" :key="option.value"><label class="relative"><input class="peer sr-only" type="radio" name="scenario" :value="option.value" :checked="scenarioName === option.value" @change="setScenario(option.value)"/><span class="inline-flex min-h-8 cursor-pointer items-center rounded-lg border border-app-border bg-app-control px-4 text-xs font-semibold text-app-muted peer-checked:border-app-accent peer-checked:bg-app-accent-soft peer-checked:text-app-accent" x-text="option.label"></span></label></template></fieldset>
+            <section class="relative min-h-0 flex-1 overflow-hidden rounded-lg border border-app-border bg-app-control p-4" aria-label="선택한 출석 상태 예시">
+                <figure class="relative m-0 h-full overflow-hidden rounded-lg border border-app-border-strong bg-app-surface-subtle" x-show="currentOs === 'mac'"><div class="flex h-8 items-center justify-end bg-app-text px-4 text-app-bg"><span class="flex items-center gap-2"><i class="size-2 rounded-full bg-app-bg"></i><i class="size-2 rounded-full bg-app-bg"></i><img class="size-4" :src="scenarioIcon" alt="선택한 상태의 메뉴 막대 아이콘"/><time class="font-data text-xs" x-text="scenario.time"></time></span></div><div class="absolute top-12 right-16 grid w-1/2 gap-1 rounded-lg border border-app-border-strong bg-app-overlay p-2 text-xs"><strong class="p-1" x-text="scenario.status"></strong><span class="p-1">출석 페이지 열기</span><hr class="m-0 border-app-divider"/><span class="p-1">식단표 보러가기</span><hr class="m-0 border-app-divider"/><small class="px-1 text-app-faint">v0.3.7</small><span class="p-1">피드백 보내기</span><span class="p-1">설정...</span><span class="p-1">종료</span></div></figure>
+                <figure class="relative m-0 h-full overflow-hidden rounded-lg border border-app-border-strong bg-app-surface-subtle" x-show="currentOs === 'win'"><div class="absolute top-4 right-16 grid w-1/2 gap-1 rounded-lg border border-app-border-strong bg-app-overlay p-2 text-xs"><strong class="p-1" x-text="scenario.status"></strong><span class="p-1">출석 페이지 열기</span><hr class="m-0 border-app-divider"/><span class="p-1">식단표 보러가기</span><hr class="m-0 border-app-divider"/><small class="px-1 text-app-faint">v0.3.7</small><span class="p-1">피드백 보내기</span><span class="p-1">설정...</span><span class="p-1">종료</span></div><div class="absolute inset-x-0 bottom-0 flex h-8 items-center justify-end bg-app-text px-4 text-app-bg"><span class="flex items-center gap-2"><i class="size-2 rounded-full bg-app-bg"></i><i class="size-2 rounded-full bg-app-bg"></i><img class="size-4" :src="scenarioIcon" alt="선택한 상태의 작업 표시줄 아이콘"/><time class="font-data text-xs" x-text="scenario.time"></time></span></div></figure>
             </section>
-            <p class="scenario-caption"><template x-for="line in scenarioCaption" :key="line"><span x-text="line"></span></template></p>
+            <p class="mt-2 flex min-h-8 flex-none flex-col items-center justify-center text-center text-xs leading-[1.45] text-app-muted"><template x-for="line in scenarioCaption" :key="line"><span x-text="line"></span></template></p>
         </section>
 
-        <section class="onboarding-slide" x-show="step === 5" x-cloak aria-labelledby="onboarding-complete-title">
-            <header class="onboarding-copy">
-                <p class="ui-eyebrow">설정 완료</p>
-                <h2 id="onboarding-complete-title">Jungle Bell을 사용할 준비가 됐습니다</h2>
-                <p x-text="finalDescription"></p>
-            </header>
-            <section class="onboarding-center-state" aria-live="polite">
-                <span class="ui-state-icon" :data-tone="completionFailed ? 'danger' : 'success'" aria-hidden="true">
-                    <svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                </span>
-                <strong x-text="completionFailed ? '완료 저장 실패' : (onboardingCompleted ? '설정 완료' : '설정을 저장하는 중')"></strong>
-                <small>사용 통계는 앱 설정에서 언제든 끌 수 있습니다.</small>
-            </section>
+        <section class="flex h-full flex-col" x-show="step === 5" x-cloak aria-labelledby="onboarding-complete-title">
+            <header class="flex-none [&_h2]:m-0 [&_h2]:text-2xl [&_h2]:leading-[1.25] [&_h2]:font-bold [&_h2]:tracking-normal [&>p:last-child]:mt-2 [&>p:last-child]:text-sm [&>p:last-child]:leading-[1.55] [&>p:last-child]:text-app-muted"><p class="mb-2 text-xs font-bold text-app-accent">설정 완료</p><h2 id="onboarding-complete-title">Jungle Bell을 사용할 준비가 됐습니다</h2><p x-text="finalDescription"></p></header>
+            <section class="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 text-center" aria-live="polite"><span class="flex size-16 items-center justify-center rounded-lg border border-app-success bg-app-success-soft text-app-success" :class="{'border-app-danger bg-app-danger-soft text-app-danger': completionFailed}" aria-hidden="true"><svg class="size-8" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span><strong x-text="completionFailed ? '완료 저장 실패' : (onboardingCompleted ? '설정 완료' : '설정을 저장하는 중')"></strong><small class="text-xs text-app-muted">사용 통계는 앱 설정에서 언제든 끌 수 있습니다.</small></section>
         </section>
     </article>
 
-    <ol class="onboarding-steps" aria-label="진행 단계">
-        <template x-for="index in totalSteps" :key="index">
-            <li :aria-current="step === index - 1 ? 'step' : undefined"><span class="sr-only" x-text="`${index}단계`"></span></li>
-        </template>
-    </ol>
+    <ol class="my-2 flex h-4 flex-none list-none items-center justify-center gap-2 p-0" aria-label="진행 단계"><template x-for="index in totalSteps" :key="index"><li class="h-1 w-4 rounded-full bg-app-control aria-current:bg-app-accent" :aria-current="step === index - 1 ? 'step' : undefined"><span class="sr-only" x-text="`${index}단계`"></span></li></template></ol>
 
-    <footer class="onboarding-actions">
-        <button type="button" class="ui-button-secondary" :disabled="step === 0" @click="previous()">이전</button>
-        <button type="button" class="ui-button-quiet" :class="{'invisible': isLast}" :disabled="isLast" :aria-hidden="isLast" @click="skip()">건너뛰기</button>
-        <button type="button" class="ui-button-primary" :disabled="isLast ? !completionFailed : nextDisabled" @click="next()" x-text="nextLabel"></button>
-    </footer>
+    <footer class="grid min-h-12 flex-none grid-cols-3 items-center gap-2"><button type="button" class="ui-button justify-self-start" data-variant="secondary" :disabled="step === 0" @click="previous()">이전</button><button type="button" class="ui-button justify-self-center" data-variant="quiet" :class="{'invisible': isLast}" :disabled="isLast" :aria-hidden="isLast" @click="skip()">건너뛰기</button><button type="button" class="ui-button justify-self-end" data-variant="primary" :disabled="isLast ? !completionFailed : nextDisabled" @click="next()" x-text="nextLabel"></button></footer>
 </main>
-
 <script type="module" src="/onboarding.ts"></script>
 </body>
 </html>
