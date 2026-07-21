@@ -59,6 +59,10 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: lts/*
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -83,7 +87,7 @@ jobs:
           releaseId: ${{ needs.get-release-info.outputs.release_id }}
           tagName: ${{ needs.get-release-info.outputs.tag }}
           args: ${{ matrix.args }}
-          projectPath: src-tauri
+          projectPath: .
           updaterJsonPreferNsis: true
 
       - name: Archive .app as tar.gz (macOS only)
