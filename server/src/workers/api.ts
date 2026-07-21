@@ -17,11 +17,14 @@ import { projectLaundry } from "../collector/projection";
 import {
   compactUtcMinute,
   floorToMinute,
-  latestCollectionCommitPath,
   minuteEpoch,
   parseCompactUtcMinute,
 } from "../collector/time";
-import { SOURCE_NAMES, type CollectionCommit, type SourceState } from "../collector/types";
+import {
+  SOURCE_NAMES,
+  type SourceName,
+  type SourceState,
+} from "../collector/types";
 import { CloudflareApiStorage } from "./cloudflare-storage";
 import { configureWorkerLogging } from "./logging";
 
@@ -37,6 +40,11 @@ export const app = new Hono<AppEnvironment>();
 const LATEST_CACHE = "public, max-age=15, s-maxage=30, stale-while-revalidate=120";
 const IMMUTABLE_CACHE = "public, max-age=31536000, immutable";
 const MEAL_HISTORY_PAGE_SIZE = 30;
+const MAX_SOURCE_AGE_MS: Record<SourceName, number> = {
+  laundry: 3 * 60_000,
+  "meals-include-pinned": 12 * 60_000,
+  "meals-default": 12 * 60_000,
+};
 const rfc3339Schema = z.iso.datetime({ offset: true });
 const timeQuerySchema = z.object({ time: rfc3339Schema });
 const minuteParamSchema = z.object({ minute: z.string().regex(/^\d{8}T\d{4}Z$/) });
@@ -50,29 +58,7 @@ const mealHistoryQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(MEAL_HISTORY_PAGE_SIZE),
 });
 const assetParamSchema = z.object({ asset: z.string().regex(/^[a-f0-9]{64}\.[a-z0-9]{1,8}$/) });
-const indexerLogger = getLogger(["jungle-bell", "api-indexer"]);
 const apiLogger = getLogger(["jungle-bell", "api-worker"]);
-
-async function syncLatestCollections(env: Env): Promise<void> {
-  await configureWorkerLogging();
-  const storage = new CloudflareApiStorage(env.DB, env.DATA_BUCKET);
-  const synced: Array<{ source: string; minuteEpoch: number }> = [];
-
-  for (const source of SOURCE_NAMES) {
-    const commit = await storage.readJson<CollectionCommit>(latestCollectionCommitPath(source));
-    if (!commit) {
-      indexerLogger.warn("Collector commit is not available", { source });
-      continue;
-    }
-    if (commit.state.source !== source || commit.observation.source !== source) {
-      throw new Error(`Collector commit source mismatch for ${source}`);
-    }
-    await storage.applyCommit(commit);
-    synced.push({ source, minuteEpoch: commit.observation.minuteEpoch });
-  }
-
-  indexerLogger.info("API database sync completed", { synced });
-}
 
 function currentCacheSlice(): Date {
   return new Date(Math.floor(Date.now() / 30_000) * 30_000);
@@ -162,7 +148,9 @@ app.get("/healthz", async (context) => {
   const states = await context.var.storage.readAllStates();
   const now = Date.now();
   const degraded = states.length !== SOURCE_NAMES.length || states.some((state) =>
-    !state.lastSuccessAt || now - Date.parse(state.lastSuccessAt) > 180_000 || state.consecutiveFailures >= 3
+    !state.lastSuccessAt
+    || now - Date.parse(state.lastSuccessAt) > MAX_SOURCE_AGE_MS[state.source]
+    || state.consecutiveFailures >= 3
   );
   return context.json({
     status: degraded ? "DEGRADED" : "OK",
@@ -328,9 +316,5 @@ app.onError((error, context) => {
 export default {
   fetch(request: Request, env: Env, context: ExecutionContext): Response | Promise<Response> {
     return app.fetch(request, env, context);
-  },
-
-  scheduled(_controller: ScheduledController, env: Env, context: ExecutionContext): void {
-    context.waitUntil(syncLatestCollections(env));
   },
 } satisfies ExportedHandler<Env>;

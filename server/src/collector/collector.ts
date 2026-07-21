@@ -10,9 +10,7 @@ import {
   type MealPost,
 } from "./meals";
 import {
-  datedObjectPath,
   floorToMinute,
-  latestCollectionCommitPath,
   minuteEpoch,
   snapshotPath,
 } from "./time";
@@ -20,11 +18,13 @@ import type {
   CollectAllResult,
   CollectionCommit,
   CollectorOptions,
+  CollectorStorage,
   JsonHttpResponse,
   MinuteObservation,
   SourceName,
   SourceState,
 } from "./types";
+import { SOURCE_NAMES } from "./types";
 
 const logger = getLogger(["jungle-bell", "collector"]);
 const MAX_TIMING_CONTINUITY_GAP_MS = 2 * 60_000;
@@ -38,35 +38,6 @@ interface ChangedArtifacts {
   laundryEvents?: CollectionCommit["laundryEvents"];
   mealPosts?: MealPost[];
   mealObservedAt?: string;
-}
-
-async function readJson<T>(bucket: R2Bucket, key: string): Promise<T | null> {
-  const object = await bucket.get(key);
-  return object ? object.json<T>() : null;
-}
-
-async function writeJson(bucket: R2Bucket, key: string, value: unknown): Promise<void> {
-  await bucket.put(key, JSON.stringify(value), {
-    httpMetadata: { contentType: "application/json; charset=utf-8" },
-  });
-}
-
-async function writeRaw(bucket: R2Bucket, key: string, raw: string): Promise<void> {
-  await bucket.put(key, raw, {
-    httpMetadata: { contentType: "application/json; charset=utf-8" },
-  });
-}
-
-async function archiveCommit(bucket: R2Bucket, commit: CollectionCommit): Promise<void> {
-  const { observation, state } = commit;
-  const key = datedObjectPath(
-    `collector/commits/${observation.source}`,
-    new Date(observation.scheduledAt),
-    `${observation.minuteEpoch}.json`,
-  );
-  await writeJson(bucket, key, commit);
-  await writeJson(bucket, latestCollectionCommitPath(observation.source), commit);
-  await writeJson(bucket, `collector/state/${state.source}.json`, state);
 }
 
 function occurrenceId(observedAt: string): string {
@@ -122,13 +93,13 @@ function minuteObservation(
 }
 
 async function archiveMealImage(
-  bucket: R2Bucket,
+  storage: CollectorStorage,
   options: CollectorOptions,
   candidate: MealImageCandidate,
 ): Promise<MealImageAsset> {
   const mappingKey = `media-map/${candidate.postId}/${candidate.mediaId}.json`;
-  const existing = await readJson<MediaMapping>(bucket, mappingKey);
-  if (existing?.sourceUrl === candidate.sourceUrl && await bucket.head(existing.objectKey)) {
+  const existing = await storage.readJson<MediaMapping>(mappingKey);
+  if (existing?.sourceUrl === candidate.sourceUrl && await storage.objectExists(existing.objectKey)) {
     const { archivedAt: _archivedAt, ...asset } = existing;
     return asset;
   }
@@ -147,11 +118,8 @@ async function archiveMealImage(
   const sha = await sha256Bytes(response.body);
   const extension = mealImageExtension(contentType, candidate.filename);
   const objectKey = `assets/${sha.slice(0, 2)}/${sha}.${extension}`;
-  if (!await bucket.head(objectKey)) {
-    await bucket.put(objectKey, response.body, {
-      httpMetadata: { contentType },
-      customMetadata: { sha256: sha },
-    });
+  if (!await storage.objectExists(objectKey)) {
+    await storage.writeBinary(objectKey, { body: response.body, contentType, etag: sha });
   }
 
   const asset: MealImageAsset = {
@@ -162,13 +130,13 @@ async function archiveMealImage(
     extension,
     byteLength: response.body.byteLength,
   };
-  await writeJson(bucket, mappingKey, { ...asset, archivedAt: response.fetchedAt } satisfies MediaMapping);
+  await storage.writeJson(mappingKey, { ...asset, archivedAt: response.fetchedAt } satisfies MediaMapping);
   return asset;
 }
 
 async function writeChangedArtifacts(
   source: SourceName,
-  bucket: R2Bucket,
+  storage: CollectorStorage,
   options: CollectorOptions,
   response: JsonHttpResponse,
   sha: string,
@@ -177,7 +145,7 @@ async function writeChangedArtifacts(
 ): Promise<ChangedArtifacts> {
   if (source === "laundry") {
     const previous = previousState.lastNormalizedKey
-      ? await readJson<LaundryVersion>(bucket, previousState.lastNormalizedKey)
+      ? await storage.readJson<LaundryVersion>(previousState.lastNormalizedKey)
       : null;
     const normalized = normalizeLaundry(
       response.value,
@@ -190,12 +158,12 @@ async function writeChangedArtifacts(
       },
     );
     const normalizedKey = `versions/laundry/${sha}/${occurrenceId(response.fetchedAt)}.json`;
-    await writeJson(bucket, normalizedKey, normalized);
+    await storage.writeJson(normalizedKey, normalized);
     const firstOccurrenceKey = `versions/laundry/${sha}.json`;
-    if (!await bucket.head(firstOccurrenceKey)) {
-      await writeJson(bucket, firstOccurrenceKey, normalized);
+    if (!await storage.objectExists(firstOccurrenceKey)) {
+      await storage.writeJson(firstOccurrenceKey, normalized);
     }
-    await writeJson(bucket, "latest/laundry.json", normalized);
+    await storage.writeJson("latest/laundry.json", normalized);
     return { normalizedKey, laundryEvents: normalized.events };
   }
 
@@ -204,11 +172,11 @@ async function writeChangedArtifacts(
       response.value,
       sha,
       response.fetchedAt,
-      (candidate) => archiveMealImage(bucket, options, candidate),
+      (candidate) => archiveMealImage(storage, options, candidate),
     );
     const normalizedKey = `versions/meals/${sha}/${occurrenceId(response.fetchedAt)}.json`;
-    await writeJson(bucket, normalizedKey, normalized);
-    await writeJson(bucket, "latest/meals.json", normalized);
+    await storage.writeJson(normalizedKey, normalized);
+    await storage.writeJson("latest/meals.json", normalized);
     return {
       normalizedKey,
       mealPosts: [...normalized.pinnedMenus, ...normalized.dailyMenus, ...normalized.otherPosts],
@@ -222,11 +190,11 @@ async function writeChangedArtifacts(
 async function collectSource(
   source: SourceName,
   url: string,
-  bucket: R2Bucket,
+  storage: CollectorStorage,
   options: CollectorOptions,
   scheduledAt: Date,
 ): Promise<CollectAllResult["results"][number]> {
-  const previousState = await readJson<SourceState>(bucket, `collector/state/${source}.json`) ?? emptyState(source);
+  const previousState = await storage.readState(source) ?? emptyState(source);
   const attemptedAt = new Date().toISOString();
 
   try {
@@ -251,7 +219,7 @@ async function collectSource(
         consecutiveFailures: 0,
         lastError: null,
       };
-      await archiveCommit(bucket, {
+      await storage.commit({
         state,
         observation: minuteObservation(source, scheduledAt, response, state, false),
       });
@@ -260,11 +228,11 @@ async function collectSource(
     }
 
     const rawKey = snapshotPath(source, scheduledAt, sha);
-    await writeRaw(bucket, rawKey, response.raw);
-    await writeRaw(bucket, `latest/raw/${source}.json`, response.raw);
+    await storage.writeRaw(rawKey, response.raw);
+    await storage.writeRaw(`latest/raw/${source}.json`, response.raw);
     const artifacts = await writeChangedArtifacts(
       source,
-      bucket,
+      storage,
       options,
       response,
       sha,
@@ -282,7 +250,7 @@ async function collectSource(
       consecutiveFailures: 0,
       lastError: null,
     };
-    await archiveCommit(bucket, {
+    await storage.commit({
       state,
       observation: minuteObservation(source, scheduledAt, response, state, true),
       ...(artifacts.laundryEvents ? { laundryEvents: artifacts.laundryEvents } : {}),
@@ -318,31 +286,47 @@ async function collectSource(
       httpStatus: null,
       error: errorMessage,
     };
-    await archiveCommit(bucket, { state, observation });
+    await storage.commit({ state, observation });
     logger.error("Source collection failed", { source, error: errorMessage, scheduledAt: scheduledAt.toISOString() });
     return { source, status: "FAILED", changed: false, sha: null, error: errorMessage };
   }
 }
 
-export async function collectAll(
-  bucket: R2Bucket,
+export async function collectSources(
+  storage: CollectorStorage,
   options: CollectorOptions,
+  sources: readonly SourceName[],
   scheduledFor: Date = new Date(),
 ): Promise<CollectAllResult> {
   const scheduledAt = floorToMinute(scheduledFor);
   const results: CollectAllResult["results"] = [];
+  const requested = new Set(sources);
 
   // Keep the upstream requests sequential. The laundry source is slow and the
   // Kakao variants must remain independently observable.
-  results.push(await collectSource("laundry", options.urls.laundry, bucket, options, scheduledAt));
-  results.push(await collectSource(
-    "meals-include-pinned",
-    options.urls.mealsIncludePinned,
-    bucket,
-    options,
-    scheduledAt,
-  ));
-  results.push(await collectSource("meals-default", options.urls.mealsDefault, bucket, options, scheduledAt));
+  if (requested.has("laundry")) {
+    results.push(await collectSource("laundry", options.urls.laundry, storage, options, scheduledAt));
+  }
+  if (requested.has("meals-include-pinned")) {
+    results.push(await collectSource(
+      "meals-include-pinned",
+      options.urls.mealsIncludePinned,
+      storage,
+      options,
+      scheduledAt,
+    ));
+  }
+  if (requested.has("meals-default")) {
+    results.push(await collectSource("meals-default", options.urls.mealsDefault, storage, options, scheduledAt));
+  }
 
   return { scheduledAt: scheduledAt.toISOString(), results };
+}
+
+export function collectAll(
+  storage: CollectorStorage,
+  options: CollectorOptions,
+  scheduledFor: Date = new Date(),
+): Promise<CollectAllResult> {
+  return collectSources(storage, options, SOURCE_NAMES, scheduledFor);
 }

@@ -5,11 +5,11 @@
   "type": "module",
   "scripts": {
     "backfill:meals:prepare": "node scripts/prepare-meal-backfill.ts",
+    "build": "tsup src/node/collector.ts --format esm --platform node --target node22 --out-dir dist/collector --clean",
     "check": "npm run typecheck && npm test",
+    "collector:collect": "node dist/collector/collector.js collect",
     "dev:api": "wrangler dev --config wrangler.api.jsonc",
-    "dev:collector": "wrangler dev --config wrangler.collector.jsonc",
     "deploy:api": "wrangler deploy --config wrangler.api.jsonc",
-    "deploy:collector": "wrangler deploy --config wrangler.collector.jsonc",
     "db:reset:local": "wrangler d1 execute jungle-bell-data --local --file=schema.sql --config wrangler.api.jsonc",
     "db:reset:remote": "wrangler d1 execute jungle-bell-data --remote --file=schema.sql --config wrangler.api.jsonc",
     "test": "vitest run",
@@ -17,8 +17,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1090.0",
     "@hono/zod-validator": "^0.9.0",
     "@logtape/logtape": "^2.0.11",
+    "commander": "^15.0.0",
     "hono": "^4.11.4",
     "json-canonicalize": "^2.0.0",
     "ky": "^2.0.2",
@@ -27,6 +29,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260717.1",
     "@types/node": "^24.10.1",
+    "tsup": "^8.5.1",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4",
     "wrangler": "^4.59.2"
