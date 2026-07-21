@@ -1,4 +1,4 @@
-import { getConsoleSink, getTextFormatter, type ConsoleFormatter, type Sink } from "@logtape/logtape";
+import { configure, getConsoleSink, getTextFormatter, type ConsoleFormatter } from "@logtape/logtape";
 
 const formatMessage = getTextFormatter({
   timestamp: "disabled",
@@ -15,6 +15,17 @@ const cloudflareFormatter: ConsoleFormatter = (record) => [
   },
 ];
 
-export function getCloudflareConsoleSink(): Sink {
-  return getConsoleSink({ formatter: cloudflareFormatter });
+let loggingConfigured: Promise<void> | null = null;
+
+export function configureWorkerLogging(): Promise<void> {
+  loggingConfigured ??= configure({
+    sinks: {
+      cloudflare: getConsoleSink({ formatter: cloudflareFormatter }),
+    },
+    loggers: [
+      { category: ["jungle-bell"], lowestLevel: "info", sinks: ["cloudflare"] },
+      { category: ["logtape"], lowestLevel: "error", sinks: ["cloudflare"] },
+    ],
+  });
+  return loggingConfigured;
 }

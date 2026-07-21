@@ -1,5 +1,5 @@
 import { zValidator, type Hook } from "@hono/zod-validator";
-import { configure, getLogger } from "@logtape/logtape";
+import { getLogger } from "@logtape/logtape";
 import { Hono, type Env as HonoEnvironment } from "hono";
 import { cache } from "hono/cache";
 import { cors } from "hono/cors";
@@ -17,7 +17,7 @@ import {
 } from "../collector/time";
 import { SOURCE_NAMES, type CollectionCommit, type SourceState } from "../collector/types";
 import { CloudflareApiStorage } from "./cloudflare-storage";
-import { getCloudflareConsoleSink } from "./logging";
+import { configureWorkerLogging } from "./logging";
 
 interface Env {
   DB: D1Database;
@@ -43,30 +43,18 @@ const mealHistoryQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(30),
 });
 const assetParamSchema = z.object({ asset: z.string().regex(/^[a-f0-9]{64}\.[a-z0-9]{1,8}$/) });
-
-let loggingConfigured: Promise<void> | null = null;
-
-function configureLogging(): Promise<void> {
-  loggingConfigured ??= configure({
-    sinks: { cloudflare: getCloudflareConsoleSink() },
-    loggers: [
-      { category: ["jungle-bell"], lowestLevel: "info", sinks: ["cloudflare"] },
-      { category: ["logtape"], lowestLevel: "error", sinks: ["cloudflare"] },
-    ],
-  });
-  return loggingConfigured;
-}
+const indexerLogger = getLogger(["jungle-bell", "api-indexer"]);
+const apiLogger = getLogger(["jungle-bell", "api-worker"]);
 
 async function syncLatestCollections(env: Env): Promise<void> {
-  await configureLogging();
-  const logger = getLogger(["jungle-bell", "api-indexer"]);
+  await configureWorkerLogging();
   const storage = new CloudflareApiStorage(env.DB, env.DATA_BUCKET);
   const synced: Array<{ source: string; minuteEpoch: number }> = [];
 
   for (const source of SOURCE_NAMES) {
     const commit = await storage.readJson<CollectionCommit>(latestCollectionCommitPath(source));
     if (!commit) {
-      logger.warn("Collector commit is not available", { source });
+      indexerLogger.warn("Collector commit is not available", { source });
       continue;
     }
     if (commit.state.source !== source || commit.observation.source !== source) {
@@ -76,7 +64,7 @@ async function syncLatestCollections(env: Env): Promise<void> {
     synced.push({ source, minuteEpoch: commit.observation.minuteEpoch });
   }
 
-  logger.info("API database sync completed", { synced });
+  indexerLogger.info("API database sync completed", { synced });
 }
 
 function currentCacheSlice(): Date {
@@ -131,7 +119,7 @@ function withAssetUrls(meals: MealsVersion, requestUrl: string): MealsVersion {
 }
 
 app.use("*", async (_context, next) => {
-  await configureLogging();
+  await configureWorkerLogging();
   await next();
 });
 
@@ -291,7 +279,7 @@ app.get("/v1/assets/:asset", zValidator("param", assetParamSchema, validationHoo
 
 app.notFound((context) => context.json({ error: "NOT_FOUND" }, 404));
 app.onError((error, context) => {
-  getLogger(["jungle-bell", "api-worker"]).error("API request failed", {
+  apiLogger.error("API request failed", {
     method: context.req.method,
     path: context.req.path,
     error: error.message,
