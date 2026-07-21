@@ -1,6 +1,7 @@
 export const MINUTE_MS = 60_000;
 export const EXPECTED_LG_REFRESH_SECONDS = 300;
 export const OVERDUE_LG_REFRESH_SECONDS = 360;
+const KST_OFFSET_MS = 9 * 60 * 60 * 1_000;
 
 export function floorToMinute(date: Date): Date {
   return new Date(Math.floor(date.getTime() / MINUTE_MS) * MINUTE_MS);
@@ -8,6 +9,14 @@ export function floorToMinute(date: Date): Date {
 
 export function minuteEpoch(date: Date): number {
   return Math.floor(date.getTime() / MINUTE_MS);
+}
+
+export function kstWeekKey(date: Date): string {
+  const kst = new Date(date.getTime() + KST_OFFSET_MS);
+  const calendarDate = new Date(Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth(), kst.getUTCDate()));
+  const daysSinceMonday = (calendarDate.getUTCDay() + 6) % 7;
+  calendarDate.setUTCDate(calendarDate.getUTCDate() - daysSinceMonday);
+  return calendarDate.toISOString().slice(0, 10);
 }
 
 export function compactUtcMinute(date: Date): string {

@@ -37,6 +37,30 @@ function commit(): CollectionCommit {
   };
 }
 
+function mealCommit(): CollectionCommit {
+  const source = "meals-include-pinned" as const;
+  return {
+    state: { ...state(), source },
+    observation: {
+      ...commit().observation,
+      source,
+    },
+    mealObservedAt: "2026-07-13T01:00:00.000Z",
+    mealPosts: [{
+      id: "weekly",
+      kind: "PINNED_MENU",
+      title: "7월 2주차 식단표",
+      text: "",
+      pinned: true,
+      publishedAt: "2026-03-09T01:00:00.000Z",
+      updatedAt: "2026-07-13T00:00:00.000Z",
+      permalink: null,
+      status: "published",
+      images: [],
+    }],
+  };
+}
+
 describe("CloudflareApiStorage", () => {
   it("applies an archived commit only to the API query tables", async () => {
     const statements: Array<{ sql: string; values: unknown[] }> = [];
@@ -56,5 +80,25 @@ describe("CloudflareApiStorage", () => {
     expect(statements.some(({ sql }) => sql.includes("minute_observation"))).toBe(true);
     expect(statements.some(({ sql }) => sql.includes("source_state"))).toBe(true);
     expect(statements.some(({ sql }) => sql.includes("source_version"))).toBe(false);
+  });
+
+  it("keeps each pinned menu as a KST weekly snapshot", async () => {
+    const statements: Array<{ sql: string; values: unknown[] }> = [];
+    const db = {
+      prepare: (sql: string) => ({
+        bind: (...values: unknown[]) => {
+          const statement = { sql, values };
+          statements.push(statement);
+          return statement;
+        },
+      }),
+      batch: async () => [],
+    } as unknown as D1Database;
+
+    await new CloudflareApiStorage(db, {} as R2Bucket).applyCommit(mealCommit());
+
+    const weekly = statements.find(({ sql }) => sql.includes("INSERT INTO meal_weekly_menu"));
+    expect(weekly?.values[0]).toBe("2026-07-13");
+    expect(weekly?.values[1]).toContain('"kind":"PINNED_MENU"');
   });
 });

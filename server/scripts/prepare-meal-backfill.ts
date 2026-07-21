@@ -1,6 +1,7 @@
 import { cp, glob, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
-import { parseArgs } from "node:util";
+import { parseArgs, promisify } from "node:util";
+import { gunzip as gunzipCallback } from "node:zlib";
 import { canonicalJsonSha256, sha256Bytes } from "../src/collector/hash.ts";
 import {
   mealImageExtension,
@@ -8,7 +9,9 @@ import {
   type MealImageAsset,
   type MealImageCandidate,
   type MealPost,
+  type WeeklyMealMenu,
 } from "../src/collector/meals.ts";
+import { kstWeekKey } from "../src/collector/time.ts";
 
 interface NewPostEvent {
   observed_at: string;
@@ -20,6 +23,15 @@ interface R2Asset {
   file: string;
   contentType: string;
 }
+
+interface ManifestEntry {
+  collected_at?: string;
+  posts_changed?: boolean;
+  posts_snapshot?: string;
+  endpoints?: { include_pinned?: { snapshot?: string; changed?: boolean } };
+}
+
+const gunzip = promisify(gunzipCallback);
 
 const { values } = parseArgs({
   options: {
@@ -49,7 +61,13 @@ const assets = new Map<string, R2Asset>();
 await mkdir(join(outputDir, "r2"), { recursive: true });
 const version = await normalizeMeals(rawValue, sourceVersionSha, observedAt, archiveImage);
 const normalizedPosts = [...version.pinnedMenus, ...version.dailyMenus, ...version.otherPosts];
-await writeFile(join(outputDir, "meals.sql"), createSql(normalizedPosts, observedAtByPost, observedAt));
+const weeklyMenus = await loadWeeklyMenus(archiveDir, posts, observedAt, archiveImage);
+await writeFile(join(outputDir, "meals.sql"), createSql(
+  normalizedPosts,
+  weeklyMenus,
+  observedAtByPost,
+  observedAt,
+));
 await writeFile(join(outputDir, "r2-assets.json"), `${JSON.stringify([...assets.values()], null, 2)}\n`);
 await writeFile(join(outputDir, "normalized.json"), `${JSON.stringify(version, null, 2)}\n`);
 
@@ -59,6 +77,7 @@ const summary = {
   posts: normalizedPosts.length,
   dailyMenus: version.dailyMenus.length,
   pinnedMenus: version.pinnedMenus.length,
+  weeklyMenus: weeklyMenus.length,
   otherPosts: version.otherPosts.length,
   imageReferences,
   uniqueImageAssets: assets.size,
@@ -126,13 +145,73 @@ async function collect<T>(values: AsyncIterable<T>): Promise<T[]> {
   return result;
 }
 
+async function loadWeeklyMenus(
+  archive: string,
+  latestPosts: unknown[],
+  fallbackObservedAt: string,
+  archiveMealImage: (candidate: MealImageCandidate) => Promise<MealImageAsset>,
+): Promise<WeeklyMealMenu[]> {
+  const versions = new Map<string, { post: unknown; observedAt: string }>();
+  const snapshots = new Set<string>();
+  const addPosts = (value: unknown, observedAt: string) => {
+    if (typeof value !== "object" || value === null) return;
+    const items = (value as { items?: unknown }).items;
+    if (!Array.isArray(items)) return;
+    for (const post of items) {
+      if (typeof post !== "object" || post === null || (post as { pinned?: unknown }).pinned !== true) continue;
+      const candidate = post as { id?: unknown; updated_at?: unknown; media?: unknown };
+      const key = JSON.stringify([candidate.id, candidate.updated_at, candidate.media]);
+      versions.set(key, { post, observedAt });
+    }
+  };
+
+  addPosts({ items: latestPosts }, fallbackObservedAt);
+  const manifest = await readFile(join(archive, "manifest.jsonl"), "utf8");
+  for (const line of manifest.split("\n").filter(Boolean)) {
+    const entry = JSON.parse(line) as ManifestEntry;
+    const snapshot = entry.endpoints?.include_pinned?.snapshot ?? entry.posts_snapshot;
+    const changed = entry.endpoints?.include_pinned?.changed ?? entry.posts_changed;
+    if (snapshot && changed !== false) snapshots.add(snapshot);
+  }
+
+  for (const snapshot of snapshots) {
+    const raw = await gunzip(await readFile(join(archive, snapshot)));
+    addPosts(JSON.parse(raw.toString("utf8")) as unknown, fallbackObservedAt);
+  }
+
+  const byWeek = new Map<string, MealPost>();
+  for (const { post, observedAt } of versions.values()) {
+    const raw = { has_next: false, items: [post] };
+    const normalized = await normalizeMeals(
+      raw,
+      await canonicalJsonSha256(raw),
+      observedAt,
+      archiveMealImage,
+    );
+    const menu = normalized.pinnedMenus[0];
+    if (!menu) continue;
+    const date = new Date(menu.updatedAt ?? observedAt);
+    if (Number.isNaN(date.getTime())) continue;
+    byWeek.set(kstWeekKey(date), menu);
+  }
+
+  return [...byWeek]
+    .map(([weekKey, post]) => ({ weekKey, post }))
+    .sort((left, right) => right.weekKey.localeCompare(left.weekKey));
+}
+
 function literal(value: string | number | null): string {
   if (value === null) return "NULL";
   if (typeof value === "number") return String(value);
   return `'${value.replaceAll("'", "''")}'`;
 }
 
-function createSql(posts: MealPost[], observedAtByPost: Map<string, string>, fallbackObservedAt: string): string {
+function createSql(
+  posts: MealPost[],
+  weeklyMenus: WeeklyMealMenu[],
+  observedAtByPost: Map<string, string>,
+  fallbackObservedAt: string,
+): string {
   const statements: string[] = [];
   for (const post of posts) {
     const seenAt = observedAtByPost.get(post.id) ?? fallbackObservedAt;
@@ -181,6 +260,18 @@ ON CONFLICT(post_id, media_id) DO UPDATE SET
   extension = excluded.extension,
   byte_length = excluded.byte_length;`);
     }
+  }
+  for (const menu of weeklyMenus) {
+    statements.push(`
+INSERT INTO meal_weekly_menu (week_key, post_json, updated_at, observed_at)
+VALUES (
+  ${literal(menu.weekKey)}, ${literal(JSON.stringify(menu.post))},
+  ${literal(menu.post.updatedAt)}, ${literal(menu.post.updatedAt ?? fallbackObservedAt)}
+)
+ON CONFLICT(week_key) DO UPDATE SET
+  post_json = excluded.post_json,
+  updated_at = excluded.updated_at,
+  observed_at = excluded.observed_at;`);
   }
   statements.push("");
   return statements.join("\n");
