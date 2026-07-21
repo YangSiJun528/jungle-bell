@@ -28,7 +28,9 @@ campus/webcrack/logs/
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
-.idea
+.idea/*
+!.idea/icon.svg
+!.idea/vcs.xml
 .DS_Store
 *.suo
 *.ntvs*
