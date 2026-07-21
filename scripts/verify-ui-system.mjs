@@ -116,6 +116,19 @@ requireRule(/<aside class="[^"]*pr-2[^"]*"[^>]*:data-tone="sourceView\(activeTab
 requireRule(campusTs.includes('window.setInterval(() =>')
     && campusTs.includes('this.clockNow = Date.now()')
     && campusTs.includes('window.clearInterval(this.clockTimer)'), 'Campus relative times and laundry countdown must use a cleaned-up live UI clock');
+requireRule(campusHtml.includes('aria-label="세탁기 현황 불러오는 중"')
+    && campusHtml.includes('x-show="!laundry && !errors.laundry"')
+    && campusHtml.includes('data-skeleton="laundry"'), 'Laundry loading must use a dedicated skeleton that disappears on errors');
+requireRule(campusHtml.includes('aria-label="식단 불러오는 중"')
+    && campusHtml.includes('x-show="!meals && !errors.meals"')
+    && campusHtml.includes('data-skeleton="meals"'), 'Meal loading must use a dedicated skeleton that disappears on errors');
+requireRule((campusHtml.match(/animate-pulse motion-reduce:animate-none/g) ?? []).length >= 2,
+    'Campus skeletons must animate with reduced-motion support');
+requireRule(campusTs.includes("window.addEventListener('online', this.onlineRecoveryHandler)")
+    && campusTs.includes('this.recoveryTimer = window.setInterval')
+    && campusTs.includes("window.removeEventListener('online', this.onlineRecoveryHandler)")
+    && campusTs.includes('window.clearInterval(this.recoveryTimer)'),
+    'Campus loading must retry after network recovery and clean up its recovery hooks');
 requireRule(infoDisclosureTs.includes("const OPEN_EVENT = 'info-disclosure-open'") && infoDisclosureTs.includes('handlePeer(event:'), 'Shared information disclosure behavior is missing');
 
 // Meal tabs, calendar, empty/error states, and dialog restoration.
