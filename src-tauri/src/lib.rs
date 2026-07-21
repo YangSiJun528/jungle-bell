@@ -161,6 +161,7 @@ pub fn run() {
             commands::get_auto_update,
             commands::set_auto_update,
             commands::get_app_version,
+            commands::get_data_api_base_url,
             commands::get_pending_update,
             commands::check_and_notify_update,
             commands::get_auto_start,
