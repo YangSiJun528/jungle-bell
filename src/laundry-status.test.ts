@@ -2,9 +2,39 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
     laundryAvailabilityState,
+    laundryOperationLabel,
     laundryOverviewText,
+    laundryProgress,
+    laundryRemainingText,
+    laundryStartAt,
     summarizeLaundryAvailability,
 } from './laundry-status.ts';
+
+test('작동 중 잔여 시간은 예상 종료 시각을 기준으로 매분 감소한다', () => {
+    const appliance = {
+        operationalStatus: 'RUNNING',
+        totalMinutes: 30,
+        estimatedFinishAt: '2026-07-20T06:30:00.000Z',
+        projection: {status: 'ESTIMATED_RUNNING', remainingMinutes: 30},
+    };
+
+    assert.equal(laundryRemainingText(appliance, Date.parse('2026-07-20T06:00:01.000Z')), '30분');
+    assert.equal(laundryRemainingText(appliance, Date.parse('2026-07-20T06:01:00.000Z')), '29분');
+    assert.equal(laundryOverviewText(appliance, Date.parse('2026-07-20T06:01:00.000Z')), '00:29');
+    assert.equal(laundryProgress(appliance, Date.parse('2026-07-20T06:01:00.000Z')), 100 / 30);
+});
+
+test('일시 정지 상태의 잔여 시간은 UI 시계가 흘러도 감소하지 않는다', () => {
+    const appliance = {
+        operationalStatus: 'PAUSED',
+        totalMinutes: 30,
+        estimatedFinishAt: '2026-07-20T06:30:00.000Z',
+        projection: {status: 'PAUSED', remainingMinutes: 12},
+    };
+
+    assert.equal(laundryRemainingText(appliance, Date.parse('2026-07-20T06:20:00.000Z')), '12분');
+    assert.equal(laundryRemainingText(appliance, Date.parse('2026-07-20T06:25:00.000Z')), '12분');
+});
 
 test('워시타워 요약은 사용 중인 기기의 잔여 시간을 HH:MM으로 표시한다', () => {
     assert.equal(laundryOverviewText({
@@ -30,6 +60,29 @@ test('워시타워 요약은 사용 가능한 기기에 텍스트를 표시하�
         operationalStatus: 'IDLE',
         projection: {status: 'IDLE', remainingMinutes: 0},
     }), '');
+});
+
+test('상세 화면은 대기 대신 사용 가능을 표시한다', () => {
+    assert.equal(laundryRemainingText({
+        operationalStatus: 'IDLE',
+        projection: {status: 'IDLE', remainingMinutes: 0},
+    }), '사용 가능');
+});
+
+test('상세 화면은 수집기가 기록한 시작 시각만 사용한다', () => {
+    assert.equal(laundryStartAt({
+        operationalStatus: 'RUNNING',
+        startedAt: '2026-07-20T05:50:02.020Z',
+        projection: {status: 'ESTIMATED_RUNNING', remainingMinutes: 76},
+    }), '2026-07-20T05:50:02.020Z');
+    assert.equal(laundryStartAt({estimatedFinishAt: '2026-07-20T07:26:02.020Z'}), null);
+});
+
+test('세부 작동 상태를 우선하고 일반 RUNNING은 기기 종류에 맞게 표시한다', () => {
+    assert.equal(laundryOperationLabel({appliance: 'washer', state: {code: 'RINSING'}}), '헹굼 중');
+    assert.equal(laundryOperationLabel({appliance: 'washer', state: {code: 'SPINNING'}}), '탈수 중');
+    assert.equal(laundryOperationLabel({appliance: 'washer', state: {code: 'RUNNING'}}), '세탁 중');
+    assert.equal(laundryOperationLabel({appliance: 'dryer', state: {code: 'RUNNING'}}), '건조 중');
 });
 
 test('상세 projection이 완료이면 사용 가능 결과에 포함한다', () => {

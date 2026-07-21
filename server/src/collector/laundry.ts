@@ -4,6 +4,7 @@ import { LG_RUN_STATE_BASELINE, normalizeLgEnum, type NormalizedEnum } from "./l
 import type { JsonValue, LaundryEvent } from "./types";
 
 const logger = getLogger(["jungle-bell", "collector", "laundry"]);
+export const UNKNOWN_LAUNDRY_STARTED_AT = "1970-01-01T00:00:00.000Z";
 
 const timerSchema = z.looseObject({
   remainHour: z.number().int().nonnegative().default(0),
@@ -52,6 +53,7 @@ export interface LaundryApplianceSnapshot {
   operationalStatus: OperationalStatus;
   remainingMinutes: number;
   totalMinutes: number;
+  startedAt: string;
   estimatedFinishAt: string | null;
   remoteControlEnabled: boolean | null;
   cycleCount: number | null;
@@ -94,6 +96,7 @@ export function toPublicLaundryAppliance(appliance: LaundryApplianceSnapshot): L
     operationalStatus: appliance.operationalStatus,
     remainingMinutes: appliance.remainingMinutes,
     totalMinutes: appliance.totalMinutes,
+    startedAt: appliance.startedAt ?? UNKNOWN_LAUNDRY_STARTED_AT,
     estimatedFinishAt: appliance.estimatedFinishAt,
     remoteControlEnabled: appliance.remoteControlEnabled,
     cycleCount: appliance.cycleCount,
@@ -164,6 +167,19 @@ function sessionId(
   return `${machineId}:${appliance}:${observedAt}`;
 }
 
+function sessionStartedAt(
+  status: OperationalStatus,
+  currentSessionId: string | null,
+  observedAt: string,
+  previous: LaundryApplianceSnapshot | null,
+): string {
+  if (!currentSessionId) return UNKNOWN_LAUNDRY_STARTED_AT;
+  if (previous?.sessionId === currentSessionId) {
+    return previous.startedAt ?? UNKNOWN_LAUNDRY_STARTED_AT;
+  }
+  return previous && status === "RUNNING" ? observedAt : UNKNOWN_LAUNDRY_STARTED_AT;
+}
+
 function normalizeAppliance(
   machineId: string,
   appliance: ApplianceKind,
@@ -198,6 +214,9 @@ function normalizeAppliance(
   const estimatedFinishAt = status === "RUNNING"
     ? new Date(Date.parse(observedAt) + remainingMinutes * 60_000).toISOString()
     : null;
+  const currentSessionId = currentState === null
+    ? previous?.sessionId ?? null
+    : sessionId(machineId, appliance, status, cycleCount, observedAt, previous);
 
   return {
     machineId,
@@ -207,12 +226,11 @@ function normalizeAppliance(
     operationalStatus: status,
     remainingMinutes,
     totalMinutes,
+    startedAt: sessionStartedAt(status, currentSessionId, observedAt, previous),
     estimatedFinishAt,
     remoteControlEnabled: raw.remoteControlEnable?.remoteControlEnabled ?? null,
     cycleCount,
-    sessionId: currentState === null
-      ? previous?.sessionId ?? null
-      : sessionId(machineId, appliance, status, cycleCount, observedAt, previous),
+    sessionId: currentSessionId,
     errorCode,
   };
 }

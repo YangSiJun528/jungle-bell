@@ -6,10 +6,15 @@ import {openUrl} from '@tauri-apps/plugin-opener';
 import {dismissInfoDisclosures, infoDisclosure, type InfoDisclosure} from './info-disclosure';
 import {
     laundryAvailabilityState,
+    laundryOperationLabel,
     laundryOverviewText,
+    laundryProgress,
+    laundryRemainingText,
+    laundryStartAt,
     laundryZoneMatchesAccess,
     summarizeLaundryAvailability,
 } from './laundry-status';
+import {relativeTimeKo} from './live-time';
 import {sortMealPostsByPeriod} from './meal-display';
 
 Alpine.plugin(anchor);
@@ -36,9 +41,10 @@ interface Appliance {
     operationalStatus?: string;
     operationalStatusLabelKo?: string;
     projection?: Projection;
-    state?: {code?: string; labelKo?: string};
+    state?: {code?: string; labelKo?: string} | null;
     totalMinutes?: number;
-    estimatedFinishAt?: string;
+    startedAt?: string | null;
+    estimatedFinishAt?: string | null;
     observedAt?: string;
     sessionId?: string | null;
     errorCode?: string;
@@ -182,13 +188,6 @@ const KST_TIME_ZONE = 'Asia/Seoul';
 const APPLIANCE_ERROR_LABELS: Record<string, string> = {
     EMPTY_WATER_ALERT_ERROR: '배관 에러',
 };
-const LG_STATE_LABELS: Record<string, string> = {
-    POWER_OFF: '전원 꺼짐', INITIAL: '사용 가능', RESERVED: '예약됨', DETECTING: '세탁량 감지 중',
-    DISPENSING: '세제 투입 중', SOAKING: '불림 중', WASHING: '세탁 중', RINSING: '헹굼 중',
-    SPINNING: '탈수 중', RUNNING: '작동 중', DRYING: '건조 중', COOLING: '식힘 중',
-    REFRESHING: '리프레시 중', WRINKLE_CARE: '구김 방지 중', PAUSE: '일시 정지', END: '완료',
-    ERROR: '오류', UNKNOWN: '알 수 없음',
-};
 const PROJECTION_LABELS: Record<string, string> = {
     OBSERVED: '관측값', ESTIMATED_RUNNING: '작동 중', AWAITING_COMPLETION_CONFIRMATION: '완료 확인 중',
     CONFIRMED_COMPLETED: '완료', PAUSED: '일시 정지', ERROR: '오류', IDLE: '사용 가능', UNKNOWN: '확인 불가',
@@ -295,6 +294,8 @@ function campus(): Record<string, unknown> {
         mealCalendarMonth: kstDateKey(new Date()).slice(0, 7),
         mealSelectedDate: kstDateKey(new Date()),
         retrying: false,
+        clockNow: Date.now(),
+        clockTimer: null as number | null,
         source: {
             laundry: {label: '세탁기 정보 확인 중', tone: 'neutral'},
             meals: {label: '식단 정보 확인 중', tone: 'neutral'},
@@ -303,6 +304,9 @@ function campus(): Record<string, unknown> {
         unlisteners: [] as UnlistenFn[],
 
         async init(this: any) {
+            this.clockTimer = window.setInterval(() => {
+                this.clockNow = Date.now();
+            }, 1000);
             const rememberLaundryPreferences = () => saveLaundryPreferences({
                 access: this.laundryAccess,
                 filter: this.laundryFilter,
@@ -330,6 +334,8 @@ function campus(): Record<string, unknown> {
         },
 
         destroy(this: any) {
+            if (this.clockTimer !== null) window.clearInterval(this.clockTimer);
+            this.clockTimer = null;
             this.unlisteners.forEach((unlisten: UnlistenFn) => unlisten());
             this.unlisteners = [];
             delete window.setCampusTab;
@@ -346,6 +352,7 @@ function campus(): Record<string, unknown> {
         applySnapshot(this: any, update: CampusUpdate) {
             const {kind, snapshot} = update;
             if (!snapshot || typeof snapshot.savedAt !== 'number') return;
+            this.clockNow = Date.now();
             if (kind === 'laundry' && this.isLaundryPayload(snapshot.data)) {
                 this.laundry = snapshot.data;
                 this.source.laundry = {
@@ -394,6 +401,18 @@ function campus(): Record<string, unknown> {
 
         hasData(this: any, tab: CampusTab) {
             return tab === 'laundry' ? Boolean(this.laundry) : Boolean(this.meals);
+        },
+
+        sourceView(this: any, tab: CampusTab): SourceState {
+            const current = this.source[tab] as SourceState;
+            if (this.errors[tab] || !this.hasData(tab)) return current;
+            const checkedAt = tab === 'laundry'
+                ? this.laundry?.quality?.lastCheckedAt
+                : this.meals?.lastCheckedAt;
+            return {
+                ...current,
+                label: checkedAt ? `${this.relativeTime(checkedAt)} 갱신` : '갱신 시각 없음',
+            };
         },
 
         isLaundryPayload(data: unknown): data is LaundryData {
@@ -604,7 +623,7 @@ function campus(): Record<string, unknown> {
                     number,
                     zone,
                     state,
-                    overviewText: laundryOverviewText(appliance),
+                    overviewText: laundryOverviewText(appliance, this.clockNow),
                     label: `${number}번 워시타워 ${zoneLabel} ${kind === 'washer' ? '세탁기' : '건조기'} ${stateLabel}`,
                 };
             });
@@ -654,7 +673,7 @@ function campus(): Record<string, unknown> {
         completionConfirmationDelayed(this: any, appliance?: Appliance | null) {
             if (appliance?.projection?.status !== 'AWAITING_COMPLETION_CONFIRMATION') return false;
             const finishAt = this.parseDate(appliance.estimatedFinishAt);
-            return Boolean(finishAt && Date.now() > finishAt.getTime());
+            return Boolean(finishAt && this.clockNow > finishAt.getTime());
         },
 
         machineName(id: string) {
@@ -683,7 +702,7 @@ function campus(): Record<string, unknown> {
             if (status === 'AWAITING_COMPLETION_CONFIRMATION') {
                 return this.completionConfirmationDelayed(appliance)
                     ? {label: '완료 확인 지연', tone: 'warning'}
-                    : {label: '작동 중', tone: 'normal'};
+                    : {label: '완료 확인 중', tone: 'normal'};
             }
             if (status === 'CONFIRMED_COMPLETED') return {label: label ?? '완료', tone: 'complete'};
             if (status === 'PAUSED') return {label: label ?? '일시 정지', tone: 'warning'};
@@ -691,7 +710,7 @@ function campus(): Record<string, unknown> {
             if (status === 'UNKNOWN') return {label: label ?? '확인 불가', tone: 'neutral'};
             if (appliance.operationalStatus === 'SCHEDULED') return {label: appliance.operationalStatusLabelKo ?? '예약됨', tone: 'normal'};
             if (status === 'IDLE') return {label: label ?? '사용 가능', tone: 'success'};
-            const stateLabel = appliance.state?.labelKo ?? LG_STATE_LABELS[appliance.state?.code ?? ''];
+            const stateLabel = laundryOperationLabel(appliance);
             if (appliance.operationalStatus === 'RUNNING') return {label: stateLabel ?? '작동 중', tone: 'normal'};
             return {
                 label: stateLabel ?? label ?? appliance.operationalStatusLabelKo ?? '작동 중',
@@ -700,28 +719,16 @@ function campus(): Record<string, unknown> {
         },
 
         remainingText(this: any, appliance?: Appliance | null) {
-            if (!appliance) return '--';
-            const status = appliance.projection?.status;
-            if (status === 'CONFIRMED_COMPLETED') return '완료';
-            if (status === 'ERROR') return '오류';
-            if (status === 'IDLE') return appliance.operationalStatus === 'SCHEDULED' ? '예약' : '대기';
-            if (status === 'UNKNOWN') return '--';
-            const minutes = appliance.projection?.remainingMinutes;
-            if (!Number.isFinite(minutes)) return '--';
-            const value = minutes as number;
-            if (value >= 60) {
-                const hours = Math.floor(value / 60);
-                const rest = value % 60;
-                return rest ? `${hours}시간 ${rest}분` : `${hours}시간`;
-            }
-            return `${value}분`;
+            return laundryRemainingText(appliance, this.clockNow);
+        },
+
+        startAt(appliance?: Appliance | null) {
+            return laundryStartAt(appliance);
         },
 
         progress(this: any, appliance?: Appliance | null) {
-            const total = appliance?.totalMinutes ?? 0;
-            const remaining = appliance?.projection?.remainingMinutes;
-            if (!total || !Number.isFinite(remaining) || !this.applianceIsActive(appliance)) return null;
-            return Math.min(100, Math.max(0, ((total - (remaining as number)) / total) * 100));
+            if (!this.applianceIsActive(appliance)) return null;
+            return laundryProgress(appliance, this.clockNow);
         },
 
         adjustmentMessage(this: any, appliance?: Appliance | null) {
@@ -813,15 +820,7 @@ function campus(): Record<string, unknown> {
         },
 
         relativeTime(this: any, value?: string | Date) {
-            const parsed = value instanceof Date ? value : this.parseDate(value);
-            if (!parsed) return '확인 시각 없음';
-            const seconds = Math.max(0, Math.floor((Date.now() - parsed.getTime()) / 1000));
-            if (seconds < 30) return '방금';
-            if (seconds < 60) return `${seconds}초 전`;
-            const minutes = Math.floor(seconds / 60);
-            if (minutes < 60) return `${minutes}분 전`;
-            const hours = Math.floor(minutes / 60);
-            return hours < 24 ? `${hours}시간 전` : `${Math.floor(hours / 24)}일 전`;
+            return relativeTimeKo(value, this.clockNow);
         },
 
         formatClock(this: any, value?: string) {
@@ -829,8 +828,8 @@ function campus(): Record<string, unknown> {
             return parsed ? new Intl.DateTimeFormat('ko-KR', {timeZone: KST_TIME_ZONE, hour: '2-digit', minute: '2-digit', hour12: false}).format(parsed) : null;
         },
 
-        formatToday() {
-            return new Intl.DateTimeFormat('ko-KR', {timeZone: KST_TIME_ZONE, month: 'long', day: 'numeric', weekday: 'long'}).format(new Date());
+        formatToday(this: any) {
+            return new Intl.DateTimeFormat('ko-KR', {timeZone: KST_TIME_ZONE, month: 'long', day: 'numeric', weekday: 'long'}).format(new Date(this.clockNow));
         },
 
         mealWeekLabel(this: any) {
