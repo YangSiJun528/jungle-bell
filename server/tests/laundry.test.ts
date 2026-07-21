@@ -81,6 +81,50 @@ describe("laundry change detection", () => {
     });
     expect(version.unknownEnums).toHaveLength(1);
   });
+
+  it("keeps collecting when a dryer runState is temporarily missing", () => {
+    const dryer = (state: string | null, remainingMinutes: number) => ({
+      "워시타워_7": {
+        dryer: {
+          ...(state === null ? {} : { runState: { currentState: state } }),
+          timer: {
+            remainHour: Math.floor(remainingMinutes / 60),
+            remainMinute: remainingMinutes % 60,
+            totalHour: 3,
+            totalMinute: 0,
+          },
+        },
+      },
+    });
+    const previous = normalizeLaundry(
+      dryer("RUNNING", 177),
+      "a".repeat(64),
+      "2026-07-19T12:52:00.000Z",
+      null,
+    );
+    const missing = normalizeLaundry(
+      dryer(null, 176),
+      "b".repeat(64),
+      "2026-07-19T12:53:00.000Z",
+      previous,
+    );
+    const recovered = normalizeLaundry(
+      dryer("RUNNING", 175),
+      "c".repeat(64),
+      "2026-07-19T12:54:00.000Z",
+      missing,
+    );
+
+    expect(missing.machines[0]?.dryer).toMatchObject({
+      state: { code: "UNKNOWN", raw: null, known: false },
+      operationalStatus: "UNKNOWN",
+      remainingMinutes: 176,
+      sessionId: previous.machines[0]?.dryer?.sessionId,
+    });
+    expect(missing.unknownEnums).toEqual([]);
+    expect(missing.events).toEqual([]);
+    expect(recovered.events).toEqual([]);
+  });
 });
 
 describe("laundry projection", () => {

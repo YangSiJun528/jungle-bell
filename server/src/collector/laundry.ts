@@ -13,7 +13,7 @@ const timerSchema = z.looseObject({
 });
 
 const applianceSchema = z.looseObject({
-  runState: z.looseObject({ currentState: z.string() }),
+  runState: z.looseObject({ currentState: z.string().nullish() }).nullish(),
   timer: timerSchema.default({
     remainHour: 0,
     remainMinute: 0,
@@ -173,13 +173,18 @@ function normalizeAppliance(
   previous: LaundryApplianceSnapshot | null,
   unknownEnums: UnknownEnumObservation[],
 ): LaundryApplianceSnapshot {
-  const state = normalizeLgEnum(raw.runState.currentState, knownStates);
-  if (!state.known) {
+  const currentState = raw.runState?.currentState ?? null;
+  const state: NormalizedEnum = currentState === null
+    ? { code: "UNKNOWN", raw: null, known: false }
+    : normalizeLgEnum(currentState, knownStates);
+  if (currentState === null) {
+    logger.warn("LG ThinQ runState missing", { machineId, appliance });
+  } else if (!state.known) {
     const unknown = {
       machineId,
       appliance,
       fieldPath: `${appliance}.runState.currentState`,
-      value: raw.runState.currentState,
+      value: currentState,
     };
     unknownEnums.push(unknown);
     logger.warn("Unknown LG ThinQ enum value", unknown);
@@ -205,7 +210,9 @@ function normalizeAppliance(
     estimatedFinishAt,
     remoteControlEnabled: raw.remoteControlEnable?.remoteControlEnabled ?? null,
     cycleCount,
-    sessionId: sessionId(machineId, appliance, status, cycleCount, observedAt, previous),
+    sessionId: currentState === null
+      ? previous?.sessionId ?? null
+      : sessionId(machineId, appliance, status, cycleCount, observedAt, previous),
     errorCode,
   };
 }
@@ -247,6 +254,9 @@ function detectEvents(
   current: LaundryApplianceSnapshot,
   timingContinuity: boolean,
 ): LaundryEvent[] {
+  const missingPreviousState = previous && !previous.state.known && previous.state.raw === null;
+  const missingCurrentState = !current.state.known && current.state.raw === null;
+  if (missingPreviousState || missingCurrentState) return [];
   if (!previous) return current.state.known ? [] : [{
     id: eventId(current, "UNKNOWN_STATE"),
     machineId: current.machineId,
