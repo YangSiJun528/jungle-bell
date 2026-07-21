@@ -16,8 +16,7 @@ interface SettingsComponent {
     pendingVersion: string | null;
     autoStart: boolean;
     autoUpdate: boolean;
-    isMacos: boolean;
-    showInDock: boolean;
+    showAppIcon: boolean;
     showDday: boolean;
     usageAnalytics: boolean;
     debugMode: boolean;
@@ -50,7 +49,7 @@ interface SettingsComponent {
 type BooleanField =
     | 'autoStart'
     | 'autoUpdate'
-    | 'showInDock'
+    | 'showAppIcon'
     | 'showDday'
     | 'usageAnalytics'
     | 'skipAttendance'
@@ -65,8 +64,7 @@ function settings(): SettingsComponent {
         pendingVersion: null,
         autoStart: false,
         autoUpdate: false,
-        isMacos: /Macintosh|Mac OS X/.test(navigator.userAgent),
-        showInDock: true,
+        showAppIcon: true,
         showDday: true,
         usageAnalytics: true,
         debugMode: false,
@@ -104,7 +102,7 @@ function settings(): SettingsComponent {
                 load<string>('get_app_version', (value) => { this.appVersion = value; }),
                 load<boolean>('get_auto_start', (value) => { this.autoStart = value; }),
                 load<boolean>('get_auto_update', (value) => { this.autoUpdate = value; }),
-                load<boolean>('get_show_in_dock', (value) => { this.showInDock = value; }),
+                load<boolean>('get_show_app_icon', (value) => { this.showAppIcon = value; }),
                 load<boolean>('get_show_dday', (value) => { this.showDday = value; }),
                 load<boolean>('get_usage_analytics_enabled', (value) => { this.usageAnalytics = value; }),
                 load<boolean>('get_debug_mode', (value) => { this.debugMode = value; }),

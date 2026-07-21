@@ -42,7 +42,6 @@ const ICON_NORMAL: &[u8] = include_bytes!("../icons/tray-white.png");
 const ICON_ALERT: &[u8] = include_bytes!("../icons/tray-red.png");
 const ICON_WARNING: &[u8] = include_bytes!("../icons/tray-orange.png");
 
-#[cfg(target_os = "macos")]
 const FOREGROUND_WINDOW_LABELS: [&str; 4] = ["attendance", "settings", "onboarding", "campus"];
 
 #[derive(Debug, Clone, Copy)]
@@ -292,9 +291,67 @@ fn has_foreground_window(app: &tauri::AppHandle) -> bool {
         .any(|label| app.get_webview_window(label).is_some())
 }
 
-#[cfg(any(target_os = "macos", test))]
-fn should_show_foreground_app(show_in_dock: bool, has_foreground_window: bool) -> bool {
-    show_in_dock || has_foreground_window
+fn should_show_foreground_app(show_app_icon: bool, has_foreground_window: bool) -> bool {
+    show_app_icon || has_foreground_window
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn should_skip_windows_taskbar(show_app_icon: bool) -> bool {
+    !show_app_icon
+}
+
+fn foreground_window_skip_taskbar(app: &tauri::AppHandle) -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        let state: tauri::State<Arc<TokioMutex<AppState>>> = app.state();
+        let show_app_icon = state.try_lock().map(|s| s.config.show_app_icon).unwrap_or(true);
+        return should_skip_windows_taskbar(show_app_icon);
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = app;
+        false
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn set_windows_taskbar_visibility(app: &tauri::AppHandle, visible: bool) -> Result<(), String> {
+    let skip_taskbar = should_skip_windows_taskbar(visible);
+    for label in FOREGROUND_WINDOW_LABELS {
+        if let Some(window) = app.get_webview_window(label) {
+            if let Err(error) = window.set_skip_taskbar(skip_taskbar) {
+                let rollback_skip_taskbar = !skip_taskbar;
+                for rollback_label in FOREGROUND_WINDOW_LABELS {
+                    if let Some(rollback_window) = app.get_webview_window(rollback_label) {
+                        let _ = rollback_window.set_skip_taskbar(rollback_skip_taskbar);
+                    }
+                }
+                return Err(format!("작업 표시줄 표시 변경 실패({label}): {error}"));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+pub fn set_app_icon_visibility(app: &tauri::AppHandle, visible: bool) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let app_for_task = app.clone();
+        app.run_on_main_thread(move || {
+            set_macos_foreground_visibility(
+                &app_for_task,
+                should_show_foreground_app(visible, has_foreground_window(&app_for_task)),
+            );
+        })
+        .map_err(|error| format!("앱 아이콘 표시 변경 예약 실패: {error}"))?;
+    }
+
+    #[cfg(target_os = "windows")]
+    set_windows_taskbar_visibility(app, visible)?;
+
+    Ok(())
 }
 
 #[cfg(target_os = "macos")]
@@ -316,13 +373,13 @@ fn set_macos_foreground_visibility(app: &tauri::AppHandle, visible: bool) {
 pub fn sync_foreground_app_visibility(app: &tauri::AppHandle) {
     #[cfg(target_os = "macos")]
     {
-        let show_in_dock = {
+        let show_app_icon = {
             let state: tauri::State<Arc<TokioMutex<AppState>>> = app.state();
-            state.try_lock().map(|s| s.config.show_in_dock).unwrap_or(true)
+            state.try_lock().map(|s| s.config.show_app_icon).unwrap_or(true)
         };
         set_macos_foreground_visibility(
             app,
-            should_show_foreground_app(show_in_dock, has_foreground_window(app)),
+            should_show_foreground_app(show_app_icon, has_foreground_window(app)),
         );
     }
 
@@ -377,6 +434,7 @@ fn build_attendance_window(app: &tauri::AppHandle) {
     .inner_size(CONTENT_WINDOW_WIDTH, STANDARD_WINDOW_HEIGHT)
     .min_inner_size(ATTENDANCE_MIN_SIZE, ATTENDANCE_MIN_SIZE)
     .resizable(true)
+    .skip_taskbar(foreground_window_skip_taskbar(app))
     .focused(true)
     .build()
     {
@@ -423,6 +481,7 @@ fn build_campus_window(app: &tauri::AppHandle, tab: CampusTab) {
     .resizable(false)
     .minimizable(false)
     .maximizable(false)
+    .skip_taskbar(foreground_window_skip_taskbar(app))
     .focused(true)
     .build()
     {
@@ -460,6 +519,7 @@ fn build_settings_window(app: &tauri::AppHandle) {
         .resizable(false)
         .minimizable(false)
         .maximizable(false)
+        .skip_taskbar(foreground_window_skip_taskbar(app))
         .focused(true)
         .build()
     {
@@ -482,6 +542,7 @@ fn build_onboarding_window(app: &tauri::AppHandle) {
             .resizable(false)
             .minimizable(false)
             .maximizable(false)
+            .skip_taskbar(foreground_window_skip_taskbar(app))
             .focused(true)
             .build()
     {
@@ -651,10 +712,16 @@ mod tests {
     }
 
     #[test]
-    fn dock_표시_설정과_전면_창_상태로_노출_여부를_결정한다() {
+    fn 앱_아이콘_설정과_전면_창_상태로_macos_노출_여부를_결정한다() {
         assert!(should_show_foreground_app(true, false));
         assert!(should_show_foreground_app(false, true));
         assert!(!should_show_foreground_app(false, false));
+    }
+
+    #[test]
+    fn 앱_아이콘_설정을_windows_skip_taskbar_값으로_변환한다() {
+        assert!(!should_skip_windows_taskbar(true));
+        assert!(should_skip_windows_taskbar(false));
     }
 
     // --- TrayViewModel ---

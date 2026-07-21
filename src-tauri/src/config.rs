@@ -60,9 +60,9 @@ pub struct Config {
     /// 트레이 메뉴 D-Day 표시 여부
     #[serde(default = "default_true")]
     pub show_dday: bool,
-    /// macOS Dock에 앱 아이콘을 계속 표시할지 여부
+    /// macOS Dock 또는 Windows 작업 표시줄에 앱 아이콘을 표시할지 여부
     #[serde(default = "default_true")]
-    pub show_in_dock: bool,
+    pub show_app_icon: bool,
     /// 환영 알림 발송 완료 여부
     /// 기존 config에 필드가 없으면 false → 신규/기존 사용자 모두 한 번 알림 수신.
     #[serde(default)]
@@ -253,7 +253,7 @@ impl Default for Config {
             debug_mode: false,
             usage_analytics_enabled: true,
             show_dday: true,
-            show_in_dock: true,
+            show_app_icon: true,
             welcome_notification_sent: false,
             onboarding_completed: false,
             last_version: None,
@@ -464,18 +464,18 @@ mod tests {
     }
 
     #[test]
-    fn dock_표시는_기본적으로_켜져있다() {
-        assert!(Config::default().show_in_dock);
+    fn 앱_아이콘_표시는_기본적으로_켜져있다() {
+        assert!(Config::default().show_app_icon);
     }
 
     #[test]
-    fn 기존_config도_dock_표시를_기본값으로_사용한다() {
+    fn 기존_config도_앱_아이콘_표시를_기본값으로_사용한다() {
         let mut value = serde_json::to_value(Config::default()).unwrap();
-        value.as_object_mut().unwrap().remove("show_in_dock");
+        value.as_object_mut().unwrap().remove("show_app_icon");
 
         let config: Config = serde_json::from_value(value).unwrap();
 
-        assert!(config.show_in_dock);
+        assert!(config.show_app_icon);
     }
 
     #[test]
