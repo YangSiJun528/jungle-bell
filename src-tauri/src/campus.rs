@@ -241,11 +241,7 @@ impl CampusService {
         self.refresh_inner(app, kind, true).await.map(|_| ())
     }
 
-    pub async fn load_meal_history(
-        &self,
-        app: &tauri::AppHandle,
-        before: Option<String>,
-    ) -> Result<(), String> {
+    pub async fn load_meal_history(&self, app: &tauri::AppHandle, before: Option<String>) -> Result<(), String> {
         let _request_guard = self.meal_history_request.lock().await;
         let mut url = reqwest::Url::parse(&format!("{}/v1/meals/history", self.base_url))
             .map_err(|error| format!("meal history URL was invalid: {error}"))?;
