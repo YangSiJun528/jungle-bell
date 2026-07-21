@@ -1057,18 +1057,7 @@ tr.ob-end-field.disabled {
 }
 
 .laundry-overview-heading {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
     margin-bottom: 12px;
-}
-
-.laundry-overview-heading > div {
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
 }
 
 .laundry-overview-heading h2 {
@@ -1077,7 +1066,6 @@ tr.ob-end-field.disabled {
     font-weight: 600;
 }
 
-.laundry-overview-heading > div > span,
 .laundry-list-title > span {
     color: var(--color-text-muted);
     font-size: var(--font-size-hint);
@@ -1221,6 +1209,14 @@ tr.ob-end-field.disabled {
     gap: 7px;
 }
 
+.laundry-filter-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
 .segmented-control {
     display: inline-grid;
     grid-template-columns: repeat(3, auto);
@@ -1228,6 +1224,16 @@ tr.ob-end-field.disabled {
     padding: 2px;
     border-radius: 8px;
     background: var(--color-pill-bg);
+}
+
+.zone-control {
+    grid-template-columns: repeat(3, auto);
+}
+
+.zone-control .segment {
+    min-width: 0;
+    padding-right: 8px;
+    padding-left: 8px;
 }
 
 .segment {
@@ -1249,22 +1255,20 @@ tr.ob-end-field.disabled {
     font-weight: 600;
 }
 
-.data-note {
-    margin: 10px 0 0;
-    padding: 9px 10px;
-    border: 1px solid var(--color-border);
-    border-radius: 6px;
-    background: var(--color-surface-subtle);
-    color: var(--color-text-muted);
-    font-size: var(--font-size-hint);
-    line-height: 1.45;
-}
-
 .laundry-list,
 .weekly-meals,
 .recent-meals {
     display: grid;
     gap: 10px;
+}
+
+.laundry-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+}
+
+.laundry-list > .inline-empty {
+    grid-column: 1 / -1;
 }
 
 .laundry-card,
@@ -1276,6 +1280,14 @@ tr.ob-end-field.disabled {
     background: var(--color-surface);
 }
 
+.laundry-card {
+    position: relative;
+    min-width: 0;
+    height: 210px;
+    display: flex;
+    flex-direction: column;
+}
+
 .laundry-card-header,
 .meal-card-header {
     min-height: 43px;
@@ -1285,6 +1297,10 @@ tr.ob-end-field.disabled {
     gap: 10px;
     padding: 9px 12px;
     border-bottom: 1px solid var(--color-divider-subtle);
+}
+
+.laundry-card-header {
+    flex: 0 0 43px;
 }
 
 .laundry-card-header h3,
@@ -1301,17 +1317,39 @@ tr.ob-end-field.disabled {
     font-size: var(--font-size-hint);
 }
 
+.laundry-card-title {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.zone-badge {
+    flex: 0 0 auto;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: var(--color-pill-bg);
+    color: var(--color-text-muted);
+    font-size: 10px;
+    line-height: 1.5;
+}
+
 .appliance-grid {
-    display: block;
+    min-height: 0;
+    flex: 1;
+    display: grid;
+    grid-template-rows: repeat(2, minmax(0, 1fr));
 }
 
 .appliance-row {
+    position: relative;
     min-width: 0;
-    min-height: 92px;
+    min-height: 0;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
+    align-content: center;
     gap: 6px 10px;
-    padding: 10px 12px 10px 9px;
+    padding: 8px 10px 8px 7px;
     border-left: 3px solid transparent;
 }
 
@@ -1430,27 +1468,35 @@ tr.ob-end-field.disabled {
 .appliance-meta {
     min-width: 0;
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 2px 10px;
+    padding-right: 26px;
+    overflow: hidden;
     color: var(--color-text-muted);
     font-size: 11px;
     line-height: 1.4;
+    white-space: nowrap;
+}
+
+.appliance-meta > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .error-code {
+    flex: 1 1 auto;
     color: var(--color-danger);
-    overflow-wrap: anywhere;
 }
 
 .inline-info {
-    grid-column: 1 / -1;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: start;
+    position: absolute;
+    right: 8px;
+    bottom: 7px;
+    z-index: 3;
 }
 
 .inline-info > .info-icon-btn {
-    grid-column: 2;
     width: 22px;
     height: 22px;
     flex-basis: 22px;
@@ -1458,14 +1504,28 @@ tr.ob-end-field.disabled {
 }
 
 .inline-info-detail {
-    grid-column: 1 / -1;
-    margin: 5px 0 0;
+    position: absolute;
+    right: 0;
+    bottom: 27px;
+    width: 250px;
+    max-width: calc(100vw - 48px);
+    margin: 0;
     padding: 7px 8px;
     border-radius: 5px;
     background: var(--color-warning-soft);
+    box-shadow: 0 4px 12px rgba(24, 29, 33, 0.16);
     color: var(--color-warning);
     font-size: 11px;
     line-height: 1.4;
+}
+
+.inline-info-detail strong,
+.inline-info-detail span {
+    display: block;
+}
+
+.inline-info-detail strong {
+    margin-bottom: 4px;
 }
 
 .appliance-unavailable {
@@ -1727,11 +1787,21 @@ tr.ob-end-field.disabled {
         grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
+    .laundry-filter-toolbar {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .zone-control {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
     .segment {
         min-width: 0;
     }
 
     .laundry-type-summary-grid,
+    .laundry-list,
     .today-meals {
         grid-template-columns: minmax(0, 1fr);
     }

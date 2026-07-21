@@ -33,14 +33,7 @@
         <div x-show="laundry">
             <section class="laundry-overview" aria-labelledby="laundry-overview-title">
                 <div class="laundry-overview-heading">
-                    <div>
-                        <h2 id="laundry-overview-title">현재 사용 현황</h2>
-                        <span x-text="`LG ThinQ ${relativeTime(laundry?.quality?.lastCheckedAt)}`"></span>
-                    </div>
-                    <button type="button" class="info-icon-btn" title="잔여 시간 안내" aria-label="잔여 시간 안내 보기"
-                            x-show="laundryInfo()" :aria-expanded="infoExpanded" @click="infoExpanded = !infoExpanded">
-                        <span aria-hidden="true">i</span>
-                    </button>
+                    <h2 id="laundry-overview-title">현재 사용 현황</h2>
                 </div>
 
                 <div class="laundry-type-summary-grid">
@@ -61,12 +54,19 @@
                         </div>
                     </template>
                 </div>
-                <p class="data-note" x-show="infoExpanded && laundryInfo()" x-text="laundryInfo()"></p>
             </section>
 
             <div class="section-heading filter-heading">
-                <div class="laundry-list-title"><h2 id="laundry-title">워시타워</h2><span x-text="`${laundry?.machines.length ?? 0}대`"></span></div>
-                <div class="segmented-control" role="group" aria-label="세탁기 필터">
+                <div class="laundry-list-title"><h2 id="laundry-title">워시타워</h2><span x-text="`${filteredMachines().length}대`"></span></div>
+            </div>
+            <div class="laundry-filter-toolbar">
+                <div class="segmented-control zone-control" role="group" aria-label="워시타워 이용 구역 필터">
+                    <template x-for="access in [{value:'all', label:'전체'}, {value:'men', label:'남성 가능'}, {value:'women', label:'여성 가능'}]" :key="access.value">
+                        <button type="button" class="segment" :class="{active: laundryAccess === access.value}"
+                                :aria-pressed="laundryAccess === access.value" @click="laundryAccess = access.value" x-text="access.label"></button>
+                    </template>
+                </div>
+                <div class="segmented-control status-control" role="group" aria-label="워시타워 상태 필터">
                     <template x-for="filter in [{value:'all', label:'전체'}, {value:'active', label:'작동 중'}, {value:'available', label:'사용 가능'}]" :key="filter.value">
                         <button type="button" class="segment" :class="{active: laundryFilter === filter.value}"
                                 :aria-pressed="laundryFilter === filter.value" @click="laundryFilter = filter.value" x-text="filter.label"></button>
@@ -78,7 +78,10 @@
                 <template x-if="filteredMachines().length === 0"><div class="inline-empty" x-text="laundryEmptyMessage()"></div></template>
                 <template x-for="machine in filteredMachines()" :key="machine.id">
                     <article class="laundry-card">
-                        <div class="laundry-card-header"><h3 x-text="machineName(machine.id)"></h3><span x-text="machineSummary(machine)"></span></div>
+                        <div class="laundry-card-header">
+                            <div class="laundry-card-title"><h3 x-text="machineName(machine.id)"></h3><span class="zone-badge" x-text="machineZoneLabel(machine.id)"></span></div>
+                            <span x-text="machineSummary(machine)"></span>
+                        </div>
                         <div class="appliance-grid">
                             <template x-for="entry in [{kind:'washer', appliance:machine.washer}, {kind:'dryer', appliance:machine.dryer}]" :key="entry.kind">
                                 <section class="appliance-row" :data-tone="projectionView(entry.appliance).tone">
@@ -98,16 +101,26 @@
                                          :aria-label="`${entry.kind === 'washer' ? '세탁' : '건조'} 진행률`">
                                         <span class="progress-fill" :style="`width: ${progress(entry.appliance) ?? 0}%`"></span>
                                     </div>
-                                    <div class="appliance-meta" x-show="entry.appliance">
+                                    <div class="appliance-meta"
+                                         x-show="applianceError(entry.appliance) || (entry.appliance?.estimatedFinishAt && applianceIsActive(entry.appliance))">
+                                        <span class="error-code" x-show="applianceError(entry.appliance)"
+                                              :title="applianceError(entry.appliance)?.text" x-text="applianceError(entry.appliance)?.text"></span>
                                         <span x-show="entry.appliance?.estimatedFinishAt && applianceIsActive(entry.appliance)"
                                               x-text="`예상 종료 ${formatClock(entry.appliance?.estimatedFinishAt)}`"></span>
-                                        <span x-text="`원격 관측 ${relativeTime(entry.appliance?.observedAt)}`"></span>
-                                        <span class="error-code" x-show="entry.appliance?.errorCode" x-text="`오류 코드 ${entry.appliance?.errorCode}`"></span>
                                     </div>
-                                    <div class="inline-info" x-data="{expanded:false}" x-show="adjustmentMessage(entry.appliance)">
-                                        <button type="button" class="info-icon-btn" title="상태 변경 안내" aria-label="상태 변경 안내"
-                                                :aria-expanded="expanded" @click="expanded = !expanded"><span aria-hidden="true">i</span></button>
-                                        <p class="inline-info-detail" x-show="expanded" x-text="adjustmentMessage(entry.appliance)"></p>
+                                    <div class="inline-info" x-data="{expanded:false, hovered:false}"
+                                         x-show="applianceInfo(entry.appliance, entry.kind)"
+                                         @mouseenter="hovered = true" @mouseleave="hovered = false"
+                                         @keydown.escape="expanded = false">
+                                        <button type="button" class="info-icon-btn"
+                                                :title="applianceInfo(entry.appliance, entry.kind)?.title ?? '기기 상태 안내'"
+                                                :aria-label="applianceInfo(entry.appliance, entry.kind)?.title ?? '기기 상태 안내'"
+                                                :aria-expanded="expanded || hovered" @click="expanded = !expanded"
+                                                @focus="hovered = true" @blur="hovered = false"><span aria-hidden="true">i</span></button>
+                                        <p class="inline-info-detail" role="note" x-show="expanded || hovered">
+                                            <strong x-text="applianceInfo(entry.appliance, entry.kind)?.title"></strong>
+                                            <span x-text="applianceInfo(entry.appliance, entry.kind)?.detail"></span>
+                                        </p>
                                     </div>
                                 </section>
                             </template>
