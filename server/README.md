@@ -14,10 +14,9 @@ OCI Collector는 세탁실을 매분, 카카오 API 두 개를 5분마다 한 �
 
 식단 게시물의 본문은 API 조회 모델인 D1 `meal_post`, 이미지 메타데이터는 `meal_image`에 누적합니다. 카카오 최신 목록에서 게시물이 사라져도 이 레코드는 삭제하지 않습니다. 원본 JSON 버전, 수집 commit, 실제 이미지 파일은 복구용으로 R2에 계속 보관합니다.
 
-## 문서
+## 내부 운영
 
-- [Cloudflare 배포](docs/guide-deploy-cloudflare.md)
-- [OCI Collector 배포](docs/guide-deploy-oci-collector.md)
+- [배포와 장애 대응 런북](OPERATIONS.md)
 - [HTTP API 레퍼런스](docs/api-reference.md)
 
 ## D1 초기화
