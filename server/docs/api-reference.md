@@ -91,11 +91,17 @@ LG 프로필에 없는 enum은 다음 형태로 그대로 노출됩니다.
 }
 ```
 
+API는 표시 언어에 종속된 라벨을 반환하지 않습니다. 클라이언트는 `state.code`, `operationalStatus`, `projection.status`, 이벤트의 `type`을 표시 언어에 맞게 변환합니다.
+
 ## 식단 엔드포인트
 
 ### `GET /v1/meals`
 
-pinned 주간 식단표, 중식·석식 게시물, 기타 게시물을 구분해 반환합니다. 각 이미지에는 원본 카카오 URL, 콘텐츠 SHA, 보관 객체 키, API 이미지 URL이 포함됩니다.
+pinned 주간 식단표, 현재 중식·석식 게시물, 기타 게시물을 구분해 반환합니다. `data.recentMenus`에는 카카오 최신 목록에서 제거된 게시물도 포함한 최근 식단 최대 30개가 들어갑니다. 각 이미지에는 원본 카카오 URL, 콘텐츠 SHA, 보관 객체 키, API 이미지 URL이 포함됩니다.
+
+### `GET /v1/meals/history?before=<RFC3339>&limit=30`
+
+D1에 누적된 과거 식단을 최신순으로 반환합니다. `limit` 범위는 1부터 100이며 `nextBefore`가 있으면 다음 요청의 `before`로 사용합니다. 카카오에서 게시물이 제거되어도 수집된 본문과 이미지 메타데이터는 이 엔드포인트에서 계속 조회할 수 있습니다.
 
 ### `GET /v1/assets/:sha.:extension`
 

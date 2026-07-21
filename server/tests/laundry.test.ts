@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { normalizeLaundry, projectLaundry, type LaundryVersion } from "../packages/collector-core/src";
+import { normalizeLaundry, type LaundryVersion } from "../src/laundry";
+import { projectLaundry } from "../src/projection";
 
 function laundry(state: string, remainingMinutes: number, totalMinutes = 60): unknown {
   return {
@@ -47,7 +48,6 @@ describe("laundry change detection", () => {
       code: "UNKNOWN",
       raw: "MODEL_SPECIFIC_STATE",
       known: false,
-      labelKo: "알 수 없음",
     });
     expect(version.unknownEnums).toHaveLength(1);
   });
@@ -72,20 +72,19 @@ describe("laundry projection", () => {
     expect(projected.machines[0]?.washer?.projection).toMatchObject({
       remainingMinutes: 0,
       status: "AWAITING_COMPLETION_CONFIRMATION",
-      statusLabelKo: "완료 확인 중",
       estimated: true,
     });
   });
 
-  it("adds Korean labels without replacing source enum values", () => {
+  it("keeps enum values language-neutral", () => {
     const version = normalizeLaundry(laundry("RINSING", 10), "a".repeat(64), "2026-07-17T00:00:00.000Z", null);
     const projected = projectLaundry(version, sourceState, new Date("2026-07-17T00:01:01.000Z"), false);
     const washer = projected.machines[0]?.washer;
 
-    expect(washer?.state).toMatchObject({ code: "RINSING", raw: null, known: true, labelKo: "헹굼 중" });
+    expect(washer?.state).toEqual({ code: "RINSING", raw: null, known: true });
     expect(washer?.operationalStatus).toBe("RUNNING");
-    expect(washer?.operationalStatusLabelKo).toBe("작동 중");
-    expect(projected.quality.sourceFreshnessLabelKo).toBe("다음 원격 갱신 대기");
+    expect(projected.quality.sourceFreshness).toBe("WITHIN_REFRESH_WINDOW");
+    expect(JSON.stringify(projected)).not.toMatch(/labelKo/i);
   });
 
   it("only reports confirmed completion from an observed END state", () => {

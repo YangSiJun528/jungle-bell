@@ -22,18 +22,20 @@ npx wrangler d1 create jungle-bell-data
 npx wrangler r2 bucket create jungle-bell-data
 ```
 
-D1 생성 결과의 `database_id`를 다음 두 파일의 `REPLACE_WITH_D1_DATABASE_ID` 자리에 넣습니다.
+D1 생성 결과의 `database_id`를 다음 두 파일에 넣습니다.
 
-- `workers/collector-worker/wrangler.jsonc`
-- `workers/api-worker/wrangler.jsonc`
+- `wrangler.collector.jsonc`
+- `wrangler.api.jsonc`
 
 두 Worker는 반드시 같은 D1과 R2 바인딩을 사용해야 합니다.
 
-## 3. D1 마이그레이션
+## 3. D1 스키마 적용
 
 ```bash
-npm run d1:migrate:remote
+npm run db:schema:remote
 ```
+
+마이그레이션 이력은 관리하지 않습니다. 테이블을 변경할 때는 `schema.sql`을 수정하고 필요한 데이터 변경은 직접 수행합니다.
 
 ## 4. Collector 배포
 
@@ -43,7 +45,7 @@ npm run deploy:collector
 
 Collector의 Cron Trigger는 `* * * * *`입니다. 세탁 API, pinned 포함 식단 API, 기본 식단 API를 이 순서로 매분 한 번씩 요청합니다. 캐시 우회 쿼리나 `no-cache` 헤더는 보내지 않습니다.
 
-LG ThinQ 모델별 상태값을 알고 있다면 `workers/collector-worker/wrangler.jsonc`의 `vars`에 추가합니다.
+LG ThinQ 모델별 상태값을 알고 있다면 `wrangler.collector.jsonc`의 `vars`에 추가합니다.
 
 ```json
 "LG_RUN_STATES": "[\"POWER_OFF\",\"WASHING\",\"RINSING\",\"SPINNING\",\"END\"]"
@@ -67,7 +69,7 @@ API Worker 배포 결과의 HTTPS origin을 GitHub 저장소의 Actions 변수 `
 https://jungle-bell-api.<account>.workers.dev
 ```
 
-릴리스 워크플로가 이 값을 Tauri 빌드에 주입합니다. 릴리스 빌드는 변수가 없으면 생활 정보 화면에서 설정 오류를 표시하며 임의의 서버로 대체하지 않습니다. 로컬 디버그 빌드는 기본적으로 `http://127.0.0.1:8787`을 사용합니다.
+릴리스 워크플로가 이 값을 Tauri 빌드에 주입합니다. 릴리스 빌드는 변수가 없으면 생활 정보 화면에서 설정 오류를 표시하며 임의의 서버로 대체하지 않습니다.
 
 직접 릴리스 빌드를 만들 때는 같은 변수를 지정합니다.
 

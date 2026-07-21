@@ -3,12 +3,10 @@ import {
   OVERDUE_LG_REFRESH_SECONDS,
 } from "./time";
 import {
-  laundryEventTypeLabelKo,
-  operationalStatusLabelKo,
+  toPublicLaundryAppliance,
   type LaundryApplianceSnapshot,
   type LaundryVersion,
 } from "./laundry";
-import { lgRunStateLabelKo } from "./lg-profile";
 import type { LaundryEvent, SourceState } from "./types";
 
 export type ProjectionStatus =
@@ -33,13 +31,8 @@ export interface ProjectedAppliance extends LaundryApplianceSnapshot {
     asOf: string;
     remainingMinutes: number | null;
     status: ProjectionStatus;
-    statusLabelKo: string;
     estimated: boolean;
   };
-}
-
-export interface ProjectedLaundryEvent extends LaundryEvent {
-  typeLabelKo: string;
 }
 
 export interface ProjectedLaundry {
@@ -49,13 +42,9 @@ export interface ProjectedLaundry {
   final: boolean;
   quality: {
     collection: "SUCCESS" | "STALE";
-    collectionLabelKo: string;
     sourceFreshness: SourceFreshness;
-    sourceFreshnessLabelKo: string;
     certainty: "OBSERVED_API_VALUE" | "PROVISIONAL_DEVICE_STATE" | "UNAVAILABLE";
-    certaintyLabelKo: string;
     basis: "SOURCE_TIMESTAMP" | "HASH_CADENCE";
-    basisLabelKo: string;
     lastCheckedAt: string | null;
     expectedRefreshIntervalSeconds: number;
   };
@@ -64,37 +53,8 @@ export interface ProjectedLaundry {
     washer: ProjectedAppliance | null;
     dryer: ProjectedAppliance | null;
   }>;
-  events: ProjectedLaundryEvent[];
+  events: LaundryEvent[];
   unknownEnums: LaundryVersion["unknownEnums"];
-}
-
-export function projectionStatusLabelKo(status: ProjectionStatus): string {
-  const labels: Record<ProjectionStatus, string> = {
-    OBSERVED: "관측값",
-    ESTIMATED_RUNNING: "작동 중",
-    AWAITING_COMPLETION_CONFIRMATION: "완료 확인 중",
-    CONFIRMED_COMPLETED: "완료",
-    PAUSED: "일시 정지",
-    ERROR: "오류",
-    IDLE: "사용 가능",
-    UNKNOWN: "확인 불가",
-  };
-  return labels[status];
-}
-
-export function sourceFreshnessLabelKo(freshness: SourceFreshness): string {
-  const labels: Record<SourceFreshness, string> = {
-    REFRESH_OBSERVED: "원격 상태 갱신됨",
-    WITHIN_REFRESH_WINDOW: "다음 원격 갱신 대기",
-    REFRESH_OVERDUE: "원격 갱신 지연",
-    UNVERIFIABLE_STABLE: "상태 변화 없음",
-    COLLECTION_GAP: "수집 연결 지연",
-  };
-  return labels[freshness];
-}
-
-export function withLaundryEventLabelKo(event: LaundryEvent): ProjectedLaundryEvent {
-  return { ...event, typeLabelKo: laundryEventTypeLabelKo(event.type) };
 }
 
 function projectAppliance(appliance: LaundryApplianceSnapshot, asOf: Date): ProjectedAppliance {
@@ -130,18 +90,11 @@ function projectAppliance(appliance: LaundryApplianceSnapshot, asOf: Date): Proj
   }
 
   return {
-    ...appliance,
-    state: {
-      ...appliance.state,
-      labelKo: appliance.state.labelKo ?? lgRunStateLabelKo(appliance.state.code),
-    },
-    operationalStatusLabelKo: appliance.operationalStatusLabelKo
-      ?? operationalStatusLabelKo(appliance.operationalStatus),
+    ...toPublicLaundryAppliance(appliance),
     projection: {
       asOf: asOf.toISOString(),
       remainingMinutes,
       status,
-      statusLabelKo: projectionStatusLabelKo(status),
       estimated,
     },
   };
@@ -176,21 +129,13 @@ export function projectLaundry(
     final,
     quality: {
       collection: freshness === "COLLECTION_GAP" ? "STALE" : "SUCCESS",
-      collectionLabelKo: freshness === "COLLECTION_GAP" ? "수집 지연" : "수집 정상",
       sourceFreshness: freshness,
-      sourceFreshnessLabelKo: sourceFreshnessLabelKo(freshness),
       certainty: freshness === "COLLECTION_GAP"
         ? "UNAVAILABLE"
         : anyActive && freshness !== "REFRESH_OBSERVED"
           ? "PROVISIONAL_DEVICE_STATE"
           : "OBSERVED_API_VALUE",
-      certaintyLabelKo: freshness === "COLLECTION_GAP"
-        ? "확인 불가"
-        : anyActive && freshness !== "REFRESH_OBSERVED"
-          ? "기기 상태 추정"
-          : "API 관측값",
       basis: "HASH_CADENCE",
-      basisLabelKo: "응답 변경 주기",
       lastCheckedAt,
       expectedRefreshIntervalSeconds: EXPECTED_LG_REFRESH_SECONDS,
     },
@@ -199,7 +144,7 @@ export function projectLaundry(
       washer: machine.washer ? projectAppliance(machine.washer, asOf) : null,
       dryer: machine.dryer ? projectAppliance(machine.dryer, asOf) : null,
     })),
-    events: version.events.map(withLaundryEventLabelKo),
+    events: version.events,
     unknownEnums: version.unknownEnums,
   };
 }

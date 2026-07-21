@@ -58,3 +58,44 @@ CREATE INDEX IF NOT EXISTS laundry_event_observed_at
 
 CREATE INDEX IF NOT EXISTS laundry_event_machine_session
   ON laundry_event (machine_id, appliance, session_id, observed_at);
+
+CREATE TABLE IF NOT EXISTS meal_post (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL CHECK (kind IN ('PINNED_MENU', 'DAILY_MENU', 'OTHER')),
+  title TEXT,
+  text TEXT NOT NULL,
+  pinned INTEGER NOT NULL CHECK (pinned IN (0, 1)),
+  published_at TEXT,
+  updated_at TEXT,
+  permalink TEXT,
+  status TEXT,
+  first_seen_at TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS meal_post_published_at
+  ON meal_post (published_at DESC);
+
+CREATE INDEX IF NOT EXISTS meal_post_kind_published_at
+  ON meal_post (kind, published_at DESC);
+
+CREATE TABLE IF NOT EXISTS meal_image (
+  post_id TEXT NOT NULL,
+  media_id TEXT NOT NULL,
+  position INTEGER NOT NULL,
+  source_url TEXT NOT NULL,
+  declared_content_type TEXT,
+  filename TEXT,
+  width INTEGER,
+  height INTEGER,
+  sha TEXT NOT NULL,
+  object_key TEXT NOT NULL,
+  content_type TEXT NOT NULL,
+  extension TEXT NOT NULL,
+  byte_length INTEGER NOT NULL,
+  PRIMARY KEY (post_id, media_id),
+  FOREIGN KEY (post_id) REFERENCES meal_post(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS meal_image_post_position
+  ON meal_image (post_id, position);

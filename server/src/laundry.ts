@@ -1,7 +1,7 @@
 import { getLogger } from "@logtape/logtape";
 import { z } from "zod";
-import { LG_RUN_STATE_BASELINE, lgRunStateLabelKo, normalizeLgEnum, type NormalizedEnum } from "./lg-profile";
-import type { JsonValue, LaundryEvent, LaundryEventType } from "./types";
+import { LG_RUN_STATE_BASELINE, normalizeLgEnum, type NormalizedEnum } from "./lg-profile";
+import type { JsonValue, LaundryEvent } from "./types";
 
 const logger = getLogger(["jungle-bell", "collector", "laundry"]);
 
@@ -57,7 +57,6 @@ export interface LaundryApplianceSnapshot {
   observedAt: string;
   state: NormalizedEnum;
   operationalStatus: OperationalStatus;
-  operationalStatusLabelKo: string;
   remainingMinutes: number;
   totalMinutes: number;
   estimatedFinishAt: string | null;
@@ -65,37 +64,6 @@ export interface LaundryApplianceSnapshot {
   cycleCount: number | null;
   sessionId: string | null;
   errorCode: string | null;
-}
-
-export function operationalStatusLabelKo(status: OperationalStatus): string {
-  const labels: Record<OperationalStatus, string> = {
-    IDLE: "사용 가능",
-    SCHEDULED: "예약됨",
-    RUNNING: "작동 중",
-    PAUSED: "일시 정지",
-    ERROR: "오류",
-    COMPLETED: "완료",
-    UNKNOWN: "알 수 없음",
-  };
-  return labels[status];
-}
-
-export function laundryEventTypeLabelKo(type: LaundryEventType): string {
-  const labels: Record<LaundryEventType, string> = {
-    STARTED: "작동 시작",
-    STATE_CHANGED: "상태 변경",
-    COUNTDOWN_NORMAL: "정상 진행",
-    ETA_EXTENDED: "예상 종료 지연",
-    ETA_REDUCED: "예상 종료 단축",
-    TOTAL_TIME_ADJUSTED: "전체 시간 조정",
-    PAUSED: "일시 정지",
-    ERROR_ENTERED: "오류 발생",
-    ERROR_CLEARED: "오류 해제",
-    COMPLETED: "작동 완료",
-    STOPPED_UNEXPECTEDLY: "예기치 않은 정지",
-    UNKNOWN_STATE: "알 수 없는 상태",
-  };
-  return labels[type];
 }
 
 export interface LaundryMachineSnapshot {
@@ -118,6 +86,42 @@ export interface LaundryVersion {
   machines: LaundryMachineSnapshot[];
   events: LaundryEvent[];
   unknownEnums: UnknownEnumObservation[];
+}
+
+export function toPublicLaundryAppliance(appliance: LaundryApplianceSnapshot): LaundryApplianceSnapshot {
+  return {
+    machineId: appliance.machineId,
+    appliance: appliance.appliance,
+    observedAt: appliance.observedAt,
+    state: {
+      code: appliance.state.code,
+      raw: appliance.state.raw,
+      known: appliance.state.known,
+    },
+    operationalStatus: appliance.operationalStatus,
+    remainingMinutes: appliance.remainingMinutes,
+    totalMinutes: appliance.totalMinutes,
+    estimatedFinishAt: appliance.estimatedFinishAt,
+    remoteControlEnabled: appliance.remoteControlEnabled,
+    cycleCount: appliance.cycleCount,
+    sessionId: appliance.sessionId,
+    errorCode: appliance.errorCode,
+  };
+}
+
+export function toPublicLaundryVersion(version: LaundryVersion): LaundryVersion {
+  return {
+    schemaVersion: version.schemaVersion,
+    sourceVersionSha: version.sourceVersionSha,
+    observedAt: version.observedAt,
+    machines: version.machines.map((machine) => ({
+      id: machine.id,
+      washer: machine.washer ? toPublicLaundryAppliance(machine.washer) : null,
+      dryer: machine.dryer ? toPublicLaundryAppliance(machine.dryer) : null,
+    })),
+    events: version.events,
+    unknownEnums: version.unknownEnums,
+  };
 }
 
 export interface NormalizeLaundryOptions {
@@ -198,9 +202,8 @@ function normalizeAppliance(
     machineId,
     appliance,
     observedAt,
-    state: { ...state, labelKo: state.labelKo ?? lgRunStateLabelKo(state.code) },
+    state,
     operationalStatus: status,
-    operationalStatusLabelKo: operationalStatusLabelKo(status),
     remainingMinutes,
     totalMinutes,
     estimatedFinishAt,
