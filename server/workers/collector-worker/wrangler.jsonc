@@ -1,0 +1,26 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "jungle-bell-collector",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-14",
+  "observability": { "enabled": true },
+  "triggers": { "crons": ["* * * * *"] },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "jungle-bell-data",
+      "database_id": "5b1d4841-3dbe-44a9-84f8-9fd032bd0d46",
+      "migrations_dir": "../../migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "DATA_BUCKET",
+      "bucket_name": "jungle-bell-data"
+    }
+  ],
+  "vars": {
+    "REQUEST_TIMEOUT_MS": "30000",
+    "REQUEST_RETRIES": "2"
+  }
+}
