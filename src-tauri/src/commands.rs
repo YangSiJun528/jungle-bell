@@ -460,6 +460,42 @@ pub async fn set_show_dday(
     Ok(())
 }
 
+/// Tauri 커맨드: macOS Dock 표시 설정 조회.
+#[tauri::command]
+pub async fn get_show_in_dock(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<bool, String> {
+    Ok(state.lock().await.config.show_in_dock)
+}
+
+/// Tauri 커맨드: macOS Dock 표시 설정 변경 및 저장.
+#[tauri::command]
+pub async fn set_show_in_dock(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    enabled: bool,
+) -> Result<(), String> {
+    log::info!("[settings] macOS Dock 표시 변경: {}", enabled);
+    let previous = {
+        let mut s = state.lock().await;
+        let previous = s.config.show_in_dock;
+        if previous == enabled {
+            return Ok(());
+        }
+        s.config.show_in_dock = enabled;
+        s.config.save();
+        previous
+    };
+
+    let app_for_task = app.clone();
+    if let Err(error) = app.run_on_main_thread(move || tray::sync_foreground_app_visibility(&app_for_task)) {
+        let mut s = state.lock().await;
+        s.config.show_in_dock = previous;
+        s.config.save();
+        return Err(format!("Dock 표시 변경 예약 실패: {error}"));
+    }
+
+    Ok(())
+}
+
 // ── 업데이트 ─────────────────────────────────────────────
 
 /// Tauri 커맨드: 주기적 체크에서 발견된 업데이트 버전 반환. None이면 최신 버전.

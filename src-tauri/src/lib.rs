@@ -195,6 +195,8 @@ pub fn run() {
             commands::set_usage_analytics_enabled,
             commands::get_show_dday,
             commands::set_show_dday,
+            commands::get_show_in_dock,
+            commands::set_show_in_dock,
             commands::open_log_folder,
             commands::open_onboarding,
             commands::complete_onboarding,

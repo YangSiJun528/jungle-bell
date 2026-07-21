@@ -292,6 +292,11 @@ fn has_foreground_window(app: &tauri::AppHandle) -> bool {
         .any(|label| app.get_webview_window(label).is_some())
 }
 
+#[cfg(any(target_os = "macos", test))]
+fn should_show_foreground_app(show_in_dock: bool, has_foreground_window: bool) -> bool {
+    show_in_dock || has_foreground_window
+}
+
 #[cfg(target_os = "macos")]
 fn set_macos_foreground_visibility(app: &tauri::AppHandle, visible: bool) {
     let policy = if visible {
@@ -311,7 +316,14 @@ fn set_macos_foreground_visibility(app: &tauri::AppHandle, visible: bool) {
 pub fn sync_foreground_app_visibility(app: &tauri::AppHandle) {
     #[cfg(target_os = "macos")]
     {
-        set_macos_foreground_visibility(app, has_foreground_window(app));
+        let show_in_dock = {
+            let state: tauri::State<Arc<TokioMutex<AppState>>> = app.state();
+            state.try_lock().map(|s| s.config.show_in_dock).unwrap_or(true)
+        };
+        set_macos_foreground_visibility(
+            app,
+            should_show_foreground_app(show_in_dock, has_foreground_window(app)),
+        );
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -636,6 +648,13 @@ mod tests {
             needs_login,
             CheckerRuntimeStatus::Healthy { generation: 1 },
         )
+    }
+
+    #[test]
+    fn dock_표시_설정과_전면_창_상태로_노출_여부를_결정한다() {
+        assert!(should_show_foreground_app(true, false));
+        assert!(should_show_foreground_app(false, true));
+        assert!(!should_show_foreground_app(false, false));
     }
 
     // --- TrayViewModel ---
