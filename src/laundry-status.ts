@@ -4,7 +4,7 @@ export type LaundryMachineZone = 'men' | 'common' | 'women' | 'other';
 
 export interface LaundryStatusAppliance {
     operationalStatus?: string;
-    projection?: {status?: string} | null;
+    projection?: {status?: string; remainingMinutes?: number} | null;
     errorCode?: string | null;
 }
 
@@ -39,6 +39,19 @@ export function laundryAvailabilityState(
     return operationalStatus === 'IDLE' || operationalStatus === 'COMPLETED'
         ? 'available'
         : 'unavailable';
+}
+
+export function laundryOverviewText(appliance?: LaundryStatusAppliance | null): string {
+    const state = laundryAvailabilityState(appliance);
+    if (state === 'available') return '';
+    if (state === 'error') return 'ERROR';
+
+    const remainingMinutes = appliance?.projection?.remainingMinutes;
+    if (!Number.isFinite(remainingMinutes)) return '--:--';
+    const totalMinutes = Math.max(0, Math.ceil(remainingMinutes as number));
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
 
 export function laundryZoneMatchesAccess(

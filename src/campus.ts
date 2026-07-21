@@ -6,6 +6,7 @@ import {openUrl} from '@tauri-apps/plugin-opener';
 import {dismissInfoDisclosures, infoDisclosure, type InfoDisclosure} from './info-disclosure';
 import {
     laundryAvailabilityState,
+    laundryOverviewText,
     laundryZoneMatchesAccess,
     summarizeLaundryAvailability,
 } from './laundry-status';
@@ -169,6 +170,7 @@ interface AvailabilitySegment {
     number: number;
     zone: MachineZone;
     state: AvailabilityState;
+    overviewText: string;
     label: string;
 }
 
@@ -602,6 +604,7 @@ function campus(): Record<string, unknown> {
                     number,
                     zone,
                     state,
+                    overviewText: laundryOverviewText(appliance),
                     label: `${number}번 워시타워 ${zoneLabel} ${kind === 'washer' ? '세탁기' : '건조기'} ${stateLabel}`,
                 };
             });
