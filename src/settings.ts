@@ -29,8 +29,6 @@ interface SettingsComponent {
     endInterval: number;
     get attendanceNotificationEnabled(): boolean;
     get skipAttendanceHint(): string;
-    get startNotificationSummary(): string;
-    get endNotificationSummary(): string;
     init(): Promise<void>;
     selectTab(tab: SettingsTab): Promise<void>;
     refreshUpdateStatus(): Promise<void>;
@@ -86,18 +84,6 @@ function settings(): SettingsComponent {
             const month = String(tomorrow.getMonth() + 1).padStart(2, '0');
             const day = String(tomorrow.getDate()).padStart(2, '0');
             return `내일(${month}/${day}) 출석 시작 시각에 자동으로 다시 켜집니다.`;
-        },
-
-        get startNotificationSummary() {
-            if (!this.startNotification) return '꺼짐';
-            const start = String(this.notificationStart).padStart(2, '0');
-            return `${start}:00–10:00 · ${this.startInterval}분마다`;
-        },
-
-        get endNotificationSummary() {
-            if (!this.endNotification) return '꺼짐';
-            const end = String(this.notificationEnd).padStart(2, '0');
-            return `23:00–다음 날 ${end}:00 · ${this.endInterval}분마다`;
         },
 
         async init() {

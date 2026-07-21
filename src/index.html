@@ -40,7 +40,7 @@
             <legend>알림 일정</legend>
             <section class="notification-option" aria-labelledby="start-notification-title">
                 <label class="ui-setting-row notification-setting-toggle">
-                    <span><strong id="start-notification-title">시작 출석 알림</strong><small x-text="startNotificationSummary"></small></span>
+                    <span><strong id="start-notification-title">시작 출석 알림</strong></span>
                     <input class="ui-switch" type="checkbox" x-model="startNotification"
                            @change="saveToggle('set_start_notification_enabled', 'startNotification')"/>
                 </label>
@@ -72,7 +72,7 @@
 
             <section class="notification-option" aria-labelledby="end-notification-title">
                 <label class="ui-setting-row notification-setting-toggle">
-                    <span><strong id="end-notification-title">종료 출석 알림</strong><small x-text="endNotificationSummary"></small></span>
+                    <span><strong id="end-notification-title">종료 출석 알림</strong></span>
                     <input class="ui-switch" type="checkbox" x-model="endNotification"
                            @change="saveToggle('set_end_notification_enabled', 'endNotification')"/>
                 </label>
