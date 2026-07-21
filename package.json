@@ -6,9 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "test:laundry-ui": "node --test src/laundry-status.test.ts",
     "typecheck": "tsc --noEmit",
     "verify:ui": "node scripts/verify-ui-system.mjs",
-    "verify": "npm run build && npm run verify:ui",
+    "verify": "npm run build && npm run test:laundry-ui && npm run verify:ui",
     "preview": "vite preview",
     "tauri": "tauri"
   },

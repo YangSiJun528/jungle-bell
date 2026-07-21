@@ -4,6 +4,11 @@ import {invoke} from '@tauri-apps/api/core';
 import {listen, type UnlistenFn} from '@tauri-apps/api/event';
 import {openUrl} from '@tauri-apps/plugin-opener';
 import {dismissInfoDisclosures, infoDisclosure, type InfoDisclosure} from './info-disclosure';
+import {
+    laundryAvailabilityState,
+    laundryZoneMatchesAccess,
+    summarizeLaundryAvailability,
+} from './laundry-status';
 
 Alpine.plugin(anchor);
 
@@ -577,12 +582,7 @@ function campus(): Record<string, unknown> {
         },
 
         typeSummary(this: any, kind: ApplianceKind): TypeSummary {
-            const available = this.availabilitySegments(kind)
-                .filter((segment: AvailabilitySegment) => segment.state === 'available').length;
-            return {
-                total: WASH_TOWER_COUNT,
-                available,
-            };
+            return summarizeLaundryAvailability(this.availabilitySegments(kind), this.laundryAccess);
         },
 
         availabilitySegments(this: any, kind: ApplianceKind): AvailabilitySegment[] {
@@ -592,13 +592,9 @@ function campus(): Record<string, unknown> {
                 const machine = this.laundry.machines.find((item: Machine) => machineNumber(item.id) === number);
                 const appliance = machine?.[kind];
                 const zone = machineZone(String(number));
-                const state: AvailabilityState = this.applianceHasError(appliance)
-                    ? 'error'
-                    : this.applianceIsAvailable(appliance) ? 'available' : 'unavailable';
+                const state: AvailabilityState = laundryAvailabilityState(appliance);
                 const zoneLabel = this.machineZoneLabel(String(number));
-                const stateLabel = !appliance
-                    ? '정보 없음'
-                    : state === 'error' ? '오류' : state === 'available' ? '사용 가능' : '사용 중';
+                const stateLabel = appliance ? this.projectionView(appliance).label : '정보 없음';
                 return {
                     id: `${number}-${kind}`,
                     number,
@@ -614,8 +610,7 @@ function campus(): Record<string, unknown> {
             return [...this.laundry.machines]
                 .filter((machine) => {
                     const zone = machineZone(machine.id);
-                    if (this.laundryAccess === 'men' && zone !== 'men' && zone !== 'common') return false;
-                    if (this.laundryAccess === 'women' && zone !== 'women' && zone !== 'common') return false;
+                    if (!laundryZoneMatchesAccess(zone, this.laundryAccess)) return false;
                     if (this.laundryFilter === 'washerAvailable') return this.applianceIsAvailable(machine.washer);
                     if (this.laundryFilter === 'dryerAvailable') return this.applianceIsAvailable(machine.dryer);
                     return true;
@@ -644,9 +639,11 @@ function campus(): Record<string, unknown> {
                 || appliance.projection?.status === 'AWAITING_COMPLETION_CONFIRMATION'));
         },
 
-        applianceIsAvailable(appliance?: Appliance | null) { return appliance?.operationalStatus === 'IDLE'; },
+        applianceIsAvailable(appliance?: Appliance | null) {
+            return laundryAvailabilityState(appliance) === 'available';
+        },
         applianceHasError(appliance?: Appliance | null) {
-            return Boolean(appliance?.errorCode || appliance?.projection?.status === 'ERROR');
+            return laundryAvailabilityState(appliance) === 'error';
         },
 
         completionConfirmationDelayed(this: any, appliance?: Appliance | null) {
