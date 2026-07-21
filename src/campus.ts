@@ -66,6 +66,7 @@ interface LaundryData {
 
 interface MealPost {
     id?: string;
+    contentSha: string;
     title?: string;
     text?: string;
     publishedAt?: string;
@@ -79,6 +80,7 @@ interface MealsData {
     schemaVersion: number;
     dailyMenus: MealPost[];
     pinnedMenus: MealPost[];
+    currentWeeklyMenu: CurrentWeeklyMealMenu;
     weeklyMenus?: WeeklyMealMenu[];
     recentMenus?: MealPost[];
     historyNextBefore?: string | null;
@@ -86,7 +88,15 @@ interface MealsData {
 
 interface WeeklyMealMenu {
     weekKey: string;
+    contentSha: string;
     post: MealPost;
+}
+
+interface CurrentWeeklyMealMenu {
+    targetWeekKey: string;
+    status: 'AVAILABLE' | 'AWAITING_UPDATE';
+    contentSha: string | null;
+    post: MealPost | null;
 }
 
 interface MealHistoryPage {
@@ -341,9 +351,15 @@ function campus(): Record<string, unknown> {
 
         isMealsPayload(data: unknown): data is MealsPayload {
             const value = data as Partial<MealsPayload> | null;
-            return value?.data?.schemaVersion === 1
+            const currentWeekly = value?.data?.currentWeeklyMenu;
+            return value?.data?.schemaVersion === 2
                 && Array.isArray(value.data.dailyMenus)
-                && Array.isArray(value.data.pinnedMenus);
+                && Array.isArray(value.data.pinnedMenus)
+                && currentWeekly !== null
+                && typeof currentWeekly === 'object'
+                && typeof currentWeekly.targetWeekKey === 'string'
+                && (currentWeekly.status === 'AVAILABLE' || currentWeekly.status === 'AWAITING_UPDATE')
+                && (currentWeekly.post === null || typeof currentWeekly.post === 'object');
         },
 
         selectMealView(this: any, view: MealView) {
@@ -481,15 +497,14 @@ function campus(): Record<string, unknown> {
         },
 
         selectedWeeklyMenu(this: any): MealPost | null {
-            const archived = this.meals?.data.weeklyMenus ?? [];
-            const current = (this.meals?.data.pinnedMenus ?? []).map((post: MealPost) => {
-                const updatedAt = this.parseDate(post.updatedAt) ?? new Date();
-                return {weekKey: weekMondayKey(kstDateKey(updatedAt)), post};
-            });
             const menus = new Map<string, WeeklyMealMenu>(
-                [...archived, ...current].map((menu) => [menu.weekKey, menu]),
+                (this.meals?.data.weeklyMenus ?? []).map((menu: WeeklyMealMenu) => [menu.weekKey, menu]),
             );
             return menus.get(weekMondayKey(this.mealSelectedDate))?.post ?? null;
+        },
+
+        currentWeeklyMenu(this: any): MealPost | null {
+            return this.meals?.data.currentWeeklyMenu?.post ?? null;
         },
 
         selectedMealWeekLabel(this: any) {
@@ -773,7 +788,7 @@ function campus(): Record<string, unknown> {
         },
 
         mealWeekLabel(this: any) {
-            return sourceMealWeekLabel(this.meals?.data.pinnedMenus?.[0]);
+            return sourceMealWeekLabel(this.currentWeeklyMenu());
         },
 
         postIsToday(this: any, post: MealPost) {
@@ -807,7 +822,11 @@ function campus(): Record<string, unknown> {
         },
 
         imageUrl(this: any, post?: MealPost | null) { return this.safeAssetUrl(post?.images?.[0]?.url); },
-        postIdentity(post: MealPost, index: number) { return post.id ?? post.permalink ?? `${post.title ?? 'post'}-${post.publishedAt ?? index}`; },
+        postIdentity(post: MealPost, index: number) {
+            return post.id
+                ? `${post.id}:${post.contentSha ?? post.updatedAt ?? ''}`
+                : post.permalink ?? `${post.title ?? 'post'}-${post.publishedAt ?? index}`;
+        },
         postKey(this: any, post: MealPost, index: number) { return this.postIdentity(post, index); },
 
         safeKakaoUrl(value?: string) {

@@ -1,4 +1,10 @@
 import { z } from "zod";
+import { canonicalJsonSha256 } from "./hash";
+import { kstWeekKey } from "./time";
+
+const DAY_MS = 24 * 60 * 60 * 1_000;
+const KST_OFFSET_MS = 9 * 60 * 60 * 1_000;
+const SOURCE_WEEK_PATTERN = /(?:(\d{4})년\s*)?(\d{1,2})월\s*(\d{1,2})주차/;
 
 const mediaSchema = z.looseObject({
   id: z.union([z.number(), z.string()]),
@@ -49,6 +55,7 @@ export interface MealImageAsset extends MealImageCandidate {
 export interface MealPost {
   id: string;
   kind: "PINNED_MENU" | "DAILY_MENU" | "OTHER";
+  contentSha: string;
   title: string | null;
   text: string;
   pinned: boolean;
@@ -65,7 +72,7 @@ export interface ArchivedMealPost extends MealPost {
 }
 
 export interface MealsVersion {
-  schemaVersion: 1;
+  schemaVersion: 2;
   sourceVersionSha: string;
   observedAt: string;
   hasNext: boolean;
@@ -76,7 +83,15 @@ export interface MealsVersion {
 
 export interface WeeklyMealMenu {
   weekKey: string;
+  contentSha: string;
   post: MealPost;
+}
+
+export interface CurrentWeeklyMealMenu {
+  targetWeekKey: string;
+  status: "AVAILABLE" | "AWAITING_UPDATE";
+  contentSha: string | null;
+  post: MealPost | null;
 }
 
 export type ArchiveMealImage = (candidate: MealImageCandidate) => Promise<MealImageAsset>;
@@ -119,6 +134,88 @@ function secureUrl(url: string): string {
   return url.replace(/^http:\/\//, "https://");
 }
 
+export async function mealPostContentSha(
+  post: Pick<MealPost, "title" | "text" | "images">,
+): Promise<string> {
+  return canonicalJsonSha256({
+    title: post.title,
+    text: post.text,
+    imageShas: post.images.map((image) => image.sha),
+  });
+}
+
+export async function withMealPostContentSha(
+  post: Omit<MealPost, "contentSha"> | MealPost,
+): Promise<MealPost> {
+  const contentSha = await mealPostContentSha(post);
+  return { ...post, contentSha };
+}
+
+function sourceWeekStart(year: number, month: number, week: number): Date {
+  const firstDay = new Date(Date.UTC(year, month - 1, 1));
+  const daysUntilMonday = (8 - firstDay.getUTCDay()) % 7;
+  return new Date(firstDay.getTime() + (daysUntilMonday + (week - 1) * 7) * DAY_MS);
+}
+
+export function sourceMealWeekKey(title: string | null, reference: Date): string | null {
+  const match = title?.match(SOURCE_WEEK_PATTERN);
+  if (!match || Number.isNaN(reference.getTime())) return null;
+
+  const [, explicitYear, rawMonth, rawWeek] = match;
+  const month = Number(rawMonth);
+  const week = Number(rawWeek);
+  if (month < 1 || month > 12 || week < 1 || week > 6) return null;
+
+  // The meal provider calls the first Monday contained in a month week 1.
+  // This intentionally differs from KS/ISO majority-day week numbering.
+  const referenceKst = new Date(reference.getTime() + KST_OFFSET_MS);
+  const referenceYear = referenceKst.getUTCFullYear();
+  const years = explicitYear
+    ? [Number(explicitYear)]
+    : [referenceYear, referenceYear - 1, referenceYear + 1];
+  const candidates = years.map((year) => sourceWeekStart(year, month, week));
+  const closest = candidates.reduce((selected, candidate) =>
+    Math.abs(candidate.getTime() - reference.getTime()) < Math.abs(selected.getTime() - reference.getTime())
+      ? candidate
+      : selected
+  );
+  return closest.toISOString().slice(0, 10);
+}
+
+export function targetMealWeekKey(reference: Date): string {
+  const referenceKst = new Date(reference.getTime() + KST_OFFSET_MS);
+  return kstWeekKey(referenceKst.getUTCDay() === 0
+    ? new Date(reference.getTime() + DAY_MS)
+    : reference);
+}
+
+export async function weeklyMealMenu(
+  post: MealPost,
+  observedAt: string,
+): Promise<WeeklyMealMenu | null> {
+  const normalizedPost = await withMealPostContentSha(post);
+  const observed = new Date(observedAt);
+  const reference = Number.isNaN(observed.getTime())
+    ? new Date(post.updatedAt ?? observedAt)
+    : observed;
+  const weekKey = sourceMealWeekKey(post.title, reference);
+  return weekKey ? { weekKey, contentSha: normalizedPost.contentSha, post: normalizedPost } : null;
+}
+
+export function currentWeeklyMealMenu(
+  menus: WeeklyMealMenu[],
+  reference: Date,
+): CurrentWeeklyMealMenu {
+  const targetWeekKey = targetMealWeekKey(reference);
+  const current = menus.find((menu) => menu.weekKey === targetWeekKey) ?? null;
+  return {
+    targetWeekKey,
+    status: current ? "AVAILABLE" : "AWAITING_UPDATE",
+    contentSha: current?.contentSha ?? null,
+    post: current?.post ?? null,
+  };
+}
+
 export async function normalizeMeals(
   rawValue: unknown,
   sourceVersionSha: string,
@@ -146,7 +243,7 @@ export async function normalizeMeals(
     }
 
     const title = rawPost.title ?? null;
-    posts.push({
+    const post = await withMealPostContentSha({
       id: postId,
       kind: postKind(title, rawPost.pinned),
       title,
@@ -158,10 +255,11 @@ export async function normalizeMeals(
       status: rawPost.status ?? null,
       images,
     });
+    posts.push(post);
   }
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     sourceVersionSha,
     observedAt,
     hasNext: parsed.has_next,

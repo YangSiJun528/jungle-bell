@@ -62,6 +62,7 @@ CREATE INDEX laundry_event_machine_session
 CREATE TABLE meal_post (
   id TEXT PRIMARY KEY,
   kind TEXT NOT NULL CHECK (kind IN ('PINNED_MENU', 'DAILY_MENU', 'OTHER')),
+  content_sha TEXT NOT NULL,
   title TEXT,
   text TEXT NOT NULL,
   pinned INTEGER NOT NULL CHECK (pinned IN (0, 1)),
@@ -81,6 +82,7 @@ CREATE INDEX meal_post_kind_published_at
 
 CREATE TABLE meal_weekly_menu (
   week_key TEXT PRIMARY KEY,
+  content_sha TEXT NOT NULL,
   post_json TEXT NOT NULL,
   updated_at TEXT,
   observed_at TEXT NOT NULL

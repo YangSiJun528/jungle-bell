@@ -97,7 +97,11 @@ API는 표시 언어에 종속된 라벨을 반환하지 않습니다. 클라이
 
 ### `GET /v1/meals`
 
-pinned 주간 식단표, 현재 중식·석식 게시물, 기타 게시물을 구분해 반환합니다. `data.recentMenus`에는 카카오 최신 목록에서 제거된 게시물도 포함한 최근 식단 최대 30개가 들어갑니다. 각 이미지에는 원본 카카오 URL, 콘텐츠 SHA, 보관 객체 키, API 이미지 URL이 포함됩니다.
+pinned 주간 식단표, 현재 중식·석식 게시물, 기타 게시물을 구분해 반환합니다. 각 게시물의 `contentSha`는 제목, 본문, 이미지 콘텐츠 SHA 목록으로 계산하며 게시 시각이나 CDN URL 변경은 포함하지 않습니다.
+
+`data.currentWeeklyMenu`는 현재 화면에 표시할 주간 식단표의 판정 결과입니다. `targetWeekKey`는 해당 주의 월요일이며, 일요일에는 다음 날 월요일을 사용합니다. pinned 게시물 제목의 `N월 N주차`를 식단 제공자의 첫 월요일 기준으로 변환한 주차가 `targetWeekKey`와 일치할 때만 `status`가 `AVAILABLE`이고 `post`가 존재합니다. 아직 이전 주 pinned 게시물만 있으면 `AWAITING_UPDATE`와 `post: null`을 반환합니다. 과거 버전은 `data.weeklyMenus`에 계속 보존됩니다.
+
+`data.recentMenus`에는 카카오 최신 목록에서 제거된 게시물도 포함한 최근 식단 최대 30개가 들어갑니다. 각 이미지에는 원본 카카오 URL, 콘텐츠 SHA, 보관 객체 키, API 이미지 URL이 포함됩니다.
 
 ### `GET /v1/meals/history?before=<RFC3339>&limit=30`
 

@@ -302,16 +302,27 @@ fn validate_payload(kind: CampusDataKind, data: &Value) -> Result<(), String> {
         }
         CampusDataKind::Meals => {
             let meals = data.get("data");
+            let current_weekly = meals.and_then(|value| value.get("currentWeeklyMenu"));
             meals
                 .and_then(|value| value.get("schemaVersion"))
                 .and_then(Value::as_u64)
-                == Some(1)
+                == Some(2)
                 && meals
                     .and_then(|value| value.get("dailyMenus"))
                     .is_some_and(Value::is_array)
                 && meals
                     .and_then(|value| value.get("pinnedMenus"))
                     .is_some_and(Value::is_array)
+                && current_weekly
+                    .and_then(|value| value.get("targetWeekKey"))
+                    .is_some_and(Value::is_string)
+                && current_weekly
+                    .and_then(|value| value.get("status"))
+                    .and_then(Value::as_str)
+                    .is_some_and(|status| matches!(status, "AVAILABLE" | "AWAITING_UPDATE"))
+                && current_weekly
+                    .and_then(|value| value.get("post"))
+                    .is_some_and(|post| post.is_null() || post.is_object())
         }
     };
     valid
@@ -343,6 +354,29 @@ mod tests {
     #[test]
     fn campus_service_builds_http_client() {
         let _service = CampusService::new();
+    }
+
+    #[test]
+    fn meals_payload_requires_current_week_verdict() {
+        let valid = serde_json::json!({
+            "data": {
+                "schemaVersion": 2,
+                "dailyMenus": [],
+                "pinnedMenus": [],
+                "currentWeeklyMenu": {
+                    "targetWeekKey": "2026-07-20",
+                    "status": "AWAITING_UPDATE",
+                    "contentSha": null,
+                    "post": null
+                }
+            }
+        });
+        let old = serde_json::json!({
+            "data": { "schemaVersion": 1, "dailyMenus": [], "pinnedMenus": [] }
+        });
+
+        assert!(validate_payload(CampusDataKind::Meals, &valid).is_ok());
+        assert!(validate_payload(CampusDataKind::Meals, &old).is_err());
     }
 
     #[test]

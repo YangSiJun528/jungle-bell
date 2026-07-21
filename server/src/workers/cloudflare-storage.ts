@@ -1,3 +1,4 @@
+import { getLogger } from "@logtape/logtape";
 import type {
   CollectionCommit,
   LaundryEvent,
@@ -5,8 +6,16 @@ import type {
   SourceName,
   SourceState,
 } from "../collector/types";
-import type { ArchivedMealPost, MealImageAsset, MealPost, WeeklyMealMenu } from "../collector/meals";
-import { kstWeekKey } from "../collector/time";
+import {
+  weeklyMealMenu,
+  withMealPostContentSha,
+  type ArchivedMealPost,
+  type MealImageAsset,
+  type MealPost,
+  type WeeklyMealMenu,
+} from "../collector/meals";
+
+const storageLogger = getLogger(["jungle-bell", "api-storage"]);
 
 interface SourceStateRow {
   source: SourceName;
@@ -53,6 +62,7 @@ interface EventRow {
 interface MealPostRow {
   id: string;
   kind: MealPost["kind"];
+  content_sha: string;
   title: string | null;
   text: string;
   pinned: number;
@@ -82,6 +92,7 @@ interface MealImageRow {
 
 interface WeeklyMealMenuRow {
   week_key: string;
+  content_sha: string;
   post_json: string;
 }
 
@@ -228,6 +239,7 @@ export class CloudflareApiStorage {
     return posts.map((post) => ({
       id: post.id,
       kind: post.kind,
+      contentSha: post.content_sha,
       title: post.title,
       text: post.text,
       pinned: post.pinned === 1,
@@ -243,11 +255,12 @@ export class CloudflareApiStorage {
 
   async listWeeklyMealMenus(limit: number): Promise<WeeklyMealMenu[]> {
     const result = await this.db
-      .prepare("SELECT week_key, post_json FROM meal_weekly_menu ORDER BY week_key DESC LIMIT ?")
+      .prepare("SELECT week_key, content_sha, post_json FROM meal_weekly_menu ORDER BY week_key DESC LIMIT ?")
       .bind(limit)
       .all<WeeklyMealMenuRow>();
     return result.results.map((row) => ({
       weekKey: row.week_key,
+      contentSha: row.content_sha,
       post: JSON.parse(row.post_json) as MealPost,
     }));
   }
@@ -339,37 +352,51 @@ export class CloudflareApiStorage {
         ));
     }
 
-    for (const post of mealPosts) {
+    for (const rawPost of mealPosts) {
+      const post = await withMealPostContentSha(rawPost);
       if (post.kind === "PINNED_MENU") {
-        const versionDate = new Date(post.updatedAt ?? mealObservedAt);
-        statements.push(this.db
-          .prepare(`
-            INSERT INTO meal_weekly_menu (week_key, post_json, updated_at, observed_at)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(week_key) DO UPDATE SET
-              post_json = excluded.post_json,
-              updated_at = excluded.updated_at,
-              observed_at = excluded.observed_at
-            WHERE excluded.observed_at >= meal_weekly_menu.observed_at
-          `)
-          .bind(
-            kstWeekKey(versionDate),
-            JSON.stringify(post),
-            post.updatedAt,
-            mealObservedAt,
-          ));
+        const weekly = await weeklyMealMenu(post, mealObservedAt);
+        if (weekly) {
+          statements.push(this.db
+            .prepare(`
+              INSERT INTO meal_weekly_menu (week_key, content_sha, post_json, updated_at, observed_at)
+              VALUES (?, ?, ?, ?, ?)
+              ON CONFLICT(week_key) DO UPDATE SET
+                content_sha = excluded.content_sha,
+                post_json = excluded.post_json,
+                updated_at = excluded.updated_at,
+                observed_at = excluded.observed_at
+              WHERE excluded.content_sha <> meal_weekly_menu.content_sha
+                AND excluded.observed_at >= meal_weekly_menu.observed_at
+            `)
+            .bind(
+              weekly.weekKey,
+              weekly.contentSha,
+              JSON.stringify(weekly.post),
+              post.updatedAt,
+              mealObservedAt,
+            ));
+        } else {
+          storageLogger.warn("Pinned meal title could not be assigned to a week", {
+            postId: post.id,
+            title: post.title,
+            contentSha: post.contentSha,
+            observedAt: mealObservedAt,
+          });
+        }
       }
       statements.push(this.db
         .prepare(`
           INSERT INTO meal_post (
-            id, kind, title, text, pinned, published_at, updated_at, permalink,
-            status, first_seen_at, last_seen_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            id, kind, content_sha, title, text, pinned, published_at, updated_at,
+            permalink, status, first_seen_at, last_seen_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(id) DO UPDATE SET
             kind = CASE
               WHEN meal_post.kind = 'PINNED_MENU' THEN meal_post.kind
               ELSE excluded.kind
             END,
+            content_sha = excluded.content_sha,
             title = excluded.title,
             text = excluded.text,
             pinned = excluded.pinned,
@@ -382,6 +409,7 @@ export class CloudflareApiStorage {
         .bind(
           post.id,
           post.kind,
+          post.contentSha,
           post.title,
           post.text,
           post.pinned ? 1 : 0,

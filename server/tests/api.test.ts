@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { MealsVersion } from "../src/collector/meals";
 import { app } from "../src/workers/api";
 
 const env = {
@@ -9,6 +10,58 @@ const env = {
   } as unknown as D1Database,
   DATA_BUCKET: {} as R2Bucket,
 };
+
+afterEach(() => vi.useRealTimers());
+
+function mealsEnv(title: string) {
+  const version: MealsVersion = {
+    schemaVersion: 2,
+    sourceVersionSha: "a".repeat(64),
+    observedAt: "2026-07-19T03:00:00.000Z",
+    hasNext: false,
+    pinnedMenus: [{
+      id: "weekly",
+      kind: "PINNED_MENU",
+      contentSha: "b".repeat(64),
+      title,
+      text: "",
+      pinned: true,
+      publishedAt: null,
+      updatedAt: "2026-07-19T02:00:00.000Z",
+      permalink: null,
+      status: "published",
+      images: [],
+    }],
+    dailyMenus: [],
+    otherPosts: [],
+  };
+  const db = {
+    prepare: (sql: string) => {
+      const statement = {
+        bind: (..._values: unknown[]) => statement,
+        first: async () => sql.includes("source_state") ? {
+          source: "meals-include-pinned",
+          last_attempt_at: version.observedAt,
+          last_success_at: version.observedAt,
+          last_response_sha: version.sourceVersionSha,
+          last_raw_key: "raw/meals.json",
+          last_normalized_key: "versions/meals.json",
+          version_first_seen_at: version.observedAt,
+          consecutive_failures: 0,
+          last_error: null,
+        } : null,
+        all: async () => ({ results: [] }),
+      };
+      return statement;
+    },
+  } as unknown as D1Database;
+  const bucket = {
+    get: async (key: string) => key === "versions/meals.json"
+      ? { json: async () => version }
+      : null,
+  } as unknown as R2Bucket;
+  return { DB: db, DATA_BUCKET: bucket };
+}
 
 describe("API middleware", () => {
   it("validates RFC3339 query parameters with Zod", async () => {
@@ -43,5 +96,25 @@ describe("API middleware", () => {
     expect(conditional.status).toBe(304);
     expect(conditional.headers.get("ETag")).toBe(responseEtag);
     expect(conditional.headers.get("Cache-Control")).toContain("s-maxage=30");
+  });
+
+  it("does not expose the previous pinned menu as the upcoming Sunday week", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-19T03:00:00.000Z"));
+
+    const response = await app.request("https://api.test/v1/meals", {}, mealsEnv("7월 2주차 식단표"));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      data: {
+        schemaVersion: 2,
+        currentWeeklyMenu: {
+          targetWeekKey: "2026-07-20",
+          status: "AWAITING_UPDATE",
+          contentSha: null,
+          post: null,
+        },
+      },
+    });
   });
 });
