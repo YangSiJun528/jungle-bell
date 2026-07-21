@@ -23,10 +23,11 @@
 
 ## 설치
 
-아래 명령어를 실행해 Jungle Bell을 설치하세요.  
-수동 설치를 원하는 경우 [Release 페이지](https://github.com/YangSiJun528/jungle-bell/releases/latest)의 안내를 참고하세요.
+수동 설치를 원하는 경우 [Release 페이지](https://github.com/YangSiJun528/jungle-bell/releases/latest)를 참고하세요.
 
 ### macOS
+
+아래 명령어를 터미널에서 실행해 Jungle Bell을 설치하세요.
 
 ```bash
 curl -fsSL https://install.sijun-yang.com/jungle-bell.sh/latest | sh
@@ -34,11 +35,22 @@ curl -fsSL https://install.sijun-yang.com/jungle-bell.sh/latest | sh
 
 ### Windows
 
-PowerShell에서 실행해 주세요.
+아래 명령어를 PowerShell에서 실행해 Jungle Bell을 설치하세요.
 
 ```powershell
 irm https://install.sijun-yang.com/jungle-bell.ps1/latest | iex
 ```
+
+### AI 에이전트에게 맡기기
+
+Codex나 Claude Code처럼 컴퓨터 명령을 대신 실행할 수 있는 AI 에이전트에게 아래 문장을 보내세요.
+
+```text
+이 컴퓨터에 Jungle Bell 최신 안정 릴리스를 설치해 줘: https://github.com/YangSiJun528/jungle-bell
+README의 설치 섹션에서 운영체제에 맞는 자동 설치 명령을 사용해.
+```
+
+> 에이전트 환경에 따라 명령 실행과 다운로드 권한을 직접 승인해야 할 수 있어요.
 
 ## 스크린샷
 
