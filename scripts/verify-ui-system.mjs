@@ -26,20 +26,14 @@ requireRule(stylesCss.includes('@font-face') && stylesCss.includes('PretendardVa
 requireRule(stylesCss.includes('--font-family: "Pretendard", sans-serif;'), 'Pretendard must remain the exclusive UI font');
 requireRule(existsSync(new URL('../src/assets/fonts/Pretendard-LICENSE.txt', import.meta.url)), 'Pretendard license is missing');
 
-// Tailwind is the layout system. Only the explicitly permitted repeated patterns stay components.
+// Tailwind utilities and adapted Pines markup are the complete component/layout system.
 requireRule(uiCss.includes('@import "tailwindcss/utilities.css" layer(utilities);'), 'Tailwind utilities are not imported');
-const componentStart = uiCss.indexOf('@layer components {');
-const componentEnd = uiCss.indexOf('\n@media (prefers-reduced-motion', componentStart);
-const componentCss = componentStart >= 0 && componentEnd >= 0 ? uiCss.slice(componentStart, componentEnd) : '';
-const allowedComponents = new Set(['ui-button', 'ui-tab', 'ui-tooltip', 'ui-tooltip-popover']);
-for (const match of componentCss.matchAll(/\.(ui-[\w-]+)/g)) {
-    if (!allowedComponents.has(match[1])) errors.push(`Unexpected component class remains in @layer components: ${match[1]}`);
-}
-const legacyUiClass = /\bui-(?:page|shell|app-header|app-logo|page-heading|section-heading|settings|setting|action-row|field|select|choice|footer|info|alert|empty|content|spinner|eyebrow|note|state|onboarding)/;
+requireRule(!uiCss.includes('@layer components'), 'Custom component CSS must not be reintroduced');
+const legacyUiClass = /\bui-[\w-]+/;
 for (const [name, source] of htmlFiles) {
-    requireRule(!legacyUiClass.test(source), `src/${name} still uses a legacy ui-* layout class`);
+    requireRule(!legacyUiClass.test(source), `src/${name} still uses a custom ui-* class`);
 }
-requireRule(!/\.(?:laundry-grid|laundry-card|meal-card|meal-calendar|onboarding-panel)\s*\{/.test(uiCss), 'Page layout CSS must live in Tailwind utilities, not named selectors');
+requireRule(!/\.(?:ui-|laundry-|meal-|onboarding-)[\w-]*\s*(?:[,{:]|::)/.test(uiCss), 'Component/page selectors must live in Tailwind markup');
 
 // Global visual constraints.
 requireRule(!/@media\s*\(max-(?:width|height):/.test(uiCss), 'Fixed-size windows must not use viewport breakpoints');
@@ -51,12 +45,6 @@ requireRule(!/--radius-(?:card|dialog)/.test(uiCss), 'Legacy card/dialog radius 
 requireRule(/html\s*\{[^}]*overflow-y:\s*scroll[^}]*scrollbar-gutter:\s*stable/s.test(uiCss), 'Stable root scrollbar layout is missing');
 requireRule(/\*::\-webkit-scrollbar-thumb/.test(uiCss) && /scrollbar-width:\s*thin/.test(uiCss), 'Thin macOS-style scrollbar rules are missing');
 
-const spacingTokens = new Map([
-    ['--space-0', 0], ['--space-half', 2], ['--space-1', 4], ['--space-2', 8],
-    ['--space-4', 16], ['--space-6', 24], ['--space-8', 32], ['--space-12', 48],
-    ['--space-16', 64], ['--space-24', 96],
-]);
-for (const [token, value] of spacingTokens) requireRule(uiCss.includes(`${token}: ${value}px;`), `Spacing token ${token} is missing`);
 const spacingProperty = /^(?:margin(?:-(?:top|right|bottom|left))?|padding(?:-(?:top|right|bottom|left))?|gap|row-gap|column-gap|inset|top|right|bottom|left|width|height|min-width|min-height|max-width|max-height)$/;
 const approvedPixels = new Set([0, 2, 4, 8, 16, 24, 32, 48, 64, 96, 9998]);
 for (const declaration of uiCss.matchAll(/([-\w]+)\s*:\s*([^;}{]+)/g)) {
@@ -66,9 +54,10 @@ for (const declaration of uiCss.matchAll(/([-\w]+)\s*:\s*([^;}{]+)/g)) {
     }
 }
 
-// Shared interaction primitives.
-for (const selector of [':hover', ':active', ':focus-visible', ':disabled', '[aria-current="page"]']) {
-    requireRule(uiCss.includes(selector), `Required interaction state ${selector} is missing`);
+// Pines-style controls stay in markup and retain the app's stronger semantics.
+const allHtml = htmlFiles.map(([, source]) => source).join('\n');
+for (const utility of ['hover:', 'focus-visible:', 'disabled:', 'aria-[current=page]:']) {
+    requireRule(allHtml.includes(utility), `Required Tailwind interaction utility ${utility} is missing`);
 }
 for (const [name, source] of htmlFiles) {
     const selects = source.match(/<select\b/g) ?? [];
@@ -77,14 +66,22 @@ for (const [name, source] of htmlFiles) {
     requireRule(selects.length === hiddenSelects.length, `src/${name} contains a visible native select`);
     requireRule(selects.length === comboboxes.length, `src/${name} has a custom select without combobox/listbox semantics`);
 }
-requireRule(/\.ui-switch::after/.test(uiCss) && /\.ui-progress::\-webkit-progress-value/.test(uiCss), 'Native switch/progress pseudo-element styling is missing');
+for (const [name, source] of [['index.html', settingsHtml], ['onboarding.html', onboardingHtml]]) {
+    const checkboxes = source.match(/type="checkbox"/g) ?? [];
+    const pinesSwitches = source.match(/class="peer sr-only" type="checkbox"/g) ?? [];
+    requireRule(checkboxes.length === pinesSwitches.length, `src/${name} has a checkbox outside the Pines switch pattern`);
+}
+requireRule(allHtml.includes('peer-checked:translate-x-6')
+    && allHtml.includes('peer-focus-visible:ring-4'), 'Pines switches need track/thumb and keyboard focus states');
+requireRule(/<progress[^>]*\[&::\-webkit-progress-value\]:bg-app-accent/.test(onboardingHtml)
+    && /<progress[^>]*\[&::\-moz-progress-bar\]:bg-app-accent/.test(campusHtml), 'Progress elements must use Tailwind vendor pseudo-element utilities');
 
 // Settings hierarchy and semantics.
 requireRule(/<nav[^>]*aria-label="설정 분류"/.test(settingsHtml), 'Settings tabs need a labelled nav');
 requireRule((settingsHtml.match(/<fieldset\b/g) ?? []).length >= 6 && (settingsHtml.match(/<legend\b/g) ?? []).length >= 6, 'Settings groups must use fieldset/legend');
 requireRule(settingsHtml.includes('text-base') && settingsHtml.includes('text-sm') && settingsHtml.includes('text-xs'), 'Settings text hierarchy is incomplete');
 requireRule(settingsHtml.includes('<details class="group') && settingsHtml.includes('온보딩 다시 보기'), 'Advanced diagnostics and onboarding action are missing');
-requireRule(/data-variant="text"/.test(settingsHtml), 'Settings text actions must use content-sized buttons');
+requireRule(settingsHtml.includes('hover:bg-app-accent-soft') && !settingsHtml.includes('data-variant='), 'Settings text actions must use direct Pines/Tailwind button utilities');
 
 // Onboarding fixed skeleton and persistent actions.
 requireRule(onboardingHtml.includes('class="h-screen overflow-hidden') && onboardingHtml.includes('class="min-h-0 flex-1 overflow-hidden'), 'Onboarding must use a fixed non-scrolling frame');
@@ -103,7 +100,9 @@ requireRule((campusHtml.match(/x-data="infoDisclosure"/g) ?? []).length >= 2
     && campusHtml.includes('@keydown.escape.stop="dismiss()"')
     && campusHtml.includes('@focusin="focus()"')
     && campusHtml.includes('x-anchor.fixed.offset.8="$refs.trigger"'), 'Information tooltips must support focus, keyboard dismissal, and viewport anchoring');
-requireRule(/\.ui-tooltip-popover\s*\{[^}]*position:\s*fixed[^}]*max-height:\s*calc\(100vh - var\(--space-6\)\)[^}]*word-break:\s*keep-all/s.test(uiCss), 'Tooltip popovers must stay inside the viewport and preserve Korean words');
+requireRule(campusHtml.includes('fixed z-40 max-h-[calc(100vh-24px)]')
+    && campusHtml.includes('[word-break:keep-all]')
+    && campusHtml.includes('x-transition:enter="transition ease-out duration-200"'), 'Pines tooltips must stay inside the viewport, animate, and preserve Korean words');
 requireRule(infoDisclosureTs.includes("const OPEN_EVENT = 'info-disclosure-open'") && infoDisclosureTs.includes('handlePeer(event:'), 'Shared information disclosure behavior is missing');
 
 // Meal tabs, calendar, empty/error states, and dialog restoration.
@@ -111,7 +110,7 @@ requireRule(/<nav[^>]*aria-label="급식 보기">[\s\S]*?>식단<\/button>[\s\S]
 requireRule(/<table[^>]*aria-labelledby="meal-calendar-title">[\s\S]*?<caption class="sr-only"[^>]*급식 달력/s.test(campusHtml), 'Meal calendar must be a labelled table');
 requireRule(campusHtml.includes("['일', '월', '화', '수', '목', '금', '토']") && campusHtml.includes('table-fixed'), 'Meal calendar must keep seven fixed columns');
 requireRule(campusHtml.includes('이번 주 식단표가 아직 게시되지 않았습니다.') && campusHtml.includes('이 주차에 저장된 식단표가 없습니다.'), 'Weekly meal empty states are missing');
-requireRule(/<dialog class="image-dialog/.test(campusHtml) && campusHtml.includes('@cancel.prevent="closeImage'), 'Meal image viewer must use dialog with Escape handling');
+requireRule(/<dialog class="[^"]*backdrop:bg-app-shade/.test(campusHtml) && campusHtml.includes('@cancel.prevent="closeImage'), 'Meal image viewer must use a Tailwind-styled dialog with Escape handling');
 requireRule(campusTs.includes('imageDialogScroll = {left: window.scrollX, top: window.scrollY}')
     && campusTs.includes('trigger?.focus({preventScroll: true})')
     && campusTs.includes('window.scrollTo(scroll.left, scroll.top)'), 'Image dialog must restore trigger focus and scroll position');

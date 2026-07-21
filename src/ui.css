@@ -1,4 +1,4 @@
-@layer theme, base, components, utilities;
+@layer theme, base, utilities;
 @import "tailwindcss/theme.css" layer(theme);
 @import "./styles.css" layer(base);
 @import "tailwindcss/utilities.css" layer(utilities);
@@ -36,23 +36,11 @@
     --color-app-common-soft: var(--color-common-soft);
     --color-app-women: var(--color-women);
     --color-app-women-soft: var(--color-women-soft);
+    --color-app-shade: var(--color-overlay);
 }
 
 @layer base {
     :root {
-        --space-0: 0px;
-        --space-half: 2px;
-        --space-1: 4px;
-        --space-2: 8px;
-        --space-4: 16px;
-        --space-6: 24px;
-        --space-8: 32px;
-        --space-12: 48px;
-        --space-16: 64px;
-        --space-24: 96px;
-        --border-width: 1px;
-        --motion-fast: 150ms;
-        --motion-ease: cubic-bezier(0.23, 1, 0.32, 1);
         --scrollbar-thumb: light-dark(oklch(20% 0.01 145 / 28%), oklch(88% 0.01 145 / 28%));
         --scrollbar-thumb-active: light-dark(oklch(20% 0.01 145 / 48%), oklch(88% 0.01 145 / 48%));
     }
@@ -64,15 +52,15 @@
     }
 
     *::-webkit-scrollbar {
-        width: var(--space-2);
-        height: var(--space-2);
+        width: 8px;
+        height: 8px;
     }
 
     *::-webkit-scrollbar-track { background: transparent; }
     *::-webkit-scrollbar-corner { background: var(--color-bg); }
 
     *::-webkit-scrollbar-thumb {
-        min-height: var(--space-8);
+        min-height: 32px;
         border-radius: 9998px;
         background: var(--scrollbar-thumb);
     }
@@ -82,8 +70,8 @@
 
     *::-webkit-scrollbar-button {
         display: none;
-        width: var(--space-0);
-        height: var(--space-0);
+        width: 0;
+        height: 0;
     }
 
     @supports not selector(::-webkit-scrollbar) {
@@ -91,209 +79,6 @@
             scrollbar-color: var(--scrollbar-thumb) transparent;
             scrollbar-width: thin;
         }
-    }
-
-    .ui-switch {
-        position: relative;
-        width: var(--space-12);
-        height: var(--space-6);
-        flex: 0 0 var(--space-12);
-        appearance: none;
-        border: var(--border-width) solid var(--color-border-strong);
-        border-radius: 9998px;
-        background: var(--color-control);
-        cursor: pointer;
-        transition: background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease);
-    }
-
-    .ui-switch::after {
-        content: "";
-        position: absolute;
-        top: var(--space-1);
-        left: var(--space-1);
-        width: var(--space-4);
-        height: var(--space-4);
-        border-radius: 9998px;
-        background: var(--color-surface-overlay);
-        box-shadow: inset 0 0 0 2px var(--color-border);
-        transition: transform var(--motion-fast) var(--motion-ease);
-    }
-
-    .ui-switch:checked {
-        border-color: var(--color-accent);
-        background: var(--color-accent);
-    }
-
-    .ui-switch:checked::after { transform: translateX(var(--space-6)); }
-    .ui-switch:active { transform: scale(0.97); }
-    .ui-switch:disabled { opacity: 0.48; }
-
-    .ui-progress {
-        appearance: none;
-        overflow: hidden;
-        border: 0;
-        border-radius: 9998px;
-        background: var(--color-control);
-    }
-
-    .ui-progress::-webkit-progress-bar { background: var(--color-control); }
-    .ui-progress::-webkit-progress-value,
-    .ui-progress::-moz-progress-bar { background: var(--progress-color, var(--color-accent)); }
-
-    .image-dialog::backdrop { background: var(--color-overlay); }
-}
-
-@layer components {
-    .ui-button {
-        display: inline-flex;
-        min-height: var(--space-12);
-        flex: none;
-        align-items: center;
-        justify-content: center;
-        padding: var(--space-2) var(--space-4);
-        border: var(--border-width) solid transparent;
-        border-radius: var(--space-2);
-        font-size: 14px;
-        font-weight: 700;
-        line-height: 1.2;
-        cursor: pointer;
-        transition: border-color var(--motion-fast) var(--motion-ease), background-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease), opacity var(--motion-fast) var(--motion-ease);
-    }
-
-    .ui-button[data-size="small"] {
-        min-height: var(--space-8);
-        padding: var(--space-1) var(--space-2);
-        font-size: 12px;
-    }
-
-    .ui-button[data-variant="primary"] {
-        border-color: var(--color-accent);
-        background: var(--color-accent);
-        color: light-dark(oklch(99% 0 0), oklch(16% 0.01 145));
-    }
-
-    .ui-button[data-variant="primary"]:hover {
-        border-color: var(--color-accent-hover);
-        background: var(--color-accent-hover);
-    }
-
-    .ui-button[data-variant="secondary"] {
-        border-color: var(--color-border);
-        background: var(--color-surface);
-        color: var(--color-text);
-    }
-
-    .ui-button[data-variant="secondary"]:hover {
-        border-color: var(--color-border-strong);
-        background: var(--color-surface-subtle);
-    }
-
-    .ui-button[data-variant="quiet"] {
-        background: transparent;
-        color: var(--color-text-muted);
-    }
-
-    .ui-button[data-variant="quiet"]:hover {
-        background: var(--color-surface-subtle);
-        color: var(--color-text);
-    }
-
-    .ui-button[data-variant="text"] {
-        min-height: var(--space-8);
-        padding: var(--space-1) var(--space-2);
-        background: transparent;
-        color: var(--color-accent);
-        font-size: 12px;
-    }
-
-    .ui-button[data-variant="text"]:hover {
-        background: var(--color-accent-soft);
-        color: var(--color-accent-hover);
-    }
-
-    .ui-button:active { transform: scale(0.97); }
-    .ui-button:disabled { opacity: 0.42; }
-
-    .ui-tab {
-        position: relative;
-        display: inline-flex;
-        min-width: var(--space-12);
-        min-height: var(--space-12);
-        align-items: center;
-        justify-content: center;
-        padding: var(--space-2) var(--space-4);
-        border: 0;
-        border-radius: var(--space-2) var(--space-2) var(--space-0) var(--space-0);
-        background: transparent;
-        color: var(--color-text-muted);
-        font-size: 14px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: background-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease);
-    }
-
-    .ui-tab[data-size="small"] {
-        min-height: var(--space-8);
-        padding: var(--space-1) var(--space-2);
-        font-size: 12px;
-    }
-
-    .ui-tab:hover {
-        background: var(--color-surface-subtle);
-        color: var(--color-text);
-    }
-
-    .ui-tab:active { transform: scale(0.97); }
-    .ui-tab[aria-current="page"] { color: var(--color-accent); font-weight: 700; }
-
-    .ui-tab[aria-current="page"]::after {
-        content: "";
-        position: absolute;
-        right: var(--space-2);
-        bottom: var(--space-0);
-        left: var(--space-2);
-        height: var(--space-1);
-        border-radius: 9998px 9998px var(--space-0) var(--space-0);
-        background: var(--color-accent);
-    }
-
-    .ui-tooltip { position: relative; flex: none; }
-
-    .ui-tooltip > summary {
-        display: flex;
-        width: var(--space-6);
-        height: var(--space-6);
-        align-items: center;
-        justify-content: center;
-        border: var(--border-width) solid var(--color-border);
-        border-radius: 9998px;
-        background: var(--color-surface);
-        color: var(--color-text-muted);
-        font: 700 12px/1 var(--font-family);
-        cursor: pointer;
-    }
-
-    .ui-tooltip > summary:hover,
-    .ui-tooltip > summary:focus-visible,
-    .ui-tooltip[open] > summary {
-        border-color: var(--color-accent);
-        color: var(--color-accent);
-    }
-
-    .ui-tooltip-popover {
-        position: fixed;
-        z-index: 40;
-        width: min(50vw, calc(100vw - var(--space-6)));
-        max-height: calc(100vh - var(--space-6));
-        padding: var(--space-2);
-        overflow-y: auto;
-        border: var(--border-width) solid var(--color-border-strong);
-        border-radius: var(--space-2);
-        background: var(--color-surface-overlay);
-        color: var(--color-text);
-        font-size: 12px;
-        line-height: 1.5;
-        word-break: keep-all;
     }
 }
 
