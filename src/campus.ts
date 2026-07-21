@@ -1,15 +1,19 @@
 import Alpine from 'alpinejs';
+import anchor from '@alpinejs/anchor';
 import {invoke} from '@tauri-apps/api/core';
 import {listen, type UnlistenFn} from '@tauri-apps/api/event';
 import {openUrl} from '@tauri-apps/plugin-opener';
+import {dismissInfoDisclosures, infoDisclosure, type InfoDisclosure} from './info-disclosure';
+
+Alpine.plugin(anchor);
 
 type CampusTab = 'laundry' | 'meals';
 type MealView = 'current' | 'history';
 type LaundryFilter = 'all' | 'washerAvailable' | 'dryerAvailable';
 type LaundryAccess = 'all' | 'men' | 'women';
-type DurationFormat = 'hoursMinutes' | 'minutes';
 type MachineZone = 'men' | 'common' | 'women' | 'other';
 type ApplianceKind = 'washer' | 'dryer';
+type AvailabilityState = 'available' | 'error' | 'unavailable';
 type Tone = 'neutral' | 'normal' | 'success' | 'warning' | 'danger' | 'complete';
 
 interface Projection {
@@ -65,17 +69,24 @@ interface MealPost {
     title?: string;
     text?: string;
     publishedAt?: string;
+    updatedAt?: string;
     firstSeenAt?: string;
     permalink?: string;
-    images?: Array<{url?: string}>;
+    images?: Array<{url?: string; width?: number; height?: number}>;
 }
 
 interface MealsData {
     schemaVersion: number;
     dailyMenus: MealPost[];
     pinnedMenus: MealPost[];
+    weeklyMenus?: WeeklyMealMenu[];
     recentMenus?: MealPost[];
     historyNextBefore?: string | null;
+}
+
+interface WeeklyMealMenu {
+    weekKey: string;
+    post: MealPost;
 }
 
 interface MealHistoryPage {
@@ -113,8 +124,7 @@ interface CampusError {
 }
 
 interface SourceState {
-    title: string;
-    detail: string;
+    label: string;
     tone: Tone;
 }
 
@@ -123,31 +133,28 @@ interface StatusView {
     tone: Tone;
 }
 
-interface ApplianceInfo {
-    title: string;
-    detail: string;
-}
-
 interface ApplianceError {
     code: string;
     label: string;
-    text: string;
 }
 
 interface TypeSummary {
     total: number;
     available: number;
-    active: number;
-    issue: number;
-    percent: number;
+}
+
+interface AvailabilitySegment {
+    id: string;
+    number: number;
+    zone: MachineZone;
+    state: AvailabilityState;
+    label: string;
 }
 
 const ACTIVE_STATUSES = new Set(['RUNNING', 'PAUSED', 'SCHEDULED']);
-const ISSUE_PROJECTIONS = new Set(['ERROR', 'UNKNOWN']);
 const SIGNIFICANT_ETA_CHANGE_MINUTES = 5;
-const COMPLETION_CONFIRMATION_GRACE_MS = 2 * 60_000;
+const WASH_TOWER_COUNT = 9;
 const KST_TIME_ZONE = 'Asia/Seoul';
-const DURATION_FORMAT_STORAGE_KEY = 'jungle-bell:laundry-duration-format';
 const APPLIANCE_ERROR_LABELS: Record<string, string> = {
     EMPTY_WATER_ALERT_ERROR: '배관 에러',
 };
@@ -186,14 +193,6 @@ function initialTab(): CampusTab {
     return new URLSearchParams(window.location.search).get('tab') === 'meals' ? 'meals' : 'laundry';
 }
 
-function initialDurationFormat(): DurationFormat {
-    try {
-        return localStorage.getItem(DURATION_FORMAT_STORAGE_KEY) === 'minutes' ? 'minutes' : 'hoursMinutes';
-    } catch {
-        return 'hoursMinutes';
-    }
-}
-
 function kstDateKey(date: Date): string {
     const parts = new Intl.DateTimeFormat('en-US', {
         timeZone: KST_TIME_ZONE,
@@ -205,13 +204,31 @@ function kstDateKey(date: Date): string {
     return `${value('year')}-${value('month')}-${value('day')}`;
 }
 
+function isMealServiceDate(dateKey: string): boolean {
+    return new Date(`${dateKey}T00:00:00Z`).getUTCDay() !== 0;
+}
+
+function weekMondayKey(dateKey: string): string {
+    const date = new Date(`${dateKey}T00:00:00Z`);
+    const daysSinceMonday = (date.getUTCDay() + 6) % 7;
+    date.setUTCDate(date.getUTCDate() - daysSinceMonday);
+    return date.toISOString().slice(0, 10);
+}
+
+function sourceMealWeekLabel(post?: MealPost | null): string {
+    // Kakao meal posts start week 1 on the month's first full Monday; keep that title instead of recalculating a KS week number.
+    return post?.title?.match(/\d{1,2}월\s*\d{1,2}주차/)?.[0] ?? '';
+}
+
 function campus(): Record<string, unknown> {
+    let imageDialogTrigger: HTMLElement | null = null;
+    let imageDialogScroll = {left: 0, top: 0};
+
     return {
         activeTab: initialTab() as CampusTab,
         mealView: 'current' as MealView,
         laundryFilter: 'all' as LaundryFilter,
         laundryAccess: 'all' as LaundryAccess,
-        durationFormat: initialDurationFormat() as DurationFormat,
         laundry: null as LaundryData | null,
         meals: null as MealsPayload | null,
         mealHistory: [] as MealPost[],
@@ -221,10 +238,10 @@ function campus(): Record<string, unknown> {
         mealHistoryError: null as string | null,
         mealCalendarMonth: kstDateKey(new Date()).slice(0, 7),
         mealSelectedDate: kstDateKey(new Date()),
-        refreshing: false,
+        retrying: false,
         source: {
-            laundry: {title: '세탁기 상태 확인 중', detail: '데이터를 불러오고 있습니다.', tone: 'neutral'},
-            meals: {title: '식단 확인 중', detail: '데이터를 불러오고 있습니다.', tone: 'neutral'},
+            laundry: {label: '세탁기 정보 확인 중', tone: 'neutral'},
+            meals: {label: '식단 정보 확인 중', tone: 'neutral'},
         } as Record<CampusTab, SourceState>,
         errors: {laundry: null, meals: null} as Record<CampusTab, string | null>,
         unlisteners: [] as UnlistenFn[],
@@ -257,6 +274,7 @@ function campus(): Record<string, unknown> {
         },
 
         selectTab(this: any, tab: CampusTab) {
+            dismissInfoDisclosures();
             this.activeTab = tab;
             const url = new URL(window.location.href);
             url.searchParams.set('tab', tab);
@@ -268,19 +286,18 @@ function campus(): Record<string, unknown> {
             if (!snapshot || typeof snapshot.savedAt !== 'number') return;
             if (kind === 'laundry' && this.isLaundryPayload(snapshot.data)) {
                 this.laundry = snapshot.data;
-                const freshness = this.freshnessView(this.laundry.quality?.sourceFreshness, this.laundry.quality?.sourceFreshnessLabelKo);
                 this.source.laundry = {
-                    title: freshness.title,
-                    detail: `LG ThinQ 확인 ${this.relativeTime(this.laundry.quality?.lastCheckedAt)} · 약 5분 간격`,
-                    tone: freshness.tone,
+                    label: this.laundry.quality?.lastCheckedAt
+                        ? `${this.relativeTime(this.laundry.quality.lastCheckedAt)} 갱신`
+                        : '갱신 시각 없음',
+                    tone: 'neutral',
                 };
             } else if (kind === 'meals' && this.isMealsPayload(snapshot.data)) {
                 this.meals = snapshot.data;
                 this.initializeMealHistory(this.meals.data);
                 this.source.meals = {
-                    title: '최신 식단 확인됨',
-                    detail: `마지막 수집 ${this.relativeTime(this.meals.lastCheckedAt)}`,
-                    tone: 'success',
+                    label: this.meals.lastCheckedAt ? `${this.relativeTime(this.meals.lastCheckedAt)} 갱신` : '갱신 시각 없음',
+                    tone: 'neutral',
                 };
             } else {
                 console.error(`[campus] ${kind} received invalid Rust snapshot`);
@@ -293,21 +310,23 @@ function campus(): Record<string, unknown> {
             if (error.kind !== 'laundry' && error.kind !== 'meals') return;
             this.errors[error.kind] = error.message;
             const hasData = error.kind === 'laundry' ? Boolean(this.laundry) : Boolean(this.meals);
+            const label = error.kind === 'laundry' ? '세탁기' : '식단';
             this.source[error.kind] = hasData
-                ? {title: '최신 상태 확인 실패', detail: '이전에 받은 정보를 표시합니다.', tone: 'warning'}
-                : {title: '데이터를 가져오지 못함', detail: '네트워크 연결 또는 수집 상태를 확인해 주세요.', tone: 'danger'};
+                ? {label: '업데이트 실패', tone: 'warning'}
+                : {label: '불러오기 실패', tone: 'danger'};
+            console.error(`[campus] ${label} source failed`, error.message);
         },
 
-        async refresh(this: any) {
-            if (this.refreshing) return;
-            this.refreshing = true;
+        async retry(this: any) {
+            if (this.retrying) return;
+            this.retrying = true;
             try {
                 await invoke('refresh_campus_data', {kind: this.activeTab});
             } catch (error) {
-                console.error(`[campus] ${this.activeTab} refresh failed`, error);
+                console.error(`[campus] ${this.activeTab} retry failed`, error);
                 this.applyError({kind: this.activeTab, message: String(error)});
             } finally {
-                this.refreshing = false;
+                this.retrying = false;
             }
         },
 
@@ -453,6 +472,30 @@ function campus(): Record<string, unknown> {
                 .sort((left, right) => Date.parse(left.publishedAt ?? '') - Date.parse(right.publishedAt ?? ''));
         },
 
+        mealsServedToday() {
+            return isMealServiceDate(kstDateKey(new Date()));
+        },
+
+        selectedMealDateIsSunday(this: any) {
+            return !isMealServiceDate(this.mealSelectedDate);
+        },
+
+        selectedWeeklyMenu(this: any): MealPost | null {
+            const archived = this.meals?.data.weeklyMenus ?? [];
+            const current = (this.meals?.data.pinnedMenus ?? []).map((post: MealPost) => {
+                const updatedAt = this.parseDate(post.updatedAt) ?? new Date();
+                return {weekKey: weekMondayKey(kstDateKey(updatedAt)), post};
+            });
+            const menus = new Map<string, WeeklyMealMenu>(
+                [...archived, ...current].map((menu) => [menu.weekKey, menu]),
+            );
+            return menus.get(weekMondayKey(this.mealSelectedDate))?.post ?? null;
+        },
+
+        selectedMealWeekLabel(this: any) {
+            return sourceMealWeekLabel(this.selectedWeeklyMenu());
+        },
+
         selectedMealDateLabel(this: any) {
             const [year, month, day] = this.mealSelectedDate.split('-').map(Number);
             return new Intl.DateTimeFormat('ko-KR', {month: 'long', day: 'numeric', weekday: 'long'})
@@ -474,31 +517,37 @@ function campus(): Record<string, unknown> {
             return post.title?.includes('석식') ? 'dinner' : 'lunch';
         },
 
-        saveDurationFormat(this: any) {
-            try {
-                localStorage.setItem(DURATION_FORMAT_STORAGE_KEY, this.durationFormat);
-            } catch (error) {
-                console.warn('[campus] laundry duration preference could not be saved', error);
-            }
-        },
-
-        appliances(this: any, kind?: ApplianceKind): Appliance[] {
-            if (!this.laundry) return [];
-            if (kind) return this.laundry.machines.map((machine: Machine) => machine[kind]).filter(Boolean) as Appliance[];
-            return this.laundry.machines.flatMap((machine: Machine) => [machine.washer, machine.dryer]).filter(Boolean) as Appliance[];
-        },
-
         typeSummary(this: any, kind: ApplianceKind): TypeSummary {
-            const appliances = this.appliances(kind);
-            const total = appliances.length;
-            const available = appliances.filter((item: Appliance) => this.applianceIsAvailable(item)).length;
+            const available = this.availabilitySegments(kind)
+                .filter((segment: AvailabilitySegment) => segment.state === 'available').length;
             return {
-                total,
+                total: WASH_TOWER_COUNT,
                 available,
-                active: appliances.filter((item: Appliance) => this.applianceIsActive(item)).length,
-                issue: appliances.filter((item: Appliance) => this.applianceNeedsAttention(item)).length,
-                percent: total ? Math.round((available / total) * 100) : 0,
             };
+        },
+
+        availabilitySegments(this: any, kind: ApplianceKind): AvailabilitySegment[] {
+            if (!this.laundry) return [];
+            return Array.from({length: WASH_TOWER_COUNT}, (_, index) => {
+                const number = index + 1;
+                const machine = this.laundry.machines.find((item: Machine) => machineNumber(item.id) === number);
+                const appliance = machine?.[kind];
+                const zone = machineZone(String(number));
+                const state: AvailabilityState = this.applianceHasError(appliance)
+                    ? 'error'
+                    : this.applianceIsAvailable(appliance) ? 'available' : 'unavailable';
+                const zoneLabel = this.machineZoneLabel(String(number));
+                const stateLabel = !appliance
+                    ? '정보 없음'
+                    : state === 'error' ? '오류' : state === 'available' ? '사용 가능' : '사용 중';
+                return {
+                    id: `${number}-${kind}`,
+                    number,
+                    zone,
+                    state,
+                    label: `${number}번 워시타워 ${zoneLabel} ${kind === 'washer' ? '세탁기' : '건조기'} ${stateLabel}`,
+                };
+            });
         },
 
         filteredMachines(this: any): Machine[] {
@@ -537,16 +586,14 @@ function campus(): Record<string, unknown> {
         },
 
         applianceIsAvailable(appliance?: Appliance | null) { return appliance?.operationalStatus === 'IDLE'; },
-        applianceNeedsAttention(this: any, appliance?: Appliance | null) {
-            return Boolean(appliance && (ISSUE_PROJECTIONS.has(appliance.projection?.status ?? '')
-                || appliance.operationalStatus === 'PAUSED'
-                || this.completionConfirmationDelayed(appliance)));
+        applianceHasError(appliance?: Appliance | null) {
+            return Boolean(appliance?.errorCode || appliance?.projection?.status === 'ERROR');
         },
 
         completionConfirmationDelayed(this: any, appliance?: Appliance | null) {
             if (appliance?.projection?.status !== 'AWAITING_COMPLETION_CONFIRMATION') return false;
             const finishAt = this.parseDate(appliance.estimatedFinishAt);
-            return Boolean(finishAt && Date.now() - finishAt.getTime() >= COMPLETION_CONFIRMATION_GRACE_MS);
+            return Boolean(finishAt && Date.now() > finishAt.getTime());
         },
 
         machineName(id: string) {
@@ -565,7 +612,7 @@ function campus(): Record<string, unknown> {
             const code = appliance?.errorCode?.trim().toUpperCase();
             if (!code) return null;
             const label = APPLIANCE_ERROR_LABELS[code] ?? '기기 오류';
-            return {code, label, text: `${label}(코드: ${code})`};
+            return {code, label};
         },
 
         projectionView(this: any, appliance?: Appliance | null): StatusView {
@@ -573,7 +620,9 @@ function campus(): Record<string, unknown> {
             const status = appliance.projection?.status;
             const label = appliance.projection?.statusLabelKo ?? PROJECTION_LABELS[status ?? ''];
             if (status === 'AWAITING_COMPLETION_CONFIRMATION') {
-                return {label: '완료 확인 중', tone: this.completionConfirmationDelayed(appliance) ? 'warning' : 'normal'};
+                return this.completionConfirmationDelayed(appliance)
+                    ? {label: '완료 확인 지연', tone: 'warning'}
+                    : {label: '작동 중', tone: 'normal'};
             }
             if (status === 'CONFIRMED_COMPLETED') return {label: label ?? '완료', tone: 'complete'};
             if (status === 'PAUSED') return {label: label ?? '일시 정지', tone: 'warning'};
@@ -599,7 +648,7 @@ function campus(): Record<string, unknown> {
             const minutes = appliance.projection?.remainingMinutes;
             if (!Number.isFinite(minutes)) return '--';
             const value = minutes as number;
-            if (value >= 60 && this.durationFormat === 'hoursMinutes') {
+            if (value >= 60) {
                 const hours = Math.floor(value / 60);
                 const rest = value % 60;
                 return rest ? `${hours}시간 ${rest}분` : `${hours}시간`;
@@ -644,11 +693,20 @@ function campus(): Record<string, unknown> {
             return null;
         },
 
-        applianceInfo(this: any, appliance: Appliance | null | undefined, kind: ApplianceKind): ApplianceInfo | null {
-            if (kind === 'dryer' && this.applianceError(appliance)?.code === 'EMPTY_WATER_ALERT_ERROR') {
+        applianceInfo(this: any, appliance: Appliance | null | undefined, kind: ApplianceKind): InfoDisclosure | null {
+            const error = this.applianceError(appliance);
+            if (error) {
+                if (kind === 'dryer' && error.code === 'EMPTY_WATER_ALERT_ERROR') {
+                    return {
+                        title: '배관 에러',
+                        detail: '건조기에 배관 에러가 표시될 경우, 필터 먼지 과다가 원인일 수 있습니다. 필터를 청소해보세요.',
+                        code: error.code,
+                    };
+                }
                 return {
-                    title: '⚠ 배관 에러 발생 시',
-                    detail: '건조기에 배관 에러가 표시될 경우, 필터 먼지 과다가 원인일 수 있습니다. 필터를 청소해보세요.',
+                    title: error.label,
+                    detail: '기기에 오류가 표시되고 있습니다. 기기 상태를 직접 확인해 주세요.',
+                    code: error.code,
                 };
             }
             if (appliance?.projection?.status === 'AWAITING_COMPLETION_CONFIRMATION') {
@@ -662,13 +720,29 @@ function campus(): Record<string, unknown> {
             return adjustment ? {title: '예상 시간 변경', detail: adjustment} : null;
         },
 
-        freshnessView(freshness?: string, labelKo?: string): SourceState {
-            const values: Record<string, [string, Tone]> = {
-                REFRESH_OBSERVED: ['원격 상태 갱신됨', 'success'], WITHIN_REFRESH_WINDOW: ['다음 원격 갱신 대기', 'normal'],
-                REFRESH_OVERDUE: ['원격 갱신 지연', 'warning'], UNVERIFIABLE_STABLE: ['상태 변화 없음', 'neutral'], COLLECTION_GAP: ['수집 연결 지연', 'danger'],
-            };
-            const [title, tone] = values[freshness ?? ''] ?? ['갱신 상태 확인 중', 'neutral'];
-            return {title: labelKo ?? title, detail: '', tone};
+        sourceInfo(this: any, tab: CampusTab): InfoDisclosure {
+            const hasError = Boolean(this.errors[tab]);
+            if (hasError && this.hasData(tab)) {
+                return {
+                    title: '업데이트 실패',
+                    detail: '새 정보를 확인하지 못해 마지막으로 저장된 정보를 표시하고 있습니다.',
+                };
+            }
+            if (hasError) {
+                return {
+                    title: '불러오기 실패',
+                    detail: '저장된 정보가 없고 서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+                };
+            }
+            return tab === 'laundry'
+                ? {
+                    title: '갱신 방식',
+                    detail: 'LG ThinQ의 상태 반영에는 약 5분이 걸릴 수 있습니다.',
+                }
+                : {
+                    title: '갱신 방식',
+                    detail: '점심·저녁 식단이 게시되는 시간대에는 더 자주 확인합니다.',
+                };
         },
 
         parseDate(value?: string) {
@@ -696,6 +770,10 @@ function campus(): Record<string, unknown> {
 
         formatToday() {
             return new Intl.DateTimeFormat('ko-KR', {timeZone: KST_TIME_ZONE, month: 'long', day: 'numeric', weekday: 'long'}).format(new Date());
+        },
+
+        mealWeekLabel(this: any) {
+            return sourceMealWeekLabel(this.meals?.data.pinnedMenus?.[0]);
         },
 
         postIsToday(this: any, post: MealPost) {
@@ -748,6 +826,8 @@ function campus(): Record<string, unknown> {
         openImage(this: any, post: MealPost, dialog: HTMLDialogElement) {
             const url = this.imageUrl(post);
             if (!url) return;
+            imageDialogTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+            imageDialogScroll = {left: window.scrollX, top: window.scrollY};
             this.dialogImage = url;
             this.dialogCaption = post.title ?? '식단';
             dialog.showModal();
@@ -756,11 +836,19 @@ function campus(): Record<string, unknown> {
         dialogImage: '',
         dialogCaption: '',
         closeImage(this: any, dialog: HTMLDialogElement) {
+            const trigger = imageDialogTrigger;
+            const scroll = imageDialogScroll;
             dialog.close();
             this.dialogImage = '';
+            imageDialogTrigger = null;
+            requestAnimationFrame(() => {
+                trigger?.focus({preventScroll: true});
+                window.scrollTo(scroll.left, scroll.top);
+            });
         },
     };
 }
 
 Alpine.data('campus', campus);
+Alpine.data('infoDisclosure', infoDisclosure);
 Alpine.start();
