@@ -350,7 +350,6 @@ a, area, button, input, label, select, summary, textarea, [tabindex] {
 
 html,
 body {
-    min-width: 320px;
     min-height: 100%;
 }
 
