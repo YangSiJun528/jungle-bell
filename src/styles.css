@@ -1230,6 +1230,10 @@ tr.ob-end-field.disabled {
     grid-template-columns: repeat(3, auto);
 }
 
+.status-control {
+    grid-template-columns: repeat(3, auto);
+}
+
 .zone-control .segment {
     min-width: 0;
     padding-right: 8px;
@@ -1281,11 +1285,29 @@ tr.ob-end-field.disabled {
 }
 
 .laundry-card {
+    --zone-color: var(--color-text-muted);
+    --zone-soft: var(--color-pill-bg);
     position: relative;
     min-width: 0;
     height: 210px;
     display: flex;
     flex-direction: column;
+    border-top: 3px solid var(--zone-color);
+}
+
+.laundry-card[data-zone="men"] {
+    --zone-color: #2878c8;
+    --zone-soft: #edf6ff;
+}
+
+.laundry-card[data-zone="women"] {
+    --zone-color: #c44f82;
+    --zone-soft: #fff0f6;
+}
+
+.laundry-card[data-zone="common"] {
+    --zone-color: #7656bd;
+    --zone-soft: #f3efff;
 }
 
 .laundry-card-header,
@@ -1312,9 +1334,8 @@ tr.ob-end-field.disabled {
     font-weight: 600;
 }
 
-.laundry-card-header > span {
-    color: var(--color-text-muted);
-    font-size: var(--font-size-hint);
+.laundry-card-header h3 {
+    color: var(--zone-color);
 }
 
 .laundry-card-title {
@@ -1328,8 +1349,8 @@ tr.ob-end-field.disabled {
     flex: 0 0 auto;
     padding: 1px 5px;
     border-radius: 4px;
-    background: var(--color-pill-bg);
-    color: var(--color-text-muted);
+    background: var(--zone-soft);
+    color: var(--zone-color);
     font-size: 10px;
     line-height: 1.5;
 }
@@ -1440,12 +1461,6 @@ tr.ob-end-field.disabled {
     font-size: 17px;
     line-height: 1.25;
     overflow-wrap: anywhere;
-}
-
-.estimate-label {
-    flex: 0 0 auto;
-    color: var(--color-text-faint);
-    font-size: 11px;
 }
 
 .progress-track {
@@ -1793,6 +1808,10 @@ tr.ob-end-field.disabled {
     }
 
     .zone-control {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .status-control {
         grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 

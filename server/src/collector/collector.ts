@@ -21,6 +21,7 @@ import type {
 } from "./types";
 
 const logger = getLogger(["jungle-bell", "collector"]);
+const MAX_TIMING_CONTINUITY_GAP_MS = 2 * 60_000;
 
 interface MediaMapping extends MealImageAsset {
   archivedAt: string;
@@ -82,6 +83,12 @@ function emptyState(source: SourceName): SourceState {
     consecutiveFailures: 0,
     lastError: null,
   };
+}
+
+function hasTimingContinuity(state: SourceState, fetchedAt: string): boolean {
+  if (!state.lastSuccessAt || state.lastError) return false;
+  const gap = Date.parse(fetchedAt) - Date.parse(state.lastSuccessAt);
+  return gap >= 0 && gap <= MAX_TIMING_CONTINUITY_GAP_MS;
 }
 
 function extensionFor(contentType: string, filename: string | null): string {
@@ -174,6 +181,7 @@ async function writeChangedArtifacts(
   response: JsonHttpResponse,
   sha: string,
   previousState: SourceState,
+  timingContinuity: boolean,
 ): Promise<ChangedArtifacts> {
   if (source === "laundry") {
     const previous = previousState.lastNormalizedKey
@@ -184,7 +192,10 @@ async function writeChangedArtifacts(
       sha,
       response.fetchedAt,
       previous,
-      options.lgRunStates ? { knownRunStates: options.lgRunStates } : {},
+      {
+        ...(options.lgRunStates ? { knownRunStates: options.lgRunStates } : {}),
+        timingContinuity,
+      },
     );
     const normalizedKey = `versions/laundry/${sha}/${occurrenceId(response.fetchedAt)}.json`;
     await writeJson(bucket, normalizedKey, normalized);
@@ -259,7 +270,15 @@ async function collectSource(
     const rawKey = snapshotPath(source, scheduledAt, sha);
     await writeRaw(bucket, rawKey, response.raw);
     await writeRaw(bucket, `latest/raw/${source}.json`, response.raw);
-    const artifacts = await writeChangedArtifacts(source, bucket, options, response, sha, previousState);
+    const artifacts = await writeChangedArtifacts(
+      source,
+      bucket,
+      options,
+      response,
+      sha,
+      previousState,
+      hasTimingContinuity(previousState, response.fetchedAt),
+    );
     const state: SourceState = {
       source,
       lastAttemptAt: attemptedAt,

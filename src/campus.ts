@@ -4,7 +4,7 @@ import {listen, type UnlistenFn} from '@tauri-apps/api/event';
 import {openUrl} from '@tauri-apps/plugin-opener';
 
 type CampusTab = 'laundry' | 'meals';
-type LaundryFilter = 'all' | 'active' | 'available';
+type LaundryFilter = 'all' | 'washerAvailable' | 'dryerAvailable';
 type LaundryAccess = 'all' | 'men' | 'women';
 type MachineZone = 'men' | 'common' | 'women' | 'other';
 type ApplianceKind = 'washer' | 'dryer';
@@ -27,6 +27,7 @@ interface Appliance {
     totalMinutes?: number;
     estimatedFinishAt?: string;
     observedAt?: string;
+    sessionId?: string | null;
     errorCode?: string;
 }
 
@@ -39,6 +40,7 @@ interface Machine {
 interface LaundryEvent {
     machineId?: string;
     appliance?: string;
+    sessionId?: string | null;
     observedAt: string;
     type: string;
     etaDeltaMinutes?: number;
@@ -123,7 +125,9 @@ interface TypeSummary {
 }
 
 const ACTIVE_STATUSES = new Set(['RUNNING', 'PAUSED', 'SCHEDULED']);
-const ISSUE_PROJECTIONS = new Set(['AWAITING_COMPLETION_CONFIRMATION', 'ERROR', 'UNKNOWN']);
+const ISSUE_PROJECTIONS = new Set(['ERROR', 'UNKNOWN']);
+const SIGNIFICANT_ETA_CHANGE_MINUTES = 5;
+const COMPLETION_CONFIRMATION_GRACE_MS = 2 * 60_000;
 const KST_TIME_ZONE = 'Asia/Seoul';
 const APPLIANCE_ERROR_LABELS: Record<string, string> = {
     EMPTY_WATER_ALERT_ERROR: '배관 에러',
@@ -298,9 +302,8 @@ function campus(): Record<string, unknown> {
                     const zone = machineZone(machine.id);
                     if (this.laundryAccess === 'men' && zone !== 'men' && zone !== 'common') return false;
                     if (this.laundryAccess === 'women' && zone !== 'women' && zone !== 'common') return false;
-                    const appliances = [machine.washer, machine.dryer].filter(Boolean) as Appliance[];
-                    if (this.laundryFilter === 'active') return appliances.some((item) => this.applianceIsActive(item));
-                    if (this.laundryFilter === 'available') return appliances.some((item) => this.applianceIsAvailable(item));
+                    if (this.laundryFilter === 'washerAvailable') return this.applianceIsAvailable(machine.washer);
+                    if (this.laundryFilter === 'dryerAvailable') return this.applianceIsAvailable(machine.dryer);
                     return true;
                 })
                 .sort((left, right) => {
@@ -317,11 +320,9 @@ function campus(): Record<string, unknown> {
 
         laundryEmptyMessage(this: any) {
             if (this.laundryAccess !== 'all') return '선택한 이용 구역에서 조건에 맞는 워시타워가 없습니다.';
-            return this.laundryFilter === 'active'
-                ? '현재 작동 중인 기기가 없습니다.'
-                : this.laundryFilter === 'available'
-                    ? '현재 사용 가능한 기기가 없습니다.'
-                    : '표시할 워시타워가 없습니다.';
+            return this.laundryFilter === 'all'
+                ? '표시할 워시타워가 없습니다.'
+                : '선택한 조건에 맞는 사용 가능한 워시타워가 없습니다.';
         },
 
         applianceIsActive(appliance?: Appliance | null) {
@@ -330,9 +331,16 @@ function campus(): Record<string, unknown> {
         },
 
         applianceIsAvailable(appliance?: Appliance | null) { return appliance?.operationalStatus === 'IDLE'; },
-        applianceNeedsAttention(appliance?: Appliance | null) {
+        applianceNeedsAttention(this: any, appliance?: Appliance | null) {
             return Boolean(appliance && (ISSUE_PROJECTIONS.has(appliance.projection?.status ?? '')
-                || appliance.operationalStatus === 'PAUSED'));
+                || appliance.operationalStatus === 'PAUSED'
+                || this.completionConfirmationDelayed(appliance)));
+        },
+
+        completionConfirmationDelayed(this: any, appliance?: Appliance | null) {
+            if (appliance?.projection?.status !== 'AWAITING_COMPLETION_CONFIRMATION') return false;
+            const finishAt = this.parseDate(appliance.estimatedFinishAt);
+            return Boolean(finishAt && Date.now() - finishAt.getTime() >= COMPLETION_CONFIRMATION_GRACE_MS);
         },
 
         machineName(id: string) {
@@ -345,12 +353,7 @@ function campus(): Record<string, unknown> {
             return ({men: '남성', common: '공용', women: '여성', other: '기타'} as Record<MachineZone, string>)[machineZone(id)];
         },
 
-        machineSummary(this: any, machine: Machine) {
-            const appliances = [machine.washer, machine.dryer].filter(Boolean) as Appliance[];
-            const active = appliances.filter((item) => this.applianceIsActive(item)).length;
-            const available = appliances.filter((item) => this.applianceIsAvailable(item)).length;
-            return active ? `${active}대 작동 중` : available ? `${available}대 사용 가능` : '상태 확인 필요';
-        },
+        machineZone(id: string) { return machineZone(id); },
 
         applianceError(appliance?: Appliance | null): ApplianceError | null {
             const code = appliance?.errorCode?.trim().toUpperCase();
@@ -363,16 +366,19 @@ function campus(): Record<string, unknown> {
             if (!appliance) return {label: '정보 없음', tone: 'neutral'};
             const status = appliance.projection?.status;
             const label = appliance.projection?.statusLabelKo ?? PROJECTION_LABELS[status ?? ''];
-            if (status === 'AWAITING_COMPLETION_CONFIRMATION') return {label: '완료 확인 중', tone: 'warning'};
+            if (status === 'AWAITING_COMPLETION_CONFIRMATION') {
+                return {label: '완료 확인 중', tone: this.completionConfirmationDelayed(appliance) ? 'warning' : 'normal'};
+            }
             if (status === 'CONFIRMED_COMPLETED') return {label: label ?? '완료', tone: 'complete'};
             if (status === 'PAUSED') return {label: label ?? '일시 정지', tone: 'warning'};
             if (status === 'ERROR') return {label: this.applianceError(appliance)?.label ?? label ?? '오류', tone: 'danger'};
             if (status === 'UNKNOWN') return {label: label ?? '확인 불가', tone: 'neutral'};
             if (appliance.operationalStatus === 'SCHEDULED') return {label: appliance.operationalStatusLabelKo ?? '예약됨', tone: 'normal'};
             if (status === 'IDLE') return {label: label ?? '사용 가능', tone: 'success'};
+            const stateLabel = appliance.state?.labelKo ?? LG_STATE_LABELS[appliance.state?.code ?? ''];
+            if (appliance.operationalStatus === 'RUNNING') return {label: stateLabel ?? '작동 중', tone: 'normal'};
             return {
-                label: appliance.state?.labelKo ?? LG_STATE_LABELS[appliance.state?.code ?? '']
-                    ?? label ?? appliance.operationalStatusLabelKo ?? '작동 중',
+                label: stateLabel ?? label ?? appliance.operationalStatusLabelKo ?? '작동 중',
                 tone: 'normal',
             };
         },
@@ -403,12 +409,22 @@ function campus(): Record<string, unknown> {
         },
 
         adjustmentMessage(this: any, appliance?: Appliance | null) {
-            if (!appliance || !this.laundry) return null;
+            if (!appliance?.sessionId || !this.laundry) return null;
             const matching = (this.laundry.events ?? [])
-                .filter((event: LaundryEvent) => event.machineId === appliance.machineId && event.appliance === appliance.appliance)
+                .filter((event: LaundryEvent) => event.machineId === appliance.machineId
+                    && event.appliance === appliance.appliance
+                    && event.sessionId === appliance.sessionId)
                 .sort((left: LaundryEvent, right: LaundryEvent) => Date.parse(right.observedAt) - Date.parse(left.observedAt));
-            const priority = ['ERROR_ENTERED', 'ETA_EXTENDED', 'ETA_REDUCED', 'TOTAL_TIME_ADJUSTED', 'ERROR_CLEARED', 'COMPLETED', 'STARTED'];
-            const current = priority.map((type) => matching.find((event: LaundryEvent) => event.type === type)).find(Boolean) as LaundryEvent | undefined;
+            const current = matching.find((event: LaundryEvent) => {
+                if (event.type === 'ETA_EXTENDED' || event.type === 'ETA_REDUCED') {
+                    return Math.abs(event.etaDeltaMinutes ?? 0) >= SIGNIFICANT_ETA_CHANGE_MINUTES;
+                }
+                if (event.type !== 'TOTAL_TIME_ADJUSTED') return false;
+                const previous = event.detail?.previousTotalMinutes;
+                const next = event.detail?.currentTotalMinutes;
+                return Number.isFinite(previous) && Number.isFinite(next)
+                    && Math.abs((next as number) - (previous as number)) >= SIGNIFICANT_ETA_CHANGE_MINUTES;
+            });
             if (!current) return null;
             const delta = Math.abs(Math.round(current.etaDeltaMinutes ?? 0));
             if (current.type === 'ETA_EXTENDED') return `예상 종료가 ${delta}분 늦어졌습니다.`;
@@ -419,7 +435,7 @@ function campus(): Record<string, unknown> {
                 return Number.isFinite(previous) && Number.isFinite(next)
                     ? `전체 시간이 ${previous}분에서 ${next}분으로 조정됐습니다.` : '전체 시간이 조정됐습니다.';
             }
-            return ({ERROR_ENTERED: '기기 오류가 감지됐습니다.', ERROR_CLEARED: '기기 오류가 해제됐습니다.', COMPLETED: '작동 완료가 확인됐습니다.', STARTED: '작동 시작이 확인됐습니다.'} as Record<string, string>)[current.type] ?? null;
+            return null;
         },
 
         applianceInfo(this: any, appliance: Appliance | null | undefined, kind: ApplianceKind): ApplianceInfo | null {
@@ -430,13 +446,14 @@ function campus(): Record<string, unknown> {
                 };
             }
             if (appliance?.projection?.status === 'AWAITING_COMPLETION_CONFIRMATION') {
+                if (!this.completionConfirmationDelayed(appliance)) return null;
                 return {
-                    title: '완료 확인 중',
+                    title: '완료 확인 지연',
                     detail: '예상 잔여 시간은 지났지만 LG ThinQ에서 완료 상태가 아직 확인되지 않았습니다. 완료가 확인될 때까지 사용 중으로 표시합니다.',
                 };
             }
             const adjustment = this.adjustmentMessage(appliance);
-            return adjustment ? {title: '상태 변경 안내', detail: adjustment} : null;
+            return adjustment ? {title: '예상 시간 변경', detail: adjustment} : null;
         },
 
         freshnessView(freshness?: string, labelKo?: string): SourceState {
