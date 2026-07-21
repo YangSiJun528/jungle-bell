@@ -1,5 +1,3 @@
-const LOCAL_DATA_API_URL: &str = "http://127.0.0.1:8787";
-
 pub(crate) fn normalize_base_url(value: &str, allow_local_http: bool) -> Result<String, String> {
     let value = value.trim().trim_end_matches('/');
     if value.is_empty() {
@@ -16,13 +14,13 @@ pub(crate) fn normalize_base_url(value: &str, allow_local_http: bool) -> Result<
     Ok(value.to_owned())
 }
 
-pub(crate) fn base_url() -> Result<String, String> {
-    let configured = option_env!("JUNGLE_BELL_DATA_API_URL").unwrap_or_default();
-    if configured.trim().is_empty() && cfg!(debug_assertions) {
-        return Ok(LOCAL_DATA_API_URL.into());
-    }
-
+pub(crate) fn base_url() -> String {
+    let configured = match option_env!("JUNGLE_BELL_DATA_API_URL") {
+        Some(value) => value,
+        None => panic!("JUNGLE_BELL_DATA_API_URL must be set when building jungle-bell"),
+    };
     normalize_base_url(configured, cfg!(debug_assertions))
+        .unwrap_or_else(|error| panic!("invalid JUNGLE_BELL_DATA_API_URL: {error}"))
 }
 
 #[cfg(test)]
