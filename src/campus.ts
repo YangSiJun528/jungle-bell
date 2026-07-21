@@ -4,8 +4,10 @@ import {listen, type UnlistenFn} from '@tauri-apps/api/event';
 import {openUrl} from '@tauri-apps/plugin-opener';
 
 type CampusTab = 'laundry' | 'meals';
+type MealView = 'current' | 'history';
 type LaundryFilter = 'all' | 'washerAvailable' | 'dryerAvailable';
 type LaundryAccess = 'all' | 'men' | 'women';
+type DurationFormat = 'hoursMinutes' | 'minutes';
 type MachineZone = 'men' | 'common' | 'women' | 'other';
 type ApplianceKind = 'washer' | 'dryer';
 type Tone = 'neutral' | 'normal' | 'success' | 'warning' | 'danger' | 'complete';
@@ -63,6 +65,7 @@ interface MealPost {
     title?: string;
     text?: string;
     publishedAt?: string;
+    firstSeenAt?: string;
     permalink?: string;
     images?: Array<{url?: string}>;
 }
@@ -72,6 +75,21 @@ interface MealsData {
     dailyMenus: MealPost[];
     pinnedMenus: MealPost[];
     recentMenus?: MealPost[];
+    historyNextBefore?: string | null;
+}
+
+interface MealHistoryPage {
+    posts: MealPost[];
+    nextBefore: string | null;
+}
+
+interface MealCalendarDay {
+    key: string;
+    day: number;
+    weekday: number;
+    inCurrentMonth: boolean;
+    isToday: boolean;
+    posts: MealPost[];
 }
 
 interface MealsPayload {
@@ -129,6 +147,7 @@ const ISSUE_PROJECTIONS = new Set(['ERROR', 'UNKNOWN']);
 const SIGNIFICANT_ETA_CHANGE_MINUTES = 5;
 const COMPLETION_CONFIRMATION_GRACE_MS = 2 * 60_000;
 const KST_TIME_ZONE = 'Asia/Seoul';
+const DURATION_FORMAT_STORAGE_KEY = 'jungle-bell:laundry-duration-format';
 const APPLIANCE_ERROR_LABELS: Record<string, string> = {
     EMPTY_WATER_ALERT_ERROR: '배관 에러',
 };
@@ -167,13 +186,41 @@ function initialTab(): CampusTab {
     return new URLSearchParams(window.location.search).get('tab') === 'meals' ? 'meals' : 'laundry';
 }
 
+function initialDurationFormat(): DurationFormat {
+    try {
+        return localStorage.getItem(DURATION_FORMAT_STORAGE_KEY) === 'minutes' ? 'minutes' : 'hoursMinutes';
+    } catch {
+        return 'hoursMinutes';
+    }
+}
+
+function kstDateKey(date: Date): string {
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: KST_TIME_ZONE,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    }).formatToParts(date);
+    const value = (type: string) => parts.find((part) => part.type === type)?.value ?? '';
+    return `${value('year')}-${value('month')}-${value('day')}`;
+}
+
 function campus(): Record<string, unknown> {
     return {
         activeTab: initialTab() as CampusTab,
+        mealView: 'current' as MealView,
         laundryFilter: 'all' as LaundryFilter,
         laundryAccess: 'all' as LaundryAccess,
+        durationFormat: initialDurationFormat() as DurationFormat,
         laundry: null as LaundryData | null,
         meals: null as MealsPayload | null,
+        mealHistory: [] as MealPost[],
+        mealHistoryNextBefore: null as string | null,
+        mealHistoryInitialized: false,
+        mealHistoryLoading: false,
+        mealHistoryError: null as string | null,
+        mealCalendarMonth: kstDateKey(new Date()).slice(0, 7),
+        mealSelectedDate: kstDateKey(new Date()),
         refreshing: false,
         source: {
             laundry: {title: '세탁기 상태 확인 중', detail: '데이터를 불러오고 있습니다.', tone: 'neutral'},
@@ -192,6 +239,9 @@ function campus(): Record<string, unknown> {
                 }));
                 this.unlisteners.push(await listen<CampusError>('campus-data-error', (event) => {
                     this.applyError(event.payload);
+                }));
+                this.unlisteners.push(await listen<MealHistoryPage>('meal-history-updated', (event) => {
+                    this.applyMealHistoryPage(event.payload);
                 }));
                 await invoke('report_campus_ready');
             } catch (error) {
@@ -226,6 +276,7 @@ function campus(): Record<string, unknown> {
                 };
             } else if (kind === 'meals' && this.isMealsPayload(snapshot.data)) {
                 this.meals = snapshot.data;
+                this.initializeMealHistory(this.meals.data);
                 this.source.meals = {
                     title: '최신 식단 확인됨',
                     detail: `마지막 수집 ${this.relativeTime(this.meals.lastCheckedAt)}`,
@@ -274,6 +325,161 @@ function campus(): Record<string, unknown> {
             return value?.data?.schemaVersion === 1
                 && Array.isArray(value.data.dailyMenus)
                 && Array.isArray(value.data.pinnedMenus);
+        },
+
+        selectMealView(this: any, view: MealView) {
+            this.mealView = view;
+            if (view === 'history' && !this.mealHistoryLoading
+                && (!this.mealHistoryInitialized || this.mealHistoryNeedsMore())) {
+                void this.loadMoreMealHistory();
+            }
+        },
+
+        initializeMealHistory(this: any, data: MealsData) {
+            const latest = [...data.dailyMenus, ...(data.recentMenus ?? [])];
+            if (!this.mealHistoryInitialized) {
+                this.mealHistory = this.uniqueMealPosts(latest);
+                this.mealHistoryNextBefore = data.historyNextBefore ?? null;
+                this.mealHistoryInitialized = true;
+                return;
+            }
+            this.mealHistory = this.uniqueMealPosts([...latest, ...this.mealHistory]);
+        },
+
+        uniqueMealPosts(this: any, posts: MealPost[]): MealPost[] {
+            const seen = new Set<string>();
+            return posts.filter((post, index) => {
+                const key = this.postIdentity(post, index);
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            });
+        },
+
+        applyMealHistoryPage(this: any, page: MealHistoryPage) {
+            if (!page || !Array.isArray(page.posts)) return;
+            this.mealHistory = this.uniqueMealPosts([...this.mealHistory, ...page.posts]);
+            this.mealHistoryNextBefore = page.nextBefore ?? null;
+            this.mealHistoryInitialized = true;
+            this.mealHistoryLoading = false;
+            this.mealHistoryError = null;
+            if (this.mealHistoryNeedsMore()) void this.loadMoreMealHistory();
+        },
+
+        async loadMoreMealHistory(this: any) {
+            if (this.mealHistoryLoading) return;
+            if (this.mealHistoryInitialized && !this.mealHistoryNextBefore) return;
+            this.mealHistoryLoading = true;
+            this.mealHistoryError = null;
+            try {
+                await invoke('load_meal_history', {before: this.mealHistoryNextBefore});
+            } catch (error) {
+                console.error('[campus] meal history request failed', error);
+                this.mealHistoryLoading = false;
+                this.mealHistoryError = String(error);
+            }
+        },
+
+        mealHistoryNeedsMore(this: any) {
+            if (!this.mealHistoryNextBefore) return false;
+            const oldest = this.mealHistory
+                .map((post: MealPost) => this.postDateKey(post))
+                .filter(Boolean)
+                .sort()[0];
+            return !oldest || oldest > `${this.mealCalendarMonth}-01`;
+        },
+
+        moveMealMonth(this: any, offset: number) {
+            const [year, month] = this.mealCalendarMonth.split('-').map(Number);
+            const target = new Date(Date.UTC(year, month - 1 + offset, 1));
+            this.mealCalendarMonth = `${target.getUTCFullYear()}-${String(target.getUTCMonth() + 1).padStart(2, '0')}`;
+            this.mealSelectedDate = `${this.mealCalendarMonth}-01`;
+            if (this.mealHistoryNeedsMore()) void this.loadMoreMealHistory();
+        },
+
+        canMoveMealMonthNext(this: any) {
+            return this.mealCalendarMonth < kstDateKey(new Date()).slice(0, 7);
+        },
+
+        mealCalendarLabel(this: any) {
+            const [year, month] = this.mealCalendarMonth.split('-').map(Number);
+            return new Intl.DateTimeFormat('ko-KR', {year: 'numeric', month: 'long'})
+                .format(new Date(Date.UTC(year, month - 1, 1)));
+        },
+
+        mealCalendarDays(this: any): MealCalendarDay[] {
+            const [year, month] = this.mealCalendarMonth.split('-').map(Number);
+            const first = new Date(Date.UTC(year, month - 1, 1));
+            const calendarStart = new Date(first);
+            calendarStart.setUTCDate(1 - first.getUTCDay());
+            const postsByDate = new Map<string, MealPost[]>();
+            for (const post of this.mealHistory as MealPost[]) {
+                const key = this.postDateKey(post);
+                if (!key) continue;
+                const posts = postsByDate.get(key) ?? [];
+                posts.push(post);
+                postsByDate.set(key, posts);
+            }
+            const today = kstDateKey(new Date());
+            return Array.from({length: 42}, (_, index) => {
+                const date = new Date(calendarStart);
+                date.setUTCDate(calendarStart.getUTCDate() + index);
+                const key = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
+                return {
+                    key,
+                    day: date.getUTCDate(),
+                    weekday: date.getUTCDay(),
+                    inCurrentMonth: date.getUTCMonth() === month - 1,
+                    isToday: key === today,
+                    posts: postsByDate.get(key) ?? [],
+                };
+            });
+        },
+
+        mealCalendarWeeks(this: any): MealCalendarDay[][] {
+            const days = this.mealCalendarDays() as MealCalendarDay[];
+            return Array.from({length: 6}, (_, index) => days.slice(index * 7, index * 7 + 7));
+        },
+
+        selectMealDate(this: any, day: MealCalendarDay) {
+            this.mealSelectedDate = day.key;
+            this.mealCalendarMonth = day.key.slice(0, 7);
+            if (this.mealHistoryNeedsMore()) void this.loadMoreMealHistory();
+        },
+
+        selectedMealPosts(this: any): MealPost[] {
+            return (this.mealHistory as MealPost[])
+                .filter((post) => this.postDateKey(post) === this.mealSelectedDate)
+                .sort((left, right) => Date.parse(left.publishedAt ?? '') - Date.parse(right.publishedAt ?? ''));
+        },
+
+        selectedMealDateLabel(this: any) {
+            const [year, month, day] = this.mealSelectedDate.split('-').map(Number);
+            return new Intl.DateTimeFormat('ko-KR', {month: 'long', day: 'numeric', weekday: 'long'})
+                .format(new Date(Date.UTC(year, month - 1, day)));
+        },
+
+        postDateKey(this: any, post: MealPost) {
+            const parsed = this.parseDate(post.publishedAt ?? post.firstSeenAt);
+            return parsed ? kstDateKey(parsed) : null;
+        },
+
+        mealPeriodLabel(post: MealPost) {
+            if (post.title?.includes('중식')) return '중식';
+            if (post.title?.includes('석식')) return '석식';
+            return '식단';
+        },
+
+        mealPeriodKind(post: MealPost) {
+            return post.title?.includes('석식') ? 'dinner' : 'lunch';
+        },
+
+        saveDurationFormat(this: any) {
+            try {
+                localStorage.setItem(DURATION_FORMAT_STORAGE_KEY, this.durationFormat);
+            } catch (error) {
+                console.warn('[campus] laundry duration preference could not be saved', error);
+            }
         },
 
         appliances(this: any, kind?: ApplianceKind): Appliance[] {
@@ -383,7 +589,7 @@ function campus(): Record<string, unknown> {
             };
         },
 
-        remainingText(appliance?: Appliance | null) {
+        remainingText(this: any, appliance?: Appliance | null) {
             if (!appliance) return '--';
             const status = appliance.projection?.status;
             if (status === 'CONFIRMED_COMPLETED') return '완료';
@@ -393,7 +599,7 @@ function campus(): Record<string, unknown> {
             const minutes = appliance.projection?.remainingMinutes;
             if (!Number.isFinite(minutes)) return '--';
             const value = minutes as number;
-            if (value >= 60) {
+            if (value >= 60 && this.durationFormat === 'hoursMinutes') {
                 const hours = Math.floor(value / 60);
                 const rest = value % 60;
                 return rest ? `${hours}시간 ${rest}분` : `${hours}시간`;
@@ -513,12 +719,6 @@ function campus(): Record<string, unknown> {
             return this.dailyMenus().filter((post: MealPost) => this.postIsToday(post)).find((post: MealPost) => post.title?.includes(keyword)) ?? null;
         },
 
-        recentMenus(this: any): MealPost[] {
-            const archived = this.meals?.data.recentMenus ?? this.dailyMenus();
-            return [...archived].filter((post) => !this.postIsToday(post))
-                .sort((left, right) => Date.parse(right.publishedAt ?? '') - Date.parse(left.publishedAt ?? '')).slice(0, 6);
-        },
-
         safeAssetUrl(value?: string) {
             if (!value) return null;
             try {
@@ -529,7 +729,8 @@ function campus(): Record<string, unknown> {
         },
 
         imageUrl(this: any, post?: MealPost | null) { return this.safeAssetUrl(post?.images?.[0]?.url); },
-        postKey(post: MealPost, index: number) { return post.id ?? post.permalink ?? `${post.title ?? 'post'}-${index}`; },
+        postIdentity(post: MealPost, index: number) { return post.id ?? post.permalink ?? `${post.title ?? 'post'}-${post.publishedAt ?? index}`; },
+        postKey(this: any, post: MealPost, index: number) { return this.postIdentity(post, index); },
 
         safeKakaoUrl(value?: string) {
             if (!value) return null;

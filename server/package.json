@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "backfill:meals:prepare": "node scripts/prepare-meal-backfill.ts",
     "check": "npm run typecheck && npm test",
     "dev:api": "wrangler dev --config wrangler.api.jsonc",
     "dev:collector": "wrangler dev --config wrangler.collector.jsonc",
@@ -31,6 +32,6 @@
     "wrangler": "^4.59.2"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=22.18.0"
   }
 }

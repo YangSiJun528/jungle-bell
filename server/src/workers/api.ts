@@ -30,6 +30,7 @@ type AppEnvironment = { Bindings: Env; Variables: Variables };
 export const app = new Hono<AppEnvironment>();
 const LATEST_CACHE = "public, max-age=15, s-maxage=30, stale-while-revalidate=120";
 const IMMUTABLE_CACHE = "public, max-age=31536000, immutable";
+const MEAL_HISTORY_PAGE_SIZE = 30;
 const rfc3339Schema = z.iso.datetime({ offset: true });
 const timeQuerySchema = z.object({ time: rfc3339Schema });
 const minuteParamSchema = z.object({ minute: z.string().regex(/^\d{8}T\d{4}Z$/) });
@@ -40,7 +41,7 @@ const eventsQuerySchema = z.object({
 });
 const mealHistoryQuerySchema = z.object({
   before: rfc3339Schema.optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(30),
+  limit: z.coerce.number().int().min(1).max(100).default(MEAL_HISTORY_PAGE_SIZE),
 });
 const assetParamSchema = z.object({ asset: z.string().regex(/^[a-f0-9]{64}\.[a-z0-9]{1,8}$/) });
 const indexerLogger = getLogger(["jungle-bell", "api-indexer"]);
@@ -241,13 +242,17 @@ app.get("/v1/meals", async (context) => {
   const version = await context.var.storage.readJson<MealsVersion>(state.lastNormalizedKey)
     ?? await context.var.storage.readJson<MealsVersion>("latest/meals.json");
   if (!version) return context.json({ error: "DATA_OBJECT_MISSING" }, 503);
-  const recentMenus = await context.var.storage.listMealPosts(null, 30);
+  const recentMenus = await context.var.storage.listMealPosts(null, MEAL_HISTORY_PAGE_SIZE);
+  const lastRecentMenu = recentMenus.at(-1);
   const body = {
     asOf: currentCacheSlice().toISOString(),
     lastCheckedAt: state.lastSuccessAt,
     data: {
       ...withAssetUrls(version, context.req.url),
       recentMenus: recentMenus.map((post) => withPostAssetUrls(post, context.req.url)),
+      historyNextBefore: recentMenus.length === MEAL_HISTORY_PAGE_SIZE && lastRecentMenu
+        ? lastRecentMenu.publishedAt ?? lastRecentMenu.firstSeenAt
+        : null,
     },
   };
   context.header("Cache-Control", LATEST_CACHE);

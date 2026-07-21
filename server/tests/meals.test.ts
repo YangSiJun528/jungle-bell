@@ -28,13 +28,20 @@ describe("normalizeMeals", () => {
           contents: [{ t: "text", v: "밥\n국" }],
           media: [],
         },
+        {
+          id: 3,
+          pinned: false,
+          title: "7월 10일 중식 메누",
+          contents: [],
+          media: [],
+        },
       ],
     };
 
     const result = await normalizeMeals(value, "a".repeat(64), "2026-07-17T00:00:00.000Z", archive);
 
     expect(result.pinnedMenus.map((post) => post.id)).toEqual(["1"]);
-    expect(result.dailyMenus.map((post) => post.id)).toEqual(["2"]);
+    expect(result.dailyMenus.map((post) => post.id)).toEqual(["2", "3"]);
     expect(result.dailyMenus[0]?.text).toBe("밥\n국");
     expect(archive).toHaveBeenCalledWith(expect.objectContaining({
       postId: "1",
