@@ -50,6 +50,12 @@ struct CheckerTriggerPayload {
     generation: u64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CheckerRefreshAction {
+    Reload,
+    Navigate,
+}
+
 pub(crate) fn apply_supervisor_event(runtime: &mut CheckerRuntime, event: CheckerEvent) -> Vec<CheckerAction> {
     match event {
         CheckerEvent::PageLoaded => {
@@ -105,7 +111,8 @@ pub(crate) fn apply_supervisor_event(runtime: &mut CheckerRuntime, event: Checke
     }
 }
 
-pub(crate) fn record_checker_page_load(state: &mut AppState) -> (u64, Vec<CheckerAction>) {
+pub(crate) fn record_checker_page_load(state: &mut AppState, page_url: &str) -> (u64, Vec<CheckerAction>) {
+    state.checker.last_loaded_url = Some(page_url.to_string());
     let actions = apply_supervisor_event(&mut state.checker, CheckerEvent::PageLoaded);
     (state.checker.page_load_generation, actions)
 }
@@ -170,9 +177,12 @@ pub fn trigger_current_check(app: &tauri::AppHandle) -> bool {
 
 /// checker WebView를 출석 페이지 기준으로 갱신한다.
 ///
-/// 이미 출석 페이지에 있으면 `navigate()` 대신 `reload()`를 사용한다.
+/// 마지막 로드 완료 페이지가 출석 페이지면 `navigate()` 대신 `reload()`를 사용한다.
 /// 같은 URL로 `navigate()`하면 WebView가 page-load를 만들지 않을 수 있기 때문이다.
 /// 로그인 페이지 등 다른 URL이면 출석 페이지로 이동시킨다.
+///
+/// 네트워크 오류 중 macOS WKWebView의 URL은 `nil`일 수 있고 Wry 0.55의
+/// `url()`은 이를 panic으로 처리하므로 네이티브 URL은 직접 조회하지 않는다.
 pub fn refresh_webview(app: &tauri::AppHandle, reason: &str) -> bool {
     let Some(checker) = app.get_webview_window("checker") else {
         log::warn!("[checker] refresh skipped: checker window not found ({})", reason);
@@ -180,16 +190,21 @@ pub fn refresh_webview(app: &tauri::AppHandle, reason: &str) -> bool {
     };
 
     let target = ATTENDANCE_URL.parse().unwrap();
-    let current = checker.url().ok();
-    let result = if current
-        .as_ref()
-        .is_some_and(|url| same_url_without_trailing_slash(url.as_str(), ATTENDANCE_URL))
-    {
-        log::info!("[checker] webview reloaded ({})", reason);
-        checker.reload()
-    } else {
-        log::info!("[checker] webview navigated ({})", reason);
-        checker.navigate(target)
+    let state: tauri::State<Arc<Mutex<AppState>>> = app.state();
+    let last_loaded_url = state
+        .try_lock()
+        .ok()
+        .and_then(|state| state.checker.last_loaded_url.clone());
+
+    let result = match decide_refresh_action(last_loaded_url.as_deref()) {
+        CheckerRefreshAction::Reload => {
+            log::info!("[checker] webview reloaded ({})", reason);
+            checker.reload()
+        }
+        CheckerRefreshAction::Navigate => {
+            log::info!("[checker] webview navigated ({})", reason);
+            checker.navigate(target)
+        }
     };
 
     match result {
@@ -198,6 +213,14 @@ pub fn refresh_webview(app: &tauri::AppHandle, reason: &str) -> bool {
             log::warn!("[checker] refresh failed ({}): {}", reason, e);
             false
         }
+    }
+}
+
+fn decide_refresh_action(last_loaded_url: Option<&str>) -> CheckerRefreshAction {
+    if last_loaded_url.is_some_and(|url| same_url_without_trailing_slash(url, ATTENDANCE_URL)) {
+        CheckerRefreshAction::Reload
+    } else {
+        CheckerRefreshAction::Navigate
     }
 }
 
@@ -225,7 +248,7 @@ pub(crate) fn build_webview(app: &tauri::AppHandle) -> tauri::Result<tauri::Webv
                 let state: tauri::State<Arc<Mutex<AppState>>> = app_handle.state();
                 let (generation, actions) = {
                     let mut s = state.lock().await;
-                    record_checker_page_load(&mut s)
+                    record_checker_page_load(&mut s, &page_url)
                 };
 
                 log::debug!(
@@ -368,6 +391,23 @@ mod tests {
         AppState::new(Config::default())
     }
 
+    #[test]
+    fn checker_url이_없으면_navigate로_갱신한다() {
+        assert_eq!(decide_refresh_action(None), CheckerRefreshAction::Navigate);
+    }
+
+    #[test]
+    fn checker_page_load_url을_기록해_갱신_방식을_결정한다() {
+        let mut state = default_state();
+
+        record_checker_page_load(&mut state, ATTENDANCE_URL);
+
+        assert_eq!(
+            decide_refresh_action(state.checker.last_loaded_url.as_deref()),
+            CheckerRefreshAction::Reload
+        );
+    }
+
     fn process_report(
         state: &mut AppState,
         report: &AttendanceReport,
@@ -380,8 +420,8 @@ mod tests {
     fn checker_page_load_세대가_증가한다() {
         let mut state = default_state();
 
-        let (first, _) = record_checker_page_load(&mut state);
-        let (second, _) = record_checker_page_load(&mut state);
+        let (first, _) = record_checker_page_load(&mut state, ATTENDANCE_URL);
+        let (second, _) = record_checker_page_load(&mut state, ATTENDANCE_URL);
 
         assert_eq!(first, 1);
         assert_eq!(second, 2);
@@ -392,7 +432,7 @@ mod tests {
     #[test]
     fn checker_report가_오면_watchdog은_대기한다() {
         let mut state = default_state();
-        let (generation, _) = record_checker_page_load(&mut state);
+        let (generation, _) = record_checker_page_load(&mut state, ATTENDANCE_URL);
 
         record_checker_report(&mut state, generation, false);
 
@@ -406,7 +446,7 @@ mod tests {
     #[test]
     fn checker_report가_없으면_watchdog은_재생성을_요구한다() {
         let mut state = default_state();
-        let (generation, _) = record_checker_page_load(&mut state);
+        let (generation, _) = record_checker_page_load(&mut state, ATTENDANCE_URL);
 
         assert_eq!(
             decide_checker_watchdog_action(&state, generation),
@@ -417,8 +457,8 @@ mod tests {
     #[test]
     fn 오래된_checker_watchdog은_무시한다() {
         let mut state = default_state();
-        let (stale_generation, _) = record_checker_page_load(&mut state);
-        record_checker_page_load(&mut state);
+        let (stale_generation, _) = record_checker_page_load(&mut state, ATTENDANCE_URL);
+        record_checker_page_load(&mut state, ATTENDANCE_URL);
 
         assert_eq!(
             decide_checker_watchdog_action(&state, stale_generation),
@@ -429,7 +469,7 @@ mod tests {
     #[test]
     fn checker_재생성_한도에_도달하면_중단한다() {
         let mut state = default_state();
-        let (generation, _) = record_checker_page_load(&mut state);
+        let (generation, _) = record_checker_page_load(&mut state, ATTENDANCE_URL);
         state.checker.no_report_recreates = CHECKER_NO_REPORT_RECREATE_LIMIT;
 
         assert_eq!(
@@ -441,7 +481,7 @@ mod tests {
     #[test]
     fn checker_재생성은_상태에_attempt를_남긴다() {
         let mut state = default_state();
-        let (generation, _) = record_checker_page_load(&mut state);
+        let (generation, _) = record_checker_page_load(&mut state, ATTENDANCE_URL);
 
         record_checker_recreate(&mut state, generation, 1);
 
@@ -455,7 +495,7 @@ mod tests {
     #[test]
     fn checker_give_up은_offline_상태로_남긴다() {
         let mut state = default_state();
-        let (generation, _) = record_checker_page_load(&mut state);
+        let (generation, _) = record_checker_page_load(&mut state, ATTENDANCE_URL);
 
         record_checker_give_up(&mut state, generation);
 
