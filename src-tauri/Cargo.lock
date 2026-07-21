@@ -2300,6 +2300,7 @@ dependencies = [
  "objc2-foundation",
  "os_info",
  "posthog-rs",
+ "reqwest 0.13.3",
  "serde",
  "serde_json",
  "sha2",

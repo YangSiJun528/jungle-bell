@@ -2,8 +2,7 @@
 //!
 //! tokio 태스크로 실행되며, 적응형 간격으로 틱:
 //!   - 5초: 첫 체커 보고 대기 중
-//!   - 60초: 사용자 액션 필요 시 (NeedStart, StartOverdue, NeedEnd)
-//!   - 300초: 대기 중 (Studying, Complete, Idle)
+//!   - 최대 30초: 생활정보 job이 추가된 일반 상태
 //!
 //! 매 틱마다: 날짜 변경 시 일일 리셋, 상태 계산, 트레이 갱신,
 //! 체커 WebView 주기적 리로드를 수행.
@@ -36,7 +35,14 @@ const CHECKER_SESSION_REFRESH_JOB: JobSpec = JobSpec::new(JobKind::CheckerSessio
     .initial_delay_secs(RELOAD_INTERVAL_NORMAL)
     .backoff_secs(30, 5 * 60)
     .max_failures(3);
-const INTERVAL_JOBS: [JobSpec; 1] = [CHECKER_SESSION_REFRESH_JOB];
+const LAUNDRY_REFRESH_JOB: JobSpec = JobSpec::new(JobKind::LaundryRefresh, 30)
+    .initial_delay_secs(0)
+    .backoff_secs(30, 30);
+const MEALS_REFRESH_JOB: JobSpec = JobSpec::new(JobKind::MealsRefresh, 60)
+    .initial_delay_secs(0)
+    .backoff_secs(60, 60);
+const INTERVAL_JOBS: [JobSpec; 3] = [CHECKER_SESSION_REFRESH_JOB, LAUNDRY_REFRESH_JOB, MEALS_REFRESH_JOB];
+const CAMPUS_TICK_INTERVAL_SECS: u64 = 30;
 /// OS 절전/복귀 등으로 틱이 예상보다 크게 밀렸을 때 checker를 다시 깨운다.
 const TICK_DELAY_REFRESH_GRACE_SECS: u64 = 60;
 /// 지연된 틱에서는 stale 상태로 알림을 보내지 않고 checker 결과를 짧게 기다린다.
@@ -163,7 +169,7 @@ fn tick_delayed(previous_tick: DateTime<Utc>, expected_interval_secs: u64, now: 
     .map(|_| (now - previous_tick).num_seconds())
 }
 
-fn refresh_checker_after_delayed_tick(
+async fn refresh_checker_after_delayed_tick(
     app_handle: &tauri::AppHandle,
     action: JobAction,
     elapsed_secs: i64,
@@ -175,7 +181,7 @@ fn refresh_checker_after_delayed_tick(
         expected_interval_secs,
     );
 
-    runtime::run_job_action(app_handle, action)
+    runtime::run_job_action(app_handle, action).await
 }
 
 fn log_tick_state(now: DateTime<Utc>, state: &AppState, result: &TickResult) {
@@ -294,8 +300,7 @@ pub(crate) fn compute_tick(state: &mut AppState, now: DateTime<Utc>, attendance_
         .and_then(|(phase, remaining)| compute_notification_for_phase(state, now, kst_now, phase, remaining));
 
     // --- 주기 job ---
-    // API 호출은 WebView 쿠키를 사용하므로 checker session refresh를
-    // interval job으로 등록한다. 나중에 급식/빨래 API도 같은 형태로 추가한다.
+    // checker 세션과 생활정보 API 요청을 같은 interval job 엔진에서 관리한다.
     let job_actions = compute_job_actions(state, now);
 
     // --- 로그인 재시도 윈도우 만료 확인 ---
@@ -310,7 +315,8 @@ pub(crate) fn compute_tick(state: &mut AppState, now: DateTime<Utc>, attendance_
         login_retry_active,
         state.phase,
         remaining,
-    );
+    )
+    .min(CAMPUS_TICK_INTERVAL_SECS);
 
     TickResult {
         tick_interval,
@@ -344,6 +350,7 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
         let mut previous_interval_secs: Option<u64> = None;
 
         loop {
+            let tick_started_at = tokio::time::Instant::now();
             let now = Utc::now();
             let delayed_tick = previous_tick
                 .zip(previous_interval_secs)
@@ -359,7 +366,7 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
                 });
 
             if let Some((elapsed, interval, action)) = delayed_tick {
-                let succeeded = refresh_checker_after_delayed_tick(&app_handle, action, elapsed, interval);
+                let succeeded = refresh_checker_after_delayed_tick(&app_handle, action, elapsed, interval).await;
                 let mut s = shared_state.lock().await;
                 record_job_result(&mut s, action, succeeded, now);
                 previous_tick = Some(now);
@@ -386,7 +393,8 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
                 tick_result.notification.as_ref(),
                 tick_result.phase_changed,
                 &tick_result.job_actions,
-            );
+            )
+            .await;
             if !job_results.is_empty() {
                 let mut s = shared_state.lock().await;
                 for (action, succeeded) in job_results {
@@ -399,7 +407,8 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
             previous_tick = Some(now);
             previous_interval_secs = Some(tick_result.tick_interval);
 
-            tokio::time::sleep(tokio::time::Duration::from_secs(tick_result.tick_interval)).await;
+            tokio::time::sleep_until(tick_started_at + tokio::time::Duration::from_secs(tick_result.tick_interval))
+                .await;
         }
     });
 }
@@ -867,6 +876,28 @@ mod tests {
         assert!(result.notification.is_none());
         assert!(result.has_job_action(JobKind::AttendanceStatusCheck));
         assert!(!result.has_job_action(JobKind::CheckerSessionRefresh));
+        assert!(result.has_job_action(JobKind::LaundryRefresh));
+        assert!(result.has_job_action(JobKind::MealsRefresh));
+    }
+
+    #[test]
+    fn 세탁_상태_job은_30초_간격으로_재실행된다() {
+        let mut state = default_state();
+        let started_at = kst_utc(9, 0, 0);
+        let first = compute_tick(&mut state, started_at, false);
+        let laundry_action = first
+            .job_actions
+            .iter()
+            .copied()
+            .find(|action| action.kind() == JobKind::LaundryRefresh)
+            .unwrap();
+        record_job_result(&mut state, laundry_action, true, started_at);
+
+        let before_due = compute_tick(&mut state, started_at + chrono::Duration::seconds(29), false);
+        let at_due = compute_tick(&mut state, started_at + chrono::Duration::seconds(30), false);
+
+        assert!(!before_due.has_job_action(JobKind::LaundryRefresh));
+        assert!(at_due.has_job_action(JobKind::LaundryRefresh));
     }
 
     #[test]
@@ -1041,7 +1072,7 @@ mod tests {
 
         // then
         assert!(state.login_retry_until.is_none());
-        assert_eq!(result.tick_interval, 600);
+        assert_eq!(result.tick_interval, CAMPUS_TICK_INTERVAL_SECS);
     }
 
     #[test]
