@@ -115,6 +115,7 @@ export function laundryProgress(
     appliance?: LaundryStatusAppliance | null,
     nowMs = Date.now(),
 ): number | null {
+    if (laundryAvailabilityState(appliance) === 'error') return 0;
     const total = appliance?.totalMinutes ?? 0;
     const remaining = laundryRemainingMinutes(appliance, nowMs);
     if (!total || remaining === null || laundryAvailabilityState(appliance) === 'available') return null;

@@ -757,7 +757,7 @@ function campus(): Record<string, unknown> {
         },
 
         progress(this: any, appliance?: Appliance | null) {
-            if (!this.applianceIsActive(appliance)) return null;
+            if (!this.applianceIsActive(appliance) && !this.applianceHasError(appliance)) return null;
             return laundryProgress(appliance, this.clockNow);
         },
 

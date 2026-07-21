@@ -36,6 +36,18 @@ test('일시 정지 상태의 잔여 시간은 UI 시계가 흘러도 감소하�
     assert.equal(laundryRemainingText(appliance, Date.parse('2026-07-20T06:25:00.000Z')), '12분');
 });
 
+test('오류 상태는 사용 불가를 나타내는 빈 진행바 값을 반환한다', () => {
+    assert.equal(laundryProgress({
+        operationalStatus: 'ERROR',
+        projection: {status: 'ERROR'},
+    }), 0);
+    assert.equal(laundryProgress({
+        operationalStatus: 'RUNNING',
+        projection: {status: 'ESTIMATED_RUNNING', remainingMinutes: 20},
+        errorCode: 'OE',
+    }), 0);
+});
+
 test('워시타워 요약은 사용 중인 기기의 잔여 시간을 HH:MM으로 표시한다', () => {
     assert.equal(laundryOverviewText({
         operationalStatus: 'RUNNING',
