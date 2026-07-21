@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "jungle-bell-api",
-  "main": "src/api-worker.ts",
+  "main": "src/workers/api.ts",
   "compatibility_date": "2026-07-14",
   "observability": { "enabled": true },
   "d1_databases": [

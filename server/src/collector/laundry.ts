@@ -5,39 +5,32 @@ import type { JsonValue, LaundryEvent } from "./types";
 
 const logger = getLogger(["jungle-bell", "collector", "laundry"]);
 
-const timerSchema = z
-  .object({
-    remainHour: z.number().int().nonnegative().default(0),
-    remainMinute: z.number().int().nonnegative().default(0),
-    totalHour: z.number().int().nonnegative().default(0),
-    totalMinute: z.number().int().nonnegative().default(0),
-  })
-  .passthrough();
+const timerSchema = z.looseObject({
+  remainHour: z.number().int().nonnegative().default(0),
+  remainMinute: z.number().int().nonnegative().default(0),
+  totalHour: z.number().int().nonnegative().default(0),
+  totalMinute: z.number().int().nonnegative().default(0),
+});
 
-const applianceSchema = z
-  .object({
-    runState: z.object({ currentState: z.string() }).passthrough(),
-    timer: timerSchema.default({
-      remainHour: 0,
-      remainMinute: 0,
-      totalHour: 0,
-      totalMinute: 0,
-    }),
-    remoteControlEnable: z
-      .object({ remoteControlEnabled: z.boolean().nullable().optional() })
-      .passthrough()
-      .optional(),
-    cycle: z.object({ cycleCount: z.number().int().nullable().optional() }).passthrough().optional(),
-    error: z.string().nullable().optional(),
-  })
-  .passthrough();
+const applianceSchema = z.looseObject({
+  runState: z.looseObject({ currentState: z.string() }),
+  timer: timerSchema.default({
+    remainHour: 0,
+    remainMinute: 0,
+    totalHour: 0,
+    totalMinute: 0,
+  }),
+  remoteControlEnable: z.looseObject({
+    remoteControlEnabled: z.boolean().nullable().optional(),
+  }).optional(),
+  cycle: z.looseObject({ cycleCount: z.number().int().nullable().optional() }).optional(),
+  error: z.string().nullable().optional(),
+});
 
-const towerSchema = z
-  .object({
-    washer: applianceSchema.optional(),
-    dryer: applianceSchema.optional(),
-  })
-  .passthrough();
+const towerSchema = z.looseObject({
+  washer: applianceSchema.optional(),
+  dryer: applianceSchema.optional(),
+});
 
 const laundryResponseSchema = z.record(z.string(), towerSchema);
 

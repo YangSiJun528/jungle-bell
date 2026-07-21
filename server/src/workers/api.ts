@@ -1,21 +1,22 @@
 import { zValidator, type Hook } from "@hono/zod-validator";
 import { configure, getLogger } from "@logtape/logtape";
 import { Hono, type Env as HonoEnvironment } from "hono";
+import { cache } from "hono/cache";
 import { cors } from "hono/cors";
+import { etag } from "hono/etag";
 import { z } from "zod";
-import { canonicalJsonSha256 } from "./hash";
-import { toPublicLaundryVersion, type LaundryVersion } from "./laundry";
-import type { MealsVersion } from "./meals";
-import { projectLaundry } from "./projection";
+import { toPublicLaundryVersion, type LaundryVersion } from "../collector/laundry";
+import type { MealsVersion } from "../collector/meals";
+import { projectLaundry } from "../collector/projection";
 import {
   compactUtcMinute,
   floorToMinute,
   minuteEpoch,
   parseCompactUtcMinute,
-} from "./time";
-import { SOURCE_NAMES, type SourceState } from "./types";
+} from "../collector/time";
+import { SOURCE_NAMES, type SourceState } from "../collector/types";
+import { CloudflareStorage } from "./cloudflare-storage";
 import { getCloudflareConsoleSink } from "./logging";
-import { CloudflareStorage } from "./storage";
 
 interface Env {
   DB: D1Database;
@@ -28,7 +29,7 @@ type AppEnvironment = { Bindings: Env; Variables: Variables };
 const app = new Hono<AppEnvironment>();
 const LATEST_CACHE = "public, max-age=15, s-maxage=30, stale-while-revalidate=120";
 const IMMUTABLE_CACHE = "public, max-age=31536000, immutable";
-const rfc3339Schema = z.string().refine((value) => !Number.isNaN(Date.parse(value)), "Expected RFC3339 date-time");
+const rfc3339Schema = z.iso.datetime({ offset: true });
 const timeQuerySchema = z.object({ time: rfc3339Schema });
 const minuteParamSchema = z.object({ minute: z.string().regex(/^\d{8}T\d{4}Z$/) });
 const shaParamSchema = z.object({ sha: z.string().regex(/^[a-f0-9]{64}$/) });
@@ -41,12 +42,6 @@ const mealHistoryQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(30),
 });
 const assetParamSchema = z.object({ asset: z.string().regex(/^[a-f0-9]{64}\.[a-z0-9]{1,8}$/) });
-const edgeCache = (caches as unknown as {
-  default: {
-    match(request: Request): Promise<Response | undefined>;
-    put(request: Request, response: Response): Promise<void>;
-  };
-}).default;
 
 let loggingConfigured: Promise<void> | null = null;
 
@@ -65,32 +60,15 @@ function currentCacheSlice(): Date {
   return new Date(Math.floor(Date.now() / 30_000) * 30_000);
 }
 
-function jsonResponse(
-  request: Request,
-  body: unknown,
-  options: { status?: number; cacheControl?: string; etag?: string } = {},
-): Response {
-  const headers = new Headers({
-    "Content-Type": "application/json; charset=utf-8",
-    "Cache-Control": options.cacheControl ?? "no-store",
-  });
-  if (options.etag) {
-    const etag = `"${options.etag}"`;
-    headers.set("ETag", etag);
-    if (request.headers.get("If-None-Match") === etag) return new Response(null, { status: 304, headers });
-  }
-  return new Response(JSON.stringify(body), { status: options.status ?? 200, headers });
-}
-
 const validationHook: Hook<unknown, HonoEnvironment, string> = (result, context) => {
   if (result.success) return;
-  return jsonResponse(context.req.raw, {
+  return context.json({
     error: "INVALID_REQUEST",
     issues: result.error.issues.map((issue) => ({
       path: issue.path.join("."),
       message: issue.message,
     })),
-  }, { status: 400 });
+  }, 400);
 };
 
 function historicalState(observation: Awaited<ReturnType<CloudflareStorage["readObservation"]>>): SourceState | null {
@@ -136,18 +114,15 @@ app.use("*", async (_context, next) => {
 
 app.use("/v1/*", cors({ origin: "*", allowMethods: ["GET", "HEAD", "OPTIONS"], maxAge: 86_400 }));
 
-app.use("/v1/*", async (context, next) => {
-  if (context.req.method !== "GET") return next();
-  const cached = await edgeCache.match(context.req.raw);
-  if (cached) {
-    context.res = cached;
-    return;
-  }
+app.use("/v1/*", etag());
+app.use("/v1/*", cache({
+  cacheName: "jungle-bell-api-v1",
+  onCacheNotAvailable: false,
+}));
+
+app.use("*", async (context, next) => {
   await next();
-  const cacheControl = context.res.headers.get("Cache-Control") ?? "";
-  if (context.res.status < 400 && cacheControl.startsWith("public")) {
-    context.executionCtx.waitUntil(edgeCache.put(context.req.raw, context.res.clone()));
-  }
+  if (!context.res.headers.has("Cache-Control")) context.res.headers.set("Cache-Control", "no-store");
 });
 
 app.use("*", async (context, next) => {
@@ -161,107 +136,100 @@ app.get("/healthz", async (context) => {
   const degraded = states.length !== SOURCE_NAMES.length || states.some((state) =>
     !state.lastSuccessAt || now - Date.parse(state.lastSuccessAt) > 180_000 || state.consecutiveFailures >= 3
   );
-  return jsonResponse(context.req.raw, {
+  return context.json({
     status: degraded ? "DEGRADED" : "OK",
     checkedAt: new Date(now).toISOString(),
     sources: states,
-  }, { status: degraded ? 503 : 200 });
+  }, degraded ? 503 : 200);
 });
 
 app.get("/v1/status", async (context) => {
   const states = await context.var.storage.readAllStates();
   const body = { asOf: currentCacheSlice().toISOString(), sources: states };
-  return jsonResponse(context.req.raw, body, {
-    cacheControl: LATEST_CACHE,
-    etag: await canonicalJsonSha256(body),
-  });
+  context.header("Cache-Control", LATEST_CACHE);
+  return context.json(body);
 });
 
 app.get("/v1/laundry/head", async (context) => {
   const state = await context.var.storage.readState("laundry");
-  if (!state) return jsonResponse(context.req.raw, { error: "NO_DATA" }, { status: 503 });
-  return jsonResponse(context.req.raw, state, {
-    cacheControl: LATEST_CACHE,
-    etag: await canonicalJsonSha256(state),
-  });
+  if (!state) return context.json({ error: "NO_DATA" }, 503);
+  context.header("Cache-Control", LATEST_CACHE);
+  return context.json(state);
 });
 
 app.get("/v1/laundry/latest", async (context) => {
   const state = await context.var.storage.readState("laundry");
-  if (!state?.lastNormalizedKey) return jsonResponse(context.req.raw, { error: "NO_DATA" }, { status: 503 });
+  if (!state?.lastNormalizedKey) return context.json({ error: "NO_DATA" }, 503);
   const version = await context.var.storage.readJson<LaundryVersion>(state.lastNormalizedKey)
     ?? await context.var.storage.readJson<LaundryVersion>("latest/laundry.json");
-  if (!version) return jsonResponse(context.req.raw, { error: "DATA_OBJECT_MISSING" }, { status: 503 });
+  if (!version) return context.json({ error: "DATA_OBJECT_MISSING" }, 503);
   const now = currentCacheSlice();
   const body = projectLaundry(version, state, now, false);
-  return jsonResponse(context.req.raw, body, {
-    cacheControl: LATEST_CACHE,
-    etag: await canonicalJsonSha256(body),
-  });
+  context.header("Cache-Control", LATEST_CACHE);
+  return context.json(body);
 });
 
 app.get("/v1/laundry/at", zValidator("query", timeQuerySchema, validationHook), (context) => {
   const parsed = new Date(context.req.valid("query").time);
   const location = `/v1/laundry/minutes/${compactUtcMinute(floorToMinute(parsed))}`;
-  return new Response(null, {
-    status: 308,
-    headers: { Location: location, "Cache-Control": IMMUTABLE_CACHE },
-  });
+  context.header("Cache-Control", IMMUTABLE_CACHE);
+  return context.redirect(location, 308);
 });
 
 app.get("/v1/laundry/minutes/:minute", zValidator("param", minuteParamSchema, validationHook), async (context) => {
   const minute = context.req.valid("param").minute;
   const requested = parseCompactUtcMinute(minute);
-  if (!requested) return jsonResponse(context.req.raw, { error: "INVALID_MINUTE" }, { status: 400 });
+  if (!requested) return context.json({ error: "INVALID_MINUTE" }, 400);
   const observation = await context.var.storage.readObservation("laundry", minuteEpoch(requested));
   if (!observation) {
     const expired = requested.getTime() < Date.now() - 90 * 24 * 60 * 60_000;
-    return jsonResponse(context.req.raw, { error: expired ? "HISTORY_EXPIRED" : "OBSERVATION_NOT_FOUND" }, {
-      status: expired ? 410 : 404,
-    });
+    return context.json(
+      { error: expired ? "HISTORY_EXPIRED" : "OBSERVATION_NOT_FOUND" },
+      expired ? 410 : 404,
+    );
   }
   if (!observation.normalizedKey) {
-    return jsonResponse(context.req.raw, { minute, observation, data: null }, {
-      cacheControl: IMMUTABLE_CACHE,
-      etag: `laundry-minute-${observation.minuteEpoch}-${observation.status}`,
-    });
+    context.header("Cache-Control", IMMUTABLE_CACHE);
+    context.header("ETag", `"laundry-minute-${observation.minuteEpoch}-${observation.status}"`);
+    return context.json({ minute, observation, data: null });
   }
   const version = await context.var.storage.readJson<LaundryVersion>(observation.normalizedKey);
-  if (!version) return jsonResponse(context.req.raw, { error: "DATA_OBJECT_MISSING" }, { status: 503 });
+  if (!version) return context.json({ error: "DATA_OBJECT_MISSING" }, 503);
   const asOf = new Date(observation.collectedAt);
-  return jsonResponse(context.req.raw, {
+  context.header("Cache-Control", IMMUTABLE_CACHE);
+  context.header(
+    "ETag",
+    `"laundry-minute-${observation.minuteEpoch}-${observation.status}-${observation.versionSha}"`,
+  );
+  return context.json({
     minute,
     observation,
     data: projectLaundry(version, historicalState(observation), asOf, true),
-  }, {
-    cacheControl: IMMUTABLE_CACHE,
-    etag: `laundry-minute-${observation.minuteEpoch}-${observation.status}-${observation.versionSha}`,
   });
 });
 
 app.get("/v1/laundry/versions/:sha", zValidator("param", shaParamSchema, validationHook), async (context) => {
   const sha = context.req.valid("param").sha;
   const version = await context.var.storage.readJson<LaundryVersion>(`versions/laundry/${sha}.json`);
-  if (!version) return jsonResponse(context.req.raw, { error: "VERSION_NOT_FOUND" }, { status: 404 });
-  return jsonResponse(context.req.raw, toPublicLaundryVersion(version), { cacheControl: IMMUTABLE_CACHE, etag: sha });
+  if (!version) return context.json({ error: "VERSION_NOT_FOUND" }, 404);
+  context.header("Cache-Control", IMMUTABLE_CACHE);
+  context.header("ETag", `"${sha}"`);
+  return context.json(toPublicLaundryVersion(version));
 });
 
 app.get("/v1/laundry/events", zValidator("query", eventsQuerySchema, validationHook), async (context) => {
   const { since = null, limit } = context.req.valid("query");
   const events = await context.var.storage.listLaundryEvents(since, limit);
-  const body = { events };
-  return jsonResponse(context.req.raw, body, {
-    cacheControl: LATEST_CACHE,
-    etag: await canonicalJsonSha256(body),
-  });
+  context.header("Cache-Control", LATEST_CACHE);
+  return context.json({ events });
 });
 
 app.get("/v1/meals", async (context) => {
   const state = await context.var.storage.readState("meals-include-pinned");
-  if (!state?.lastNormalizedKey) return jsonResponse(context.req.raw, { error: "NO_DATA" }, { status: 503 });
+  if (!state?.lastNormalizedKey) return context.json({ error: "NO_DATA" }, 503);
   const version = await context.var.storage.readJson<MealsVersion>(state.lastNormalizedKey)
     ?? await context.var.storage.readJson<MealsVersion>("latest/meals.json");
-  if (!version) return jsonResponse(context.req.raw, { error: "DATA_OBJECT_MISSING" }, { status: 503 });
+  if (!version) return context.json({ error: "DATA_OBJECT_MISSING" }, 503);
   const recentMenus = await context.var.storage.listMealPosts(null, 30);
   const body = {
     asOf: currentCacheSlice().toISOString(),
@@ -271,10 +239,8 @@ app.get("/v1/meals", async (context) => {
       recentMenus: recentMenus.map((post) => withPostAssetUrls(post, context.req.url)),
     },
   };
-  return jsonResponse(context.req.raw, body, {
-    cacheControl: LATEST_CACHE,
-    etag: await canonicalJsonSha256(body),
-  });
+  context.header("Cache-Control", LATEST_CACHE);
+  return context.json(body);
 });
 
 app.get("/v1/meals/history", zValidator("query", mealHistoryQuerySchema, validationHook), async (context) => {
@@ -285,10 +251,8 @@ app.get("/v1/meals/history", zValidator("query", mealHistoryQuerySchema, validat
     posts: posts.map((post) => withPostAssetUrls(post, context.req.url)),
     nextBefore: posts.length === limit && last ? last.publishedAt ?? last.firstSeenAt : null,
   };
-  return jsonResponse(context.req.raw, body, {
-    cacheControl: LATEST_CACHE,
-    etag: await canonicalJsonSha256(body),
-  });
+  context.header("Cache-Control", LATEST_CACHE);
+  return context.json(body);
 });
 
 app.get("/v1/assets/:asset", zValidator("param", assetParamSchema, validationHook), async (context) => {
@@ -296,21 +260,20 @@ app.get("/v1/assets/:asset", zValidator("param", assetParamSchema, validationHoo
   if (!match?.[1] || !match[2]) throw new Error("Validated asset parameter did not match");
   const [sha, extension] = [match[1], match[2]];
   const object = await context.var.storage.readObject(`assets/${sha.slice(0, 2)}/${sha}.${extension}`);
-  if (!object) return jsonResponse(context.req.raw, { error: "ASSET_NOT_FOUND" }, { status: 404 });
+  if (!object) return context.json({ error: "ASSET_NOT_FOUND" }, 404);
   const headers = new Headers({ "Cache-Control": IMMUTABLE_CACHE, ETag: `"${sha}"` });
-  if (context.req.header("If-None-Match") === `"${sha}"`) return new Response(null, { status: 304, headers });
   object.writeHttpMetadata(headers);
   return new Response(object.body, { headers });
 });
 
-app.notFound((context) => jsonResponse(context.req.raw, { error: "NOT_FOUND" }, { status: 404 }));
+app.notFound((context) => context.json({ error: "NOT_FOUND" }, 404));
 app.onError((error, context) => {
   getLogger(["jungle-bell", "api-worker"]).error("API request failed", {
     method: context.req.method,
     path: context.req.path,
     error: error.message,
   });
-  return jsonResponse(context.req.raw, { error: "INTERNAL_ERROR" }, { status: 500 });
+  return context.json({ error: "INTERNAL_ERROR" }, 500);
 });
 
 export default app;

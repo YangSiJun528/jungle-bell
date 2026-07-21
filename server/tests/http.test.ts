@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchBinary, fetchJson } from "../src/http";
+import { fetchBinary, fetchJson } from "../src/collector/http";
 
 afterEach(() => vi.restoreAllMocks());
 

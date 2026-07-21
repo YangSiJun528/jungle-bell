@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canonicalJsonSha256 } from "../src/hash";
+import { canonicalJsonSha256 } from "../src/collector/hash";
 
 describe("canonicalJsonSha256", () => {
   it("ignores object key insertion order", async () => {

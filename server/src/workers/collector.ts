@@ -1,10 +1,10 @@
 import { configure, getLogger } from "@logtape/logtape";
 import { Hono } from "hono";
-import { collectAll } from "./collector";
-import { collectorOptionsFromEnv, type CollectorEnvironment } from "./config";
+import { collectAll } from "../collector/collector";
+import { datedObjectPath } from "../collector/time";
+import { collectorOptionsFromEnv, type CollectorEnvironment } from "./collector-config";
+import { CloudflareStorage } from "./cloudflare-storage";
 import { getCloudflareConsoleSink } from "./logging";
-import { CloudflareStorage } from "./storage";
-import { datedObjectPath } from "./time";
 
 interface Env extends CollectorEnvironment {
   DB: D1Database;

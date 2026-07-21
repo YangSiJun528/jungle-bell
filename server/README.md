@@ -2,9 +2,10 @@
 
 세탁기 상태와 카카오 채널 식단 데이터를 수집하고 공개 API로 제공하는 Cloudflare Workers 서버입니다.
 
-- `src/collector-worker.ts`: 매분 원본 3개를 순차 요청하고 D1과 R2에 저장합니다.
-- `src/api-worker.ts`: 최신 상태, 분 단위 이력, 이벤트, 식단, 이미지를 캐시 가능한 HTTP API로 제공합니다.
-- `src/*.ts`: 수집, 정규화, 투영, 저장 코드를 별도 패키지 없이 한 디렉터리에서 관리합니다.
+- `src/collector/`: 런타임에 독립적인 수집, 정규화, 투영 로직입니다.
+- `src/workers/collector.ts`: 매분 원본 3개를 순차 요청하고 D1과 R2에 저장합니다.
+- `src/workers/api.ts`: 최신 상태, 분 단위 이력, 이벤트, 식단, 이미지를 캐시 가능한 HTTP API로 제공합니다.
+- `src/workers/`: Cloudflare 환경 설정과 D1/R2, 로깅 어댑터를 관리합니다.
 
 수집 로직은 `CollectorStorage` 계약을 호출하고 `CloudflareStorage`가 D1/R2 저장을 담당합니다. 이 계약은 수집 테스트에서 메모리 저장소를 사용할 수 있는 최소 경계로만 유지합니다.
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { normalizeLaundry, type LaundryVersion } from "../src/laundry";
-import { projectLaundry } from "../src/projection";
+import { normalizeLaundry, type LaundryVersion } from "../src/collector/laundry";
+import { projectLaundry } from "../src/collector/projection";
 
 function laundry(state: string, remainingMinutes: number, totalMinutes = 60): unknown {
   return {
