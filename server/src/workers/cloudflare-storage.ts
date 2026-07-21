@@ -1,7 +1,5 @@
 import type {
-  BinaryObject,
   CollectionCommit,
-  CollectorStorage,
   LaundryEvent,
   MinuteObservation,
   SourceName,
@@ -146,11 +144,20 @@ function toMealImage(row: MealImageRow): MealImageAsset {
   };
 }
 
-export class CloudflareStorage implements CollectorStorage {
+export class CloudflareApiStorage {
   constructor(
     readonly db: D1Database,
     readonly bucket: R2Bucket,
   ) {}
+
+  async readJson<T>(key: string): Promise<T | null> {
+    const object = await this.bucket.get(key);
+    return object ? object.json<T>() : null;
+  }
+
+  async readObject(key: string): Promise<R2ObjectBody | null> {
+    return this.bucket.get(key);
+  }
 
   async readState(source: SourceName): Promise<SourceState | null> {
     const row = await this.db
@@ -228,44 +235,10 @@ export class CloudflareStorage implements CollectorStorage {
     }));
   }
 
-  async readJson<T>(key: string): Promise<T | null> {
-    const object = await this.bucket.get(key);
-    if (!object) return null;
-    return JSON.parse(await object.text()) as T;
-  }
-
-  async readObject(key: string): Promise<R2ObjectBody | null> {
-    return this.bucket.get(key);
-  }
-
-  async writeJson(key: string, value: unknown): Promise<void> {
-    await this.bucket.put(key, JSON.stringify(value), {
-      httpMetadata: { contentType: "application/json; charset=utf-8" },
-    });
-  }
-
-  async writeRaw(key: string, raw: string): Promise<void> {
-    await this.bucket.put(key, raw, {
-      httpMetadata: { contentType: "application/json; charset=utf-8" },
-    });
-  }
-
-  async objectExists(key: string): Promise<boolean> {
-    return await this.bucket.head(key) !== null;
-  }
-
-  async writeBinary(key: string, object: BinaryObject): Promise<void> {
-    await this.bucket.put(key, object.body, {
-      httpMetadata: { contentType: object.contentType },
-      ...(object.etag ? { customMetadata: { sha256: object.etag } } : {}),
-    });
-  }
-
-  async commit(commit: CollectionCommit): Promise<void> {
+  async applyCommit(commit: CollectionCommit): Promise<void> {
     const {
       state,
       observation,
-      version,
       laundryEvents = [],
       mealPosts = [],
       mealObservedAt = observation.collectedAt,
@@ -324,16 +297,6 @@ export class CloudflareStorage implements CollectorStorage {
           state.lastError,
         ),
     ];
-
-    if (version) {
-      statements.push(this.db
-        .prepare(`
-          INSERT INTO source_version (source, sha, first_observed_at, raw_key, normalized_key)
-          VALUES (?, ?, ?, ?, ?)
-          ON CONFLICT(source, sha) DO NOTHING
-        `)
-        .bind(version.source, version.sha, version.firstObservedAt, version.rawKey, version.normalizedKey));
-    }
 
     for (const event of laundryEvents) {
       statements.push(this.db

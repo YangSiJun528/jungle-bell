@@ -37,3 +37,7 @@ export function datedObjectPath(prefix: string, date: Date, name: string): strin
   const [year, month, datePart] = day.split("-");
   return `${prefix}/${year}/${month}/${datePart}/${name}`;
 }
+
+export function latestCollectionCommitPath(source: string): string {
+  return `collector/latest/${source}.json`;
+}

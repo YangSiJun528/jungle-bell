@@ -9,8 +9,8 @@
     "dev:collector": "wrangler dev --config wrangler.collector.jsonc",
     "deploy:api": "wrangler deploy --config wrangler.api.jsonc",
     "deploy:collector": "wrangler deploy --config wrangler.collector.jsonc",
-    "db:schema:local": "wrangler d1 execute jungle-bell-data --local --file=schema.sql --config wrangler.collector.jsonc",
-    "db:schema:remote": "wrangler d1 execute jungle-bell-data --remote --file=schema.sql --config wrangler.collector.jsonc",
+    "db:reset:local": "wrangler d1 execute jungle-bell-data --local --file=schema.sql --config wrangler.api.jsonc",
+    "db:reset:remote": "wrangler d1 execute jungle-bell-data --remote --file=schema.sql --config wrangler.api.jsonc",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"

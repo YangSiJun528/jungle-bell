@@ -2,29 +2,31 @@
 
 세탁기 상태와 카카오 채널 식단 데이터를 수집하고 공개 API로 제공하는 Cloudflare Workers 서버입니다.
 
-- `src/collector/`: 런타임에 독립적인 수집, 정규화, 투영 로직입니다.
-- `src/workers/collector.ts`: 매분 원본 3개를 순차 요청하고 D1과 R2에 저장합니다.
-- `src/workers/api.ts`: 최신 상태, 분 단위 이력, 이벤트, 식단, 이미지를 캐시 가능한 HTTP API로 제공합니다.
-- `src/workers/`: Cloudflare 환경 설정과 D1/R2, 로깅 어댑터를 관리합니다.
+- `src/collector/`: 수집, 정규화, 투영 로직입니다.
+- `src/workers/collector.ts`: 매분 원본 3개를 순차 요청하고 원본, 이미지, 수집 commit을 R2에 백업합니다.
+- `src/workers/api.ts`: R2의 최신 commit을 D1 조회 모델에 반영하고 캐시 가능한 HTTP API를 제공합니다.
+- `src/workers/`: Cloudflare 환경 설정과 R2 백업/D1 조회 어댑터, 로깅을 관리합니다.
 
-수집 로직은 `CollectorStorage` 계약을 호출하고 `CloudflareStorage`가 D1/R2 저장을 담당합니다. 이 계약은 수집 테스트에서 메모리 저장소를 사용할 수 있는 최소 경계로만 유지합니다.
+Collector Worker에는 D1 바인딩이 없습니다. 수집 로직은 `R2Bucket`에 원본과 복구 데이터를 직접 저장합니다. API Worker의 scheduled 핸들러는 R2의 `collector/latest/*.json` commit을 `CloudflareApiStorage`로 D1에 반영합니다. 따라서 API 배포나 D1 초기화 중에도 원본 수집은 중단되지 않습니다.
 
 원본 전체 JSON은 RFC 8785 방식으로 정규화한 뒤 SHA-256을 계산합니다. 직전 SHA와 같으면 원본, 정규화본, 이미지는 다시 저장하지 않고 해당 분의 관측 결과와 실행 로그만 남깁니다. 카카오의 pinned 포함 API와 기본 API는 응답이 같아도 별도 소스로 기록합니다.
 
-식단 게시물의 본문은 D1 `meal_post`, 이미지 메타데이터는 `meal_image`에 누적합니다. 카카오 최신 목록에서 게시물이 사라져도 이 레코드는 삭제하지 않습니다. 원본 JSON 버전과 실제 이미지 파일은 복구용으로 R2에 계속 보관합니다.
+식단 게시물의 본문은 API 조회 모델인 D1 `meal_post`, 이미지 메타데이터는 `meal_image`에 누적합니다. 카카오 최신 목록에서 게시물이 사라져도 이 레코드는 삭제하지 않습니다. 원본 JSON 버전, 수집 commit, 실제 이미지 파일은 복구용으로 R2에 계속 보관합니다.
 
 ## 문서
 
 - [Cloudflare 배포](docs/guide-deploy-cloudflare.md)
 - [HTTP API 레퍼런스](docs/api-reference.md)
 
-## D1 스키마
+## D1 초기화
 
-마이그레이션 이력은 관리하지 않습니다. 현재 스키마는 `schema.sql` 하나가 기준이며 필요할 때 직접 적용합니다.
+현재 `schema.sql`만 지원하며 마이그레이션과 구버전 호환은 제공하지 않습니다. 실행하면 D1의 기존 테이블과 데이터가 모두 삭제된 뒤 현재 스키마로 다시 생성됩니다. R2와 로컬에 보관한 원본 JSON 및 이미지는 삭제되지 않습니다.
 
 ```bash
-npm run db:schema:remote
+npm run db:reset:remote
 ```
+
+작은 필드 추가가 필요하면 별도 마이그레이션 체계를 만들지 않고 Wrangler로 SQL을 수동 실행한 뒤 `schema.sql`의 현재 구조도 함께 수정합니다. 과거 D1 구조를 코드에서 읽는 호환 분기는 추가하지 않습니다.
 
 ## 검증
 

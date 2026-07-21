@@ -22,20 +22,21 @@ npx wrangler d1 create jungle-bell-data
 npx wrangler r2 bucket create jungle-bell-data
 ```
 
-D1 생성 결과의 `database_id`를 다음 두 파일에 넣습니다.
+D1 생성 결과의 `database_id`를 다음 파일에 넣습니다.
 
-- `wrangler.collector.jsonc`
 - `wrangler.api.jsonc`
 
-두 Worker는 반드시 같은 D1과 R2 바인딩을 사용해야 합니다.
+R2 버킷은 `wrangler.collector.jsonc`와 `wrangler.api.jsonc`에 동일하게 설정합니다. Collector Worker는 D1을 사용하지 않습니다.
 
-## 3. D1 스키마 적용
+## 3. D1 초기화
 
 ```bash
-npm run db:schema:remote
+npm run db:reset:remote
 ```
 
-마이그레이션 이력은 관리하지 않습니다. 테이블을 변경할 때는 `schema.sql`을 수정하고 필요한 데이터 변경은 직접 수행합니다.
+이 명령은 기존 D1 테이블과 데이터를 모두 삭제합니다. 현재 `schema.sql`만 지원하며 구버전 호환은 제공하지 않습니다. R2와 로컬의 원본 JSON, 수집 commit, 이미지는 영향을 받지 않습니다.
+
+작은 필드 추가는 Wrangler의 `d1 execute --command`로 수동 적용하고 `schema.sql`에도 최종 구조를 반영합니다. 마이그레이션 프레임워크나 구버전 읽기 분기는 만들지 않습니다. 구조를 크게 바꿀 때는 D1을 다시 초기화합니다.
 
 ## 4. Collector 배포
 
@@ -59,7 +60,7 @@ LG ThinQ 모델별 상태값을 알고 있다면 `wrangler.collector.jsonc`의 `
 npm run deploy:api
 ```
 
-API 배포는 Collector 배포와 독립적입니다. API Worker를 다시 배포하는 동안에도 Collector Cron Trigger는 계속 실행됩니다.
+API Worker도 1분 Cron Trigger를 사용합니다. 이 scheduled 핸들러는 Collector가 R2에 남긴 최신 commit을 D1 조회 모델에 반영합니다. API 배포나 D1 초기화 중에도 Collector Cron Trigger와 R2 백업은 계속 실행되며, API 인덱스는 다음 실행에서 최신 commit을 반영합니다.
 
 ## 6. Jungle Bell 앱 연결
 

@@ -3,11 +3,9 @@ import { Hono } from "hono";
 import { collectAll } from "../collector/collector";
 import { datedObjectPath } from "../collector/time";
 import { collectorOptionsFromEnv, type CollectorEnvironment } from "./collector-config";
-import { CloudflareStorage } from "./cloudflare-storage";
 import { getCloudflareConsoleSink } from "./logging";
 
 interface Env extends CollectorEnvironment {
-  DB: D1Database;
   DATA_BUCKET: R2Bucket;
 }
 
@@ -29,20 +27,25 @@ function configureLogging(): Promise<void> {
   return loggingConfigured;
 }
 
+async function writeLog(bucket: R2Bucket, key: string, value: unknown): Promise<void> {
+  await bucket.put(key, JSON.stringify(value), {
+    httpMetadata: { contentType: "application/json; charset=utf-8" },
+  });
+}
+
 async function runCollection(env: Env, scheduledAt: Date): Promise<void> {
   await configureLogging();
   const logger = getLogger(["jungle-bell", "collector-worker"]);
-  const storage = new CloudflareStorage(env.DB, env.DATA_BUCKET);
   const startedAt = new Date();
   try {
-    const result = await collectAll(storage, collectorOptionsFromEnv(env), scheduledAt);
+    const result = await collectAll(env.DATA_BUCKET, collectorOptionsFromEnv(env), scheduledAt);
     const completedAt = new Date();
     const logKey = datedObjectPath(
       "logs/collector-runs",
       startedAt,
       `${startedAt.toISOString().replaceAll(/[-:.]/g, "")}.json`,
     );
-    await storage.writeJson(logKey, {
+    await writeLog(env.DATA_BUCKET, logKey, {
       startedAt: startedAt.toISOString(),
       completedAt: completedAt.toISOString(),
       durationMs: completedAt.getTime() - startedAt.getTime(),
@@ -58,7 +61,7 @@ async function runCollection(env: Env, scheduledAt: Date): Promise<void> {
       `${startedAt.toISOString().replaceAll(/[-:.]/g, "")}-failed.json`,
     );
     try {
-      await storage.writeJson(logKey, {
+      await writeLog(env.DATA_BUCKET, logKey, {
         startedAt: startedAt.toISOString(),
         failedAt: failedAt.toISOString(),
         durationMs: failedAt.getTime() - startedAt.getTime(),

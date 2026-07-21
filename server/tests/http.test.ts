@@ -23,10 +23,16 @@ describe("collector HTTP client", () => {
   });
 
   it("preserves useful final HTTP error details", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("upstream failed", { status: 500 }));
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => (
+      new Response("upstream failed", {
+        status: 500,
+        headers: { "Retry-After": "0" },
+      })
+    ));
 
-    await expect(fetchJson("https://source.test/data", { timeoutMs: 1_000, retries: 0 }))
-      .rejects.toThrow("Request failed after 1 attempts: HTTP 500: upstream failed");
+    await expect(fetchJson("https://source.test/data", { timeoutMs: 1_000, retries: 1 }))
+      .rejects.toThrow("Request failed after 2 attempts: HTTP 500: upstream failed");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("rejects invalid JSON without pretending it retried parsing", async () => {
