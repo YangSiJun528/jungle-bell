@@ -872,15 +872,16 @@
     .zone-choice input[value="women"]:checked + span { border-color: var(--color-women); background: var(--color-women-soft); color: var(--color-women); }
 
     .laundry-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; gap: var(--space-4); }
-    .laundry-card { position: relative; display: grid; height: 208px; min-width: var(--space-0); grid-template-rows: var(--space-12) minmax(0, 1fr); overflow: visible; border: var(--border-width) solid var(--color-border); border-radius: var(--radius-card); background: var(--color-surface); }
+    .laundry-card { position: relative; display: grid; height: 208px; min-width: var(--space-0); grid-template-rows: var(--space-8) minmax(0, 1fr); overflow: visible; border: var(--border-width) solid var(--color-border); border-radius: var(--radius-card); background: var(--color-surface); }
     .laundry-card[data-zone="men"] { --zone-color: var(--color-men); --zone-soft: var(--color-men-soft); }
     .laundry-card[data-zone="common"] { --zone-color: var(--color-common); --zone-soft: var(--color-common-soft); }
     .laundry-card[data-zone="women"] { --zone-color: var(--color-women); --zone-soft: var(--color-women-soft); }
 
-    .laundry-card > header { display: flex; min-height: var(--space-12); align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-2); border-bottom: var(--border-width) solid var(--color-divider-subtle); }
-    .laundry-card > header h3 { margin: var(--space-0); overflow: hidden; font-size: 14px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+    .laundry-card > header { display: flex; min-height: var(--space-8); align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-1) var(--space-2); border-bottom: var(--border-width) solid var(--color-divider-subtle); }
+    .laundry-card > header h3 { margin: var(--space-0); overflow: hidden; font-size: 12px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
     .zone-badge, .status-badge { overflow: hidden; padding: var(--space-1) var(--space-2); border-radius: var(--radius-pill); font-size: 10px; font-weight: 700; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
     .zone-badge { background: var(--zone-soft, var(--color-control)); color: var(--zone-color, var(--color-text-muted)); }
+    .laundry-card > header .zone-badge { padding-block: 2px; font-weight: 650; }
 
     .appliance-stack { display: grid; min-width: var(--space-0); min-height: var(--space-0); grid-template-rows: repeat(2, minmax(0, 1fr)); }
     .appliance-row { position: relative; min-width: var(--space-0); min-height: var(--space-0); padding: var(--space-2); }
