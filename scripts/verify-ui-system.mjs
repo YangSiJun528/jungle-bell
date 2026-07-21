@@ -99,16 +99,19 @@ requireRule(campusHtml.includes("filteredMachines().length === 0") && campusHtml
 requireRule((campusHtml.match(/x-data="infoDisclosure"/g) ?? []).length >= 2
     && campusHtml.includes('@keydown.escape.stop="dismiss()"')
     && campusHtml.includes('@focusin="focus()"')
-    && campusHtml.includes('x-anchor.fixed.offset.8="$refs.trigger"'), 'Information tooltips must support focus, keyboard dismissal, and viewport anchoring');
-requireRule(campusHtml.includes('fixed z-40 max-h-[calc(100vh-24px)]')
+    && campusHtml.includes('x-anchor.fixed.bottom-end.offset.16="$refs.trigger"'), 'Information tooltips must support focus, keyboard dismissal, and inward viewport anchoring');
+requireRule(campusHtml.includes('fixed z-40 max-h-[calc(100vh-32px)] w-[min(40vw,calc(100vw-32px))]')
     && campusHtml.includes('[word-break:keep-all]')
     && campusHtml.includes('x-transition:enter="transition ease-out duration-200"'), 'Pines tooltips must stay inside the viewport, animate, and preserve Korean words');
+requireRule(/<aside class="[^"]*pr-2[^"]*"[^>]*:data-tone="source\[activeTab\]\.tone"/.test(campusHtml), 'Header information control must keep extra distance from the scrollbar edge');
 requireRule(infoDisclosureTs.includes("const OPEN_EVENT = 'info-disclosure-open'") && infoDisclosureTs.includes('handlePeer(event:'), 'Shared information disclosure behavior is missing');
 
 // Meal tabs, calendar, empty/error states, and dialog restoration.
 requireRule(/<nav[^>]*aria-label="급식 보기">[\s\S]*?>식단<\/button>[\s\S]*?>내역<\/button>/s.test(campusHtml), 'Meal tabs must retain 식단 and 내역');
+requireRule(campusHtml.includes('class="grid grid-cols-2 gap-4" x-show="mealsServedToday()"'), 'Today lunch and dinner cards must keep the compact 16px gap');
 requireRule(/<table[^>]*aria-labelledby="meal-calendar-title">[\s\S]*?<caption class="sr-only"[^>]*급식 달력/s.test(campusHtml), 'Meal calendar must be a labelled table');
 requireRule(campusHtml.includes("['일', '월', '화', '수', '목', '금', '토']") && campusHtml.includes('table-fixed'), 'Meal calendar must keep seven fixed columns');
+requireRule((campusTs.match(/sortMealPostsByPeriod\(/g) ?? []).length >= 2, 'Calendar meal indicators and selected posts must sort lunch before dinner');
 requireRule(campusHtml.includes('이번 주 식단표가 아직 게시되지 않았습니다.') && campusHtml.includes('이 주차에 저장된 식단표가 없습니다.'), 'Weekly meal empty states are missing');
 requireRule(/<dialog class="[^"]*backdrop:bg-app-shade/.test(campusHtml) && campusHtml.includes('@cancel.prevent="closeImage'), 'Meal image viewer must use a Tailwind-styled dialog with Escape handling');
 requireRule(campusTs.includes('imageDialogScroll = {left: window.scrollX, top: window.scrollY}')

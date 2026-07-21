@@ -9,6 +9,7 @@ import {
     laundryZoneMatchesAccess,
     summarizeLaundryAvailability,
 } from './laundry-status';
+import {sortMealPostsByPeriod} from './meal-display';
 
 Alpine.plugin(anchor);
 
@@ -515,7 +516,7 @@ function campus(): Record<string, unknown> {
                     weekday: date.getUTCDay(),
                     inCurrentMonth: date.getUTCMonth() === month - 1,
                     isToday: key === today,
-                    posts: postsByDate.get(key) ?? [],
+                    posts: sortMealPostsByPeriod(postsByDate.get(key) ?? []),
                 };
             });
         },
@@ -532,9 +533,10 @@ function campus(): Record<string, unknown> {
         },
 
         selectedMealPosts(this: any): MealPost[] {
-            return (this.mealHistory as MealPost[])
-                .filter((post) => this.postDateKey(post) === this.mealSelectedDate)
-                .sort((left, right) => Date.parse(left.publishedAt ?? '') - Date.parse(right.publishedAt ?? ''));
+            return sortMealPostsByPeriod(
+                (this.mealHistory as MealPost[])
+                    .filter((post) => this.postDateKey(post) === this.mealSelectedDate),
+            );
         },
 
         mealsServedToday() {
