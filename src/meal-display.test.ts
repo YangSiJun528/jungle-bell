@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import {test} from 'vitest';
 import {sortMealPostsByPeriod} from './meal-display.ts';
 
 test('같은 날짜의 식단은 게시 시각과 무관하게 중식 다음 석식 순서로 정렬한다', () => {

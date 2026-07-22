@@ -6,11 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "test:laundry-ui": "node --test src/laundry-status.test.ts",
-    "test:time-ui": "node --test src/live-time.test.ts",
-    "test:meal-ui": "node --test src/meal-display.test.ts",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "verify": "npm run build && npm run test:laundry-ui && npm run test:time-ui && npm run test:meal-ui",
+    "verify": "npm run build && npm test",
     "preview": "vite preview",
     "tauri": "tauri"
   },
@@ -29,6 +27,7 @@
     "@types/node": "^26.1.1",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
-    "vite": "^8.1.5"
+    "vite": "^8.1.5",
+    "vitest": "^4.1.10"
   }
 }

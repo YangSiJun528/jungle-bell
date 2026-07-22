@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import {test} from 'vitest';
 import {relativeTimeKo} from './live-time.ts';
 
 test('최근 갱신 상대 시간은 현재 UI 시각에 따라 초 단위로 변한다', () => {
