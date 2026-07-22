@@ -48,7 +48,7 @@
     html {
         overflow-y: scroll;
         background: var(--color-bg);
-        scrollbar-gutter: stable;
+        scrollbar-gutter: stable both-edges;
     }
 
     *::-webkit-scrollbar {
@@ -56,7 +56,7 @@
         height: 8px;
     }
 
-    *::-webkit-scrollbar-track { background: transparent; }
+    *::-webkit-scrollbar-track { background: var(--color-bg); }
     *::-webkit-scrollbar-corner { background: var(--color-bg); }
 
     *::-webkit-scrollbar-thumb {
