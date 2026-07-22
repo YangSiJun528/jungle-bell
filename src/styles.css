@@ -288,8 +288,8 @@ a, area, button, input, label, select, summary, textarea, [tabindex] {
 }
 
 @font-face {
-    font-family: "Pretendard";
-    src: url("./assets/fonts/PretendardVariable.woff2") format("woff2");
+    font-family: "Pretendard Variable";
+    src: url("./assets/fonts/PretendardVariable.woff2") format("woff2-variations");
     font-weight: 45 920;
     font-style: normal;
     font-display: swap;
@@ -343,7 +343,7 @@ a, area, button, input, label, select, summary, textarea, [tabindex] {
     --color-common-soft: color-mix(in oklch, var(--jungle-common), transparent 90%);
     --color-women: var(--jungle-women);
     --color-women-soft: color-mix(in oklch, var(--jungle-women), transparent 90%);
-    --font-family: "Pretendard", sans-serif;
+    --font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue", "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
     --font-data: "SFMono-Regular", "Cascadia Code", "Roboto Mono", monospace;
     --focus-ring: 0 0 0 4px color-mix(in oklch, var(--jungle-leaf), transparent 72%);
 }
