@@ -168,6 +168,7 @@ pub fn run() {
             commands::report_campus_ready,
             commands::refresh_campus_data,
             commands::load_meal_history,
+            commands::open_image_viewer,
             commands::get_pending_update,
             commands::check_and_notify_update,
             commands::get_auto_start,
@@ -206,6 +207,13 @@ pub fn run() {
         ])
         // setup(): 앱 초기화 후 이벤트 루프 시작 전에 한 번 실행.
         .setup(move |app| {
+            #[cfg(desktop)]
+            app.handle().plugin(
+                tauri_plugin_window_state::Builder::default()
+                    .with_state_flags(tauri_plugin_window_state::StateFlags::SIZE)
+                    .build(),
+            )?;
+
             log::info!(
                 "[app] starting v{} (log_level={}, log_max_size={}KB)",
                 app.package_info().version,

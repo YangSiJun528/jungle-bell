@@ -11,13 +11,14 @@ use std::time::Duration;
 use tokio::sync::Mutex as TokioMutex;
 
 use chrono::{DateTime, NaiveDate, Utc};
+use serde::Serialize;
 
 use crate::state::{AppState, CheckerRuntimeStatus, DailyPhase, DdayStatus, TraySnapshot};
 use tauri::{
     image::Image,
     menu::{Menu, MenuBuilder, MenuItem, MenuItemBuilder},
     tray::TrayIconBuilder,
-    Manager, WebviewWindow,
+    Emitter, Manager, WebviewWindow,
 };
 
 const ATTENDANCE_URL: &str = "https://jungle-lms.krafton.com/check-in";
@@ -27,6 +28,10 @@ const UTILITY_WINDOW_WIDTH: f64 = 560.0;
 const CONTENT_WINDOW_WIDTH: f64 = 720.0;
 const STANDARD_WINDOW_HEIGHT: f64 = 720.0;
 const ATTENDANCE_MIN_SIZE: f64 = 640.0;
+const IMAGE_VIEWER_WIDTH: f64 = 1120.0;
+const IMAGE_VIEWER_HEIGHT: f64 = 840.0;
+const IMAGE_VIEWER_MIN_WIDTH: f64 = 420.0;
+const IMAGE_VIEWER_MIN_HEIGHT: f64 = 320.0;
 
 /// 출석 페이지 닫힌 후 로그인 재시도 윈도우 (초). 3분간 빠르게 재확인.
 const LOGIN_RETRY_WINDOW_SECS: u64 = 180;
@@ -42,7 +47,13 @@ const ICON_NORMAL: &[u8] = include_bytes!("../icons/tray-white.png");
 const ICON_ALERT: &[u8] = include_bytes!("../icons/tray-red.png");
 const ICON_WARNING: &[u8] = include_bytes!("../icons/tray-orange.png");
 
-const FOREGROUND_WINDOW_LABELS: [&str; 4] = ["attendance", "settings", "onboarding", "campus"];
+const FOREGROUND_WINDOW_LABELS: [&str; 5] = ["attendance", "settings", "onboarding", "campus", "image-viewer"];
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ImageViewerPayload {
+    image_url: String,
+}
 
 #[derive(Debug, Clone, Copy)]
 enum CampusTab {
@@ -462,6 +473,51 @@ pub fn open_attendance_window(app: &tauri::AppHandle) {
     }
 }
 
+pub fn open_image_viewer(app: &tauri::AppHandle, image_url: String) -> Result<(), String> {
+    let payload = ImageViewerPayload { image_url };
+
+    show_foreground_app(app);
+    if let Some(window) = app.get_webview_window("image-viewer") {
+        app.emit_to("image-viewer", "image-viewer-update", &payload)
+            .map_err(|error| error.to_string())?;
+        focus_window(&window);
+        return Ok(());
+    }
+
+    let mut viewer_url =
+        reqwest::Url::parse("http://localhost/image-viewer.html").map_err(|error| error.to_string())?;
+    viewer_url
+        .query_pairs_mut()
+        .append_pair("src", &payload.image_url);
+    let app_url = format!(
+        "image-viewer.html?{}",
+        viewer_url
+            .query()
+            .ok_or_else(|| "이미지 뷰어 주소를 만들지 못했습니다.".to_string())?
+    );
+
+    let window = tauri::WebviewWindowBuilder::new(app, "image-viewer", tauri::WebviewUrl::App(app_url.into()))
+        .title("식단 이미지")
+        .inner_size(IMAGE_VIEWER_WIDTH, IMAGE_VIEWER_HEIGHT)
+        .min_inner_size(IMAGE_VIEWER_MIN_WIDTH, IMAGE_VIEWER_MIN_HEIGHT)
+        .resizable(true)
+        .minimizable(true)
+        .maximizable(true)
+        .skip_taskbar(foreground_window_skip_taskbar(app))
+        .focused(true)
+        .build()
+        .map_err(|error| error.to_string())?;
+
+    focus_window(&window);
+    let app_handle = app.clone();
+    window.on_window_event(move |event| {
+        if let tauri::WindowEvent::Destroyed = event {
+            sync_foreground_app_visibility_soon(app_handle.clone());
+        }
+    });
+    Ok(())
+}
+
 fn select_campus_tab(window: &WebviewWindow<tauri::Wry>, tab: CampusTab) {
     let script = format!("window.setCampusTab && window.setCampusTab('{}')", tab.as_str());
     if let Err(error) = window.eval(&script) {
@@ -722,6 +778,12 @@ mod tests {
     fn 앱_아이콘_설정을_windows_skip_taskbar_값으로_변환한다() {
         assert!(!should_skip_windows_taskbar(true));
         assert!(should_skip_windows_taskbar(false));
+    }
+
+    #[test]
+    fn 이미지_창은_넓은_기본_크기로_열린다() {
+        assert_eq!(IMAGE_VIEWER_WIDTH, 1120.0);
+        assert_eq!(IMAGE_VIEWER_HEIGHT, 840.0);
     }
 
     // --- TrayViewModel ---

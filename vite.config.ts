@@ -66,6 +66,7 @@ export default defineConfig({
                 settings: resolve(import.meta.dirname, 'src/index.html'),
                 onboarding: resolve(import.meta.dirname, 'src/onboarding.html'),
                 campus: resolve(import.meta.dirname, 'src/campus.html'),
+                imageViewer: resolve(import.meta.dirname, 'src/image-viewer.html'),
             },
         },
     },

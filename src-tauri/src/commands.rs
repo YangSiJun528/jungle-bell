@@ -344,6 +344,23 @@ pub async fn load_meal_history(
     service.load_meal_history(&app, before).await
 }
 
+fn validate_meal_image_url(value: &str) -> Result<String, String> {
+    let url = reqwest::Url::parse(value).map_err(|_| "잘못된 이미지 주소입니다.".to_string())?;
+    let is_local_http = url.scheme() == "http" && matches!(url.host_str(), Some("127.0.0.1" | "localhost"));
+    let has_credentials = !url.username().is_empty() || url.password().is_some();
+    if has_credentials || (url.scheme() != "https" && !is_local_http) || !url.path().starts_with("/v1/assets/") {
+        return Err("허용되지 않은 이미지 주소입니다.".into());
+    }
+    Ok(url.to_string())
+}
+
+/// 검증된 식단 이미지를 별도의 크기 조절 가능 창에서 연다.
+#[tauri::command]
+pub fn open_image_viewer(app: tauri::AppHandle, image_url: String) -> Result<(), String> {
+    let image_url = validate_meal_image_url(&image_url)?;
+    tray::open_image_viewer(&app, image_url)
+}
+
 /// Tauri 커맨드: 자동 시작 설정 조회.
 #[tauri::command]
 pub async fn get_auto_start(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<bool, String> {
@@ -612,5 +629,20 @@ pub async fn open_notification_settings() -> Result<(), String> {
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         Err("이 플랫폼에서는 시스템 알림 설정 바로가기를 지원하지 않습니다.".into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_meal_image_url;
+
+    #[test]
+    fn 식단_이미지_url은_https와_로컬_assets만_허용한다() {
+        assert!(validate_meal_image_url("https://api.example.com/v1/assets/menu.png").is_ok());
+        assert!(validate_meal_image_url("http://127.0.0.1:43120/v1/assets/menu.png").is_ok());
+        assert!(validate_meal_image_url("http://localhost:43120/v1/assets/menu.png").is_ok());
+        assert!(validate_meal_image_url("http://example.com/v1/assets/menu.png").is_err());
+        assert!(validate_meal_image_url("https://api.example.com/other/menu.png").is_err());
+        assert!(validate_meal_image_url("javascript:alert(1)").is_err());
     }
 }

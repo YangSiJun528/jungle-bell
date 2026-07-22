@@ -1,0 +1,9 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "image-viewer",
+  "description": "Minimal event permissions for the meal image viewer window",
+  "windows": ["image-viewer"],
+  "permissions": [
+    "core:event:default"
+  ]
+}

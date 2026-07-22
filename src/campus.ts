@@ -16,6 +16,7 @@ import {
 } from './laundry-status';
 import {relativeTimeKo} from './live-time';
 import {sortMealPostsByPeriod} from './meal-display';
+import {isSafeMealImageUrl} from './meal-image-url';
 
 Alpine.plugin(anchor);
 
@@ -277,8 +278,6 @@ function sourceMealWeekLabel(post?: MealPost | null): string {
 
 function campus(): Record<string, unknown> {
     const laundryPreferences = loadLaundryPreferences();
-    let imageDialogTrigger: HTMLElement | null = null;
-    let imageDialogScroll = {left: 0, top: 0};
 
     return {
         activeTab: initialTab() as CampusTab,
@@ -891,8 +890,7 @@ function campus(): Record<string, unknown> {
             if (!value) return null;
             try {
                 const parsed = new URL(value);
-                const localHttp = parsed.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(parsed.hostname);
-                return ((parsed.protocol === 'https:' || localHttp) && parsed.pathname.startsWith('/v1/assets/')) ? parsed.toString() : null;
+                return isSafeMealImageUrl(parsed.toString()) ? parsed.toString() : null;
             } catch { return null; }
         },
 
@@ -917,28 +915,12 @@ function campus(): Record<string, unknown> {
             if (url) await openUrl(url).catch((error) => console.error('[campus] external URL failed', error));
         },
 
-        openImage(this: any, post: MealPost, dialog: HTMLDialogElement) {
+        async openImage(this: any, post: MealPost) {
             const url = this.imageUrl(post);
             if (!url) return;
-            imageDialogTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-            imageDialogScroll = {left: window.scrollX, top: window.scrollY};
-            this.dialogImage = url;
-            this.dialogCaption = post.title ?? '식단';
-            dialog.showModal();
-        },
-
-        dialogImage: '',
-        dialogCaption: '',
-        closeImage(this: any, dialog: HTMLDialogElement) {
-            const trigger = imageDialogTrigger;
-            const scroll = imageDialogScroll;
-            dialog.close();
-            this.dialogImage = '';
-            imageDialogTrigger = null;
-            requestAnimationFrame(() => {
-                trigger?.focus({preventScroll: true});
-                window.scrollTo(scroll.left, scroll.top);
-            });
+            await invoke('open_image_viewer', {
+                imageUrl: url,
+            }).catch((error) => console.error('[campus] image viewer failed', error));
         },
     };
 }

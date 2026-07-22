@@ -5,6 +5,7 @@
 @source "./index.html";
 @source "./onboarding.html";
 @source "./campus.html";
+@source "./image-viewer.html";
 
 @theme inline {
     --font-sans: var(--font-family);
