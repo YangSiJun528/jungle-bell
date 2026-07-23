@@ -236,6 +236,7 @@ pub(crate) fn build_webview(app: &tauri::AppHandle) -> tauri::Result<tauri::Webv
         tauri::WebviewUrl::External(ATTENDANCE_URL.parse().unwrap()),
     )
     .title("Jungle Bell")
+    .theme(Some(tauri::Theme::Light))
     .visible(false)
     .focused(false)
     .skip_taskbar(true)

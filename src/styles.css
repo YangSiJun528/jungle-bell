@@ -296,23 +296,23 @@ a, area, button, input, label, select, summary, textarea, [tabindex] {
 }
 
 :root {
-    color-scheme: light dark;
+    color-scheme: only light;
 
     /* Jungle Bell primitives: fog, paper, leaf, bell, and campus zones. */
-    --jungle-fog: light-dark(oklch(96.5% 0.006 145), oklch(15% 0.012 145));
-    --jungle-paper: light-dark(oklch(99% 0.004 145), oklch(19% 0.012 145));
-    --jungle-overlay: light-dark(oklch(100% 0 0), oklch(23% 0.012 145));
-    --jungle-inset: light-dark(oklch(93% 0.008 145), oklch(13% 0.01 145));
-    --jungle-ink: light-dark(oklch(22% 0.012 145), oklch(94% 0.008 145));
-    --jungle-ink-secondary: light-dark(oklch(43% 0.012 145), oklch(74% 0.01 145));
-    --jungle-ink-tertiary: light-dark(oklch(56% 0.01 145), oklch(60% 0.01 145));
-    --jungle-ink-muted: light-dark(oklch(70% 0.008 145), oklch(42% 0.008 145));
-    --jungle-leaf: light-dark(oklch(50% 0.16 148), oklch(76% 0.13 148));
-    --jungle-bell: light-dark(oklch(50% 0.2 28), oklch(76% 0.14 28));
-    --jungle-login: light-dark(oklch(50% 0.14 70), oklch(78% 0.11 70));
-    --jungle-men: light-dark(oklch(50% 0.13 245), oklch(76% 0.09 245));
-    --jungle-common: light-dark(oklch(50% 0.11 300), oklch(76% 0.08 300));
-    --jungle-women: light-dark(oklch(50% 0.12 355), oklch(77% 0.08 355));
+    --jungle-fog: oklch(96.5% 0.006 145);
+    --jungle-paper: oklch(99% 0.004 145);
+    --jungle-overlay: oklch(100% 0 0);
+    --jungle-inset: oklch(93% 0.008 145);
+    --jungle-ink: oklch(22% 0.012 145);
+    --jungle-ink-secondary: oklch(43% 0.012 145);
+    --jungle-ink-tertiary: oklch(56% 0.01 145);
+    --jungle-ink-muted: oklch(70% 0.008 145);
+    --jungle-leaf: oklch(50% 0.16 148);
+    --jungle-bell: oklch(50% 0.2 28);
+    --jungle-login: oklch(50% 0.14 70);
+    --jungle-men: oklch(50% 0.13 245);
+    --jungle-common: oklch(50% 0.11 300);
+    --jungle-women: oklch(50% 0.12 355);
 
     --color-bg: var(--jungle-fog);
     --color-text: var(--jungle-ink);
@@ -328,15 +328,15 @@ a, area, button, input, label, select, summary, textarea, [tabindex] {
     --color-warning-soft: color-mix(in oklch, var(--jungle-login), transparent 88%);
     --color-danger: var(--jungle-bell);
     --color-danger-soft: color-mix(in oklch, var(--jungle-bell), transparent 90%);
-    --color-border: light-dark(oklch(0% 0 0 / 10%), oklch(100% 0 0 / 12%));
-    --color-border-strong: light-dark(oklch(0% 0 0 / 18%), oklch(100% 0 0 / 22%));
-    --color-divider-subtle: light-dark(oklch(0% 0 0 / 6%), oklch(100% 0 0 / 7%));
+    --color-border: oklch(0% 0 0 / 10%);
+    --color-border-strong: oklch(0% 0 0 / 18%);
+    --color-divider-subtle: oklch(0% 0 0 / 6%);
     --color-surface: var(--jungle-paper);
     --color-surface-subtle: color-mix(in oklch, var(--jungle-paper), var(--jungle-fog) 48%);
     --color-surface-overlay: var(--jungle-overlay);
     --color-control: var(--jungle-inset);
     --color-overlay: oklch(8% 0.008 145 / 72%);
-    --color-image-outline: light-dark(oklch(0% 0 0 / 10%), oklch(100% 0 0 / 10%));
+    --color-image-outline: oklch(0% 0 0 / 10%);
     --color-men: var(--jungle-men);
     --color-men-soft: color-mix(in oklch, var(--jungle-men), transparent 90%);
     --color-common: var(--jungle-common);

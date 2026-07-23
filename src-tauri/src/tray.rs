@@ -442,6 +442,7 @@ fn build_attendance_window(app: &tauri::AppHandle) {
         tauri::WebviewUrl::External(ATTENDANCE_URL.parse().unwrap()),
     )
     .title("Jungle Compass")
+    .theme(Some(tauri::Theme::Light))
     .inner_size(CONTENT_WINDOW_WIDTH, STANDARD_WINDOW_HEIGHT)
     .min_inner_size(ATTENDANCE_MIN_SIZE, ATTENDANCE_MIN_SIZE)
     .resizable(true)
@@ -496,6 +497,7 @@ pub fn open_image_viewer(app: &tauri::AppHandle, image_url: String) -> Result<()
 
     let window = tauri::WebviewWindowBuilder::new(app, "image-viewer", tauri::WebviewUrl::App(app_url.into()))
         .title("식단 이미지")
+        .theme(Some(tauri::Theme::Light))
         .inner_size(IMAGE_VIEWER_WIDTH, IMAGE_VIEWER_HEIGHT)
         .min_inner_size(IMAGE_VIEWER_MIN_WIDTH, IMAGE_VIEWER_MIN_HEIGHT)
         .resizable(true)
@@ -531,6 +533,7 @@ fn build_campus_window(app: &tauri::AppHandle, tab: CampusTab) {
         tauri::WebviewUrl::App(format!("campus.html?tab={}", tab.as_str()).into()),
     )
     .title("생활 정보")
+    .theme(Some(tauri::Theme::Light))
     .inner_size(CONTENT_WINDOW_WIDTH, STANDARD_WINDOW_HEIGHT)
     .resizable(false)
     .minimizable(false)
@@ -569,6 +572,7 @@ fn build_settings_window(app: &tauri::AppHandle) {
     show_foreground_app(app);
     if let Ok(window) = tauri::WebviewWindowBuilder::new(app, "settings", tauri::WebviewUrl::App("index.html".into()))
         .title("설정")
+        .theme(Some(tauri::Theme::Light))
         .inner_size(UTILITY_WINDOW_WIDTH, STANDARD_WINDOW_HEIGHT)
         .resizable(false)
         .minimizable(false)
@@ -592,6 +596,7 @@ fn build_onboarding_window(app: &tauri::AppHandle) {
     if let Ok(window) =
         tauri::WebviewWindowBuilder::new(app, "onboarding", tauri::WebviewUrl::App("onboarding.html".into()))
             .title("Jungle Bell 시작하기")
+            .theme(Some(tauri::Theme::Light))
             .inner_size(UTILITY_WINDOW_WIDTH, STANDARD_WINDOW_HEIGHT)
             .resizable(false)
             .minimizable(false)

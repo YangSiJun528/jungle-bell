@@ -42,8 +42,8 @@
 
 @layer base {
     :root {
-        --scrollbar-thumb: light-dark(oklch(20% 0.01 145 / 28%), oklch(88% 0.01 145 / 28%));
-        --scrollbar-thumb-active: light-dark(oklch(20% 0.01 145 / 48%), oklch(88% 0.01 145 / 48%));
+        --scrollbar-thumb: oklch(20% 0.01 145 / 28%);
+        --scrollbar-thumb-active: oklch(20% 0.01 145 / 48%);
     }
 
     html {
