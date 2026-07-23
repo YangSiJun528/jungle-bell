@@ -8,6 +8,11 @@
   },
   "windows": ["checker"],
   "permissions": [
-    "core:default"
+    "core:event:allow-listen",
+    "allow-report-attendance-status",
+    "allow-report-checker-ready",
+    "allow-report-cms-identity",
+    "allow-log-from-js",
+    "allow-get-usage-analytics-enabled"
   ]
 }

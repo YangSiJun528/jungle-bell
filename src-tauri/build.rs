@@ -1,4 +1,56 @@
+const APP_COMMANDS: &[&str] = &[
+    "report_attendance_status",
+    "report_checker_ready",
+    "report_cms_identity",
+    "log_from_js",
+    "get_auto_update",
+    "set_auto_update",
+    "get_app_version",
+    "report_campus_ready",
+    "refresh_campus_data",
+    "load_meal_history",
+    "open_image_viewer",
+    "get_pending_update",
+    "check_and_notify_update",
+    "get_auto_start",
+    "set_auto_start",
+    "get_start_notification_enabled",
+    "set_start_notification_enabled",
+    "get_end_notification_enabled",
+    "set_end_notification_enabled",
+    "get_start_notification_interval",
+    "set_start_notification_interval",
+    "get_end_notification_interval",
+    "set_end_notification_interval",
+    "get_notification_start",
+    "set_notification_start",
+    "get_notification_end",
+    "set_notification_end",
+    "get_skip_attendance",
+    "set_skip_attendance",
+    "get_skip_sunday",
+    "set_skip_sunday",
+    "open_notification_settings",
+    "get_debug_mode",
+    "set_debug_mode",
+    "get_usage_analytics_enabled",
+    "set_usage_analytics_enabled",
+    "get_show_dday",
+    "set_show_dday",
+    "get_show_app_icon",
+    "set_show_app_icon",
+    "open_log_folder",
+    "open_onboarding",
+    "complete_onboarding",
+    "open_attendance_window",
+    "get_login_status",
+    "refresh_login_status",
+];
+
 fn main() {
     println!("cargo:rerun-if-env-changed=JUNGLE_BELL_DATA_API_URL");
-    tauri_build::build()
+    tauri_build::try_build(
+        tauri_build::Attributes::new().app_manifest(tauri_build::AppManifest::new().commands(APP_COMMANDS)),
+    )
+    .expect("failed to run Tauri build script");
 }
