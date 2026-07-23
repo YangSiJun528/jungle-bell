@@ -42,6 +42,7 @@
 
 @layer base {
     :root {
+        --page-gutter: 16px;
         --scrollbar-thumb: oklch(20% 0.01 145 / 28%);
         --scrollbar-thumb-active: oklch(20% 0.01 145 / 48%);
     }
@@ -50,6 +51,14 @@
         overflow-y: scroll;
         background: var(--color-bg);
         scrollbar-gutter: stable both-edges;
+    }
+
+    html[data-page-layout="bleed"] {
+        scrollbar-gutter: auto;
+    }
+
+    body {
+        padding: var(--page-gutter);
     }
 
     *::-webkit-scrollbar {

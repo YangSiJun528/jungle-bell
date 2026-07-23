@@ -33,6 +33,7 @@ test('이미지 뷰어는 로딩 상태와 오류 후 재시도를 제공한다'
     assert.match(html, /\bid="image-viewer-loading"/);
     assert.match(html, /\bid="image-viewer-error"/);
     assert.match(html, /\bid="image-viewer-retry"/);
+    assert.doesNotMatch(html, /\bp-6\b/);
     assert.match(html, /이미지를 불러오지 못했습니다/);
     assert.match(script, /IMAGE_LOAD_TIMEOUT_MS/);
     assert.match(script, /retryButton\.addEventListener\(['"]click['"]/);
