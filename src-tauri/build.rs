@@ -7,6 +7,7 @@ const APP_COMMANDS: &[&str] = &[
     "set_auto_update",
     "get_app_version",
     "report_campus_ready",
+    "report_campus_interaction",
     "refresh_campus_data",
     "load_meal_history",
     "open_image_viewer",

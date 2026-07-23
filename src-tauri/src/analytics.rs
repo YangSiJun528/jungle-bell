@@ -14,7 +14,10 @@
 //!   - `laundry_status_opened`: 트레이에서 워시타워 현황을 열 때
 //!   - `attendance_completed`: 출석 상태가 false→true로 전이할 때 (period=morning|evening)
 //!   - `meal_plan_opened`: 트레이에서 식단표 보러가기 클릭 시
+//!   - `setting_changed`: 앱 설정값을 변경할 때
+//!   - `campus_interaction`: 생활정보 화면에서 주요 기능을 사용할 때
 
+use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
@@ -27,6 +30,200 @@ static PENDING_APP_UPDATED: OnceLock<(String, String)> = OnceLock::new();
 static USER_ENABLED: AtomicBool = AtomicBool::new(true);
 static APP_OPENED_SENT: AtomicBool = AtomicBool::new(false);
 static APP_UPDATED_SENT: AtomicBool = AtomicBool::new(false);
+
+pub enum Event {
+    AppOpened,
+    AppUpdated { from_version: String, to_version: String },
+    OnboardingStarted,
+    OnboardingCompleted,
+    UsageAnalyticsToggled(bool),
+    SettingsOpened,
+    AttendancePageOpened,
+    LaundryStatusOpened,
+    MealPlanOpened,
+    FeedbackOpened,
+    AttendanceCompleted(AttendancePeriod),
+    SettingChanged(Setting),
+    CampusInteraction(CampusInteraction),
+}
+
+pub enum AttendancePeriod {
+    Morning,
+    Evening,
+}
+
+pub enum Setting {
+    AutoUpdate(bool),
+    AutoStart(bool),
+    StartNotificationEnabled(bool),
+    EndNotificationEnabled(bool),
+    StartNotificationIntervalMinutes(u32),
+    EndNotificationIntervalMinutes(u32),
+    NotificationStart { hour: u32, minute: u32 },
+    NotificationEnd { hour: u32, minute: u32 },
+    SkipAttendance(bool),
+    SkipSunday(bool),
+    DebugMode(bool),
+    ShowDday(bool),
+    ShowAppIcon(bool),
+}
+
+#[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LaundryAccess {
+    All,
+    Men,
+    Women,
+}
+
+#[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LaundryFilter {
+    All,
+    WasherAvailable,
+    DryerAvailable,
+}
+
+#[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CalendarDirection {
+    Previous,
+    Next,
+}
+
+#[derive(Clone, Copy, Deserialize)]
+#[serde(tag = "action", content = "value", rename_all = "snake_case", deny_unknown_fields)]
+pub enum CampusInteraction {
+    LaundryTabSelected,
+    MealsTabSelected,
+    LaundryAccessChanged(LaundryAccess),
+    LaundryFilterChanged(LaundryFilter),
+    MealHistoryOpened,
+    MealCalendarNavigated(CalendarDirection),
+    MealPostOpened,
+    MealImageOpened,
+    LaundryRefreshRequested,
+    MealsRefreshRequested,
+}
+
+struct EventPayload {
+    name: &'static str,
+    properties: Vec<(&'static str, String)>,
+}
+
+impl Event {
+    fn into_payload(self) -> EventPayload {
+        let (name, properties) = match self {
+            Self::AppOpened => ("app_opened", vec![]),
+            Self::AppUpdated {
+                from_version,
+                to_version,
+            } => (
+                "app_updated",
+                vec![("from_version", from_version), ("to_version", to_version)],
+            ),
+            Self::OnboardingStarted => ("onboarding_started", vec![]),
+            Self::OnboardingCompleted => ("onboarding_completed", vec![]),
+            Self::UsageAnalyticsToggled(enabled) => {
+                ("usage_analytics_toggled", vec![("enabled", bool_value(enabled).into())])
+            }
+            Self::SettingsOpened => ("settings_opened", vec![]),
+            Self::AttendancePageOpened => ("attendance_page_opened", vec![]),
+            Self::LaundryStatusOpened => ("laundry_status_opened", vec![]),
+            Self::MealPlanOpened => ("meal_plan_opened", vec![]),
+            Self::FeedbackOpened => ("feedback_opened", vec![]),
+            Self::AttendanceCompleted(period) => ("attendance_completed", vec![("period", period.as_str().into())]),
+            Self::SettingChanged(setting) => {
+                let (setting, value) = setting.into_parts();
+                ("setting_changed", vec![("setting", setting.into()), ("value", value)])
+            }
+            Self::CampusInteraction(interaction) => {
+                let (action, value) = interaction.into_parts();
+                let mut properties = vec![("action", action.into())];
+                if let Some(value) = value {
+                    properties.push(("value", value.into()));
+                }
+                ("campus_interaction", properties)
+            }
+        };
+        EventPayload { name, properties }
+    }
+}
+
+impl AttendancePeriod {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::Morning => "morning",
+            Self::Evening => "evening",
+        }
+    }
+}
+
+impl Setting {
+    fn into_parts(self) -> (&'static str, String) {
+        match self {
+            Self::AutoUpdate(value) => ("auto_update", bool_value(value).into()),
+            Self::AutoStart(value) => ("auto_start", bool_value(value).into()),
+            Self::StartNotificationEnabled(value) => ("start_notification_enabled", bool_value(value).into()),
+            Self::EndNotificationEnabled(value) => ("end_notification_enabled", bool_value(value).into()),
+            Self::StartNotificationIntervalMinutes(value) => ("start_notification_interval_minutes", value.to_string()),
+            Self::EndNotificationIntervalMinutes(value) => ("end_notification_interval_minutes", value.to_string()),
+            Self::NotificationStart { hour, minute } => ("notification_start", time_value(hour, minute)),
+            Self::NotificationEnd { hour, minute } => ("notification_end", time_value(hour, minute)),
+            Self::SkipAttendance(value) => ("skip_attendance", bool_value(value).into()),
+            Self::SkipSunday(value) => ("skip_sunday", bool_value(value).into()),
+            Self::DebugMode(value) => ("debug_mode", bool_value(value).into()),
+            Self::ShowDday(value) => ("show_dday", bool_value(value).into()),
+            Self::ShowAppIcon(value) => ("show_app_icon", bool_value(value).into()),
+        }
+    }
+}
+
+impl LaundryAccess {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::All => "all",
+            Self::Men => "men",
+            Self::Women => "women",
+        }
+    }
+}
+
+impl LaundryFilter {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::All => "all",
+            Self::WasherAvailable => "washer_available",
+            Self::DryerAvailable => "dryer_available",
+        }
+    }
+}
+
+impl CalendarDirection {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::Previous => "previous",
+            Self::Next => "next",
+        }
+    }
+}
+
+impl CampusInteraction {
+    fn into_parts(self) -> (&'static str, Option<&'static str>) {
+        match self {
+            Self::LaundryTabSelected => ("laundry_tab_selected", None),
+            Self::MealsTabSelected => ("meals_tab_selected", None),
+            Self::LaundryAccessChanged(value) => ("laundry_access_changed", Some(value.as_str())),
+            Self::LaundryFilterChanged(value) => ("laundry_filter_changed", Some(value.as_str())),
+            Self::MealHistoryOpened => ("meal_history_opened", None),
+            Self::MealCalendarNavigated(value) => ("meal_calendar_navigated", Some(value.as_str())),
+            Self::MealPostOpened => ("meal_post_opened", None),
+            Self::MealImageOpened => ("meal_image_opened", None),
+            Self::LaundryRefreshRequested => ("laundry_refresh_requested", None),
+            Self::MealsRefreshRequested => ("meals_refresh_requested", None),
+        }
+    }
+}
 
 /// PostHog 이벤트 수집용 Project API Key.
 ///
@@ -101,15 +298,22 @@ pub fn set_identity(cms_user_id: &str) {
     track_startup_events();
 }
 
-/// 이벤트 전송 (fire-and-forget).
+/// enum으로 정의된 이벤트를 전송한다 (fire-and-forget).
 /// - 로그인 상태: hashed CMS ID 사용
 /// - 미로그인 상태: "anonymous" 고정값 사용
-fn capture(event_name: &'static str, extra_props: &[(&'static str, &str)]) {
+pub fn track(event: Event) {
     if !is_enabled() {
         return;
     }
+    match &event {
+        Event::AppOpened if APP_OPENED_SENT.swap(true, Ordering::Relaxed) => return,
+        Event::AppUpdated { .. } if APP_UPDATED_SENT.swap(true, Ordering::Relaxed) => return,
+        _ => {}
+    }
 
     let distinct_id = DISTINCT_ID.get().cloned().unwrap_or_else(|| "anonymous".to_owned());
+    let payload = event.into_payload();
+    let event_name = payload.name;
 
     let mut event = posthog_rs::Event::new(event_name, &distinct_id);
     if let Err(e) = event.insert_prop("app_version", APP_VERSION) {
@@ -120,8 +324,8 @@ fn capture(event_name: &'static str, extra_props: &[(&'static str, &str)]) {
     if let Err(e) = event.insert_prop("$os", os_name()) {
         log::debug!("[analytics] insert_prop '$os' failed: {}", e);
     }
-    for (key, value) in extra_props {
-        if let Err(e) = event.insert_prop(*key, *value) {
+    for (key, value) in payload.properties {
+        if let Err(e) = event.insert_prop(key, value) {
             log::debug!("[analytics] insert_prop '{}' failed: {}", key, e);
         }
     }
@@ -135,66 +339,25 @@ fn capture(event_name: &'static str, extra_props: &[(&'static str, &str)]) {
 }
 
 pub fn track_startup_events() {
-    track_app_opened();
+    track(Event::AppOpened);
     if let Some((from_version, to_version)) = PENDING_APP_UPDATED.get() {
-        track_app_updated(from_version, to_version);
+        track(Event::AppUpdated {
+            from_version: from_version.clone(),
+            to_version: to_version.clone(),
+        });
     }
 }
 
-pub fn track_app_opened() {
-    if !is_enabled() || APP_OPENED_SENT.swap(true, Ordering::Relaxed) {
-        return;
+fn bool_value(value: bool) -> &'static str {
+    if value {
+        "true"
+    } else {
+        "false"
     }
-    capture("app_opened", &[]);
 }
 
-pub fn track_app_updated(from_version: &str, to_version: &str) {
-    if !is_enabled() || APP_UPDATED_SENT.swap(true, Ordering::Relaxed) {
-        return;
-    }
-    capture(
-        "app_updated",
-        &[("from_version", from_version), ("to_version", to_version)],
-    );
-}
-
-pub fn track_onboarding_started() {
-    capture("onboarding_started", &[]);
-}
-
-pub fn track_onboarding_completed() {
-    capture("onboarding_completed", &[]);
-}
-
-pub fn track_usage_analytics_toggled(enabled: bool) {
-    let enabled = if enabled { "true" } else { "false" };
-    capture("usage_analytics_toggled", &[("enabled", enabled)]);
-}
-
-pub fn track_settings_opened() {
-    capture("settings_opened", &[]);
-}
-
-pub fn track_attendance_page_opened() {
-    capture("attendance_page_opened", &[]);
-}
-
-pub fn track_meal_plan_opened() {
-    capture("meal_plan_opened", &[]);
-}
-
-pub fn track_laundry_status_opened() {
-    capture("laundry_status_opened", &[]);
-}
-
-pub fn track_feedback_opened() {
-    capture("feedback_opened", &[]);
-}
-
-/// 출석 완료 이벤트. `period`는 "morning" 또는 "evening".
-/// 스케줄러 틱마다가 아니라 morning/evening 상태가 false→true로 전이할 때만 호출한다.
-pub fn track_attendance_completed(period: &'static str) {
-    capture("attendance_completed", &[("period", period)]);
+fn time_value(hour: u32, minute: u32) -> String {
+    format!("{hour:02}:{minute:02}")
 }
 
 fn sha256_hex(input: &str) -> String {
@@ -217,5 +380,95 @@ mod tests {
     #[test]
     fn sha256_different_inputs_produce_different_hashes() {
         assert_ne!(sha256_hex("user-a"), sha256_hex("user-b"));
+    }
+
+    #[test]
+    fn boolean_event_properties_use_lowercase_strings() {
+        assert_eq!(bool_value(true), "true");
+        assert_eq!(bool_value(false), "false");
+    }
+
+    #[test]
+    fn time_event_properties_use_24_hour_format() {
+        assert_eq!(time_value(4, 0), "04:00");
+        assert_eq!(time_value(23, 30), "23:30");
+    }
+
+    #[test]
+    fn analytics_event_enum_owns_the_posthog_contract() {
+        let cases = [
+            (Event::AppOpened, "app_opened"),
+            (
+                Event::AppUpdated {
+                    from_version: "0.4.1".into(),
+                    to_version: "0.4.2".into(),
+                },
+                "app_updated",
+            ),
+            (Event::OnboardingStarted, "onboarding_started"),
+            (Event::OnboardingCompleted, "onboarding_completed"),
+            (Event::UsageAnalyticsToggled(true), "usage_analytics_toggled"),
+            (Event::SettingsOpened, "settings_opened"),
+            (Event::AttendancePageOpened, "attendance_page_opened"),
+            (Event::LaundryStatusOpened, "laundry_status_opened"),
+            (Event::MealPlanOpened, "meal_plan_opened"),
+            (Event::FeedbackOpened, "feedback_opened"),
+            (
+                Event::AttendanceCompleted(AttendancePeriod::Morning),
+                "attendance_completed",
+            ),
+            (Event::SettingChanged(Setting::ShowDday(true)), "setting_changed"),
+            (
+                Event::CampusInteraction(CampusInteraction::MealHistoryOpened),
+                "campus_interaction",
+            ),
+        ];
+
+        for (event, expected_name) in cases {
+            assert_eq!(event.into_payload().name, expected_name);
+        }
+    }
+
+    #[test]
+    fn enum_payloads_generate_typed_properties() {
+        let setting = Event::SettingChanged(Setting::NotificationStart { hour: 4, minute: 0 }).into_payload();
+        assert_eq!(
+            setting.properties,
+            vec![("setting", "notification_start".into()), ("value", "04:00".into()),]
+        );
+
+        let campus = Event::CampusInteraction(CampusInteraction::LaundryFilterChanged(LaundryFilter::WasherAvailable))
+            .into_payload();
+        assert_eq!(
+            campus.properties,
+            vec![
+                ("action", "laundry_filter_changed".into()),
+                ("value", "washer_available".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn campus_interaction_ipc_deserializes_only_known_enum_shapes() {
+        let interaction: CampusInteraction = serde_json::from_value(serde_json::json!({
+            "action": "laundry_access_changed",
+            "value": "women"
+        }))
+        .unwrap();
+        assert!(matches!(
+            interaction,
+            CampusInteraction::LaundryAccessChanged(LaundryAccess::Women)
+        ));
+
+        assert!(serde_json::from_value::<CampusInteraction>(serde_json::json!({
+            "action": "laundry_access_changed",
+            "value": "unknown"
+        }))
+        .is_err());
+        assert!(serde_json::from_value::<CampusInteraction>(serde_json::json!({
+            "action": "meal_post_opened",
+            "value": "unexpected"
+        }))
+        .is_err());
     }
 }

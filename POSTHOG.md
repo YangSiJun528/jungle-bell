@@ -18,12 +18,15 @@ Project API Key가 `analytics.rs`에 하드코딩되어 **릴리스 빌드**에�
 | `app_updated` | 앱 버전 변경 감지 후 LMS 사용자 식별자가 준비될 때 |
 | `onboarding_started` | 온보딩 창이 열릴 때 |
 | `onboarding_completed` | 온보딩 마지막 단계에서 시작하기를 누를 때 |
-| `onboarding_closed_before_complete` | 온보딩 완료 전에 창을 닫을 때 |
 | `usage_analytics_toggled` | 설정 → 앱 → 사용 통계 토글을 변경할 때 |
 | `settings_opened` | 트레이 → 설정 창 열 때 |
 | `attendance_page_opened` | 트레이 → 출석 페이지 열 때 |
+| `laundry_status_opened` | 트레이 → 워시타워 현황 열 때 |
 | `meal_plan_opened` | 트레이 → 식단표 보러가기 클릭 시 |
+| `feedback_opened` | 트레이 → 피드백 보내기 클릭 시 |
 | `attendance_completed` | 출석 상태가 `false → true`로 전이할 때 (morning/evening 각각 최대 1일 1회) |
+| `setting_changed` | 설정 화면이나 온보딩에서 설정값을 변경할 때 |
+| `campus_interaction` | 생활정보 화면의 탭·필터·내역·달력·원문·이미지·재시도 기능을 사용할 때 |
 
 ### 이벤트 프로퍼티
 
@@ -33,6 +36,25 @@ Project API Key가 `analytics.rs`에 하드코딩되어 **릴리스 빌드**에�
 - `app_updated`: `from_version`, `to_version`
 - `usage_analytics_toggled`: `enabled` = `"true"` 또는 `"false"`
 - `attendance_completed`: `period` = `"morning"` 또는 `"evening"`
+- `setting_changed`: `setting`, `value`
+- `campus_interaction`: `action`, 선택적으로 `value`
+
+`setting_changed.setting`은 `auto_update`, `auto_start`, `start_notification_enabled`,
+`end_notification_enabled`, `start_notification_interval_minutes`,
+`end_notification_interval_minutes`, `notification_start`, `notification_end`,
+`skip_attendance`, `skip_sunday`, `debug_mode`, `show_dday`, `show_app_icon` 중 하나입니다.
+시각은 `HH:mm`, 불리언은 `"true"` 또는 `"false"` 문자열로 기록합니다.
+
+`campus_interaction.action`은 다음 값 중 하나입니다.
+
+- `laundry_tab_selected`, `meals_tab_selected`
+- `laundry_access_changed`, `laundry_filter_changed`
+- `meal_history_opened`, `meal_calendar_navigated`
+- `meal_post_opened`, `meal_image_opened`
+- `laundry_refresh_requested`, `meals_refresh_requested`
+
+세탁 구역과 필터 변경에는 선택한 범주가 `value`로 포함됩니다. 식단 달력 이동에는
+`previous` 또는 `next`가 포함됩니다. 사용자 입력이나 식단 게시물 내용은 수집하지 않습니다.
 
 > `$os`는 PostHog 표준 메타데이터로 취급되어 대시보드 필터/차트에서 자동 인식됩니다.
 

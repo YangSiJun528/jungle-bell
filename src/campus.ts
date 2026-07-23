@@ -28,6 +28,16 @@ type MachineZone = 'men' | 'common' | 'women' | 'other';
 type ApplianceKind = 'washer' | 'dryer';
 type AvailabilityState = 'available' | 'error' | 'unavailable';
 type Tone = 'neutral' | 'normal' | 'success' | 'warning' | 'danger' | 'complete';
+type CampusInteraction =
+    | {action: 'laundry_tab_selected'}
+    | {action: 'meals_tab_selected'}
+    | {action: 'laundry_access_changed'; value: LaundryAccess}
+    | {action: 'laundry_filter_changed'; value: 'all' | 'washer_available' | 'dryer_available'}
+    | {action: 'meal_history_opened'}
+    | {action: 'meal_calendar_navigated'; value: 'previous' | 'next'}
+    | {action: 'meal_post_opened'}
+    | {action: 'laundry_refresh_requested'}
+    | {action: 'meals_refresh_requested'};
 
 interface Projection {
     status?: string;
@@ -194,6 +204,16 @@ const PROJECTION_LABELS: Record<string, string> = {
     OBSERVED: '관측값', ESTIMATED_RUNNING: '작동 중', AWAITING_COMPLETION_CONFIRMATION: '완료 확인 중',
     CONFIRMED_COMPLETED: '완료', PAUSED: '일시 정지', ERROR: '오류', IDLE: '사용 가능', UNKNOWN: '확인 불가',
 };
+const LAUNDRY_FILTER_ANALYTICS_VALUES = {
+    all: 'all',
+    washerAvailable: 'washer_available',
+    dryerAvailable: 'dryer_available',
+} as const satisfies Record<LaundryFilter, string>;
+
+function reportCampusInteraction(interaction: CampusInteraction): void {
+    void invoke('report_campus_interaction', {interaction})
+        .catch((error) => console.error('[campus] analytics report failed', error));
+}
 
 function machineNumber(id: string): number | null {
     const match = String(id ?? '').trim().match(/(?:워시타워[_\s-]*)?(\d+)$/);
@@ -317,12 +337,19 @@ function campus(): Record<string, unknown> {
             this.recoveryTimer = window.setInterval(() => {
                 void this.recoverMissingData();
             }, CAMPUS_RECOVERY_INTERVAL_MS);
-            const rememberLaundryPreferences = () => saveLaundryPreferences({
-                access: this.laundryAccess,
-                filter: this.laundryFilter,
+            this.$watch('laundryAccess', (value: LaundryAccess, previous: LaundryAccess) => {
+                saveLaundryPreferences({access: value, filter: this.laundryFilter});
+                if (value !== previous) reportCampusInteraction({action: 'laundry_access_changed', value});
             });
-            this.$watch('laundryAccess', rememberLaundryPreferences);
-            this.$watch('laundryFilter', rememberLaundryPreferences);
+            this.$watch('laundryFilter', (value: LaundryFilter, previous: LaundryFilter) => {
+                saveLaundryPreferences({access: this.laundryAccess, filter: value});
+                if (value !== previous) {
+                    reportCampusInteraction({
+                        action: 'laundry_filter_changed',
+                        value: LAUNDRY_FILTER_ANALYTICS_VALUES[value],
+                    });
+                }
+            });
             window.setCampusTab = (tab) => {
                 if (tab === 'laundry' || tab === 'meals') this.selectTab(tab);
             };
@@ -357,11 +384,17 @@ function campus(): Record<string, unknown> {
         },
 
         selectTab(this: any, tab: CampusTab) {
+            const changed = this.activeTab !== tab;
             dismissInfoDisclosures();
             this.activeTab = tab;
             const url = new URL(window.location.href);
             url.searchParams.set('tab', tab);
             window.history.replaceState(null, '', url);
+            if (changed) {
+                reportCampusInteraction({
+                    action: tab === 'laundry' ? 'laundry_tab_selected' : 'meals_tab_selected',
+                });
+            }
             void this.recoverMissingData();
         },
 
@@ -404,6 +437,11 @@ function campus(): Record<string, unknown> {
 
         async retry(this: any) {
             if (this.retrying) return;
+            reportCampusInteraction({
+                action: this.activeTab === 'laundry'
+                    ? 'laundry_refresh_requested'
+                    : 'meals_refresh_requested',
+            });
             await this.refreshCampusKind(this.activeTab, true);
         },
 
@@ -463,7 +501,9 @@ function campus(): Record<string, unknown> {
         },
 
         selectMealView(this: any, view: MealView) {
+            const changed = this.mealView !== view;
             this.mealView = view;
+            if (changed && view === 'history') reportCampusInteraction({action: 'meal_history_opened'});
             if (view === 'history' && !this.mealHistoryLoading
                 && (!this.mealHistoryInitialized || this.mealHistoryNeedsMore())) {
                 void this.loadMoreMealHistory();
@@ -529,6 +569,10 @@ function campus(): Record<string, unknown> {
             const target = new Date(Date.UTC(year, month - 1 + offset, 1));
             this.mealCalendarMonth = `${target.getUTCFullYear()}-${String(target.getUTCMonth() + 1).padStart(2, '0')}`;
             this.mealSelectedDate = `${this.mealCalendarMonth}-01`;
+            reportCampusInteraction({
+                action: 'meal_calendar_navigated',
+                value: offset < 0 ? 'previous' : 'next',
+            });
             if (this.mealHistoryNeedsMore()) void this.loadMoreMealHistory();
         },
 
@@ -912,7 +956,10 @@ function campus(): Record<string, unknown> {
 
         async openPost(this: any, post: MealPost) {
             const url = this.safeKakaoUrl(post.permalink);
-            if (url) await openUrl(url).catch((error) => console.error('[campus] external URL failed', error));
+            if (url) {
+                reportCampusInteraction({action: 'meal_post_opened'});
+                await openUrl(url).catch((error) => console.error('[campus] external URL failed', error));
+            }
         },
 
         async openImage(this: any, post: MealPost) {

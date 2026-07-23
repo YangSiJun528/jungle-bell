@@ -11,7 +11,7 @@ use serde::Serialize;
 use tauri::{Emitter, Manager};
 use tokio::sync::Mutex;
 
-use crate::analytics;
+use crate::analytics::{self, AttendancePeriod, CampusInteraction, Event, Setting};
 use crate::attendance;
 use crate::attendance_day;
 use crate::autostart;
@@ -114,10 +114,10 @@ pub async fn report_attendance_status(
     // 스케줄러의 일일 리셋(자정) 이후 첫 완료 시에도 정상적으로 전이로 감지된다.
     if was_loaded && !status.api_error && !status.needs_login {
         if !prev_morning && status.morning_done {
-            analytics::track_attendance_completed("morning");
+            analytics::track(Event::AttendanceCompleted(AttendancePeriod::Morning));
         }
         if !prev_evening && status.evening_done {
-            analytics::track_attendance_completed("evening");
+            analytics::track(Event::AttendanceCompleted(AttendancePeriod::Evening));
         }
     }
 
@@ -170,7 +170,7 @@ pub fn log_from_js(level: String, message: String) {
 
 /// bool 설정 getter/setter 생성 매크로.
 macro_rules! setting_bool {
-    ($get:ident, $set:ident, $field:ident, $label:expr) => {
+    ($get:ident, $set:ident, $field:ident, $label:expr, $setting:ident) => {
         #[tauri::command]
         pub async fn $get(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<bool, String> {
             Ok(state.lock().await.config.$field)
@@ -179,9 +179,19 @@ macro_rules! setting_bool {
         #[tauri::command]
         pub async fn $set(state: tauri::State<'_, Arc<Mutex<AppState>>>, enabled: bool) -> Result<(), String> {
             log::info!("[settings] {} 변경: {}", $label, enabled);
-            let mut s = state.lock().await;
-            s.config.$field = enabled;
-            s.config.save();
+            let changed = {
+                let mut s = state.lock().await;
+                if s.config.$field == enabled {
+                    false
+                } else {
+                    s.config.$field = enabled;
+                    s.config.save();
+                    true
+                }
+            };
+            if changed {
+                analytics::track(Event::SettingChanged(Setting::$setting(enabled)));
+            }
             Ok(())
         }
     };
@@ -189,21 +199,35 @@ macro_rules! setting_bool {
 
 // ── 매크로 생성 설정 커맨드 ──────────────────────────────
 
-setting_bool!(get_auto_update, set_auto_update, auto_update, "자동 업데이트 설정");
+setting_bool!(
+    get_auto_update,
+    set_auto_update,
+    auto_update,
+    "자동 업데이트 설정",
+    AutoUpdate
+);
 setting_bool!(
     get_start_notification_enabled,
     set_start_notification_enabled,
     start_notification_enabled,
-    "시작 출석 알림 설정"
+    "시작 출석 알림 설정",
+    StartNotificationEnabled
 );
 setting_bool!(
     get_end_notification_enabled,
     set_end_notification_enabled,
     end_notification_enabled,
-    "종료 출석 알림 설정"
+    "종료 출석 알림 설정",
+    EndNotificationEnabled
 );
 
-setting_bool!(get_skip_sunday, set_skip_sunday, skip_sunday, "일요일 알림 끄기");
+setting_bool!(
+    get_skip_sunday,
+    set_skip_sunday,
+    skip_sunday,
+    "일요일 알림 끄기",
+    SkipSunday
+);
 
 // ── 커스텀 설정 커맨드 ───────────────────────────────────
 
@@ -219,9 +243,19 @@ pub async fn set_start_notification_interval(
 ) -> Result<(), String> {
     let value = config::validate_notification_interval(value)?;
     log::info!("[settings] 시작 출석 알림 간격 변경: {}", value);
-    let mut s = state.lock().await;
-    s.config.start_notification_interval_mins = value;
-    s.config.save();
+    let changed = {
+        let mut s = state.lock().await;
+        if s.config.start_notification_interval_mins == value {
+            false
+        } else {
+            s.config.start_notification_interval_mins = value;
+            s.config.save();
+            true
+        }
+    };
+    if changed {
+        analytics::track(Event::SettingChanged(Setting::StartNotificationIntervalMinutes(value)));
+    }
     Ok(())
 }
 
@@ -237,9 +271,19 @@ pub async fn set_end_notification_interval(
 ) -> Result<(), String> {
     let value = config::validate_notification_interval(value)?;
     log::info!("[settings] 종료 출석 알림 간격 변경: {}", value);
-    let mut s = state.lock().await;
-    s.config.end_notification_interval_mins = value;
-    s.config.save();
+    let changed = {
+        let mut s = state.lock().await;
+        if s.config.end_notification_interval_mins == value {
+            false
+        } else {
+            s.config.end_notification_interval_mins = value;
+            s.config.save();
+            true
+        }
+    };
+    if changed {
+        analytics::track(Event::SettingChanged(Setting::EndNotificationIntervalMinutes(value)));
+    }
     Ok(())
 }
 
@@ -256,9 +300,22 @@ pub async fn set_notification_start(
 ) -> Result<(), String> {
     let time = config::validate_notification_start(hour, minute)?;
     log::info!("[settings] 알림 시작 시각 변경: {:02}:{:02}", time.hour, time.minute);
-    let mut s = state.lock().await;
-    s.config.notification_start = time;
-    s.config.save();
+    let changed = {
+        let mut s = state.lock().await;
+        if s.config.notification_start.hour == time.hour && s.config.notification_start.minute == time.minute {
+            false
+        } else {
+            s.config.notification_start = time.clone();
+            s.config.save();
+            true
+        }
+    };
+    if changed {
+        analytics::track(Event::SettingChanged(Setting::NotificationStart {
+            hour: time.hour,
+            minute: time.minute,
+        }));
+    }
     Ok(())
 }
 
@@ -275,9 +332,22 @@ pub async fn set_notification_end(
 ) -> Result<(), String> {
     let time = config::validate_notification_end(hour, minute)?;
     log::info!("[settings] 알림 종료 시각 변경: {:02}:{:02}", time.hour, time.minute);
-    let mut s = state.lock().await;
-    s.config.notification_end = time;
-    s.config.save();
+    let changed = {
+        let mut s = state.lock().await;
+        if s.config.notification_end.hour == time.hour && s.config.notification_end.minute == time.minute {
+            false
+        } else {
+            s.config.notification_end = time.clone();
+            s.config.save();
+            true
+        }
+    };
+    if changed {
+        analytics::track(Event::SettingChanged(Setting::NotificationEnd {
+            hour: time.hour,
+            minute: time.minute,
+        }));
+    }
     Ok(())
 }
 
@@ -297,14 +367,20 @@ pub async fn get_skip_attendance(state: tauri::State<'_, Arc<Mutex<AppState>>>) 
 #[tauri::command]
 pub async fn set_skip_attendance(state: tauri::State<'_, Arc<Mutex<AppState>>>, enabled: bool) -> Result<(), String> {
     let mut s = state.lock().await;
-    s.config.skip_attendance = if enabled {
+    let next = if enabled {
         let kst_now = chrono::Utc::now().with_timezone(&state::kst());
         Some(attendance_day::calendar_date_string(kst_now))
     } else {
         None
     };
+    if s.config.skip_attendance == next {
+        return Ok(());
+    }
+    s.config.skip_attendance = next;
     log::info!("[settings] 이번 출석 알림 끄기 변경: {:?}", s.config.skip_attendance);
     s.config.save();
+    drop(s);
+    analytics::track(Event::SettingChanged(Setting::SkipAttendance(enabled)));
     Ok(())
 }
 
@@ -322,6 +398,12 @@ pub async fn report_campus_ready(
 ) -> Result<(), String> {
     service.emit_cached_snapshots(&app).await;
     Ok(())
+}
+
+/// 생활정보 화면의 주요 사용자 상호작용을 분석 이벤트로 기록한다.
+#[tauri::command]
+pub fn report_campus_interaction(interaction: CampusInteraction) {
+    analytics::track(Event::CampusInteraction(interaction));
 }
 
 /// 사용자가 누른 수동 새로고침을 즉시 실행한다.
@@ -358,7 +440,9 @@ fn validate_meal_image_url(value: &str) -> Result<String, String> {
 #[tauri::command]
 pub fn open_image_viewer(app: tauri::AppHandle, image_url: String) -> Result<(), String> {
     let image_url = validate_meal_image_url(&image_url)?;
-    tray::open_image_viewer(&app, image_url)
+    tray::open_image_viewer(&app, image_url)?;
+    analytics::track(Event::CampusInteraction(CampusInteraction::MealImageOpened));
+    Ok(())
 }
 
 /// Tauri 커맨드: 자동 시작 설정 조회.
@@ -377,12 +461,17 @@ pub async fn set_auto_start(
     log::info!("[settings] 자동 시작 설정 변경: {}", enabled);
     // 앱 설정을 먼저 저장한 후 OS 설정을 변경한다.
     // OS 변경에 실패하더라도 다음 실행 시 setup에서 Config 기준으로 재동기화된다.
-    {
+    let changed = {
         let mut s = state.lock().await;
+        let changed = s.config.auto_start != enabled;
         s.config.auto_start = enabled;
         s.config.save();
-    }
+        changed
+    };
     autostart::sync_auto_start(&app, enabled)?;
+    if changed {
+        analytics::track(Event::SettingChanged(Setting::AutoStart(enabled)));
+    }
     Ok(())
 }
 
@@ -397,9 +486,13 @@ pub async fn get_debug_mode(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Re
 #[tauri::command]
 pub async fn set_debug_mode(state: tauri::State<'_, Arc<Mutex<AppState>>>, enabled: bool) -> Result<(), String> {
     log::info!("[settings] 디버그 모드 변경: {}", enabled);
-    let mut s = state.lock().await;
-    s.config.debug_mode = enabled;
-    s.config.save();
+    let changed = {
+        let mut s = state.lock().await;
+        let changed = s.config.debug_mode != enabled;
+        s.config.debug_mode = enabled;
+        s.config.save();
+        changed
+    };
 
     // 런타임 로그 레벨 즉시 전환
     let level = if enabled {
@@ -409,6 +502,9 @@ pub async fn set_debug_mode(state: tauri::State<'_, Arc<Mutex<AppState>>>, enabl
     };
     log::set_max_level(level);
     log::info!("[settings] 로그 레벨 전환: {}", level);
+    if changed {
+        analytics::track(Event::SettingChanged(Setting::DebugMode(enabled)));
+    }
     Ok(())
 }
 
@@ -436,10 +532,10 @@ pub async fn set_usage_analytics_enabled(
     if previous != enabled {
         if enabled {
             analytics::set_user_enabled(true);
-            analytics::track_usage_analytics_toggled(true);
+            analytics::track(Event::UsageAnalyticsToggled(true));
             analytics::track_startup_events();
         } else {
-            analytics::track_usage_analytics_toggled(false);
+            analytics::track(Event::UsageAnalyticsToggled(false));
             analytics::set_user_enabled(false);
         }
     } else {
@@ -474,6 +570,7 @@ pub async fn set_show_dday(
         s.config.show_dday = enabled;
         s.config.save();
     }
+    analytics::track(Event::SettingChanged(Setting::ShowDday(enabled)));
     Ok(())
 }
 
@@ -509,6 +606,7 @@ pub async fn set_show_app_icon(
         return Err(error);
     }
 
+    analytics::track(Event::SettingChanged(Setting::ShowAppIcon(enabled)));
     Ok(())
 }
 
@@ -558,7 +656,7 @@ pub async fn complete_onboarding(state: tauri::State<'_, Arc<Mutex<AppState>>>) 
     };
     if !was_completed {
         log::info!("[onboarding] completed");
-        analytics::track_onboarding_completed();
+        analytics::track(Event::OnboardingCompleted);
     } else {
         log::info!("[onboarding] completed command ignored; already completed");
     }

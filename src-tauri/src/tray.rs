@@ -13,6 +13,7 @@ use tokio::sync::Mutex as TokioMutex;
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::Serialize;
 
+use crate::analytics::{self, Event};
 use crate::state::{AppState, CheckerRuntimeStatus, DailyPhase, DdayStatus, TraySnapshot};
 use tauri::{
     image::Image,
@@ -464,7 +465,7 @@ fn build_attendance_window(app: &tauri::AppHandle) {
 
 pub fn open_attendance_window(app: &tauri::AppHandle) {
     log::info!("[tray] attendance window opened");
-    crate::analytics::track_attendance_page_opened();
+    analytics::track(Event::AttendancePageOpened);
 
     if let Some(window) = app.get_webview_window("attendance") {
         show_foreground_app(app);
@@ -555,8 +556,8 @@ fn build_campus_window(app: &tauri::AppHandle, tab: CampusTab) {
 fn open_campus_window(app: &tauri::AppHandle, tab: CampusTab) {
     log::info!("[tray] campus window opened: {}", tab.as_str());
     match tab {
-        CampusTab::Laundry => crate::analytics::track_laundry_status_opened(),
-        CampusTab::Meals => crate::analytics::track_meal_plan_opened(),
+        CampusTab::Laundry => analytics::track(Event::LaundryStatusOpened),
+        CampusTab::Meals => analytics::track(Event::MealPlanOpened),
     }
 
     if let Some(window) = app.get_webview_window("campus") {
@@ -623,12 +624,12 @@ pub fn open_onboarding_window(app: &tauri::AppHandle) {
     } else {
         build_onboarding_window(app);
     }
-    crate::analytics::track_onboarding_started();
+    analytics::track(Event::OnboardingStarted);
 }
 
 fn open_settings_window(app: &tauri::AppHandle) {
     log::info!("[tray] settings window opened");
-    crate::analytics::track_settings_opened();
+    analytics::track(Event::SettingsOpened);
 
     if let Some(window) = app.get_webview_window("settings") {
         show_foreground_app(app);
@@ -654,7 +655,7 @@ fn handle_menu_event(app: &tauri::AppHandle, event_id: &str) {
         "laundry" => run_window_task(app, |app| open_campus_window(&app, CampusTab::Laundry)),
         "meals" => run_window_task(app, |app| open_campus_window(&app, CampusTab::Meals)),
         "feedback" => {
-            crate::analytics::track_feedback_opened();
+            analytics::track(Event::FeedbackOpened);
             let _ = tauri_plugin_opener::open_url(FEEDBACK_URL, None::<&str>);
         }
         "settings" => run_window_task(app, |app| open_settings_window(&app)),
