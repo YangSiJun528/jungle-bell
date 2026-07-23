@@ -16,14 +16,14 @@ use crate::state::{AppState, CheckerRuntime, CheckerRuntimeStatus};
 use crate::tray;
 
 const ATTENDANCE_URL: &str = "https://jungle-lms.krafton.com/check-in";
-pub(crate) const CHECKER_NO_REPORT_RECREATE_LIMIT: u32 = 3;
+pub(crate) const CHECKER_NO_REPORT_REFRESH_LIMIT: u32 = 3;
 const CHECKER_REPORT_TIMEOUT: Duration = Duration::from_secs(7);
 
 #[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CheckerWatchdogAction {
     Wait,
-    Recreate { attempt: u32 },
+    Refresh { attempt: u32 },
     GiveUp,
 }
 
@@ -39,7 +39,7 @@ pub(crate) enum CheckerEvent {
 pub(crate) enum CheckerAction {
     TriggerCheck { generation: u64 },
     StartReportWatchdog { generation: u64 },
-    Recreate { generation: u64, attempt: u32 },
+    Refresh { generation: u64, attempt: u32 },
     GiveUp { generation: u64 },
     IgnoreStale { generation: u64, current_generation: u64 },
 }
@@ -86,7 +86,7 @@ pub(crate) fn apply_supervisor_event(runtime: &mut CheckerRuntime, event: Checke
                 }];
             }
             runtime.report_generation = generation;
-            runtime.no_report_recreates = 0;
+            runtime.no_report_refreshes = 0;
             runtime.status = if api_error {
                 CheckerRuntimeStatus::Offline { generation }
             } else {
@@ -98,15 +98,15 @@ pub(crate) fn apply_supervisor_event(runtime: &mut CheckerRuntime, event: Checke
             if runtime.page_load_generation != generation || runtime.report_generation >= generation {
                 return vec![];
             }
-            if runtime.no_report_recreates >= CHECKER_NO_REPORT_RECREATE_LIMIT {
+            if runtime.no_report_refreshes >= CHECKER_NO_REPORT_REFRESH_LIMIT {
                 runtime.status = CheckerRuntimeStatus::Offline { generation };
                 return vec![CheckerAction::GiveUp { generation }];
             }
 
-            let attempt = runtime.no_report_recreates.saturating_add(1);
-            runtime.no_report_recreates = attempt;
-            runtime.status = CheckerRuntimeStatus::Recreating { generation, attempt };
-            vec![CheckerAction::Recreate { generation, attempt }]
+            let attempt = runtime.no_report_refreshes.saturating_add(1);
+            runtime.no_report_refreshes = attempt;
+            runtime.status = CheckerRuntimeStatus::Refreshing { generation, attempt };
+            vec![CheckerAction::Refresh { generation, attempt }]
         }
     }
 }
@@ -131,19 +131,19 @@ pub(crate) fn decide_checker_watchdog_action(state: &AppState, generation: u64) 
         return CheckerWatchdogAction::Wait;
     }
 
-    if state.checker.no_report_recreates >= CHECKER_NO_REPORT_RECREATE_LIMIT {
+    if state.checker.no_report_refreshes >= CHECKER_NO_REPORT_REFRESH_LIMIT {
         CheckerWatchdogAction::GiveUp
     } else {
-        CheckerWatchdogAction::Recreate {
-            attempt: state.checker.no_report_recreates + 1,
+        CheckerWatchdogAction::Refresh {
+            attempt: state.checker.no_report_refreshes + 1,
         }
     }
 }
 
 #[cfg(test)]
-pub(crate) fn record_checker_recreate(state: &mut AppState, generation: u64, attempt: u32) {
-    state.checker.no_report_recreates = state.checker.no_report_recreates.saturating_add(1);
-    state.checker.status = CheckerRuntimeStatus::Recreating { generation, attempt };
+pub(crate) fn record_checker_refresh(state: &mut AppState, generation: u64, attempt: u32) {
+    state.checker.no_report_refreshes = state.checker.no_report_refreshes.saturating_add(1);
+    state.checker.status = CheckerRuntimeStatus::Refreshing { generation, attempt };
 }
 
 #[cfg(test)]
@@ -264,7 +264,7 @@ pub(crate) fn build_webview(app: &tauri::AppHandle) -> tauri::Result<tauri::Webv
                         CheckerAction::StartReportWatchdog { generation } => {
                             spawn_report_watchdog(app_handle.clone(), generation, page_url.clone());
                         }
-                        CheckerAction::Recreate { .. }
+                        CheckerAction::Refresh { .. }
                         | CheckerAction::GiveUp { .. }
                         | CheckerAction::IgnoreStale { .. } => {}
                     }
@@ -287,30 +287,6 @@ pub(crate) fn build_webview(app: &tauri::AppHandle) -> tauri::Result<tauri::Webv
     Ok(checker)
 }
 
-fn recreate_webview(app: &tauri::AppHandle, reason: &str) -> tauri::Result<()> {
-    if let Some(checker) = app.get_webview_window("checker") {
-        log::warn!("[checker] destroying checker WebView ({})", reason);
-        if let Err(e) = checker.destroy() {
-            log::warn!("[checker] checker WebView destroy failed ({}): {}", reason, e);
-        }
-    }
-
-    build_webview(app)?;
-    log::info!("[checker] checker WebView recreated ({})", reason);
-    Ok(())
-}
-
-fn recreate_webview_on_main_thread(app: tauri::AppHandle, reason: String) {
-    let app_for_task = app.clone();
-    if let Err(e) = app.run_on_main_thread(move || {
-        if let Err(e) = recreate_webview(&app_for_task, &reason) {
-            log::warn!("[checker] checker WebView recreate failed ({}): {}", reason, e);
-        }
-    }) {
-        log::warn!("[checker] checker WebView recreate scheduling failed: {}", e);
-    }
-}
-
 fn spawn_report_watchdog(app: tauri::AppHandle, generation: u64, page_url: String) {
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(CHECKER_REPORT_TIMEOUT).await;
@@ -321,7 +297,7 @@ fn spawn_report_watchdog(app: tauri::AppHandle, generation: u64, page_url: Strin
             let actions = apply_supervisor_event(&mut s.checker, CheckerEvent::ReportTimeout { generation });
             let tray_snapshot = if actions
                 .iter()
-                .any(|action| matches!(action, CheckerAction::Recreate { .. } | CheckerAction::GiveUp { .. }))
+                .any(|action| matches!(action, CheckerAction::Refresh { .. } | CheckerAction::GiveUp { .. }))
             {
                 Some(s.tray_snapshot(None))
             } else {
@@ -341,7 +317,7 @@ fn spawn_report_watchdog(app: tauri::AppHandle, generation: u64, page_url: Strin
 
         for action in actions {
             match action {
-                CheckerAction::Recreate { attempt, .. } => {
+                CheckerAction::Refresh { attempt, .. } => {
                     let reason = format!("no report after page load generation={generation} attempt={attempt}");
                     log::warn!(
                         "[checker] watchdog: {} url={} ready_generation={} report_generation={}",
@@ -350,7 +326,9 @@ fn spawn_report_watchdog(app: tauri::AppHandle, generation: u64, page_url: Strin
                         ready_generation,
                         report_generation,
                     );
-                    recreate_webview_on_main_thread(app.clone(), reason);
+                    if !refresh_webview(&app, &reason) {
+                        log::error!("[checker] watchdog refresh failed: {}", reason);
+                    }
                 }
                 CheckerAction::GiveUp { .. } => {
                     log::error!(
@@ -359,7 +337,7 @@ fn spawn_report_watchdog(app: tauri::AppHandle, generation: u64, page_url: Strin
                         page_url,
                         ready_generation,
                         report_generation,
-                        CHECKER_NO_REPORT_RECREATE_LIMIT,
+                        CHECKER_NO_REPORT_REFRESH_LIMIT,
                     );
                 }
                 CheckerAction::TriggerCheck { .. }
@@ -444,13 +422,13 @@ mod tests {
     }
 
     #[test]
-    fn checker_report가_없으면_watchdog은_재생성을_요구한다() {
+    fn checker_report가_없으면_watchdog은_갱신을_요구한다() {
         let mut state = default_state();
         let (generation, _) = record_checker_page_load(&mut state, ATTENDANCE_URL);
 
         assert_eq!(
             decide_checker_watchdog_action(&state, generation),
-            CheckerWatchdogAction::Recreate { attempt: 1 }
+            CheckerWatchdogAction::Refresh { attempt: 1 }
         );
     }
 
@@ -467,10 +445,10 @@ mod tests {
     }
 
     #[test]
-    fn checker_재생성_한도에_도달하면_중단한다() {
+    fn checker_갱신_한도에_도달하면_중단한다() {
         let mut state = default_state();
         let (generation, _) = record_checker_page_load(&mut state, ATTENDANCE_URL);
-        state.checker.no_report_recreates = CHECKER_NO_REPORT_RECREATE_LIMIT;
+        state.checker.no_report_refreshes = CHECKER_NO_REPORT_REFRESH_LIMIT;
 
         assert_eq!(
             decide_checker_watchdog_action(&state, generation),
@@ -479,16 +457,16 @@ mod tests {
     }
 
     #[test]
-    fn checker_재생성은_상태에_attempt를_남긴다() {
+    fn checker_갱신은_상태에_attempt를_남긴다() {
         let mut state = default_state();
         let (generation, _) = record_checker_page_load(&mut state, ATTENDANCE_URL);
 
-        record_checker_recreate(&mut state, generation, 1);
+        record_checker_refresh(&mut state, generation, 1);
 
-        assert_eq!(state.checker.no_report_recreates, 1);
+        assert_eq!(state.checker.no_report_refreshes, 1);
         assert_eq!(
             state.checker.status,
-            CheckerRuntimeStatus::Recreating { generation, attempt: 1 }
+            CheckerRuntimeStatus::Refreshing { generation, attempt: 1 }
         );
     }
 
@@ -761,26 +739,26 @@ mod tests {
     }
 
     #[test]
-    fn supervisor_watchdog는_recreate와_give_up을_명시한다() {
+    fn supervisor_watchdog는_refresh와_give_up을_명시한다() {
         let mut runtime = crate::state::CheckerRuntime::default();
         apply_supervisor_event(&mut runtime, CheckerEvent::PageLoaded);
 
         assert_eq!(
             apply_supervisor_event(&mut runtime, CheckerEvent::ReportTimeout { generation: 1 }),
-            vec![CheckerAction::Recreate {
+            vec![CheckerAction::Refresh {
                 generation: 1,
                 attempt: 1,
             }]
         );
         assert_eq!(
             runtime.status,
-            CheckerRuntimeStatus::Recreating {
+            CheckerRuntimeStatus::Refreshing {
                 generation: 1,
                 attempt: 1,
             }
         );
 
-        runtime.no_report_recreates = CHECKER_NO_REPORT_RECREATE_LIMIT;
+        runtime.no_report_refreshes = CHECKER_NO_REPORT_REFRESH_LIMIT;
 
         assert_eq!(
             apply_supervisor_event(&mut runtime, CheckerEvent::ReportTimeout { generation: 1 }),

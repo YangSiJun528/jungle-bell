@@ -72,13 +72,13 @@ pub enum CheckerRuntimeStatus {
     PageLoaded { generation: u64 },
     Ready { generation: u64 },
     Healthy { generation: u64 },
-    Recreating { generation: u64, attempt: u32 },
+    Refreshing { generation: u64, attempt: u32 },
     Offline { generation: u64 },
 }
 
 impl CheckerRuntimeStatus {
     pub fn is_recovering_or_offline(self) -> bool {
-        matches!(self, Self::Recreating { .. } | Self::Offline { .. })
+        matches!(self, Self::Refreshing { .. } | Self::Offline { .. })
     }
 }
 
@@ -87,7 +87,7 @@ pub struct CheckerRuntime {
     pub page_load_generation: u64,
     pub ready_generation: u64,
     pub report_generation: u64,
-    pub no_report_recreates: u32,
+    pub no_report_refreshes: u32,
     /// 마지막으로 로드를 완료한 checker 페이지 URL.
     ///
     /// macOS WKWebView는 네트워크 오류 중 `URL()`이 `nil`일 수 있으므로,
@@ -102,7 +102,7 @@ impl Default for CheckerRuntime {
             page_load_generation: 0,
             ready_generation: 0,
             report_generation: 0,
-            no_report_recreates: 0,
+            no_report_refreshes: 0,
             last_loaded_url: None,
             status: CheckerRuntimeStatus::Loading,
         }

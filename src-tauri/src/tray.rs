@@ -135,7 +135,7 @@ fn icon_kind_for_snapshot(snapshot: &TraySnapshot) -> TrayIconKind {
 
 fn status_kind_for_snapshot(snapshot: &TraySnapshot) -> TrayStatusKind {
     match snapshot.checker_status {
-        CheckerRuntimeStatus::Recreating { .. } => return TrayStatusKind::Recovering,
+        CheckerRuntimeStatus::Refreshing { .. } => return TrayStatusKind::Recovering,
         CheckerRuntimeStatus::Offline { .. } => return TrayStatusKind::Offline,
         CheckerRuntimeStatus::Loading
         | CheckerRuntimeStatus::PageLoaded { .. }
@@ -163,7 +163,7 @@ fn checker_status_text(status: CheckerRuntimeStatus) -> &'static str {
         CheckerRuntimeStatus::Loading
         | CheckerRuntimeStatus::PageLoaded { .. }
         | CheckerRuntimeStatus::Ready { .. } => "상태 확인 중...",
-        CheckerRuntimeStatus::Recreating { .. } => "상태 재확인 중...",
+        CheckerRuntimeStatus::Refreshing { .. } => "상태 재확인 중...",
         CheckerRuntimeStatus::Offline { .. } => "상태 확인 불가",
         CheckerRuntimeStatus::Healthy { .. } => "대기 중",
     }
@@ -486,9 +486,7 @@ pub fn open_image_viewer(app: &tauri::AppHandle, image_url: String) -> Result<()
 
     let mut viewer_url =
         reqwest::Url::parse("http://localhost/image-viewer.html").map_err(|error| error.to_string())?;
-    viewer_url
-        .query_pairs_mut()
-        .append_pair("src", &payload.image_url);
+    viewer_url.query_pairs_mut().append_pair("src", &payload.image_url);
     let app_url = format!(
         "image-viewer.html?{}",
         viewer_url
@@ -801,14 +799,14 @@ mod tests {
     }
 
     #[test]
-    fn checker_재생성중은_회색_재확인으로_표시한다() {
+    fn checker_갱신중은_회색_재확인으로_표시한다() {
         let view = build_tray_view_model(
             &snapshot(
                 DailyPhase::NeedStart,
                 Some(3600),
                 true,
                 false,
-                CheckerRuntimeStatus::Recreating {
+                CheckerRuntimeStatus::Refreshing {
                     generation: 2,
                     attempt: 1,
                 },
@@ -881,7 +879,7 @@ mod tests {
                 Some(3600),
                 true,
                 false,
-                CheckerRuntimeStatus::Recreating {
+                CheckerRuntimeStatus::Refreshing {
                     generation: 2,
                     attempt: 1,
                 },
