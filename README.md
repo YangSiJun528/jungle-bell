@@ -1,5 +1,5 @@
 <p></p>
-<img src="docs/files/logo.png" height="100" alt="Jungle Bell" align="left"/>
+<img src="assets/readme/logo.png" height="100" alt="Jungle Bell" align="left"/>
 
 <div>
 <h3>Jungle Bell</h3>
@@ -13,7 +13,7 @@
     <a href="LICENSE"><img src="https://img.shields.io/github/license/YangSiJun528/jungle-bell" alt="License"></a>
     <a href="https://github.com/YangSiJun528/jungle-bell"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey" alt="Platform"></a>
     <br/>
-    <img src="docs/files/readme-tray-menu.png" alt="Jungle Bell tray menu" width="760">
+    <img src="assets/readme/readme-tray-menu.png" alt="Jungle Bell tray menu" width="760">
 </div>
 
 <hr>
@@ -55,11 +55,11 @@ README의 설치 섹션에서 운영체제에 맞는 자동 설치 명령을 사
 ## 스크린샷
 
 <p align="center">
-  <img src="docs/files/readme-settings-attendance.png" alt="Attendance settings" width="30%">
-  <img src="docs/files/readme-screenshot-gap.svg" alt="" width="1%">
-  <img src="docs/files/readme-settings-notification.png" alt="Notification settings" width="30%">
-  <img src="docs/files/readme-screenshot-gap.svg" alt="" width="1%">
-  <img src="docs/files/readme-settings-app.png" alt="App settings" width="30%">
+  <img src="assets/readme/readme-settings-attendance.png" alt="Attendance settings" width="30%">
+  <img src="assets/readme/readme-screenshot-gap.svg" alt="" width="1%">
+  <img src="assets/readme/readme-settings-notification.png" alt="Notification settings" width="30%">
+  <img src="assets/readme/readme-screenshot-gap.svg" alt="" width="1%">
+  <img src="assets/readme/readme-settings-app.png" alt="App settings" width="30%">
 </p>
 
 ## 출석 상태 보기
@@ -69,25 +69,25 @@ README의 설치 섹션에서 운영체제에 맞는 자동 설치 명령을 사
 <table>
   <tr>
     <td align="center" width="58">
-      <img src="docs/files/readme-status-gray.svg" width="52" alt="회색 아이콘">
+      <img src="assets/readme/readme-status-gray.svg" width="52" alt="회색 아이콘">
     </td>
     <td><strong>상태 확인 중 / 확인 불가</strong><br>로그인 세션이나 네트워크 상태를 다시 확인하고 있어요.</td>
   </tr>
   <tr>
     <td align="center" width="58">
-      <img src="docs/files/readme-status-red.svg" width="52" alt="빨간 아이콘">
+      <img src="assets/readme/readme-status-red.svg" width="52" alt="빨간 아이콘">
     </td>
     <td><strong>출석 시작/종료 가능</strong><br>출석 페이지를 열어 체크인/체크아웃해 주세요.</td>
   </tr>
   <tr>
     <td align="center" width="58">
-      <img src="docs/files/readme-status-white.svg" width="52" alt="흰색 아이콘">
+      <img src="assets/readme/readme-status-white.svg" width="52" alt="흰색 아이콘">
     </td>
     <td><strong>학습 중 / 출석 완료</strong><br>출석이 완료된 상태에요.</td>
   </tr>
   <tr>
     <td align="center" width="58">
-      <img src="docs/files/readme-status-orange.svg" width="52" alt="주황 아이콘">
+      <img src="assets/readme/readme-status-orange.svg" width="52" alt="주황 아이콘">
     </td>
     <td><strong>로그인 필요</strong><br>Jungle Campus에 로그인해 주세요.</td>
   </tr>
