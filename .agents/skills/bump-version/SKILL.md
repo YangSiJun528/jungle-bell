@@ -1,19 +1,21 @@
 ---
 name: bump-version
-description: Bump the app version across all config files for the jungle-bell project. Use when the user asks to bump/update the version, or says "버전 올려줘", "bump version", "/bump-version". Updates src-tauri/Cargo.toml, src-tauri/tauri.conf.json, and regenerates Cargo.lock.
+description: Bump the app version across all config files for the jungle-bell project. Use when the user asks to bump/update the version, or says "버전 올려줘", "bump version", "/bump-version". Updates package.json, package-lock.json, src-tauri/Cargo.toml, src-tauri/tauri.conf.json, and Cargo.lock.
 ---
 
 # Bump version
 
 Bump the version of this project.
 
-If the user provided a specific version as an argument, use that version. Otherwise, read the current version from `src-tauri/Cargo.toml` first, then ask the user what version they want to bump to.
+If the user provided a specific version as an argument, use that version. Otherwise, read the current versions from `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json` first, then ask the user what version they want to bump to.
 
 The following files need to be updated:
 
-1. `src-tauri/Cargo.toml` — `version` field in `[package]`
-2. `src-tauri/tauri.conf.json` — `"version"` field at the top level
-3. `src-tauri/Cargo.lock` — updated via `cargo generate-lockfile`
+1. `package.json` — top-level `"version"` field
+2. `package-lock.json` — updated with `npm version <version> --no-git-tag-version --allow-same-version`
+3. `src-tauri/Cargo.toml` — `version` field in `[package]`
+4. `src-tauri/tauri.conf.json` — top-level `"version"` field
+5. `src-tauri/Cargo.lock` — updated with `cargo generate-lockfile`
 
 ## Interaction compatibility
 
@@ -24,8 +26,9 @@ If a required target version is missing, ask one concise question and wait for t
 
 ## Steps
 
-1. Read both config files to confirm current version
+1. Read `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json` to confirm their current versions
 2. If no target version was specified, ask the user which version to bump to (show the current version for reference)
-3. Update the version string in both config files
-4. Run `cargo generate-lockfile` in `src-tauri/` to update Cargo.lock
-5. Report the old version and new version to the user
+3. Run `npm version <version> --no-git-tag-version --allow-same-version` at the repository root to update `package.json` and `package-lock.json`
+4. Update the version string in `src-tauri/Cargo.toml` and `src-tauri/tauri.conf.json`
+5. Run `cargo generate-lockfile` in `src-tauri/` to update `Cargo.lock`
+6. Confirm all five files contain the target version and report the old and new versions to the user
