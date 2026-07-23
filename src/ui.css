@@ -9,7 +9,7 @@
 
 @theme inline {
     --font-sans: var(--font-family);
-    --font-data: var(--font-data);
+    --font-mono: var(--font-family);
     --color-app-bg: var(--color-bg);
     --color-app-text: var(--color-text);
     --color-app-muted: var(--color-text-muted);

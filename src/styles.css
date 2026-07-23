@@ -344,7 +344,6 @@ a, area, button, input, label, select, summary, textarea, [tabindex] {
     --color-women: var(--jungle-women);
     --color-women-soft: color-mix(in oklch, var(--jungle-women), transparent 90%);
     --font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue", "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
-    --font-data: "SFMono-Regular", "Cascadia Code", "Roboto Mono", monospace;
     --focus-ring: 0 0 0 4px color-mix(in oklch, var(--jungle-leaf), transparent 72%);
 }
 
@@ -364,7 +363,12 @@ body {
 
 button,
 input,
-select {
+select,
+textarea,
+code,
+kbd,
+samp,
+pre {
     font: inherit;
 }
 

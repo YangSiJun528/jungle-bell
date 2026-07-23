@@ -8,13 +8,13 @@
     <link rel="license" href="assets/fonts/Pretendard-LICENSE.txt"/>
     <title>Jungle Bell 설정</title>
 </head>
-<body class="h-screen bg-app-bg p-4 text-app-text" x-data="settings" @focus.window="onFocus()">
+<body class="h-screen bg-app-bg p-4 font-sans text-app-text" x-data="settings" @focus.window="onFocus()">
 <main class="mx-auto flex min-h-full w-full flex-col">
     <header class="mb-4 flex min-h-12 items-center gap-2">
         <img src="assets/logo.png" alt="" class="size-12 flex-none rounded-lg object-cover"/>
         <hgroup class="min-w-0 flex-1">
             <h1 class="m-0 text-[22px] leading-[1.2] font-bold tracking-normal">설정</h1>
-            <p class="mt-1 text-xs leading-[1.4] font-medium text-app-muted">Jungle Bell <span class="ml-1 font-data text-app-faint tabular-nums" x-text="appVersion ? `v${appVersion}` : ''"></span></p>
+            <p class="mt-1 text-xs leading-[1.4] font-medium text-app-muted">Jungle Bell <span class="ml-1 font-mono text-app-faint tabular-nums" x-text="appVersion ? `v${appVersion}` : ''"></span></p>
         </hgroup>
     </header>
 
