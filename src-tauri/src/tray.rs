@@ -278,9 +278,16 @@ fn pad_to_min_width(s: &str, min: usize) -> String {
     }
 }
 
-fn focus_window(window: &WebviewWindow<tauri::Wry>) {
-    let _ = window.show();
-    let _ = window.unminimize();
+fn focus_window_checked(window: &WebviewWindow<tauri::Wry>) -> Result<(), String> {
+    window.show().map_err(|error| format!("창 표시 실패: {error}"))?;
+    if window
+        .is_minimized()
+        .map_err(|error| format!("창 최소화 상태 확인 실패: {error}"))?
+    {
+        window
+            .unminimize()
+            .map_err(|error| format!("창 최소화 해제 실패: {error}"))?;
+    }
 
     #[cfg(target_os = "macos")]
     {
@@ -290,10 +297,25 @@ fn focus_window(window: &WebviewWindow<tauri::Wry>) {
         if let Some(mtm) = MainThreadMarker::new() {
             let ns_app = NSApplication::sharedApplication(mtm);
             ns_app.activate();
+        } else {
+            window
+                .run_on_main_thread(|| {
+                    if let Some(mtm) = MainThreadMarker::new() {
+                        let ns_app = NSApplication::sharedApplication(mtm);
+                        ns_app.activate();
+                    }
+                })
+                .map_err(|error| format!("macOS 앱 활성화 예약 실패: {error}"))?;
         }
     }
 
-    let _ = window.set_focus();
+    window.set_focus().map_err(|error| format!("창 포커스 실패: {error}"))
+}
+
+fn focus_window(window: &WebviewWindow<tauri::Wry>) {
+    if let Err(error) = focus_window_checked(window) {
+        log::warn!("[tray] window focus failed ({}): {}", window.label(), error);
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -481,13 +503,13 @@ pub fn open_image_viewer(app: &tauri::AppHandle, image_url: String) -> Result<()
     show_foreground_app(app);
     if let Some(window) = app.get_webview_window("image-viewer") {
         app.emit_to("image-viewer", "image-viewer-update", &payload)
-            .map_err(|error| error.to_string())?;
-        focus_window(&window);
+            .map_err(|error| format!("이미지 갱신 실패: {error}"))?;
+        focus_window_checked(&window)?;
         return Ok(());
     }
 
-    let mut viewer_url =
-        reqwest::Url::parse("http://localhost/image-viewer.html").map_err(|error| error.to_string())?;
+    let mut viewer_url = reqwest::Url::parse("http://localhost/image-viewer.html")
+        .map_err(|error| format!("이미지 뷰어 주소 생성 실패: {error}"))?;
     viewer_url.query_pairs_mut().append_pair("src", &payload.image_url);
     let app_url = format!(
         "image-viewer.html?{}",
@@ -497,19 +519,21 @@ pub fn open_image_viewer(app: &tauri::AppHandle, image_url: String) -> Result<()
     );
 
     let window = tauri::WebviewWindowBuilder::new(app, "image-viewer", tauri::WebviewUrl::App(app_url.into()))
-        .title("식단 이미지")
+        .title("이미지 뷰어")
         .theme(Some(tauri::Theme::Light))
         .inner_size(IMAGE_VIEWER_WIDTH, IMAGE_VIEWER_HEIGHT)
         .min_inner_size(IMAGE_VIEWER_MIN_WIDTH, IMAGE_VIEWER_MIN_HEIGHT)
+        .center()
+        .prevent_overflow()
         .resizable(true)
         .minimizable(true)
         .maximizable(true)
         .skip_taskbar(foreground_window_skip_taskbar(app))
         .focused(true)
         .build()
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| format!("이미지 창 생성 실패: {error}"))?;
 
-    focus_window(&window);
+    focus_window_checked(&window)?;
     let app_handle = app.clone();
     window.on_window_event(move |event| {
         if let tauri::WindowEvent::Destroyed = event {

@@ -2,6 +2,7 @@ import Alpine from 'alpinejs';
 import anchor from '@alpinejs/anchor';
 import {invoke} from '@tauri-apps/api/core';
 import {listen, type UnlistenFn} from '@tauri-apps/api/event';
+import {message} from '@tauri-apps/plugin-dialog';
 import {openUrl} from '@tauri-apps/plugin-opener';
 import {dismissInfoDisclosures, infoDisclosure, type InfoDisclosure} from './info-disclosure';
 import {
@@ -16,7 +17,7 @@ import {
 } from './laundry-status';
 import {relativeTimeKo} from './live-time';
 import {sortMealPostsByPeriod} from './meal-display';
-import {isSafeMealImageUrl} from './meal-image-url';
+import {isSafeImageAssetUrl} from './image-asset-url';
 
 Alpine.plugin(anchor);
 
@@ -36,6 +37,7 @@ type CampusInteraction =
     | {action: 'meal_history_opened'}
     | {action: 'meal_calendar_navigated'; value: 'previous' | 'next'}
     | {action: 'meal_post_opened'}
+    | {action: 'meal_image_opened'}
     | {action: 'laundry_refresh_requested'}
     | {action: 'meals_refresh_requested'};
 
@@ -934,7 +936,7 @@ function campus(): Record<string, unknown> {
             if (!value) return null;
             try {
                 const parsed = new URL(value);
-                return isSafeMealImageUrl(parsed.toString()) ? parsed.toString() : null;
+                return isSafeImageAssetUrl(parsed.toString()) ? parsed.toString() : null;
             } catch { return null; }
         },
 
@@ -965,9 +967,18 @@ function campus(): Record<string, unknown> {
         async openImage(this: any, post: MealPost) {
             const url = this.imageUrl(post);
             if (!url) return;
-            await invoke('open_image_viewer', {
-                imageUrl: url,
-            }).catch((error) => console.error('[campus] image viewer failed', error));
+            try {
+                await invoke('open_image_viewer', {
+                    imageUrl: url,
+                });
+                reportCampusInteraction({action: 'meal_image_opened'});
+            } catch (error) {
+                console.error('[campus] image viewer failed', error);
+                await message(`이미지 뷰어를 열지 못했습니다.\n\n${String(error)}`, {
+                    title: '이미지 뷰어',
+                    kind: 'error',
+                }).catch((dialogError) => console.error('[campus] image viewer error dialog failed', dialogError));
+            }
         },
     };
 }

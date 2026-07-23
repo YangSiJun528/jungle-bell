@@ -1,7 +1,6 @@
-import Panzoom from '@panzoom/panzoom/dist/panzoom.es.js';
 import {listen} from '@tauri-apps/api/event';
-import {PANZOOM_OPTIONS} from './image-viewer-options';
-import {isSafeMealImageUrl} from './meal-image-url';
+import {isSafeImageAssetUrl} from './image-asset-url';
+import {calculateImageFitScale} from './image-viewer-fit';
 
 interface ImageViewerPayload {
     imageUrl: string;
@@ -15,29 +14,86 @@ function requiredElement<T extends Element>(selector: string): T {
 }
 
 const viewerElement = requiredElement<HTMLElement>('#image-viewer');
-const imageElement = requiredElement<HTMLImageElement>('#meal-image');
+const fitLayer = requiredElement<HTMLElement>('#image-fit-layer');
+const imageElement = requiredElement<HTMLImageElement>('#viewer-image');
 
-const panzoom = Panzoom(imageElement, PANZOOM_OPTIONS);
-viewerElement.addEventListener('wheel', panzoom.zoomWithWheel, {passive: false});
+let naturalWidth = 0;
+let naturalHeight = 0;
+let fittedViewportWidth = 0;
+let fittedViewportHeight = 0;
+let imageLoadSequence = 0;
+
+function updateImageFit(
+    viewportWidth = viewerElement.clientWidth,
+    viewportHeight = viewerElement.clientHeight,
+): void {
+    if (naturalWidth <= 0 || naturalHeight <= 0) return;
+    if (viewportWidth === fittedViewportWidth && viewportHeight === fittedViewportHeight) return;
+
+    fittedViewportWidth = viewportWidth;
+    fittedViewportHeight = viewportHeight;
+    const fitScale = calculateImageFitScale(viewportWidth, viewportHeight, naturalWidth, naturalHeight);
+    fitLayer.style.transform = `translate3d(-50%, -50%, 0) scale(${fitScale})`;
+}
+
+const resizeObserver = typeof ResizeObserver === 'undefined'
+    ? null
+    : new ResizeObserver(([entry]) => {
+        if (!entry) return;
+        const size = entry.contentBoxSize[0];
+        updateImageFit(size?.inlineSize ?? entry.contentRect.width, size?.blockSize ?? entry.contentRect.height);
+    });
+const updateImageFitFromViewport = () => updateImageFit();
+if (resizeObserver) {
+    resizeObserver.observe(viewerElement);
+} else {
+    window.addEventListener('resize', updateImageFitFromViewport);
+}
+
+async function loadImage(imageUrl: string): Promise<void> {
+    const loadSequence = ++imageLoadSequence;
+
+    fitLayer.classList.add('invisible');
+    imageElement.src = imageUrl;
+
+    try {
+        await imageElement.decode();
+    } catch {
+        if (!imageElement.complete || imageElement.naturalWidth <= 0) return;
+    }
+
+    if (loadSequence !== imageLoadSequence) return;
+
+    naturalWidth = imageElement.naturalWidth;
+    naturalHeight = imageElement.naturalHeight;
+    if (naturalWidth <= 0 || naturalHeight <= 0) return;
+
+    fitLayer.style.width = `${naturalWidth}px`;
+    fitLayer.style.height = `${naturalHeight}px`;
+    fittedViewportWidth = 0;
+    fittedViewportHeight = 0;
+    updateImageFit();
+    fitLayer.classList.remove('invisible');
+}
 
 function queryPayload(): ImageViewerPayload | null {
     const params = new URLSearchParams(window.location.search);
     const imageUrl = params.get('src') ?? '';
-    if (!isSafeMealImageUrl(imageUrl)) return null;
+    if (!isSafeImageAssetUrl(imageUrl)) return null;
     return {imageUrl};
 }
 
 function storedPayload(): ImageViewerPayload | null {
     try {
         const imageUrl = sessionStorage.getItem(SESSION_KEY) ?? '';
-        return isSafeMealImageUrl(imageUrl) ? {imageUrl} : null;
+        return isSafeImageAssetUrl(imageUrl) ? {imageUrl} : null;
     } catch {
         return null;
     }
 }
 
 function applyPayload(payload: ImageViewerPayload): void {
-    if (!isSafeMealImageUrl(payload.imageUrl)) return;
+    if (!isSafeImageAssetUrl(payload.imageUrl)) return;
     try {
         sessionStorage.setItem(SESSION_KEY, payload.imageUrl);
         const params = new URLSearchParams({src: payload.imageUrl});
@@ -45,14 +101,14 @@ function applyPayload(payload: ImageViewerPayload): void {
     } catch {
         // Storage and history are optional; the viewer can still open the image.
     }
-    panzoom.reset({animate: false});
-    imageElement.src = payload.imageUrl;
+    void loadImage(payload.imageUrl);
 }
 
 void listen<ImageViewerPayload>('image-viewer-update', ({payload}) => applyPayload(payload));
 window.addEventListener('beforeunload', () => {
-    viewerElement.removeEventListener('wheel', panzoom.zoomWithWheel);
-    panzoom.destroy();
+    imageLoadSequence += 1;
+    resizeObserver?.disconnect();
+    window.removeEventListener('resize', updateImageFitFromViewport);
 });
 
 const initialPayload = queryPayload() ?? storedPayload();

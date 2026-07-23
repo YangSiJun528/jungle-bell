@@ -1,16 +1,26 @@
 <!doctype html>
-<html lang="ko" class="overflow-hidden bg-app-bg">
+<html lang="ko" class="h-full overflow-hidden bg-app-bg">
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <meta name="color-scheme" content="light"/>
     <link rel="stylesheet" href="ui.css"/>
     <link rel="license" href="assets/fonts/Pretendard-LICENSE.txt"/>
-    <title>식단 이미지</title>
+    <title>이미지 뷰어</title>
 </head>
-<body class="h-screen overflow-hidden bg-app-bg">
-<main id="image-viewer" class="h-full w-full">
-    <img id="meal-image" class="block h-full w-full touch-none select-none object-contain" alt="식단 이미지" draggable="false"/>
+<body class="h-full overflow-hidden bg-app-bg">
+<main id="image-viewer" class="fixed inset-0 overflow-hidden">
+    <div
+        id="image-fit-layer"
+        class="invisible absolute left-1/2 top-1/2 origin-center will-change-transform"
+    >
+        <img
+            id="viewer-image"
+            class="block h-full w-full max-h-none max-w-none select-none"
+            alt="이미지"
+            draggable="false"
+        />
+    </div>
 </main>
 <script type="module" src="/image-viewer.ts"></script>
 </body>
