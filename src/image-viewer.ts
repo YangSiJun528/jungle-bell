@@ -1,5 +1,6 @@
 import {listen} from '@tauri-apps/api/event';
 import {isSafeImageAssetUrl} from './image-asset-url';
+import {IMAGE_LOAD_TIMEOUT_MS, loadImageWithTimeout} from './image-loader';
 import {calculateImageFitScale} from './image-viewer-fit';
 
 interface ImageViewerPayload {
@@ -16,12 +17,25 @@ function requiredElement<T extends Element>(selector: string): T {
 const viewerElement = requiredElement<HTMLElement>('#image-viewer');
 const fitLayer = requiredElement<HTMLElement>('#image-fit-layer');
 const imageElement = requiredElement<HTMLImageElement>('#viewer-image');
+const loadingElement = requiredElement<HTMLElement>('#image-viewer-loading');
+const errorElement = requiredElement<HTMLElement>('#image-viewer-error');
+const retryButton = requiredElement<HTMLButtonElement>('#image-viewer-retry');
 
 let naturalWidth = 0;
 let naturalHeight = 0;
 let fittedViewportWidth = 0;
 let fittedViewportHeight = 0;
 let imageLoadSequence = 0;
+let currentImageUrl: string | null = null;
+
+function setViewerState(state: 'loading' | 'loaded' | 'error'): void {
+    fitLayer.classList.toggle('invisible', state !== 'loaded');
+    loadingElement.classList.toggle('hidden', state !== 'loading');
+    loadingElement.classList.toggle('flex', state === 'loading');
+    errorElement.classList.toggle('hidden', state !== 'error');
+    errorElement.classList.toggle('flex', state === 'error');
+    viewerElement.setAttribute('aria-busy', String(state === 'loading'));
+}
 
 function updateImageFit(
     viewportWidth = viewerElement.clientWidth,
@@ -52,28 +66,36 @@ if (resizeObserver) {
 
 async function loadImage(imageUrl: string): Promise<void> {
     const loadSequence = ++imageLoadSequence;
+    currentImageUrl = imageUrl;
 
-    fitLayer.classList.add('invisible');
-    imageElement.src = imageUrl;
+    setViewerState('loading');
 
     try {
-        await imageElement.decode();
+        await loadImageWithTimeout(imageElement, imageUrl, IMAGE_LOAD_TIMEOUT_MS);
     } catch {
-        if (!imageElement.complete || imageElement.naturalWidth <= 0) return;
+        if (loadSequence !== imageLoadSequence) return;
+        naturalWidth = 0;
+        naturalHeight = 0;
+        imageElement.removeAttribute('src');
+        setViewerState('error');
+        return;
     }
 
     if (loadSequence !== imageLoadSequence) return;
 
     naturalWidth = imageElement.naturalWidth;
     naturalHeight = imageElement.naturalHeight;
-    if (naturalWidth <= 0 || naturalHeight <= 0) return;
+    if (naturalWidth <= 0 || naturalHeight <= 0) {
+        setViewerState('error');
+        return;
+    }
 
     fitLayer.style.width = `${naturalWidth}px`;
     fitLayer.style.height = `${naturalHeight}px`;
     fittedViewportWidth = 0;
     fittedViewportHeight = 0;
     updateImageFit();
-    fitLayer.classList.remove('invisible');
+    setViewerState('loaded');
 }
 
 function queryPayload(): ImageViewerPayload | null {
@@ -104,6 +126,9 @@ function applyPayload(payload: ImageViewerPayload): void {
     void loadImage(payload.imageUrl);
 }
 
+retryButton.addEventListener('click', () => {
+    if (currentImageUrl) void loadImage(currentImageUrl);
+});
 void listen<ImageViewerPayload>('image-viewer-update', ({payload}) => applyPayload(payload));
 window.addEventListener('beforeunload', () => {
     imageLoadSequence += 1;
@@ -112,4 +137,8 @@ window.addEventListener('beforeunload', () => {
 });
 
 const initialPayload = queryPayload() ?? storedPayload();
-if (initialPayload) applyPayload(initialPayload);
+if (initialPayload) {
+    applyPayload(initialPayload);
+} else {
+    setViewerState('error');
+}
