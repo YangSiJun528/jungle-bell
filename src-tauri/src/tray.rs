@@ -682,7 +682,7 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     let open_page = MenuItemBuilder::with_id("open_page", "출석 페이지 열기").build(app)?;
 
-    let laundry = MenuItemBuilder::with_id("laundry", "세탁기 현황").build(app)?;
+    let laundry = MenuItemBuilder::with_id("laundry", "워시타워 현황").build(app)?;
 
     let meals = MenuItemBuilder::with_id("meals", "오늘의 식단").build(app)?;
 
@@ -969,6 +969,11 @@ mod tests {
     #[test]
     fn 툴팁은_상태문구를_감싼다() {
         assert_eq!(build_tooltip("오늘 출석 완료"), "Jungle Bell - 오늘 출석 완료");
+    }
+
+    #[test]
+    fn 트레이_목록은_워시타워_현황으로_표시한다() {
+        assert!(include_str!("tray.rs").contains("MenuItemBuilder::with_id(\"laundry\", \"워시타워 현황\")"));
     }
 }
 

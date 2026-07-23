@@ -11,7 +11,7 @@
 //!   - `usage_analytics_toggled`: 사용 통계 토글을 변경할 때
 //!   - `settings_opened`: 트레이에서 설정 창 열 때
 //!   - `attendance_page_opened`: 트레이에서 출석 페이지 열 때
-//!   - `laundry_status_opened`: 트레이에서 세탁기 현황을 열 때
+//!   - `laundry_status_opened`: 트레이에서 워시타워 현황을 열 때
 //!   - `attendance_completed`: 출석 상태가 false→true로 전이할 때 (period=morning|evening)
 //!   - `meal_plan_opened`: 트레이에서 식단표 보러가기 클릭 시
 
