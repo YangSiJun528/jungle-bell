@@ -134,7 +134,7 @@ logged-in snapshot을 한 번 만든 뒤에는 다음 순서로 반복한다.
 3. 앱 실행.
 4. 기대 결과:
    - checker가 로그인 필요를 보고한다.
-   - report가 없으면 watchdog 복구 또는 오프라인 상태가 기록된다.
+   - report가 없으면 watchdog refresh 또는 오프라인 상태가 기록된다.
 5. 앱 종료.
 6. snapshot 복구.
 7. 앱 실행.
@@ -199,7 +199,7 @@ no-report 장애를 확인할 때 볼 신호:
 checker page loaded
 trigger_check emitted
 watchdog
-checker WebView recreated
+checker webview reloaded 또는 checker webview navigated
 ```
 
 원본 로그를 기록할 때는 쿠키, WebKit storage, API raw response body, 사용자 ID,

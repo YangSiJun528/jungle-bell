@@ -1,6 +1,6 @@
 ---
 name: checker-session-repro
-description: jungle-bell hidden checker WebView를 사용자 수동 로그인/로그아웃 없이 세션 파일 백업/제거/복구로 로그인 없음 상태와 세션 복구 상태를 반복 재현하고 검증한다. checker.js ready/report, 세션 백업/복구, stale tray icon, watchdog recreate/give-up, checker 세션 재현 리포트 작성이 필요할 때 사용한다.
+description: jungle-bell hidden checker WebView를 사용자 수동 로그인/로그아웃 없이 세션 파일 백업/제거/복구로 로그인 없음 상태와 세션 복구 상태를 반복 재현하고 검증한다. checker.js ready/report, 세션 백업/복구, stale tray icon, watchdog refresh/give-up, checker 세션 재현 리포트 작성이 필요할 때 사용한다.
 ---
 
 # Checker Session Repro
@@ -8,6 +8,9 @@ description: jungle-bell hidden checker WebView를 사용자 수동 로그인/�
 이 스킬은 jungle-bell의 hidden checker WebView를 세션 상태별로 재현/검증할 때 사용한다. 목표는 사용자가 매번 로그인/로그아웃하지 않아도 되도록 WebKit 세션 파일을 백업, 제거, 복구해서 로그인 없음 상태를 반복 재현하는 것이다.
 
 긴 재현 플로우는 `references/session-repro-guide.md`에 번들되어 있다. 세션 백업/복구나 실제 재현을 수행할 때는 이 reference를 먼저 읽고 따른다.
+
+- 이전 검증 결과와 환경 차이가 필요하면 `references/session-status-report.md`를 읽는다.
+- 공개 앱의 ready/timeout 복구 패턴이 필요하면 `references/webview-patterns.md`를 읽는다.
 
 ## 기본 원칙
 
@@ -26,7 +29,7 @@ description: jungle-bell hidden checker WebView를 사용자 수동 로그인/�
 
 1. 상태 확인:
    - `git status --short`로 기존 변경사항을 기록한다.
-   - `references/session-repro-guide.md`, 관련 report 문서를 읽는다.
+   - `references/session-repro-guide.md`를 읽고, 필요할 때만 관련 reference를 추가로 읽는다.
    - 현재 코드에서 checker/tray 관련 파일을 찾는다: `src-tauri/src/checker.rs`, `commands.rs`, `lib.rs`, `tray.rs`, `state.rs`, `src/checker.js`.
 
 2. 재현 root 생성:
@@ -57,7 +60,7 @@ description: jungle-bell hidden checker WebView를 사용자 수동 로그인/�
      - `checker.js ready`
      - `report: needs_login=true|false`
      - `trigger_check emitted`
-     - watchdog `Recreate`/`GiveUp`
+     - watchdog `Refresh`/`GiveUp`
      - tray 상태가 loading/offline/login/action/normal 중 어디로 전이됐는지
 
 6. 기대 결과 판정:
@@ -75,11 +78,11 @@ description: jungle-bell hidden checker WebView를 사용자 수동 로그인/�
      - report 후 실제 출석 phase 기반 tray 상태
    - no-report 장애:
      - page-load와 `trigger_check`는 있지만 `checker.js loaded` 또는 report가 없다.
-     - timeout 후 watchdog recreate가 발생해야 한다.
-     - recreate 한도 초과 시 gray/offline 상태가 남아야 한다.
+     - timeout 후 watchdog refresh가 발생해야 한다.
+     - refresh 한도 초과 시 gray/offline 상태가 남아야 한다.
 
 7. 리포트 작성:
-   - 사용자가 별도 파일을 지정하지 않으면 `docs/report_checker_session_status.md`에 후속 검증 섹션을 추가한다.
+   - 사용자가 별도 파일을 지정하지 않으면 `references/session-status-report.md`에 후속 검증 섹션을 추가한다.
    - 포함할 항목:
      - 날짜/환경
      - 테스트 케이스

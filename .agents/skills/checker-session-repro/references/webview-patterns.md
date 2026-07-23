@@ -1,4 +1,4 @@
-# hidden checker WebView 공개 앱 패턴 분석 리포트
+# hidden checker WebView 공개 앱 패턴 참고
 
 문서 유형: explanation.
 

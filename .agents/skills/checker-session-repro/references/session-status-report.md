@@ -1,4 +1,4 @@
-# checker 세션 상태 재현 리포트
+# checker 세션 상태 누적 재현 리포트
 
 문서 유형: explanation.
 
