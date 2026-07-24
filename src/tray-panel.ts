@@ -5,6 +5,7 @@ import {
     newsExcerpt,
     newsItemLabel,
     newsCount,
+    sortNewsItems,
     statusPresentation,
     type NewsFeed,
     type NewsItem,
@@ -93,7 +94,7 @@ function trayPanel(): TrayPanelComponent {
         },
 
         get newsItems() {
-            return this.newsFeed.items;
+            return sortNewsItems(this.newsFeed.items);
         },
 
         async init() {
