@@ -4,6 +4,7 @@ import {test} from 'vitest';
 import {
     newsItemLabel,
     newsCount,
+    sortNewsItems,
     statusPresentation,
     type NewsItem,
     type TrayPanelState,
@@ -83,6 +84,50 @@ test('Discussion 소식과 앱 업데이트를 각각 읽지 않은 항목으로
     );
     assert.equal(newsItemLabel(items[0]!), '공지');
     assert.equal(newsItemLabel(items[1]!), '설문');
+});
+
+test('상단 고정 공지를 먼저, 각 그룹에서는 작성일 최신순으로 정렬한다', () => {
+    const items = [
+        {
+            id: 'discussion-12',
+            type: 'announcement' as const,
+            title: '일반 최신 공지',
+            body: '내용',
+            url: 'https://github.com/YangSiJun528/jungle-bell/discussions/12',
+            category: '공지',
+            pinned: false,
+            createdAt: '2026-07-24T03:00:00Z',
+            updatedAt: '2026-07-24T03:00:00Z',
+        },
+        {
+            id: 'discussion-10',
+            type: 'announcement' as const,
+            title: '고정 이전 공지',
+            body: '내용',
+            url: 'https://github.com/YangSiJun528/jungle-bell/discussions/10',
+            category: '공지',
+            pinned: true,
+            createdAt: '2026-07-24T01:00:00Z',
+            updatedAt: '2026-07-24T01:00:00Z',
+        },
+        {
+            id: 'discussion-11',
+            type: 'announcement' as const,
+            title: '고정 최신 공지',
+            body: '내용',
+            url: 'https://github.com/YangSiJun528/jungle-bell/discussions/11',
+            category: '공지',
+            pinned: true,
+            createdAt: '2026-07-24T02:00:00Z',
+            updatedAt: '2026-07-24T02:00:00Z',
+        },
+    ];
+
+    assert.deepEqual(
+        sortNewsItems(items).map((item) => item.id),
+        ['discussion-11', 'discussion-10', 'discussion-12'],
+    );
+    assert.equal(newsItemLabel(items[1]!), '상단 고정');
 });
 
 test('트레이 패널은 홈과 소식 화면 및 기존 주요 액션을 제공한다', () => {

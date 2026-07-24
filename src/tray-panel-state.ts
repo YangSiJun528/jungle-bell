@@ -24,6 +24,7 @@ export interface NewsItem {
     body: string;
     url: string;
     category: string;
+    pinned?: boolean;
     createdAt: string;
     updatedAt: string;
 }
@@ -100,6 +101,8 @@ export function newsCount(
 }
 
 export function newsItemLabel(item: NewsItem): string {
+    if (item.pinned) return '상단 고정';
+
     switch (item.type) {
         case 'announcement':
             return '공지';
@@ -110,6 +113,18 @@ export function newsItemLabel(item: NewsItem): string {
         default:
             return '이야기';
     }
+}
+
+export function sortNewsItems(items: NewsItem[]): NewsItem[] {
+    return [...items].sort((left, right) => {
+        const pinnedOrder = Number(Boolean(right.pinned)) - Number(Boolean(left.pinned));
+        if (pinnedOrder !== 0) return pinnedOrder;
+
+        const createdOrder = right.createdAt.localeCompare(left.createdAt);
+        if (createdOrder !== 0) return createdOrder;
+
+        return right.id.localeCompare(left.id);
+    });
 }
 
 export function newsExcerpt(body: string): string {
