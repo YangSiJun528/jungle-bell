@@ -1,6 +1,6 @@
 ---
 name: capture-jungle-bell-ui
-description: Capture Jungle Bell Tauri UI as directly viewable image files using current server data. Use when asked for Jungle Bell screenshots, actual API data screens, attendance/news/laundry/meals state images, or visual QA that every screen is fully visible without clipping.
+description: Capture and visually QA the entire Jungle Bell Tauri UI as directly viewable image files using current server data. Use only for final release verification or after major feature development when a comprehensive review of the whole UI is required. Do not use for routine feature development or ordinary UI changes.
 ---
 
 # Capture Jungle Bell UI
