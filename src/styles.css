@@ -310,6 +310,7 @@ a, area, button, input, label, select, summary, textarea, [tabindex] {
     --jungle-leaf: oklch(50% 0.16 148);
     --jungle-bell: oklch(50% 0.2 28);
     --jungle-login: oklch(50% 0.14 70);
+    --jungle-info: oklch(52% 0.15 245);
     --jungle-men: oklch(50% 0.13 245);
     --jungle-common: oklch(50% 0.11 300);
     --jungle-women: oklch(50% 0.12 355);
@@ -328,6 +329,9 @@ a, area, button, input, label, select, summary, textarea, [tabindex] {
     --color-warning-soft: color-mix(in oklch, var(--jungle-login), transparent 88%);
     --color-danger: var(--jungle-bell);
     --color-danger-soft: color-mix(in oklch, var(--jungle-bell), transparent 90%);
+    --color-info: var(--jungle-info);
+    --color-info-hover: color-mix(in oklch, var(--jungle-info), var(--jungle-ink) 12%);
+    --color-info-soft: color-mix(in oklch, var(--jungle-info), transparent 90%);
     --color-border: oklch(0% 0 0 / 10%);
     --color-border-strong: oklch(0% 0 0 / 18%);
     --color-divider-subtle: oklch(0% 0 0 / 6%);

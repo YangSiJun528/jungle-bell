@@ -40,6 +40,11 @@ const APP_COMMANDS: &[&str] = &[
     "open_onboarding",
     "complete_onboarding",
     "open_attendance_window",
+    "get_tray_panel_state",
+    "run_tray_panel_action",
+    "hide_tray_panel",
+    "get_news_feed",
+    "open_news_item",
     "get_login_status",
     "refresh_login_status",
 ];

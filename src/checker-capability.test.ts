@@ -1,13 +1,18 @@
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {readdirSync, readFileSync} from 'node:fs';
 import {test} from 'vitest';
 
 const checkerSource = readFileSync(new URL('./injected/checker.ts', import.meta.url), 'utf8');
 const buildSource = readFileSync(new URL('../src-tauri/build.rs', import.meta.url), 'utf8');
 const appSource = readFileSync(new URL('../src-tauri/src/lib.rs', import.meta.url), 'utf8');
-const defaultCapability = JSON.parse(
-    readFileSync(new URL('../src-tauri/capabilities/default.json', import.meta.url), 'utf8'),
-) as {permissions: string[]};
+const capabilityDirectory = new URL('../src-tauri/capabilities/', import.meta.url);
+const localCapabilities = readdirSync(capabilityDirectory)
+    .filter((path) => path.endsWith('.json'))
+    .map((path) => JSON.parse(readFileSync(new URL(path, capabilityDirectory), 'utf8')) as {
+        local?: boolean;
+        permissions: string[];
+    })
+    .filter((capability) => capability.local !== false);
 const checkerCapability = JSON.parse(
     readFileSync(new URL('../src-tauri/capabilities/checker.json', import.meta.url), 'utf8'),
 ) as {
@@ -52,11 +57,15 @@ function checkerInvokeCommands(): string[] {
     );
 }
 
-test('모든 앱 명령은 manifest와 로컬 capability에 명시된다', () => {
+test('모든 앱 명령은 manifest와 하나 이상의 로컬 capability에 명시된다', () => {
     const registered = sorted(new Set(invokeHandlerCommands()));
     const manifested = sorted(new Set(appManifestCommands()));
     const locallyAllowed = sorted(
-        defaultCapability.permissions.filter((permission) => permission.startsWith('allow-')),
+        new Set(
+            localCapabilities.flatMap((capability) =>
+                capability.permissions.filter((permission) => permission.startsWith('allow-')),
+            ),
+        ),
     );
 
     assert.deepEqual(manifested, registered);
