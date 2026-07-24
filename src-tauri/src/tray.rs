@@ -22,8 +22,7 @@ use tauri::{
 };
 
 const ATTENDANCE_URL: &str = "https://jungle-lms.krafton.com/check-in";
-const DISCUSSIONS_URL: &str =
-    "https://github.com/YangSiJun528/jungle-bell/discussions/new?category=%EA%B6%81%EA%B8%88%ED%95%B4%EC%9A%94";
+const FEEDBACK_URL: &str = "https://github.com/YangSiJun528/jungle-bell/issues/new/choose";
 
 const UTILITY_WINDOW_WIDTH: f64 = 560.0;
 const CONTENT_WINDOW_WIDTH: f64 = 720.0;
@@ -123,7 +122,7 @@ pub enum TrayPanelAction {
     OpenAttendance,
     OpenLaundry,
     OpenMeals,
-    OpenDiscussions,
+    OpenFeedback,
     OpenSettings,
     CheckUpdate,
     Quit,
@@ -1001,9 +1000,9 @@ pub fn run_tray_panel_action(app: &tauri::AppHandle, action: TrayPanelAction) ->
         TrayPanelAction::OpenAttendance => run_window_task(app, |app| open_attendance_window(&app)),
         TrayPanelAction::OpenLaundry => run_window_task(app, |app| open_campus_window(&app, CampusTab::Laundry)),
         TrayPanelAction::OpenMeals => run_window_task(app, |app| open_campus_window(&app, CampusTab::Meals)),
-        TrayPanelAction::OpenDiscussions => {
+        TrayPanelAction::OpenFeedback => {
             analytics::track(Event::FeedbackOpened);
-            tauri_plugin_opener::open_url(DISCUSSIONS_URL, None::<&str>).map_err(|error| error.to_string())?;
+            tauri_plugin_opener::open_url(FEEDBACK_URL, None::<&str>).map_err(|error| error.to_string())?;
         }
         TrayPanelAction::OpenSettings => run_window_task(app, |app| open_settings_window(&app)),
         TrayPanelAction::CheckUpdate => {
@@ -1355,6 +1354,10 @@ mod tests {
     fn 트레이_패널_액션은_허용된_값만_역직렬화한다() {
         let action: TrayPanelAction = serde_json::from_str("\"open_laundry\"").unwrap();
         assert_eq!(action, TrayPanelAction::OpenLaundry);
+        let feedback: TrayPanelAction = serde_json::from_str("\"open_feedback\"").unwrap();
+        assert_eq!(feedback, TrayPanelAction::OpenFeedback);
+        let quit: TrayPanelAction = serde_json::from_str("\"quit\"").unwrap();
+        assert_eq!(quit, TrayPanelAction::Quit);
         assert!(serde_json::from_str::<TrayPanelAction>("\"open_shell\"").is_err());
     }
 

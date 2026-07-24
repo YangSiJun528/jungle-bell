@@ -11,7 +11,7 @@
 <main
     class="flex h-full flex-col overflow-hidden rounded-[20px] border border-app-border bg-app-bg shadow-none"
     x-data="trayPanel"
-    @keydown.window.escape="hide()"
+    @keydown.window.escape="menuOpen ? closeMenu() : hide()"
 >
     <header class="flex h-14 flex-none items-center justify-between px-4">
         <div class="flex min-w-0 items-center gap-2.5">
@@ -21,36 +21,71 @@
                 <small class="mt-0.5 block text-[11px] leading-none text-app-faint" x-text="state.currentVersion ? `v${state.currentVersion}` : '불러오는 중'"></small>
             </span>
         </div>
-        <button
-            type="button"
-            class="flex size-8 items-center justify-center rounded-full border-0 bg-transparent text-app-faint transition-colors hover:bg-app-surface-subtle hover:text-app-text focus-visible:ring-4 focus-visible:ring-app-accent-soft"
-            aria-label="패널 닫기"
-            @click="hide()"
-        >
-            <svg class="size-4" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        </button>
+        <div class="flex items-center gap-1">
+            <div class="relative" @click.outside="closeMenu()">
+                <button
+                    type="button"
+                    class="flex size-8 items-center justify-center rounded-full border-0 bg-transparent text-app-faint transition-colors hover:bg-app-surface-subtle hover:text-app-text focus-visible:ring-4 focus-visible:ring-app-accent-soft disabled:opacity-50"
+                    aria-label="앱 메뉴"
+                    aria-haspopup="menu"
+                    :aria-expanded="menuOpen"
+                    aria-controls="app-menu"
+                    :disabled="busyAction !== null"
+                    @click="toggleMenu()"
+                >
+                    <svg class="size-4" data-icon="nut" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="m8 3.5-5 8.5 5 8.5h8l5-8.5-5-8.5H8Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                        <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/>
+                    </svg>
+                </button>
+                <!-- 숨겨진 WebView가 닫힘 전환의 중간 프레임을 보존하지 않도록 열기 전환만 사용한다. -->
+                <div
+                    id="app-menu"
+                    data-ui="app-menu"
+                    class="absolute top-full right-0 z-50 mt-1 w-52 overflow-hidden rounded-xl border border-app-border-strong bg-app-overlay p-1 shadow-lg"
+                    role="menu"
+                    x-show="menuOpen"
+                    x-cloak
+                    x-transition:enter="transition ease-out duration-150"
+                    x-transition:enter-start="opacity-0 -translate-y-1 scale-95"
+                    x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+                >
+                    <button type="button" class="flex min-h-9 w-full items-center justify-between gap-2 rounded-lg border-0 bg-transparent px-3 text-left text-xs font-medium text-app-text transition-colors hover:bg-app-surface-subtle focus-visible:bg-app-surface-subtle focus-visible:ring-0 disabled:opacity-50" role="menuitem" :disabled="busyAction !== null" @click="perform('check_update')">
+                        <span>업데이트 확인</span>
+                        <span class="flex-none text-[10px] font-bold text-app-accent" x-show="state.pendingUpdate" x-cloak>(업데이트 필요)</span>
+                    </button>
+                    <button type="button" class="flex min-h-9 w-full items-center rounded-lg border-0 bg-transparent px-3 text-left text-xs font-medium text-app-text transition-colors hover:bg-app-surface-subtle focus-visible:bg-app-surface-subtle focus-visible:ring-0 disabled:opacity-50" role="menuitem" :disabled="busyAction !== null" @click="perform('open_settings')">설정</button>
+                    <button type="button" class="flex min-h-9 w-full items-center justify-between gap-2 rounded-lg border-0 bg-transparent px-3 text-left text-xs font-medium text-app-text transition-colors hover:bg-app-surface-subtle focus-visible:bg-app-surface-subtle focus-visible:ring-0 disabled:opacity-50" role="menuitem" :disabled="busyAction !== null" @click="perform('open_feedback')">
+                        <span>피드백</span>
+                        <svg class="size-3.5 text-app-faint" data-icon="external-link" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 16 16 8m-5 0h5v5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                    <div class="my-1 border-t border-app-divider" role="separator"></div>
+                    <button type="button" class="flex min-h-9 w-full items-center rounded-lg border-0 bg-transparent px-3 text-left text-xs font-medium text-app-text transition-colors hover:bg-app-danger-soft hover:text-app-danger focus-visible:bg-app-danger-soft focus-visible:text-app-danger focus-visible:ring-0 disabled:opacity-50" role="menuitem" :disabled="busyAction !== null" @click="perform('quit')">종료</button>
+                </div>
+            </div>
+        </div>
     </header>
 
-    <nav class="mx-4 mb-3 grid h-10 flex-none grid-cols-2 rounded-xl bg-app-control p-1" role="tablist" aria-label="트레이 패널">
+    <nav class="mb-3 flex h-10 flex-none items-stretch gap-5 border-b border-app-divider px-4" role="tablist" aria-label="트레이 패널">
         <button
             type="button"
-            class="rounded-lg border-0 text-xs font-semibold transition-colors duration-200 focus-visible:ring-4 focus-visible:ring-app-accent-soft"
-            :class="activeTab === 'home' ? 'bg-app-surface text-app-accent shadow-sm' : 'bg-transparent text-app-muted hover:text-app-text'"
+            class="relative flex h-full items-center border-0 bg-transparent px-1 text-xs font-semibold transition-colors duration-200 after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:rounded-full after:content-[''] focus-visible:ring-4 focus-visible:ring-app-accent-soft"
+            :class="activeTab === 'home' ? 'text-app-accent after:bg-app-accent' : 'text-app-muted after:bg-transparent hover:text-app-text'"
             role="tab"
             :aria-selected="activeTab === 'home'"
             @click="selectTab('home')"
         >홈</button>
         <button
             type="button"
-            class="relative rounded-lg border-0 text-xs font-semibold transition-colors duration-200 focus-visible:ring-4 focus-visible:ring-app-accent-soft"
-            :class="activeTab === 'news' ? 'bg-app-surface text-app-accent shadow-sm' : 'bg-transparent text-app-muted hover:text-app-text'"
+            class="relative flex h-full items-center gap-1 border-0 bg-transparent px-1 text-xs font-semibold transition-colors duration-200 after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:rounded-full after:content-[''] focus-visible:ring-4 focus-visible:ring-app-accent-soft"
+            :class="activeTab === 'news' ? 'text-app-accent after:bg-app-accent' : 'text-app-muted after:bg-transparent hover:text-app-text'"
             role="tab"
             :aria-selected="activeTab === 'news'"
             @click="selectTab('news')"
         >
             소식
             <span
-                class="absolute right-3 top-1/2 flex min-h-4 min-w-4 -translate-y-1/2 items-center justify-center rounded-full bg-app-danger px-1 text-[9px] font-bold text-white"
+                class="self-start pt-1 text-[10px] font-bold text-app-accent"
                 x-show="newsTotal > 0"
                 x-cloak
                 x-text="newsTotal > 9 ? '9+' : newsTotal"
@@ -102,7 +137,7 @@
                     @click="perform('open_attendance')"
                 >
                     <span x-text="presentation.actionLabel ?? '출석 상태 확인'"></span>
-                    <svg class="size-3.5" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <svg class="size-3.5" data-icon="chevron-right" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 </button>
             </footer>
         </article>
@@ -133,7 +168,10 @@
                     @click="perform('open_laundry')"
                 >
                     <span class="flex size-8 items-center justify-center rounded-lg bg-app-men-soft text-app-men"><svg class="size-[18px]" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3.5h14v17H5v-17Zm3 3h.1M12 6.5h4M12 10a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-                    <strong class="mt-2 block text-xs">워시타워</strong>
+                    <span class="mt-2 flex items-center justify-between gap-2">
+                        <strong class="text-xs">워시타워</strong>
+                        <svg class="size-3.5 flex-none text-app-faint" data-icon="chevron-right" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </span>
                 </button>
                 <button
                     type="button"
@@ -142,7 +180,10 @@
                     @click="perform('open_meals')"
                 >
                     <span class="flex size-8 items-center justify-center rounded-lg bg-app-success-soft text-app-success"><svg class="size-[18px]" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v7m-2-7v5a2 2 0 0 0 4 0V3m-2 7v11m8-18v18m0-18c3 2 3 7 0 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-                    <strong class="mt-2 block text-xs">오늘의 식단</strong>
+                    <span class="mt-2 flex items-center justify-between gap-2">
+                        <strong class="text-xs">오늘의 식단</strong>
+                        <svg class="size-3.5 flex-none text-app-faint" data-icon="chevron-right" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </span>
                 </button>
             </div>
         </section>
@@ -213,35 +254,9 @@
                 등록된 소식이 없어요
             </p>
 
-            <button
-                type="button"
-                class="mt-3 flex min-h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-app-border bg-app-surface px-3 text-xs font-semibold text-app-muted transition-colors hover:border-app-border-strong hover:text-app-text focus-visible:ring-4 focus-visible:ring-app-accent-soft disabled:opacity-50"
-                :disabled="busyAction !== null"
-                @click="perform('open_discussions')"
-            >
-                궁금해요에 질문하기
-                <svg class="size-3.5" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </button>
         </section>
     </section>
 
-    <footer class="flex h-12 flex-none items-center justify-between border-t border-app-divider px-3">
-        <button
-            type="button"
-            class="flex min-h-8 items-center gap-1.5 rounded-lg border-0 bg-transparent px-2 text-[11px] font-semibold text-app-muted transition-colors hover:bg-app-surface-subtle hover:text-app-text focus-visible:ring-4 focus-visible:ring-app-accent-soft disabled:opacity-50"
-            :disabled="busyAction !== null"
-            @click="perform('open_settings')"
-        >
-            <svg class="size-4" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm7.5 3.5-.1-1.4 1.6-1.3-2-3.4-2 .8a8 8 0 0 0-2.4-1.4L14.3 3h-4.6l-.3 2.3A8 8 0 0 0 7 6.7l-2-.8-2 3.4 1.6 1.3L4.5 12l.1 1.4L3 14.7l2 3.4 2-.8a8 8 0 0 0 2.4 1.4l.3 2.3h4.6l.3-2.3a8 8 0 0 0 2.4-1.4l2 .8 2-3.4-1.6-1.3.1-1.4Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            환경설정
-        </button>
-        <button
-            type="button"
-            class="min-h-8 rounded-lg border-0 bg-transparent px-2 text-[11px] font-semibold text-app-faint transition-colors hover:bg-app-danger-soft hover:text-app-danger focus-visible:ring-4 focus-visible:ring-app-danger-soft disabled:opacity-50"
-            :disabled="busyAction !== null"
-            @click="perform('quit')"
-        >종료</button>
-    </footer>
 </main>
 <script type="module" src="/tray-panel.ts"></script>
 </body>
