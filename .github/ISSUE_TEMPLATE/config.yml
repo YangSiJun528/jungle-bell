@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: "궁금해요"
-    url: "https://github.com/YangSiJun528/jungle-bell/discussions/categories/궁금해요"
+    url: "https://github.com/YangSiJun528/jungle-bell/discussions/new?category=%EA%B6%81%EA%B8%88%ED%95%B4%EC%9A%94"
     about: "사용법이나 그 외 궁금한 점을 자유롭게 남겨 주세요."
   - name: "건의하기"
-    url: "https://github.com/YangSiJun528/jungle-bell/discussions/categories/건의하기"
+    url: "https://github.com/YangSiJun528/jungle-bell/discussions/new?category=%EA%B1%B4%EC%9D%98%ED%95%98%EA%B8%B0"
     about: "새 기능이나 기존 기능의 보완을 요청해 주세요."
