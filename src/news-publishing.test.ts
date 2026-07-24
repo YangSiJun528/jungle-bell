@@ -27,18 +27,6 @@ test('버그만 Issues로 받고 공지·건의·질문은 Discussions로 구분
     const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
     const settings = readFileSync(new URL('./index.html', import.meta.url), 'utf8');
     const campus = readFileSync(new URL('./campus.html', import.meta.url), 'utf8');
-    const announcementForm = readFileSync(
-        new URL('../.github/DISCUSSION_TEMPLATE/공지.yml', import.meta.url),
-        'utf8',
-    );
-    const questionForm = readFileSync(
-        new URL('../.github/DISCUSSION_TEMPLATE/궁금해요.yml', import.meta.url),
-        'utf8',
-    );
-    const ideaForm = readFileSync(
-        new URL('../.github/DISCUSSION_TEMPLATE/건의하기.yml', import.meta.url),
-        'utf8',
-    );
 
     assert.equal(existsSync(new URL('../.github/ISSUE_TEMPLATE/question.yml', import.meta.url)), false);
     assert.equal(existsSync(new URL('../.github/ISSUE_TEMPLATE/feature_request.yml', import.meta.url)), false);
@@ -46,21 +34,20 @@ test('버그만 Issues로 받고 공지·건의·질문은 Discussions로 구분
     assert.equal(existsSync(new URL('../.github/DISCUSSION_TEMPLATE/announcements.yml', import.meta.url)), false);
     assert.equal(existsSync(new URL('../.github/DISCUSSION_TEMPLATE/ideas.yml', import.meta.url)), false);
     assert.equal(existsSync(new URL('../.github/DISCUSSION_TEMPLATE/q-a.yml', import.meta.url)), false);
-    assert.match(config, /\/discussions\/categories\/궁금해요/);
-    assert.match(config, /\/discussions\/categories\/건의하기/);
+    assert.equal(existsSync(new URL('../.github/DISCUSSION_TEMPLATE/공지.yml', import.meta.url)), false);
+    assert.equal(existsSync(new URL('../.github/DISCUSSION_TEMPLATE/궁금해요.yml', import.meta.url)), false);
+    assert.equal(existsSync(new URL('../.github/DISCUSSION_TEMPLATE/건의하기.yml', import.meta.url)), false);
+    assert.match(config, /\/discussions\/new\?category=%EA%B6%81%EA%B8%88%ED%95%B4%EC%9A%94/);
+    assert.match(config, /\/discussions\/new\?category=%EA%B1%B4%EC%9D%98%ED%95%98%EA%B8%B0/);
     assert.match(config, /궁금해요/);
     assert.match(config, /건의하기/);
     assert.doesNotMatch(config, /Slack|slack|이메일|mail\.google\.com|mailto:/);
     assert.match(readme, /GitHub Discussions.+공지.+건의하기.+궁금해요/);
     assert.match(readme, /GitHub Issues.+버그/);
     assert.doesNotMatch(readme, /krafton-aliens\.slack\.com|mailto:/);
-    assert.match(announcementForm, /labels: \["소식"]/);
-    assert.match(announcementForm, /앱의 \*\*소식\*\* 탭/);
-    assert.doesNotMatch(questionForm, /labels: \["소식"]/);
-    assert.doesNotMatch(ideaForm, /labels: \["소식"]/);
 
-    assert.match(settings, /\/discussions\/categories\/궁금해요/);
-    assert.match(settings, /\/discussions\/categories\/건의하기/);
+    assert.match(settings, /\/discussions\/new\?category=%EA%B6%81%EA%B8%88%ED%95%B4%EC%9A%94/);
+    assert.match(settings, /\/discussions\/new\?category=%EA%B1%B4%EC%9D%98%ED%95%98%EA%B8%B0/);
     assert.match(settings, /\/issues\/new\?template=bug\.yml/);
     assert.match(settings, /https:\/\/krafton-aliens\.slack\.com\/team\/U0AHGCT20DQ/);
     assert.match(settings, /mailto:yangsijun5528@gmail\.com/);
