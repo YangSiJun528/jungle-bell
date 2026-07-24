@@ -1,0 +1,130 @@
+name: Publish News Feed
+
+on:
+  discussion:
+    types:
+      - created
+      - edited
+      - deleted
+      - category_changed
+      - pinned
+      - unpinned
+      - labeled
+      - unlabeled
+      - locked
+      - unlocked
+  release:
+    types:
+      - published
+      - edited
+      - deleted
+      - released
+      - prereleased
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  discussions: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages-news
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      # 참고:
+      # - GitHub의 discussion 이벤트: https://docs.github.com/actions/using-workflows/events-that-trigger-workflows#discussion
+      # - GitHub CLI JSON 출력: https://cli.github.com/manual/gh_discussion_list
+      # - Discussions를 정적 사이트 원본으로 쓰는 사례: https://github.com/QingXuan2000/QxBlog
+      - name: Build news feed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p _site
+
+          gh discussion list \
+            --repo "$GITHUB_REPOSITORY" \
+            --state open \
+            --label "소식" \
+            --sort created \
+            --order desc \
+            --limit 30 \
+            --json number,title,body,category,createdAt,updatedAt,url \
+            > discussions.json
+
+          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=20" > releases.json
+
+          jq '
+            map({
+              id: ("discussion-" + (.number | tostring)),
+              type: (
+                if ((.category.name // "") == "Announcements" or (.category.name // "") == "공지") then "announcement"
+                elif ((.category.name // "") == "Polls" or (.category.name // "") == "설문") then "poll"
+                elif ((.category.name // "") == "Q&A" or (.category.name // "") == "질문") then "question"
+                else "discussion"
+                end
+              ),
+              title,
+              body: ((.body // "")[0:20000]),
+              url,
+              category: (.category.name // "Discussion"),
+              createdAt,
+              updatedAt
+            })
+          ' discussions.json > discussion-items.json
+
+          jq '
+            map(
+              select(.draft == false)
+              | {
+                  id: ("release-" + (.tag_name | sub("^v"; ""))),
+                  type: "release",
+                  title: (.name // .tag_name),
+                  body: ((.body // "")[0:20000]),
+                  url: .html_url,
+                  category: "Release",
+                  createdAt: (.published_at // .created_at),
+                  updatedAt: (.published_at // .created_at)
+                }
+            )
+          ' releases.json > release-items.json
+
+          jq -s '
+            {
+              version: 1,
+              generatedAt: (now | todateiso8601),
+              items: ((.[0] + .[1]) | sort_by(.createdAt) | reverse | .[0:30])
+            }
+          ' discussion-items.json release-items.json > _site/news.json
+
+          printf '%s\n' \
+            '<!doctype html>' \
+            '<html lang="ko"><meta charset="utf-8"><title>Jungle Bell News</title>' \
+            '<body><a href="./news.json">news.json</a></body></html>' \
+            > _site/index.html
+
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

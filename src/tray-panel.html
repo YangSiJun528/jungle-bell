@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="ko" data-page-layout="bleed" class="h-full overflow-hidden bg-transparent">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta name="color-scheme" content="light"/>
+    <title>Jungle Bell</title>
+    <link rel="stylesheet" href="/ui.css"/>
+</head>
+<body class="h-full overflow-hidden bg-transparent p-2 font-sans text-app-text antialiased">
+<main
+    class="flex h-full flex-col overflow-hidden rounded-[20px] border border-app-border bg-app-bg shadow-none"
+    x-data="trayPanel"
+    @keydown.window.escape="hide()"
+>
+    <header class="flex h-14 flex-none items-center justify-between px-4">
+        <div class="flex min-w-0 items-center gap-2.5">
+            <img class="size-8 flex-none rounded-[10px] object-cover" src="assets/logo.png" alt=""/>
+            <span class="min-w-0">
+                <strong class="block truncate text-[15px] font-bold leading-tight">Jungle Bell</strong>
+                <small class="mt-0.5 block text-[11px] leading-none text-app-faint" x-text="state.currentVersion ? `v${state.currentVersion}` : '불러오는 중'"></small>
+            </span>
+        </div>
+        <button
+            type="button"
+            class="flex size-8 items-center justify-center rounded-full border-0 bg-transparent text-app-faint transition-colors hover:bg-app-surface-subtle hover:text-app-text focus-visible:ring-4 focus-visible:ring-app-accent-soft"
+            aria-label="패널 닫기"
+            @click="hide()"
+        >
+            <svg class="size-4" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+    </header>
+
+    <nav class="mx-4 mb-3 grid h-10 flex-none grid-cols-2 rounded-xl bg-app-control p-1" role="tablist" aria-label="트레이 패널">
+        <button
+            type="button"
+            class="rounded-lg border-0 text-xs font-semibold transition-colors duration-200 focus-visible:ring-4 focus-visible:ring-app-accent-soft"
+            :class="activeTab === 'home' ? 'bg-app-surface text-app-accent shadow-sm' : 'bg-transparent text-app-muted hover:text-app-text'"
+            role="tab"
+            :aria-selected="activeTab === 'home'"
+            @click="selectTab('home')"
+        >홈</button>
+        <button
+            type="button"
+            class="relative rounded-lg border-0 text-xs font-semibold transition-colors duration-200 focus-visible:ring-4 focus-visible:ring-app-accent-soft"
+            :class="activeTab === 'news' ? 'bg-app-surface text-app-accent shadow-sm' : 'bg-transparent text-app-muted hover:text-app-text'"
+            role="tab"
+            :aria-selected="activeTab === 'news'"
+            @click="selectTab('news')"
+        >
+            소식
+            <span
+                class="absolute right-3 top-1/2 flex min-h-4 min-w-4 -translate-y-1/2 items-center justify-center rounded-full bg-app-danger px-1 text-[9px] font-bold text-white"
+                x-show="newsTotal > 0"
+                x-cloak
+                x-text="newsTotal > 9 ? '9+' : newsTotal"
+                aria-label="새 소식"
+            ></span>
+        </button>
+    </nav>
+
+    <section class="min-h-0 flex-1 overflow-y-auto px-4 pb-3" x-show="activeTab === 'home'">
+        <article
+            class="rounded-2xl border p-4 transition-colors"
+            data-ui="attendance-status"
+            :class="{
+                'border-app-border bg-app-surface-subtle': presentation.tone === 'neutral',
+                'border-app-warning bg-app-warning-soft': presentation.tone === 'warning',
+                'border-app-danger bg-app-danger-soft': presentation.tone === 'danger',
+                'border-app-success bg-app-success-soft': presentation.tone === 'success',
+                'border-app-accent bg-app-accent-soft': presentation.tone === 'accent'
+            }"
+            aria-live="polite"
+        >
+            <div class="flex items-start gap-3">
+                <span
+                    class="mt-0.5 flex size-10 flex-none items-center justify-center rounded-xl"
+                    :class="{
+                        'bg-app-overlay text-app-faint': presentation.tone === 'neutral',
+                        'bg-app-warning text-white': presentation.tone === 'warning',
+                        'bg-app-danger text-white': presentation.tone === 'danger',
+                        'bg-app-success text-white': presentation.tone === 'success',
+                        'bg-app-accent text-white': presentation.tone === 'accent'
+                    }"
+                >
+                    <svg class="size-5" viewBox="0 0 24 24" aria-hidden="true">
+                        <path x-show="presentation.tone === 'success'" d="m6.5 12.5 3.5 3.5 7.5-8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path x-show="presentation.tone === 'danger' || presentation.tone === 'warning'" d="M12 8v5m0 3.5v.1M10.3 4.8 3.7 17a2 2 0 0 0 1.8 3h13a2 2 0 0 0 1.8-3L13.7 4.8a2 2 0 0 0-3.4 0Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path x-show="presentation.tone === 'neutral' || presentation.tone === 'accent'" d="M12 3.5a8.5 8.5 0 1 0 8.5 8.5A8.5 8.5 0 0 0 12 3.5Zm0 4v5l3 1.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </span>
+                <span class="min-w-0 flex-1">
+                    <small class="block text-[11px] font-bold" x-text="presentation.label"></small>
+                    <strong class="mt-1 block text-[17px] font-bold leading-snug" x-text="state.statusText"></strong>
+                </span>
+            </div>
+            <footer class="mt-3 border-t border-black/5 pt-3">
+                <button
+                    type="button"
+                    class="flex min-h-9 w-full items-center justify-center gap-1.5 rounded-lg border-0 bg-app-text px-3 text-xs font-semibold text-app-bg transition-opacity hover:opacity-80 focus-visible:ring-4 focus-visible:ring-app-accent-soft disabled:opacity-50"
+                    :disabled="busyAction !== null"
+                    @click="perform('open_attendance')"
+                >
+                    <span x-text="presentation.actionLabel ?? '출석 상태 확인'"></span>
+                    <svg class="size-3.5" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+            </footer>
+        </article>
+
+        <aside
+            class="mt-3 flex min-h-14 items-center gap-3 rounded-xl border border-app-border bg-app-surface px-3"
+            data-ui="dday"
+            x-show="state.ddayText"
+            x-cloak
+            aria-live="polite"
+        >
+            <span class="flex size-9 flex-none items-center justify-center rounded-[10px] bg-app-common-soft text-app-common">
+                <svg class="size-5" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3.5v17m0-15h10l-2.5 3L17 12H7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+            <span class="min-w-0 flex-1">
+                <small class="block text-[10px] font-bold text-app-common">D-Day</small>
+                <strong class="mt-0.5 block truncate text-sm" x-text="state.ddayText"></strong>
+            </span>
+        </aside>
+
+        <section class="mt-4" aria-labelledby="campus-action-title">
+            <h2 id="campus-action-title" class="mb-2 text-xs font-bold text-app-muted">생활 정보</h2>
+            <div class="grid grid-cols-2 gap-2">
+                <button
+                    type="button"
+                    class="min-h-20 rounded-xl border border-app-border bg-app-surface p-3 text-left transition-colors hover:border-app-border-strong hover:bg-app-surface-subtle focus-visible:ring-4 focus-visible:ring-app-accent-soft disabled:opacity-50"
+                    :disabled="busyAction !== null"
+                    @click="perform('open_laundry')"
+                >
+                    <span class="flex size-8 items-center justify-center rounded-lg bg-app-men-soft text-app-men"><svg class="size-[18px]" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3.5h14v17H5v-17Zm3 3h.1M12 6.5h4M12 10a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+                    <strong class="mt-2 block text-xs">워시타워</strong>
+                </button>
+                <button
+                    type="button"
+                    class="min-h-20 rounded-xl border border-app-border bg-app-surface p-3 text-left transition-colors hover:border-app-border-strong hover:bg-app-surface-subtle focus-visible:ring-4 focus-visible:ring-app-accent-soft disabled:opacity-50"
+                    :disabled="busyAction !== null"
+                    @click="perform('open_meals')"
+                >
+                    <span class="flex size-8 items-center justify-center rounded-lg bg-app-success-soft text-app-success"><svg class="size-[18px]" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v7m-2-7v5a2 2 0 0 0 4 0V3m-2 7v11m8-18v18m0-18c3 2 3 7 0 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+                    <strong class="mt-2 block text-xs">오늘의 식단</strong>
+                </button>
+            </div>
+        </section>
+
+    </section>
+
+    <section class="min-h-0 flex-1 overflow-y-auto px-4 pb-3" x-show="activeTab === 'news'" x-cloak>
+        <section aria-labelledby="news-title">
+            <h2 id="news-title" class="mb-2 text-xs font-bold text-app-muted">새 소식</h2>
+
+            <article class="rounded-2xl border border-app-info bg-app-info-soft p-4" x-show="state.pendingUpdate" x-cloak>
+                <div class="flex items-start gap-3">
+                    <span class="flex size-9 flex-none items-center justify-center rounded-xl bg-app-info text-white">
+                        <svg class="size-5" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0 4-4m-4 4-4-4M5 19.5h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </span>
+                    <span class="min-w-0 flex-1">
+                        <small class="block text-[10px] font-bold text-app-info">새 버전</small>
+                        <strong class="mt-1 block text-sm" x-text="state.pendingUpdate ? `Jungle Bell v${state.pendingUpdate}` : ''"></strong>
+                    </span>
+                </div>
+                <button
+                    type="button"
+                    class="mt-3 min-h-9 w-full rounded-lg border-0 bg-app-info px-3 text-xs font-semibold text-white transition-colors hover:bg-app-info-hover focus-visible:ring-4 focus-visible:ring-app-overlay disabled:opacity-50"
+                    :disabled="busyAction !== null"
+                    @click="perform('check_update')"
+                >업데이트하기</button>
+            </article>
+
+            <p class="m-0 flex min-h-12 items-center gap-2 rounded-xl border border-app-border bg-app-surface px-3 text-xs font-medium text-app-muted"
+               x-show="newsLoading">
+                <svg class="size-4 flex-none text-app-info" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4.5h12v15H6v-15Zm3 4h6m-6 3h6m-6 3h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                소식을 불러오는 중...
+            </p>
+
+            <p class="m-0 flex min-h-12 items-center gap-2 rounded-xl border border-app-danger bg-app-danger-soft px-3 text-xs font-medium text-app-danger"
+               x-show="newsError && newsItems.length === 0 && !newsLoading"
+               x-cloak>
+                소식을 불러오지 못했어요
+            </p>
+
+            <div class="space-y-2" :class="state.pendingUpdate ? 'mt-2' : ''" x-show="newsItems.length > 0" x-cloak>
+                <template x-for="item in newsItems" :key="item.id">
+                    <button
+                        type="button"
+                        class="block w-full rounded-xl border border-app-border bg-app-surface p-3 text-left transition-colors hover:border-app-border-strong hover:bg-app-surface-subtle focus-visible:ring-4 focus-visible:ring-app-accent-soft"
+                        @click="openNewsItem(item)"
+                    >
+                        <span class="flex items-center justify-between gap-2">
+                            <small
+                                class="rounded-md bg-app-info-soft px-1.5 py-0.5 text-[10px] font-bold text-app-info"
+                                x-text="newsLabel(item)"
+                            ></small>
+                            <small class="text-[10px] text-app-faint" x-text="newsDate(item)"></small>
+                        </span>
+                        <strong class="mt-2 block text-sm leading-snug" x-text="item.title"></strong>
+                        <span
+                            class="mt-1 line-clamp-2 text-[11px] leading-relaxed text-app-muted"
+                            x-show="newsSummary(item)"
+                            x-text="newsSummary(item)"
+                        ></span>
+                    </button>
+                </template>
+            </div>
+
+            <p class="m-0 flex min-h-12 items-center gap-2 rounded-xl border border-app-border bg-app-surface px-3 text-xs font-medium text-app-muted"
+               x-show="!state.pendingUpdate && newsItems.length === 0 && !newsLoading && !newsError">
+                <svg class="size-4 flex-none text-app-info" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4.5h12v15H6v-15Zm3 4h6m-6 3h6m-6 3h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                등록된 소식이 없어요
+            </p>
+
+            <button
+                type="button"
+                class="mt-3 flex min-h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-app-border bg-app-surface px-3 text-xs font-semibold text-app-muted transition-colors hover:border-app-border-strong hover:text-app-text focus-visible:ring-4 focus-visible:ring-app-accent-soft disabled:opacity-50"
+                :disabled="busyAction !== null"
+                @click="perform('open_discussions')"
+            >
+                Discussions에서 이야기하기
+                <svg class="size-3.5" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+        </section>
+    </section>
+
+    <footer class="flex h-12 flex-none items-center justify-between border-t border-app-divider px-3">
+        <button
+            type="button"
+            class="flex min-h-8 items-center gap-1.5 rounded-lg border-0 bg-transparent px-2 text-[11px] font-semibold text-app-muted transition-colors hover:bg-app-surface-subtle hover:text-app-text focus-visible:ring-4 focus-visible:ring-app-accent-soft disabled:opacity-50"
+            :disabled="busyAction !== null"
+            @click="perform('open_settings')"
+        >
+            <svg class="size-4" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm7.5 3.5-.1-1.4 1.6-1.3-2-3.4-2 .8a8 8 0 0 0-2.4-1.4L14.3 3h-4.6l-.3 2.3A8 8 0 0 0 7 6.7l-2-.8-2 3.4 1.6 1.3L4.5 12l.1 1.4L3 14.7l2 3.4 2-.8a8 8 0 0 0 2.4 1.4l.3 2.3h4.6l.3-2.3a8 8 0 0 0 2.4-1.4l2 .8 2-3.4-1.6-1.3.1-1.4Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            환경설정
+        </button>
+        <button
+            type="button"
+            class="min-h-8 rounded-lg border-0 bg-transparent px-2 text-[11px] font-semibold text-app-faint transition-colors hover:bg-app-danger-soft hover:text-app-danger focus-visible:ring-4 focus-visible:ring-app-danger-soft disabled:opacity-50"
+            :disabled="busyAction !== null"
+            @click="perform('quit')"
+        >종료</button>
+    </footer>
+</main>
+<script type="module" src="/tray-panel.ts"></script>
+</body>
+</html>

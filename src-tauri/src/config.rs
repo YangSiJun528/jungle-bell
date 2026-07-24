@@ -57,7 +57,7 @@ pub struct Config {
     /// 사용 통계 전송 여부
     #[serde(default = "default_true")]
     pub usage_analytics_enabled: bool,
-    /// 트레이 메뉴 D-Day 표시 여부
+    /// 트레이 패널 D-Day 표시 여부
     #[serde(default = "default_true")]
     pub show_dday: bool,
     /// macOS Dock 또는 Windows 작업 표시줄에 앱 아이콘을 표시할지 여부

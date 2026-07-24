@@ -6,6 +6,7 @@
 @source "./onboarding.html";
 @source "./campus.html";
 @source "./image-viewer.html";
+@source "./tray-panel.html";
 
 @theme inline {
     --font-sans: var(--font-family);
@@ -31,6 +32,9 @@
     --color-app-warning-soft: var(--color-warning-soft);
     --color-app-danger: var(--color-danger);
     --color-app-danger-soft: var(--color-danger-soft);
+    --color-app-info: var(--color-info);
+    --color-app-info-hover: var(--color-info-hover);
+    --color-app-info-soft: var(--color-info-soft);
     --color-app-men: var(--color-men);
     --color-app-men-soft: var(--color-men-soft);
     --color-app-common: var(--color-common);

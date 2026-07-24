@@ -8,6 +8,7 @@ mod commands;
 mod config;
 mod data_api;
 mod interval_tasks;
+mod news;
 mod runtime;
 mod scheduler;
 mod state;
@@ -110,6 +111,7 @@ pub fn run() {
     };
     let shared_state = Arc::new(Mutex::new(AppState::new(config)));
     let campus_service = Arc::new(campus::CampusService::new());
+    let news_service = Arc::new(news::NewsService::new());
 
     tauri::Builder::default()
         // single-instance 플러그인: 공식 문서 권장대로 가장 먼저 등록한다.
@@ -156,6 +158,7 @@ pub fn run() {
         // 핸들러에서 `tauri::State<Arc<Mutex<AppState>>>`로 받아 사용.
         .manage(shared_state.clone())
         .manage(campus_service.clone())
+        .manage(news_service)
         // JS에서 `window.__TAURI__.core.invoke()`로 호출할 수 있는 Tauri 커맨드 등록.
         .invoke_handler(tauri::generate_handler![
             commands::report_attendance_status,
@@ -203,6 +206,11 @@ pub fn run() {
             commands::open_onboarding,
             commands::complete_onboarding,
             commands::open_attendance_window,
+            commands::get_tray_panel_state,
+            commands::run_tray_panel_action,
+            commands::hide_tray_panel,
+            commands::get_news_feed,
+            commands::open_news_item,
             commands::get_login_status,
             commands::refresh_login_status,
         ])

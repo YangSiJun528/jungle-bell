@@ -133,15 +133,14 @@ Jungle Bell 안에서 **출석 페이지 열기** 를 눌러 Jungle Campus에 �
 
 **출석 페이지 열기** 를 눌러 로그인 상태를 다시 확인해 주세요. 계속 다르면 [문의](#문의하기)해 주세요.
 
-## 문의하기
+## 질문·제보하기
 
-버그나 사용 중 막힌 부분은 아래 경로로 알려주세요.
-
-- [GitHub Issue](https://github.com/YangSiJun528/jungle-bell/issues/new/choose)
+- [GitHub Discussions](https://github.com/YangSiJun528/jungle-bell/discussions): 사용법 질문, 아이디어, 설문처럼 함께 논의할 내용
+- [GitHub Issues](https://github.com/YangSiJun528/jungle-bell/issues/new/choose): 재현 가능한 버그나 범위가 정해진 기능 작업
 - [크래프톤 정글 Slack](https://krafton-aliens.slack.com/team/U0AHGCT20DQ)
 - [이메일](mailto:yangsijun5528@gmail.com)
 
-문의할 때 사용 중인 OS, 재현 조건, 가능하면 스크린샷을 함께 보내주시면 좋아요.
+버그를 제보할 때는 사용 중인 OS, 재현 조건, 가능하면 스크린샷을 함께 보내주시면 좋아요.
 
 ## 주의사항
 
@@ -157,7 +156,7 @@ SW-AI Lab 12기인 한 정글러가 관리하는 비공식 앱입니다.
 
 #### 문의
 
-기능 관련 버그나 문의는 [이슈](https://github.com/YangSiJun528/jungle-bell/issues)를 통해 제보해 주세요.
+기능 관련 질문과 논의는 [Discussions](https://github.com/YangSiJun528/jungle-bell/discussions)에, 재현 가능한 버그는 [Issues](https://github.com/YangSiJun528/jungle-bell/issues)에 남겨 주세요.
 
 ## 라이선스
 

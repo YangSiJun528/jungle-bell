@@ -8,6 +8,7 @@ const localPages = [
     './onboarding.html',
     './campus.html',
     './image-viewer.html',
+    './tray-panel.html',
 ];
 const localStyles = [source('./styles.css'), source('./ui.css')].join('\n');
 const windowSources = [

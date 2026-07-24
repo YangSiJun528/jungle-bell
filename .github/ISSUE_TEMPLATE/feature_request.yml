@@ -1,12 +1,12 @@
-name: "기능 개선 건의"
-description: "이런 기능이 있으면 좋겠다! 아이디어를 들려주세요."
+name: "구체적인 기능 작업 제안"
+description: "범위와 기대 동작이 정해진 실행 가능한 기능 작업을 제안해 주세요. 아이디어 단계라면 Discussions를 이용해 주세요."
 labels: ["기능_개선_건의"]
 body:
   - type: textarea
     id: proposal
     attributes:
-      label: "어떤 기능을 원하시나요?"
-      description: "추가되거나 개선됐으면 하는 기능을 설명해 주세요."
+      label: "어떤 기능을 구현해야 하나요?"
+      description: "구체적인 기대 동작과 완료 조건을 설명해 주세요."
       placeholder: |
         예: 타이머 종료 시 슬랙 메시지를 자동으로 보내는 기능이 있으면 좋겠어요.
     validations:

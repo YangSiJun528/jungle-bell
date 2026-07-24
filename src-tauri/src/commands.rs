@@ -18,6 +18,7 @@ use crate::autostart;
 use crate::campus::{CampusDataKind, CampusService};
 use crate::checker;
 use crate::config::{self, TimeOfDay};
+use crate::news::{self, NewsFeed, NewsService};
 use crate::state::{self, AppState};
 use crate::tray;
 
@@ -562,7 +563,7 @@ pub async fn set_show_dday(
         return Ok(());
     }
 
-    tray::sync_dday_menu_visibility(&app, enabled).await?;
+    tray::sync_dday_panel_visibility(&app, enabled).await?;
 
     {
         let mut s = state.lock().await;
@@ -663,11 +664,46 @@ pub async fn complete_onboarding(state: tauri::State<'_, Arc<Mutex<AppState>>>) 
 }
 
 /// Tauri 커맨드: 출석 페이지 창을 연다 (온보딩의 "출석 페이지 열기" 버튼용).
-/// 트레이 메뉴의 "출석 페이지 열기"와 동일한 동작.
+/// 트레이 패널의 "출석 페이지 열기"와 동일한 동작.
 #[tauri::command]
 pub async fn open_attendance_window(app: tauri::AppHandle) {
     tray::open_attendance_window(&app);
     tray::refresh_login_status(&app);
+}
+
+/// 커스텀 트레이 패널이 렌더링할 최신 상태를 반환한다.
+#[tauri::command]
+pub async fn get_tray_panel_state(app: tauri::AppHandle) -> Result<tray::TrayPanelState, String> {
+    tray::get_tray_panel_state(&app).await
+}
+
+/// 커스텀 트레이 패널에서 선택한 허용된 액션을 실행한다.
+#[tauri::command]
+pub fn run_tray_panel_action(app: tauri::AppHandle, action: tray::TrayPanelAction) -> Result<(), String> {
+    tray::run_tray_panel_action(&app, action)
+}
+
+/// Esc 키 등 패널 내부 요청으로 커스텀 트레이 패널을 숨긴다.
+#[tauri::command]
+pub fn hide_tray_panel(app: tauri::AppHandle) -> Result<(), String> {
+    tray::hide_tray_panel(&app)
+}
+
+/// GitHub Pages에 게시된 소식 피드를 1시간 캐시와 함께 반환한다.
+#[tauri::command]
+pub async fn get_news_feed(
+    app: tauri::AppHandle,
+    service: tauri::State<'_, Arc<NewsService>>,
+) -> Result<NewsFeed, String> {
+    service.get(&app).await
+}
+
+/// 피드가 허용한 현재 저장소의 Discussion/Release 링크만 시스템 브라우저로 연다.
+#[tauri::command]
+pub fn open_news_item(app: tauri::AppHandle, url: String) -> Result<(), String> {
+    news::validate_news_url(&url)?;
+    tray::hide_tray_panel(&app)?;
+    tauri_plugin_opener::open_url(url, None::<&str>).map_err(|error| error.to_string())
 }
 
 /// Tauri 커맨드: 현재 로그인 확인 상태 조회.
