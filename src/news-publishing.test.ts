@@ -26,6 +26,7 @@ test('버그만 Issues로 받고 공지·건의·질문은 Discussions로 구분
     const config = readFileSync(new URL('../.github/ISSUE_TEMPLATE/config.yml', import.meta.url), 'utf8');
     const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
     const settings = readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+    const settingsScript = readFileSync(new URL('./settings.ts', import.meta.url), 'utf8');
     const campus = readFileSync(new URL('./campus.html', import.meta.url), 'utf8');
 
     assert.equal(existsSync(new URL('../.github/ISSUE_TEMPLATE/question.yml', import.meta.url)), false);
@@ -41,16 +42,26 @@ test('버그만 Issues로 받고 공지·건의·질문은 Discussions로 구분
     assert.match(config, /\/discussions\/new\?category=%EA%B1%B4%EC%9D%98%ED%95%98%EA%B8%B0/);
     assert.match(config, /궁금해요/);
     assert.match(config, /건의하기/);
-    assert.doesNotMatch(config, /Slack|slack|이메일|mail\.google\.com|mailto:/);
+    assert.match(config, /name: "Slack으로 문의하기"/);
+    assert.match(config, /https:\/\/krafton-aliens\.slack\.com\/team\/U0AHGCT20DQ/);
+    assert.match(config, /name: "이메일로 문의하기"/);
+    assert.match(config, /https:\/\/mail\.google\.com\/mail\/\?view=cm&fs=1&to=yangsijun5528%40gmail\.com/);
+    assert.ok(config.indexOf('name: "건의하기"') < config.indexOf('name: "Slack으로 문의하기"'));
+    assert.ok(config.indexOf('name: "Slack으로 문의하기"') < config.indexOf('name: "이메일로 문의하기"'));
     assert.match(readme, /GitHub Discussions.+공지.+건의하기.+궁금해요/);
     assert.match(readme, /GitHub Issues.+버그/);
     assert.doesNotMatch(readme, /krafton-aliens\.slack\.com|mailto:/);
 
-    assert.match(settings, /\/discussions\/new\?category=%EA%B6%81%EA%B8%88%ED%95%B4%EC%9A%94/);
-    assert.match(settings, /\/discussions\/new\?category=%EA%B1%B4%EC%9D%98%ED%95%98%EA%B8%B0/);
-    assert.match(settings, /\/issues\/new\?template=bug\.yml/);
-    assert.match(settings, /https:\/\/krafton-aliens\.slack\.com\/team\/U0AHGCT20DQ/);
-    assert.match(settings, /mailto:yangsijun5528@gmail\.com/);
+    assert.doesNotMatch(settings, /support-links-title|aria-label="공개 문의"|aria-label="비공개 문의"/);
+    assert.doesNotMatch(settings, /피드백 보내기|궁금해요|건의하기|버그 제보|>Slack<|>이메일</);
+    assert.doesNotMatch(settings, /\/issues\/new|\/discussions\/new|krafton-aliens\.slack\.com|mailto:/);
+    assert.doesNotMatch(settings, /앱 종료|quitApp/);
+    assert.doesNotMatch(settingsScript, /quitApp|run_tray_panel_action/);
+    assert.doesNotMatch(settings, /app-info-title|<h2[^>]*>앱 정보<\/h2>/);
+    assert.match(settings, /href="https:\/\/github\.com\/YangSiJun528\/jungle-bell"/);
+    assert.match(settings, /href="https:\/\/github\.com\/YangSiJun528\/jungle-bell\/releases"/);
+    assert.doesNotMatch(settings, /<footer class="mt-auto/);
+    assert.doesNotMatch(campus, /<footer class="mt-auto/);
     assert.doesNotMatch(
         settings,
         /href="https:\/\/github\.com\/YangSiJun528\/jungle-bell\/discussions"/,
