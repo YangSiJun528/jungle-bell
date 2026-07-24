@@ -304,12 +304,12 @@ fn build_attendance_status_text(phase: DailyPhase, remaining: Option<i64>, needs
 
     let mins = remaining.map(|s| (s + 59) / 60);
 
-    /// 분 단위 잔여시간을 "Xh Ym" 또는 "X분" 형식으로 포매팅.
+    /// 분 단위 잔여시간을 "X시간 Y분" 또는 "X분" 형식으로 포매팅.
     fn fmt_time(m: i64) -> String {
         let hours = m / 60;
         let rest = m % 60;
         if hours > 0 {
-            format!("{}h {}m", hours, rest)
+            format!("{}시간 {}분", hours, rest)
         } else {
             format!("{}분", m)
         }
@@ -1232,10 +1232,10 @@ mod tests {
 
     #[test]
     fn 정상_학습중은_흰색_아이콘을_표시한다() {
-        let view = build_tray_view_model(&healthy_snapshot(DailyPhase::Studying, Some(5400), false), Utc::now());
+        let view = build_tray_view_model(&healthy_snapshot(DailyPhase::Studying, Some(14_580), false), Utc::now());
 
         assert_eq!(view.icon, TrayIconKind::Normal);
-        assert_eq!(view.status_text, "학습 중 (종료 가능까지 1h 30m)");
+        assert_eq!(view.status_text, "학습 중 (종료 가능까지 4시간 3분)");
     }
 
     #[test]
