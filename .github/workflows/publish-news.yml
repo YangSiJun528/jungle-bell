@@ -13,13 +13,6 @@ on:
       - unlabeled
       - locked
       - unlocked
-  release:
-    types:
-      - published
-      - edited
-      - deleted
-      - released
-      - prereleased
   schedule:
     - cron: '17 * * * *'
   workflow_dispatch:
@@ -62,51 +55,34 @@ jobs:
             --json number,title,body,category,createdAt,updatedAt,url \
             > discussions.json
 
-          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=20" > releases.json
-
           jq '
-            .discussions
-            | map({
-              id: ("discussion-" + (.number | tostring)),
-              type: (
-                if ((.category.name // "") == "Announcements" or (.category.name // "") == "공지") then "announcement"
-                elif ((.category.name // "") == "Polls" or (.category.name // "") == "설문") then "poll"
-                elif ((.category.name // "") == "Q&A" or (.category.name // "") == "질문") then "question"
-                else "discussion"
-                end
-              ),
-              title,
-              body: ((.body // "")[0:20000]),
-              url,
-              category: (.category.name // "Discussion"),
-              createdAt,
-              updatedAt
-            })
-          ' discussions.json > discussion-items.json
-
-          jq '
-            map(
-              select(.draft == false)
-              | {
-                  id: ("release-" + (.tag_name | sub("^v"; ""))),
-                  type: "release",
-                  title: (.name // .tag_name),
-                  body: ((.body // "")[0:20000]),
-                  url: .html_url,
-                  category: "Release",
-                  createdAt: (.published_at // .created_at),
-                  updatedAt: (.published_at // .created_at)
-                }
-            )
-          ' releases.json > release-items.json
-
-          jq -s '
             {
               version: 1,
               generatedAt: (now | todateiso8601),
-              items: ((.[0] + .[1]) | sort_by(.createdAt) | reverse | .[0:30])
+              items: (
+                .discussions
+                | map({
+                    id: ("discussion-" + (.number | tostring)),
+                    type: (
+                      if ((.category.name // "") == "Announcements" or (.category.name // "") == "공지") then "announcement"
+                      elif ((.category.name // "") == "Polls" or (.category.name // "") == "설문") then "poll"
+                      elif ((.category.name // "") == "Q&A" or (.category.name // "") == "질문") then "question"
+                      else "discussion"
+                      end
+                    ),
+                    title,
+                    body: ((.body // "")[0:20000]),
+                    url,
+                    category: (.category.name // "Discussion"),
+                    createdAt,
+                    updatedAt
+                  })
+                | sort_by(.createdAt)
+                | reverse
+                | .[0:30]
+              )
             }
-          ' discussion-items.json release-items.json > _site/news.json
+          ' discussions.json > _site/news.json
 
           printf '%s\n' \
             '<!doctype html>' \

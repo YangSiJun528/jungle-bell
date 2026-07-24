@@ -13,7 +13,7 @@ body:
     id: content
     attributes:
       label: 내용
-      description: 공지, 추가 질문, 의견을 묻는 글 등 사용자에게 알릴 내용을 작성해 주세요.
+      description: 사용자에게 알릴 공지 내용을 작성해 주세요.
       placeholder: 알려드릴 내용을 입력하세요.
     validations:
       required: true

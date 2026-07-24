@@ -1,0 +1,20 @@
+# 파일명은 기본 Q&A 카테고리의 slug와 일치한다.
+# https://docs.github.com/discussions/managing-discussions-for-your-community/syntax-for-discussion-category-forms
+title: "[궁금해요] "
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: 궁금한 점
+      description: 사용법이나 동작에 관해 궁금한 점을 적어 주세요.
+      placeholder: 무엇이 궁금한가요?
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: 확인한 내용
+      description: 이미 확인하거나 시도한 내용이 있다면 적어 주세요.
+    validations:
+      required: false
