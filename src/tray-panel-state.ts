@@ -15,7 +15,7 @@ export interface TrayPanelState {
     pendingUpdate: string | null;
 }
 
-export type NewsItemType = 'announcement' | 'poll' | 'question' | 'discussion' | 'release';
+export type NewsItemType = 'announcement' | 'poll' | 'question' | 'discussion';
 
 export interface NewsItem {
     id: string;
@@ -107,8 +107,6 @@ export function newsItemLabel(item: NewsItem): string {
             return '설문';
         case 'question':
             return '질문';
-        case 'release':
-            return '릴리즈';
         default:
             return '이야기';
     }

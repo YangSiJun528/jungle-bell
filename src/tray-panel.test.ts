@@ -50,7 +50,7 @@ test('소식 배지는 출석 상태와 분리해 새 업데이트만 집계한�
     assert.equal(newsCount(panelState({pendingUpdate: '0.5.0'})), 1);
 });
 
-test('Discussion과 릴리즈를 하나의 읽지 않은 소식 목록으로 집계한다', () => {
+test('Discussion 소식과 앱 업데이트를 각각 읽지 않은 항목으로 집계한다', () => {
     const items: NewsItem[] = [
         {
             id: 'discussion-12',
@@ -63,23 +63,26 @@ test('Discussion과 릴리즈를 하나의 읽지 않은 소식 목록으로 집
             updatedAt: '2026-07-24T00:00:00Z',
         },
         {
-            id: 'release-0.5.0',
-            type: 'release',
-            title: 'Jungle Bell v0.5.0',
-            body: '새 트레이 패널',
-            url: 'https://github.com/YangSiJun528/jungle-bell/releases/tag/v0.5.0',
-            category: 'Release',
+            id: 'discussion-13',
+            type: 'poll',
+            title: '다음 기능 설문',
+            body: '어떤 기능이 필요한가요?',
+            url: 'https://github.com/YangSiJun528/jungle-bell/discussions/13',
+            category: 'Polls',
             createdAt: '2026-07-24T01:00:00Z',
             updatedAt: '2026-07-24T01:00:00Z',
         },
     ];
 
-    assert.equal(newsCount(panelState({pendingUpdate: '0.5.0'}), items, []), 2);
-    assert.equal(newsCount(panelState({pendingUpdate: '0.5.0'}), items, ['discussion-12']), 1);
-    assert.equal(newsCount(panelState({pendingUpdate: '0.5.0'}), items, items.map((item) => item.id)), 0);
+    assert.equal(newsCount(panelState({pendingUpdate: '0.5.0'}), items, []), 3);
+    assert.equal(newsCount(panelState({pendingUpdate: '0.5.0'}), items, ['discussion-12']), 2);
+    assert.equal(newsCount(panelState({pendingUpdate: '0.5.0'}), items, items.map((item) => item.id)), 1);
+    assert.equal(
+        newsCount(panelState({pendingUpdate: '0.5.0'}), items, [...items.map((item) => item.id), 'release-0.5.0']),
+        0,
+    );
     assert.equal(newsItemLabel(items[0]!), '공지');
-    assert.equal(newsItemLabel({...items[0]!, type: 'poll'}), '설문');
-    assert.equal(newsItemLabel(items[1]!), '릴리즈');
+    assert.equal(newsItemLabel(items[1]!), '설문');
 });
 
 test('트레이 패널은 홈과 소식 화면 및 기존 주요 액션을 제공한다', () => {

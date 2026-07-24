@@ -46,7 +46,6 @@ pub enum NewsItemType {
     Poll,
     Question,
     Discussion,
-    Release,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -201,12 +200,7 @@ pub fn validate_news_url(value: &str) -> Result<(), String> {
         .map(|segments| segments.collect())
         .unwrap_or_default();
     let is_discussion = matches!(segments.as_slice(), ["YangSiJun528", "jungle-bell", "discussions", _]);
-    let is_release = matches!(
-        segments.as_slice(),
-        ["YangSiJun528", "jungle-bell", "releases", "tag", _]
-    );
-
-    if !is_discussion && !is_release {
+    if !is_discussion {
         return Err("허용되지 않은 소식 링크입니다.".to_string());
     }
     Ok(())
@@ -230,9 +224,9 @@ mod tests {
     }
 
     #[test]
-    fn 저장소의_discussion과_release_링크만_허용한다() {
+    fn 저장소의_discussion_링크만_허용한다() {
         assert!(validate_news_url("https://github.com/YangSiJun528/jungle-bell/discussions/12").is_ok());
-        assert!(validate_news_url("https://github.com/YangSiJun528/jungle-bell/releases/tag/v0.4.4").is_ok());
+        assert!(validate_news_url("https://github.com/YangSiJun528/jungle-bell/releases/tag/v0.4.4").is_err());
         assert!(validate_news_url("https://github.com/other/repo/discussions/12").is_err());
         assert!(validate_news_url("https://github.com/YangSiJun528/jungle-bell/issues/12").is_err());
         assert!(validate_news_url("javascript:alert(1)").is_err());

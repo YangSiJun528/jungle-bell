@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
-  - name: "GitHub Discussions에서 질문·논의하기"
+  - name: "궁금해요·기능 추가 요청·설문·공지"
     url: "https://github.com/YangSiJun528/jungle-bell/discussions"
-    about: "사용법 질문, 아이디어 제안, 설문과 자유로운 논의는 Discussions에 남겨 주세요."
+    about: "버그 제보 외의 질문, 기능 추가 요청, 설문, 공지와 자유로운 논의는 Discussions에 남겨 주세요."
   - name: "Slack으로 문의하기"
     url: "https://krafton-aliens.slack.com/team/U0AHGCT20DQ"
     about: "공개하기 어려운 내용은 크래프톤 정글 슬랙의 양시준(정글12기-32)에게 보내 주세요."
