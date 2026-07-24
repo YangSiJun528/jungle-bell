@@ -22,6 +22,15 @@ test('소식 라벨이 붙은 Discussion만 news.json으로 만들어 GitHub Pag
     assert.match(workflow, /actions\/deploy-pages@/);
 });
 
+test('상단 고정 라벨 공지를 먼저, 각 그룹에서는 작성일 최신순으로 배치한다', () => {
+    const workflow = readFileSync(workflowPath, 'utf8');
+
+    assert.match(workflow, /--json number,title,body,category,labels,createdAt,updatedAt,url/);
+    assert.match(workflow, /pinned: \(\[\.labels\[\]\?\.name\] \| any\(\. == "상단 고정"\)\)/);
+    assert.match(workflow, /map\(select\(\.pinned\)\)\s*\| sort_by\(\.createdAt\)\s*\| reverse/);
+    assert.match(workflow, /map\(select\(\.pinned \| not\)\)\s*\| sort_by\(\.createdAt\)\s*\| reverse/);
+});
+
 test('버그만 Issues로 받고 공지·건의·질문은 Discussions로 구분한다', () => {
     const config = readFileSync(new URL('../.github/ISSUE_TEMPLATE/config.yml', import.meta.url), 'utf8');
     const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');

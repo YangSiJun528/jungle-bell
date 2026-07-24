@@ -51,8 +51,8 @@ jobs:
             --label "소식" \
             --sort created \
             --order desc \
-            --limit 30 \
-            --json number,title,body,category,createdAt,updatedAt,url \
+            --limit 100 \
+            --json number,title,body,category,labels,createdAt,updatedAt,url \
             > discussions.json
 
           jq '
@@ -70,12 +70,17 @@ jobs:
                         body: ((.body // "")[0:20000]),
                         url,
                         category: .category.name,
+                        pinned: ([.labels[]?.name] | any(. == "상단 고정")),
                         createdAt,
                         updatedAt
                       }
                   )
-                | sort_by(.createdAt)
-                | reverse
+                | . as $items
+                | (
+                    ($items | map(select(.pinned)) | sort_by(.createdAt) | reverse)
+                    +
+                    ($items | map(select(.pinned | not)) | sort_by(.createdAt) | reverse)
+                  )
                 | .[0:30]
               )
             }

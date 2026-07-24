@@ -35,6 +35,8 @@ pub struct NewsItem {
     pub body: String,
     pub url: String,
     pub category: String,
+    #[serde(default)]
+    pub pinned: bool,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -221,6 +223,7 @@ mod tests {
             body: "내용".to_string(),
             url: "https://github.com/YangSiJun528/jungle-bell/discussions/12".to_string(),
             category: "공지".to_string(),
+            pinned: false,
             created_at: "2026-07-24T00:00:00Z".to_string(),
             updated_at: "2026-07-24T00:00:00Z".to_string(),
         }
