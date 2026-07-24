@@ -561,7 +561,7 @@ fn build_campus_window(app: &tauri::AppHandle, tab: CampusTab) {
     .theme(Some(tauri::Theme::Light))
     .inner_size(CONTENT_WINDOW_WIDTH, STANDARD_WINDOW_HEIGHT)
     .resizable(false)
-    .minimizable(false)
+    .minimizable(true)
     .maximizable(false)
     .skip_taskbar(foreground_window_skip_taskbar(app))
     .focused(true)
