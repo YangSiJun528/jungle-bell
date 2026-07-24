@@ -18,12 +18,13 @@ type PanelAction =
     | 'open_laundry'
     | 'open_meals'
     | 'open_settings'
-    | 'open_discussions'
+    | 'open_feedback'
     | 'check_update'
     | 'quit';
 
 interface TrayPanelComponent {
     activeTab: PanelTab;
+    menuOpen: boolean;
     state: TrayPanelState;
     newsFeed: NewsFeed;
     newsLoading: boolean;
@@ -36,6 +37,8 @@ interface TrayPanelComponent {
     init(): Promise<void>;
     refresh(): Promise<void>;
     refreshNews(): Promise<void>;
+    toggleMenu(): void;
+    closeMenu(): void;
     selectTab(tab: PanelTab): void;
     markNewsSeen(): void;
     openNewsItem(item: NewsItem): Promise<void>;
@@ -73,6 +76,7 @@ function loadSeenNewsIds(): string[] {
 function trayPanel(): TrayPanelComponent {
     return {
         activeTab: 'home',
+        menuOpen: false,
         state: {...INITIAL_STATE},
         newsFeed: {...INITIAL_NEWS_FEED},
         newsLoading: true,
@@ -96,6 +100,7 @@ function trayPanel(): TrayPanelComponent {
             await listen<TrayPanelState>('tray-panel-state', (event) => {
                 this.state = event.payload;
             }).catch((error) => console.error('[tray-panel] state listener failed', error));
+            window.addEventListener('blur', () => this.closeMenu());
             window.addEventListener('focus', () => {
                 void this.refresh();
                 void this.refreshNews();
@@ -124,7 +129,16 @@ function trayPanel(): TrayPanelComponent {
             }
         },
 
+        toggleMenu() {
+            this.menuOpen = !this.menuOpen;
+        },
+
+        closeMenu() {
+            this.menuOpen = false;
+        },
+
         selectTab(tab) {
+            this.closeMenu();
             this.activeTab = tab;
             if (tab === 'news') this.markNewsSeen();
         },
@@ -165,6 +179,7 @@ function trayPanel(): TrayPanelComponent {
 
         async perform(action) {
             if (this.busyAction) return;
+            this.closeMenu();
             this.busyAction = action;
             try {
                 await invoke('run_tray_panel_action', {action});
