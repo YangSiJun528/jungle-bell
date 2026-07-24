@@ -111,7 +111,7 @@ test('트레이 패널은 홈과 소식 화면 및 기존 주요 액션을 제�
     assert.match(html, /newsItems/);
     assert.match(html, /openNewsItem/);
     assert.match(html, /perform\('open_discussions'\)/);
-    assert.match(html, /Discussions에서 이야기하기/);
+    assert.match(html, /궁금해요에 질문하기/);
     assert.ok(attendanceCardStart >= 0);
     assert.match(attendanceCard, /perform\('open_attendance'\)/);
     assert.match(attendanceCard, /출석 상태 확인/);

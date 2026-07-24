@@ -1,6 +1,6 @@
 # GitHub 공식 Discussion category form 문법:
 # https://docs.github.com/discussions/managing-discussions-for-your-community/syntax-for-discussion-category-forms
-# Announcements 카테고리에서 작성하면 `소식` 라벨이 자동으로 붙어 앱 피드에 게시된다.
+# `공지` 카테고리에서 작성하면 `소식` 라벨이 자동으로 붙어 앱 피드에 게시된다.
 title: ""
 labels: ["소식"]
 body:

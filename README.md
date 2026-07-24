@@ -135,12 +135,11 @@ Jungle Bell 안에서 **출석 페이지 열기** 를 눌러 Jungle Campus에 �
 
 ## 질문·제보하기
 
-- [GitHub Discussions](https://github.com/YangSiJun528/jungle-bell/discussions): 궁금해요, 기능 추가 요청, 설문, 공지와 자유로운 논의
-- [GitHub Issues](https://github.com/YangSiJun528/jungle-bell/issues/new/choose): 재현 가능한 버그 제보
-- [크래프톤 정글 Slack](https://krafton-aliens.slack.com/team/U0AHGCT20DQ)
-- [이메일](mailto:yangsijun5528@gmail.com)
+- GitHub Discussions: [공지](https://github.com/YangSiJun528/jungle-bell/discussions/categories/공지), [건의하기](https://github.com/YangSiJun528/jungle-bell/discussions/categories/건의하기), [궁금해요](https://github.com/YangSiJun528/jungle-bell/discussions/categories/궁금해요)
+- [GitHub Issues](https://github.com/YangSiJun528/jungle-bell/issues/new?template=bug.yml): 재현 가능한 버그 제보
 
 버그를 제보할 때는 사용 중인 OS, 재현 조건, 가능하면 스크린샷을 함께 보내주시면 좋아요.
+공개하기 어려운 문의는 앱 설정의 **문의**에서 Slack이나 이메일을 이용해 주세요.
 
 ## 주의사항
 
@@ -156,7 +155,7 @@ SW-AI Lab 12기인 한 정글러가 관리하는 비공식 앱입니다.
 
 #### 문의
 
-궁금해요, 기능 추가 요청, 설문과 공지는 [Discussions](https://github.com/YangSiJun528/jungle-bell/discussions)에, 재현 가능한 버그 제보는 [Issues](https://github.com/YangSiJun528/jungle-bell/issues)에 남겨 주세요.
+새 기능·보완 요청은 Discussions의 **건의하기**에, 그 외 내용은 **궁금해요**에 남겨 주세요. 재현 가능한 버그 제보만 [버그 양식](https://github.com/YangSiJun528/jungle-bell/issues/new?template=bug.yml)을 사용합니다.
 
 ## 라이선스
 

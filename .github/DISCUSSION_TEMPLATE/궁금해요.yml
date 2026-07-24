@@ -1,4 +1,4 @@
-# 파일명은 기본 Q&A 카테고리의 slug와 일치한다.
+# 파일명은 `궁금해요` 카테고리의 slug와 일치한다.
 # https://docs.github.com/discussions/managing-discussions-for-your-community/syntax-for-discussion-category-forms
 title: "[궁금해요] "
 body:
