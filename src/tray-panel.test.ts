@@ -3,8 +3,8 @@ import {readFileSync} from 'node:fs';
 import {test} from 'vitest';
 import {
     newsItemLabel,
-    newsCount,
     sortNewsItems,
+    splitStatusText,
     statusPresentation,
     type NewsItem,
     type TrayPanelState,
@@ -28,30 +28,35 @@ function panelState(overrides: Partial<TrayPanelState> = {}): TrayPanelState {
 
 test('현재 상태에 따라 강조 톤과 출석 CTA를 결정한다', () => {
     assert.deepEqual(statusPresentation('needsLogin'), {
-        label: '로그인 필요',
         tone: 'warning',
         actionLabel: '로그인하기',
     });
     assert.deepEqual(statusPresentation('active'), {
-        label: '출석 확인 필요',
         tone: 'danger',
         actionLabel: '출석 페이지 열기',
     });
     assert.deepEqual(statusPresentation('complete'), {
-        label: '오늘 출석 완료',
         tone: 'success',
         actionLabel: null,
     });
 });
 
-test('소식 배지는 출석 상태와 분리해 새 업데이트만 집계한다', () => {
-    assert.equal(newsCount(panelState()), 0);
-    assert.equal(newsCount(panelState({status: 'active'})), 0);
-    assert.equal(newsCount(panelState({status: 'needsLogin'})), 0);
-    assert.equal(newsCount(panelState({pendingUpdate: '0.5.0'})), 1);
+test('출석 상태의 시간 안내를 작은 보조 문구로 분리한다', () => {
+    assert.deepEqual(splitStatusText('학습 종료 가능 (3시간 49분 남음)'), {
+        title: '학습 종료 가능',
+        detail: '3시간 49분 남음',
+    });
+    assert.deepEqual(splitStatusText('학습 중 (종료 가능까지 4시간 3분)'), {
+        title: '학습 중',
+        detail: '종료 가능까지 4시간 3분',
+    });
+    assert.deepEqual(splitStatusText('오늘 출석 완료'), {
+        title: '오늘 출석 완료',
+        detail: null,
+    });
 });
 
-test('Discussion 소식과 앱 업데이트를 각각 읽지 않은 항목으로 집계한다', () => {
+test('Discussion 소식 유형을 표시한다', () => {
     const items: NewsItem[] = [
         {
             id: 'discussion-12',
@@ -75,13 +80,6 @@ test('Discussion 소식과 앱 업데이트를 각각 읽지 않은 항목으로
         },
     ];
 
-    assert.equal(newsCount(panelState({pendingUpdate: '0.5.0'}), items, []), 3);
-    assert.equal(newsCount(panelState({pendingUpdate: '0.5.0'}), items, ['discussion-12']), 2);
-    assert.equal(newsCount(panelState({pendingUpdate: '0.5.0'}), items, items.map((item) => item.id)), 1);
-    assert.equal(
-        newsCount(panelState({pendingUpdate: '0.5.0'}), items, [...items.map((item) => item.id), 'release-0.5.0']),
-        0,
-    );
     assert.equal(newsItemLabel(items[0]!), '공지');
     assert.equal(newsItemLabel(items[1]!), '설문');
 });
@@ -135,8 +133,9 @@ test('트레이 패널은 홈과 소식 화면 및 기존 주요 액션을 제�
     const script = readFileSync(new URL('./tray-panel.ts', import.meta.url), 'utf8');
     const styles = readFileSync(new URL('./styles.css', import.meta.url), 'utf8');
     const uiStyles = readFileSync(new URL('./ui.css', import.meta.url), 'utf8');
-    const attendanceCardStart = html.indexOf('data-ui="attendance-status"');
-    const attendanceCardEnd = html.indexOf('</article>', attendanceCardStart);
+    const attendanceCardMarker = html.indexOf('data-ui="attendance-status"');
+    const attendanceCardStart = html.lastIndexOf('<button', attendanceCardMarker);
+    const attendanceCardEnd = html.indexOf('</button>', attendanceCardMarker) + 9;
     const attendanceCard = html.slice(attendanceCardStart, attendanceCardEnd);
     const ddayCardStart = html.indexOf('data-ui="dday"');
     const laundryActionStart = html.indexOf('@click="perform(\'open_laundry\')"');
@@ -161,8 +160,10 @@ test('트레이 패널은 홈과 소식 화면 및 기존 주요 액션을 제�
     assert.doesNotMatch(html, /<nav class="[^"]*(?:grid-cols-2|bg-app-control)[^"]*" role="tablist"/);
     assert.match(html, /after:absolute after:inset-x-0 after:bottom-0/);
     assert.match(html, />홈</);
-    assert.match(html, />\s*소식\s*<span/);
-    assert.match(html, />새 소식</);
+    assert.match(html, />\s*소식\s*<\/button>/);
+    assert.match(html, />소식</);
+    assert.doesNotMatch(html, /newsTotal|aria-label="새 소식"/);
+    assert.doesNotMatch(script, /seenNewsIds|SEEN_NEWS_KEY|markNewsSeen|newsCount/);
     assert.match(html, /등록된 소식이 없어요/);
     assert.match(html, /bg-app-info-soft/);
     assert.match(html, /newsItems/);
@@ -170,10 +171,19 @@ test('트레이 패널은 홈과 소식 화면 및 기존 주요 액션을 제�
     assert.doesNotMatch(html, /perform\('open_discussions'\)|궁금해요에 질문하기/);
     assert.doesNotMatch(script, /\|\s*'open_discussions'/);
     assert.doesNotMatch(traySource, /OpenDiscussions|DISCUSSIONS_URL/);
+    assert.ok(attendanceCardMarker >= 0);
     assert.ok(attendanceCardStart >= 0);
+    assert.match(attendanceCard, /^<button/);
     assert.match(attendanceCard, /perform\('open_attendance'\)/);
-    assert.match(attendanceCard, /출석 상태 확인/);
+    assert.match(attendanceCard, /:aria-label=/);
+    assert.match(attendanceCard, /presentation\.actionLabel \?\? '출석 상태 확인'/);
+    assert.match(attendanceCard, /x-text="statusTextParts\.title"/);
+    assert.match(attendanceCard, /x-show="statusTextParts\.detail"/);
+    assert.match(attendanceCard, /text-xs[^"]*text-app-muted/);
+    assert.doesNotMatch(attendanceCard, /<strong[^>]*x-text="state\.statusText"/);
+    assert.doesNotMatch(attendanceCard, /presentation\.label/);
     assert.match(attendanceCard, /data-icon="chevron-right"/);
+    assert.doesNotMatch(attendanceCard, /<footer|x-text="presentation\.actionLabel/);
     assert.doesNotMatch(attendanceCard, /state\.ddayText/);
     assert.ok(ddayCardStart > attendanceCardEnd);
     assert.match(html.slice(ddayCardStart), /state\.ddayText/);

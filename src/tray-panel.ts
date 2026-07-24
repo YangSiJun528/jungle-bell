@@ -4,12 +4,13 @@ import {listen} from '@tauri-apps/api/event';
 import {
     newsExcerpt,
     newsItemLabel,
-    newsCount,
     sortNewsItems,
+    splitStatusText,
     statusPresentation,
     type NewsFeed,
     type NewsItem,
     type StatusPresentation,
+    type StatusTextParts,
     type TrayPanelState,
 } from './tray-panel-state.ts';
 
@@ -30,18 +31,16 @@ interface TrayPanelComponent {
     newsFeed: NewsFeed;
     newsLoading: boolean;
     newsError: boolean;
-    seenNewsIds: string[];
     busyAction: PanelAction | null;
     get presentation(): StatusPresentation;
+    get statusTextParts(): StatusTextParts;
     get newsItems(): NewsItem[];
-    get newsTotal(): number;
     init(): Promise<void>;
     refresh(): Promise<void>;
     refreshNews(): Promise<void>;
     toggleMenu(): void;
     closeMenu(): void;
     selectTab(tab: PanelTab): void;
-    markNewsSeen(): void;
     openNewsItem(item: NewsItem): Promise<void>;
     newsLabel(item: NewsItem): string;
     newsSummary(item: NewsItem): string;
@@ -63,16 +62,6 @@ const INITIAL_NEWS_FEED: NewsFeed = {
     generatedAt: '',
     items: [],
 };
-const SEEN_NEWS_KEY = 'jungle-bell.seen-news';
-
-function loadSeenNewsIds(): string[] {
-    try {
-        const value = JSON.parse(localStorage.getItem(SEEN_NEWS_KEY) ?? '[]');
-        return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string').slice(-100) : [];
-    } catch {
-        return [];
-    }
-}
 
 function trayPanel(): TrayPanelComponent {
     return {
@@ -82,15 +71,14 @@ function trayPanel(): TrayPanelComponent {
         newsFeed: {...INITIAL_NEWS_FEED},
         newsLoading: true,
         newsError: false,
-        seenNewsIds: loadSeenNewsIds(),
         busyAction: null,
 
         get presentation() {
             return statusPresentation(this.state.status);
         },
 
-        get newsTotal() {
-            return newsCount(this.state, this.newsItems, this.seenNewsIds);
+        get statusTextParts() {
+            return splitStatusText(this.state.statusText);
         },
 
         get newsItems() {
@@ -141,19 +129,9 @@ function trayPanel(): TrayPanelComponent {
         selectTab(tab) {
             this.closeMenu();
             this.activeTab = tab;
-            if (tab === 'news') this.markNewsSeen();
-        },
-
-        markNewsSeen() {
-            const ids = new Set(this.seenNewsIds);
-            this.newsItems.forEach((item) => ids.add(item.id));
-            if (this.state.pendingUpdate) ids.add(`release-${this.state.pendingUpdate.replace(/^v/, '')}`);
-            this.seenNewsIds = [...ids].slice(-100);
-            localStorage.setItem(SEEN_NEWS_KEY, JSON.stringify(this.seenNewsIds));
         },
 
         async openNewsItem(item) {
-            this.markNewsSeen();
             try {
                 await invoke('open_news_item', {url: item.url});
             } catch (error) {
