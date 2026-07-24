@@ -61,22 +61,19 @@ jobs:
               generatedAt: (now | todateiso8601),
               items: (
                 .discussions
-                | map({
-                    id: ("discussion-" + (.number | tostring)),
-                    type: (
-                      if ((.category.name // "") == "Announcements" or (.category.name // "") == "공지") then "announcement"
-                      elif ((.category.name // "") == "Polls" or (.category.name // "") == "설문") then "poll"
-                      elif ((.category.name // "") == "Q&A" or (.category.name // "") == "질문") then "question"
-                      else "discussion"
-                      end
-                    ),
-                    title,
-                    body: ((.body // "")[0:20000]),
-                    url,
-                    category: (.category.name // "Discussion"),
-                    createdAt,
-                    updatedAt
-                  })
+                | map(
+                    select(.category.name == "공지")
+                    | {
+                        id: ("discussion-" + (.number | tostring)),
+                        type: "announcement",
+                        title,
+                        body: ((.body // "")[0:20000]),
+                        url,
+                        category: .category.name,
+                        createdAt,
+                        updatedAt
+                      }
+                  )
                 | sort_by(.createdAt)
                 | reverse
                 | .[0:30]

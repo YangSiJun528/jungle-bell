@@ -1,4 +1,4 @@
-//! GitHub Discussions와 Releases를 정규화한 GitHub Pages 소식 피드를 읽는다.
+//! `소식` 라벨이 붙은 `공지` Discussion을 정규화한 GitHub Pages 피드를 읽는다.
 //!
 //! 게시 파이프라인은 `.github/workflows/publish-news.yml`이 담당한다. 앱은 매시간
 //! 같은 쿼리 URL을 사용하고, 마지막으로 성공한 응답을 디스크에 남겨 오프라인에서도
@@ -179,6 +179,9 @@ fn validate_feed(feed: &NewsFeed) -> Result<(), String> {
         if item.title.is_empty() || item.title.len() > 300 || item.body.len() > 20_000 {
             return Err("잘못된 소식 내용입니다.".to_string());
         }
+        if item.kind != NewsItemType::Announcement || item.category != "공지" {
+            return Err("공지 카테고리가 아닌 피드 항목입니다.".to_string());
+        }
         validate_news_url(&item.url)?;
     }
     Ok(())
@@ -217,7 +220,7 @@ mod tests {
             title: "새 공지".to_string(),
             body: "내용".to_string(),
             url: "https://github.com/YangSiJun528/jungle-bell/discussions/12".to_string(),
-            category: "Announcements".to_string(),
+            category: "공지".to_string(),
             created_at: "2026-07-24T00:00:00Z".to_string(),
             updated_at: "2026-07-24T00:00:00Z".to_string(),
         }
@@ -240,6 +243,16 @@ mod tests {
             items: vec![valid_item()],
         };
         assert!(validate_feed(&valid).is_ok());
+
+        let wrong_category = NewsFeed {
+            items: vec![NewsItem {
+                kind: NewsItemType::Question,
+                category: "궁금해요".to_string(),
+                ..valid_item()
+            }],
+            ..valid.clone()
+        };
+        assert!(validate_feed(&wrong_category).is_err());
 
         let invalid = NewsFeed { version: 2, ..valid };
         assert!(validate_feed(&invalid).is_err());

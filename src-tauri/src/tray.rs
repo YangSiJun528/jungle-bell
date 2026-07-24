@@ -22,7 +22,7 @@ use tauri::{
 };
 
 const ATTENDANCE_URL: &str = "https://jungle-lms.krafton.com/check-in";
-const DISCUSSIONS_URL: &str = "https://github.com/YangSiJun528/jungle-bell/discussions";
+const DISCUSSIONS_URL: &str = "https://github.com/YangSiJun528/jungle-bell/discussions/categories/궁금해요";
 
 const UTILITY_WINDOW_WIDTH: f64 = 560.0;
 const CONTENT_WINDOW_WIDTH: f64 = 720.0;

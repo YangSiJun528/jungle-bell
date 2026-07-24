@@ -1,11 +1,8 @@
 blank_issues_enabled: false
 contact_links:
-  - name: "궁금해요·기능 추가 요청·설문·공지"
-    url: "https://github.com/YangSiJun528/jungle-bell/discussions"
-    about: "버그 제보 외의 질문, 기능 추가 요청, 설문, 공지와 자유로운 논의는 Discussions에 남겨 주세요."
-  - name: "Slack으로 문의하기"
-    url: "https://krafton-aliens.slack.com/team/U0AHGCT20DQ"
-    about: "공개하기 어려운 내용은 크래프톤 정글 슬랙의 양시준(정글12기-32)에게 보내 주세요."
-  - name: "이메일로 문의하기"
-    url: "https://mail.google.com/mail/?view=cm&fs=1&to=yangsijun5528%40gmail.com"
-    about: "Slack 사용이 어렵다면 이메일로 보내 주세요."
+  - name: "궁금해요"
+    url: "https://github.com/YangSiJun528/jungle-bell/discussions/categories/궁금해요"
+    about: "사용법이나 그 외 궁금한 점을 자유롭게 남겨 주세요."
+  - name: "건의하기"
+    url: "https://github.com/YangSiJun528/jungle-bell/discussions/categories/건의하기"
+    about: "새 기능이나 기존 기능의 보완을 요청해 주세요."
