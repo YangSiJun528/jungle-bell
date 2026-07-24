@@ -13,6 +13,7 @@ test('Discussion과 릴리즈를 news.json으로 만들어 GitHub Pages에 배�
     assert.match(workflow, /schedule:/);
     assert.match(workflow, /gh discussion list/);
     assert.match(workflow, /--label "소식"/);
+    assert.match(workflow, /\.discussions\s+\| map/);
     assert.match(workflow, /news\.json/);
     assert.match(workflow, /actions\/upload-pages-artifact@/);
     assert.match(workflow, /actions\/deploy-pages@/);

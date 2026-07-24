@@ -65,7 +65,8 @@ jobs:
           gh api "repos/$GITHUB_REPOSITORY/releases?per_page=20" > releases.json
 
           jq '
-            map({
+            .discussions
+            | map({
               id: ("discussion-" + (.number | tostring)),
               type: (
                 if ((.category.name // "") == "Announcements" or (.category.name // "") == "공지") then "announcement"
