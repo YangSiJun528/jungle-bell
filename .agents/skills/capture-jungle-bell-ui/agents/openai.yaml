@@ -1,0 +1,4 @@
+interface:
+  display_name: "Jungle Bell UI Capture"
+  short_description: "Capture real-data Jungle Bell UI states as images"
+  default_prompt: "Use $capture-jungle-bell-ui to capture Jungle Bell screens as image files."
