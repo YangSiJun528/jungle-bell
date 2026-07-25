@@ -2,23 +2,11 @@ import Alpine from 'alpinejs';
 import {invoke} from '@tauri-apps/api/core';
 import {listen} from '@tauri-apps/api/event';
 import {
-    attendanceDashboardSummary,
-    dashboardUpdates,
-    formatDashboardDate,
-    formatDashboardUpdateTime,
-    laundryDashboardSummary,
-    mealDashboardSummary,
     newsExcerpt,
     newsItemLabel,
     sortNewsItems,
     splitStatusText,
     statusPresentation,
-    type CampusDataKind,
-    type CampusError,
-    type CampusSnapshot,
-    type CampusUpdate,
-    type DashboardSummary,
-    type DashboardUpdate,
     type NewsFeed,
     type NewsItem,
     type StatusPresentation,
@@ -40,24 +28,15 @@ interface TrayPanelComponent {
     activeTab: PanelTab;
     menuOpen: boolean;
     state: TrayPanelState;
-    campusSnapshots: Record<CampusDataKind, CampusSnapshot | null>;
-    campusErrors: Record<CampusDataKind, boolean>;
-    clockNow: number;
     newsFeed: NewsFeed;
     newsLoading: boolean;
     newsError: boolean;
     busyAction: PanelAction | null;
     get presentation(): StatusPresentation;
     get statusTextParts(): StatusTextParts;
-    get attendanceSummary(): DashboardSummary;
-    get mealsSummary(): DashboardSummary;
-    get laundrySummary(): DashboardSummary;
-    get recentUpdates(): DashboardUpdate[];
-    get dashboardDate(): string;
     get newsItems(): NewsItem[];
     init(): Promise<void>;
     refresh(): Promise<void>;
-    refreshCampusState(): Promise<void>;
     refreshNews(): Promise<void>;
     toggleMenu(): void;
     closeMenu(): void;
@@ -66,7 +45,6 @@ interface TrayPanelComponent {
     newsLabel(item: NewsItem): string;
     newsSummary(item: NewsItem): string;
     newsDate(item: NewsItem): string;
-    updateTime(item: DashboardUpdate): string;
     perform(action: PanelAction): Promise<void>;
     hide(): Promise<void>;
 }
@@ -90,9 +68,6 @@ function trayPanel(): TrayPanelComponent {
         activeTab: 'home',
         menuOpen: false,
         state: {...INITIAL_STATE},
-        campusSnapshots: {laundry: null, meals: null},
-        campusErrors: {laundry: false, meals: false},
-        clockNow: Date.now(),
         newsFeed: {...INITIAL_NEWS_FEED},
         newsLoading: true,
         newsError: false,
@@ -106,67 +81,20 @@ function trayPanel(): TrayPanelComponent {
             return splitStatusText(this.state.statusText);
         },
 
-        get attendanceSummary() {
-            return attendanceDashboardSummary(this.state);
-        },
-
-        get mealsSummary() {
-            return mealDashboardSummary(
-                this.campusSnapshots.meals,
-                this.campusErrors.meals,
-                new Date(this.clockNow),
-            );
-        },
-
-        get laundrySummary() {
-            return laundryDashboardSummary(
-                this.campusSnapshots.laundry,
-                this.campusErrors.laundry,
-            );
-        },
-
-        get recentUpdates() {
-            return dashboardUpdates(
-                this.campusSnapshots.meals,
-                this.campusSnapshots.laundry,
-                new Date(this.clockNow),
-            );
-        },
-
-        get dashboardDate() {
-            return formatDashboardDate(new Date(this.clockNow));
-        },
-
         get newsItems() {
             return sortNewsItems(this.newsFeed.items);
         },
 
         async init() {
-            await Promise.all([
-                listen<TrayPanelState>('tray-panel-state', (event) => {
-                    this.state = event.payload;
-                }),
-                listen<CampusUpdate>('campus-data-updated', (event) => {
-                    const {kind, snapshot} = event.payload;
-                    if (kind !== 'laundry' && kind !== 'meals') return;
-                    this.campusSnapshots[kind] = snapshot;
-                    this.campusErrors[kind] = false;
-                    this.clockNow = Date.now();
-                }),
-                listen<CampusError>('campus-data-error', (event) => {
-                    const {kind} = event.payload;
-                    if (kind !== 'laundry' && kind !== 'meals') return;
-                    this.campusErrors[kind] = true;
-                }),
-            ]).catch((error) => console.error('[tray-panel] state listener failed', error));
+            await listen<TrayPanelState>('tray-panel-state', (event) => {
+                this.state = event.payload;
+            }).catch((error) => console.error('[tray-panel] state listener failed', error));
             window.addEventListener('blur', () => this.closeMenu());
             window.addEventListener('focus', () => {
-                this.clockNow = Date.now();
                 void this.refresh();
-                void this.refreshCampusState();
                 void this.refreshNews();
             });
-            await Promise.all([this.refresh(), this.refreshCampusState(), this.refreshNews()]);
+            await Promise.all([this.refresh(), this.refreshNews()]);
         },
 
         async refresh() {
@@ -175,12 +103,6 @@ function trayPanel(): TrayPanelComponent {
             } catch (error) {
                 console.error('[tray-panel] state refresh failed', error);
             }
-        },
-
-        async refreshCampusState() {
-            await invoke('report_campus_ready').catch((error) => {
-                console.error('[tray-panel] campus state refresh failed', error);
-            });
         },
 
         async refreshNews() {
@@ -232,10 +154,6 @@ function trayPanel(): TrayPanelComponent {
                 month: 'short',
                 day: 'numeric',
             }).format(date);
-        },
-
-        updateTime(item) {
-            return formatDashboardUpdateTime(item.occurredAt);
         },
 
         async perform(action) {
