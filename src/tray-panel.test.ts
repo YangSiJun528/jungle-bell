@@ -2,10 +2,14 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {test} from 'vitest';
 import {
+    dashboardUpdates,
+    laundryDashboardSummary,
+    mealDashboardSummary,
     newsItemLabel,
     sortNewsItems,
     splitStatusText,
     statusPresentation,
+    type CampusSnapshot,
     type NewsItem,
     type TrayPanelState,
 } from './tray-panel-state.ts';
@@ -54,6 +58,116 @@ test('출석 상태의 시간 안내를 작은 보조 문구로 분리한다', (
         title: '오늘 출석 완료',
         detail: null,
     });
+});
+
+test('오늘 올라온 식단 수를 홈 상태로 요약한다', () => {
+    const snapshot: CampusSnapshot = {
+        savedAt: Date.parse('2026-07-25T03:00:00Z'),
+        data: {
+            lastCheckedAt: '2026-07-25T03:00:00Z',
+            data: {
+                schemaVersion: 2,
+                dailyMenus: [
+                    {
+                        contentSha: 'lunch',
+                        title: '7월 25일 중식',
+                        publishedAt: '2026-07-25T02:40:00Z',
+                    },
+                    {
+                        contentSha: 'yesterday',
+                        title: '7월 24일 석식',
+                        publishedAt: '2026-07-24T08:00:00Z',
+                    },
+                ],
+            },
+        },
+    };
+
+    assert.deepEqual(
+        mealDashboardSummary(snapshot, false, new Date('2026-07-25T03:10:00Z')),
+        {
+            detail: '중식 등록 · 석식 대기',
+            badge: '1개 등록',
+            tone: 'accent',
+        },
+    );
+});
+
+test('사용 가능한 세탁기와 건조기 수를 홈 상태로 요약한다', () => {
+    const snapshot: CampusSnapshot = {
+        savedAt: Date.parse('2026-07-25T03:00:00Z'),
+        data: {
+            schemaVersion: 1,
+            machines: [
+                {
+                    id: '워시타워_1',
+                    washer: {operationalStatus: 'IDLE', projection: {status: 'IDLE'}},
+                    dryer: {operationalStatus: 'RUNNING', projection: {status: 'ESTIMATED_RUNNING'}},
+                },
+                {
+                    id: '워시타워_2',
+                    washer: {operationalStatus: 'COMPLETED', projection: {status: 'CONFIRMED_COMPLETED'}},
+                    dryer: {operationalStatus: 'ERROR', projection: {status: 'ERROR'}},
+                },
+            ],
+            quality: {lastCheckedAt: '2026-07-25T03:00:00Z'},
+        },
+    };
+
+    assert.deepEqual(laundryDashboardSummary(snapshot, false), {
+        detail: '세탁기 2대 · 건조기 0대 사용 가능',
+        badge: '2대 가능',
+        tone: 'success',
+    });
+});
+
+test('식단 게시와 세탁 이벤트를 최신 업데이트로 합친다', () => {
+    const meals: CampusSnapshot = {
+        savedAt: Date.parse('2026-07-25T03:00:00Z'),
+        data: {
+            data: {
+                schemaVersion: 2,
+                dailyMenus: [{
+                    contentSha: 'lunch',
+                    title: '7월 25일 중식',
+                    publishedAt: '2026-07-25T02:40:00Z',
+                }],
+            },
+        },
+    };
+    const laundry: CampusSnapshot = {
+        savedAt: Date.parse('2026-07-25T03:00:00Z'),
+        data: {
+            schemaVersion: 1,
+            machines: [],
+            events: [{
+                machineId: '워시타워_7',
+                appliance: 'dryer',
+                sessionId: 'dryer-session',
+                observedAt: '2026-07-25T03:00:00Z',
+                type: 'COMPLETED',
+            }],
+            quality: {},
+        },
+    };
+
+    assert.deepEqual(
+        dashboardUpdates(meals, laundry, new Date('2026-07-25T03:10:00Z')),
+        [
+            {
+                id: 'laundry:워시타워_7:dryer:dryer-session:COMPLETED:2026-07-25T03:00:00Z',
+                kind: 'laundry',
+                title: '7번 건조가 끝났어요',
+                occurredAt: '2026-07-25T03:00:00Z',
+            },
+            {
+                id: 'meal:lunch',
+                kind: 'meal',
+                title: '오늘 중식 식단이 등록됐어요',
+                occurredAt: '2026-07-25T02:40:00Z',
+            },
+        ],
+    );
 });
 
 test('Discussion 소식 유형을 표시한다', () => {
@@ -133,11 +247,12 @@ test('트레이 패널은 홈과 소식 화면 및 기존 주요 액션을 제�
     const script = readFileSync(new URL('./tray-panel.ts', import.meta.url), 'utf8');
     const styles = readFileSync(new URL('./styles.css', import.meta.url), 'utf8');
     const uiStyles = readFileSync(new URL('./ui.css', import.meta.url), 'utf8');
-    const attendanceCardMarker = html.indexOf('data-ui="attendance-status"');
+    const attendanceCardMarker = html.indexOf('data-ui="primary-status"');
     const attendanceCardStart = html.lastIndexOf('<button', attendanceCardMarker);
     const attendanceCardEnd = html.indexOf('</button>', attendanceCardMarker) + 9;
     const attendanceCard = html.slice(attendanceCardStart, attendanceCardEnd);
-    const ddayCardStart = html.indexOf('data-ui="dday"');
+    const todayStatusStart = html.indexOf('data-ui="today-status"');
+    const recentUpdatesStart = html.indexOf('data-ui="recent-updates"');
     const laundryActionStart = html.indexOf('@click="perform(\'open_laundry\')"');
     const laundryActionEnd = html.indexOf('</button>', laundryActionStart);
     const laundryAction = html.slice(laundryActionStart, laundryActionEnd);
@@ -185,8 +300,6 @@ test('트레이 패널은 홈과 소식 화면 및 기존 주요 액션을 제�
     assert.match(attendanceCard, /data-icon="chevron-right"/);
     assert.doesNotMatch(attendanceCard, /<footer|x-text="presentation\.actionLabel/);
     assert.doesNotMatch(attendanceCard, /state\.ddayText/);
-    assert.ok(ddayCardStart > attendanceCardEnd);
-    assert.match(html.slice(ddayCardStart), /state\.ddayText/);
     assert.doesNotMatch(html, /quick-action-title/);
     assert.match(html, /워시타워/);
     assert.match(html, /오늘의 식단/);
@@ -198,6 +311,8 @@ test('트레이 패널은 홈과 소식 화면 및 기존 주요 액션을 제�
     assert.doesNotMatch(panelHeader, /aria-label="패널 닫기"/);
     assert.doesNotMatch(panelHeader, /@click="hide\(\)"/);
     assert.match(panelHeader, /@click="toggleMenu\(\)"/);
+    assert.match(panelHeader, /dashboardDate/);
+    assert.match(panelHeader, /state\.ddayText/);
     assert.match(appMenu, /role="menu"/);
     assert.match(appMenu, /x-transition:enter=/);
     assert.doesNotMatch(appMenu, /x-transition:leave/);
@@ -227,6 +342,17 @@ test('트레이 패널은 홈과 소식 화면 및 기존 주요 액션을 제�
     assert.doesNotMatch(html, /이 패널에 의견 보내기/);
     assert.doesNotMatch(html, /출석 알림/);
     assert.doesNotMatch(html, /attendanceNotificationVisible/);
+    assert.match(html, />지금 할 일</);
+    assert.match(html, />오늘</);
+    assert.ok(todayStatusStart > attendanceCardEnd);
+    assert.match(html.slice(todayStatusStart), /attendanceSummary\.detail/);
+    assert.match(html.slice(todayStatusStart), /laundrySummary\.detail/);
+    assert.match(html.slice(todayStatusStart), /mealsSummary\.detail/);
+    assert.ok(recentUpdatesStart > todayStatusStart);
+    assert.match(html.slice(recentUpdatesStart), /recentUpdates/);
+    assert.match(script, /campus-data-updated/);
+    assert.match(script, /report_campus_ready/);
+    assert.doesNotMatch(html, /data-ui="dday"/);
 });
 
 test('트레이 패널은 macOS에서도 투명한 네이티브 창 위에 렌더링한다', () => {

@@ -6,6 +6,7 @@
   "permissions": [
     "core:event:allow-listen",
     "allow-get-tray-panel-state",
+    "allow-report-campus-ready",
     "allow-run-tray-panel-action",
     "allow-hide-tray-panel",
     "allow-get-news-feed",

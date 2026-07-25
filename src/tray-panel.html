@@ -18,7 +18,11 @@
             <img class="size-8 flex-none rounded-[10px] object-cover" src="assets/logo.png" alt=""/>
             <span class="min-w-0">
                 <strong class="block truncate text-[15px] font-bold leading-tight">Jungle Bell</strong>
-                <small class="mt-0.5 block text-[11px] leading-none text-app-faint" x-text="state.currentVersion ? `v${state.currentVersion}` : '불러오는 중'"></small>
+                <small class="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] leading-none text-app-faint">
+                    <span class="truncate" x-text="dashboardDate"></span>
+                    <span class="text-app-faint" x-show="state.ddayText" x-cloak aria-hidden="true">·</span>
+                    <span class="truncate font-semibold text-app-common" x-show="state.ddayText" x-cloak x-text="state.ddayText"></span>
+                </small>
             </span>
         </div>
         <div class="flex items-center gap-1">
@@ -86,93 +90,153 @@
     </nav>
 
     <section class="min-h-0 flex-1 overflow-y-auto px-4 pb-3" x-show="activeTab === 'home'">
-        <button
-            type="button"
-            class="w-full rounded-2xl border p-4 text-left transition-[filter,transform] duration-200 hover:brightness-[.98] active:scale-[.99] focus-visible:ring-4 focus-visible:ring-app-accent-soft disabled:pointer-events-none disabled:opacity-50"
-            data-ui="attendance-status"
-            :class="{
-                'border-app-border bg-app-surface-subtle': presentation.tone === 'neutral',
-                'border-app-warning bg-app-warning-soft': presentation.tone === 'warning',
-                'border-app-danger bg-app-danger-soft': presentation.tone === 'danger',
-                'border-app-success bg-app-success-soft': presentation.tone === 'success',
-                'border-app-accent bg-app-accent-soft': presentation.tone === 'accent'
-            }"
-            :aria-label="`${presentation.actionLabel ?? '출석 상태 확인'} — ${state.statusText}`"
-            aria-live="polite"
-            :disabled="busyAction !== null"
-            @click="perform('open_attendance')"
-        >
-            <span class="flex items-center gap-3">
-                <span
-                    class="flex size-10 flex-none items-center justify-center rounded-xl"
-                    :class="{
-                        'bg-app-overlay text-app-faint': presentation.tone === 'neutral',
-                        'bg-app-warning text-white': presentation.tone === 'warning',
-                        'bg-app-danger text-white': presentation.tone === 'danger',
-                        'bg-app-success text-white': presentation.tone === 'success',
-                        'bg-app-accent text-white': presentation.tone === 'accent'
-                    }"
-                >
-                    <svg class="size-5" viewBox="0 0 24 24" aria-hidden="true">
-                        <path x-show="presentation.tone === 'success'" d="m6.5 12.5 3.5 3.5 7.5-8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-                        <path x-show="presentation.tone === 'danger' || presentation.tone === 'warning'" d="M12 8v5m0 3.5v.1M10.3 4.8 3.7 17a2 2 0 0 0 1.8 3h13a2 2 0 0 0 1.8-3L13.7 4.8a2 2 0 0 0-3.4 0Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                        <path x-show="presentation.tone === 'neutral' || presentation.tone === 'accent'" d="M12 3.5a8.5 8.5 0 1 0 8.5 8.5A8.5 8.5 0 0 0 12 3.5Zm0 4v5l3 1.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
+        <section aria-labelledby="primary-status-title">
+            <h2 id="primary-status-title" class="mb-2 text-xs font-bold text-app-muted">지금 할 일</h2>
+            <button
+                type="button"
+                class="w-full rounded-2xl border p-4 text-left transition-[filter,transform] duration-200 hover:brightness-[.98] active:scale-[.99] focus-visible:ring-4 focus-visible:ring-app-accent-soft disabled:pointer-events-none disabled:opacity-50"
+                data-ui="primary-status"
+                :class="{
+                    'border-app-border bg-app-surface-subtle': presentation.tone === 'neutral',
+                    'border-app-warning bg-app-warning-soft': presentation.tone === 'warning',
+                    'border-app-danger bg-app-danger-soft': presentation.tone === 'danger',
+                    'border-app-success bg-app-success-soft': presentation.tone === 'success',
+                    'border-app-accent bg-app-accent-soft': presentation.tone === 'accent'
+                }"
+                :aria-label="`${presentation.actionLabel ?? '출석 상태 확인'} — ${state.statusText}`"
+                aria-live="polite"
+                :disabled="busyAction !== null"
+                @click="perform('open_attendance')"
+            >
+                <span class="flex items-center gap-3">
+                    <span
+                        class="flex size-11 flex-none items-center justify-center rounded-xl"
+                        :class="{
+                            'bg-app-overlay text-app-faint': presentation.tone === 'neutral',
+                            'bg-app-warning text-white': presentation.tone === 'warning',
+                            'bg-app-danger text-white': presentation.tone === 'danger',
+                            'bg-app-success text-white': presentation.tone === 'success',
+                            'bg-app-accent text-white': presentation.tone === 'accent'
+                        }"
+                    >
+                        <svg class="size-5" viewBox="0 0 24 24" aria-hidden="true">
+                            <path x-show="presentation.tone === 'success'" d="m6.5 12.5 3.5 3.5 7.5-8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path x-show="presentation.tone === 'danger' || presentation.tone === 'warning'" d="M12 8v5m0 3.5v.1M10.3 4.8 3.7 17a2 2 0 0 0 1.8 3h13a2 2 0 0 0 1.8-3L13.7 4.8a2 2 0 0 0-3.4 0Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path x-show="presentation.tone === 'neutral' || presentation.tone === 'accent'" d="M12 3.5a8.5 8.5 0 1 0 8.5 8.5A8.5 8.5 0 0 0 12 3.5Zm0 4v5l3 1.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </span>
+                    <span class="min-w-0 flex-1">
+                        <strong class="block text-[17px] font-bold leading-snug" x-text="statusTextParts.title"></strong>
+                        <small class="mt-1 block text-xs font-medium leading-snug text-app-muted" x-show="statusTextParts.detail" x-text="statusTextParts.detail"></small>
+                    </span>
+                    <svg class="size-4 flex-none text-app-faint" data-icon="chevron-right" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 </span>
-                <span class="min-w-0 flex-1">
-                    <strong class="block text-[17px] font-bold leading-snug" x-text="statusTextParts.title"></strong>
-                    <small class="mt-1 block text-xs font-medium leading-snug text-app-muted" x-show="statusTextParts.detail" x-text="statusTextParts.detail"></small>
-                </span>
-                <svg class="size-4 flex-none text-app-faint" data-icon="chevron-right" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </span>
-        </button>
+            </button>
+        </section>
 
-        <aside
-            class="mt-3 flex min-h-14 items-center gap-3 rounded-xl border border-app-border bg-app-surface px-3"
-            data-ui="dday"
-            x-show="state.ddayText"
-            x-cloak
-            aria-live="polite"
-        >
-            <span class="flex size-9 flex-none items-center justify-center rounded-[10px] bg-app-common-soft text-app-common">
-                <svg class="size-5" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3.5v17m0-15h10l-2.5 3L17 12H7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </span>
-            <span class="min-w-0 flex-1">
-                <small class="block text-[10px] font-bold text-app-common">D-Day</small>
-                <strong class="mt-0.5 block truncate text-sm" x-text="state.ddayText"></strong>
-            </span>
-        </aside>
-
-        <section class="mt-4" aria-labelledby="campus-action-title">
-            <h2 id="campus-action-title" class="mb-2 text-xs font-bold text-app-muted">생활 정보</h2>
-            <div class="grid grid-cols-2 gap-2">
+        <section class="mt-4" data-ui="today-status" aria-labelledby="today-status-title">
+            <h2 id="today-status-title" class="mb-2 text-xs font-bold text-app-muted">오늘</h2>
+            <div class="overflow-hidden rounded-2xl border border-app-border bg-app-surface">
                 <button
                     type="button"
-                    class="min-h-20 rounded-xl border border-app-border bg-app-surface p-3 text-left transition-colors hover:border-app-border-strong hover:bg-app-surface-subtle focus-visible:ring-4 focus-visible:ring-app-accent-soft disabled:opacity-50"
+                    class="flex min-h-16 w-full items-center gap-3 border-0 bg-transparent px-3 py-2 text-left transition-colors hover:bg-app-surface-subtle focus-visible:bg-app-surface-subtle focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-app-accent-soft disabled:opacity-50"
                     :disabled="busyAction !== null"
-                    @click="perform('open_laundry')"
+                    @click="perform('open_attendance')"
                 >
-                    <span class="flex size-8 items-center justify-center rounded-lg bg-app-men-soft text-app-men"><svg class="size-[18px]" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3.5h14v17H5v-17Zm3 3h.1M12 6.5h4M12 10a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-                    <span class="mt-2 flex items-center justify-between gap-2">
-                        <strong class="text-xs">워시타워</strong>
-                        <svg class="size-3.5 flex-none text-app-faint" data-icon="chevron-right" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <span class="flex size-9 flex-none items-center justify-center rounded-[10px] bg-app-accent-soft text-app-accent">
+                        <svg class="size-[18px]" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5h10a2 2 0 0 1 2 2v13H5v-13a2 2 0 0 1 2-2Zm1 4h8m-8 4h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </span>
+                    <span class="min-w-0 flex-1">
+                        <strong class="block text-xs font-bold">출석</strong>
+                        <small class="mt-0.5 block truncate text-[11px] text-app-muted" x-text="attendanceSummary.detail"></small>
+                    </span>
+                    <span
+                        class="flex-none rounded-full px-2 py-1 text-[10px] font-bold"
+                        :class="{
+                            'bg-app-danger-soft text-app-danger': attendanceSummary.tone === 'danger',
+                            'bg-app-warning-soft text-app-warning': attendanceSummary.tone === 'warning',
+                            'bg-app-success-soft text-app-success': attendanceSummary.tone === 'success',
+                            'bg-app-accent-soft text-app-accent': attendanceSummary.tone === 'accent',
+                            'bg-app-control text-app-faint': attendanceSummary.tone === 'neutral'
+                        }"
+                        x-text="attendanceSummary.badge"
+                    ></span>
+                    <svg class="size-3.5 flex-none text-app-faint" data-icon="chevron-right" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 </button>
                 <button
                     type="button"
-                    class="min-h-20 rounded-xl border border-app-border bg-app-surface p-3 text-left transition-colors hover:border-app-border-strong hover:bg-app-surface-subtle focus-visible:ring-4 focus-visible:ring-app-accent-soft disabled:opacity-50"
+                    class="flex min-h-16 w-full items-center gap-3 border-0 border-t border-app-divider bg-transparent px-3 py-2 text-left transition-colors hover:bg-app-surface-subtle focus-visible:bg-app-surface-subtle focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-app-accent-soft disabled:opacity-50"
                     :disabled="busyAction !== null"
                     @click="perform('open_meals')"
                 >
-                    <span class="flex size-8 items-center justify-center rounded-lg bg-app-success-soft text-app-success"><svg class="size-[18px]" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v7m-2-7v5a2 2 0 0 0 4 0V3m-2 7v11m8-18v18m0-18c3 2 3 7 0 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-                    <span class="mt-2 flex items-center justify-between gap-2">
-                        <strong class="text-xs">오늘의 식단</strong>
-                        <svg class="size-3.5 flex-none text-app-faint" data-icon="chevron-right" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <span class="flex size-9 flex-none items-center justify-center rounded-[10px] bg-app-success-soft text-app-success">
+                        <svg class="size-[18px]" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v7m-2-7v5a2 2 0 0 0 4 0V3m-2 7v11m8-18v18m0-18c3 2 3 7 0 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </span>
+                    <span class="min-w-0 flex-1">
+                        <strong class="block text-xs font-bold">오늘의 식단</strong>
+                        <small class="mt-0.5 block truncate text-[11px] text-app-muted" x-text="mealsSummary.detail"></small>
+                    </span>
+                    <span
+                        class="flex-none rounded-full px-2 py-1 text-[10px] font-bold"
+                        :class="{
+                            'bg-app-warning-soft text-app-warning': mealsSummary.tone === 'warning',
+                            'bg-app-success-soft text-app-success': mealsSummary.tone === 'success',
+                            'bg-app-accent-soft text-app-accent': mealsSummary.tone === 'accent',
+                            'bg-app-control text-app-faint': mealsSummary.tone === 'neutral'
+                        }"
+                        x-text="mealsSummary.badge"
+                    ></span>
+                    <svg class="size-3.5 flex-none text-app-faint" data-icon="chevron-right" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+                <button
+                    type="button"
+                    class="flex min-h-16 w-full items-center gap-3 border-0 border-t border-app-divider bg-transparent px-3 py-2 text-left transition-colors hover:bg-app-surface-subtle focus-visible:bg-app-surface-subtle focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-app-accent-soft disabled:opacity-50"
+                    :disabled="busyAction !== null"
+                    @click="perform('open_laundry')"
+                >
+                    <span class="flex size-9 flex-none items-center justify-center rounded-[10px] bg-app-men-soft text-app-men">
+                        <svg class="size-[18px]" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3.5h14v17H5v-17Zm3 3h.1M12 6.5h4M12 10a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </span>
+                    <span class="min-w-0 flex-1">
+                        <strong class="block text-xs font-bold">워시타워</strong>
+                        <small class="mt-0.5 block truncate text-[11px] text-app-muted" x-text="laundrySummary.detail"></small>
+                    </span>
+                    <span
+                        class="flex-none rounded-full px-2 py-1 text-[10px] font-bold"
+                        :class="{
+                            'bg-app-warning-soft text-app-warning': laundrySummary.tone === 'warning',
+                            'bg-app-success-soft text-app-success': laundrySummary.tone === 'success',
+                            'bg-app-control text-app-faint': laundrySummary.tone === 'neutral'
+                        }"
+                        x-text="laundrySummary.badge"
+                    ></span>
+                    <svg class="size-3.5 flex-none text-app-faint" data-icon="chevron-right" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 </button>
             </div>
         </section>
 
+        <section class="mt-4" data-ui="recent-updates" aria-labelledby="recent-updates-title" x-show="recentUpdates.length > 0" x-cloak>
+            <h2 id="recent-updates-title" class="mb-2 text-xs font-bold text-app-muted">최근 업데이트</h2>
+            <div class="overflow-hidden rounded-2xl border border-app-border bg-app-surface">
+                <template x-for="item in recentUpdates" :key="item.id">
+                    <button
+                        type="button"
+                        class="flex min-h-12 w-full items-center gap-2.5 border-0 border-t border-app-divider bg-transparent px-3 py-2 text-left first:border-t-0 hover:bg-app-surface-subtle focus-visible:bg-app-surface-subtle focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-app-accent-soft disabled:opacity-50"
+                        :disabled="busyAction !== null"
+                        @click="perform(item.kind === 'meal' ? 'open_meals' : 'open_laundry')"
+                    >
+                        <span
+                            class="flex size-7 flex-none items-center justify-center rounded-lg"
+                            :class="item.kind === 'meal' ? 'bg-app-success-soft text-app-success' : 'bg-app-men-soft text-app-men'"
+                        >
+                            <svg class="size-3.5" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12.5 10 16l8-9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </span>
+                        <span class="min-w-0 flex-1 truncate text-[11px] font-medium" x-text="item.title"></span>
+                        <time class="flex-none font-mono text-[10px] tabular-nums text-app-faint" :datetime="item.occurredAt" x-text="updateTime(item)"></time>
+                    </button>
+                </template>
+            </div>
+        </section>
     </section>
 
     <section class="min-h-0 flex-1 overflow-y-auto px-4 pb-3" x-show="activeTab === 'news'" x-cloak>
