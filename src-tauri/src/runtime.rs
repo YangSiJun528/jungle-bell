@@ -20,7 +20,9 @@ pub(crate) async fn apply_tick_side_effects(
     job_actions: &[JobAction],
 ) -> Vec<(JobAction, bool)> {
     if let Some(snapshot) = tray_update {
-        tray::update_tray(app_handle, snapshot);
+        if let Err(error) = tray::update_tray(app_handle, snapshot) {
+            log::error!("[scheduler] tray projection update failed: {error}");
+        }
     }
 
     if let Some((title, body)) = notification {

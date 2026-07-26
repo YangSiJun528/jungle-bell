@@ -1,19 +1,26 @@
 import Alpine from 'alpinejs';
 import './select-control';
 import {invoke} from '@tauri-apps/api/core';
+import type {UnlistenFn} from '@tauri-apps/api/event';
 import {confirm, message} from '@tauri-apps/plugin-dialog';
+import {
+    connectSettingsSnapshots,
+    invokeSettingsMutation,
+    refreshSettingsSnapshot,
+    type SettingsSnapshot,
+} from './settings-state';
 
 type SettingsTab = 'notification' | 'app';
 
-interface TimeOfDay {
-    hour: number;
-    minute: number;
-}
-
 interface SettingsComponent {
     activeTab: SettingsTab;
+    settingsRevision: number;
+    lastSettingsSnapshot: SettingsSnapshot | null;
+    unlistenSettings: UnlistenFn | null;
     appVersion: string;
+    pendingVersion: string | null;
     autoStart: boolean;
+    autoUpdate: boolean;
     showAppIcon: boolean;
     showDday: boolean;
     usageAnalytics: boolean;
@@ -29,8 +36,10 @@ interface SettingsComponent {
     get attendanceNotificationEnabled(): boolean;
     get skipAttendanceHint(): string;
     init(): Promise<void>;
+    destroy(): void;
     selectTab(tab: SettingsTab): Promise<void>;
-    refreshSkipAttendance(): Promise<void>;
+    refreshSettings(): Promise<void>;
+    restoreSettings(context: string, error: unknown, fallback?: () => void): Promise<void>;
     onFocus(): Promise<void>;
     setAttendanceNotification(enabled: boolean): Promise<void>;
     saveToggle(command: string, field: BooleanField): Promise<void>;
@@ -45,6 +54,7 @@ interface SettingsComponent {
 
 type BooleanField =
     | 'autoStart'
+    | 'autoUpdate'
     | 'showAppIcon'
     | 'showDday'
     | 'usageAnalytics'
@@ -53,11 +63,36 @@ type BooleanField =
     | 'startNotification'
     | 'endNotification';
 
+function projectSettings(target: SettingsComponent, snapshot: SettingsSnapshot): void {
+    target.appVersion = snapshot.appVersion;
+    target.pendingVersion = snapshot.pendingVersion;
+    target.autoStart = snapshot.autoStart;
+    target.autoUpdate = snapshot.autoUpdate;
+    target.showAppIcon = snapshot.showAppIcon;
+    target.showDday = snapshot.showDday;
+    target.usageAnalytics = snapshot.usageAnalytics;
+    target.debugMode = snapshot.debugMode;
+    target.skipAttendance = snapshot.skipAttendance;
+    target.skipSunday = snapshot.skipSunday;
+    target.startNotification = snapshot.startNotification;
+    target.endNotification = snapshot.endNotification;
+    target.notificationStart = snapshot.notificationStart.hour;
+    target.notificationEnd = snapshot.notificationEnd.hour;
+    target.startInterval = snapshot.startInterval;
+    target.endInterval = snapshot.endInterval;
+    target.lastSettingsSnapshot = snapshot;
+}
+
 function settings(): SettingsComponent {
     return {
         activeTab: 'notification',
+        settingsRevision: -1,
+        lastSettingsSnapshot: null,
+        unlistenSettings: null,
         appVersion: '',
+        pendingVersion: null,
         autoStart: false,
+        autoUpdate: false,
         showAppIcon: true,
         showDday: true,
         usageAnalytics: true,
@@ -84,84 +119,115 @@ function settings(): SettingsComponent {
         },
 
         async init() {
-            const load = async <T>(command: string, apply: (value: T) => void) => {
-                try {
-                    apply(await invoke<T>(command));
-                } catch (error) {
-                    console.error(`[settings] ${command} failed`, error);
-                }
-            };
+            this.unlistenSettings = await connectSettingsSnapshots(
+                this,
+                projectSettings,
+                (context, error) => console.error(`[settings] ${context} failed`, error),
+            );
+        },
 
-            await Promise.all([
-                load<string>('get_app_version', (value) => { this.appVersion = value; }),
-                load<boolean>('get_auto_start', (value) => { this.autoStart = value; }),
-                load<boolean>('get_show_app_icon', (value) => { this.showAppIcon = value; }),
-                load<boolean>('get_show_dday', (value) => { this.showDday = value; }),
-                load<boolean>('get_usage_analytics_enabled', (value) => { this.usageAnalytics = value; }),
-                load<boolean>('get_debug_mode', (value) => { this.debugMode = value; }),
-                load<boolean>('get_skip_attendance', (value) => { this.skipAttendance = value; }),
-                load<boolean>('get_skip_sunday', (value) => { this.skipSunday = value; }),
-                load<boolean>('get_start_notification_enabled', (value) => { this.startNotification = value; }),
-                load<boolean>('get_end_notification_enabled', (value) => { this.endNotification = value; }),
-                load<TimeOfDay>('get_notification_start', (value) => { this.notificationStart = value.hour; }),
-                load<TimeOfDay>('get_notification_end', (value) => { this.notificationEnd = value.hour; }),
-                load<number>('get_start_notification_interval', (value) => { this.startInterval = value; }),
-                load<number>('get_end_notification_interval', (value) => { this.endInterval = value; }),
-            ]);
+        destroy() {
+            this.unlistenSettings?.();
+            this.unlistenSettings = null;
         },
 
         async selectTab(tab) {
             this.activeTab = tab;
+            if (tab === 'app') await this.refreshSettings();
         },
 
-        async refreshSkipAttendance() {
+        async refreshSettings() {
             try {
-                this.skipAttendance = await invoke<boolean>('get_skip_attendance');
+                await refreshSettingsSnapshot(this, projectSettings);
             } catch (error) {
-                console.error('[settings] skip attendance refresh failed', error);
+                console.error('[settings] snapshot refresh failed', error);
+            }
+        },
+
+        async restoreSettings(context, error, fallback) {
+            console.error(`[settings] ${context} failed`, error);
+            try {
+                await refreshSettingsSnapshot(this, projectSettings);
+            } catch (refreshError) {
+                console.error('[settings] recovery snapshot failed', refreshError);
+                if (this.lastSettingsSnapshot) projectSettings(this, this.lastSettingsSnapshot);
+                else fallback?.();
             }
         },
 
         async onFocus() {
             await invoke('log_from_js', {level: 'info', message: '[settings] window focus'}).catch(console.error);
-            await this.refreshSkipAttendance();
+            await this.refreshSettings();
         },
 
         async setAttendanceNotification(enabled) {
             const previous = this.skipAttendance;
             this.skipAttendance = !enabled;
             try {
-                await invoke('set_skip_attendance', {enabled: this.skipAttendance});
+                await invokeSettingsMutation(
+                    this,
+                    projectSettings,
+                    'set_skip_attendance',
+                    {enabled: this.skipAttendance},
+                );
             } catch (error) {
-                console.error('[settings] set_skip_attendance failed', error);
-                this.skipAttendance = previous;
+                await this.restoreSettings('set_skip_attendance', error, () => {
+                    this.skipAttendance = previous;
+                });
             }
         },
 
         async saveToggle(command, field) {
             const value = this[field];
             try {
-                await invoke(command, {enabled: value});
+                await invokeSettingsMutation(this, projectSettings, command, {enabled: value});
             } catch (error) {
-                console.error(`[settings] ${command} failed`, error);
-                this[field] = !value;
+                await this.restoreSettings(command, error, () => {
+                    this[field] = !value;
+                });
             }
         },
 
         async saveStartTime() {
-            await invoke('set_notification_start', {hour: this.notificationStart, minute: 0}).catch(console.error);
+            try {
+                await invokeSettingsMutation(this, projectSettings, 'set_notification_start', {
+                    hour: this.notificationStart,
+                    minute: 0,
+                });
+            } catch (error) {
+                await this.restoreSettings('set_notification_start', error);
+            }
         },
 
         async saveEndTime() {
-            await invoke('set_notification_end', {hour: this.notificationEnd, minute: 0}).catch(console.error);
+            try {
+                await invokeSettingsMutation(this, projectSettings, 'set_notification_end', {
+                    hour: this.notificationEnd,
+                    minute: 0,
+                });
+            } catch (error) {
+                await this.restoreSettings('set_notification_end', error);
+            }
         },
 
         async saveStartInterval() {
-            await invoke('set_start_notification_interval', {value: this.startInterval}).catch(console.error);
+            try {
+                await invokeSettingsMutation(this, projectSettings, 'set_start_notification_interval', {
+                    value: this.startInterval,
+                });
+            } catch (error) {
+                await this.restoreSettings('set_start_notification_interval', error);
+            }
         },
 
         async saveEndInterval() {
-            await invoke('set_end_notification_interval', {value: this.endInterval}).catch(console.error);
+            try {
+                await invokeSettingsMutation(this, projectSettings, 'set_end_notification_interval', {
+                    value: this.endInterval,
+                });
+            } catch (error) {
+                await this.restoreSettings('set_end_notification_interval', error);
+            }
         },
 
         async toggleDebugMode() {
@@ -178,10 +244,11 @@ function settings(): SettingsComponent {
                 }
             }
             try {
-                await invoke('set_debug_mode', {enabled: value});
+                await invokeSettingsMutation(this, projectSettings, 'set_debug_mode', {enabled: value});
             } catch (error) {
-                console.error('[settings] debug mode update failed', error);
-                this.debugMode = !value;
+                await this.restoreSettings('set_debug_mode', error, () => {
+                    this.debugMode = !value;
+                });
             }
         },
 

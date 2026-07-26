@@ -5,7 +5,7 @@ use std::path::Path;
 use std::path::PathBuf;
 
 /// 시각 값 (시 + 분). 스케줄 경계 설정에 사용.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TimeOfDay {
     pub hour: u32,
     pub minute: u32,
@@ -17,7 +17,7 @@ pub struct TimeOfDay {
 ///   morning_start ~ morning_end  : 학습 시작(체크인) 목표 시간  (04:00 ~ 10:00)
 ///   morning_end   ~ evening_start: 학습 중, 액션 없음          (10:00 ~ 23:00)
 ///   evening_start ~ evening_end  : 학습 종료(체크아웃) 시간     (23:00 ~ 04:00)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
     /// 하루 시작 / 체크인 가능 시작
     pub morning_start: TimeOfDay,
@@ -134,7 +134,7 @@ pub fn validate_notification_interval(value: u32) -> Result<u32, String> {
     }
 }
 
-fn config_path() -> Option<PathBuf> {
+pub(crate) fn config_path() -> Option<PathBuf> {
     dirs::config_dir().map(|p| p.join("jungle-bell").join("config.json"))
 }
 
@@ -157,7 +157,9 @@ impl Config {
                             changed = true;
                         }
                         if changed {
-                            config.save();
+                            if let Err(error) = config.save() {
+                                log::error!("[config] 마이그레이션 결과 저장 실패: {error}");
+                            }
                         }
                         return config;
                     }
@@ -179,24 +181,22 @@ impl Config {
         Self::default()
     }
 
-    /// 설정을 파일에 저장.
-    pub fn save(&self) {
-        if let Some(path) = config_path() {
-            if let Some(parent) = path.parent() {
-                if let Err(e) = fs::create_dir_all(parent) {
-                    log::error!("[config] 설정 디렉토리({}) 생성 실패: {}", parent.display(), e);
-                    return;
-                }
-            }
-            match serde_json::to_string_pretty(self) {
-                Ok(data) => {
-                    if let Err(e) = write_file_atomically(&path, data.as_bytes()) {
-                        log::error!("[config] 설정 파일({}) 저장 실패: {}", path.display(), e);
-                    }
-                }
-                Err(e) => log::error!("[config] 설정 직렬화 실패: {}", e),
-            }
-        }
+    /// 기본 설정 경로에 저장한다. 실패는 호출자에게 전달한다.
+    pub fn save(&self) -> Result<(), String> {
+        let path = config_path().ok_or_else(|| "운영체제 설정 디렉토리를 확인할 수 없습니다.".to_string())?;
+        self.save_to(&path)
+    }
+
+    /// 지정한 경로에 원자적으로 저장한다.
+    pub(crate) fn save_to(&self, path: &Path) -> Result<(), String> {
+        let parent = path
+            .parent()
+            .ok_or_else(|| "설정 파일 상위 디렉토리가 없습니다.".to_string())?;
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("설정 디렉토리({}) 생성 실패: {error}", parent.display()))?;
+        let data = serde_json::to_string_pretty(self).map_err(|error| format!("설정 직렬화 실패: {error}"))?;
+        write_file_atomically(path, data.as_bytes())
+            .map_err(|error| format!("설정 파일({}) 저장 실패: {error}", path.display()))
     }
 
     fn normalize_loaded_values(&mut self) -> bool {
@@ -482,5 +482,20 @@ mod tests {
         ));
         assert!(!config_data_has_field(r#"{"auto_start":true}"#, "onboarding_completed"));
         assert!(!config_data_has_field("not json", "onboarding_completed"));
+    }
+
+    #[test]
+    fn save_to_propagates_parent_directory_errors() {
+        let root = std::env::temp_dir().join(format!("jungle-bell-config-save-error-{}", std::process::id()));
+        let blocked_parent = root.join("not-a-directory");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(&blocked_parent, b"file").unwrap();
+
+        let error = Config::default()
+            .save_to(&blocked_parent.join("config.json"))
+            .expect_err("상위 경로가 파일이면 저장 실패가 호출자에게 전달되어야 한다");
+
+        assert!(error.contains("설정 디렉토리"));
+        fs::remove_dir_all(root).unwrap();
     }
 }

@@ -2,7 +2,7 @@
 //!
 //! JS에서 `window.__TAURI__.core.invoke()`로 호출하는
 //! 모든 커맨드 함수가 이 모듈에 정의된다.
-//! 도메인 로직은 `checker` 등 전용 모듈에 위임한다.
+//! 도메인 로직은 `checker`, `updater` 등 전용 모듈에 위임한다.
 
 use std::process::Command;
 use std::sync::Arc;
@@ -17,8 +17,9 @@ use crate::attendance_day;
 use crate::autostart;
 use crate::campus::{CampusDataKind, CampusService};
 use crate::checker;
-use crate::config::{self, TimeOfDay};
+use crate::config;
 use crate::news::{self, NewsFeed, NewsService};
+use crate::settings_state::{SettingsService, SettingsSnapshot};
 use crate::state::{self, AppState};
 use crate::tray;
 
@@ -96,7 +97,9 @@ pub async fn report_attendance_status(
     drop(s);
 
     if let Some(snapshot) = tray_snapshot {
-        tray::update_tray(&app, &snapshot);
+        if let Err(error) = tray::update_tray(&app, &snapshot) {
+            log::error!("[tray] checker report projection update failed: {error}");
+        }
     }
 
     // 로그인 상태/초기 로드 상태 전이 시 이벤트 발사 — 온보딩 슬라이드가 ✓ 표시 갱신용으로 listen.
@@ -169,219 +172,173 @@ pub fn log_from_js(level: String, message: String) {
 
 // ── 설정 매크로 ──────────────────────────────────────────
 
-/// bool 설정 getter/setter 생성 매크로.
+/// bool 설정 setter 생성 매크로.
 macro_rules! setting_bool {
-    ($get:ident, $set:ident, $field:ident, $label:expr, $setting:ident) => {
+    ($set:ident, $field:ident, $label:expr, $setting:ident) => {
         #[tauri::command]
-        pub async fn $get(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<bool, String> {
-            Ok(state.lock().await.config.$field)
-        }
-
-        #[tauri::command]
-        pub async fn $set(state: tauri::State<'_, Arc<Mutex<AppState>>>, enabled: bool) -> Result<(), String> {
+        pub async fn $set(
+            app: tauri::AppHandle,
+            settings: tauri::State<'_, Arc<SettingsService>>,
+            enabled: bool,
+        ) -> Result<SettingsSnapshot, String> {
             log::info!("[settings] {} 변경: {}", $label, enabled);
-            let changed = {
-                let mut s = state.lock().await;
-                if s.config.$field == enabled {
-                    false
-                } else {
-                    s.config.$field = enabled;
-                    s.config.save();
-                    true
-                }
-            };
-            if changed {
+            let commit = settings
+                .update_config(&app, stringify!($set), move |config| {
+                    config.$field = enabled;
+                    Ok(())
+                })
+                .await?;
+            if commit.changed {
                 analytics::track(Event::SettingChanged(Setting::$setting(enabled)));
             }
-            Ok(())
+            Ok(commit.snapshot)
         }
     };
 }
 
 // ── 매크로 생성 설정 커맨드 ──────────────────────────────
 
+setting_bool!(set_auto_update, auto_update, "자동 업데이트 설정", AutoUpdate);
 setting_bool!(
-    get_start_notification_enabled,
     set_start_notification_enabled,
     start_notification_enabled,
     "시작 출석 알림 설정",
     StartNotificationEnabled
 );
 setting_bool!(
-    get_end_notification_enabled,
     set_end_notification_enabled,
     end_notification_enabled,
     "종료 출석 알림 설정",
     EndNotificationEnabled
 );
 
-setting_bool!(
-    get_skip_sunday,
-    set_skip_sunday,
-    skip_sunday,
-    "일요일 알림 끄기",
-    SkipSunday
-);
+setting_bool!(set_skip_sunday, skip_sunday, "일요일 알림 끄기", SkipSunday);
 
 // ── 커스텀 설정 커맨드 ───────────────────────────────────
 
+/// 설정 UI가 초기화/재동기화에 사용하는 단일 snapshot.
 #[tauri::command]
-pub async fn get_start_notification_interval(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<u32, String> {
-    Ok(state.lock().await.config.start_notification_interval_mins)
+pub async fn get_settings_snapshot(
+    settings: tauri::State<'_, Arc<SettingsService>>,
+) -> Result<SettingsSnapshot, String> {
+    Ok(settings.snapshot().await)
 }
 
 #[tauri::command]
 pub async fn set_start_notification_interval(
-    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    app: tauri::AppHandle,
+    settings: tauri::State<'_, Arc<SettingsService>>,
     value: u32,
-) -> Result<(), String> {
+) -> Result<SettingsSnapshot, String> {
     let value = config::validate_notification_interval(value)?;
     log::info!("[settings] 시작 출석 알림 간격 변경: {}", value);
-    let changed = {
-        let mut s = state.lock().await;
-        if s.config.start_notification_interval_mins == value {
-            false
-        } else {
-            s.config.start_notification_interval_mins = value;
-            s.config.save();
-            true
-        }
-    };
-    if changed {
+    let commit = settings
+        .update_config(&app, "set_start_notification_interval", move |config| {
+            config.start_notification_interval_mins = value;
+            Ok(())
+        })
+        .await?;
+    if commit.changed {
         analytics::track(Event::SettingChanged(Setting::StartNotificationIntervalMinutes(value)));
     }
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn get_end_notification_interval(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<u32, String> {
-    Ok(state.lock().await.config.end_notification_interval_mins)
+    Ok(commit.snapshot)
 }
 
 #[tauri::command]
 pub async fn set_end_notification_interval(
-    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    app: tauri::AppHandle,
+    settings: tauri::State<'_, Arc<SettingsService>>,
     value: u32,
-) -> Result<(), String> {
+) -> Result<SettingsSnapshot, String> {
     let value = config::validate_notification_interval(value)?;
     log::info!("[settings] 종료 출석 알림 간격 변경: {}", value);
-    let changed = {
-        let mut s = state.lock().await;
-        if s.config.end_notification_interval_mins == value {
-            false
-        } else {
-            s.config.end_notification_interval_mins = value;
-            s.config.save();
-            true
-        }
-    };
-    if changed {
+    let commit = settings
+        .update_config(&app, "set_end_notification_interval", move |config| {
+            config.end_notification_interval_mins = value;
+            Ok(())
+        })
+        .await?;
+    if commit.changed {
         analytics::track(Event::SettingChanged(Setting::EndNotificationIntervalMinutes(value)));
     }
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn get_notification_start(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<TimeOfDay, String> {
-    Ok(state.lock().await.config.notification_start.clone())
+    Ok(commit.snapshot)
 }
 
 #[tauri::command]
 pub async fn set_notification_start(
-    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    app: tauri::AppHandle,
+    settings: tauri::State<'_, Arc<SettingsService>>,
     hour: u32,
     minute: u32,
-) -> Result<(), String> {
+) -> Result<SettingsSnapshot, String> {
     let time = config::validate_notification_start(hour, minute)?;
     log::info!("[settings] 알림 시작 시각 변경: {:02}:{:02}", time.hour, time.minute);
-    let changed = {
-        let mut s = state.lock().await;
-        if s.config.notification_start.hour == time.hour && s.config.notification_start.minute == time.minute {
-            false
-        } else {
-            s.config.notification_start = time.clone();
-            s.config.save();
-            true
-        }
-    };
-    if changed {
+    let analytics_time = time.clone();
+    let commit = settings
+        .update_config(&app, "set_notification_start", move |config| {
+            config.notification_start = time;
+            Ok(())
+        })
+        .await?;
+    if commit.changed {
         analytics::track(Event::SettingChanged(Setting::NotificationStart {
-            hour: time.hour,
-            minute: time.minute,
+            hour: analytics_time.hour,
+            minute: analytics_time.minute,
         }));
     }
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn get_notification_end(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<TimeOfDay, String> {
-    Ok(state.lock().await.config.notification_end.clone())
+    Ok(commit.snapshot)
 }
 
 #[tauri::command]
 pub async fn set_notification_end(
-    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    app: tauri::AppHandle,
+    settings: tauri::State<'_, Arc<SettingsService>>,
     hour: u32,
     minute: u32,
-) -> Result<(), String> {
+) -> Result<SettingsSnapshot, String> {
     let time = config::validate_notification_end(hour, minute)?;
     log::info!("[settings] 알림 종료 시각 변경: {:02}:{:02}", time.hour, time.minute);
-    let changed = {
-        let mut s = state.lock().await;
-        if s.config.notification_end.hour == time.hour && s.config.notification_end.minute == time.minute {
-            false
-        } else {
-            s.config.notification_end = time.clone();
-            s.config.save();
-            true
-        }
-    };
-    if changed {
+    let analytics_time = time.clone();
+    let commit = settings
+        .update_config(&app, "set_notification_end", move |config| {
+            config.notification_end = time;
+            Ok(())
+        })
+        .await?;
+    if commit.changed {
         analytics::track(Event::SettingChanged(Setting::NotificationEnd {
-            hour: time.hour,
-            minute: time.minute,
+            hour: analytics_time.hour,
+            minute: analytics_time.minute,
         }));
     }
-    Ok(())
-}
-
-/// Tauri 커맨드: 이번 출석 알림 끄기 상태 조회.
-/// config.skip_attendance가 현재 "출석일" 날짜와 일치하면 true.
-/// 자정~morning_start 사이에는 전날 날짜도 유효로 판정.
-#[tauri::command]
-pub async fn get_skip_attendance(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<bool, String> {
-    let s = state.lock().await;
-    let kst_now = chrono::Utc::now().with_timezone(&state::kst());
-
-    Ok(attendance_day::is_skip_attendance_active(&s.config, kst_now))
+    Ok(commit.snapshot)
 }
 
 /// Tauri 커맨드: 이번 출석 알림 끄기 설정 변경 및 저장.
 /// enabled=true이면 오늘 KST 날짜를 저장, false이면 None.
 #[tauri::command]
-pub async fn set_skip_attendance(state: tauri::State<'_, Arc<Mutex<AppState>>>, enabled: bool) -> Result<(), String> {
-    let mut s = state.lock().await;
+pub async fn set_skip_attendance(
+    app: tauri::AppHandle,
+    settings: tauri::State<'_, Arc<SettingsService>>,
+    enabled: bool,
+) -> Result<SettingsSnapshot, String> {
     let next = if enabled {
         let kst_now = chrono::Utc::now().with_timezone(&state::kst());
         Some(attendance_day::calendar_date_string(kst_now))
     } else {
         None
     };
-    if s.config.skip_attendance == next {
-        return Ok(());
+    log::info!("[settings] 이번 출석 알림 끄기 변경: {next:?}");
+    let commit = settings
+        .update_config(&app, "set_skip_attendance", move |config| {
+            config.skip_attendance = next;
+            Ok(())
+        })
+        .await?;
+    if commit.changed {
+        analytics::track(Event::SettingChanged(Setting::SkipAttendance(enabled)));
     }
-    s.config.skip_attendance = next;
-    log::info!("[settings] 이번 출석 알림 끄기 변경: {:?}", s.config.skip_attendance);
-    s.config.save();
-    drop(s);
-    analytics::track(Event::SettingChanged(Setting::SkipAttendance(enabled)));
-    Ok(())
-}
-
-/// Tauri 커맨드: 현재 앱 버전 반환.
-#[tauri::command]
-pub fn get_app_version(app: tauri::AppHandle) -> String {
-    app.package_info().version.to_string()
+    Ok(commit.snapshot)
 }
 
 /// 생활정보 창이 이벤트 구독을 마쳤음을 보고한다.
@@ -438,54 +395,49 @@ pub async fn open_image_viewer(app: tauri::AppHandle, image_url: String) -> Resu
     Ok(())
 }
 
-/// Tauri 커맨드: 자동 시작 설정 조회.
-#[tauri::command]
-pub async fn get_auto_start(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<bool, String> {
-    Ok(state.lock().await.config.auto_start)
-}
-
 /// Tauri 커맨드: 자동 시작 설정 변경 및 저장.
 #[tauri::command]
 pub async fn set_auto_start(
     app: tauri::AppHandle,
-    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    settings: tauri::State<'_, Arc<SettingsService>>,
     enabled: bool,
-) -> Result<(), String> {
+) -> Result<SettingsSnapshot, String> {
     log::info!("[settings] 자동 시작 설정 변경: {}", enabled);
-    // 앱 설정을 먼저 저장한 후 OS 설정을 변경한다.
-    // OS 변경에 실패하더라도 다음 실행 시 setup에서 Config 기준으로 재동기화된다.
-    let changed = {
-        let mut s = state.lock().await;
-        let changed = s.config.auto_start != enabled;
-        s.config.auto_start = enabled;
-        s.config.save();
-        changed
-    };
-    autostart::sync_auto_start(&app, enabled)?;
-    if changed {
+    let apply_app = app.clone();
+    let rollback_app = app.clone();
+    let commit = settings
+        .update_config_with_effect(
+            &app,
+            "set_auto_start",
+            move |config| {
+                config.auto_start = enabled;
+                Ok(())
+            },
+            move |_, next| autostart::sync_auto_start(&apply_app, next.auto_start),
+            move |previous, _| autostart::sync_auto_start(&rollback_app, previous.auto_start),
+        )
+        .await?;
+    if commit.changed {
         analytics::track(Event::SettingChanged(Setting::AutoStart(enabled)));
     }
-    Ok(())
-}
-
-/// Tauri 커맨드: 디버그 모드 설정 조회.
-#[tauri::command]
-pub async fn get_debug_mode(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<bool, String> {
-    Ok(state.lock().await.config.debug_mode)
+    Ok(commit.snapshot)
 }
 
 /// Tauri 커맨드: 디버그 모드 설정 변경 및 저장.
 /// 런타임에 로그 레벨도 즉시 전환 (Info ↔ Debug).
 #[tauri::command]
-pub async fn set_debug_mode(state: tauri::State<'_, Arc<Mutex<AppState>>>, enabled: bool) -> Result<(), String> {
+pub async fn set_debug_mode(
+    app: tauri::AppHandle,
+    settings: tauri::State<'_, Arc<SettingsService>>,
+    enabled: bool,
+) -> Result<SettingsSnapshot, String> {
     log::info!("[settings] 디버그 모드 변경: {}", enabled);
-    let changed = {
-        let mut s = state.lock().await;
-        let changed = s.config.debug_mode != enabled;
-        s.config.debug_mode = enabled;
-        s.config.save();
-        changed
-    };
+    let commit = settings
+        .update_config(&app, "set_debug_mode", move |config| {
+            config.debug_mode = enabled;
+            Ok(())
+        })
+        .await?;
 
     // 런타임 로그 레벨 즉시 전환
     let level = if enabled {
@@ -495,10 +447,10 @@ pub async fn set_debug_mode(state: tauri::State<'_, Arc<Mutex<AppState>>>, enabl
     };
     log::set_max_level(level);
     log::info!("[settings] 로그 레벨 전환: {}", level);
-    if changed {
+    if commit.changed {
         analytics::track(Event::SettingChanged(Setting::DebugMode(enabled)));
     }
-    Ok(())
+    Ok(commit.snapshot)
 }
 
 /// Tauri 커맨드: 사용 통계 전송 설정 조회.
@@ -510,17 +462,19 @@ pub async fn get_usage_analytics_enabled(state: tauri::State<'_, Arc<Mutex<AppSt
 /// Tauri 커맨드: 사용 통계 전송 설정 변경 및 저장.
 #[tauri::command]
 pub async fn set_usage_analytics_enabled(
-    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    app: tauri::AppHandle,
+    settings: tauri::State<'_, Arc<SettingsService>>,
     enabled: bool,
-) -> Result<(), String> {
+) -> Result<SettingsSnapshot, String> {
     log::info!("[settings] 사용 통계 전송 변경: {}", enabled);
-    let previous = {
-        let mut s = state.lock().await;
-        let previous = s.config.usage_analytics_enabled;
-        s.config.usage_analytics_enabled = enabled;
-        s.config.save();
-        previous
-    };
+    let commit = settings
+        .update_config(&app, "set_usage_analytics_enabled", move |config| {
+            let previous = config.usage_analytics_enabled;
+            config.usage_analytics_enabled = enabled;
+            Ok(previous)
+        })
+        .await?;
+    let previous = commit.value;
 
     if previous != enabled {
         if enabled {
@@ -534,72 +488,74 @@ pub async fn set_usage_analytics_enabled(
     } else {
         analytics::set_user_enabled(enabled);
     }
-    Ok(())
-}
-
-/// Tauri 커맨드: 트레이 D-Day 표시 설정 조회.
-#[tauri::command]
-pub async fn get_show_dday(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<bool, String> {
-    Ok(state.lock().await.config.show_dday)
+    Ok(commit.snapshot)
 }
 
 /// Tauri 커맨드: 트레이 D-Day 표시 설정 변경 및 저장.
 #[tauri::command]
 pub async fn set_show_dday(
     app: tauri::AppHandle,
-    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    settings: tauri::State<'_, Arc<SettingsService>>,
     enabled: bool,
-) -> Result<(), String> {
+) -> Result<SettingsSnapshot, String> {
     log::info!("[settings] D-Day 표시 변경: {}", enabled);
-    let previous = state.lock().await.config.show_dday;
-    if previous == enabled {
-        return Ok(());
+    let apply_app = app.clone();
+    let rollback_app = app.clone();
+    let commit = settings
+        .update_config_with_effect(
+            &app,
+            "set_show_dday",
+            move |config| {
+                config.show_dday = enabled;
+                Ok(())
+            },
+            move |_, next| tray::sync_dday_panel_visibility(&apply_app, next.show_dday),
+            move |previous, _| tray::sync_dday_panel_visibility(&rollback_app, previous.show_dday),
+        )
+        .await?;
+    if commit.changed {
+        analytics::track(Event::SettingChanged(Setting::ShowDday(enabled)));
     }
-
-    tray::sync_dday_panel_visibility(&app, enabled).await?;
-
-    {
-        let mut s = state.lock().await;
-        s.config.show_dday = enabled;
-        s.config.save();
-    }
-    analytics::track(Event::SettingChanged(Setting::ShowDday(enabled)));
-    Ok(())
-}
-
-/// Tauri 커맨드: 플랫폼 앱 아이콘 표시 설정 조회.
-#[tauri::command]
-pub async fn get_show_app_icon(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<bool, String> {
-    Ok(state.lock().await.config.show_app_icon)
+    Ok(commit.snapshot)
 }
 
 /// Tauri 커맨드: 플랫폼 앱 아이콘 표시 설정 변경 및 저장.
 #[tauri::command]
 pub async fn set_show_app_icon(
     app: tauri::AppHandle,
-    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    settings: tauri::State<'_, Arc<SettingsService>>,
     enabled: bool,
-) -> Result<(), String> {
+) -> Result<SettingsSnapshot, String> {
     log::info!("[settings] 앱 아이콘 표시 변경: {}", enabled);
-    let previous = {
-        let mut s = state.lock().await;
-        let previous = s.config.show_app_icon;
-        if previous == enabled {
-            return Ok(());
-        }
-        s.config.show_app_icon = enabled;
-        s.config.save();
-        previous
-    };
-
-    if let Err(error) = tray::set_app_icon_visibility(&app, enabled) {
-        let mut s = state.lock().await;
-        s.config.show_app_icon = previous;
-        s.config.save();
-        return Err(error);
+    let apply_app = app.clone();
+    let rollback_app = app.clone();
+    let commit = settings
+        .update_config_with_effect(
+            &app,
+            "set_show_app_icon",
+            move |config| {
+                config.show_app_icon = enabled;
+                Ok(())
+            },
+            move |_, next| tray::set_app_icon_visibility(&apply_app, next.show_app_icon),
+            move |previous, _| tray::set_app_icon_visibility(&rollback_app, previous.show_app_icon),
+        )
+        .await?;
+    if commit.changed {
+        analytics::track(Event::SettingChanged(Setting::ShowAppIcon(enabled)));
     }
+    Ok(commit.snapshot)
+}
 
-    analytics::track(Event::SettingChanged(Setting::ShowAppIcon(enabled)));
+// ── 업데이트 ─────────────────────────────────────────────
+
+/// Tauri 커맨드: 업데이트 확인 후 결과를 시스템 다이얼로그로 표시.
+#[tauri::command]
+pub async fn check_and_notify_update(app: tauri::AppHandle) -> Result<(), String> {
+    log::info!("[updater] 업데이트 확인 요청");
+    tauri::async_runtime::spawn(async move {
+        crate::updater::prompt_and_install_update(app, false).await;
+    });
     Ok(())
 }
 
@@ -621,14 +577,18 @@ pub async fn open_onboarding(app: tauri::AppHandle) {
 
 /// Tauri 커맨드: 온보딩 완료 상태를 저장한다.
 #[tauri::command]
-pub async fn complete_onboarding(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<(), String> {
-    let was_completed = {
-        let mut state = state.lock().await;
-        let was_completed = state.config.onboarding_completed;
-        state.config.onboarding_completed = true;
-        state.config.save();
-        was_completed
-    };
+pub async fn complete_onboarding(
+    app: tauri::AppHandle,
+    settings: tauri::State<'_, Arc<SettingsService>>,
+) -> Result<(), String> {
+    let commit = settings
+        .update_config(&app, "complete_onboarding", |config| {
+            let was_completed = config.onboarding_completed;
+            config.onboarding_completed = true;
+            Ok(was_completed)
+        })
+        .await?;
+    let was_completed = commit.value;
     if !was_completed {
         log::info!("[onboarding] completed");
         analytics::track(Event::OnboardingCompleted);
@@ -648,8 +608,8 @@ pub async fn open_attendance_window(app: tauri::AppHandle) {
 
 /// 커스텀 트레이 패널이 렌더링할 최신 상태를 반환한다.
 #[tauri::command]
-pub async fn get_tray_panel_state(app: tauri::AppHandle) -> Result<tray::TrayPanelState, String> {
-    tray::get_tray_panel_state(&app).await
+pub fn get_tray_panel_state(app: tauri::AppHandle) -> Result<tray::TrayPanelState, String> {
+    tray::get_tray_panel_state(&app)
 }
 
 /// 커스텀 트레이 패널에서 선택한 허용된 액션을 실행한다.

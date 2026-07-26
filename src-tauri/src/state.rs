@@ -7,6 +7,10 @@ use crate::{config::Config, interval_tasks::JobStore};
 /// `Arc<Mutex<AppState>>`로 보호되며 Tauri managed state로 접근.
 pub struct AppState {
     pub config: Config,
+    /// UI 설정 snapshot의 단조 증가 revision.
+    pub settings_revision: u64,
+    /// 마지막 설정 변경 경로. snapshot/event 진단에 사용.
+    pub settings_source: String,
     /// 학습 시작(체크인) 완료 여부 (LMS 테이블 기준)
     pub morning_checked: bool,
     /// 학습 종료(체크아웃) 완료 여부 (LMS 테이블 기준)
@@ -37,6 +41,8 @@ impl AppState {
     pub fn new(config: Config) -> Self {
         Self {
             config,
+            settings_revision: 0,
+            settings_source: "startup".into(),
             morning_checked: false,
             evening_checked: false,
             phase: DailyPhase::Idle,
