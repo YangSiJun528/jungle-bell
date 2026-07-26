@@ -5,11 +5,13 @@
 
 use std::sync::Arc;
 
+use tauri::Manager;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_updater::UpdaterExt;
 use tokio::sync::Mutex;
 
+use crate::settings_state::SettingsService;
 use crate::state::AppState;
 
 /// 업데이트를 확인하고 사용자 확인 후 설치하는 공통 로직.
@@ -133,8 +135,8 @@ pub(crate) async fn auto_install_update(app: tauri::AppHandle) {
 /// 업데이트 확인 후 `pending_update`에만 저장 — 알림·설치 없음.
 ///
 /// 자동 업데이트가 꺼져 있을 때 주기적 체크 및 시작 시 사용.
-/// UI가 `get_pending_update`로 조회해 배너를 표시한다.
-pub(crate) async fn check_and_store_pending_update(app: &tauri::AppHandle, shared_state: &Arc<Mutex<AppState>>) {
+/// UI에는 settings snapshot/event로 결과를 전달한다.
+pub(crate) async fn check_and_store_pending_update(app: &tauri::AppHandle) {
     let updater = match app.updater() {
         Ok(u) => u,
         Err(e) => {
@@ -146,13 +148,10 @@ pub(crate) async fn check_and_store_pending_update(app: &tauri::AppHandle, share
     let pending = match updater.check().await {
         Ok(Some(update)) => {
             log::info!("[updater] 업데이트 발견 (수동): v{}", update.version);
-            let version = update.version.clone();
-            shared_state.lock().await.pending_update = Some(version.clone());
-            Some(version)
+            Some(update.version.clone())
         }
         Ok(None) => {
             log::debug!("[updater] 최신 버전 (수동 체크)");
-            shared_state.lock().await.pending_update = None;
             None
         }
         Err(e) => {
@@ -160,7 +159,11 @@ pub(crate) async fn check_and_store_pending_update(app: &tauri::AppHandle, share
             return;
         }
     };
-    crate::tray::update_tray_version(app, pending);
+    let settings: tauri::State<Arc<SettingsService>> = app.state();
+    settings.set_pending_update(app, pending.clone()).await;
+    if let Err(error) = crate::tray::update_tray_version(app, pending) {
+        log::error!("[updater] tray update projection failed: {error}");
+    }
 }
 
 /// 주기적 업데이트 체크.
@@ -172,6 +175,6 @@ pub(crate) async fn check_update_periodic(app: &tauri::AppHandle, shared_state: 
     if auto_update {
         auto_install_update(app.clone()).await;
     } else {
-        check_and_store_pending_update(app, shared_state).await;
+        check_and_store_pending_update(app).await;
     }
 }

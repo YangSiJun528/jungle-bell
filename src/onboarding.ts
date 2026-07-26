@@ -3,6 +3,12 @@ import './select-control';
 import {invoke} from '@tauri-apps/api/core';
 import {listen, type UnlistenFn} from '@tauri-apps/api/event';
 import {message} from '@tauri-apps/plugin-dialog';
+import {
+    connectSettingsSnapshots,
+    invokeSettingsMutation,
+    refreshSettingsSnapshot,
+    type SettingsSnapshot,
+} from './settings-state';
 
 type OsName = 'mac' | 'win';
 type ScenarioName = 'morning' | 'day' | 'night';
@@ -11,11 +17,6 @@ type TrayColor = 'red' | 'white';
 interface LoginStatus {
     dataLoaded: boolean;
     needsLogin: boolean;
-}
-
-interface TimeOfDay {
-    hour: number;
-    minute: number;
 }
 
 interface Scenario {
@@ -67,6 +68,8 @@ interface OnboardingComponent {
     onboardingCompleted: boolean;
     completionPending: boolean;
     completionFailed: boolean;
+    settingsRevision: number;
+    lastSettingsSnapshot: SettingsSnapshot | null;
     startNotification: boolean;
     endNotification: boolean;
     notificationStart: number;
@@ -74,6 +77,7 @@ interface OnboardingComponent {
     startInterval: number;
     endInterval: number;
     unlistenLogin: UnlistenFn | null;
+    unlistenSettings: UnlistenFn | null;
     loginRefreshTimer: number | null;
     completionScheduled: boolean;
     get isLast(): boolean;
@@ -102,10 +106,24 @@ interface OnboardingComponent {
     complete(): Promise<void>;
     scheduleComplete(): void;
     hydrateNotificationSettings(): Promise<void>;
+    restoreNotificationSettings(context: string, error: unknown, fallback?: () => void): Promise<void>;
     saveToggle(command: string, field: 'startNotification' | 'endNotification'): Promise<void>;
     saveTime(command: string, hour: number): Promise<void>;
     saveInterval(command: string, value: number): Promise<void>;
     openNotificationSettings(): Promise<void>;
+}
+
+function projectNotificationSettings(
+    target: OnboardingComponent,
+    snapshot: SettingsSnapshot,
+): void {
+    target.startNotification = snapshot.startNotification;
+    target.endNotification = snapshot.endNotification;
+    target.notificationStart = snapshot.notificationStart.hour;
+    target.notificationEnd = snapshot.notificationEnd.hour;
+    target.startInterval = snapshot.startInterval;
+    target.endInterval = snapshot.endInterval;
+    target.lastSettingsSnapshot = snapshot;
 }
 
 function onboarding(): OnboardingComponent {
@@ -119,6 +137,8 @@ function onboarding(): OnboardingComponent {
         onboardingCompleted: false,
         completionPending: false,
         completionFailed: false,
+        settingsRevision: -1,
+        lastSettingsSnapshot: null,
         startNotification: true,
         endNotification: true,
         notificationStart: 4,
@@ -126,6 +146,7 @@ function onboarding(): OnboardingComponent {
         startInterval: 15,
         endInterval: 15,
         unlistenLogin: null,
+        unlistenSettings: null,
         loginRefreshTimer: null,
         completionScheduled: false,
 
@@ -162,6 +183,8 @@ function onboarding(): OnboardingComponent {
             this.stopLoginRefresh();
             this.unlistenLogin?.();
             this.unlistenLogin = null;
+            this.unlistenSettings?.();
+            this.unlistenSettings = null;
         },
 
         setOs(os) { this.currentOs = os; },
@@ -285,32 +308,52 @@ function onboarding(): OnboardingComponent {
         },
 
         async hydrateNotificationSettings() {
-            const load = async <T>(command: string, apply: (value: T) => void) => {
-                try { apply(await invoke<T>(command)); }
-                catch (error) { console.error(`[onboarding] ${command} failed`, error); }
-            };
-            await Promise.all([
-                load<boolean>('get_start_notification_enabled', (value) => { this.startNotification = value; }),
-                load<boolean>('get_end_notification_enabled', (value) => { this.endNotification = value; }),
-                load<TimeOfDay>('get_notification_start', (value) => { this.notificationStart = value.hour; }),
-                load<TimeOfDay>('get_notification_end', (value) => { this.notificationEnd = value.hour; }),
-                load<number>('get_start_notification_interval', (value) => { this.startInterval = value; }),
-                load<number>('get_end_notification_interval', (value) => { this.endInterval = value; }),
-            ]);
+            this.unlistenSettings = await connectSettingsSnapshots(
+                this,
+                projectNotificationSettings,
+                (context, error) => console.error(`[onboarding] ${context} failed`, error),
+            );
+        },
+
+        async restoreNotificationSettings(context, error, fallback) {
+            console.error(`[onboarding] ${context} failed`, error);
+            try {
+                await refreshSettingsSnapshot(this, projectNotificationSettings);
+            } catch (refreshError) {
+                console.error('[onboarding] recovery snapshot failed', refreshError);
+                if (this.lastSettingsSnapshot) {
+                    projectNotificationSettings(this, this.lastSettingsSnapshot);
+                } else {
+                    fallback?.();
+                }
+            }
         },
 
         async saveToggle(command, field) {
             const value = this[field];
-            try { await invoke(command, {enabled: value}); }
-            catch (error) { console.error(error); this[field] = !value; }
+            try {
+                await invokeSettingsMutation(this, projectNotificationSettings, command, {enabled: value});
+            } catch (error) {
+                await this.restoreNotificationSettings(command, error, () => {
+                    this[field] = !value;
+                });
+            }
         },
 
         async saveTime(command, hour) {
-            await invoke(command, {hour, minute: 0}).catch(console.error);
+            try {
+                await invokeSettingsMutation(this, projectNotificationSettings, command, {hour, minute: 0});
+            } catch (error) {
+                await this.restoreNotificationSettings(command, error);
+            }
         },
 
         async saveInterval(command, value) {
-            await invoke(command, {value}).catch(console.error);
+            try {
+                await invokeSettingsMutation(this, projectNotificationSettings, command, {value});
+            } catch (error) {
+                await this.restoreNotificationSettings(command, error);
+            }
         },
 
         async openNotificationSettings() {

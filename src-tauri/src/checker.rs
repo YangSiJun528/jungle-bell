@@ -313,7 +313,9 @@ fn spawn_report_watchdog(app: tauri::AppHandle, generation: u64, page_url: Strin
         };
 
         if let Some(snapshot) = tray_snapshot {
-            tray::update_tray(&app, &snapshot);
+            if let Err(error) = tray::update_tray(&app, &snapshot) {
+                log::error!("[checker] tray projection update failed: {error}");
+            }
         }
 
         for action in actions {

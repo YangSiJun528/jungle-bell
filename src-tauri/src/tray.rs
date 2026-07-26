@@ -6,7 +6,7 @@
 //!   - 오렌지 (경고): 로그인 필요
 //!   - 빨간색 (긴급): NeedStart, StartOverdue, NeedEnd
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex, MutexGuard as StdMutexGuard};
 use std::time::Duration;
 use tokio::sync::Mutex as TokioMutex;
 
@@ -70,11 +70,18 @@ impl CampusTab {
 }
 
 /// 커스텀 트레이 패널에 전달할 마지막 상태를 보관한다.
-/// Tauri managed state로 저장: `Arc<TokioMutex<TrayState>>`.
 pub struct TrayState {
     view: TrayViewModel,
     dday_visible: bool,
     pending_update: Option<String>,
+}
+
+/// 짧은 메모리 projection 갱신을 유실 없이 직렬화한다.
+///
+/// 비동기 작업이나 파일 I/O를 잠금 안에서 수행하지 않으므로 일반 mutex가
+/// `try_lock` 기반 best-effort 갱신보다 이 상태의 성격에 맞다.
+pub struct TrayStateStore {
+    state: StdMutex<TrayState>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -401,23 +408,64 @@ impl TrayState {
     }
 }
 
+impl TrayStateStore {
+    fn new(state: TrayState) -> Self {
+        Self {
+            state: StdMutex::new(state),
+        }
+    }
+
+    fn lock(&self) -> Result<StdMutexGuard<'_, TrayState>, String> {
+        self.state
+            .lock()
+            .map_err(|_| "트레이 패널 상태 잠금이 손상되었습니다.".to_string())
+    }
+
+    fn panel_state(&self, current_version: String) -> Result<TrayPanelState, String> {
+        Ok(self.lock()?.panel_state(current_version))
+    }
+
+    fn set_dday_visible(&self, visible: bool, current_version: String) -> Result<Option<TrayPanelState>, String> {
+        let mut state = self.lock()?;
+        if state.dday_visible == visible {
+            return Ok(None);
+        }
+        state.dday_visible = visible;
+        Ok(Some(state.panel_state(current_version)))
+    }
+
+    fn set_pending_update(
+        &self,
+        pending_update: Option<String>,
+        current_version: String,
+    ) -> Result<TrayPanelState, String> {
+        let mut state = self.lock()?;
+        state.pending_update = pending_update;
+        Ok(state.panel_state(current_version))
+    }
+
+    fn set_view(&self, view: TrayViewModel, current_version: String) -> Result<TrayPanelState, String> {
+        let mut state = self.lock()?;
+        state.view = view;
+        Ok(state.panel_state(current_version))
+    }
+}
+
 fn emit_tray_panel_state(app: &tauri::AppHandle, state: TrayPanelState) {
     if let Err(error) = app.emit_to("tray-panel", "tray-panel-state", state) {
         log::debug!("[tray-panel] state emit skipped: {error}");
     }
 }
 
-fn current_tray_panel_state(app: &tauri::AppHandle) -> Option<TrayPanelState> {
-    let tray_state: tauri::State<Arc<TokioMutex<TrayState>>> = app.state();
-    tray_state
-        .try_lock()
-        .ok()
-        .map(|state| state.panel_state(app.package_info().version.to_string()))
+fn current_tray_panel_state(app: &tauri::AppHandle) -> Result<TrayPanelState, String> {
+    let tray_state: tauri::State<TrayStateStore> = app.state();
+    tray_state.panel_state(app.package_info().version.to_string())
 }
 
 fn refresh_tray_panel(app: &tauri::AppHandle) {
-    if let Some(state) = current_tray_panel_state(app) {
-        emit_tray_panel_state(app, state);
+    match current_tray_panel_state(app) {
+        Ok(state) => emit_tray_panel_state(app, state),
+        Err(error) => log::error!("[tray-panel] state refresh failed: {error}"),
     }
 }
 
@@ -987,10 +1035,8 @@ pub fn hide_tray_panel(app: &tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-pub async fn get_tray_panel_state(app: &tauri::AppHandle) -> Result<TrayPanelState, String> {
-    let tray_state: tauri::State<'_, Arc<TokioMutex<TrayState>>> = app.state();
-    let state = tray_state.lock().await;
-    Ok(state.panel_state(app.package_info().version.to_string()))
+pub fn get_tray_panel_state(app: &tauri::AppHandle) -> Result<TrayPanelState, String> {
+    current_tray_panel_state(app)
 }
 
 pub fn run_tray_panel_action(app: &tauri::AppHandle, action: TrayPanelAction) -> Result<(), String> {
@@ -1029,11 +1075,11 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         )
     };
 
-    let tray_state = Arc::new(TokioMutex::new(TrayState {
+    let tray_state = TrayStateStore::new(TrayState {
         view: initial_view,
         dday_visible: show_dday,
         pending_update,
-    }));
+    });
     app.manage(tray_state);
     build_tray_panel_window(app.handle())?;
 
@@ -1063,54 +1109,40 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-pub async fn sync_dday_panel_visibility(app: &tauri::AppHandle, visible: bool) -> Result<(), String> {
-    let tray_state: tauri::State<Arc<TokioMutex<TrayState>>> = app.state();
-    let mut ts = tray_state.lock().await;
-    if visible == ts.dday_visible {
-        return Ok(());
+pub fn sync_dday_panel_visibility(app: &tauri::AppHandle, visible: bool) -> Result<(), String> {
+    let tray_state: tauri::State<TrayStateStore> = app.state();
+    if let Some(panel_state) = tray_state.set_dday_visible(visible, app.package_info().version.to_string())? {
+        emit_tray_panel_state(app, panel_state);
     }
-    ts.dday_visible = visible;
-    let panel_state = ts.panel_state(app.package_info().version.to_string());
-    drop(ts);
-    emit_tray_panel_state(app, panel_state);
     Ok(())
 }
 
 /// 커스텀 트레이 패널의 업데이트 알림 상태를 갱신한다.
-pub fn update_tray_version(app: &tauri::AppHandle, pending_update: Option<String>) {
-    let tray_state: tauri::State<Arc<TokioMutex<TrayState>>> = app.state();
-    let panel_state = if let Ok(mut ts) = tray_state.try_lock() {
-        ts.pending_update = pending_update;
-        Some(ts.panel_state(app.package_info().version.to_string()))
-    } else {
-        None
-    };
-    if let Some(panel_state) = panel_state {
-        emit_tray_panel_state(app, panel_state);
-    }
+pub fn update_tray_version(app: &tauri::AppHandle, pending_update: Option<String>) -> Result<(), String> {
+    let tray_state: tauri::State<TrayStateStore> = app.state();
+    let panel_state = tray_state.set_pending_update(pending_update, app.package_info().version.to_string())?;
+    emit_tray_panel_state(app, panel_state);
+    Ok(())
 }
 
 /// 트레이 아이콘, 툴팁, 커스텀 패널 상태를 갱신한다.
 /// 스케줄러(주기적)와 체커(보고 시) 양쪽에서 호출됨.
-pub fn update_tray(app: &tauri::AppHandle, snapshot: &TraySnapshot) {
+pub fn update_tray(app: &tauri::AppHandle, snapshot: &TraySnapshot) -> Result<(), String> {
     let view = build_tray_view_model(snapshot, Utc::now());
+    let tray_state: tauri::State<TrayStateStore> = app.state();
+    let panel_state = tray_state.set_view(view.clone(), app.package_info().version.to_string())?;
 
     if let Some(tray) = app.tray_by_id("main-tray") {
-        let _ = tray.set_icon(Some(icon_for_kind(view.icon)));
-        let _ = tray.set_tooltip(Some(&view.tooltip));
+        if let Err(error) = tray.set_icon(Some(icon_for_kind(view.icon))) {
+            log::warn!("[tray] icon update failed: {error}");
+        }
+        if let Err(error) = tray.set_tooltip(Some(&view.tooltip)) {
+            log::warn!("[tray] tooltip update failed: {error}");
+        }
     }
 
-    // try_lock 사용 — 락이 잡혀 있으면 이번 주기 갱신은 건너뜀.
-    let tray_state: tauri::State<Arc<TokioMutex<TrayState>>> = app.state();
-    let panel_state = if let Ok(mut ts) = tray_state.try_lock() {
-        ts.view = view;
-        Some(ts.panel_state(app.package_info().version.to_string()))
-    } else {
-        None
-    };
-    if let Some(panel_state) = panel_state {
-        emit_tray_panel_state(app, panel_state);
-    }
+    emit_tray_panel_state(app, panel_state);
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1481,6 +1513,45 @@ mod tests {
                 width: 780,
                 height: 1280,
             }
+        );
+    }
+
+    #[test]
+    fn tray_state_store_waits_for_contention_and_keeps_the_latest_update() {
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        let initial_view = build_tray_view_model(&healthy_snapshot(DailyPhase::Studying, None, false), Utc::now());
+        let store = Arc::new(TrayStateStore::new(TrayState {
+            view: initial_view,
+            dday_visible: true,
+            pending_update: None,
+        }));
+        let held_guard = store.state.lock().unwrap();
+        let (started_tx, started_rx) = mpsc::channel();
+        let (finished_tx, finished_rx) = mpsc::channel();
+        let worker_store = store.clone();
+
+        let worker = std::thread::spawn(move || {
+            started_tx.send(()).unwrap();
+            finished_tx
+                .send(worker_store.set_pending_update(Some("0.5.0".into()), "0.4.4".into()))
+                .unwrap();
+        });
+
+        started_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        assert!(
+            finished_rx.recv_timeout(Duration::from_millis(20)).is_err(),
+            "경합 중인 갱신은 유실되지 않고 잠금 해제를 기다려야 한다"
+        );
+        drop(held_guard);
+
+        let panel = finished_rx.recv_timeout(Duration::from_secs(1)).unwrap().unwrap();
+        worker.join().unwrap();
+        assert_eq!(panel.pending_update.as_deref(), Some("0.5.0"));
+        assert_eq!(
+            store.panel_state("0.4.4".into()).unwrap().pending_update.as_deref(),
+            Some("0.5.0")
         );
     }
 }

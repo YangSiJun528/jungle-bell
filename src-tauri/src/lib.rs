@@ -11,6 +11,7 @@ mod interval_tasks;
 mod news;
 mod runtime;
 mod scheduler;
+mod settings_state;
 mod state;
 mod tray;
 mod updater;
@@ -19,6 +20,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use config::Config;
+use settings_state::SettingsService;
 use state::AppState;
 
 /// 로그 파일 최대 크기 (5 MB). 초과 시 이전 파일 삭제 후 새 파일 시작.
@@ -36,40 +38,46 @@ fn sync_auto_start_setting(app: &tauri::AppHandle, shared_state: &Arc<Mutex<AppS
 fn notify_startup_status(app: &tauri::AppHandle, shared_state: &Arc<Mutex<AppState>>) {
     use tauri_plugin_notification::NotificationExt;
 
-    let should_open_onboarding = {
-        let mut state = shared_state.try_lock().unwrap();
-        let current_version = app.package_info().version.to_string();
+    let current = shared_state.try_lock().unwrap().config.clone();
+    let current_version = app.package_info().version.to_string();
+    let should_open_onboarding = !current.onboarding_completed;
 
-        let should_open_onboarding = !state.config.onboarding_completed;
-
-        match &state.config.last_version {
-            None => {
-                let _ = app
-                    .notification()
-                    .builder()
-                    .title("Jungle Bell 설치 완료")
-                    .body("트레이 아이콘에서 출석 창을 열고 LMS에 로그인해 주세요.")
-                    .show();
-                log::info!("[app] 환영 알림 발송 (첫 설치)");
-            }
-            Some(last) if last != &current_version => {
-                let _ = app
-                    .notification()
-                    .builder()
-                    .title("Jungle Bell 업데이트 완료")
-                    .body(format!("v{} → v{}로 업데이트되었습니다.", last, current_version))
-                    .show();
-                log::info!("[app] 업데이트 완료 알림 발송: v{} → v{}", last, current_version);
-                analytics::prepare_app_updated(last.clone(), current_version.clone());
-            }
-            _ => {}
+    match &current.last_version {
+        None => {
+            let _ = app
+                .notification()
+                .builder()
+                .title("Jungle Bell 설치 완료")
+                .body("트레이 아이콘에서 출석 창을 열고 LMS에 로그인해 주세요.")
+                .show();
+            log::info!("[app] 환영 알림 발송 (첫 설치)");
         }
+        Some(last) if last != &current_version => {
+            let _ = app
+                .notification()
+                .builder()
+                .title("Jungle Bell 업데이트 완료")
+                .body(format!("v{} → v{}로 업데이트되었습니다.", last, current_version))
+                .show();
+            log::info!("[app] 업데이트 완료 알림 발송: v{} → v{}", last, current_version);
+            analytics::prepare_app_updated(last.clone(), current_version.clone());
+        }
+        _ => {}
+    }
 
-        state.config.last_version = Some(current_version);
-        state.config.welcome_notification_sent = true;
-        state.config.save();
-        should_open_onboarding
-    };
+    let mut next = current.clone();
+    next.last_version = Some(current_version);
+    next.welcome_notification_sent = true;
+    match next.save() {
+        Ok(()) => {
+            let mut state = shared_state.try_lock().unwrap();
+            if state.config != current {
+                log::warn!("[app] 시작 상태 저장 중 config가 변경되어 최신 시작 snapshot으로 재동기화");
+            }
+            state.config = next;
+        }
+        Err(error) => log::error!("[app] 시작 상태 저장 실패: {error}"),
+    }
 
     if should_open_onboarding {
         tray::open_onboarding_window(app);
@@ -82,7 +90,7 @@ fn spawn_startup_update_check(app: tauri::AppHandle, shared_state: Arc<Mutex<App
         if auto_update {
             updater::auto_install_update(app).await;
         } else {
-            updater::check_and_store_pending_update(&app, &shared_state).await;
+            updater::check_and_store_pending_update(&app).await;
         }
     });
 }
@@ -110,6 +118,10 @@ pub fn run() {
         log::LevelFilter::Info
     };
     let shared_state = Arc::new(Mutex::new(AppState::new(config)));
+    let settings_service = Arc::new(SettingsService::new(
+        shared_state.clone(),
+        env!("CARGO_PKG_VERSION").to_string(),
+    ));
     let campus_service = Arc::new(campus::CampusService::new());
     let news_service = Arc::new(news::NewsService::new());
 
@@ -157,6 +169,7 @@ pub fn run() {
         // AppState를 Tauri의 managed state로 등록.
         // 핸들러에서 `tauri::State<Arc<Mutex<AppState>>>`로 받아 사용.
         .manage(shared_state.clone())
+        .manage(settings_service)
         .manage(campus_service.clone())
         .manage(news_service)
         // JS에서 `window.__TAURI__.core.invoke()`로 호출할 수 있는 Tauri 커맨드 등록.
@@ -165,42 +178,28 @@ pub fn run() {
             commands::report_checker_ready,
             commands::report_cms_identity,
             commands::log_from_js,
-            commands::get_auto_update,
+            commands::get_settings_snapshot,
             commands::set_auto_update,
-            commands::get_app_version,
             commands::report_campus_ready,
             commands::report_campus_interaction,
             commands::refresh_campus_data,
             commands::load_meal_history,
             commands::open_image_viewer,
-            commands::get_pending_update,
             commands::check_and_notify_update,
-            commands::get_auto_start,
             commands::set_auto_start,
-            commands::get_start_notification_enabled,
             commands::set_start_notification_enabled,
-            commands::get_end_notification_enabled,
             commands::set_end_notification_enabled,
-            commands::get_start_notification_interval,
             commands::set_start_notification_interval,
-            commands::get_end_notification_interval,
             commands::set_end_notification_interval,
-            commands::get_notification_start,
             commands::set_notification_start,
-            commands::get_notification_end,
             commands::set_notification_end,
-            commands::get_skip_attendance,
             commands::set_skip_attendance,
-            commands::get_skip_sunday,
             commands::set_skip_sunday,
             commands::open_notification_settings,
-            commands::get_debug_mode,
             commands::set_debug_mode,
             commands::get_usage_analytics_enabled,
             commands::set_usage_analytics_enabled,
-            commands::get_show_dday,
             commands::set_show_dday,
-            commands::get_show_app_icon,
             commands::set_show_app_icon,
             commands::open_log_folder,
             commands::open_onboarding,
