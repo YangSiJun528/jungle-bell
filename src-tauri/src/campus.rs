@@ -237,8 +237,10 @@ impl CampusService {
         self.refresh_inner(app, kind, false).await.map(|_| ())
     }
 
-    pub async fn refresh_scheduled(&self, app: &tauri::AppHandle, kind: CampusDataKind) -> Result<(), String> {
-        self.refresh_inner(app, kind, true).await.map(|_| ())
+    pub async fn refresh_scheduled(&self, app: &tauri::AppHandle, kind: CampusDataKind) -> Result<bool, String> {
+        self.refresh_inner(app, kind, true)
+            .await
+            .map(|snapshot| snapshot.is_some())
     }
 
     pub async fn load_meal_history(&self, app: &tauri::AppHandle, before: Option<String>) -> Result<(), String> {

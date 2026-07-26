@@ -20,6 +20,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use config::Config;
+use interval_tasks::JobStore;
 use settings_state::SettingsService;
 use state::AppState;
 
@@ -117,7 +118,13 @@ pub fn run() {
     } else {
         log::LevelFilter::Info
     };
-    let shared_state = Arc::new(Mutex::new(AppState::new(config)));
+    let (interval_jobs, scheduler_state_load_error) = match JobStore::load() {
+        Ok(store) => (store, None),
+        Err(error) => (JobStore::default(), Some(error)),
+    };
+    let mut app_state = AppState::new(config);
+    app_state.interval_jobs = interval_jobs;
+    let shared_state = Arc::new(Mutex::new(app_state));
     let settings_service = Arc::new(SettingsService::new(
         shared_state.clone(),
         env!("CARGO_PKG_VERSION").to_string(),
@@ -228,6 +235,9 @@ pub fn run() {
                 log_level,
                 MAX_LOG_FILE_SIZE / 1000,
             );
+            if let Some(error) = scheduler_state_load_error.as_deref() {
+                log::warn!("[scheduler] {error}; 빈 상태로 시작합니다");
+            }
 
             // 분석: PostHog 클라이언트 초기화.
             // app_opened 이벤트는 identity 설정 시(set_identity) 전송한다.

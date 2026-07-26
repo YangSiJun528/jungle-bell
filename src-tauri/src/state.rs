@@ -1,5 +1,8 @@
+use std::sync::Arc;
+
 use chrono::{DateTime, FixedOffset, NaiveDate, Timelike, Utc};
 use serde::{Deserialize, Serialize};
+use tokio::sync::Notify;
 
 use crate::{config::Config, interval_tasks::JobStore};
 
@@ -37,6 +40,8 @@ pub struct AppState {
     pub last_notification: Option<DateTime<Utc>>,
     /// 발견된 업데이트 버전 (None이면 최신 버전 또는 미확인)
     pub pending_update: Option<String>,
+    /// 상태 변경 시 스케줄러의 다음 deadline 대기를 깨운다.
+    pub scheduler_wakeup: Arc<Notify>,
 }
 
 impl AppState {
@@ -57,7 +62,12 @@ impl AppState {
             login_retry_until: None,
             last_notification: None,
             pending_update: None,
+            scheduler_wakeup: Arc::new(Notify::new()),
         }
+    }
+
+    pub fn notify_scheduler(&self) {
+        self.scheduler_wakeup.notify_one();
     }
 
     pub fn tray_snapshot(&self, remaining: Option<i64>) -> TraySnapshot {

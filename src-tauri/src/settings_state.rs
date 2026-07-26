@@ -177,6 +177,7 @@ impl SettingsService {
             state.config = next;
             state.settings_revision = state.settings_revision.saturating_add(1);
             state.settings_source = source.to_string();
+            state.notify_scheduler();
             SettingsSnapshot::from_state(&state, &self.app_version)
         };
 

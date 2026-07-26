@@ -333,7 +333,7 @@ fn nearest_notification_interval(value: u32) -> u32 {
     best
 }
 
-fn write_file_atomically(path: &Path, data: &[u8]) -> std::io::Result<()> {
+pub(crate) fn write_file_atomically(path: &Path, data: &[u8]) -> std::io::Result<()> {
     let parent = path
         .parent()
         .ok_or_else(|| std::io::Error::other("설정 파일 상위 디렉토리가 없습니다."))?;
