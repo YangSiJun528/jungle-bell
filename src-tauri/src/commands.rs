@@ -94,6 +94,7 @@ pub async fn report_attendance_status(
     let curr_needs_login = s.needs_login;
     let curr_data_loaded = s.data_loaded;
     let login_status = LoginStatus::from_state(&s);
+    s.notify_scheduler();
     drop(s);
 
     if let Some(snapshot) = tray_snapshot {
@@ -149,6 +150,7 @@ pub async fn report_checker_ready(
         return Ok(());
     }
     log::info!("[checker] checker.js ready: generation={}", generation);
+    s.notify_scheduler();
     Ok(())
 }
 

@@ -249,7 +249,9 @@ pub(crate) fn build_webview(app: &tauri::AppHandle) -> tauri::Result<tauri::Webv
                 let state: tauri::State<Arc<Mutex<AppState>>> = app_handle.state();
                 let (generation, actions) = {
                     let mut s = state.lock().await;
-                    record_checker_page_load(&mut s, &page_url)
+                    let result = record_checker_page_load(&mut s, &page_url);
+                    s.notify_scheduler();
+                    result
                 };
 
                 log::debug!(
@@ -296,6 +298,7 @@ fn spawn_report_watchdog(app: tauri::AppHandle, generation: u64, page_url: Strin
         let (actions, ready_generation, report_generation, tray_snapshot) = {
             let mut s = state.lock().await;
             let actions = apply_supervisor_event(&mut s.checker, CheckerEvent::ReportTimeout { generation });
+            s.notify_scheduler();
             let tray_snapshot = if actions
                 .iter()
                 .any(|action| matches!(action, CheckerAction::Refresh { .. } | CheckerAction::GiveUp { .. }))

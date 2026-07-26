@@ -11,6 +11,13 @@ use crate::interval_tasks::{JobAction, JobKind};
 use crate::state::{DailyPhase, TraySnapshot};
 use crate::tray;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum JobOutcome {
+    Executed,
+    NotEligible,
+    Retry,
+}
+
 pub(crate) async fn apply_tick_side_effects(
     app_handle: &tauri::AppHandle,
     phase: DailyPhase,
@@ -18,7 +25,7 @@ pub(crate) async fn apply_tick_side_effects(
     notification: Option<&(&'static str, String)>,
     phase_changed: bool,
     job_actions: &[JobAction],
-) -> Vec<(JobAction, bool)> {
+) -> Vec<(JobAction, JobOutcome)> {
     if let Some(snapshot) = tray_update {
         if let Err(error) = tray::update_tray(app_handle, snapshot) {
             log::error!("[scheduler] tray projection update failed: {error}");
@@ -49,10 +56,12 @@ pub(crate) async fn apply_tick_side_effects(
     results
 }
 
-pub(crate) async fn run_job_action(app_handle: &tauri::AppHandle, action: JobAction) -> bool {
+pub(crate) async fn run_job_action(app_handle: &tauri::AppHandle, action: JobAction) -> JobOutcome {
     match action.kind() {
-        JobKind::AttendanceStatusCheck => checker::trigger_current_check(app_handle),
-        JobKind::CheckerSessionRefresh => checker::refresh_webview(app_handle, action.reason().label()),
+        JobKind::AttendanceStatusCheck => outcome_from_bool(checker::trigger_current_check(app_handle)),
+        JobKind::CheckerSessionRefresh => {
+            outcome_from_bool(checker::refresh_webview(app_handle, action.reason().label()))
+        }
         JobKind::LaundryRefresh | JobKind::MealsRefresh => {
             let kind = match action.kind() {
                 JobKind::LaundryRefresh => CampusDataKind::Laundry,
@@ -61,16 +70,25 @@ pub(crate) async fn run_job_action(app_handle: &tauri::AppHandle, action: JobAct
             };
             let service: tauri::State<Arc<CampusService>> = app_handle.state();
             match service.refresh_scheduled(app_handle, kind).await {
-                Ok(()) => true,
+                Ok(true) => JobOutcome::Executed,
+                Ok(false) => JobOutcome::NotEligible,
                 Err(error) => {
                     log::warn!(
                         "[scheduler] campus job failed: kind={} error={error}",
                         action.kind().name()
                     );
                     service.emit_error(app_handle, kind, error);
-                    false
+                    JobOutcome::Retry
                 }
             }
         }
+    }
+}
+
+fn outcome_from_bool(executed: bool) -> JobOutcome {
+    if executed {
+        JobOutcome::Executed
+    } else {
+        JobOutcome::Retry
     }
 }

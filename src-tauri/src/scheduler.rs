@@ -1,8 +1,7 @@
 //! 스케줄러 모듈 — 앱의 주기적 로직을 구동하는 백그라운드 루프.
 //!
-//! tokio 태스크로 실행되며, 적응형 간격으로 틱:
-//!   - 5초: 첫 체커 보고 대기 중
-//!   - 최대 30초: 생활정보 job이 추가된 일반 상태
+//! tokio 태스크로 실행되며 상태용 적응형 틱과 가장 가까운 job deadline 중
+//! 먼저 도래하는 시점까지 대기한다. 상태 변경 알림은 이 대기를 즉시 깨운다.
 //!
 //! 매 틱마다: 날짜 변경 시 일일 리셋, 상태 계산, 트레이 갱신,
 //! 체커 WebView 주기적 리로드를 수행.
@@ -16,8 +15,9 @@ use tokio::sync::Mutex;
 use tauri::Manager;
 
 use crate::attendance;
-use crate::interval_tasks::{self, JobAction, JobActionReason, JobFailureDecision, JobKind, JobSpec};
-use crate::runtime;
+use crate::attendance_day;
+use crate::interval_tasks::{self, JobAction, JobActionReason, JobEvaluation, JobFailureDecision, JobKind, JobSpec};
+use crate::runtime::{self, JobOutcome};
 use crate::state::{kst, AppState, DailyPhase, TraySnapshot};
 
 #[cfg(test)]
@@ -41,37 +41,117 @@ const LAUNDRY_REFRESH_JOB: JobSpec = JobSpec::new(JobKind::LaundryRefresh, 30)
 const MEALS_REFRESH_JOB: JobSpec = JobSpec::new(JobKind::MealsRefresh, 60)
     .initial_delay_secs(0)
     .backoff_secs(60, 60);
-const INTERVAL_JOBS: [JobSpec; 3] = [CHECKER_SESSION_REFRESH_JOB, LAUNDRY_REFRESH_JOB, MEALS_REFRESH_JOB];
-const CAMPUS_TICK_INTERVAL_SECS: u64 = 30;
+
+#[derive(Clone, Copy)]
+struct RegisteredJob {
+    spec: JobSpec,
+    condition: fn(&AppState) -> bool,
+}
+
+fn always_eligible(_state: &AppState) -> bool {
+    true
+}
+
+const SCHEDULED_JOBS: [RegisteredJob; 3] = [
+    RegisteredJob {
+        spec: CHECKER_SESSION_REFRESH_JOB,
+        condition: always_eligible,
+    },
+    RegisteredJob {
+        spec: LAUNDRY_REFRESH_JOB,
+        condition: always_eligible,
+    },
+    RegisteredJob {
+        spec: MEALS_REFRESH_JOB,
+        condition: always_eligible,
+    },
+];
+
 /// OS 절전/복귀 등으로 틱이 예상보다 크게 밀렸을 때 checker를 다시 깨운다.
 const TICK_DELAY_REFRESH_GRACE_SECS: u64 = 60;
 /// 지연된 틱에서는 stale 상태로 알림을 보내지 않고 checker 결과를 짧게 기다린다.
 const DELAYED_TICK_RECHECK_INTERVAL_SECS: u64 = 10;
 
-fn interval_job_spec(kind: JobKind) -> Option<&'static JobSpec> {
-    INTERVAL_JOBS.iter().find(|spec| spec.kind == kind)
+fn registered_job(kind: JobKind) -> Option<&'static RegisteredJob> {
+    SCHEDULED_JOBS.iter().find(|job| job.spec.kind == kind)
 }
 
-fn record_job_result(state: &mut AppState, action: JobAction, succeeded: bool, now: DateTime<Utc>) {
-    let Some(spec) = interval_job_spec(action.kind()) else {
+fn record_job_result(state: &mut AppState, action: JobAction, outcome: JobOutcome, now: DateTime<Utc>) {
+    let Some(job) = registered_job(action.kind()) else {
+        return;
+    };
+    let kst_now = now.with_timezone(&kst());
+    let attendance_date = attendance_day::effective_attendance_date(&state.config, kst_now);
+    let condition_active = (job.condition)(state);
+    let evaluation = JobEvaluation::new(now, kst_now, &attendance_date, condition_active);
+
+    match outcome {
+        JobOutcome::Executed => {
+            state.interval_jobs.mark_success_with_context(&job.spec, &evaluation);
+        }
+        JobOutcome::NotEligible => {
+            state
+                .interval_jobs
+                .mark_not_eligible_with_context(&job.spec, &evaluation);
+        }
+        JobOutcome::Retry => match state.interval_jobs.mark_failure(&job.spec, now) {
+            JobFailureDecision::RetryAt(next_due_at) => log::warn!(
+                "[scheduler] job failed: kind={} next_retry_at={}",
+                action.kind().name(),
+                next_due_at.with_timezone(&kst()).format("%Y-%m-%d %H:%M:%S"),
+            ),
+            JobFailureDecision::GiveUp { kind } => {
+                log::error!("[scheduler] job give-up: kind={}", kind.name());
+            }
+        },
+    }
+}
+
+async fn persist_dirty_job_store(shared_state: &Arc<Mutex<AppState>>) {
+    let snapshot = {
+        let mut state = shared_state.lock().await;
+        state.interval_jobs.take_dirty().then(|| state.interval_jobs.clone())
+    };
+    let Some(snapshot) = snapshot else {
         return;
     };
 
-    if succeeded {
-        state.interval_jobs.mark_success(spec, now);
-        return;
-    }
+    let result = tauri::async_runtime::spawn_blocking(move || snapshot.save()).await;
+    let error = match result {
+        Ok(Ok(())) => return,
+        Ok(Err(error)) => error,
+        Err(error) => format!("스케줄 상태 저장 작업 실행 실패: {error}"),
+    };
 
-    match state.interval_jobs.mark_failure(spec, now) {
-        JobFailureDecision::RetryAt(next_due_at) => log::warn!(
-            "[scheduler] job failed: kind={} next_retry_at={}",
-            action.kind().name(),
-            next_due_at.with_timezone(&kst()).format("%Y-%m-%d %H:%M:%S"),
-        ),
-        JobFailureDecision::GiveUp { kind } => {
-            log::error!("[scheduler] job give-up: kind={}", kind.name());
-        }
+    log::error!("[scheduler] {error}");
+    shared_state.lock().await.interval_jobs.mark_dirty();
+}
+
+fn build_job_evaluation<'a>(now: DateTime<Utc>, attendance_date: &'a str, condition_active: bool) -> JobEvaluation<'a> {
+    JobEvaluation::new(now, now.with_timezone(&kst()), attendance_date, condition_active)
+}
+
+fn compute_job_actions(state: &mut AppState, now: DateTime<Utc>) -> Vec<JobAction> {
+    let attendance_date = attendance_day::effective_attendance_date(&state.config, now.with_timezone(&kst()));
+    let evaluations = SCHEDULED_JOBS.map(|job| (job.spec, (job.condition)(state)));
+    let mut actions = evaluations
+        .into_iter()
+        .filter_map(|(spec, condition_active)| {
+            let evaluation = build_job_evaluation(now, &attendance_date, condition_active);
+            match state.interval_jobs.decide_with_context(&spec, &evaluation) {
+                interval_tasks::JobDecision::Run(action) => Some(action),
+                interval_tasks::JobDecision::Skip { .. } | interval_tasks::JobDecision::GiveUp { .. } => None,
+            }
+        })
+        .collect::<Vec<_>>();
+
+    if !actions
+        .iter()
+        .any(|action| action.kind() == JobKind::CheckerSessionRefresh)
+    {
+        actions.push(JobAction::new(JobKind::AttendanceStatusCheck, JobActionReason::Tick));
     }
+    actions
 }
 
 /// 틱 한 번의 순수 계산 결과. 부수효과는 호출자가 수행.
@@ -140,17 +220,6 @@ fn compute_notification_for_phase(
     message
 }
 
-fn compute_job_actions(state: &mut AppState, now: DateTime<Utc>) -> Vec<JobAction> {
-    let mut actions = state.interval_jobs.collect_due_actions(now, &INTERVAL_JOBS);
-    if !actions
-        .iter()
-        .any(|action| action.kind() == JobKind::CheckerSessionRefresh)
-    {
-        actions.push(JobAction::new(JobKind::AttendanceStatusCheck, JobActionReason::Tick));
-    }
-    actions
-}
-
 fn expire_login_retry_window(state: &mut AppState, now: DateTime<Utc>) {
     if matches!(state.login_retry_until, Some(until) if now >= until) {
         state.login_retry_until = None;
@@ -174,7 +243,7 @@ async fn refresh_checker_after_delayed_tick(
     action: JobAction,
     elapsed_secs: i64,
     expected_interval_secs: u64,
-) -> bool {
+) -> JobOutcome {
     log::info!(
         "[scheduler] delayed tick detected: elapsed={}s expected={}s",
         elapsed_secs,
@@ -275,6 +344,19 @@ pub(crate) fn compute_tick_interval(
     }
 }
 
+fn compute_next_wake_interval(tick_interval: u64, now: DateTime<Utc>, next_job_due_at: Option<DateTime<Utc>>) -> u64 {
+    let Some(next_due_at) = next_job_due_at else {
+        return tick_interval;
+    };
+    let remaining_millis = (next_due_at - now).num_milliseconds();
+    let job_interval = if remaining_millis <= 0 {
+        1
+    } else {
+        ((remaining_millis as u64).saturating_add(999) / 1000).max(1)
+    };
+    tick_interval.min(job_interval)
+}
+
 #[cfg(test)]
 pub(crate) fn notification_message(phase: DailyPhase, remaining: Option<i64>) -> (&'static str, String) {
     attendance::notification_message(phase, remaining)
@@ -315,8 +397,7 @@ pub(crate) fn compute_tick(state: &mut AppState, now: DateTime<Utc>, attendance_
         login_retry_active,
         state.phase,
         remaining,
-    )
-    .min(CAMPUS_TICK_INTERVAL_SECS);
+    );
 
     TickResult {
         tick_interval,
@@ -346,11 +427,11 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
             );
         }
 
+        let scheduler_wakeup = shared_state.lock().await.scheduler_wakeup.clone();
         let mut previous_tick: Option<DateTime<Utc>> = None;
         let mut previous_interval_secs: Option<u64> = None;
 
         loop {
-            let tick_started_at = tokio::time::Instant::now();
             let now = Utc::now();
             let delayed_tick = previous_tick
                 .zip(previous_interval_secs)
@@ -366,12 +447,20 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
                 });
 
             if let Some((elapsed, interval, action)) = delayed_tick {
-                let succeeded = refresh_checker_after_delayed_tick(&app_handle, action, elapsed, interval).await;
-                let mut s = shared_state.lock().await;
-                record_job_result(&mut s, action, succeeded, now);
+                let outcome = refresh_checker_after_delayed_tick(&app_handle, action, elapsed, interval).await;
+                {
+                    let mut state = shared_state.lock().await;
+                    record_job_result(&mut state, action, outcome, now);
+                }
+                persist_dirty_job_store(&shared_state).await;
                 previous_tick = Some(now);
                 previous_interval_secs = Some(DELAYED_TICK_RECHECK_INTERVAL_SECS);
-                tokio::time::sleep(tokio::time::Duration::from_secs(DELAYED_TICK_RECHECK_INTERVAL_SECS)).await;
+                tokio::select! {
+                    _ = tokio::time::sleep(tokio::time::Duration::from_secs(
+                        DELAYED_TICK_RECHECK_INTERVAL_SECS,
+                    )) => {}
+                    _ = scheduler_wakeup.notified() => {}
+                }
                 continue;
             }
 
@@ -395,20 +484,33 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
                 &tick_result.job_actions,
             )
             .await;
-            if !job_results.is_empty() {
+            {
                 let mut s = shared_state.lock().await;
-                for (action, succeeded) in job_results {
-                    record_job_result(&mut s, action, succeeded, now);
+                for (action, outcome) in job_results {
+                    record_job_result(&mut s, action, outcome, now);
                 }
             }
+            persist_dirty_job_store(&shared_state).await;
 
-            log::debug!("[scheduler] tick: interval={}s", tick_result.tick_interval,);
+            let wake_started_at = Utc::now();
+            let next_job_due_at = shared_state.lock().await.interval_jobs.next_due_at();
+            let wake_interval = compute_next_wake_interval(tick_result.tick_interval, wake_started_at, next_job_due_at);
+            log::debug!(
+                "[scheduler] tick: base_interval={}s wake_interval={}s next_job_due_at={:?}",
+                tick_result.tick_interval,
+                wake_interval,
+                next_job_due_at,
+            );
 
             previous_tick = Some(now);
-            previous_interval_secs = Some(tick_result.tick_interval);
+            previous_interval_secs = Some(wake_interval);
 
-            tokio::time::sleep_until(tick_started_at + tokio::time::Duration::from_secs(tick_result.tick_interval))
-                .await;
+            tokio::select! {
+                _ = tokio::time::sleep(tokio::time::Duration::from_secs(wake_interval)) => {}
+                _ = scheduler_wakeup.notified() => {
+                    log::debug!("[scheduler] state change wake-up");
+                }
+            }
         }
     });
 }
@@ -755,6 +857,26 @@ mod tests {
         assert_eq!(result, TICK_INTERVAL_ACTIVE);
     }
 
+    #[test]
+    fn 가까운_job_due는_기본_틱보다_먼저_스케줄러를_깨운다() {
+        let now = kst_utc(9, 0, 0);
+
+        assert_eq!(
+            compute_next_wake_interval(300, now, Some(now + chrono::Duration::seconds(30))),
+            30
+        );
+    }
+
+    #[test]
+    fn 이미_due인_job은_1초_후_재검사한다() {
+        let now = kst_utc(9, 0, 0);
+
+        assert_eq!(
+            compute_next_wake_interval(300, now, Some(now - chrono::Duration::seconds(1))),
+            1
+        );
+    }
+
     // --- notification_message ---
 
     #[test]
@@ -891,7 +1013,7 @@ mod tests {
             .copied()
             .find(|action| action.kind() == JobKind::LaundryRefresh)
             .unwrap();
-        record_job_result(&mut state, laundry_action, true, started_at);
+        record_job_result(&mut state, laundry_action, JobOutcome::Executed, started_at);
 
         let before_due = compute_tick(&mut state, started_at + chrono::Duration::seconds(29), false);
         let at_due = compute_tick(&mut state, started_at + chrono::Duration::seconds(30), false);
@@ -1072,7 +1194,7 @@ mod tests {
 
         // then
         assert!(state.login_retry_until.is_none());
-        assert_eq!(result.tick_interval, CAMPUS_TICK_INTERVAL_SECS);
+        assert_eq!(result.tick_interval, 600);
     }
 
     #[test]
