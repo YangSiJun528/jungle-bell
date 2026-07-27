@@ -28,7 +28,30 @@
     </nav>
 
     <section id="notification-settings" class="flex-1" x-show="activeTab === 'notification'" x-cloak>
-        <fieldset class="attendance-notification m-0 min-w-0 border-0 p-0">
+        <fieldset class="m-0 min-w-0 border-0 p-0" data-ui="cohort-selection"
+                  x-show="cohortOptions.length > 1" x-cloak>
+            <legend class="w-full p-0 text-base leading-[1.4] font-bold tracking-normal">출석 확인 기수</legend>
+            <div class="mt-2 flex min-h-12 w-full items-center justify-between gap-3 py-1">
+                <span class="min-w-0 flex-1">
+                    <strong class="block text-sm leading-[1.35] font-semibold">기수 선택</strong>
+                    <small class="mt-1 block text-xs leading-[1.45] text-app-muted" data-ui="settings-description">선택한 기수의 출석 상태와 D-Day를 확인합니다.</small>
+                </span>
+                <select class="min-h-8 max-w-48 rounded-lg border border-app-border bg-app-surface px-2 py-1 text-xs font-semibold text-app-text focus-visible:ring-4 focus-visible:ring-app-accent-soft"
+                        aria-label="출석 확인 기수"
+                        x-model="selectedCohortId"
+                        @change="saveSelectedCohort()">
+                    <option value="" :selected="selectedCohortId === ''">자동 선택</option>
+                    <template x-for="cohort in cohortOptions" :key="cohort.id">
+                        <option :value="cohort.id"
+                                :selected="selectedCohortId === cohort.id"
+                                x-text="cohort.label"></option>
+                    </template>
+                </select>
+            </div>
+        </fieldset>
+
+        <fieldset class="attendance-notification m-0 min-w-0 border-0 p-0"
+                  :class="cohortOptions.length > 1 ? 'mt-4' : ''">
             <legend class="w-full p-0 text-base leading-[1.4] font-bold tracking-normal">이번 출석</legend>
             <div class="mt-2 flex min-h-12 w-full items-center justify-between gap-2 py-1">
                 <span class="min-w-0 flex-1">

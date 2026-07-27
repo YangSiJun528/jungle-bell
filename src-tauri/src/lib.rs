@@ -186,6 +186,8 @@ pub fn run() {
             commands::report_cms_identity,
             commands::log_from_js,
             commands::get_settings_snapshot,
+            commands::resolve_cohort_selection,
+            commands::set_selected_cohort,
             commands::set_auto_update,
             commands::report_campus_ready,
             commands::report_campus_interaction,

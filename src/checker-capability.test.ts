@@ -84,3 +84,10 @@ test('원격 checker는 필요한 명령과 event listen 권한만 가진다', (
     assert.deepEqual(checkerCapability.remote.urls, ['https://jungle-lms.krafton.com/*']);
     assert.deepEqual(sorted(checkerCapability.permissions), expectedPermissions);
 });
+
+test('checker는 LMS 기수 목록을 로컬 선택 규칙으로 해석한 뒤 해당 출석만 조회한다', () => {
+    assert.match(checkerSource, /\/api\/v2\/me\/cohorts/);
+    assert.match(checkerSource, /resolve_cohort_selection/);
+    assert.match(checkerSource, /cohortOptions/);
+    assert.match(checkerSource, /fetchAttendance\(selection\.cohort_id\)/);
+});

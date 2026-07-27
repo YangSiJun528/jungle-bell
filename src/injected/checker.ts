@@ -2,7 +2,7 @@
 // Vite가 dist/injected/checker.js 단일 classic script로 변환한다.
 
 type LogLevel = 'error' | 'warn' | 'debug' | 'info';
-type CohortStatus = 'active' | 'unknown' | 'ended' | 'none';
+type CohortStatus = 'active' | 'upcoming' | 'unknown' | 'ended' | 'none';
 
 interface TauriEvent<T> {
     payload: T;
@@ -26,13 +26,21 @@ interface RawCohort {
     isActive?: unknown;
     startDate?: unknown;
     endDate?: unknown;
+    name?: unknown;
+    title?: unknown;
+    cohortName?: unknown;
+    generation?: unknown;
+    number?: unknown;
+    cohortNumber?: unknown;
+    ordinal?: unknown;
 }
 
-interface NormalizedCohort {
+interface CohortOption {
     id: string;
-    is_active: boolean;
-    start_date: string;
-    end_date: string | null;
+    label: string;
+    startDate: string;
+    endDate: string | null;
+    isActive: boolean;
 }
 
 interface CohortSelection {
@@ -64,7 +72,8 @@ interface TriggerCheckPayload {
     generation?: unknown;
 }
 
-let cachedCohortSelection: CohortSelection | null = null;
+let cachedCohortOptions: CohortOption[] | null = null;
+let cachedCohortDate: string | null = null;
 let identityReported = false;
 let checkInFlight = false;
 let currentGeneration = 0;
@@ -110,73 +119,47 @@ function normalizeDateString(value: unknown): string | null {
     return match?.[1] ?? null;
 }
 
-function compareCohortDesc(left: NormalizedCohort, right: NormalizedCohort): number {
-    if (left.start_date !== right.start_date) return left.start_date < right.start_date ? 1 : -1;
-    if ((left.end_date ?? '') !== (right.end_date ?? '')) return (left.end_date ?? '') < (right.end_date ?? '') ? 1 : -1;
-    return 0;
-}
-
 function parseActiveFlag(value: unknown): boolean {
     return value === true || value === 'true';
 }
 
-function parseCohorts(cohorts: RawCohort[], today: string): CohortSelection {
-    const normalized = cohorts
-        .map((cohort): NormalizedCohort | null => {
+function cohortLabel(cohort: RawCohort, startDate: string, endDate: string | null): string {
+    for (const value of [cohort.name, cohort.title, cohort.cohortName]) {
+        if (typeof value === 'string' && value.trim()) return value.trim().slice(0, 80);
+    }
+    for (const value of [cohort.generation, cohort.cohortNumber, cohort.number, cohort.ordinal]) {
+        if ((typeof value === 'string' || typeof value === 'number') && String(value).trim()) {
+            const text = String(value).trim();
+            return (text.endsWith('기') ? text : `${text}기`).slice(0, 80);
+        }
+    }
+    return `${startDate} ~ ${endDate ?? '종료일 미정'}`;
+}
+
+function normalizeCohortOptions(cohorts: RawCohort[]): CohortOption[] {
+    return cohorts
+        .map((cohort): CohortOption | null => {
             const id = typeof cohort.id === 'string' ? cohort.id : null;
             const startDate = normalizeDateString(cohort.startDate);
             if (!id || !startDate) return null;
+            const endDate = normalizeDateString(cohort.endDate);
             return {
                 id,
-                is_active: parseActiveFlag(cohort.isActive),
-                start_date: startDate,
-                end_date: normalizeDateString(cohort.endDate),
+                label: cohortLabel(cohort, startDate, endDate),
+                isActive: parseActiveFlag(cohort.isActive),
+                startDate,
+                endDate,
             };
         })
-        .filter((cohort): cohort is NormalizedCohort => cohort !== null);
+        .filter((cohort): cohort is CohortOption => cohort !== null);
+}
 
-    if (normalized.length === 0) {
-        return {cohort_id: null, cohort_status: 'none', cohort_end_date: null};
-    }
-
-    const fallback = normalized.slice().sort(compareCohortDesc)[0];
-    const dated = normalized.filter((cohort) => cohort.end_date !== null);
-    const active = dated
-        .filter((cohort) => cohort.is_active && cohort.start_date <= today && today <= (cohort.end_date ?? ''))
-        .sort(compareCohortDesc)[0];
-
-    if (active) {
-        return {cohort_id: active.id, cohort_status: 'active', cohort_end_date: active.end_date};
-    }
-
-    const inRange = dated
-        .filter((cohort) => cohort.start_date <= today && today <= (cohort.end_date ?? ''))
-        .sort(compareCohortDesc)[0];
-
-    if (inRange) {
-        return {cohort_id: inRange.id, cohort_status: 'unknown', cohort_end_date: null};
-    }
-
-    if (fallback && !fallback.end_date) {
-        return {cohort_id: fallback.id, cohort_status: 'unknown', cohort_end_date: null};
-    }
-
-    const ended = dated
-        .filter((cohort) => (cohort.end_date ?? '') < today)
-        .sort((left, right) => {
-            if (left.end_date !== right.end_date) return (left.end_date ?? '') < (right.end_date ?? '') ? 1 : -1;
-            return compareCohortDesc(left, right);
-        })[0];
-
-    if (ended) {
-        return {cohort_id: null, cohort_status: 'ended', cohort_end_date: ended.end_date};
-    }
-
-    return {
-        cohort_id: fallback?.id ?? null,
-        cohort_status: fallback ? 'unknown' : 'none',
-        cohort_end_date: null,
-    };
+async function resolveCohortOptions(cohortOptions: CohortOption[], today: string): Promise<CohortSelection> {
+    const selection = await window.__TAURI__.core.invoke<CohortSelection>('resolve_cohort_selection', {
+        cohortOptions,
+    });
+    selection.fetched_date = today;
+    return selection;
 }
 
 function parseAttendanceToday(data: unknown): AttendanceValue {
@@ -224,6 +207,8 @@ async function fetchCohortSelection(): Promise<CohortSelection> {
 
         if (response.status === 401) {
             jsLog('info', 'fetchCohortSelection: status=401 (login required)');
+            cachedCohortOptions = null;
+            cachedCohortDate = null;
             return {needs_login: true, cohort_id: null, cohort_status: 'unknown', cohort_end_date: null};
         }
         if (!response.ok) {
@@ -237,11 +222,13 @@ async function fetchCohortSelection(): Promise<CohortSelection> {
         const cohorts = Array.isArray(data) ? data.filter(isRecord) : [];
         jsLog('debug', `fetchCohortSelection: cohorts count=${cohorts.length}`);
         const today = currentKstDateString();
-        const selection = parseCohorts(cohorts, today);
-        selection.fetched_date = today;
+        const cohortOptions = normalizeCohortOptions(cohorts);
+        const selection = await resolveCohortOptions(cohortOptions, today);
+        cachedCohortOptions = cohortOptions;
+        cachedCohortDate = today;
         jsLog(
             'debug',
-            `fetchCohortSelection: selected cohort status=${selection.cohort_status} endDate=${selection.cohort_end_date} (total=${cohorts.length})`,
+            `fetchCohortSelection: selected cohort status=${selection.cohort_status} endDate=${selection.cohort_end_date} (valid=${cohortOptions.length})`,
         );
         return selection;
     } catch (error: unknown) {
@@ -299,15 +286,24 @@ async function checkAttendance(): Promise<AttendanceResult> {
     }
 
     const today = currentKstDateString();
-    const selection = cachedCohortSelection?.fetched_date === today
-        ? cachedCohortSelection
+    const selection = cachedCohortOptions && cachedCohortDate === today
+        ? await resolveCohortOptions(cachedCohortOptions, today).catch((error: unknown) => {
+            jsLog('error', `resolveCohortOptions failed: ${errorMessage(error)}`);
+            return {
+                api_error: true,
+                cohort_id: null,
+                cohort_status: 'unknown',
+                cohort_end_date: null,
+            } satisfies CohortSelection;
+        })
         : await fetchCohortSelection();
 
     if (selection.api_error) {
         return {needs_login: false, morning_done: false, evening_done: false, api_error: true};
     }
     if (selection.needs_login) {
-        cachedCohortSelection = null;
+        cachedCohortOptions = null;
+        cachedCohortDate = null;
         return {
             needs_login: true,
             morning_done: false,
@@ -317,7 +313,6 @@ async function checkAttendance(): Promise<AttendanceResult> {
         };
     }
 
-    cachedCohortSelection = selection;
     if (!selection.cohort_id) {
         return {
             needs_login: false,
@@ -343,7 +338,8 @@ async function checkAttendance(): Promise<AttendanceResult> {
     }
     if ('needs_login' in attendance) {
         jsLog('debug', 'checkAttendance: needs_login flag set, clearing cohort cache');
-        cachedCohortSelection = null;
+        cachedCohortOptions = null;
+        cachedCohortDate = null;
         return {
             needs_login: true,
             morning_done: false,

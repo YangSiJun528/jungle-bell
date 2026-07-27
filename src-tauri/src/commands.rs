@@ -227,6 +227,42 @@ pub async fn get_settings_snapshot(
 }
 
 #[tauri::command]
+pub async fn resolve_cohort_selection(
+    app: tauri::AppHandle,
+    settings: tauri::State<'_, Arc<SettingsService>>,
+    cohort_options: Vec<attendance::CohortOption>,
+) -> Result<attendance::CohortResolution, String> {
+    attendance::validate_cohort_options(&cohort_options)?;
+    let today = chrono::Utc::now().with_timezone(&state::kst()).date_naive();
+    Ok(settings.resolve_cohort_options(&app, cohort_options, today).await)
+}
+
+#[tauri::command]
+pub async fn set_selected_cohort(
+    app: tauri::AppHandle,
+    settings: tauri::State<'_, Arc<SettingsService>>,
+    cohort_id: Option<String>,
+) -> Result<SettingsSnapshot, String> {
+    if let Some(cohort_id) = cohort_id.as_deref() {
+        config::validate_cohort_id(cohort_id)?;
+        let snapshot = settings.snapshot().await;
+        if !snapshot.cohort_options.iter().any(|option| option.id == cohort_id) {
+            return Err("현재 계정에서 조회되지 않은 기수입니다.".into());
+        }
+    }
+    let commit = settings
+        .update_config(&app, "set_selected_cohort", move |config| {
+            config.selected_cohort_id = cohort_id;
+            Ok(())
+        })
+        .await?;
+    if commit.changed {
+        checker::trigger_current_check(&app);
+    }
+    Ok(commit.snapshot)
+}
+
+#[tauri::command]
 pub async fn set_start_notification_interval(
     app: tauri::AppHandle,
     settings: tauri::State<'_, Arc<SettingsService>>,

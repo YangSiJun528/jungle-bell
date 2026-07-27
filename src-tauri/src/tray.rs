@@ -24,6 +24,12 @@ use tauri::{
 const ATTENDANCE_URL: &str = "https://jungle-lms.krafton.com/check-in";
 const FEEDBACK_URL: &str = "https://github.com/YangSiJun528/jungle-bell/issues/new/choose";
 
+const STATUS_COURSE_UPCOMING: &str = "코스 시작 전";
+const STATUS_COURSE_COMPLETE: &str = "코스 완료";
+const STATUS_NO_COHORT: &str = "진행 중인 코스 없음";
+const STATUS_NO_ATTENDANCE: &str = "현재 출석 없음";
+const STATUS_COURSE_CHECKING: &str = "코스 확인 중";
+
 const UTILITY_WINDOW_WIDTH: f64 = 560.0;
 const CONTENT_WINDOW_WIDTH: f64 = 720.0;
 const STANDARD_WINDOW_HEIGHT: f64 = 720.0;
@@ -299,7 +305,7 @@ fn checker_status_text(status: CheckerRuntimeStatus) -> &'static str {
         | CheckerRuntimeStatus::Ready { .. } => "상태 확인 중...",
         CheckerRuntimeStatus::Refreshing { .. } => "상태 재확인 중...",
         CheckerRuntimeStatus::Offline { .. } => "상태 확인 불가",
-        CheckerRuntimeStatus::Healthy { .. } => "대기 중",
+        CheckerRuntimeStatus::Healthy { .. } => STATUS_NO_ATTENDANCE,
     }
 }
 
@@ -323,7 +329,7 @@ fn build_attendance_status_text(phase: DailyPhase, remaining: Option<i64>, needs
     }
 
     match phase {
-        DailyPhase::Idle => "대기 중".to_string(),
+        DailyPhase::Idle => STATUS_NO_ATTENDANCE.to_string(),
         DailyPhase::NeedStart => match mins {
             Some(m) => format!("학습 시작 가능 ({} 남음)", fmt_time(m)),
             None => "학습 시작 가능".to_string(),
@@ -354,6 +360,17 @@ fn build_status_text(snapshot: &TraySnapshot) -> String {
         return "상태 확인 중...".to_string();
     }
 
+    match &snapshot.dday_status {
+        DdayStatus::Upcoming { .. } => return STATUS_COURSE_UPCOMING.to_string(),
+        DdayStatus::Ended => return STATUS_COURSE_COMPLETE.to_string(),
+        DdayStatus::NoCohort => return STATUS_NO_COHORT.to_string(),
+        DdayStatus::Unknown if snapshot.phase == DailyPhase::Idle => {
+            return STATUS_COURSE_CHECKING.to_string();
+        }
+        DdayStatus::Unknown => {}
+        DdayStatus::Active { .. } | DdayStatus::Unavailable | DdayStatus::LoginRequired => {}
+    }
+
     build_attendance_status_text(snapshot.phase, snapshot.remaining, snapshot.needs_login)
 }
 
@@ -367,15 +384,20 @@ fn build_dday_text_for_date(status: &DdayStatus, today: NaiveDate) -> String {
     match status {
         DdayStatus::Unknown => "D-day 확인 중...".to_string(),
         DdayStatus::LoginRequired => "로그인 후 D-day 표시".to_string(),
-        DdayStatus::Ended | DdayStatus::NoCohort => "진행 중인 코스 없음".to_string(),
-        DdayStatus::Active { end_date } => {
+        DdayStatus::Unavailable | DdayStatus::Upcoming { end_date: None } => "수료일 정보 없음".to_string(),
+        DdayStatus::Ended => STATUS_COURSE_COMPLETE.to_string(),
+        DdayStatus::NoCohort => STATUS_NO_COHORT.to_string(),
+        DdayStatus::Active { end_date }
+        | DdayStatus::Upcoming {
+            end_date: Some(end_date),
+        } => {
             let days = end_date.signed_duration_since(today).num_days();
             if days > 0 {
                 format!("수료까지 D-{}", days)
             } else if days == 0 {
                 "수료 D-Day".to_string()
             } else {
-                "진행 중인 코스 없음".to_string()
+                STATUS_COURSE_COMPLETE.to_string()
             }
         }
     }
@@ -1279,6 +1301,70 @@ mod tests {
     }
 
     #[test]
+    fn 시작전_코스는_짧고_명시적으로_표시한다() {
+        let mut snapshot = healthy_snapshot(DailyPhase::Idle, None, false);
+        snapshot.dday_status = DdayStatus::Upcoming { end_date: None };
+
+        let view = build_tray_view_model(&snapshot, Utc::now());
+
+        assert_eq!(view.status_text, "코스 시작 전");
+    }
+
+    #[test]
+    fn 완료된_코스는_짧고_명시적으로_표시한다() {
+        let mut snapshot = healthy_snapshot(DailyPhase::Idle, None, false);
+        snapshot.dday_status = DdayStatus::Ended;
+
+        let view = build_tray_view_model(&snapshot, Utc::now());
+
+        assert_eq!(view.status_text, "코스 완료");
+    }
+
+    #[test]
+    fn 코호트가_없으면_짧고_명시적으로_표시한다() {
+        let mut snapshot = healthy_snapshot(DailyPhase::Idle, None, false);
+        snapshot.dday_status = DdayStatus::NoCohort;
+
+        let view = build_tray_view_model(&snapshot, Utc::now());
+
+        assert_eq!(view.status_text, "진행 중인 코스 없음");
+    }
+
+    #[test]
+    fn 활성_코스의_idle은_현재_출석이_없다고_표시한다() {
+        let mut snapshot = healthy_snapshot(DailyPhase::Idle, None, false);
+        snapshot.dday_status = DdayStatus::Active {
+            end_date: NaiveDate::from_ymd_opt(2026, 12, 31).unwrap(),
+        };
+
+        let view = build_tray_view_model(&snapshot, Utc::now());
+
+        assert_eq!(view.status_text, "현재 출석 없음");
+    }
+
+    #[test]
+    fn 코스_상태_판별중은_짧고_명시적으로_표시한다() {
+        let snapshot = healthy_snapshot(DailyPhase::Idle, None, false);
+
+        let view = build_tray_view_model(&snapshot, Utc::now());
+
+        assert_eq!(view.status_text, "코스 확인 중");
+    }
+
+    #[test]
+    fn 코스_상태_문구는_12자_이내다() {
+        for text in [
+            "코스 시작 전",
+            "코스 완료",
+            "진행 중인 코스 없음",
+            "현재 출석 없음",
+            "코스 확인 중",
+        ] {
+            assert!(text.chars().count() <= 12, "{text}");
+        }
+    }
+
+    #[test]
     fn view_model은_표시상태를_명시적으로_분리한다() {
         let loading = build_tray_view_model(
             &snapshot(DailyPhase::Idle, None, false, false, CheckerRuntimeStatus::Loading),
@@ -1345,7 +1431,13 @@ mod tests {
         let status = DdayStatus::Active {
             end_date: NaiveDate::from_ymd_opt(2026, 3, 31).unwrap(),
         };
-        assert_eq!(build_dday_text_for_date(&status, today), "진행 중인 코스 없음");
+        assert_eq!(build_dday_text_for_date(&status, today), "코스 완료");
+    }
+
+    #[test]
+    fn dday_완료된_코스를_표시한다() {
+        let today = NaiveDate::from_ymd_opt(2026, 4, 1).unwrap();
+        assert_eq!(build_dday_text_for_date(&DdayStatus::Ended, today), "코스 완료");
     }
 
     #[test]
@@ -1373,6 +1465,24 @@ mod tests {
             build_dday_text_for_date(&DdayStatus::Unknown, today),
             "D-day 확인 중..."
         );
+    }
+
+    #[test]
+    fn dday_종료일_정보없음을_표시한다() {
+        let today = NaiveDate::from_ymd_opt(2026, 3, 17).unwrap();
+        assert_eq!(
+            build_dday_text_for_date(&DdayStatus::Unavailable, today),
+            "수료일 정보 없음"
+        );
+    }
+
+    #[test]
+    fn dday_시작전_기수의_수료일까지_표시한다() {
+        let today = NaiveDate::from_ymd_opt(2026, 7, 27).unwrap();
+        let status = DdayStatus::Upcoming {
+            end_date: Some(NaiveDate::from_ymd_opt(2026, 12, 31).unwrap()),
+        };
+        assert_eq!(build_dday_text_for_date(&status, today), "수료까지 D-157");
     }
 
     // --- build_tooltip ---

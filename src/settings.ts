@@ -7,6 +7,7 @@ import {
     connectSettingsSnapshots,
     invokeSettingsMutation,
     refreshSettingsSnapshot,
+    type CohortOption,
     type SettingsSnapshot,
 } from './settings-state';
 
@@ -33,6 +34,9 @@ interface SettingsComponent {
     notificationEnd: number;
     startInterval: number;
     endInterval: number;
+    selectedCohortId: string;
+    effectiveCohortId: string | null;
+    cohortOptions: CohortOption[];
     get attendanceNotificationEnabled(): boolean;
     get skipAttendanceHint(): string;
     init(): Promise<void>;
@@ -47,6 +51,7 @@ interface SettingsComponent {
     saveEndTime(): Promise<void>;
     saveStartInterval(): Promise<void>;
     saveEndInterval(): Promise<void>;
+    saveSelectedCohort(): Promise<void>;
     toggleDebugMode(): Promise<void>;
     openNotificationSettings(): Promise<void>;
     command(command: string): Promise<void>;
@@ -80,6 +85,12 @@ function projectSettings(target: SettingsComponent, snapshot: SettingsSnapshot):
     target.notificationEnd = snapshot.notificationEnd.hour;
     target.startInterval = snapshot.startInterval;
     target.endInterval = snapshot.endInterval;
+    target.cohortOptions = snapshot.cohortOptions;
+    target.selectedCohortId = snapshot.selectedCohortId
+        && snapshot.cohortOptions.some((cohort) => cohort.id === snapshot.selectedCohortId)
+        ? snapshot.selectedCohortId
+        : '';
+    target.effectiveCohortId = snapshot.effectiveCohortId;
     target.lastSettingsSnapshot = snapshot;
 }
 
@@ -105,6 +116,9 @@ function settings(): SettingsComponent {
         notificationEnd: 4,
         startInterval: 15,
         endInterval: 15,
+        selectedCohortId: '',
+        effectiveCohortId: null,
+        cohortOptions: [],
 
         get attendanceNotificationEnabled() {
             return !this.skipAttendance;
@@ -227,6 +241,19 @@ function settings(): SettingsComponent {
                 });
             } catch (error) {
                 await this.restoreSettings('set_end_notification_interval', error);
+            }
+        },
+
+        async saveSelectedCohort() {
+            const previous = this.lastSettingsSnapshot?.selectedCohortId ?? '';
+            try {
+                await invokeSettingsMutation(this, projectSettings, 'set_selected_cohort', {
+                    cohortId: this.selectedCohortId || null,
+                });
+            } catch (error) {
+                await this.restoreSettings('set_selected_cohort', error, () => {
+                    this.selectedCohortId = previous;
+                });
             }
         },
 

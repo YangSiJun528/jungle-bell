@@ -13,6 +13,7 @@
     "allow-report-checker-ready",
     "allow-report-cms-identity",
     "allow-log-from-js",
+    "allow-resolve-cohort-selection",
     "allow-get-usage-analytics-enabled"
   ]
 }
