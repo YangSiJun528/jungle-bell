@@ -18,6 +18,7 @@ use crate::autostart;
 use crate::campus::{CampusDataKind, CampusService};
 use crate::checker;
 use crate::config;
+use crate::local_consumption::{LocalConsumptionService, LocalDashboardSnapshot};
 use crate::news::{self, NewsFeed, NewsService};
 use crate::settings_state::{SettingsService, SettingsSnapshot};
 use crate::state::{self, AppState};
@@ -94,7 +95,6 @@ pub async fn report_attendance_status(
     let curr_needs_login = s.needs_login;
     let curr_data_loaded = s.data_loaded;
     let login_status = LoginStatus::from_state(&s);
-    s.notify_scheduler();
     drop(s);
 
     if let Some(snapshot) = tray_snapshot {
@@ -259,6 +259,45 @@ pub async fn set_selected_cohort(
     if commit.changed {
         checker::trigger_current_check(&app);
     }
+    Ok(commit.snapshot)
+}
+
+#[tauri::command]
+pub async fn set_meal_subscription_enabled(
+    app: tauri::AppHandle,
+    settings: tauri::State<'_, Arc<SettingsService>>,
+    local_consumption: tauri::State<'_, Arc<LocalConsumptionService>>,
+    enabled: bool,
+) -> Result<SettingsSnapshot, String> {
+    let commit = settings
+        .update_config(&app, "set_meal_subscription_enabled", move |config| {
+            config.meal_subscription_enabled = enabled;
+            Ok(())
+        })
+        .await?;
+    local_consumption
+        .on_settings_changed(&app, commit.changed && enabled)
+        .await;
+    Ok(commit.snapshot)
+}
+
+#[tauri::command]
+pub async fn set_laundry_watch(
+    app: tauri::AppHandle,
+    settings: tauri::State<'_, Arc<SettingsService>>,
+    local_consumption: tauri::State<'_, Arc<LocalConsumptionService>>,
+    watch: Option<config::LaundryWatch>,
+) -> Result<SettingsSnapshot, String> {
+    if let Some(watch) = &watch {
+        config::validate_laundry_watch(watch)?;
+    }
+    let commit = settings
+        .update_config(&app, "set_laundry_watch", move |config| {
+            config.laundry_watch = watch;
+            Ok(())
+        })
+        .await?;
+    local_consumption.on_settings_changed(&app, false).await;
     Ok(commit.snapshot)
 }
 
@@ -648,6 +687,13 @@ pub async fn open_attendance_window(app: tauri::AppHandle) {
 #[tauri::command]
 pub fn get_tray_panel_state(app: tauri::AppHandle) -> Result<tray::TrayPanelState, String> {
     tray::get_tray_panel_state(&app)
+}
+
+#[tauri::command]
+pub async fn get_local_dashboard_snapshot(
+    local_consumption: tauri::State<'_, Arc<LocalConsumptionService>>,
+) -> Result<LocalDashboardSnapshot, String> {
+    Ok(local_consumption.dashboard_snapshot().await)
 }
 
 /// 커스텀 트레이 패널에서 선택한 허용된 액션을 실행한다.

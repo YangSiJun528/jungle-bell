@@ -10,15 +10,8 @@
 //!   https://github.com/agronholm/apscheduler/blob/26bff5d1001d8d259f4d7ddaad6cf055072bb257/src/apscheduler/_schedulers/async_.py
 
 use std::collections::BTreeMap;
-use std::fs;
-use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Duration, FixedOffset, NaiveDate, TimeZone, Utc};
-use serde::{Deserialize, Serialize};
-
-use crate::config;
-
-const JOB_STORE_VERSION: u32 = 1;
 
 /// 코드에 등록되는 작업 식별자.
 ///
@@ -89,7 +82,6 @@ pub(crate) struct JobSpec {
     pub(crate) misfire_grace_secs: u64,
     pub(crate) limits: &'static [RunLimit],
     pub(crate) cooldown_secs: Option<u64>,
-    persist_runtime: bool,
 }
 
 impl JobSpec {
@@ -105,7 +97,6 @@ impl JobSpec {
             misfire_grace_secs: 60,
             limits: &[],
             cooldown_secs: None,
-            persist_runtime: false,
         }
     }
 
@@ -121,7 +112,6 @@ impl JobSpec {
             misfire_grace_secs: 60,
             limits: &[],
             cooldown_secs: None,
-            persist_runtime: false,
         }
     }
 
@@ -138,7 +128,6 @@ impl JobSpec {
             misfire_grace_secs: 60,
             limits: &[],
             cooldown_secs: None,
-            persist_runtime: true,
         }
     }
 
@@ -159,7 +148,6 @@ impl JobSpec {
             misfire_grace_secs: 60,
             limits: &[],
             cooldown_secs: None,
-            persist_runtime: true,
         }
     }
 
@@ -195,7 +183,6 @@ impl JobSpec {
             misfire_grace_secs: 60,
             limits: &[],
             cooldown_secs: None,
-            persist_runtime: true,
         }
     }
 
@@ -222,15 +209,15 @@ impl JobSpec {
         self
     }
 
+    #[allow(dead_code)]
     pub(crate) const fn limits(mut self, limits: &'static [RunLimit]) -> Self {
         self.limits = limits;
-        self.persist_runtime = true;
         self
     }
 
+    #[allow(dead_code)]
     pub(crate) const fn cooldown_secs(mut self, seconds: u64) -> Self {
         self.cooldown_secs = Some(seconds);
-        self.persist_runtime = true;
         self
     }
 }
@@ -341,8 +328,7 @@ impl<'a> JobEvaluation<'a> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct JobRuntime {
     pub(crate) next_due_at: Option<DateTime<Utc>>,
     pub(crate) last_success_at: Option<DateTime<Utc>>,
@@ -475,24 +461,9 @@ impl JobRuntime {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct JobStore {
-    #[serde(default = "job_store_version")]
-    version: u32,
-    #[serde(default)]
     runtimes: BTreeMap<String, JobRuntime>,
-    #[serde(skip)]
-    dirty: bool,
-}
-
-impl Default for JobStore {
-    fn default() -> Self {
-        Self {
-            version: JOB_STORE_VERSION,
-            runtimes: BTreeMap::new(),
-            dirty: false,
-        }
-    }
 }
 
 impl JobStore {
@@ -509,7 +480,6 @@ impl JobStore {
             .entry(spec.kind.name().to_string())
             .or_default()
             .mark_success(spec, now);
-        self.dirty |= spec.persist_runtime;
     }
 
     pub(crate) fn mark_success_with_context(&mut self, spec: &JobSpec, evaluation: &JobEvaluation<'_>) {
@@ -517,7 +487,6 @@ impl JobStore {
             .entry(spec.kind.name().to_string())
             .or_default()
             .mark_success_with_context(spec, evaluation);
-        self.dirty |= spec.persist_runtime;
     }
 
     pub(crate) fn mark_not_eligible_with_context(&mut self, spec: &JobSpec, evaluation: &JobEvaluation<'_>) {
@@ -525,17 +494,13 @@ impl JobStore {
             .entry(spec.kind.name().to_string())
             .or_default()
             .mark_not_eligible_with_context(spec, evaluation);
-        self.dirty |= spec.persist_runtime;
     }
 
     pub(crate) fn mark_failure(&mut self, spec: &JobSpec, now: DateTime<Utc>) -> JobFailureDecision {
-        let decision = self
-            .runtimes
+        self.runtimes
             .entry(spec.kind.name().to_string())
             .or_default()
-            .mark_failure(spec, now);
-        self.dirty |= spec.persist_runtime;
-        decision
+            .mark_failure(spec, now)
     }
 
     #[cfg(test)]
@@ -560,10 +525,7 @@ impl JobStore {
 
     pub(crate) fn decide_with_context(&mut self, spec: &JobSpec, evaluation: &JobEvaluation<'_>) -> JobDecision {
         let runtime = self.runtimes.entry(spec.kind.name().to_string()).or_default();
-        let previous = runtime.clone();
-        let decision = decide_job_with_context(spec, runtime, evaluation);
-        self.dirty |= spec.persist_runtime && *runtime != previous;
-        decision
+        decide_job_with_context(spec, runtime, evaluation)
     }
 
     pub(crate) fn next_due_at_for(&self, specs: &[JobSpec]) -> Option<DateTime<Utc>> {
@@ -574,58 +536,6 @@ impl JobStore {
             .filter_map(|runtime| runtime.next_due_at)
             .min()
     }
-
-    pub(crate) fn take_dirty(&mut self) -> bool {
-        std::mem::take(&mut self.dirty)
-    }
-
-    pub(crate) fn mark_dirty(&mut self) {
-        self.dirty = true;
-    }
-
-    pub(crate) fn load() -> Result<Self, String> {
-        let path = job_store_path().ok_or_else(|| "운영체제 설정 디렉토리를 확인할 수 없습니다.".to_string())?;
-        Self::load_from(&path)
-    }
-
-    pub(crate) fn load_from(path: &Path) -> Result<Self, String> {
-        let data = match fs::read_to_string(path) {
-            Ok(data) => data,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Self::default()),
-            Err(error) => return Err(format!("스케줄 상태 파일({}) 읽기 실패: {error}", path.display())),
-        };
-        let mut store: Self = serde_json::from_str(&data)
-            .map_err(|error| format!("스케줄 상태 파일({}) 파싱 실패: {error}", path.display()))?;
-        if store.version != JOB_STORE_VERSION {
-            return Err(format!("지원하지 않는 스케줄 상태 버전입니다: {}", store.version));
-        }
-        store.dirty = false;
-        Ok(store)
-    }
-
-    pub(crate) fn save(&self) -> Result<(), String> {
-        let path = job_store_path().ok_or_else(|| "운영체제 설정 디렉토리를 확인할 수 없습니다.".to_string())?;
-        self.save_to(&path)
-    }
-
-    pub(crate) fn save_to(&self, path: &Path) -> Result<(), String> {
-        let parent = path
-            .parent()
-            .ok_or_else(|| "스케줄 상태 파일 상위 디렉토리가 없습니다.".to_string())?;
-        fs::create_dir_all(parent)
-            .map_err(|error| format!("스케줄 상태 디렉토리({}) 생성 실패: {error}", parent.display()))?;
-        let data = serde_json::to_string_pretty(self).map_err(|error| format!("스케줄 상태 직렬화 실패: {error}"))?;
-        config::write_file_atomically(path, data.as_bytes())
-            .map_err(|error| format!("스케줄 상태 파일({}) 저장 실패: {error}", path.display()))
-    }
-}
-
-const fn job_store_version() -> u32 {
-    JOB_STORE_VERSION
-}
-
-fn job_store_path() -> Option<PathBuf> {
-    config::config_path().map(|path| path.with_file_name("scheduler-state.json"))
 }
 
 #[cfg(test)]
@@ -901,7 +811,6 @@ fn backoff_delay_secs(spec: &JobSpec, consecutive_failures: u32) -> u64 {
 mod tests {
     use super::*;
     use chrono::{FixedOffset, TimeZone, Utc};
-    use std::fs;
 
     const TEST_TASK: JobSpec = JobSpec::new(JobId::new("checker_session_refresh"), 60);
     const ONCE_PER_CALENDAR_DAY: [RunLimit; 1] = [RunLimit::CalendarDay(1)];
@@ -1325,45 +1234,6 @@ mod tests {
             store.decide_with_context(&spec, &evaluation(17, 9, 1, 0, "2026-03-17", true),),
             JobDecision::Run(_)
         ));
-    }
-
-    #[test]
-    fn job_store는_실행_상태를_json으로_복원한다() {
-        let spec = JobSpec::new(JobId::new("meals_refresh"), 60)
-            .initial_delay_secs(0)
-            .limits(&ONCE_PER_ATTENDANCE_DAY);
-        let first = evaluation(17, 9, 0, 0, "2026-03-17", true);
-        let mut store = JobStore::default();
-        assert!(matches!(store.decide_with_context(&spec, &first), JobDecision::Run(_)));
-        store.mark_success_with_context(&spec, &first);
-
-        let path = std::env::temp_dir().join(format!(
-            "jungle-bell-scheduler-state-{}-{}.json",
-            std::process::id(),
-            first.now().timestamp()
-        ));
-        store.save_to(&path).unwrap();
-        let mut restored = JobStore::load_from(&path).unwrap();
-        fs::remove_file(path).unwrap();
-
-        assert_eq!(restored.last_success_at(JobId::new("meals_refresh")), Some(first.now()));
-        assert!(matches!(
-            restored.decide_with_context(&spec, &evaluation(17, 9, 1, 0, "2026-03-17", true),),
-            JobDecision::Skip {
-                reason: JobSkipReason::LimitReached,
-                ..
-            }
-        ));
-    }
-
-    #[test]
-    fn 고빈도_interval은_영속_저장을_요청하지_않는다() {
-        let mut store = JobStore::default();
-        let now = utc(9, 0, 0);
-
-        store.mark_success(&TEST_TASK, now);
-
-        assert!(!store.take_dirty());
     }
 
     #[test]

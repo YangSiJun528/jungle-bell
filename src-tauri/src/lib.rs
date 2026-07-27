@@ -8,6 +8,7 @@ mod commands;
 mod config;
 mod data_api;
 mod interval_tasks;
+mod local_consumption;
 mod news;
 mod runtime;
 mod scheduler;
@@ -20,7 +21,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use config::Config;
-use interval_tasks::JobStore;
+use local_consumption::LocalConsumptionService;
 use settings_state::SettingsService;
 use state::AppState;
 
@@ -118,17 +119,12 @@ pub fn run() {
     } else {
         log::LevelFilter::Info
     };
-    let (interval_jobs, scheduler_state_load_error) = match JobStore::load() {
-        Ok(store) => (store, None),
-        Err(error) => (JobStore::default(), Some(error)),
-    };
-    let mut app_state = AppState::new(config);
-    app_state.interval_jobs = interval_jobs;
-    let shared_state = Arc::new(Mutex::new(app_state));
+    let shared_state = Arc::new(Mutex::new(AppState::new(config)));
     let settings_service = Arc::new(SettingsService::new(
         shared_state.clone(),
         env!("CARGO_PKG_VERSION").to_string(),
     ));
+    let local_consumption_service = Arc::new(LocalConsumptionService::new(shared_state.clone()));
     let campus_service = Arc::new(campus::CampusService::new());
     let news_service = Arc::new(news::NewsService::new());
 
@@ -177,6 +173,7 @@ pub fn run() {
         // 핸들러에서 `tauri::State<Arc<Mutex<AppState>>>`로 받아 사용.
         .manage(shared_state.clone())
         .manage(settings_service)
+        .manage(local_consumption_service)
         .manage(campus_service.clone())
         .manage(news_service)
         // JS에서 `window.__TAURI__.core.invoke()`로 호출할 수 있는 Tauri 커맨드 등록.
@@ -198,6 +195,8 @@ pub fn run() {
             commands::set_auto_start,
             commands::set_start_notification_enabled,
             commands::set_end_notification_enabled,
+            commands::set_meal_subscription_enabled,
+            commands::set_laundry_watch,
             commands::set_start_notification_interval,
             commands::set_end_notification_interval,
             commands::set_notification_start,
@@ -215,6 +214,7 @@ pub fn run() {
             commands::complete_onboarding,
             commands::open_attendance_window,
             commands::get_tray_panel_state,
+            commands::get_local_dashboard_snapshot,
             commands::run_tray_panel_action,
             commands::hide_tray_panel,
             commands::get_news_feed,
@@ -237,10 +237,6 @@ pub fn run() {
                 log_level,
                 MAX_LOG_FILE_SIZE / 1000,
             );
-            if let Some(error) = scheduler_state_load_error.as_deref() {
-                log::warn!("[scheduler] {error}; 빈 상태로 시작합니다");
-            }
-
             // 분석: PostHog 클라이언트 초기화.
             // app_opened 이벤트는 identity 설정 시(set_identity) 전송한다.
             let usage_analytics_enabled = {
