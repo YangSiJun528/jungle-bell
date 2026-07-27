@@ -27,6 +27,11 @@ function snapshot(revision: number, autoStart: boolean): SettingsSnapshot {
         notificationEnd: {hour: 4, minute: 0},
         startInterval: 15,
         endInterval: 15,
+        selectedCohortId: null,
+        effectiveCohortId: null,
+        cohortOptions: [],
+        mealSubscription: false,
+        laundryWatch: null,
     };
 }
 

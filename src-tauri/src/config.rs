@@ -11,6 +11,22 @@ pub struct TimeOfDay {
     pub minute: u32,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LaundryApplianceKind {
+    Washer,
+    Dryer,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LaundryWatch {
+    pub machine_id: String,
+    pub appliance: LaundryApplianceKind,
+    pub session_id: String,
+    pub notify_before_mins: u32,
+}
+
 /// 출석 체크 시간대 설정.
 ///
 /// 하루가 다음 시간대로 나뉨:
@@ -79,6 +95,15 @@ pub struct Config {
     /// 일요일(KST) 알림 끄기
     #[serde(default)]
     pub skip_sunday: bool,
+    /// 출석을 확인할 기수 ID. None이면 현재 활성 기수를 자동 선택한다.
+    #[serde(default)]
+    pub selected_cohort_id: Option<String>,
+    /// 새 주간 식단이 게시되면 홈에 표시하고 알림을 받을지 여부.
+    #[serde(default)]
+    pub meal_subscription_enabled: bool,
+    /// 홈에서 추적하고 종료 임박·완료 알림을 받을 세탁 작업.
+    #[serde(default)]
+    pub laundry_watch: Option<LaundryWatch>,
 }
 
 fn default_true() -> bool {
@@ -98,6 +123,7 @@ fn default_notification_end() -> TimeOfDay {
 }
 
 const ALLOWED_NOTIFICATION_INTERVAL_MINS: [u32; 6] = [1, 3, 5, 10, 15, 30];
+pub const ALLOWED_LAUNDRY_NOTICE_MINS: [u32; 6] = [1, 3, 5, 10, 15, 30];
 
 impl TimeOfDay {
     /// 자정 기준 초 단위 변환. 시간 비교·계산에 사용.
@@ -132,6 +158,32 @@ pub fn validate_notification_interval(value: u32) -> Result<u32, String> {
     } else {
         Err("알림 간격은 1, 3, 5, 10, 15, 30분 중 하나여야 합니다.".into())
     }
+}
+
+pub fn validate_laundry_watch(watch: &LaundryWatch) -> Result<(), String> {
+    fn validate_text(value: &str, label: &str, max_len: usize) -> Result<(), String> {
+        let trimmed = value.trim();
+        if trimmed.is_empty() || trimmed.chars().count() > max_len || trimmed.chars().any(char::is_control) {
+            return Err(format!("잘못된 {label}입니다."));
+        }
+        Ok(())
+    }
+
+    validate_text(&watch.machine_id, "세탁기 ID", 80)?;
+    validate_text(&watch.session_id, "세탁 세션 ID", 240)?;
+    if !ALLOWED_LAUNDRY_NOTICE_MINS.contains(&watch.notify_before_mins) {
+        return Err("세탁 종료 전 알림은 1, 3, 5, 10, 15, 30분 중 하나여야 합니다.".into());
+    }
+    Ok(())
+}
+
+pub fn validate_cohort_id(value: &str) -> Result<(), String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() || trimmed != value || trimmed.chars().count() > 128 || trimmed.chars().any(char::is_control)
+    {
+        return Err("잘못된 기수 ID입니다.".into());
+    }
+    Ok(())
 }
 
 pub(crate) fn config_path() -> Option<PathBuf> {
@@ -220,6 +272,24 @@ impl Config {
         ) {
             changed = true;
         }
+        if self
+            .laundry_watch
+            .as_ref()
+            .is_some_and(|watch| validate_laundry_watch(watch).is_err())
+        {
+            log::warn!("[config] 잘못된 세탁 추적 설정을 제거합니다");
+            self.laundry_watch = None;
+            changed = true;
+        }
+        if self
+            .selected_cohort_id
+            .as_deref()
+            .is_some_and(|cohort_id| validate_cohort_id(cohort_id).is_err())
+        {
+            log::warn!("[config] 잘못된 기수 선택 설정을 제거합니다");
+            self.selected_cohort_id = None;
+            changed = true;
+        }
 
         changed
     }
@@ -255,6 +325,9 @@ impl Default for Config {
             last_version: None,
             skip_attendance: None,
             skip_sunday: false,
+            selected_cohort_id: None,
+            meal_subscription_enabled: false,
+            laundry_watch: None,
         }
     }
 }
@@ -472,6 +545,45 @@ mod tests {
         let config: Config = serde_json::from_value(value).unwrap();
 
         assert!(config.show_app_icon);
+    }
+
+    #[test]
+    fn 로컬_구독은_사용자가_선택하기_전까지_비활성화된다() {
+        let config = Config::default();
+
+        assert!(!config.meal_subscription_enabled);
+        assert!(config.laundry_watch.is_none());
+    }
+
+    #[test]
+    fn 세탁_추적은_기기와_세션과_종료전_알림_분을_검증한다() {
+        let valid = LaundryWatch {
+            machine_id: "워시타워_6".into(),
+            appliance: LaundryApplianceKind::Washer,
+            session_id: "tower6:washer:cycle:42".into(),
+            notify_before_mins: 5,
+        };
+        assert!(validate_laundry_watch(&valid).is_ok());
+
+        let invalid_minutes = LaundryWatch {
+            notify_before_mins: 2,
+            ..valid.clone()
+        };
+        assert!(validate_laundry_watch(&invalid_minutes).is_err());
+
+        let invalid_machine = LaundryWatch {
+            machine_id: "tower6\nforged".into(),
+            ..valid
+        };
+        assert!(validate_laundry_watch(&invalid_machine).is_err());
+    }
+
+    #[test]
+    fn 기수_선택은_기본적으로_자동이며_유효한_id만_저장한다() {
+        assert!(Config::default().selected_cohort_id.is_none());
+        assert!(validate_cohort_id("cohort-2026-1").is_ok());
+        assert!(validate_cohort_id("").is_err());
+        assert!(validate_cohort_id("cohort\nforged").is_err());
     }
 
     #[test]
