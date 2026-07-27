@@ -3,6 +3,7 @@ import {readdirSync, readFileSync} from 'node:fs';
 import {test} from 'vitest';
 
 const checkerSource = readFileSync(new URL('./injected/checker.ts', import.meta.url), 'utf8');
+const attendanceSource = readFileSync(new URL('./injected/attendance.ts', import.meta.url), 'utf8');
 const buildSource = readFileSync(new URL('../src-tauri/build.rs', import.meta.url), 'utf8');
 const appSource = readFileSync(new URL('../src-tauri/src/lib.rs', import.meta.url), 'utf8');
 const capabilityDirectory = new URL('../src-tauri/capabilities/', import.meta.url);
@@ -15,6 +16,14 @@ const localCapabilities = readdirSync(capabilityDirectory)
     .filter((capability) => capability.local !== false);
 const checkerCapability = JSON.parse(
     readFileSync(new URL('../src-tauri/capabilities/checker.json', import.meta.url), 'utf8'),
+) as {
+    local: boolean;
+    permissions: string[];
+    remote: {urls: string[]};
+    windows: string[];
+};
+const attendanceCapability = JSON.parse(
+    readFileSync(new URL('../src-tauri/capabilities/attendance.json', import.meta.url), 'utf8'),
 ) as {
     local: boolean;
     permissions: string[];
@@ -57,6 +66,13 @@ function checkerInvokeCommands(): string[] {
     );
 }
 
+function attendanceInvokeCommands(): string[] {
+    return captures(
+        attendanceSource,
+        /window\.__TAURI__\.core\.invoke(?:<[^>]+>)?\(\s*['"]([a-z0-9_]+)['"]/g,
+    );
+}
+
 test('모든 앱 명령은 manifest와 하나 이상의 로컬 capability에 명시된다', () => {
     const registered = sorted(new Set(invokeHandlerCommands()));
     const manifested = sorted(new Set(appManifestCommands()));
@@ -83,6 +99,16 @@ test('원격 checker는 필요한 명령과 event listen 권한만 가진다', (
     assert.equal(checkerCapability.local, false);
     assert.deepEqual(checkerCapability.remote.urls, ['https://jungle-lms.krafton.com/*']);
     assert.deepEqual(sorted(checkerCapability.permissions), expectedPermissions);
+});
+
+test('원격 출석 창은 클릭 보고 명령 하나만 허용한다', () => {
+    const invoked = sorted(new Set(attendanceInvokeCommands()));
+
+    assert.deepEqual(attendanceCapability.windows, ['attendance']);
+    assert.equal(attendanceCapability.local, false);
+    assert.deepEqual(attendanceCapability.remote.urls, ['https://jungle-lms.krafton.com/*']);
+    assert.deepEqual(sorted(attendanceCapability.permissions), invoked.map(allowPermission));
+    assert.deepEqual(invoked, ['report_attendance_start_clicked']);
 });
 
 test('checker는 LMS 기수 목록을 로컬 선택 규칙으로 해석한 뒤 해당 출석만 조회한다', () => {

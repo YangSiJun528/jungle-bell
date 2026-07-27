@@ -4,11 +4,32 @@ import tailwindcss from '@tailwindcss/vite';
 import {defineConfig, transformWithOxc, type Plugin} from 'vite';
 
 const host = process.env.TAURI_DEV_HOST;
-const checkerSource = resolve(import.meta.dirname, 'src/injected/checker.ts');
-const checkerOutput = resolve(import.meta.dirname, 'dist/injected/checker.js');
 
-async function compileChecker(): Promise<void> {
-    const result = await transformWithOxc(readFileSync(checkerSource, 'utf8'), checkerSource, {
+interface InjectionScript {
+    name: string;
+    sources: string[];
+    output: string;
+}
+
+const injectionScripts: InjectionScript[] = [
+    {
+        name: 'checker',
+        sources: [resolve(import.meta.dirname, 'src/injected/checker.ts')],
+        output: resolve(import.meta.dirname, 'dist/injected/checker.js'),
+    },
+    {
+        name: 'attendance',
+        sources: [
+            resolve(import.meta.dirname, 'src/injected/attendance-decision.ts'),
+            resolve(import.meta.dirname, 'src/injected/attendance.ts'),
+        ],
+        output: resolve(import.meta.dirname, 'dist/injected/attendance.js'),
+    },
+];
+
+async function compileInjectionScript(script: InjectionScript): Promise<void> {
+    const source = script.sources.map((sourcePath) => readFileSync(sourcePath, 'utf8')).join('\n');
+    const result = await transformWithOxc(source, script.sources[0] ?? script.name, {
         lang: 'ts',
         sourceType: 'script',
         target: 'safari13',
@@ -16,35 +37,42 @@ async function compileChecker(): Promise<void> {
     });
     const output = `(function () {\n${result.code}\n})();\n`;
 
-    mkdirSync(resolve(checkerOutput, '..'), {recursive: true});
+    mkdirSync(resolve(script.output, '..'), {recursive: true});
     const previous = (() => {
         try {
-            return readFileSync(checkerOutput, 'utf8');
+            return readFileSync(script.output, 'utf8');
         } catch {
             return null;
         }
     })();
-    if (previous !== output) writeFileSync(checkerOutput, output);
+    if (previous !== output) writeFileSync(script.output, output);
 }
 
-function checkerInjectionScript(): Plugin {
+async function compileInjectionScripts(): Promise<void> {
+    await Promise.all(injectionScripts.map(compileInjectionScript));
+}
+
+function injectionScriptPlugin(): Plugin {
     return {
-        name: 'checker-injection-script',
+        name: 'injection-scripts',
         async buildStart() {
-            await compileChecker();
-            this.addWatchFile(checkerSource);
+            await compileInjectionScripts();
+            for (const script of injectionScripts) {
+                for (const source of script.sources) this.addWatchFile(source);
+            }
         },
         async writeBundle() {
-            await compileChecker();
+            await compileInjectionScripts();
         },
         async handleHotUpdate(context) {
-            if (context.file === checkerSource) await compileChecker();
+            const affected = injectionScripts.filter((script) => script.sources.includes(context.file));
+            await Promise.all(affected.map(compileInjectionScript));
         },
     };
 }
 
 export default defineConfig({
-    plugins: [tailwindcss(), checkerInjectionScript()],
+    plugins: [tailwindcss(), injectionScriptPlugin()],
     root: 'src',
     base: './',
     clearScreen: false,

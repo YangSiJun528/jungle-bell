@@ -672,6 +672,7 @@ pub fn refresh_login_status(app_handle: &tauri::AppHandle) {
 fn build_attendance_window(app: &tauri::AppHandle) {
     show_foreground_app(app);
     let app_handle = app.clone();
+    let attendance_script = include_str!("../../dist/injected/attendance.js");
     if let Ok(window) = tauri::WebviewWindowBuilder::new(
         app,
         "attendance",
@@ -684,6 +685,7 @@ fn build_attendance_window(app: &tauri::AppHandle) {
     .resizable(true)
     .skip_taskbar(foreground_window_skip_taskbar(app))
     .focused(true)
+    .initialization_script(attendance_script)
     .build()
     {
         focus_window(&window);
