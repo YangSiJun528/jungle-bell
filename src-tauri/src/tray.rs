@@ -2,7 +2,7 @@
 //!
 //! 트레이 아이콘은 현재 상태에 따라 색상이 변경됨:
 //!   - 회색 (오프라인/확인 중): checker 미보고, 복구 중, 확인 불가
-//!   - 흰색 (정상): Idle, Studying, Complete
+//!   - 검정/흰색 컷아웃 (조작 불필요): Idle, Studying, Complete
 //!   - 오렌지 (경고): 로그인 필요
 //!   - 빨간색 (긴급): NeedStart, StartOverdue, NeedEnd
 
@@ -46,11 +46,50 @@ const TRAY_PANEL_HIDE_DELAY_MS: u64 = 120;
 /// 출석 페이지 닫힌 후 로그인 재시도 윈도우 (초). 3분간 빠르게 재확인.
 const LOGIN_RETRY_WINDOW_SECS: u64 = 180;
 
-// 트레이 아이콘 — 컴파일 시 include_bytes!로 바이너리에 포함
-const ICON_OFFLINE: &[u8] = include_bytes!("../icons/tray-gray.png");
-const ICON_NORMAL: &[u8] = include_bytes!("../icons/tray-white.png");
-const ICON_ALERT: &[u8] = include_bytes!("../icons/tray-red.png");
-const ICON_WARNING: &[u8] = include_bytes!("../icons/tray-orange.png");
+// 트레이 아이콘 — 컴파일 시 include_bytes!로 바이너리에 포함.
+// macOS는 tray-icon이 강제하는 18pt의 정확한 @2x인 36px, 그 외 플랫폼은
+// Windows 고배율 트레이에도 대응하는 48px 자산을 사용한다.
+// 밝은 OS 배경에는 짙은 상태색, 어두운 OS 배경에는 밝은 상태색을 사용한다.
+#[cfg(target_os = "macos")]
+const ICON_OFFLINE_LIGHT: &[u8] = include_bytes!("../icons/tray-offline-light.png");
+#[cfg(not(target_os = "macos"))]
+const ICON_OFFLINE_LIGHT: &[u8] = include_bytes!("../icons/tray-offline-light-windows.png");
+#[cfg(target_os = "macos")]
+const ICON_NORMAL_LIGHT: &[u8] = include_bytes!("../icons/tray-normal-light.png");
+#[cfg(not(target_os = "macos"))]
+const ICON_NORMAL_LIGHT: &[u8] = include_bytes!("../icons/tray-normal-light-windows.png");
+#[cfg(target_os = "macos")]
+const ICON_WARNING_LIGHT: &[u8] = include_bytes!("../icons/tray-warning-light.png");
+#[cfg(not(target_os = "macos"))]
+const ICON_WARNING_LIGHT: &[u8] = include_bytes!("../icons/tray-warning-light-windows.png");
+#[cfg(target_os = "macos")]
+const ICON_ALERT_LIGHT: &[u8] = include_bytes!("../icons/tray-alert-light.png");
+#[cfg(not(target_os = "macos"))]
+const ICON_ALERT_LIGHT: &[u8] = include_bytes!("../icons/tray-alert-light-windows.png");
+#[cfg(target_os = "macos")]
+const ICON_COMPLETE_LIGHT: &[u8] = include_bytes!("../icons/tray-complete-light.png");
+#[cfg(not(target_os = "macos"))]
+const ICON_COMPLETE_LIGHT: &[u8] = include_bytes!("../icons/tray-complete-light-windows.png");
+#[cfg(target_os = "macos")]
+const ICON_OFFLINE_DARK: &[u8] = include_bytes!("../icons/tray-offline-dark.png");
+#[cfg(not(target_os = "macos"))]
+const ICON_OFFLINE_DARK: &[u8] = include_bytes!("../icons/tray-offline-dark-windows.png");
+#[cfg(target_os = "macos")]
+const ICON_NORMAL_DARK: &[u8] = include_bytes!("../icons/tray-normal-dark.png");
+#[cfg(not(target_os = "macos"))]
+const ICON_NORMAL_DARK: &[u8] = include_bytes!("../icons/tray-normal-dark-windows.png");
+#[cfg(target_os = "macos")]
+const ICON_WARNING_DARK: &[u8] = include_bytes!("../icons/tray-warning-dark.png");
+#[cfg(not(target_os = "macos"))]
+const ICON_WARNING_DARK: &[u8] = include_bytes!("../icons/tray-warning-dark-windows.png");
+#[cfg(target_os = "macos")]
+const ICON_ALERT_DARK: &[u8] = include_bytes!("../icons/tray-alert-dark.png");
+#[cfg(not(target_os = "macos"))]
+const ICON_ALERT_DARK: &[u8] = include_bytes!("../icons/tray-alert-dark-windows.png");
+#[cfg(target_os = "macos")]
+const ICON_COMPLETE_DARK: &[u8] = include_bytes!("../icons/tray-complete-dark.png");
+#[cfg(not(target_os = "macos"))]
+const ICON_COMPLETE_DARK: &[u8] = include_bytes!("../icons/tray-complete-dark-windows.png");
 
 const FOREGROUND_WINDOW_LABELS: [&str; 5] = ["attendance", "settings", "onboarding", "campus", "image-viewer"];
 
@@ -78,6 +117,7 @@ impl CampusTab {
 /// 커스텀 트레이 패널에 전달할 마지막 상태를 보관한다.
 pub struct TrayState {
     view: TrayViewModel,
+    icon_theme: TrayIconTheme,
     dday_visible: bool,
     pending_update: Option<String>,
 }
@@ -88,6 +128,7 @@ pub struct TrayState {
 /// `try_lock` 기반 best-effort 갱신보다 이 상태의 성격에 맞다.
 pub struct TrayStateStore {
     state: StdMutex<TrayState>,
+    icon_update: StdMutex<()>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -96,6 +137,23 @@ enum TrayIconKind {
     Normal,
     Warning,
     Alert,
+    Complete,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TrayIconTheme {
+    Light,
+    Dark,
+}
+
+impl From<tauri::Theme> for TrayIconTheme {
+    fn from(theme: tauri::Theme) -> Self {
+        match theme {
+            tauri::Theme::Dark => Self::Dark,
+            tauri::Theme::Light => Self::Light,
+            _ => Self::Light,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -248,14 +306,31 @@ fn calculate_panel_position(anchor: PanelRect, panel: PanelSize, work_area: Pane
     }
 }
 
-fn icon_for_kind(kind: TrayIconKind) -> Image<'static> {
-    let bytes = match kind {
-        TrayIconKind::Offline => ICON_OFFLINE,
-        TrayIconKind::Normal => ICON_NORMAL,
-        TrayIconKind::Warning => ICON_WARNING,
-        TrayIconKind::Alert => ICON_ALERT,
+fn icon_bytes_for_kind(kind: TrayIconKind, theme: TrayIconTheme) -> &'static [u8] {
+    match (theme, kind) {
+        (TrayIconTheme::Light, TrayIconKind::Offline) => ICON_OFFLINE_LIGHT,
+        (TrayIconTheme::Light, TrayIconKind::Normal) => ICON_NORMAL_LIGHT,
+        (TrayIconTheme::Light, TrayIconKind::Warning) => ICON_WARNING_LIGHT,
+        (TrayIconTheme::Light, TrayIconKind::Alert) => ICON_ALERT_LIGHT,
+        (TrayIconTheme::Light, TrayIconKind::Complete) => ICON_COMPLETE_LIGHT,
+        (TrayIconTheme::Dark, TrayIconKind::Offline) => ICON_OFFLINE_DARK,
+        (TrayIconTheme::Dark, TrayIconKind::Normal) => ICON_NORMAL_DARK,
+        (TrayIconTheme::Dark, TrayIconKind::Warning) => ICON_WARNING_DARK,
+        (TrayIconTheme::Dark, TrayIconKind::Alert) => ICON_ALERT_DARK,
+        (TrayIconTheme::Dark, TrayIconKind::Complete) => ICON_COMPLETE_DARK,
+    }
+}
+
+fn icon_for_kind(kind: TrayIconKind, theme: TrayIconTheme) -> Image<'static> {
+    Image::from_bytes(icon_bytes_for_kind(kind, theme)).expect("invalid icon PNG")
+}
+
+fn apply_tray_icon(app: &tauri::AppHandle, kind: TrayIconKind, theme: TrayIconTheme) -> Result<(), String> {
+    if let Some(tray) = app.tray_by_id("main-tray") {
+        tray.set_icon_with_as_template(Some(icon_for_kind(kind, theme)), false)
+            .map_err(|error| format!("트레이 아이콘 적용 실패: {error}"))?;
     };
-    Image::from_bytes(bytes).expect("invalid icon PNG")
+    Ok(())
 }
 
 fn icon_kind_for_snapshot(snapshot: &TraySnapshot) -> TrayIconKind {
@@ -269,7 +344,8 @@ fn icon_kind_for_snapshot(snapshot: &TraySnapshot) -> TrayIconKind {
 
     match snapshot.phase {
         DailyPhase::NeedStart | DailyPhase::StartOverdue | DailyPhase::NeedEnd => TrayIconKind::Alert,
-        _ => TrayIconKind::Normal,
+        DailyPhase::Complete => TrayIconKind::Complete,
+        DailyPhase::Idle | DailyPhase::Studying => TrayIconKind::Normal,
     }
 }
 
@@ -434,6 +510,7 @@ impl TrayStateStore {
     fn new(state: TrayState) -> Self {
         Self {
             state: StdMutex::new(state),
+            icon_update: StdMutex::new(()),
         }
     }
 
@@ -470,6 +547,29 @@ impl TrayStateStore {
         let mut state = self.lock()?;
         state.view = view;
         Ok(state.panel_state(current_version))
+    }
+
+    fn set_icon_theme(&self, icon_theme: TrayIconTheme) -> Result<bool, String> {
+        let mut state = self.lock()?;
+        if state.icon_theme == icon_theme {
+            return Ok(false);
+        }
+        state.icon_theme = icon_theme;
+        Ok(true)
+    }
+
+    fn icon_projection(&self) -> Result<(TrayIconKind, TrayIconTheme), String> {
+        let state = self.lock()?;
+        Ok((state.view.icon, state.icon_theme))
+    }
+
+    fn apply_current_icon(&self, app: &tauri::AppHandle) -> Result<(), String> {
+        let _update_guard = self
+            .icon_update
+            .lock()
+            .map_err(|_| "트레이 아이콘 갱신 잠금이 손상되었습니다.".to_string())?;
+        let (kind, theme) = self.icon_projection()?;
+        apply_tray_icon(app, kind, theme)
     }
 }
 
@@ -1100,7 +1200,8 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let tray_state = TrayStateStore::new(TrayState {
-        view: initial_view,
+        view: initial_view.clone(),
+        icon_theme: TrayIconTheme::Light,
         dday_visible: show_dday,
         pending_update,
     });
@@ -1108,7 +1209,8 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     build_tray_panel_window(app.handle())?;
 
     let _tray = TrayIconBuilder::with_id("main-tray")
-        .icon(Image::from_bytes(ICON_OFFLINE).expect("invalid icon PNG"))
+        .icon(icon_for_kind(initial_view.icon, TrayIconTheme::Light))
+        .icon_as_template(false)
         .tooltip("Jungle Bell - 상태 확인 중...")
         .show_menu_on_left_click(false)
         .on_tray_icon_event(|tray, event| {
@@ -1130,6 +1232,19 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         })
         .build(app)?;
 
+    Ok(())
+}
+
+/// 시스템 테마 변경을 현재 트레이 상태 아이콘에 즉시 반영한다.
+pub fn sync_icon_theme(app: &tauri::AppHandle, system_theme: tauri::Theme) -> Result<(), String> {
+    let icon_theme = TrayIconTheme::from(system_theme);
+    let tray_state: tauri::State<TrayStateStore> = app.state();
+    if !tray_state.set_icon_theme(icon_theme)? {
+        return Ok(());
+    }
+
+    tray_state.apply_current_icon(app)?;
+    log::info!("[tray] icon theme changed: {icon_theme:?}");
     Ok(())
 }
 
@@ -1156,10 +1271,10 @@ pub fn update_tray(app: &tauri::AppHandle, snapshot: &TraySnapshot) -> Result<()
     let tray_state: tauri::State<TrayStateStore> = app.state();
     let panel_state = tray_state.set_view(view.clone(), app.package_info().version.to_string())?;
 
+    if let Err(error) = tray_state.apply_current_icon(app) {
+        log::warn!("[tray] icon update failed: {error}");
+    }
     if let Some(tray) = app.tray_by_id("main-tray") {
-        if let Err(error) = tray.set_icon(Some(icon_for_kind(view.icon))) {
-            log::warn!("[tray] icon update failed: {error}");
-        }
         if let Err(error) = tray.set_tooltip(Some(&view.tooltip)) {
             log::warn!("[tray] tooltip update failed: {error}");
         }
@@ -1172,6 +1287,11 @@ pub fn update_tray(app: &tauri::AppHandle, snapshot: &TraySnapshot) -> Result<()
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "macos")]
+    const EXPECTED_TRAY_ICON_SIZE: u32 = 36;
+    #[cfg(not(target_os = "macos"))]
+    const EXPECTED_TRAY_ICON_SIZE: u32 = 48;
 
     fn snapshot(
         phase: DailyPhase,
@@ -1200,11 +1320,240 @@ mod tests {
         )
     }
 
+    fn rgba_at(image: &Image<'_>, x: u32, y: u32) -> [u8; 4] {
+        assert!(x < image.width());
+        assert!(y < image.height());
+        let offset = ((y * image.width() + x) * 4) as usize;
+        image.rgba()[offset..offset + 4].try_into().unwrap()
+    }
+
+    fn has_antialiased_edge(image: &Image<'_>) -> bool {
+        image
+            .rgba()
+            .chunks_exact(4)
+            .any(|pixel| pixel[3] > 0 && pixel[3] < u8::MAX)
+    }
+
+    fn transparent_cutout_bounds(image: &Image<'_>) -> (u32, u32, u32, u32) {
+        let center_x = (image.width() - 1) as f64 / 2.0;
+        let center_y = (image.height() - 1) as f64 / 2.0;
+        let max_radius = image.width().min(image.height()) as f64 * 0.38;
+        let mut bounds: Option<(u32, u32, u32, u32)> = None;
+
+        for y in 0..image.height() {
+            for x in 0..image.width() {
+                let dx = x as f64 - center_x;
+                let dy = y as f64 - center_y;
+                if dx * dx + dy * dy > max_radius * max_radius || rgba_at(image, x, y)[3] >= 128 {
+                    continue;
+                }
+
+                bounds = Some(match bounds {
+                    Some((min_x, min_y, max_x, max_y)) => (min_x.min(x), min_y.min(y), max_x.max(x), max_y.max(y)),
+                    None => (x, y, x, y),
+                });
+            }
+        }
+
+        bounds.expect("transparent compass cutout is missing")
+    }
+
+    fn transparent_cutout_y_at_center(image: &Image<'_>) -> u32 {
+        let center = image.width() / 2;
+        let plate_top = opaque_plate_y_at_center(image);
+        (plate_top + 1..image.height() / 2)
+            .find(|&y| rgba_at(image, center, y)[3] == 0)
+            .expect("transparent compass ring is missing")
+    }
+
+    fn opaque_plate_y_at_center(image: &Image<'_>) -> u32 {
+        let center = image.width() / 2;
+        (0..image.height() / 2)
+            .find(|&y| rgba_at(image, center, y)[3] == 255)
+            .expect("opaque tray icon plate is missing")
+    }
+
     #[test]
     fn 앱_아이콘_설정과_전면_창_상태로_macos_노출_여부를_결정한다() {
         assert!(should_show_foreground_app(true, false));
         assert!(should_show_foreground_app(false, true));
         assert!(!should_show_foreground_app(false, false));
+    }
+
+    #[test]
+    fn 라이트_테마는_모든_상태에서_라이트용_아이콘을_선택한다() {
+        assert_eq!(
+            icon_bytes_for_kind(TrayIconKind::Offline, TrayIconTheme::Light),
+            ICON_OFFLINE_LIGHT
+        );
+        assert_eq!(
+            icon_bytes_for_kind(TrayIconKind::Normal, TrayIconTheme::Light),
+            ICON_NORMAL_LIGHT
+        );
+        assert_eq!(
+            icon_bytes_for_kind(TrayIconKind::Warning, TrayIconTheme::Light),
+            ICON_WARNING_LIGHT
+        );
+        assert_eq!(
+            icon_bytes_for_kind(TrayIconKind::Alert, TrayIconTheme::Light),
+            ICON_ALERT_LIGHT
+        );
+        assert_eq!(
+            icon_bytes_for_kind(TrayIconKind::Complete, TrayIconTheme::Light),
+            ICON_COMPLETE_LIGHT
+        );
+    }
+
+    #[test]
+    fn 다크_테마는_모든_상태에서_다크용_아이콘을_선택한다() {
+        assert_eq!(
+            icon_bytes_for_kind(TrayIconKind::Offline, TrayIconTheme::Dark),
+            ICON_OFFLINE_DARK
+        );
+        assert_eq!(
+            icon_bytes_for_kind(TrayIconKind::Normal, TrayIconTheme::Dark),
+            ICON_NORMAL_DARK
+        );
+        assert_eq!(
+            icon_bytes_for_kind(TrayIconKind::Warning, TrayIconTheme::Dark),
+            ICON_WARNING_DARK
+        );
+        assert_eq!(
+            icon_bytes_for_kind(TrayIconKind::Alert, TrayIconTheme::Dark),
+            ICON_ALERT_DARK
+        );
+        assert_eq!(
+            icon_bytes_for_kind(TrayIconKind::Complete, TrayIconTheme::Dark),
+            ICON_COMPLETE_DARK
+        );
+    }
+
+    #[test]
+    fn 컨셉6_주의상태_아이콘은_작업영역을_채우고_절제된_중앙_심볼을_사용한다() {
+        let light = icon_for_kind(TrayIconKind::Alert, TrayIconTheme::Light);
+        let dark = icon_for_kind(TrayIconKind::Alert, TrayIconTheme::Dark);
+        let quiet = icon_for_kind(TrayIconKind::Normal, TrayIconTheme::Light);
+        let center = EXPECTED_TRAY_ICON_SIZE / 2;
+        let plate_top = opaque_plate_y_at_center(&light);
+        let glyph_top = transparent_cutout_y_at_center(&quiet);
+
+        assert_eq!(
+            (light.width(), light.height()),
+            (EXPECTED_TRAY_ICON_SIZE, EXPECTED_TRAY_ICON_SIZE)
+        );
+        assert_eq!(
+            (dark.width(), dark.height()),
+            (EXPECTED_TRAY_ICON_SIZE, EXPECTED_TRAY_ICON_SIZE)
+        );
+        assert!(rgba_at(&light, center, 0)[3] < 128);
+        assert!(rgba_at(&dark, center, 0)[3] < 128);
+        assert_eq!(rgba_at(&light, center, plate_top), [180, 35, 44, 255]);
+        assert_eq!(rgba_at(&dark, center, plate_top), [240, 93, 101, 255]);
+        assert_eq!(rgba_at(&light, center, glyph_top), [255, 255, 255, 255]);
+        assert_eq!(rgba_at(&dark, center, glyph_top), [38, 11, 14, 255]);
+    }
+
+    #[test]
+    fn 컨셉6_나침반은_픽셀중앙과_얇은_링을_사용한다() {
+        let normal_svg = include_str!("../../design/tray-icon-lab/icons/light/tile/normal.svg");
+        let alert_svg = include_str!("../../design/tray-icon-lab/icons/light/tile/alert.svg");
+        let complete_svg = include_str!("../../design/tray-icon-lab/icons/light/tile/complete.svg");
+
+        for svg in [normal_svg, alert_svg, complete_svg] {
+            assert!(svg.contains("translate(22 22) scale(1.5)"));
+            assert!(svg.contains("translate(22 22) scale(0.78) translate(-22 -22)"));
+            assert!(svg.contains("stroke-width=\"1.62\""));
+            assert!(svg.contains("<rect x=\"2\" y=\"2\" width=\"40\" height=\"40\" rx=\"8.5\""));
+        }
+
+        let macos = Image::from_bytes(include_bytes!("../icons/tray-normal-light.png")).unwrap();
+        let windows = Image::from_bytes(include_bytes!("../icons/tray-normal-light-windows.png")).unwrap();
+
+        for image in [&macos, &windows] {
+            let (min_x, min_y, max_x, max_y) = transparent_cutout_bounds(image);
+            let center = image.width() / 2;
+            let gap_offset = image.width() / 6;
+
+            assert_eq!(min_x + max_x, image.width() - 1);
+            assert_eq!(min_y + max_y, image.height() - 1);
+            assert!(min_x <= image.width() / 6);
+            assert!(max_x - min_x + 1 >= image.width() * 7 / 10);
+            assert!(rgba_at(image, center + gap_offset, center - gap_offset)[3] >= 250);
+        }
+    }
+
+    #[test]
+    fn 출석완료_아이콘은_테마별_무채색_배경과_투명한_중앙을_사용한다() {
+        let light = icon_for_kind(TrayIconKind::Complete, TrayIconTheme::Light);
+        let dark = icon_for_kind(TrayIconKind::Complete, TrayIconTheme::Dark);
+        let center = EXPECTED_TRAY_ICON_SIZE / 2;
+        let plate_top = opaque_plate_y_at_center(&light);
+        let glyph_top = transparent_cutout_y_at_center(&light);
+
+        assert!(rgba_at(&light, center, 0)[3] < 128);
+        assert!(rgba_at(&dark, center, 0)[3] < 128);
+        assert_eq!(rgba_at(&light, center, plate_top), [255, 255, 255, 255]);
+        assert_eq!(rgba_at(&dark, center, plate_top), [0, 0, 0, 255]);
+        assert_eq!(rgba_at(&light, center, glyph_top)[3], 0);
+        assert_eq!(rgba_at(&dark, center, glyph_top)[3], 0);
+        assert_eq!(rgba_at(&light, center, center)[3], 0);
+        assert_eq!(rgba_at(&dark, center, center)[3], 0);
+    }
+
+    #[test]
+    fn windows용_아이콘은_48픽셀_고해상도_자산을_사용한다() {
+        let alert = Image::from_bytes(include_bytes!("../icons/tray-alert-light-windows.png")).unwrap();
+        let normal_light = Image::from_bytes(include_bytes!("../icons/tray-normal-light-windows.png")).unwrap();
+        let complete_light = Image::from_bytes(include_bytes!("../icons/tray-complete-light-windows.png")).unwrap();
+        let normal_dark = Image::from_bytes(include_bytes!("../icons/tray-normal-dark-windows.png")).unwrap();
+        let complete_dark = Image::from_bytes(include_bytes!("../icons/tray-complete-dark-windows.png")).unwrap();
+        let plate_top = opaque_plate_y_at_center(&alert);
+        let glyph_top = transparent_cutout_y_at_center(&normal_light);
+
+        assert_eq!((alert.width(), alert.height()), (48, 48));
+        assert_eq!((complete_dark.width(), complete_dark.height()), (48, 48));
+        assert!(rgba_at(&alert, 24, 0)[3] < 128);
+        assert_eq!(rgba_at(&alert, 24, plate_top), [180, 35, 44, 255]);
+        assert_eq!(rgba_at(&alert, 24, glyph_top), [255, 255, 255, 255]);
+        assert_eq!(normal_light.rgba(), complete_light.rgba());
+        assert_eq!(normal_dark.rgba(), complete_dark.rgba());
+        assert_eq!(rgba_at(&complete_light, 24, plate_top), [255, 255, 255, 255]);
+        assert_eq!(rgba_at(&complete_dark, 24, plate_top), [0, 0, 0, 255]);
+        assert_eq!(rgba_at(&complete_dark, 24, glyph_top)[3], 0);
+        assert_eq!(rgba_at(&complete_dark, 24, 24)[3], 0);
+    }
+
+    #[test]
+    fn 플랫폼별_아이콘의_곡선은_중간_알파로_안티앨리어싱된다() {
+        let current_platform = icon_for_kind(TrayIconKind::Normal, TrayIconTheme::Light);
+        let windows = Image::from_bytes(include_bytes!("../icons/tray-normal-light-windows.png")).unwrap();
+
+        assert!(has_antialiased_edge(&current_platform));
+        assert!(has_antialiased_edge(&windows));
+    }
+
+    #[test]
+    fn 시스템_테마를_트레이_아이콘_테마로_변환한다() {
+        assert_eq!(TrayIconTheme::from(tauri::Theme::Light), TrayIconTheme::Light);
+        assert_eq!(TrayIconTheme::from(tauri::Theme::Dark), TrayIconTheme::Dark);
+    }
+
+    #[test]
+    fn 테마_변경은_현재_상태_아이콘을_유지하고_중복_갱신을_생략한다() {
+        let view = build_tray_view_model(&healthy_snapshot(DailyPhase::NeedStart, Some(1800), false), Utc::now());
+        let store = TrayStateStore::new(TrayState {
+            view,
+            icon_theme: TrayIconTheme::Light,
+            dday_visible: true,
+            pending_update: None,
+        });
+
+        assert!(store.set_icon_theme(TrayIconTheme::Dark).unwrap());
+        assert_eq!(
+            store.icon_projection().unwrap(),
+            (TrayIconKind::Alert, TrayIconTheme::Dark)
+        );
+        assert!(!store.set_icon_theme(TrayIconTheme::Dark).unwrap());
     }
 
     #[test]
@@ -1287,18 +1636,33 @@ mod tests {
     }
 
     #[test]
-    fn 정상_학습중은_흰색_아이콘을_표시한다() {
-        let view = build_tray_view_model(&healthy_snapshot(DailyPhase::Studying, Some(14_580), false), Utc::now());
+    fn 확인이나_조작이_필요하지_않은_상태는_무채색_컷아웃_아이콘을_표시한다() {
+        let idle = build_tray_view_model(&healthy_snapshot(DailyPhase::Idle, None, false), Utc::now());
+        let studying = build_tray_view_model(&healthy_snapshot(DailyPhase::Studying, Some(14_580), false), Utc::now());
+        let complete = build_tray_view_model(&healthy_snapshot(DailyPhase::Complete, None, false), Utc::now());
+        let center = EXPECTED_TRAY_ICON_SIZE / 2;
 
-        assert_eq!(view.icon, TrayIconKind::Normal);
-        assert_eq!(view.status_text, "학습 중 (종료 가능까지 4시간 3분)");
+        assert_eq!(idle.icon, TrayIconKind::Normal);
+        assert_eq!(studying.icon, TrayIconKind::Normal);
+        assert_eq!(complete.icon, TrayIconKind::Complete);
+        assert_eq!(studying.status_text, "학습 중 (종료 가능까지 4시간 3분)");
+
+        for theme in [TrayIconTheme::Light, TrayIconTheme::Dark] {
+            let normal = icon_for_kind(TrayIconKind::Normal, theme);
+            let complete = icon_for_kind(TrayIconKind::Complete, theme);
+            let glyph_top = transparent_cutout_y_at_center(&normal);
+
+            assert_eq!(normal.rgba(), complete.rgba());
+            assert_eq!(rgba_at(&normal, center, glyph_top)[3], 0);
+            assert_eq!(rgba_at(&normal, center, center)[3], 0);
+        }
     }
 
     #[test]
     fn 출석완료_상태를_표시한다() {
         let view = build_tray_view_model(&healthy_snapshot(DailyPhase::Complete, None, false), Utc::now());
 
-        assert_eq!(view.icon, TrayIconKind::Normal);
+        assert_eq!(view.icon, TrayIconKind::Complete);
         assert_eq!(view.status_text, "오늘 출석 완료");
     }
 
@@ -1636,6 +2000,7 @@ mod tests {
         let initial_view = build_tray_view_model(&healthy_snapshot(DailyPhase::Studying, None, false), Utc::now());
         let store = Arc::new(TrayStateStore::new(TrayState {
             view: initial_view,
+            icon_theme: TrayIconTheme::Light,
             dday_visible: true,
             pending_update: None,
         }));

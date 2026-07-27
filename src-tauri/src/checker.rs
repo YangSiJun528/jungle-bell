@@ -236,7 +236,6 @@ pub(crate) fn build_webview(app: &tauri::AppHandle) -> tauri::Result<tauri::Webv
         tauri::WebviewUrl::External(ATTENDANCE_URL.parse().unwrap()),
     )
     .title("Jungle Bell")
-    .theme(Some(tauri::Theme::Light))
     .visible(false)
     .focused(false)
     .skip_taskbar(true)
@@ -278,13 +277,19 @@ pub(crate) fn build_webview(app: &tauri::AppHandle) -> tauri::Result<tauri::Webv
     .build()?;
 
     let app_handle = app.clone();
-    checker.on_window_event(move |event| {
-        if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+    checker.on_window_event(move |event| match event {
+        tauri::WindowEvent::CloseRequested { api, .. } => {
             api.prevent_close();
             if let Some(window) = app_handle.get_webview_window("checker") {
                 let _ = window.hide();
             }
         }
+        tauri::WindowEvent::ThemeChanged(theme) => {
+            if let Err(error) = crate::tray::sync_icon_theme(&app_handle, *theme) {
+                log::warn!("[checker] tray theme sync failed: {error}");
+            }
+        }
+        _ => {}
     });
 
     Ok(checker)

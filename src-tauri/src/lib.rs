@@ -251,7 +251,15 @@ pub fn run() {
             // 기본값이 true이므로 첫 설치 시 자동으로 등록됨.
             sync_auto_start_setting(app.handle(), &shared_state);
             tray::setup_tray(app)?;
-            checker::build_webview(app.handle())?;
+            let checker_window = checker::build_webview(app.handle())?;
+            match checker_window.theme() {
+                Ok(theme) => {
+                    if let Err(error) = tray::sync_icon_theme(app.handle(), theme) {
+                        log::warn!("[app] initial tray theme sync failed: {error}");
+                    }
+                }
+                Err(error) => log::warn!("[app] system theme detection failed: {error}"),
+            }
             notify_startup_status(app.handle(), &shared_state);
             spawn_startup_update_check(app.handle().clone(), shared_state.clone());
             spawn_periodic_update_check(app.handle().clone(), shared_state.clone());
