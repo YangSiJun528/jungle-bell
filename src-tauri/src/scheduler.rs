@@ -17,7 +17,8 @@ use tauri::Manager;
 use crate::attendance;
 use crate::attendance_day;
 use crate::campus::CampusDataKind;
-use crate::interval_tasks::{self, JobAction, JobEvaluation, JobFailureDecision, JobId, JobSpec, RunLimit};
+use crate::interval_tasks::{self, JobAction, JobEvaluation, JobFailureDecision, JobId, JobSpec};
+use crate::local_consumption::LocalConsumptionService;
 use crate::runtime::{self, JobOutcome, RuntimeAction, ScheduledAction};
 use crate::state::{kst, AppState, DailyPhase, TraySnapshot};
 
@@ -28,7 +29,6 @@ use crate::state;
 const TICK_INTERVAL_ACTIVE: u64 = 60;
 /// 대기 시 틱 간격 (초). 5분 간격으로 상태 확인.
 const TICK_INTERVAL_IDLE: u64 = 300;
-const END_DEADLINE_URGENT_THRESHOLD_SECS: i64 = 5 * 60;
 
 /// 체커 WebView 리로드 간격 (초). 세션/토큰 갱신 목적.
 /// 액세스 토큰이 1시간 만료이므로 15분 간격으로 리로드하여 갱신.
@@ -37,10 +37,6 @@ const ATTENDANCE_STATUS_CHECK_ID: JobId = JobId::new("attendance_status_check");
 const CHECKER_SESSION_REFRESH_ID: JobId = JobId::new("checker_session_refresh");
 const LAUNDRY_REFRESH_ID: JobId = JobId::new("laundry_refresh");
 const MEALS_REFRESH_ID: JobId = JobId::new("meals_refresh");
-const START_NOTIFICATION_ID: JobId = JobId::new("attendance.start-notification");
-const END_NOTIFICATION_ID: JobId = JobId::new("attendance.end-notification");
-const END_DEADLINE_URGENT_NOTIFICATION_ID: JobId = JobId::new("attendance.end-deadline-urgent");
-const ONCE_PER_ATTENDANCE_DAY: [RunLimit; 1] = [RunLimit::AttendanceDay(1)];
 
 const ATTENDANCE_STATUS_CHECK_JOB: JobSpec = JobSpec::on_tick(ATTENDANCE_STATUS_CHECK_ID);
 const CHECKER_SESSION_REFRESH_JOB: JobSpec = JobSpec::new(CHECKER_SESSION_REFRESH_ID, RELOAD_INTERVAL_NORMAL)
@@ -59,7 +55,6 @@ struct SchedulerContext {
     now: DateTime<Utc>,
     kst_now: DateTime<FixedOffset>,
     attendance_date: String,
-    remaining: Option<i64>,
 }
 
 #[derive(Clone, Copy)]
@@ -88,47 +83,8 @@ fn fixed_meals_spec(_state: &AppState) -> JobSpec {
     MEALS_REFRESH_JOB
 }
 
-fn start_notification_spec(state: &AppState) -> JobSpec {
-    JobSpec::on_tick(START_NOTIFICATION_ID).cooldown_secs(state.config.start_notification_interval_mins as u64 * 60)
-}
-
-fn end_notification_spec(state: &AppState) -> JobSpec {
-    JobSpec::on_tick(END_NOTIFICATION_ID).cooldown_secs(state.config.end_notification_interval_mins as u64 * 60)
-}
-
-fn urgent_end_notification_spec(_state: &AppState) -> JobSpec {
-    JobSpec::on_tick(END_DEADLINE_URGENT_NOTIFICATION_ID)
-        .limits(&ONCE_PER_ATTENDANCE_DAY)
-        .backoff_secs(10, 60)
-}
-
 fn always_eligible(_state: &AppState, _context: &SchedulerContext) -> bool {
     true
-}
-
-fn attendance_notification_eligible(state: &AppState, context: &SchedulerContext) -> bool {
-    attendance::notification_decision(
-        &state.config,
-        state.phase,
-        context.remaining,
-        state.needs_login,
-        context.kst_now,
-    )
-    .send
-}
-
-fn start_notification_eligible(state: &AppState, context: &SchedulerContext) -> bool {
-    matches!(state.phase, DailyPhase::NeedStart | DailyPhase::StartOverdue)
-        && attendance_notification_eligible(state, context)
-}
-
-fn end_notification_eligible(state: &AppState, context: &SchedulerContext) -> bool {
-    state.phase == DailyPhase::NeedEnd && attendance_notification_eligible(state, context)
-}
-
-fn urgent_end_notification_eligible(state: &AppState, context: &SchedulerContext) -> bool {
-    end_notification_eligible(state, context)
-        && matches!(context.remaining, Some(1..=END_DEADLINE_URGENT_THRESHOLD_SECS))
 }
 
 fn attendance_status_action(_state: &AppState, _context: &SchedulerContext) -> RuntimeAction {
@@ -147,19 +103,7 @@ fn meals_action(_state: &AppState, _context: &SchedulerContext) -> RuntimeAction
     RuntimeAction::CampusRefresh(CampusDataKind::Meals)
 }
 
-fn attendance_notification_action(state: &AppState, context: &SchedulerContext) -> RuntimeAction {
-    let (title, body) = attendance::notification_message(state.phase, context.remaining);
-    RuntimeAction::Notification { title, body }
-}
-
-fn urgent_end_notification_action(_state: &AppState, _context: &SchedulerContext) -> RuntimeAction {
-    RuntimeAction::Notification {
-        title: "!!! 퇴근 출석 마감 임박",
-        body: "퇴근 출석 마감까지 5분도 남지 않았습니다. 지금 바로 출석을 완료해 주세요.".into(),
-    }
-}
-
-const SCHEDULED_JOBS: [RegisteredJob; 7] = [
+const SCHEDULED_JOBS: [RegisteredJob; 4] = [
     RegisteredJob {
         id: ATTENDANCE_STATUS_CHECK_ID,
         spec: fixed_attendance_status_spec,
@@ -191,30 +135,6 @@ const SCHEDULED_JOBS: [RegisteredJob; 7] = [
         action: meals_action,
         conflict_key: None,
         priority: 10,
-    },
-    RegisteredJob {
-        id: START_NOTIFICATION_ID,
-        spec: start_notification_spec,
-        condition: start_notification_eligible,
-        action: attendance_notification_action,
-        conflict_key: Some("attendance-notification"),
-        priority: 10,
-    },
-    RegisteredJob {
-        id: END_NOTIFICATION_ID,
-        spec: end_notification_spec,
-        condition: end_notification_eligible,
-        action: attendance_notification_action,
-        conflict_key: Some("attendance-notification"),
-        priority: 10,
-    },
-    RegisteredJob {
-        id: END_DEADLINE_URGENT_NOTIFICATION_ID,
-        spec: urgent_end_notification_spec,
-        condition: urgent_end_notification_eligible,
-        action: urgent_end_notification_action,
-        conflict_key: Some("attendance-notification"),
-        priority: 100,
     },
 ];
 
@@ -261,33 +181,12 @@ fn record_job_result(state: &mut AppState, action: JobAction, outcome: JobOutcom
     }
 }
 
-async fn persist_dirty_job_store(shared_state: &Arc<Mutex<AppState>>) {
-    let snapshot = {
-        let mut state = shared_state.lock().await;
-        state.interval_jobs.take_dirty().then(|| state.interval_jobs.clone())
-    };
-    let Some(snapshot) = snapshot else {
-        return;
-    };
-
-    let result = tauri::async_runtime::spawn_blocking(move || snapshot.save()).await;
-    let error = match result {
-        Ok(Ok(())) => return,
-        Ok(Err(error)) => error,
-        Err(error) => format!("스케줄 상태 저장 작업 실행 실패: {error}"),
-    };
-
-    log::error!("[scheduler] {error}");
-    shared_state.lock().await.interval_jobs.mark_dirty();
-}
-
-fn scheduler_context(state: &AppState, now: DateTime<Utc>, remaining: Option<i64>) -> SchedulerContext {
+fn scheduler_context(state: &AppState, now: DateTime<Utc>) -> SchedulerContext {
     let kst_now = now.with_timezone(&kst());
     SchedulerContext {
         now,
         kst_now,
         attendance_date: attendance_day::effective_attendance_date(&state.config, kst_now),
-        remaining,
     }
 }
 
@@ -362,14 +261,6 @@ impl TickResult {
     #[cfg(test)]
     pub(crate) fn has_job_action(&self, kind: JobId) -> bool {
         self.job_actions.iter().any(|action| action.job.kind() == kind)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn notification(&self) -> Option<(&'static str, String)> {
-        self.job_actions.iter().find_map(|scheduled| match &scheduled.action {
-            RuntimeAction::Notification { title, body } => Some((*title, body.clone())),
-            _ => None,
-        })
     }
 }
 
@@ -549,8 +440,8 @@ pub(crate) fn compute_tick(state: &mut AppState, now: DateTime<Utc>, attendance_
     let tray_update = phase_update.map(|(_, remaining)| state.tray_snapshot(remaining));
 
     // --- 주기 job ---
-    // 조회·알림 작업을 같은 선언형 job 엔진에서 평가하고 충돌 시 우선순위로 합친다.
-    let context = scheduler_context(state, now, remaining);
+    // 공통 데이터 조회와 checker 갱신 작업만 선언형 job 엔진에서 평가한다.
+    let context = scheduler_context(state, now);
     let job_actions = compute_job_actions(state, &context);
 
     // --- 로그인 재시도 윈도우 만료 확인 ---
@@ -619,7 +510,6 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
                     let mut state = shared_state.lock().await;
                     record_job_result(&mut state, action, outcome, now);
                 }
-                persist_dirty_job_store(&shared_state).await;
                 previous_tick = Some(now);
                 previous_interval_secs = Some(DELAYED_TICK_RECHECK_INTERVAL_SECS);
                 tokio::select! {
@@ -642,6 +532,15 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
                 (result, phase)
             };
 
+            let local_consumption: tauri::State<'_, Arc<LocalConsumptionService>> = app_handle.state();
+            local_consumption
+                .on_scheduler_tick(
+                    &app_handle,
+                    now,
+                    phase,
+                    tick_result.tray_update.as_ref().and_then(|snapshot| snapshot.remaining),
+                )
+                .await;
             let job_results = runtime::apply_tick_side_effects(
                 &app_handle,
                 phase,
@@ -661,7 +560,6 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
                     }
                 }
             }
-            persist_dirty_job_store(&shared_state).await;
 
             let wake_started_at = Utc::now();
             let next_job_due_at = {
@@ -710,15 +608,6 @@ mod tests {
 
     fn default_state() -> AppState {
         AppState::new(Config::default())
-    }
-
-    fn record_executed_tick(state: &mut AppState, result: &TickResult, now: DateTime<Utc>) {
-        for scheduled in &result.job_actions {
-            record_job_result(state, scheduled.job, JobOutcome::Executed, now);
-            for coalesced in &scheduled.coalesced_jobs {
-                record_job_result(state, *coalesced, JobOutcome::Executed, now);
-            }
-        }
     }
 
     // --- check_daily_reset ---
@@ -1116,7 +1005,7 @@ mod tests {
     // --- compute_tick (통합) ---
 
     #[test]
-    fn 데이터_미로드시_트레이_알림_리로드_모두_없다() {
+    fn 데이터_미로드시_트레이는_없고_수집_job만_실행한다() {
         // given
         let mut state = default_state();
 
@@ -1126,11 +1015,16 @@ mod tests {
         // then
         assert_eq!(result.tick_interval, 5);
         assert!(result.tray_update.is_none());
-        assert!(result.notification().is_none());
         assert!(result.has_job_action(JobId::new("attendance_status_check")));
         assert!(!result.has_job_action(JobId::new("checker_session_refresh")));
         assert!(result.has_job_action(JobId::new("laundry_refresh")));
         assert!(result.has_job_action(JobId::new("meals_refresh")));
+    }
+
+    #[test]
+    fn 스케줄러에는_알림_job을_등록하지_않는다() {
+        assert_eq!(SCHEDULED_JOBS.len(), 4);
+        assert!(SCHEDULED_JOBS.iter().all(|job| !job.id.name().contains("notification")));
     }
 
     #[test]
@@ -1154,146 +1048,6 @@ mod tests {
     }
 
     #[test]
-    fn 출석_필요_상태에서_알림_윈도우_내이면_알림이_발송된다() {
-        // given
-        let mut state = default_state();
-        state.data_loaded = true;
-
-        // when: 첫 틱, NeedStart + 알림 윈도우 내
-        let result = compute_tick(&mut state, kst_utc(9, 30, 0), false);
-
-        // then
-        assert_eq!(state.phase, DailyPhase::NeedStart);
-        assert!(result.tray_update.is_some());
-        assert!(result.notification().is_some());
-    }
-
-    #[test]
-    fn 알림_쓰로틀_후_간격_경과시_재발송된다() {
-        // given
-        let mut state = default_state();
-        state.data_loaded = true;
-        let first_at = kst_utc(9, 30, 0);
-        let first = compute_tick(&mut state, first_at, false);
-        record_executed_tick(&mut state, &first, first_at);
-
-        // when: 5분 후 → 쓰로틀 (interval=15분)
-        let result_5min = compute_tick(&mut state, kst_utc(9, 35, 0), false);
-
-        // then: 쓰로틀됨
-        assert!(result_5min.notification().is_none());
-
-        // when: 16분 후 → 쓰로틀 해제
-        let result_16min = compute_tick(&mut state, kst_utc(9, 46, 1), false);
-
-        // then: 재발송
-        assert!(result_16min.notification().is_some());
-    }
-
-    #[test]
-    fn 마감_5분전에는_일반_종료_알림보다_긴급_알림을_우선한다() {
-        let mut state = default_state();
-        state.data_loaded = true;
-        state.morning_checked = true;
-
-        let result = compute_tick(&mut state, kst_utc(3, 55, 0), false);
-
-        let (title, body) = result.notification().expect("마감 임박 알림이 필요하다");
-        assert_eq!(title, "!!! 퇴근 출석 마감 임박");
-        assert!(body.contains("5분"));
-        let urgent = result
-            .job_actions
-            .iter()
-            .find(|scheduled| scheduled.job.kind() == END_DEADLINE_URGENT_NOTIFICATION_ID)
-            .expect("긴급 알림 작업이 선택되어야 한다");
-        assert!(urgent
-            .coalesced_jobs
-            .iter()
-            .any(|action| action.kind() == END_NOTIFICATION_ID));
-    }
-
-    #[test]
-    fn 마감_임박_알림은_일반_알림_간격과_무관하게_한번_실행된다() {
-        let mut state = default_state();
-        state.data_loaded = true;
-        state.morning_checked = true;
-
-        let regular_at = kst_utc(3, 54, 0);
-        let regular = compute_tick(&mut state, regular_at, false);
-        record_executed_tick(&mut state, &regular, regular_at);
-
-        let urgent_at = kst_utc(3, 55, 0);
-        let urgent = compute_tick(&mut state, urgent_at, false);
-        assert_eq!(
-            urgent.notification().map(|(title, _)| title),
-            Some("!!! 퇴근 출석 마감 임박")
-        );
-        record_executed_tick(&mut state, &urgent, urgent_at);
-
-        let repeated = compute_tick(&mut state, kst_utc(3, 56, 0), false);
-        assert_ne!(
-            repeated.notification().map(|(title, _)| title),
-            Some("!!! 퇴근 출석 마감 임박")
-        );
-    }
-
-    #[test]
-    fn 마감_임박_알림_실행_기록은_재시작_후에도_유지된다() {
-        let mut state = default_state();
-        state.data_loaded = true;
-        state.morning_checked = true;
-        let first_at = kst_utc(3, 55, 0);
-        let first = compute_tick(&mut state, first_at, false);
-        record_executed_tick(&mut state, &first, first_at);
-
-        let mut restarted = default_state();
-        restarted.data_loaded = true;
-        restarted.morning_checked = true;
-        restarted.interval_jobs = state.interval_jobs.clone();
-
-        let result = compute_tick(&mut restarted, kst_utc(3, 56, 0), false);
-
-        assert_ne!(
-            result.notification().map(|(title, _)| title),
-            Some("!!! 퇴근 출석 마감 임박")
-        );
-    }
-
-    #[test]
-    fn 다음_출석일에는_마감_임박_알림을_다시_실행한다() {
-        let mut state = default_state();
-        state.data_loaded = true;
-        state.morning_checked = true;
-        let first_at = kst_utc(3, 55, 0);
-        let first = compute_tick(&mut state, first_at, false);
-        record_executed_tick(&mut state, &first, first_at);
-
-        let next_day = FixedOffset::east_opt(9 * 3600)
-            .unwrap()
-            .with_ymd_and_hms(2026, 3, 18, 3, 55, 0)
-            .unwrap()
-            .with_timezone(&Utc);
-        let result = compute_tick(&mut state, next_day, false);
-
-        assert_eq!(
-            result.notification().map(|(title, _)| title),
-            Some("!!! 퇴근 출석 마감 임박")
-        );
-    }
-
-    #[test]
-    fn 종료_알림을_끈_경우에는_마감_임박_알림도_보내지_않는다() {
-        let mut state = default_state();
-        state.data_loaded = true;
-        state.morning_checked = true;
-        state.config.end_notification_enabled = false;
-
-        let result = compute_tick(&mut state, kst_utc(3, 55, 0), false);
-
-        assert!(result.notification().is_none());
-    }
-
-    #[test]
     fn 학습중_상태에서는_알림이_발송되지_않는다() {
         // given
         let mut state = default_state();
@@ -1305,7 +1059,6 @@ mod tests {
 
         // then
         assert_eq!(state.phase, DailyPhase::Studying);
-        assert!(result.notification().is_none());
         assert!(result.tray_update.is_some());
     }
 
@@ -1321,7 +1074,6 @@ mod tests {
 
         // then
         assert_eq!(state.phase, DailyPhase::Idle);
-        assert!(result.notification().is_none());
         assert!(result.tray_update.is_some());
     }
 

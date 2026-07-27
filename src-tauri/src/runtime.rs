@@ -3,7 +3,6 @@
 use std::sync::Arc;
 
 use tauri::{Emitter, Manager};
-use tauri_plugin_notification::NotificationExt;
 
 use crate::campus::{CampusDataKind, CampusService};
 use crate::checker;
@@ -23,7 +22,6 @@ pub(crate) enum RuntimeAction {
     AttendanceStatusCheck,
     CheckerSessionRefresh,
     CampusRefresh(CampusDataKind),
-    Notification { title: &'static str, body: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -105,21 +103,6 @@ pub(crate) async fn run_action(app_handle: &tauri::AppHandle, scheduled: &Schedu
                         scheduled.job.kind().name()
                     );
                     service.emit_error(app_handle, *kind, error);
-                    JobOutcome::Retry
-                }
-            }
-        }
-        RuntimeAction::Notification { title, body } => {
-            match app_handle.notification().builder().title(*title).body(body).show() {
-                Ok(_) => {
-                    log::info!("[scheduler] notification sent: id={}", scheduled.job.kind().name());
-                    JobOutcome::Executed
-                }
-                Err(error) => {
-                    log::error!(
-                        "[scheduler] notification show failed: id={} error={error}",
-                        scheduled.job.kind().name()
-                    );
                     JobOutcome::Retry
                 }
             }

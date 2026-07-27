@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{DateTime, FixedOffset, Timelike, Utc};
@@ -5,10 +6,11 @@ use reqwest::header::{ACCEPT, ETAG, IF_NONE_MATCH};
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 use tokio::sync::Mutex;
 
 use crate::data_api;
+use crate::local_consumption::LocalConsumptionService;
 use crate::state::kst;
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
@@ -230,6 +232,8 @@ impl CampusService {
                 snapshot: snapshot.clone(),
             },
         );
+        let local_consumption: tauri::State<'_, Arc<LocalConsumptionService>> = app.state();
+        local_consumption.observe_campus(app, kind, snapshot.clone()).await;
         Ok(snapshot)
     }
 

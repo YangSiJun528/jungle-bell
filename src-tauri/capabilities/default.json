@@ -26,6 +26,8 @@
     "allow-set-auto-start",
     "allow-set-start-notification-enabled",
     "allow-set-end-notification-enabled",
+    "allow-set-meal-subscription-enabled",
+    "allow-set-laundry-watch",
     "allow-set-start-notification-interval",
     "allow-set-end-notification-interval",
     "allow-set-notification-start",
@@ -42,6 +44,7 @@
     "allow-open-onboarding",
     "allow-complete-onboarding",
     "allow-open-attendance-window",
+    "allow-get-local-dashboard-snapshot",
     "allow-get-login-status",
     "allow-refresh-login-status"
   ]
