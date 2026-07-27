@@ -369,6 +369,43 @@ fn build_dashboard_snapshot(config: &Config, runtime: &LocalRuntime, now: DateTi
     }
 }
 
+fn laundry_completion_observed(
+    data: &Value,
+    watch: &LaundryWatch,
+    appliance_key: &str,
+    appliance: Option<&Value>,
+) -> bool {
+    let current_matches = appliance
+        .and_then(|appliance| appliance.get("sessionId"))
+        .and_then(Value::as_str)
+        == Some(watch.session_id.as_str());
+    let current_completed = current_matches
+        && appliance.is_some_and(|appliance| {
+            appliance.get("operationalStatus").and_then(Value::as_str) == Some("COMPLETED")
+                || appliance
+                    .get("projection")
+                    .and_then(|projection| projection.get("status"))
+                    .and_then(Value::as_str)
+                    == Some("CONFIRMED_COMPLETED")
+        });
+    let completed_event = data.get("events").and_then(Value::as_array).is_some_and(|events| {
+        events.iter().any(|event| {
+            let is_watched_session = event.get("machineId").and_then(Value::as_str) == Some(watch.machine_id.as_str())
+                && event.get("appliance").and_then(Value::as_str) == Some(appliance_key)
+                && event.get("sessionId").and_then(Value::as_str) == Some(watch.session_id.as_str());
+            let event_type = event.get("type").and_then(Value::as_str);
+            let ended_before_power_off = event_type == Some("STATE_CHANGED")
+                && event.get("previousState").and_then(Value::as_str) == Some("END")
+                && matches!(
+                    event.get("currentState").and_then(Value::as_str),
+                    Some("POWER_OFF" | "INITIAL")
+                );
+            is_watched_session && (event_type == Some("COMPLETED") || ended_before_power_off)
+        })
+    });
+    current_completed || completed_event
+}
+
 fn build_laundry_dashboard_card(watch: &LaundryWatch, runtime: &LocalRuntime) -> LaundryDashboardCard {
     let appliance_key = match watch.appliance {
         LaundryApplianceKind::Washer => "washer",
@@ -392,26 +429,7 @@ fn build_laundry_dashboard_card(watch: &LaundryWatch, runtime: &LocalRuntime) ->
         == Some(watch.session_id.as_str());
     let completion_mark = laundry_completion_mark(watch);
     let completed = runtime.cursors.has_fingerprint(&completion_mark)
-        || (current_matches
-            && appliance.is_some_and(|appliance| {
-                appliance.get("operationalStatus").and_then(Value::as_str) == Some("COMPLETED")
-                    || appliance
-                        .get("projection")
-                        .and_then(|projection| projection.get("status"))
-                        .and_then(Value::as_str)
-                        == Some("CONFIRMED_COMPLETED")
-            }))
-        || data
-            .and_then(|data| data.get("events"))
-            .and_then(Value::as_array)
-            .is_some_and(|events| {
-                events.iter().any(|event| {
-                    event.get("machineId").and_then(Value::as_str) == Some(watch.machine_id.as_str())
-                        && event.get("appliance").and_then(Value::as_str) == Some(appliance_key)
-                        && event.get("sessionId").and_then(Value::as_str) == Some(watch.session_id.as_str())
-                        && event.get("type").and_then(Value::as_str) == Some("COMPLETED")
-                })
-            });
+        || data.is_some_and(|data| laundry_completion_observed(data, watch, appliance_key, appliance));
 
     let status = if completed {
         LaundryDashboardStatus::Completed
@@ -546,32 +564,17 @@ fn evaluate_laundry(
         .and_then(|appliance| appliance.get("sessionId"))
         .and_then(Value::as_str)
         == Some(watch.session_id.as_str());
-    let current_completed = current_matches
-        && machine_label.is_some_and(|appliance| {
-            appliance.get("operationalStatus").and_then(Value::as_str) == Some("COMPLETED")
-                || appliance
-                    .get("projection")
-                    .and_then(|projection| projection.get("status"))
-                    .and_then(Value::as_str)
-                    == Some("CONFIRMED_COMPLETED")
-        });
-    let completed_event = data.get("events").and_then(Value::as_array).is_some_and(|events| {
-        events.iter().any(|event| {
-            event.get("machineId").and_then(Value::as_str) == Some(watch.machine_id.as_str())
-                && event.get("appliance").and_then(Value::as_str) == Some(appliance_key)
-                && event.get("sessionId").and_then(Value::as_str) == Some(watch.session_id.as_str())
-                && event.get("type").and_then(Value::as_str) == Some("COMPLETED")
-        })
-    });
+    let completed = laundry_completion_observed(data, watch, appliance_key, machine_label);
 
     let mut evaluation = LocalEvaluation::default();
     let session_conflict = Some(format!(
         "laundry:{}:{}:{}",
         watch.machine_id, appliance_key, watch.session_id
     ));
-    if current_completed || completed_event {
+    if completed {
         let mark = laundry_completion_mark(watch);
         if !cursors.has_fingerprint(&mark) {
+            evaluation.baselines.push(mark.clone());
             evaluation.notifications.push(LocalNotification {
                 cursor: mark,
                 title: format!("{appliance_label} 완료"),
@@ -984,6 +987,56 @@ mod tests {
 
         assert_eq!(result.notifications.len(), 1);
         assert!(result.notifications[0].title.contains("완료"));
+    }
+
+    #[test]
+    fn 종료후_전원이_꺼진_세탁_세션도_완료로_알린다() {
+        let mut data = laundry("IDLE", "IDLE", "", "session-1");
+        data["machines"][0]["washer"]["estimatedFinishAt"] = Value::Null;
+        data["events"] = serde_json::json!([{
+            "machineId": "tower6",
+            "appliance": "washer",
+            "sessionId": "session-1",
+            "type": "STATE_CHANGED",
+            "previousState": "END",
+            "currentState": "POWER_OFF"
+        }]);
+
+        let result = evaluate_laundry(&data, &watch(5), utc(9, 5, 0), &EventCursorStore::default());
+
+        assert_eq!(result.notifications.len(), 1);
+        assert!(result.notifications[0].title.contains("완료"));
+    }
+
+    #[test]
+    fn 완료된_세탁_알림은_사용자가_해제할때까지_대시보드에_남는다() {
+        let completed_at = utc(9, 5, 0);
+        let completed = laundry("COMPLETED", "CONFIRMED_COMPLETED", "2026-07-27T09:05:00Z", "session-1");
+        let evaluation = evaluate_laundry(&completed, &watch(5), completed_at, &EventCursorStore::default());
+        let mut cursors = EventCursorStore::default();
+        cursors.record_baselines(&evaluation.baselines, completed_at);
+        let runtime = LocalRuntime {
+            cursors,
+            laundry: Some(CampusSnapshot {
+                saved_at: utc(9, 10, 0).timestamp_millis(),
+                data: laundry("RUNNING", "ESTIMATED_RUNNING", "2026-07-27T09:40:00Z", "session-2"),
+            }),
+            ..LocalRuntime::default()
+        };
+        let mut config = Config {
+            laundry_watch: Some(watch(5)),
+            ..Config::default()
+        };
+
+        let retained = build_dashboard_snapshot(&config, &runtime, utc(9, 10, 0));
+        assert_eq!(
+            retained.laundry.as_ref().map(|card| card.status),
+            Some(LaundryDashboardStatus::Completed)
+        );
+
+        config.laundry_watch = None;
+        let dismissed = build_dashboard_snapshot(&config, &runtime, utc(9, 10, 0));
+        assert!(dismissed.laundry.is_none());
     }
 
     #[test]

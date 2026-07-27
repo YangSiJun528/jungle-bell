@@ -26,6 +26,16 @@ import {
     mealDashboardSummary,
     type LocalDashboardSnapshot,
 } from './local-dashboard.ts';
+import {
+    homeTaskDismissal,
+    homeTaskSubscriptions,
+    resolveHomeTasks,
+    withoutHomeTask,
+    type HomeTaskKind,
+    type HomeTaskSubscriptions,
+    type HomeTaskVisibility,
+} from './home-tasks.ts';
+import type {SettingsSnapshot} from './settings-state.ts';
 
 type PanelTab = 'home' | 'news';
 type PanelAction =
@@ -42,6 +52,8 @@ interface TrayPanelComponent {
     menuOpen: boolean;
     state: TrayPanelState;
     dashboard: LocalDashboardSnapshot;
+    taskSubscriptions: HomeTaskSubscriptions;
+    taskError: string | null;
     clockNow: number;
     clockTimer: number | null;
     ddayExpanded: boolean;
@@ -50,14 +62,17 @@ interface TrayPanelComponent {
     newsLoading: boolean;
     newsError: boolean;
     busyAction: PanelAction | null;
+    taskBusy: HomeTaskKind | null;
     get presentation(): StatusPresentation;
     get statusTextParts(): StatusTextParts;
+    get homeTasks(): HomeTaskVisibility;
     get ddayProgress(): DdayProgress | null;
     get newsItems(): NewsItem[];
     init(): Promise<void>;
     destroy(): void;
     refresh(): Promise<void>;
     refreshDashboard(): Promise<void>;
+    refreshSettings(): Promise<void>;
     refreshNews(): Promise<void>;
     toggleMenu(): void;
     closeMenu(): void;
@@ -73,6 +88,7 @@ interface TrayPanelComponent {
     laundrySourceWarning(): boolean;
     mealSummary(): string;
     mealSourceWarning(): boolean;
+    dismissHomeTask(kind: HomeTaskKind): Promise<void>;
     perform(action: PanelAction): Promise<void>;
     hide(): Promise<void>;
 }
@@ -98,6 +114,8 @@ function trayPanel(): TrayPanelComponent {
         menuOpen: false,
         state: {...INITIAL_STATE},
         dashboard: {...EMPTY_LOCAL_DASHBOARD},
+        taskSubscriptions: {laundry: false, meals: false},
+        taskError: null,
         clockNow: Date.now(),
         clockTimer: null,
         ddayExpanded: false,
@@ -106,6 +124,7 @@ function trayPanel(): TrayPanelComponent {
         newsLoading: true,
         newsError: false,
         busyAction: null,
+        taskBusy: null,
 
         get presentation() {
             return statusPresentation(this.state.status);
@@ -113,6 +132,10 @@ function trayPanel(): TrayPanelComponent {
 
         get statusTextParts() {
             return splitStatusText(this.state.statusText);
+        },
+
+        get homeTasks() {
+            return resolveHomeTasks(this.dashboard, this.taskSubscriptions);
         },
 
         get ddayProgress() {
@@ -140,9 +163,15 @@ function trayPanel(): TrayPanelComponent {
             window.addEventListener('focus', () => {
                 void this.refresh();
                 void this.refreshDashboard();
+                void this.refreshSettings();
                 void this.refreshNews();
             });
-            await Promise.all([this.refresh(), this.refreshDashboard(), this.refreshNews()]);
+            await Promise.all([
+                this.refresh(),
+                this.refreshDashboard(),
+                this.refreshSettings(),
+                this.refreshNews(),
+            ]);
         },
 
         destroy() {
@@ -163,6 +192,15 @@ function trayPanel(): TrayPanelComponent {
                 this.dashboard = await invoke<LocalDashboardSnapshot>('get_local_dashboard_snapshot');
             } catch (error) {
                 console.error('[tray-panel] dashboard refresh failed', error);
+            }
+        },
+
+        async refreshSettings() {
+            try {
+                const snapshot = await invoke<SettingsSnapshot>('get_settings_snapshot');
+                this.taskSubscriptions = homeTaskSubscriptions(snapshot);
+            } catch (error) {
+                console.error('[tray-panel] settings refresh failed', error);
             }
         },
 
@@ -261,8 +299,32 @@ function trayPanel(): TrayPanelComponent {
                 : false;
         },
 
+        async dismissHomeTask(kind) {
+            if (this.busyAction || this.taskBusy) return;
+            const previousSubscriptions = this.taskSubscriptions;
+            this.taskBusy = kind;
+            this.taskError = null;
+            this.taskSubscriptions = withoutHomeTask(this.taskSubscriptions, kind);
+            const dismissal = homeTaskDismissal(kind);
+            try {
+                const snapshot = await invoke<SettingsSnapshot>(
+                    dismissal.command,
+                    dismissal.args,
+                );
+                this.taskSubscriptions = homeTaskSubscriptions(snapshot);
+            } catch (error) {
+                this.taskSubscriptions = previousSubscriptions;
+                this.taskError = kind === 'laundry'
+                    ? '세탁 추적을 취소하지 못했어요. 잠시 후 다시 시도해 주세요.'
+                    : '급식 알림을 끄지 못했어요. 잠시 후 다시 시도해 주세요.';
+                console.error(`[tray-panel] ${dismissal.command} failed`, error);
+            } finally {
+                this.taskBusy = null;
+            }
+        },
+
         async perform(action) {
-            if (this.busyAction) return;
+            if (this.busyAction || this.taskBusy) return;
             this.closeMenu();
             this.busyAction = action;
             try {

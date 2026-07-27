@@ -98,8 +98,8 @@ pub struct Config {
     /// 출석을 확인할 기수 ID. None이면 현재 활성 기수를 자동 선택한다.
     #[serde(default)]
     pub selected_cohort_id: Option<String>,
-    /// 새 주간 식단이 게시되면 홈에 표시하고 알림을 받을지 여부.
-    #[serde(default)]
+    /// 새 식단이 게시되면 홈에 표시하고 알림을 받을지 여부.
+    #[serde(default = "default_true")]
     pub meal_subscription_enabled: bool,
     /// 홈에서 추적하고 종료 임박·완료 알림을 받을 세탁 작업.
     #[serde(default)]
@@ -326,7 +326,7 @@ impl Default for Config {
             skip_attendance: None,
             skip_sunday: false,
             selected_cohort_id: None,
-            meal_subscription_enabled: false,
+            meal_subscription_enabled: true,
             laundry_watch: None,
         }
     }
@@ -548,11 +548,21 @@ mod tests {
     }
 
     #[test]
-    fn 로컬_구독은_사용자가_선택하기_전까지_비활성화된다() {
+    fn 새_식단_알림은_기본적으로_켜지고_세탁_추적은_선택전까지_비활성화된다() {
         let config = Config::default();
 
-        assert!(!config.meal_subscription_enabled);
+        assert!(config.meal_subscription_enabled);
         assert!(config.laundry_watch.is_none());
+    }
+
+    #[test]
+    fn 식단_알림_필드가_없는_기존_config도_기본값을_사용한다() {
+        let mut value = serde_json::to_value(Config::default()).unwrap();
+        value.as_object_mut().unwrap().remove("meal_subscription_enabled");
+
+        let config: Config = serde_json::from_value(value).unwrap();
+
+        assert!(config.meal_subscription_enabled);
     }
 
     #[test]
