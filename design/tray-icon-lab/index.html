@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Jungle Bell 트레이 아이콘을 macOS·Windows의 밝고 어두운 배경 및 사용자 지정 RGB 배경에서 비교하는 로컬 테스트 페이지"
+    />
+    <title>Jungle Bell · Tray Icon Lab</title>
+    <link rel="stylesheet" href="./styles.css?v=3" />
+    <script src="./app.js?v=3" defer></script>
+  </head>
+  <body>
+    <header class="masthead">
+      <div class="masthead__copy">
+        <p class="eyebrow">JUNGLE BELL · TRAY ICON LAB</p>
+        <h1><span>색은 유지하고,</span><span>어떤 배경에서도 보이게.</span></h1>
+        <p class="lede">
+          6가지 형태, 5가지 상태, 라이트·다크 전용 팔레트를 실제 트레이 크기로 비교합니다.
+          아래 설정은 브라우저 안에서만 바뀌며 앱 자산에는 반영되지 않습니다.
+        </p>
+      </div>
+      <dl class="summary">
+        <div><dt>형태</dt><dd>6</dd></div>
+        <div><dt>상태</dt><dd>5</dd></div>
+        <div><dt>팔레트</dt><dd>2</dd></div>
+        <div><dt>PNG 크기</dt><dd>12</dd></div>
+      </dl>
+    </header>
+
+    <main class="lab-layout">
+      <aside class="controls" aria-label="아이콘 테스트 설정">
+        <div class="controls__heading">
+          <div>
+            <p class="section-kicker">TEST CONTROLS</p>
+            <h2>테스트 조건</h2>
+          </div>
+          <button class="quiet-button" id="resetButton" type="button">초기화</button>
+        </div>
+
+        <section class="control-group" aria-labelledby="paletteLabel">
+          <div class="control-label-row">
+            <h3 id="paletteLabel">아이콘 팔레트</h3>
+            <output id="resolvedPalette" class="resolved-value"></output>
+          </div>
+          <div class="segmented segmented--three" id="paletteControl" role="group" aria-label="아이콘 팔레트">
+            <button type="button" data-palette="auto" aria-pressed="true">자동</button>
+            <button type="button" data-palette="light" aria-pressed="false">라이트용</button>
+            <button type="button" data-palette="dark" aria-pressed="false">다크용</button>
+          </div>
+          <p class="control-help">자동은 현재 배경의 상대 밝기에 따라 두 이미지 세트 중 하나를 선택합니다.</p>
+        </section>
+
+        <section class="control-group" aria-labelledby="backgroundLabel">
+          <div class="control-label-row">
+            <h3 id="backgroundLabel">배경 프리셋</h3>
+            <output id="backgroundName" class="resolved-value"></output>
+          </div>
+          <div class="preset-grid" id="backgroundPresets"></div>
+        </section>
+
+        <section class="control-group" aria-labelledby="customColorLabel">
+          <div class="control-label-row">
+            <h3 id="customColorLabel">사용자 RGB</h3>
+            <div class="color-value">
+              <input id="colorPicker" type="color" value="#f5f5f5" aria-label="배경 색상 선택" />
+              <input
+                id="hexInput"
+                class="hex-input"
+                type="text"
+                value="#F5F5F5"
+                maxlength="7"
+                spellcheck="false"
+                aria-label="배경 HEX"
+              />
+            </div>
+          </div>
+          <div class="rgb-controls" id="rgbControls"></div>
+        </section>
+
+        <section class="control-group" aria-labelledby="sizeLabel">
+          <div class="control-label-row">
+            <h3 id="sizeLabel">표시 크기</h3>
+            <output id="sizeOutput" class="resolved-value">18px</output>
+          </div>
+          <div class="size-grid" id="sizeControl" role="group" aria-label="아이콘 표시 크기"></div>
+          <p class="control-help">macOS는 18px/36px Retina, Windows는 16px/32px Retina가 실제 기본 크기입니다.</p>
+        </section>
+
+        <section class="control-group" aria-labelledby="platformLabel">
+          <h3 id="platformLabel">시뮬레이션</h3>
+          <div class="segmented" id="platformControl" role="group" aria-label="운영체제 시뮬레이션">
+            <button type="button" data-platform="mac" aria-pressed="true">macOS 메뉴 막대</button>
+            <button type="button" data-platform="windows" aria-pressed="false">Windows 작업 표시줄</button>
+          </div>
+        </section>
+
+        <section class="control-group" aria-labelledby="statusLabel">
+          <label class="select-label" id="statusLabel" for="statusSelect">집중해서 볼 상태</label>
+          <select id="statusSelect"></select>
+        </section>
+
+        <div class="decision-note">
+          <span class="decision-note__mark" aria-hidden="true">3:1</span>
+          <p>
+            작은 비문자 UI의 실용 기준선으로 색 면/배경과 문양/색 면 대비를 각각 확인합니다.
+            실제 OS 렌더링에서는 축소와 안티앨리어싱 때문에 수치보다 조금 약하게 보일 수 있습니다.
+          </p>
+        </div>
+      </aside>
+
+      <div class="workspace">
+        <section class="stage-card" aria-labelledby="stageTitle">
+          <header class="section-heading">
+            <div>
+              <p class="section-kicker">LIVE SURFACE</p>
+              <h2 id="stageTitle">실제 크기 미리보기</h2>
+            </div>
+            <div class="stage-meta">
+              <span id="stageBackgroundChip" class="meta-chip"></span>
+              <span id="stagePaletteChip" class="meta-chip"></span>
+            </div>
+          </header>
+
+          <div class="stage" id="stage">
+            <div class="stage__wallpaper" aria-hidden="true">
+              <span></span><span></span><span></span>
+            </div>
+            <div class="system-bar" id="systemBar">
+              <div class="system-bar__left" id="systemBarLeft"></div>
+              <div class="system-bar__icons" id="systemBarIcons"></div>
+              <div class="system-bar__clock" id="systemBarClock">오후 9:41</div>
+            </div>
+          </div>
+
+          <div class="selection-strip">
+            <div>
+              <p class="selection-strip__label">현재 선택</p>
+              <h3 id="selectedTitle"></h3>
+              <p id="selectedDescription"></p>
+            </div>
+            <div class="contrast-pairs" id="contrastPairs"></div>
+            <div class="download-actions">
+              <a id="downloadSvg" class="download-link" download>SVG</a>
+              <a id="downloadPng" class="download-link" download>PNG</a>
+            </div>
+          </div>
+        </section>
+
+        <section class="matrix-section" aria-labelledby="matrixTitle">
+          <header class="section-heading section-heading--compact">
+            <div>
+              <p class="section-kicker">BACKGROUND MATRIX</p>
+              <h2 id="matrixTitle">대표 배경 교차 비교</h2>
+            </div>
+            <p class="section-caption">
+              각 셀은 배경에 맞는 팔레트를 자동 적용합니다. 아이콘을 누르면 위 미리보기의 형태를 바꿉니다.
+            </p>
+          </header>
+          <div class="matrix-scroll">
+            <div class="comparison-matrix" id="comparisonMatrix"></div>
+          </div>
+        </section>
+
+        <section class="drafts-section" aria-labelledby="draftsTitle">
+          <header class="section-heading section-heading--compact">
+            <div>
+              <p class="section-kicker">ALL DRAFTS</p>
+              <h2 id="draftsTitle">형태별 전체 상태</h2>
+            </div>
+            <p class="section-caption">카드를 선택하면 실제 크기 미리보기와 다운로드 대상이 함께 바뀝니다.</p>
+          </header>
+          <div class="family-grid" id="familyGrid"></div>
+        </section>
+      </div>
+    </main>
+
+    <footer>
+      <p>Generated for Jungle Bell · SVG 44×44 · PNG 16/18/20/22/24/32/44px</p>
+    </footer>
+  </body>
+</html>

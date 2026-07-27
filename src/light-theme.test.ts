@@ -11,10 +11,8 @@ const localPages = [
     './tray-panel.html',
 ];
 const localStyles = [source('./styles.css'), source('./ui.css')].join('\n');
-const windowSources = [
-    source('../src-tauri/src/checker.rs'),
-    source('../src-tauri/src/tray.rs'),
-].join('\n');
+const checkerSource = source('../src-tauri/src/checker.rs');
+const traySource = source('../src-tauri/src/tray.rs');
 
 test('로컬 UI는 라이트 color scheme만 선언한다', () => {
     assert.match(localStyles, /color-scheme:\s*only light/);
@@ -29,11 +27,14 @@ test('로컬 UI는 라이트 color scheme만 선언한다', () => {
     }
 });
 
-test('모든 Tauri WebView 창은 라이트 테마로 고정한다', () => {
-    const builderCount = windowSources.match(/WebviewWindowBuilder::new\(/g)?.length ?? 0;
-    const lightThemeCount =
-        windowSources.match(/\.theme\(Some\(tauri::Theme::Light\)\)/g)?.length ?? 0;
+test('사용자 UI 창은 라이트로 고정하고 숨겨진 checker만 시스템 테마를 감지한다', () => {
+    const userWindowBuilderCount = traySource.match(/WebviewWindowBuilder::new\(/g)?.length ?? 0;
+    const lightThemeCount = traySource.match(/\.theme\(Some\(tauri::Theme::Light\)\)/g)?.length ?? 0;
 
-    assert.ok(builderCount > 0);
-    assert.equal(lightThemeCount, builderCount);
+    assert.ok(userWindowBuilderCount > 0);
+    assert.equal(lightThemeCount, userWindowBuilderCount);
+    assert.match(checkerSource, /WebviewWindowBuilder::new\(/);
+    assert.doesNotMatch(checkerSource, /\.theme\(Some\(tauri::Theme::Light\)\)/);
+    assert.match(checkerSource, /WindowEvent::ThemeChanged\(theme\)/);
+    assert.match(checkerSource, /tray::sync_icon_theme\(&app_handle, \*theme\)/);
 });

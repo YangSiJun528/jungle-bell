@@ -12,7 +12,7 @@ import {
 
 type OsName = 'mac' | 'win';
 type ScenarioName = 'morning' | 'day' | 'night';
-type TrayColor = 'red' | 'white';
+type TrayStatusIcon = 'alert' | 'normal';
 
 interface LoginStatus {
     dataLoaded: boolean;
@@ -20,7 +20,7 @@ interface LoginStatus {
 }
 
 interface Scenario {
-    color: TrayColor;
+    icon: TrayStatusIcon;
     status: string;
     time: string;
     caption: Record<OsName, string[]>;
@@ -30,30 +30,30 @@ const TOTAL_STEPS = 6;
 const LOGIN_STEP = 1;
 const SCENARIO_STEP = 4;
 const SCENARIO_ORDER: ScenarioName[] = ['morning', 'day', 'night'];
-const TRAY_ICONS: Record<TrayColor, string> = {
-    red: new URL('./assets/tray-mini-red.png', import.meta.url).href,
-    white: new URL('./assets/tray-mini-white.png', import.meta.url).href,
+const TRAY_ICONS: Record<TrayStatusIcon, string> = {
+    alert: new URL('./assets/tray-mini-alert.png', import.meta.url).href,
+    normal: new URL('./assets/tray-mini-normal.png', import.meta.url).href,
 };
 const SCENARIOS: Record<ScenarioName, Scenario> = {
     morning: {
-        color: 'red', status: '출석 시작 가능', time: '09:24',
+        icon: 'alert', status: '출석 시작 가능', time: '09:24',
         caption: {
-            mac: ['빨간 종은 출석 시작이 필요한 상태예요.', '출석 페이지를 열어 체크인해 주세요.'],
-            win: ['빨간 종은 출석 시작이 필요한 상태예요.', '출석 페이지를 열어 체크인해 주세요.'],
+            mac: ['빨간 아이콘은 출석 시작이 필요한 상태예요.', '출석 페이지를 열어 체크인해 주세요.'],
+            win: ['빨간 아이콘은 출석 시작이 필요한 상태예요.', '출석 페이지를 열어 체크인해 주세요.'],
         },
     },
     day: {
-        color: 'white', status: '학습 중', time: '14:08',
+        icon: 'normal', status: '학습 중', time: '14:08',
         caption: {
-            mac: ['흰색 종은 출석이 완료된 상태예요.', '별도 작업은 필요 없어요.'],
-            win: ['흰색 종은 출석이 완료된 상태예요.', '별도 작업은 필요 없어요.'],
+            mac: ['테마에 섞이는 컷아웃은 지금 필요한 조작이 없다는 뜻이에요.', '종료 가능 시각까지 별도 작업은 필요 없어요.'],
+            win: ['테마에 섞이는 컷아웃은 지금 필요한 조작이 없다는 뜻이에요.', '종료 가능 시각까지 별도 작업은 필요 없어요.'],
         },
     },
     night: {
-        color: 'red', status: '출석 종료 가능', time: '23:30',
+        icon: 'alert', status: '출석 종료 가능', time: '23:30',
         caption: {
-            mac: ['빨간 종은 출석 종료가 필요한 상태예요.', '출석 페이지를 열어 체크아웃해 주세요.'],
-            win: ['빨간 종은 출석 종료가 필요한 상태예요.', '출석 페이지를 열어 체크아웃해 주세요.'],
+            mac: ['빨간 아이콘은 출석 종료가 필요한 상태예요.', '출석 페이지를 열어 체크아웃해 주세요.'],
+            win: ['빨간 아이콘은 출석 종료가 필요한 상태예요.', '출석 페이지를 열어 체크아웃해 주세요.'],
         },
     },
 };
@@ -164,7 +164,7 @@ function onboarding(): OnboardingComponent {
             return '완료 처리 중이에요.';
         },
         get scenario() { return SCENARIOS[this.scenarioName]; },
-        get scenarioIcon() { return TRAY_ICONS[this.scenario.color]; },
+        get scenarioIcon() { return TRAY_ICONS[this.scenario.icon]; },
         get scenarioCaption() { return this.scenario.caption[this.currentOs]; },
 
         async init() {

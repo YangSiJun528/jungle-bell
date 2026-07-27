@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="52" height="44" viewBox="0 0 52 44">
+  <title>출석 완료 상태 트레이 아이콘</title>
+  <defs>
+    <mask id="complete-cutout" maskUnits="userSpaceOnUse" x="0" y="0" width="52" height="44">
+      <rect width="52" height="44" fill="#FFFFFF"/>
+      <g transform="translate(26 22) scale(1.5) translate(-22 -22)">
+        <circle cx="22" cy="22" r="9.8" fill="none" stroke="#000000" stroke-width="1.62"/>
+        <g transform="translate(22 22) scale(0.78) translate(-22 -22)">
+          <path d="M28.45 15.55c-1.48 3.45-3.02 6.12-4.64 7.76-1.65 1.64-4.3 3.2-7.78 4.68-.64.28-1.28-.36-1-.99 1.49-3.47 3.04-6.12 4.67-7.76 1.64-1.63 4.3-3.19 7.77-4.68.63-.27 1.26.36.98.99Z" fill="#000000"/>
+        </g>
+      </g>
+    </mask>
+  </defs>
+  <rect width="52" height="44" rx="8" fill="#F5F5F5"/>
+  <rect x="6" y="2" width="40" height="40" rx="8.5" fill="#FFFFFF" mask="url(#complete-cutout)"/>
+</svg>

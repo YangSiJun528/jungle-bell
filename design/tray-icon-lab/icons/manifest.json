@@ -1,0 +1,135 @@
+{
+  "generatedAt": "2026-07-27T12:33:43.576Z",
+  "sizes": [
+    16,
+    18,
+    20,
+    22,
+    24,
+    32,
+    36,
+    40,
+    44,
+    48,
+    64,
+    88
+  ],
+  "statuses": {
+    "normal": {
+      "label": "정상",
+      "mark": "check"
+    },
+    "offline": {
+      "label": "오프라인",
+      "mark": "minus"
+    },
+    "warning": {
+      "label": "로그인 필요",
+      "mark": "bang"
+    },
+    "alert": {
+      "label": "출석 필요",
+      "mark": "bang"
+    },
+    "complete": {
+      "label": "출석 완료",
+      "mark": "check"
+    }
+  },
+  "themes": {
+    "light": {
+      "label": "밝은 배경용",
+      "edge": "#17212B",
+      "halo": "#FFFFFF",
+      "neutral": "#24313B",
+      "neutralGlyph": "#FFFFFF",
+      "ringPlate": "#FFFFFF",
+      "ringGlyph": "#202B33",
+      "colors": {
+        "normal": {
+          "fill": "#087F5B",
+          "glyph": "#FFFFFF"
+        },
+        "offline": {
+          "fill": "#536170",
+          "glyph": "#FFFFFF"
+        },
+        "warning": {
+          "fill": "#A94D00",
+          "glyph": "#FFFFFF"
+        },
+        "alert": {
+          "fill": "#B4232C",
+          "glyph": "#FFFFFF"
+        },
+        "complete": {
+          "fill": "#FFFFFF",
+          "glyph": "#111111"
+        }
+      }
+    },
+    "dark": {
+      "label": "어두운 배경용",
+      "edge": "#F4F7F8",
+      "halo": "#11181D",
+      "neutral": "#EEF2F3",
+      "neutralGlyph": "#172129",
+      "ringPlate": "#171D22",
+      "ringGlyph": "#F7FAFB",
+      "colors": {
+        "normal": {
+          "fill": "#22B98A",
+          "glyph": "#071C15"
+        },
+        "offline": {
+          "fill": "#9DA9B8",
+          "glyph": "#151B21"
+        },
+        "warning": {
+          "fill": "#F29A38",
+          "glyph": "#23170A"
+        },
+        "alert": {
+          "fill": "#F05D65",
+          "glyph": "#260B0E"
+        },
+        "complete": {
+          "fill": "#000000",
+          "glyph": "#F7F7F7"
+        }
+      }
+    }
+  },
+  "families": {
+    "solid": {
+      "label": "01 채운 원",
+      "shortLabel": "채운 원",
+      "description": "상태색 면적이 가장 크고 작은 크기에서도 읽기 쉽습니다."
+    },
+    "halo": {
+      "label": "02 대비 테두리",
+      "shortLabel": "대비 테두리",
+      "description": "반대 명도의 이중 테두리로 유사한 배경에서도 외곽을 분리합니다."
+    },
+    "ring": {
+      "label": "03 상태 링",
+      "shortLabel": "상태 링",
+      "description": "중앙은 중립색으로 유지하고 굵은 외곽 링에 상태색을 사용합니다."
+    },
+    "badge": {
+      "label": "04 상태 배지",
+      "shortLabel": "상태 배지",
+      "description": "나침반 본체를 일정하게 유지하고 우하단 배지로 상태를 구분합니다."
+    },
+    "split": {
+      "label": "05 투톤 원",
+      "shortLabel": "투톤 원",
+      "description": "넓은 상태색 면에 명암을 더해 밝고 어두운 배경 모두에서 덩어리감을 줍니다."
+    },
+    "tile": {
+      "label": "06 둥근 사각형",
+      "shortLabel": "둥근 사각형",
+      "description": "작은 나침반과 테마에 동화되는 무채색 기본 상태로 필요한 변화만 강조합니다."
+    }
+  }
+}
