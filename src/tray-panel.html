@@ -143,6 +143,48 @@
             </span>
         </aside>
 
+        <button
+            type="button"
+            class="mt-3 w-full rounded-xl border border-app-men bg-app-men-soft p-3 text-left transition-colors hover:brightness-[.98] focus-visible:ring-4 focus-visible:ring-app-accent-soft disabled:opacity-50"
+            data-ui="tracked-laundry"
+            x-show="dashboard.laundry"
+            x-cloak
+            :disabled="busyAction !== null"
+            @click="perform('open_laundry')"
+        >
+            <span class="flex items-center gap-3">
+                <span class="flex size-9 flex-none items-center justify-center rounded-[10px] bg-app-men text-white"><svg class="size-[18px]" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3.5h14v17H5v-17Zm3 3h.1M12 6.5h4M12 10a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+                <span class="min-w-0 flex-1">
+                    <small class="block truncate text-[10px] font-bold text-app-men" x-text="dashboard.laundry ? `${dashboard.laundry.machineLabel} ${dashboard.laundry.appliance === 'washer' ? '세탁기' : '건조기'}` : ''"></small>
+                    <strong class="mt-0.5 block text-sm" x-text="laundryRemaining()" aria-live="polite"></strong>
+                    <small class="mt-0.5 block text-[10px] text-app-muted" x-text="dashboard.laundry ? `종료 ${dashboard.laundry.notifyBeforeMins}분 전 알림` : ''"></small>
+                    <small class="mt-1 block text-[10px] font-bold text-app-warning" x-show="laundrySourceWarning()">정보 갱신 지연</small>
+                </span>
+                <svg class="size-4 flex-none text-app-men" data-icon="chevron-right" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+        </button>
+
+        <button
+            type="button"
+            class="mt-3 w-full rounded-xl border border-app-success bg-app-success-soft p-3 text-left transition-colors hover:brightness-[.98] focus-visible:ring-4 focus-visible:ring-app-accent-soft disabled:opacity-50"
+            data-ui="subscribed-meals"
+            x-show="dashboard.meals"
+            x-cloak
+            :disabled="busyAction !== null"
+            @click="perform('open_meals')"
+        >
+            <span class="flex items-center gap-3">
+                <span class="flex size-9 flex-none items-center justify-center rounded-[10px] bg-app-success text-white"><svg class="size-[18px]" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v7m-2-7v5a2 2 0 0 0 4 0V3m-2 7v11m8-18v18m0-18c3 2 3 7 0 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+                <span class="min-w-0 flex-1">
+                    <small class="block text-[10px] font-bold text-app-success">오늘 급식</small>
+                    <strong class="mt-0.5 block truncate text-sm" x-text="mealSummary()"></strong>
+                    <small class="mt-0.5 block truncate text-[10px] text-app-muted" x-text="dashboard.meals?.title ?? (dashboard.meals?.status === 'awaitingUpdate' ? '주간 식단표 게시 대기' : '식단 정보 확인 중')"></small>
+                    <small class="mt-1 block text-[10px] font-bold text-app-warning" x-show="mealSourceWarning()">정보 갱신 지연</small>
+                </span>
+                <svg class="size-4 flex-none text-app-success" data-icon="chevron-right" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+        </button>
+
         <section class="mt-4" aria-labelledby="campus-action-title">
             <h2 id="campus-action-title" class="mb-2 text-xs font-bold text-app-muted">생활 정보</h2>
             <div class="grid grid-cols-2 gap-2">
