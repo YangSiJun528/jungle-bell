@@ -36,8 +36,6 @@ pub struct AppState {
     /// 로그인 재시도 윈도우 마감 시각.
     /// 출석 페이지가 닫힌 후 일정 시간 동안만 로그인 상태를 재확인.
     pub login_retry_until: Option<DateTime<Utc>>,
-    /// 마지막 알림 전송 시각
-    pub last_notification: Option<DateTime<Utc>>,
     /// 발견된 업데이트 버전 (None이면 최신 버전 또는 미확인)
     pub pending_update: Option<String>,
     /// 상태 변경 시 스케줄러의 다음 deadline 대기를 깨운다.
@@ -60,7 +58,6 @@ impl AppState {
             interval_jobs: JobStore::default(),
             checker: CheckerRuntime::default(),
             login_retry_until: None,
-            last_notification: None,
             pending_update: None,
             scheduler_wakeup: Arc::new(Notify::new()),
         }

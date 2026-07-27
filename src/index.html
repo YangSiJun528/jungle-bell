@@ -95,6 +95,7 @@
                         </div>
                     </div>
                 </div>
+                <small class="mt-1 block text-xs leading-[1.45] text-app-muted" data-ui="settings-description" x-show="endNotification" x-cloak>종료 출석을 하지 않으면 반복 간격과 관계없이 마감 5분 전에 긴급 알림을 한 번 보냅니다.</small>
             </section>
             <div class="mt-2 flex min-h-12 w-full items-center justify-between gap-2 border-t border-app-divider py-2"><span class="min-w-0 flex-1"><strong class="block text-sm leading-[1.35] font-semibold">일요일에는 알림 보내지 않기</strong></span><label class="relative inline-flex h-6 w-12 flex-none items-center" data-ui="settings-toggle"><input class="peer sr-only" type="checkbox" aria-label="일요일에는 알림 보내지 않기" x-model="skipSunday" @change="saveToggle('set_skip_sunday', 'skipSunday')"/><span class="h-6 w-12 rounded-full border border-app-border-strong bg-app-control transition-colors duration-200 peer-checked:border-app-accent peer-checked:bg-app-accent peer-focus-visible:ring-4 peer-focus-visible:ring-app-accent-soft" aria-hidden="true"></span><span class="pointer-events-none absolute left-1 size-4 rounded-full bg-app-overlay shadow-[inset_0_0_0_2px_var(--color-border)] transition-transform duration-200 ease-out peer-checked:translate-x-6" aria-hidden="true"></span></label></div>
         </fieldset>

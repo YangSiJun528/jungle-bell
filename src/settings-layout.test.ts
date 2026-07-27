@@ -130,3 +130,16 @@ test('이번 출석 알림 안내와 모든 추가 설명은 별도 박스 없�
         assert.match(description, /\btext-app-muted\b/);
     }
 });
+
+test('종료 출석 설정은 마감 5분 전 긴급 알림을 안내한다', () => {
+    const endSectionStart = settings.indexOf('aria-labelledby="end-notification-title"');
+    const endSectionEnd = settings.indexOf('</section>', endSectionStart);
+    const endSection = settings.slice(endSectionStart, endSectionEnd);
+
+    assert.match(
+        endSection,
+        /종료 출석을 하지 않으면 반복 간격과 관계없이 마감 5분 전에 긴급 알림을 한 번 보냅니다\./,
+    );
+    assert.match(endSection, /data-ui="settings-description"/);
+    assert.match(endSection, /x-show="endNotification"/);
+});

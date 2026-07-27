@@ -7,7 +7,7 @@ use tauri_plugin_notification::NotificationExt;
 
 use crate::campus::{CampusDataKind, CampusService};
 use crate::checker;
-use crate::interval_tasks::{JobAction, JobKind};
+use crate::interval_tasks::JobAction;
 use crate::state::{DailyPhase, TraySnapshot};
 use crate::tray;
 
@@ -18,24 +18,52 @@ pub(crate) enum JobOutcome {
     Retry,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum RuntimeAction {
+    AttendanceStatusCheck,
+    CheckerSessionRefresh,
+    CampusRefresh(CampusDataKind),
+    Notification { title: &'static str, body: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ScheduledAction {
+    pub(crate) job: JobAction,
+    pub(crate) action: RuntimeAction,
+    pub(crate) conflict_key: Option<&'static str>,
+    pub(crate) priority: u8,
+    pub(crate) coalesced_jobs: Vec<JobAction>,
+}
+
+impl ScheduledAction {
+    pub(crate) fn new(job: JobAction, action: RuntimeAction, conflict_key: Option<&'static str>, priority: u8) -> Self {
+        Self {
+            job,
+            action,
+            conflict_key,
+            priority,
+            coalesced_jobs: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ScheduledActionResult {
+    pub(crate) job: JobAction,
+    pub(crate) outcome: JobOutcome,
+    pub(crate) coalesced_jobs: Vec<JobAction>,
+}
+
 pub(crate) async fn apply_tick_side_effects(
     app_handle: &tauri::AppHandle,
     phase: DailyPhase,
     tray_update: Option<&TraySnapshot>,
-    notification: Option<&(&'static str, String)>,
     phase_changed: bool,
-    job_actions: &[JobAction],
-) -> Vec<(JobAction, JobOutcome)> {
+    job_actions: &[ScheduledAction],
+) -> Vec<ScheduledActionResult> {
     if let Some(snapshot) = tray_update {
         if let Err(error) = tray::update_tray(app_handle, snapshot) {
             log::error!("[scheduler] tray projection update failed: {error}");
-        }
-    }
-
-    if let Some((title, body)) = notification {
-        match app_handle.notification().builder().title(*title).body(body).show() {
-            Ok(_) => log::info!("[scheduler] notification sent: phase={:?}", phase),
-            Err(e) => log::error!("[scheduler] notification show failed: {e}"),
         }
     }
 
@@ -44,40 +72,54 @@ pub(crate) async fn apply_tick_side_effects(
     }
 
     let mut results = Vec::with_capacity(job_actions.len());
-    for action in job_actions.iter().copied() {
+    for scheduled in job_actions {
         log::debug!(
-            "[scheduler] job action: kind={} reason={}",
-            action.kind().name(),
-            action.reason().label(),
+            "[scheduler] job action: id={} reason={}",
+            scheduled.job.kind().name(),
+            scheduled.job.reason().label(),
         );
-        let succeeded = run_job_action(app_handle, action).await;
-        results.push((action, succeeded));
+        let outcome = run_action(app_handle, scheduled).await;
+        results.push(ScheduledActionResult {
+            job: scheduled.job,
+            outcome,
+            coalesced_jobs: scheduled.coalesced_jobs.clone(),
+        });
     }
     results
 }
 
-pub(crate) async fn run_job_action(app_handle: &tauri::AppHandle, action: JobAction) -> JobOutcome {
-    match action.kind() {
-        JobKind::AttendanceStatusCheck => outcome_from_bool(checker::trigger_current_check(app_handle)),
-        JobKind::CheckerSessionRefresh => {
-            outcome_from_bool(checker::refresh_webview(app_handle, action.reason().label()))
+pub(crate) async fn run_action(app_handle: &tauri::AppHandle, scheduled: &ScheduledAction) -> JobOutcome {
+    match &scheduled.action {
+        RuntimeAction::AttendanceStatusCheck => outcome_from_bool(checker::trigger_current_check(app_handle)),
+        RuntimeAction::CheckerSessionRefresh => {
+            outcome_from_bool(checker::refresh_webview(app_handle, scheduled.job.reason().label()))
         }
-        JobKind::LaundryRefresh | JobKind::MealsRefresh => {
-            let kind = match action.kind() {
-                JobKind::LaundryRefresh => CampusDataKind::Laundry,
-                JobKind::MealsRefresh => CampusDataKind::Meals,
-                _ => unreachable!(),
-            };
+        RuntimeAction::CampusRefresh(kind) => {
             let service: tauri::State<Arc<CampusService>> = app_handle.state();
-            match service.refresh_scheduled(app_handle, kind).await {
+            match service.refresh_scheduled(app_handle, *kind).await {
                 Ok(true) => JobOutcome::Executed,
                 Ok(false) => JobOutcome::NotEligible,
                 Err(error) => {
                     log::warn!(
-                        "[scheduler] campus job failed: kind={} error={error}",
-                        action.kind().name()
+                        "[scheduler] campus job failed: id={} error={error}",
+                        scheduled.job.kind().name()
                     );
-                    service.emit_error(app_handle, kind, error);
+                    service.emit_error(app_handle, *kind, error);
+                    JobOutcome::Retry
+                }
+            }
+        }
+        RuntimeAction::Notification { title, body } => {
+            match app_handle.notification().builder().title(*title).body(body).show() {
+                Ok(_) => {
+                    log::info!("[scheduler] notification sent: id={}", scheduled.job.kind().name());
+                    JobOutcome::Executed
+                }
+                Err(error) => {
+                    log::error!(
+                        "[scheduler] notification show failed: id={} error={error}",
+                        scheduled.job.kind().name()
+                    );
                     JobOutcome::Retry
                 }
             }
