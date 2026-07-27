@@ -46,6 +46,7 @@ interface CohortOption {
 interface CohortSelection {
     cohort_id: string | null;
     cohort_status: CohortStatus;
+    cohort_start_date: string | null;
     cohort_end_date: string | null;
     fetched_date?: string;
     needs_login?: boolean;
@@ -65,6 +66,7 @@ interface AttendanceResult {
     evening_done: boolean;
     api_error?: boolean;
     cohort_status?: CohortStatus;
+    cohort_start_date?: string | null;
     cohort_end_date?: string | null;
 }
 
@@ -209,13 +211,25 @@ async function fetchCohortSelection(): Promise<CohortSelection> {
             jsLog('info', 'fetchCohortSelection: status=401 (login required)');
             cachedCohortOptions = null;
             cachedCohortDate = null;
-            return {needs_login: true, cohort_id: null, cohort_status: 'unknown', cohort_end_date: null};
+            return {
+                needs_login: true,
+                cohort_id: null,
+                cohort_status: 'unknown',
+                cohort_start_date: null,
+                cohort_end_date: null,
+            };
         }
         if (!response.ok) {
             const body = await response.text();
             jsLog('warn', `fetchCohortSelection: status=${response.status}`);
             jsLog('debug', `fetchCohortSelection: error body length=${body.length}`);
-            return {api_error: true, cohort_id: null, cohort_status: 'unknown', cohort_end_date: null};
+            return {
+                api_error: true,
+                cohort_id: null,
+                cohort_status: 'unknown',
+                cohort_start_date: null,
+                cohort_end_date: null,
+            };
         }
 
         const data: unknown = await response.json();
@@ -228,12 +242,18 @@ async function fetchCohortSelection(): Promise<CohortSelection> {
         cachedCohortDate = today;
         jsLog(
             'debug',
-            `fetchCohortSelection: selected cohort status=${selection.cohort_status} endDate=${selection.cohort_end_date} (valid=${cohortOptions.length})`,
+            `fetchCohortSelection: selected cohort status=${selection.cohort_status} startDate=${selection.cohort_start_date} endDate=${selection.cohort_end_date} (valid=${cohortOptions.length})`,
         );
         return selection;
     } catch (error: unknown) {
         jsLog('error', `fetchCohortSelection failed: ${errorMessage(error)}`);
-        return {api_error: true, cohort_id: null, cohort_status: 'unknown', cohort_end_date: null};
+        return {
+            api_error: true,
+            cohort_id: null,
+            cohort_status: 'unknown',
+            cohort_start_date: null,
+            cohort_end_date: null,
+        };
     }
 }
 
@@ -281,6 +301,7 @@ async function checkAttendance(): Promise<AttendanceResult> {
             morning_done: false,
             evening_done: false,
             cohort_status: 'unknown',
+            cohort_start_date: null,
             cohort_end_date: null,
         };
     }
@@ -293,6 +314,7 @@ async function checkAttendance(): Promise<AttendanceResult> {
                 api_error: true,
                 cohort_id: null,
                 cohort_status: 'unknown',
+                cohort_start_date: null,
                 cohort_end_date: null,
             } satisfies CohortSelection;
         })
@@ -309,6 +331,7 @@ async function checkAttendance(): Promise<AttendanceResult> {
             morning_done: false,
             evening_done: false,
             cohort_status: 'unknown',
+            cohort_start_date: null,
             cohort_end_date: null,
         };
     }
@@ -319,6 +342,7 @@ async function checkAttendance(): Promise<AttendanceResult> {
             morning_done: false,
             evening_done: false,
             cohort_status: selection.cohort_status,
+            cohort_start_date: selection.cohort_start_date,
             cohort_end_date: selection.cohort_end_date,
         };
     }
@@ -333,6 +357,7 @@ async function checkAttendance(): Promise<AttendanceResult> {
             evening_done: false,
             api_error: true,
             cohort_status: selection.cohort_status,
+            cohort_start_date: selection.cohort_start_date,
             cohort_end_date: selection.cohort_end_date,
         };
     }
@@ -345,6 +370,7 @@ async function checkAttendance(): Promise<AttendanceResult> {
             morning_done: false,
             evening_done: false,
             cohort_status: 'unknown',
+            cohort_start_date: null,
             cohort_end_date: null,
         };
     }
@@ -355,6 +381,7 @@ async function checkAttendance(): Promise<AttendanceResult> {
         morning_done: attendance.morning_done,
         evening_done: attendance.evening_done,
         cohort_status: selection.cohort_status,
+        cohort_start_date: selection.cohort_start_date,
         cohort_end_date: selection.cohort_end_date,
     };
 }
@@ -363,7 +390,7 @@ function reportResult(result: AttendanceResult): void {
     const status = {...result, generation: currentGeneration};
     jsLog(
         'debug',
-        `result: needs_login=${status.needs_login} generation=${status.generation} morning=${status.morning_done} evening=${status.evening_done} cohort_status=${status.cohort_status} cohort_end_date=${status.cohort_end_date}${status.api_error ? ' api_error=true' : ''}`,
+        `result: needs_login=${status.needs_login} generation=${status.generation} morning=${status.morning_done} evening=${status.evening_done} cohort_status=${status.cohort_status} cohort_start_date=${status.cohort_start_date} cohort_end_date=${status.cohort_end_date}${status.api_error ? ' api_error=true' : ''}`,
     );
     void window.__TAURI__.core.invoke('report_attendance_status', {status});
 }

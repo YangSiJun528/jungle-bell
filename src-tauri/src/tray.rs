@@ -14,7 +14,7 @@ use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::analytics::{self, Event};
-use crate::state::{AppState, CheckerRuntimeStatus, DailyPhase, DdayStatus, TraySnapshot};
+use crate::state::{AppState, CheckerRuntimeStatus, CohortPeriod, DailyPhase, DdayStatus, TraySnapshot};
 use tauri::{
     image::Image,
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -174,6 +174,7 @@ struct TrayViewModel {
     icon: TrayIconKind,
     status_text: String,
     dday_text: String,
+    dday_period: Option<CohortPeriod>,
     tooltip: String,
 }
 
@@ -183,6 +184,7 @@ pub struct TrayPanelState {
     status: TrayStatusKind,
     status_text: String,
     dday_text: Option<String>,
+    dday_period: Option<CohortPeriod>,
     current_version: String,
     pending_update: Option<String>,
 }
@@ -489,6 +491,7 @@ fn build_tray_view_model(snapshot: &TraySnapshot, now: DateTime<Utc>) -> TrayVie
         status: status_kind_for_snapshot(snapshot),
         icon: icon_kind_for_snapshot(snapshot),
         dday_text: build_dday_text(&snapshot.dday_status, now),
+        dday_period: snapshot.cohort_period,
         tooltip: build_tooltip(&status_text),
         status_text,
     }
@@ -500,6 +503,7 @@ impl TrayState {
             status: self.view.status,
             status_text: self.view.status_text.clone(),
             dday_text: self.dday_visible.then(|| self.view.dday_text.clone()),
+            dday_period: self.dday_visible.then_some(self.view.dday_period).flatten(),
             current_version,
             pending_update: self.pending_update.clone(),
         }
@@ -1304,6 +1308,7 @@ mod tests {
             phase,
             remaining,
             dday_status: DdayStatus::Unknown,
+            cohort_period: None,
             data_loaded,
             needs_login,
             checker_status,

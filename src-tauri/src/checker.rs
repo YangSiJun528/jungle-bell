@@ -502,6 +502,7 @@ mod tests {
             evening_done: false,
             api_error: true,
             cohort_status: CohortReportStatus::Unknown,
+            cohort_start_date: None,
             cohort_end_date: None,
         };
 
@@ -524,6 +525,7 @@ mod tests {
             evening_done: false,
             api_error: true,
             cohort_status: CohortReportStatus::Active,
+            cohort_start_date: Some("2026-03-01".into()),
             cohort_end_date: Some("2026-03-31".into()),
         };
 
@@ -538,6 +540,13 @@ mod tests {
                 end_date: NaiveDate::from_ymd_opt(2026, 3, 31).unwrap()
             }
         );
+        assert_eq!(
+            state.cohort_period,
+            Some(crate::state::CohortPeriod {
+                start_date: NaiveDate::from_ymd_opt(2026, 3, 1).unwrap(),
+                end_date: NaiveDate::from_ymd_opt(2026, 3, 31).unwrap(),
+            })
+        );
     }
 
     #[test]
@@ -551,6 +560,7 @@ mod tests {
             evening_done: false,
             api_error: false,
             cohort_status: CohortReportStatus::Unknown,
+            cohort_start_date: None,
             cohort_end_date: None,
         };
 
@@ -577,6 +587,7 @@ mod tests {
             evening_done: false,
             api_error: false,
             cohort_status: CohortReportStatus::Active,
+            cohort_start_date: Some("2026-03-01".into()),
             cohort_end_date: Some("2026-03-31".into()),
         };
 
@@ -607,6 +618,7 @@ mod tests {
             evening_done: true,
             api_error: false,
             cohort_status: CohortReportStatus::Active,
+            cohort_start_date: Some("2026-03-01".into()),
             cohort_end_date: Some("2026-03-31".into()),
         };
 
@@ -629,6 +641,7 @@ mod tests {
             evening_done: false,
             api_error: false,
             cohort_status: CohortReportStatus::Active,
+            cohort_start_date: Some("2026-03-01".into()),
             cohort_end_date: Some("2026-03-31".into()),
         };
 
@@ -651,6 +664,7 @@ mod tests {
             evening_done: false,
             api_error: false,
             cohort_status: CohortReportStatus::NoCohort,
+            cohort_start_date: None,
             cohort_end_date: None,
         };
 
@@ -675,6 +689,7 @@ mod tests {
             evening_done: false,
             api_error: false,
             cohort_status: CohortReportStatus::Ended,
+            cohort_start_date: Some("2026-01-01".into()),
             cohort_end_date: Some("2026-03-01".into()),
         };
 

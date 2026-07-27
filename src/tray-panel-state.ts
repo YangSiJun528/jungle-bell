@@ -1,3 +1,5 @@
+import type {DdayPeriod} from './dday-progress.ts';
+
 export type TrayPanelStatus =
     | 'loading'
     | 'recovering'
@@ -11,6 +13,7 @@ export interface TrayPanelState {
     status: TrayPanelStatus;
     statusText: string;
     ddayText: string | null;
+    ddayPeriod: DdayPeriod | null;
     currentVersion: string;
     pendingUpdate: string | null;
 }

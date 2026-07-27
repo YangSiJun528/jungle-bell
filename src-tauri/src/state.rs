@@ -25,6 +25,8 @@ pub struct AppState {
     pub phase: DailyPhase,
     /// 현재 코호트 종료일 기반 D-Day 상태
     pub dday_status: DdayStatus,
+    /// 현재 D-Day 대상 코호트의 시작일과 종료일.
+    pub cohort_period: Option<CohortPeriod>,
     /// LMS에서 조회한 사용자 소속 기수 목록.
     pub cohort_options: Vec<CohortOption>,
     /// 현재 출석 조회에 실제 적용된 기수 ID.
@@ -61,6 +63,7 @@ impl AppState {
             evening_checked: false,
             phase: DailyPhase::Idle,
             dday_status: DdayStatus::Unknown,
+            cohort_period: None,
             cohort_options: Vec::new(),
             effective_cohort_id: None,
             needs_login: false,
@@ -84,6 +87,7 @@ impl AppState {
             phase: self.phase,
             remaining,
             dday_status: self.dday_status.clone(),
+            cohort_period: self.cohort_period,
             data_loaded: self.data_loaded,
             needs_login: self.needs_login,
             checker_status: self.checker.status,
@@ -139,9 +143,17 @@ pub struct TraySnapshot {
     pub phase: DailyPhase,
     pub remaining: Option<i64>,
     pub dday_status: DdayStatus,
+    pub cohort_period: Option<CohortPeriod>,
     pub data_loaded: bool,
     pub needs_login: bool,
     pub checker_status: CheckerRuntimeStatus,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CohortPeriod {
+    pub start_date: NaiveDate,
+    pub end_date: NaiveDate,
 }
 
 /// 현재 코호트 종료일 기반 D-Day 표시 상태.

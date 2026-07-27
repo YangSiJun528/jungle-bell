@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::attendance_day;
 use crate::config::Config;
-use crate::state::{self, AppState, CheckerRuntimeStatus, DailyPhase, DdayStatus, TraySnapshot};
+use crate::state::{self, AppState, CheckerRuntimeStatus, CohortPeriod, DailyPhase, DdayStatus, TraySnapshot};
 
 /// checker.js의 API 조회 결과.
 /// JS invoke 호출의 JSON 페이로드에서 역직렬화됨.
@@ -33,6 +33,9 @@ pub struct AttendanceReport {
     /// /api/v2/me/cohorts 기준 현재 코호트 상태.
     #[serde(default)]
     pub cohort_status: CohortReportStatus,
+    /// 현재 코호트 시작일 (YYYY-MM-DD).
+    #[serde(default)]
+    pub cohort_start_date: Option<String>,
     /// 현재 코호트 종료일 (YYYY-MM-DD).
     #[serde(default)]
     pub cohort_end_date: Option<String>,
@@ -64,6 +67,7 @@ pub struct CohortOption {
 pub struct CohortResolution {
     pub cohort_id: Option<String>,
     pub cohort_status: CohortReportStatus,
+    pub cohort_start_date: Option<NaiveDate>,
     pub cohort_end_date: Option<NaiveDate>,
 }
 
@@ -98,6 +102,7 @@ fn cohort_resolution(option: &CohortOption, today: NaiveDate) -> CohortResolutio
         return CohortResolution {
             cohort_id: None,
             cohort_status: CohortReportStatus::Ended,
+            cohort_start_date: Some(option.start_date),
             cohort_end_date: option.end_date,
         };
     }
@@ -105,6 +110,7 @@ fn cohort_resolution(option: &CohortOption, today: NaiveDate) -> CohortResolutio
         return CohortResolution {
             cohort_id: None,
             cohort_status: CohortReportStatus::Upcoming,
+            cohort_start_date: Some(option.start_date),
             cohort_end_date: option.end_date,
         };
     }
@@ -117,6 +123,7 @@ fn cohort_resolution(option: &CohortOption, today: NaiveDate) -> CohortResolutio
         } else {
             CohortReportStatus::Unknown
         },
+        cohort_start_date: in_range.then_some(option.start_date),
         cohort_end_date: in_range.then_some(option.end_date).flatten(),
     }
 }
@@ -191,6 +198,7 @@ pub(crate) fn resolve_cohort_selection(
         } else {
             CohortReportStatus::Unknown
         },
+        cohort_start_date: None,
         cohort_end_date: None,
     }
 }
@@ -211,6 +219,12 @@ pub(crate) struct NotificationDecision {
 
 fn parse_report_date(value: &str) -> Option<NaiveDate> {
     NaiveDate::parse_from_str(value, "%Y-%m-%d").ok()
+}
+
+fn cohort_period_from_report(report: &AttendanceReport) -> Option<CohortPeriod> {
+    let start_date = report.cohort_start_date.as_deref().and_then(parse_report_date)?;
+    let end_date = report.cohort_end_date.as_deref().and_then(parse_report_date)?;
+    (start_date <= end_date).then_some(CohortPeriod { start_date, end_date })
 }
 
 fn dday_status_from_report(report: &AttendanceReport) -> DdayStatus {
@@ -245,6 +259,7 @@ pub(crate) fn apply_report_fields(state: &mut AppState, report: &AttendanceRepor
     if report.needs_login {
         state.needs_login = true;
         state.dday_status = DdayStatus::LoginRequired;
+        state.cohort_period = None;
         return;
     }
 
@@ -253,12 +268,14 @@ pub(crate) fn apply_report_fields(state: &mut AppState, report: &AttendanceRepor
     state.morning_checked = report.morning_done;
     state.evening_checked = report.evening_done;
     state.dday_status = dday_status_from_report(report);
+    state.cohort_period = cohort_period_from_report(report);
 }
 
 pub(crate) fn apply_dday_from_report(state: &mut AppState, report: &AttendanceReport) {
     let dday_status = dday_status_from_report(report);
     if !matches!(dday_status, DdayStatus::Unknown) {
         state.dday_status = dday_status;
+        state.cohort_period = cohort_period_from_report(report);
     }
 }
 
@@ -446,6 +463,7 @@ mod tests {
             evening_done: false,
             api_error: false,
             cohort_status: CohortReportStatus::Active,
+            cohort_start_date: Some("2026-03-01".into()),
             cohort_end_date: Some("2026-03-31".into()),
         };
 
@@ -462,6 +480,13 @@ mod tests {
                 end_date: chrono::NaiveDate::from_ymd_opt(2026, 3, 31).unwrap(),
             }
         );
+        assert_eq!(
+            snapshot.cohort_period,
+            Some(state::CohortPeriod {
+                start_date: chrono::NaiveDate::from_ymd_opt(2026, 3, 1).unwrap(),
+                end_date: chrono::NaiveDate::from_ymd_opt(2026, 3, 31).unwrap(),
+            })
+        );
     }
 
     #[test]
@@ -475,6 +500,7 @@ mod tests {
             evening_done: false,
             api_error: false,
             cohort_status: CohortReportStatus::Unknown,
+            cohort_start_date: None,
             cohort_end_date: None,
         };
 
@@ -497,6 +523,7 @@ mod tests {
             evening_done: false,
             api_error: false,
             cohort_status: CohortReportStatus::Active,
+            cohort_start_date: Some("2026-03-01".into()),
             cohort_end_date: None,
         };
 
@@ -544,6 +571,10 @@ mod tests {
         assert_eq!(resolution.cohort_id.as_deref(), Some("cohort-1"));
         assert_eq!(resolution.cohort_status, CohortReportStatus::Active);
         assert_eq!(
+            resolution.cohort_start_date,
+            Some(chrono::NaiveDate::from_ymd_opt(2026, 3, 1).unwrap())
+        );
+        assert_eq!(
             resolution.cohort_end_date,
             Some(chrono::NaiveDate::from_ymd_opt(2026, 8, 1).unwrap())
         );
@@ -587,6 +618,10 @@ mod tests {
         assert_eq!(resolution.cohort_id, None);
         assert_eq!(resolution.cohort_status, CohortReportStatus::Upcoming);
         assert_eq!(
+            resolution.cohort_start_date,
+            Some(chrono::NaiveDate::from_ymd_opt(2026, 8, 10).unwrap())
+        );
+        assert_eq!(
             resolution.cohort_end_date,
             Some(chrono::NaiveDate::from_ymd_opt(2026, 12, 31).unwrap())
         );
@@ -603,6 +638,7 @@ mod tests {
             evening_done: false,
             api_error: false,
             cohort_status: CohortReportStatus::Upcoming,
+            cohort_start_date: Some("2026-08-10".into()),
             cohort_end_date: Some("2026-12-31".into()),
         };
 
@@ -614,6 +650,13 @@ mod tests {
             DdayStatus::Upcoming {
                 end_date: Some(chrono::NaiveDate::from_ymd_opt(2026, 12, 31).unwrap())
             }
+        );
+        assert_eq!(
+            state.cohort_period,
+            Some(state::CohortPeriod {
+                start_date: chrono::NaiveDate::from_ymd_opt(2026, 8, 10).unwrap(),
+                end_date: chrono::NaiveDate::from_ymd_opt(2026, 12, 31).unwrap(),
+            })
         );
     }
 
