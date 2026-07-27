@@ -20,6 +20,7 @@ function panelState(overrides: Partial<TrayPanelState> = {}): TrayPanelState {
         status: 'loading',
         statusText: '상태 확인 중...',
         ddayText: 'D-day 확인 중...',
+        ddayPeriod: null,
         currentVersion: '0.4.4',
         pendingUpdate: null,
         ...overrides,
