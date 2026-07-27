@@ -139,6 +139,8 @@ test('트레이 패널은 홈과 소식 화면 및 기존 주요 액션을 제�
     const attendanceCardEnd = html.indexOf('</button>', attendanceCardMarker) + 9;
     const attendanceCard = html.slice(attendanceCardStart, attendanceCardEnd);
     const ddayCardStart = html.indexOf('data-ui="dday"');
+    const ddayCardEnd = html.indexOf('</aside>', ddayCardStart) + 8;
+    const ddayCard = html.slice(ddayCardStart, ddayCardEnd);
     const laundryActionStart = html.indexOf('@click="perform(\'open_laundry\')"');
     const laundryActionEnd = html.indexOf('</button>', laundryActionStart);
     const laundryAction = html.slice(laundryActionStart, laundryActionEnd);
@@ -187,7 +189,29 @@ test('트레이 패널은 홈과 소식 화면 및 기존 주요 액션을 제�
     assert.doesNotMatch(attendanceCard, /<footer|x-text="presentation\.actionLabel/);
     assert.doesNotMatch(attendanceCard, /state\.ddayText/);
     assert.ok(ddayCardStart > attendanceCardEnd);
-    assert.match(html.slice(ddayCardStart), /state\.ddayText/);
+    assert.match(ddayCard, /state\.ddayText/);
+    assert.match(ddayCard, /@click="toggleDday\(\)"/);
+    assert.match(ddayCard, /:aria-expanded="Boolean\(ddayProgress && ddayExpanded\)"/);
+    assert.match(ddayCard, /aria-controls="dday-calendar"/);
+    assert.match(ddayCard, /id="dday-calendar"/);
+    assert.match(ddayCard, /grid-rows-\[1fr\]/);
+    assert.match(ddayCard, /grid-rows-\[0fr\]/);
+    assert.match(ddayCard, /grid-cols-\[repeat\(31,minmax\(0,1fr\)\)\]/);
+    assert.match(ddayCard, /gap-\[1px\]/);
+    assert.match(ddayCard, /x-for="day in 31"/);
+    assert.match(ddayCard, /day === 1 \|\| day === 10 \|\| day === 20 \|\| day === 31/);
+    assert.match(ddayCard, /x-for="row in ddayProgress\?\.rows \?\? \[\]"/);
+    assert.match(
+        ddayCard,
+        /class="mr-auto whitespace-nowrap text-\[10px\] font-medium text-app-muted" x-text="ddayRange\(\)"/,
+    );
+    assert.doesNotMatch(ddayCard, /aria-label="D-Day 표시 단위"/);
+    assert.doesNotMatch(ddayCard, /divide-x/);
+    assert.doesNotMatch(ddayCard, /day % 5|월\/일|border-app-border-strong/);
+    assert.match(script, /buildDdayProgress/);
+    assert.match(script, /ddayExpanded:\s*false/);
+    assert.match(script, /toggleDday\(\)/);
+    assert.doesNotMatch(script, /ddayUnit|setDdayUnit/);
     assert.doesNotMatch(html, /quick-action-title/);
     assert.match(html, /워시타워/);
     assert.match(html, /오늘의 식단/);
