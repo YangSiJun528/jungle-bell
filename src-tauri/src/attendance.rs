@@ -157,7 +157,6 @@ pub(crate) fn notification_decision(
     remaining: Option<i64>,
     needs_login: bool,
     kst_now: DateTime<FixedOffset>,
-    secs_since_last: Option<u64>,
 ) -> NotificationDecision {
     if needs_login {
         return NotificationDecision {
@@ -217,20 +216,6 @@ pub(crate) fn notification_decision(
         return NotificationDecision {
             send: false,
             reason: "outside_window",
-            message: None,
-        };
-    }
-
-    let interval_mins = match phase {
-        DailyPhase::NeedStart | DailyPhase::StartOverdue => config.start_notification_interval_mins,
-        DailyPhase::NeedEnd => config.end_notification_interval_mins,
-        _ => config.start_notification_interval_mins,
-    };
-    let interval_secs = interval_mins as u64 * 60;
-    if secs_since_last.is_some_and(|elapsed| elapsed < interval_secs) {
-        return NotificationDecision {
-            send: false,
-            reason: "throttled",
             message: None,
         };
     }
@@ -351,8 +336,8 @@ mod tests {
         config.skip_attendance = Some("2026-03-17".into());
         let kst_now = kst_time(9, 30, 0).with_timezone(&crate::state::kst());
 
-        let login = notification_decision(&config, DailyPhase::NeedStart, Some(3600), true, kst_now, None);
-        let skipped = notification_decision(&config, DailyPhase::NeedStart, Some(3600), false, kst_now, None);
+        let login = notification_decision(&config, DailyPhase::NeedStart, Some(3600), true, kst_now);
+        let skipped = notification_decision(&config, DailyPhase::NeedStart, Some(3600), false, kst_now);
 
         assert_eq!(login.reason, "needs_login");
         assert!(!login.send);

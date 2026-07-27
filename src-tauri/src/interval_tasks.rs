@@ -20,31 +20,31 @@ use crate::config;
 
 const JOB_STORE_VERSION: u32 = 1;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum JobKind {
-    AttendanceStatusCheck,
-    CheckerSessionRefresh,
-    LaundryRefresh,
-    MealsRefresh,
-}
+/// 코드에 등록되는 작업 식별자.
+///
+/// 실행 상태는 문자열 키로 저장하므로 새 작업은 엔진 enum 수정 없이
+/// 고유한 ID를 선언하는 것만으로 등록할 수 있다.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct JobId(&'static str);
 
-impl JobKind {
-    pub(crate) fn name(self) -> &'static str {
-        match self {
-            Self::AttendanceStatusCheck => "attendance_status_check",
-            Self::CheckerSessionRefresh => "checker_session_refresh",
-            Self::LaundryRefresh => "laundry_refresh",
-            Self::MealsRefresh => "meals_refresh",
-        }
+impl JobId {
+    pub(crate) const fn new(value: &'static str) -> Self {
+        assert!(!value.is_empty(), "job id must not be empty");
+        Self(value)
+    }
+
+    pub(crate) const fn name(self) -> &'static str {
+        self.0
     }
 }
 
 /// 반복 계산은 Quartz `DailyTimeIntervalTrigger`의 "매일 시작점에서
 /// cadence를 다시 시작"하는 규칙을 따른다.
-#[allow(dead_code)] // 현재 등록 작업은 Every만 사용하며 나머지는 확장용 계약이다.
+#[allow(dead_code)] // Once/DailyAt/DailyWindow는 새 작업 등록을 위한 확장 계약이다.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Trigger {
+    /// 스케줄러가 현재 상태를 평가할 때마다 조건·한도·cooldown을 판단한다.
+    OnTick,
     Every {
         interval_secs: u64,
     },
@@ -69,7 +69,7 @@ pub(crate) enum MisfirePolicy {
     Skip,
 }
 
-#[allow(dead_code)] // 제한 규칙은 새 작업 등록 시 선택적으로 사용한다.
+#[allow(dead_code)] // CalendarDay/ConditionEpisode는 새 작업 등록을 위한 확장 계약이다.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum RunLimit {
     CalendarDay(u32),
@@ -79,7 +79,7 @@ pub(crate) enum RunLimit {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct JobSpec {
-    pub(crate) kind: JobKind,
+    pub(crate) kind: JobId,
     pub(crate) trigger: Trigger,
     pub(crate) initial_delay_secs: u64,
     pub(crate) backoff_base_secs: u64,
@@ -88,11 +88,12 @@ pub(crate) struct JobSpec {
     pub(crate) misfire_policy: MisfirePolicy,
     pub(crate) misfire_grace_secs: u64,
     pub(crate) limits: &'static [RunLimit],
+    pub(crate) cooldown_secs: Option<u64>,
     persist_runtime: bool,
 }
 
 impl JobSpec {
-    pub(crate) const fn new(kind: JobKind, interval_secs: u64) -> Self {
+    pub(crate) const fn new(kind: JobId, interval_secs: u64) -> Self {
         Self {
             kind,
             trigger: Trigger::Every { interval_secs },
@@ -103,12 +104,29 @@ impl JobSpec {
             misfire_policy: MisfirePolicy::RunOnce,
             misfire_grace_secs: 60,
             limits: &[],
+            cooldown_secs: None,
+            persist_runtime: false,
+        }
+    }
+
+    pub(crate) const fn on_tick(kind: JobId) -> Self {
+        Self {
+            kind,
+            trigger: Trigger::OnTick,
+            initial_delay_secs: 0,
+            backoff_base_secs: 60,
+            backoff_max_secs: 60,
+            max_failures: u32::MAX,
+            misfire_policy: MisfirePolicy::RunOnce,
+            misfire_grace_secs: 60,
+            limits: &[],
+            cooldown_secs: None,
             persist_runtime: false,
         }
     }
 
     #[allow(dead_code)]
-    pub(crate) const fn once(kind: JobKind, at: DateTime<Utc>) -> Self {
+    pub(crate) const fn once(kind: JobId, at: DateTime<Utc>) -> Self {
         Self {
             kind,
             trigger: Trigger::Once { at },
@@ -119,12 +137,13 @@ impl JobSpec {
             misfire_policy: MisfirePolicy::RunOnce,
             misfire_grace_secs: 60,
             limits: &[],
+            cooldown_secs: None,
             persist_runtime: true,
         }
     }
 
     #[allow(dead_code)]
-    pub(crate) const fn daily_at(kind: JobKind, hour: u32, minute: u32) -> Self {
+    pub(crate) const fn daily_at(kind: JobId, hour: u32, minute: u32) -> Self {
         assert!(hour < 24, "daily_at hour must be less than 24");
         assert!(minute < 60, "daily_at minute must be less than 60");
         Self {
@@ -139,13 +158,14 @@ impl JobSpec {
             misfire_policy: MisfirePolicy::RunOnce,
             misfire_grace_secs: 60,
             limits: &[],
+            cooldown_secs: None,
             persist_runtime: true,
         }
     }
 
     #[allow(dead_code)]
     pub(crate) const fn daily_window(
-        kind: JobKind,
+        kind: JobId,
         start_hour: u32,
         start_minute: u32,
         end_hour: u32,
@@ -174,6 +194,7 @@ impl JobSpec {
             misfire_policy: MisfirePolicy::RunOnce,
             misfire_grace_secs: 60,
             limits: &[],
+            cooldown_secs: None,
             persist_runtime: true,
         }
     }
@@ -201,9 +222,14 @@ impl JobSpec {
         self
     }
 
-    #[allow(dead_code)]
     pub(crate) const fn limits(mut self, limits: &'static [RunLimit]) -> Self {
         self.limits = limits;
+        self.persist_runtime = true;
+        self
+    }
+
+    pub(crate) const fn cooldown_secs(mut self, seconds: u64) -> Self {
+        self.cooldown_secs = Some(seconds);
         self.persist_runtime = true;
         self
     }
@@ -234,16 +260,16 @@ impl JobActionReason {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct JobAction {
-    kind: JobKind,
+    kind: JobId,
     reason: JobActionReason,
 }
 
 impl JobAction {
-    pub(crate) const fn new(kind: JobKind, reason: JobActionReason) -> Self {
+    pub(crate) const fn new(kind: JobId, reason: JobActionReason) -> Self {
         Self { kind, reason }
     }
 
-    pub(crate) fn kind(self) -> JobKind {
+    pub(crate) fn kind(self) -> JobId {
         self.kind
     }
 
@@ -267,19 +293,19 @@ pub(crate) enum JobSkipReason {
 pub(crate) enum JobDecision {
     Run(JobAction),
     Skip {
-        kind: JobKind,
+        kind: JobId,
         reason: JobSkipReason,
         next_due_at: Option<DateTime<Utc>>,
     },
     GiveUp {
-        kind: JobKind,
+        kind: JobId,
     },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum JobFailureDecision {
     RetryAt(DateTime<Utc>),
-    GiveUp { kind: JobKind },
+    GiveUp { kind: JobId },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -425,6 +451,9 @@ impl JobRuntime {
 
     fn advance_trigger(&mut self, spec: &JobSpec, evaluation: &JobEvaluation<'_>) {
         match spec.trigger {
+            Trigger::OnTick => {
+                self.next_due_at = None;
+            }
             Trigger::Every { interval_secs } => {
                 self.next_due_at = Some(add_secs(evaluation.now, interval_secs));
             }
@@ -451,7 +480,7 @@ pub(crate) struct JobStore {
     #[serde(default = "job_store_version")]
     version: u32,
     #[serde(default)]
-    runtimes: BTreeMap<JobKind, JobRuntime>,
+    runtimes: BTreeMap<String, JobRuntime>,
     #[serde(skip)]
     dirty: bool,
 }
@@ -468,19 +497,24 @@ impl Default for JobStore {
 
 impl JobStore {
     #[cfg(test)]
-    pub(crate) fn last_success_at(&self, kind: JobKind) -> Option<DateTime<Utc>> {
-        self.runtimes.get(&kind).and_then(|runtime| runtime.last_success_at)
+    pub(crate) fn last_success_at(&self, kind: JobId) -> Option<DateTime<Utc>> {
+        self.runtimes
+            .get(kind.name())
+            .and_then(|runtime| runtime.last_success_at)
     }
 
     #[cfg(test)]
     pub(crate) fn mark_success(&mut self, spec: &JobSpec, now: DateTime<Utc>) {
-        self.runtimes.entry(spec.kind).or_default().mark_success(spec, now);
+        self.runtimes
+            .entry(spec.kind.name().to_string())
+            .or_default()
+            .mark_success(spec, now);
         self.dirty |= spec.persist_runtime;
     }
 
     pub(crate) fn mark_success_with_context(&mut self, spec: &JobSpec, evaluation: &JobEvaluation<'_>) {
         self.runtimes
-            .entry(spec.kind)
+            .entry(spec.kind.name().to_string())
             .or_default()
             .mark_success_with_context(spec, evaluation);
         self.dirty |= spec.persist_runtime;
@@ -488,14 +522,18 @@ impl JobStore {
 
     pub(crate) fn mark_not_eligible_with_context(&mut self, spec: &JobSpec, evaluation: &JobEvaluation<'_>) {
         self.runtimes
-            .entry(spec.kind)
+            .entry(spec.kind.name().to_string())
             .or_default()
             .mark_not_eligible_with_context(spec, evaluation);
         self.dirty |= spec.persist_runtime;
     }
 
     pub(crate) fn mark_failure(&mut self, spec: &JobSpec, now: DateTime<Utc>) -> JobFailureDecision {
-        let decision = self.runtimes.entry(spec.kind).or_default().mark_failure(spec, now);
+        let decision = self
+            .runtimes
+            .entry(spec.kind.name().to_string())
+            .or_default()
+            .mark_failure(spec, now);
         self.dirty |= spec.persist_runtime;
         decision
     }
@@ -521,16 +559,17 @@ impl JobStore {
     }
 
     pub(crate) fn decide_with_context(&mut self, spec: &JobSpec, evaluation: &JobEvaluation<'_>) -> JobDecision {
-        let runtime = self.runtimes.entry(spec.kind).or_default();
+        let runtime = self.runtimes.entry(spec.kind.name().to_string()).or_default();
         let previous = runtime.clone();
         let decision = decide_job_with_context(spec, runtime, evaluation);
         self.dirty |= spec.persist_runtime && *runtime != previous;
         decision
     }
 
-    pub(crate) fn next_due_at(&self) -> Option<DateTime<Utc>> {
-        self.runtimes
-            .values()
+    pub(crate) fn next_due_at_for(&self, specs: &[JobSpec]) -> Option<DateTime<Utc>> {
+        specs
+            .iter()
+            .filter_map(|spec| self.runtimes.get(spec.kind.name()))
             .filter(|runtime| !runtime.given_up && !runtime.completed)
             .filter_map(|runtime| runtime.next_due_at)
             .min()
@@ -616,6 +655,10 @@ pub(crate) fn decide_job_with_context(
 
     runtime.sync_scopes(evaluation);
 
+    if matches!(spec.trigger, Trigger::OnTick) {
+        return decide_on_tick_job(spec, runtime, evaluation);
+    }
+
     let Some(next_due_at) = runtime.next_due_at else {
         let next_due_at = initial_due_at(spec, evaluation);
         runtime.next_due_at = Some(next_due_at);
@@ -643,6 +686,56 @@ pub(crate) fn decide_job_with_context(
     }
 
     decide_due_job(spec, runtime, evaluation, false, next_due_at)
+}
+
+fn decide_on_tick_job(spec: &JobSpec, runtime: &mut JobRuntime, evaluation: &JobEvaluation<'_>) -> JobDecision {
+    if !evaluation.condition_active {
+        runtime.next_due_at = None;
+        return JobDecision::Skip {
+            kind: spec.kind,
+            reason: JobSkipReason::ConditionFalse,
+            next_due_at: None,
+        };
+    }
+
+    if runtime.limit_reached(spec.limits) {
+        runtime.next_due_at = None;
+        return JobDecision::Skip {
+            kind: spec.kind,
+            reason: JobSkipReason::LimitReached,
+            next_due_at: None,
+        };
+    }
+
+    if let Some(retry_at) = runtime.next_due_at {
+        if evaluation.now < retry_at {
+            return JobDecision::Skip {
+                kind: spec.kind,
+                reason: JobSkipReason::BackingOff,
+                next_due_at: Some(retry_at),
+            };
+        }
+    }
+
+    if runtime.consecutive_failures == 0 {
+        if let (Some(last_success_at), Some(cooldown_secs)) = (runtime.last_success_at, spec.cooldown_secs) {
+            let next_due_at = add_secs(last_success_at, cooldown_secs);
+            if evaluation.now < next_due_at {
+                return JobDecision::Skip {
+                    kind: spec.kind,
+                    reason: JobSkipReason::NotDue,
+                    next_due_at: Some(next_due_at),
+                };
+            }
+        }
+    }
+
+    let reason = if runtime.consecutive_failures > 0 {
+        JobActionReason::RetryDue
+    } else {
+        JobActionReason::Tick
+    };
+    JobDecision::Run(JobAction::new(spec.kind, reason))
 }
 
 fn decide_due_job(
@@ -699,7 +792,7 @@ pub(crate) fn delayed_tick_action(
     expected_interval_secs: u64,
     now: DateTime<Utc>,
     grace_secs: u64,
-    kind: JobKind,
+    kind: JobId,
 ) -> Option<JobAction> {
     let elapsed = (now - previous_tick).num_seconds();
     let threshold = expected_interval_secs.saturating_add(grace_secs) as i64;
@@ -713,6 +806,7 @@ fn add_secs(now: DateTime<Utc>, seconds: u64) -> DateTime<Utc> {
 
 fn initial_due_at(spec: &JobSpec, evaluation: &JobEvaluation<'_>) -> DateTime<Utc> {
     match spec.trigger {
+        Trigger::OnTick => evaluation.now,
         Trigger::Every { .. } => add_secs(evaluation.now, spec.initial_delay_secs),
         Trigger::Once { at } => at,
         Trigger::DailyAt { second_of_day } => local_datetime(
@@ -809,7 +903,7 @@ mod tests {
     use chrono::{FixedOffset, TimeZone, Utc};
     use std::fs;
 
-    const TEST_TASK: JobSpec = JobSpec::new(JobKind::CheckerSessionRefresh, 60);
+    const TEST_TASK: JobSpec = JobSpec::new(JobId::new("checker_session_refresh"), 60);
     const ONCE_PER_CALENDAR_DAY: [RunLimit; 1] = [RunLimit::CalendarDay(1)];
     const ONCE_PER_ATTENDANCE_DAY: [RunLimit; 1] = [RunLimit::AttendanceDay(1)];
     const TWICE_PER_CONDITION: [RunLimit; 1] = [RunLimit::ConditionEpisode(2)];
@@ -847,7 +941,7 @@ mod tests {
         assert_eq!(
             decision,
             JobDecision::Skip {
-                kind: JobKind::CheckerSessionRefresh,
+                kind: JobId::new("checker_session_refresh"),
                 reason: JobSkipReason::Scheduled,
                 next_due_at: Some(utc(9, 1, 0)),
             }
@@ -866,7 +960,7 @@ mod tests {
         assert_eq!(
             decision,
             JobDecision::Skip {
-                kind: JobKind::CheckerSessionRefresh,
+                kind: JobId::new("checker_session_refresh"),
                 reason: JobSkipReason::NotDue,
                 next_due_at: Some(utc(9, 1, 0)),
             }
@@ -885,7 +979,7 @@ mod tests {
         assert_eq!(
             decision,
             JobDecision::Run(JobAction::new(
-                JobKind::CheckerSessionRefresh,
+                JobId::new("checker_session_refresh"),
                 JobActionReason::IntervalDue,
             ))
         );
@@ -903,7 +997,7 @@ mod tests {
         assert_eq!(
             decision,
             JobDecision::Skip {
-                kind: JobKind::CheckerSessionRefresh,
+                kind: JobId::new("checker_session_refresh"),
                 reason: JobSkipReason::NotDue,
                 next_due_at: Some(utc(9, 1, 0)),
             }
@@ -919,7 +1013,7 @@ mod tests {
         assert_eq!(
             store
                 .runtimes
-                .get(&JobKind::CheckerSessionRefresh)
+                .get(JobId::new("checker_session_refresh").name())
                 .and_then(|runtime| runtime.next_due_at),
             Some(utc(9, 1, 0))
         );
@@ -933,16 +1027,16 @@ mod tests {
         let actions = store.collect_due_actions(utc(9, 1, 0), &[TEST_TASK]);
 
         assert_eq!(actions.len(), 1);
-        assert_eq!(actions[0].kind(), JobKind::CheckerSessionRefresh);
+        assert_eq!(actions[0].kind(), JobId::new("checker_session_refresh"));
         assert_eq!(
-            store.last_success_at(JobKind::CheckerSessionRefresh),
+            store.last_success_at(JobId::new("checker_session_refresh")),
             Some(utc(9, 0, 0))
         );
     }
 
     #[test]
     fn job_engine은_initial_delay_due_success를_분리한다() {
-        let spec = JobSpec::new(JobKind::CheckerSessionRefresh, 60)
+        let spec = JobSpec::new(JobId::new("checker_session_refresh"), 60)
             .initial_delay_secs(60)
             .max_failures(3);
         let mut runtime = JobRuntime::default();
@@ -950,7 +1044,7 @@ mod tests {
         assert_eq!(
             decide_job(&spec, &mut runtime, utc(9, 0, 0)),
             JobDecision::Skip {
-                kind: JobKind::CheckerSessionRefresh,
+                kind: JobId::new("checker_session_refresh"),
                 reason: JobSkipReason::Scheduled,
                 next_due_at: Some(utc(9, 1, 0)),
             }
@@ -958,7 +1052,7 @@ mod tests {
         assert_eq!(
             decide_job(&spec, &mut runtime, utc(9, 0, 59)),
             JobDecision::Skip {
-                kind: JobKind::CheckerSessionRefresh,
+                kind: JobId::new("checker_session_refresh"),
                 reason: JobSkipReason::NotDue,
                 next_due_at: Some(utc(9, 1, 0)),
             }
@@ -966,7 +1060,7 @@ mod tests {
         assert_eq!(
             decide_job(&spec, &mut runtime, utc(9, 1, 0)),
             JobDecision::Run(JobAction::new(
-                JobKind::CheckerSessionRefresh,
+                JobId::new("checker_session_refresh"),
                 JobActionReason::IntervalDue,
             ))
         );
@@ -980,7 +1074,7 @@ mod tests {
 
     #[test]
     fn job_engine은_failure_backoff와_give_up을_계산한다() {
-        let spec = JobSpec::new(JobKind::CheckerSessionRefresh, 60)
+        let spec = JobSpec::new(JobId::new("checker_session_refresh"), 60)
             .initial_delay_secs(0)
             .backoff_secs(10, 40)
             .max_failures(3);
@@ -988,7 +1082,10 @@ mod tests {
 
         assert_eq!(
             decide_job(&spec, &mut runtime, utc(9, 0, 0)),
-            JobDecision::Run(JobAction::new(JobKind::CheckerSessionRefresh, JobActionReason::Initial,))
+            JobDecision::Run(JobAction::new(
+                JobId::new("checker_session_refresh"),
+                JobActionReason::Initial,
+            ))
         );
 
         assert_eq!(
@@ -1002,25 +1099,31 @@ mod tests {
         assert_eq!(
             runtime.mark_failure(&spec, utc(9, 0, 30)),
             JobFailureDecision::GiveUp {
-                kind: JobKind::CheckerSessionRefresh
+                kind: JobId::new("checker_session_refresh")
             }
         );
         assert_eq!(
             decide_job(&spec, &mut runtime, utc(9, 1, 0)),
             JobDecision::GiveUp {
-                kind: JobKind::CheckerSessionRefresh
+                kind: JobId::new("checker_session_refresh")
             }
         );
     }
 
     #[test]
     fn delayed_tick은_복구_job_action으로_표현된다() {
-        let action = delayed_tick_action(utc(9, 0, 0), 60, utc(9, 2, 1), 60, JobKind::CheckerSessionRefresh);
+        let action = delayed_tick_action(
+            utc(9, 0, 0),
+            60,
+            utc(9, 2, 1),
+            60,
+            JobId::new("checker_session_refresh"),
+        );
 
         assert_eq!(
             action,
             Some(JobAction::new(
-                JobKind::CheckerSessionRefresh,
+                JobId::new("checker_session_refresh"),
                 JobActionReason::DelayedTick,
             ))
         );
@@ -1028,13 +1131,13 @@ mod tests {
 
     #[test]
     fn daily_at_run_once는_놓친_시각을_한_번만_복구한다() {
-        let spec = JobSpec::daily_at(JobKind::MealsRefresh, 9, 0).misfire_policy(MisfirePolicy::RunOnce, 60);
+        let spec = JobSpec::daily_at(JobId::new("meals_refresh"), 9, 0).misfire_policy(MisfirePolicy::RunOnce, 60);
         let mut runtime = JobRuntime::default();
         let late = evaluation(17, 9, 30, 0, "2026-03-17", true);
 
         assert_eq!(
             decide_job_with_context(&spec, &mut runtime, &late),
-            JobDecision::Run(JobAction::new(JobKind::MealsRefresh, JobActionReason::Misfire))
+            JobDecision::Run(JobAction::new(JobId::new("meals_refresh"), JobActionReason::Misfire))
         );
 
         runtime.mark_success_with_context(&spec, &late);
@@ -1047,7 +1150,7 @@ mod tests {
     #[test]
     fn once는_성공한_뒤_완료_상태를_유지한다() {
         let at = evaluation(17, 9, 0, 0, "2026-03-17", true);
-        let spec = JobSpec::once(JobKind::MealsRefresh, at.now());
+        let spec = JobSpec::once(JobId::new("meals_refresh"), at.now());
         let mut runtime = JobRuntime::default();
 
         assert!(matches!(
@@ -1059,7 +1162,7 @@ mod tests {
         assert_eq!(
             decide_job_with_context(&spec, &mut runtime, &evaluation(18, 9, 0, 0, "2026-03-18", true),),
             JobDecision::Skip {
-                kind: JobKind::MealsRefresh,
+                kind: JobId::new("meals_refresh"),
                 reason: JobSkipReason::Completed,
                 next_due_at: None,
             }
@@ -1068,14 +1171,14 @@ mod tests {
 
     #[test]
     fn daily_at_skip은_놓친_시각을_건너뛴다() {
-        let spec = JobSpec::daily_at(JobKind::MealsRefresh, 9, 0).misfire_policy(MisfirePolicy::Skip, 60);
+        let spec = JobSpec::daily_at(JobId::new("meals_refresh"), 9, 0).misfire_policy(MisfirePolicy::Skip, 60);
         let mut runtime = JobRuntime::default();
         let late = evaluation(17, 9, 30, 0, "2026-03-17", true);
 
         assert_eq!(
             decide_job_with_context(&spec, &mut runtime, &late),
             JobDecision::Skip {
-                kind: JobKind::MealsRefresh,
+                kind: JobId::new("meals_refresh"),
                 reason: JobSkipReason::Misfire,
                 next_due_at: Some(evaluation(18, 9, 0, 0, "2026-03-18", true).now()),
             }
@@ -1084,13 +1187,13 @@ mod tests {
 
     #[test]
     fn daily_window는_매일_시작점을_기준으로_반복한다() {
-        let spec = JobSpec::daily_window(JobKind::MealsRefresh, 10, 0, 12, 0, 20 * 60);
+        let spec = JobSpec::daily_window(JobId::new("meals_refresh"), 10, 0, 12, 0, 20 * 60);
         let mut runtime = JobRuntime::default();
         let start = evaluation(17, 10, 0, 0, "2026-03-17", true);
 
         assert_eq!(
             decide_job_with_context(&spec, &mut runtime, &start),
-            JobDecision::Run(JobAction::new(JobKind::MealsRefresh, JobActionReason::Initial))
+            JobDecision::Run(JobAction::new(JobId::new("meals_refresh"), JobActionReason::Initial))
         );
         runtime.mark_success_with_context(&spec, &start);
         assert_eq!(
@@ -1120,7 +1223,7 @@ mod tests {
 
     #[test]
     fn 출석일_실행_한도는_다음_출석일에_초기화된다() {
-        let spec = JobSpec::new(JobKind::MealsRefresh, 60)
+        let spec = JobSpec::new(JobId::new("meals_refresh"), 60)
             .initial_delay_secs(0)
             .limits(&ONCE_PER_ATTENDANCE_DAY);
         let mut runtime = JobRuntime::default();
@@ -1147,7 +1250,7 @@ mod tests {
 
     #[test]
     fn 달력일_실행_한도는_자정에_초기화된다() {
-        let spec = JobSpec::new(JobKind::MealsRefresh, 60)
+        let spec = JobSpec::new(JobId::new("meals_refresh"), 60)
             .initial_delay_secs(0)
             .limits(&ONCE_PER_CALENDAR_DAY);
         let mut runtime = JobRuntime::default();
@@ -1173,7 +1276,7 @@ mod tests {
 
     #[test]
     fn 조건_구간_실행_한도는_false를_거친_뒤_초기화된다() {
-        let spec = JobSpec::new(JobKind::MealsRefresh, 60)
+        let spec = JobSpec::new(JobId::new("meals_refresh"), 60)
             .initial_delay_secs(0)
             .limits(&TWICE_PER_CONDITION);
         let mut runtime = JobRuntime::default();
@@ -1209,7 +1312,7 @@ mod tests {
 
     #[test]
     fn 실행하지_않은_job은_한도에_포함하지_않는다() {
-        let spec = JobSpec::new(JobKind::MealsRefresh, 60)
+        let spec = JobSpec::new(JobId::new("meals_refresh"), 60)
             .initial_delay_secs(0)
             .limits(&ONCE_PER_ATTENDANCE_DAY);
         let mut store = JobStore::default();
@@ -1226,7 +1329,7 @@ mod tests {
 
     #[test]
     fn job_store는_실행_상태를_json으로_복원한다() {
-        let spec = JobSpec::new(JobKind::MealsRefresh, 60)
+        let spec = JobSpec::new(JobId::new("meals_refresh"), 60)
             .initial_delay_secs(0)
             .limits(&ONCE_PER_ATTENDANCE_DAY);
         let first = evaluation(17, 9, 0, 0, "2026-03-17", true);
@@ -1243,7 +1346,7 @@ mod tests {
         let mut restored = JobStore::load_from(&path).unwrap();
         fs::remove_file(path).unwrap();
 
-        assert_eq!(restored.last_success_at(JobKind::MealsRefresh), Some(first.now()));
+        assert_eq!(restored.last_success_at(JobId::new("meals_refresh")), Some(first.now()));
         assert!(matches!(
             restored.decide_with_context(&spec, &evaluation(17, 9, 1, 0, "2026-03-17", true),),
             JobDecision::Skip {
@@ -1261,5 +1364,105 @@ mod tests {
         store.mark_success(&TEST_TASK, now);
 
         assert!(!store.take_dirty());
+    }
+
+    #[test]
+    fn 선언형_job_id는_엔진_enum_수정_없이_사용할_수_있다() {
+        const CUSTOM_TASK: JobId = JobId::new("test.custom-task");
+        let spec = JobSpec::on_tick(CUSTOM_TASK).limits(&ONCE_PER_ATTENDANCE_DAY);
+        let first = evaluation(17, 9, 0, 0, "2026-03-17", true);
+        let mut store = JobStore::default();
+
+        assert!(matches!(store.decide_with_context(&spec, &first), JobDecision::Run(_)));
+        store.mark_success_with_context(&spec, &first);
+
+        assert!(matches!(
+            store.decide_with_context(&spec, &evaluation(17, 9, 1, 0, "2026-03-17", true)),
+            JobDecision::Skip {
+                reason: JobSkipReason::LimitReached,
+                ..
+            }
+        ));
+        assert!(matches!(
+            store.decide_with_context(&spec, &evaluation(18, 9, 0, 0, "2026-03-18", true)),
+            JobDecision::Run(_)
+        ));
+    }
+
+    #[test]
+    fn 평가형_job의_cooldown은_현재_설정값으로_즉시_재계산된다() {
+        const CUSTOM_TASK: JobId = JobId::new("test.dynamic-cooldown");
+        let first = evaluation(17, 9, 0, 0, "2026-03-17", true);
+        let mut store = JobStore::default();
+        let initial_spec = JobSpec::on_tick(CUSTOM_TASK).cooldown_secs(30 * 60);
+
+        assert!(matches!(
+            store.decide_with_context(&initial_spec, &first),
+            JobDecision::Run(_)
+        ));
+        store.mark_success_with_context(&initial_spec, &first);
+
+        let shortened_spec = JobSpec::on_tick(CUSTOM_TASK).cooldown_secs(60);
+        assert!(matches!(
+            store.decide_with_context(&shortened_spec, &evaluation(17, 9, 1, 0, "2026-03-17", true)),
+            JobDecision::Run(_)
+        ));
+    }
+
+    #[test]
+    fn 평가형_job의_실패_재시도도_다음_deadline에_포함된다() {
+        const CUSTOM_TASK: JobId = JobId::new("test.retry-deadline");
+        let spec = JobSpec::on_tick(CUSTOM_TASK).backoff_secs(10, 60);
+        let current = evaluation(17, 9, 0, 0, "2026-03-17", true);
+        let mut store = JobStore::default();
+
+        assert!(matches!(
+            store.decide_with_context(&spec, &current),
+            JobDecision::Run(_)
+        ));
+        assert_eq!(
+            store.mark_failure(&spec, current.now()),
+            JobFailureDecision::RetryAt(current.now() + Duration::seconds(10))
+        );
+
+        assert_eq!(
+            store.next_due_at_for(&[spec]),
+            Some(current.now() + Duration::seconds(10))
+        );
+    }
+
+    #[test]
+    fn 평가형_job은_조건_구간마다_n회_한도를_적용한다() {
+        const CUSTOM_TASK: JobId = JobId::new("test.condition-episode");
+        let spec = JobSpec::on_tick(CUSTOM_TASK).limits(&TWICE_PER_CONDITION);
+        let mut store = JobStore::default();
+
+        for minute in [0, 1] {
+            let current = evaluation(17, 9, minute, 0, "2026-03-17", true);
+            assert!(matches!(
+                store.decide_with_context(&spec, &current),
+                JobDecision::Run(_)
+            ));
+            store.mark_success_with_context(&spec, &current);
+        }
+        assert!(matches!(
+            store.decide_with_context(&spec, &evaluation(17, 9, 2, 0, "2026-03-17", true)),
+            JobDecision::Skip {
+                reason: JobSkipReason::LimitReached,
+                ..
+            }
+        ));
+
+        assert!(matches!(
+            store.decide_with_context(&spec, &evaluation(17, 9, 3, 0, "2026-03-17", false)),
+            JobDecision::Skip {
+                reason: JobSkipReason::ConditionFalse,
+                ..
+            }
+        ));
+        assert!(matches!(
+            store.decide_with_context(&spec, &evaluation(17, 9, 4, 0, "2026-03-17", true)),
+            JobDecision::Run(_)
+        ));
     }
 }
