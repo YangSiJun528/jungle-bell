@@ -4,6 +4,8 @@ const APP_COMMANDS: &[&str] = &[
     "report_cms_identity",
     "log_from_js",
     "get_settings_snapshot",
+    "resolve_cohort_selection",
+    "set_selected_cohort",
     "set_auto_update",
     "report_campus_ready",
     "report_campus_interaction",

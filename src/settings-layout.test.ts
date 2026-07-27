@@ -3,6 +3,7 @@ import {readFileSync} from 'node:fs';
 import {test} from 'vitest';
 
 const settings = readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+const settingsScript = readFileSync(new URL('./settings.ts', import.meta.url), 'utf8');
 
 test('앱 정보와 프로젝트 링크를 기존 높이의 설정 헤더에 배치한다', () => {
     const headerStart = settings.indexOf('<header class="mb-4');
@@ -142,4 +143,29 @@ test('종료 출석 설정은 마감 5분 전 긴급 알림을 안내한다', ()
     );
     assert.match(endSection, /data-ui="settings-description"/);
     assert.match(endSection, /x-show="endNotification"/);
+});
+
+test('복수 기수가 조회되면 알림 탭에서 출석 확인 기수를 선택한다', () => {
+    const notificationSectionStart = settings.indexOf('<section id="notification-settings"');
+    const appSectionStart = settings.indexOf('<section id="app-settings"');
+    const notificationSection = settings.slice(notificationSectionStart, appSectionStart);
+
+    assert.match(notificationSection, /data-ui="cohort-selection"/);
+    assert.match(notificationSection, /출석 확인 기수/);
+    assert.match(notificationSection, /cohortOptions\.length > 1/);
+    assert.match(notificationSection, /자동 선택/);
+    assert.match(notificationSection, /saveSelectedCohort\(\)/);
+});
+
+test('저장된 기수 선택은 동적 option 생성 후에도 select에 명시적으로 반영한다', () => {
+    const cohortSelectionStart = settings.indexOf('data-ui="cohort-selection"');
+    const cohortSelectionEnd = settings.indexOf('</fieldset>', cohortSelectionStart);
+    const cohortSelection = settings.slice(cohortSelectionStart, cohortSelectionEnd);
+    const optionsProjection = settingsScript.indexOf('target.cohortOptions = snapshot.cohortOptions');
+    const selectionProjection = settingsScript.indexOf('target.selectedCohortId = snapshot.selectedCohortId');
+
+    assert.match(cohortSelection, /:selected="selectedCohortId === ''"/);
+    assert.match(cohortSelection, /:selected="selectedCohortId === cohort\.id"/);
+    assert.ok(optionsProjection >= 0);
+    assert.ok(selectionProjection > optionsProjection);
 });
