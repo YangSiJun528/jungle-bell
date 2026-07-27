@@ -30,6 +30,7 @@ interface SettingsComponent {
     skipSunday: boolean;
     startNotification: boolean;
     endNotification: boolean;
+    mealSubscription: boolean;
     notificationStart: number;
     notificationEnd: number;
     startInterval: number;
@@ -66,7 +67,8 @@ type BooleanField =
     | 'skipAttendance'
     | 'skipSunday'
     | 'startNotification'
-    | 'endNotification';
+    | 'endNotification'
+    | 'mealSubscription';
 
 function projectSettings(target: SettingsComponent, snapshot: SettingsSnapshot): void {
     target.appVersion = snapshot.appVersion;
@@ -81,6 +83,7 @@ function projectSettings(target: SettingsComponent, snapshot: SettingsSnapshot):
     target.skipSunday = snapshot.skipSunday;
     target.startNotification = snapshot.startNotification;
     target.endNotification = snapshot.endNotification;
+    target.mealSubscription = snapshot.mealSubscription;
     target.notificationStart = snapshot.notificationStart.hour;
     target.notificationEnd = snapshot.notificationEnd.hour;
     target.startInterval = snapshot.startInterval;
@@ -112,6 +115,7 @@ function settings(): SettingsComponent {
         skipSunday: false,
         startNotification: true,
         endNotification: true,
+        mealSubscription: true,
         notificationStart: 4,
         notificationEnd: 4,
         startInterval: 15,

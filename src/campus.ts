@@ -199,6 +199,14 @@ interface AvailabilitySegment {
     label: string;
 }
 
+interface LaundryAlertOption {
+    value: string;
+    label: string;
+    machineId: string;
+    appliance: ApplianceKind;
+    sessionId: string;
+}
+
 const ACTIVE_STATUSES = new Set(['RUNNING', 'PAUSED', 'SCHEDULED']);
 const SIGNIFICANT_ETA_CHANGE_MINUTES = 5;
 const WASH_TOWER_COUNT = 9;
@@ -306,7 +314,6 @@ function sourceMealWeekLabel(post?: MealPost | null): string {
 }
 
 function projectCampusSettings(target: any, snapshot: SettingsSnapshot): void {
-    target.mealSubscription = snapshot.mealSubscription;
     target.laundryWatch = snapshot.laundryWatch;
 }
 
@@ -321,9 +328,11 @@ function campus(): Record<string, unknown> {
         laundry: null as LaundryData | null,
         meals: null as MealsPayload | null,
         settingsRevision: -1,
-        mealSubscription: false,
         laundryWatch: null as LaundryWatch | null,
         subscriptionBusy: false,
+        laundryAlertPickerOpen: false,
+        laundryAlertSelection: '',
+        laundryAlertNotice: 5,
         laundryNoticeMinutes: [...LAUNDRY_NOTICE_MINUTES],
         mealHistory: [] as MealPost[],
         mealHistoryNextBefore: null as string | null,
@@ -423,47 +432,84 @@ function campus(): Record<string, unknown> {
             void this.recoverMissingData();
         },
 
-        isWatchedLaundry(this: any, machineId: string, kind: ApplianceKind, appliance?: Appliance | null) {
-            return Boolean(
-                appliance?.sessionId
-                && this.laundryWatch?.machineId === machineId
-                && this.laundryWatch?.appliance === kind
-                && this.laundryWatch?.sessionId === appliance.sessionId,
-            );
+        laundryAlertOptions(this: any): LaundryAlertOption[] {
+            if (!this.laundry) return [];
+            const options: LaundryAlertOption[] = [];
+            for (const machine of this.laundry.machines as Machine[]) {
+                if (!laundryZoneMatchesAccess(machineZone(machine.id), this.laundryAccess)) continue;
+                for (const appliance of ['dryer', 'washer'] as const) {
+                    const state = machine[appliance];
+                    if (!state?.sessionId || (!this.applianceIsActive(state) && !this.applianceHasError(state))) {
+                        continue;
+                    }
+                    const status = this.applianceHasError(state)
+                        ? this.projectionView(state).label
+                        : this.remainingText(state);
+                    options.push({
+                        value: `${machine.id}:${appliance}:${state.sessionId}`,
+                        label: `${this.machineName(machine.id)} ${appliance === 'washer' ? '세탁기' : '건조기'} · ${status}`,
+                        machineId: machine.id,
+                        appliance,
+                        sessionId: state.sessionId,
+                    });
+                }
+            }
+            return options.sort((left, right) => {
+                const leftNumber = machineNumber(left.machineId) ?? Number.MAX_SAFE_INTEGER;
+                const rightNumber = machineNumber(right.machineId) ?? Number.MAX_SAFE_INTEGER;
+                if (leftNumber !== rightNumber) return leftNumber - rightNumber;
+                return left.appliance === right.appliance ? 0 : left.appliance === 'dryer' ? -1 : 1;
+            });
+        },
+
+        openLaundryAlertPicker(this: any) {
+            const options = this.laundryAlertOptions() as LaundryAlertOption[];
+            const current = options.find((option) => this.laundryWatch
+                && option.machineId === this.laundryWatch.machineId
+                && option.appliance === this.laundryWatch.appliance
+                && option.sessionId === this.laundryWatch.sessionId);
+            this.laundryAlertSelection = current?.value ?? options[0]?.value ?? '';
+            this.laundryAlertNotice = this.laundryWatch?.notifyBeforeMins ?? 5;
+            this.laundryAlertPickerOpen = true;
+        },
+
+        closeLaundryAlertPicker(this: any) {
+            this.laundryAlertPickerOpen = false;
+        },
+
+        async saveLaundryAlert(this: any) {
+            const option = (this.laundryAlertOptions() as LaundryAlertOption[])
+                .find((candidate) => candidate.value === this.laundryAlertSelection);
+            if (!option || !LAUNDRY_NOTICE_MINUTES.includes(
+                this.laundryAlertNotice as typeof LAUNDRY_NOTICE_MINUTES[number],
+            )) return;
+            const saved = await this.mutateLocalSubscription('set_laundry_watch', {
+                watch: {
+                    machineId: option.machineId,
+                    appliance: option.appliance,
+                    sessionId: option.sessionId,
+                    notifyBeforeMins: this.laundryAlertNotice,
+                },
+            });
+            if (saved) this.closeLaundryAlertPicker();
         },
 
         async mutateLocalSubscription(this: any, command: string, args: Record<string, unknown>) {
-            if (this.subscriptionBusy) return;
+            if (this.subscriptionBusy) return false;
             this.subscriptionBusy = true;
             try {
                 await invokeSettingsMutation(this, projectCampusSettings, command, args);
+                return true;
             } catch (error) {
                 console.error(`[campus] ${command} failed`, error);
                 await message(`설정을 저장하지 못했습니다.\n\n${String(error)}`, {
                     title: '생활 정보 알림',
                     kind: 'error',
                 }).catch((dialogError) => console.error('[campus] settings error dialog failed', dialogError));
+                return false;
             } finally {
                 this.subscriptionBusy = false;
             }
-        },
-
-        async toggleLaundryWatch(
-            this: any,
-            machine: Machine,
-            kind: ApplianceKind,
-            appliance?: Appliance | null,
-        ) {
-            if (!appliance?.sessionId) return;
-            const watch: LaundryWatch | null = this.isWatchedLaundry(machine.id, kind, appliance)
-                ? null
-                : {
-                    machineId: machine.id,
-                    appliance: kind,
-                    sessionId: appliance.sessionId,
-                    notifyBeforeMins: this.laundryWatch?.notifyBeforeMins ?? 5,
-                };
-            await this.mutateLocalSubscription('set_laundry_watch', {watch});
         },
 
         async clearLaundryWatch(this: any) {
@@ -477,10 +523,6 @@ function campus(): Record<string, unknown> {
             await this.mutateLocalSubscription('set_laundry_watch', {
                 watch: {...this.laundryWatch, notifyBeforeMins: value},
             });
-        },
-
-        async setMealSubscription(this: any, enabled: boolean) {
-            await this.mutateLocalSubscription('set_meal_subscription_enabled', {enabled});
         },
 
         watchedLaundryLabel(this: any) {

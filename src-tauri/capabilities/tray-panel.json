@@ -5,8 +5,11 @@
   "windows": ["tray-panel"],
   "permissions": [
     "core:event:allow-listen",
+    "allow-get-settings-snapshot",
     "allow-get-tray-panel-state",
     "allow-get-local-dashboard-snapshot",
+    "allow-set-laundry-watch",
+    "allow-set-meal-subscription-enabled",
     "allow-run-tray-panel-action",
     "allow-hide-tray-panel",
     "allow-get-news-feed",

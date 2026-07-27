@@ -80,6 +80,28 @@ test('시스템 알림 설정은 알림 탭의 설명이 있는 독립 항목으
     assert.doesNotMatch(settings, /class="notification-actions/);
 });
 
+test('새 식단 알림은 식단 화면이 아니라 설정 알림 탭에서 관리한다', () => {
+    const notificationSectionStart = settings.indexOf('<section id="notification-settings"');
+    const appSectionStart = settings.indexOf('<section id="app-settings"');
+    const notificationSection = settings.slice(notificationSectionStart, appSectionStart);
+    const mealSettingsStart = notificationSection.indexOf('data-ui="meal-notification-settings"');
+    const mealSettingsEnd = notificationSection.indexOf('</fieldset>', mealSettingsStart);
+    const mealSettings = notificationSection.slice(mealSettingsStart, mealSettingsEnd);
+
+    assert.ok(mealSettingsStart >= 0);
+    assert.match(mealSettings, /<legend[^>]*>생활 알림<\/legend>/);
+    assert.match(mealSettings, /<strong[^>]*>새 식단 알림<\/strong>/);
+    assert.match(mealSettings, /aria-label="새 식단 알림"/);
+    assert.match(mealSettings, /x-model="mealSubscription"/);
+    assert.match(
+        mealSettings,
+        /saveToggle\('set_meal_subscription_enabled', 'mealSubscription'\)/,
+    );
+    assert.match(settingsScript, /target\.mealSubscription = snapshot\.mealSubscription/);
+    assert.match(settingsScript, /mealSubscription:\s*true/);
+    assert.match(settingsScript, /\|\s*'mealSubscription'/);
+});
+
 test('앱 탭은 일반, 권한 및 개인정보, 도움말, 고급 설정으로 통합한다', () => {
     const appSectionStart = settings.indexOf('<section id="app-settings"');
     const appSectionEnd = settings.indexOf('</main>', appSectionStart);

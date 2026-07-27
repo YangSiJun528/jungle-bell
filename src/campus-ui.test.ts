@@ -41,13 +41,25 @@ test('오늘의 식단 카드에는 게시 상태 뱃지를 표시하지 않는�
     assert.doesNotMatch(mealsPanel, /게시됨|게시 전/);
 });
 
-test('세탁 세션과 급식은 홈 대시보드 구독을 화면에서 설정한다', () => {
+test('세탁 알림은 기기마다 버튼을 두지 않고 단일 알림받기 화면에서 세션을 선택한다', () => {
     const script = readFileSync(new URL('./campus.ts', import.meta.url), 'utf8');
+    const laundryPanel = campusHtml.slice(
+        campusHtml.indexOf('<section id="laundry-panel"'),
+        campusHtml.indexOf('<section id="meals-panel"'),
+    );
 
-    assert.match(campusHtml, /홈에 표시/);
+    assert.equal(laundryPanel.match(/>알림받기<\/button>/g)?.length, 1);
+    assert.match(laundryPanel, /data-ui="laundry-alert-picker"/);
+    assert.match(laundryPanel, /@click="openLaundryAlertPicker\(\)"/);
+    assert.match(laundryPanel, /x-for="option in laundryAlertOptions\(\)"/);
+    assert.match(laundryPanel, /x-model="laundryAlertSelection"/);
+    assert.match(laundryPanel, /@click="saveLaundryAlert\(\)"/);
     assert.match(campusHtml, /종료\s*전\s*알림/);
-    assert.match(campusHtml, /새 식단 알림/);
     assert.match(script, /set_laundry_watch/);
-    assert.match(script, /set_meal_subscription_enabled/);
+    assert.match(script, /laundryAlertOptions/);
+    assert.match(script, /saveLaundryAlert/);
     assert.match(script, /connectSettingsSnapshots/);
+    assert.doesNotMatch(laundryPanel, /toggleLaundryWatch|홈에 표시 중|>\s*홈에 표시\s*</);
+    assert.doesNotMatch(mealsPanel, /새 식단 알림|setMealSubscription/);
+    assert.doesNotMatch(script, /setMealSubscription|set_meal_subscription_enabled|mealSubscription/);
 });
