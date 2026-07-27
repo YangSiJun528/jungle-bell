@@ -40,3 +40,14 @@ test('모든 식단 이미지는 영역을 늘려 채운다', () => {
 test('오늘의 식단 카드에는 게시 상태 뱃지를 표시하지 않는다', () => {
     assert.doesNotMatch(mealsPanel, /게시됨|게시 전/);
 });
+
+test('세탁 세션과 급식은 홈 대시보드 구독을 화면에서 설정한다', () => {
+    const script = readFileSync(new URL('./campus.ts', import.meta.url), 'utf8');
+
+    assert.match(campusHtml, /홈에 표시/);
+    assert.match(campusHtml, /종료\s*전\s*알림/);
+    assert.match(campusHtml, /새 식단 알림/);
+    assert.match(script, /set_laundry_watch/);
+    assert.match(script, /set_meal_subscription_enabled/);
+    assert.match(script, /connectSettingsSnapshots/);
+});

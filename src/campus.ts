@@ -18,6 +18,12 @@ import {
 import {relativeTimeKo} from './live-time';
 import {sortMealPostsByPeriod} from './meal-display';
 import {isSafeImageAssetUrl} from './image-asset-url';
+import {
+    connectSettingsSnapshots,
+    invokeSettingsMutation,
+    type LaundryWatch,
+    type SettingsSnapshot,
+} from './settings-state';
 
 Alpine.plugin(anchor);
 
@@ -198,6 +204,7 @@ const SIGNIFICANT_ETA_CHANGE_MINUTES = 5;
 const WASH_TOWER_COUNT = 9;
 const LAUNDRY_PREFERENCES_KEY = 'jungle-bell:campus:laundry-preferences';
 const CAMPUS_RECOVERY_INTERVAL_MS = 10_000;
+const LAUNDRY_NOTICE_MINUTES = [1, 3, 5, 10, 15, 30] as const;
 const KST_TIME_ZONE = 'Asia/Seoul';
 const APPLIANCE_ERROR_LABELS: Record<string, string> = {
     EMPTY_WATER_ALERT_ERROR: '배관 에러',
@@ -298,6 +305,11 @@ function sourceMealWeekLabel(post?: MealPost | null): string {
     return post?.title?.match(/\d{1,2}월\s*\d{1,2}주차/)?.[0] ?? '';
 }
 
+function projectCampusSettings(target: any, snapshot: SettingsSnapshot): void {
+    target.mealSubscription = snapshot.mealSubscription;
+    target.laundryWatch = snapshot.laundryWatch;
+}
+
 function campus(): Record<string, unknown> {
     const laundryPreferences = loadLaundryPreferences();
 
@@ -308,6 +320,11 @@ function campus(): Record<string, unknown> {
         laundryAccess: laundryPreferences.access,
         laundry: null as LaundryData | null,
         meals: null as MealsPayload | null,
+        settingsRevision: -1,
+        mealSubscription: false,
+        laundryWatch: null as LaundryWatch | null,
+        subscriptionBusy: false,
+        laundryNoticeMinutes: [...LAUNDRY_NOTICE_MINUTES],
         mealHistory: [] as MealPost[],
         mealHistoryNextBefore: null as string | null,
         mealHistoryInitialized: false,
@@ -365,6 +382,12 @@ function campus(): Record<string, unknown> {
                 this.unlisteners.push(await listen<MealHistoryPage>('meal-history-updated', (event) => {
                     this.applyMealHistoryPage(event.payload);
                 }));
+                const unlistenSettings = await connectSettingsSnapshots(
+                    this,
+                    projectCampusSettings,
+                    (context, error) => console.error(`[campus] settings ${context} failed`, error),
+                );
+                if (unlistenSettings) this.unlisteners.push(unlistenSettings);
                 await invoke('report_campus_ready');
                 await this.recoverMissingData();
             } catch (error) {
@@ -398,6 +421,72 @@ function campus(): Record<string, unknown> {
                 });
             }
             void this.recoverMissingData();
+        },
+
+        isWatchedLaundry(this: any, machineId: string, kind: ApplianceKind, appliance?: Appliance | null) {
+            return Boolean(
+                appliance?.sessionId
+                && this.laundryWatch?.machineId === machineId
+                && this.laundryWatch?.appliance === kind
+                && this.laundryWatch?.sessionId === appliance.sessionId,
+            );
+        },
+
+        async mutateLocalSubscription(this: any, command: string, args: Record<string, unknown>) {
+            if (this.subscriptionBusy) return;
+            this.subscriptionBusy = true;
+            try {
+                await invokeSettingsMutation(this, projectCampusSettings, command, args);
+            } catch (error) {
+                console.error(`[campus] ${command} failed`, error);
+                await message(`설정을 저장하지 못했습니다.\n\n${String(error)}`, {
+                    title: '생활 정보 알림',
+                    kind: 'error',
+                }).catch((dialogError) => console.error('[campus] settings error dialog failed', dialogError));
+            } finally {
+                this.subscriptionBusy = false;
+            }
+        },
+
+        async toggleLaundryWatch(
+            this: any,
+            machine: Machine,
+            kind: ApplianceKind,
+            appliance?: Appliance | null,
+        ) {
+            if (!appliance?.sessionId) return;
+            const watch: LaundryWatch | null = this.isWatchedLaundry(machine.id, kind, appliance)
+                ? null
+                : {
+                    machineId: machine.id,
+                    appliance: kind,
+                    sessionId: appliance.sessionId,
+                    notifyBeforeMins: this.laundryWatch?.notifyBeforeMins ?? 5,
+                };
+            await this.mutateLocalSubscription('set_laundry_watch', {watch});
+        },
+
+        async clearLaundryWatch(this: any) {
+            await this.mutateLocalSubscription('set_laundry_watch', {watch: null});
+        },
+
+        async updateLaundryNotice(this: any, value: number) {
+            if (!this.laundryWatch || !LAUNDRY_NOTICE_MINUTES.includes(value as typeof LAUNDRY_NOTICE_MINUTES[number])) {
+                return;
+            }
+            await this.mutateLocalSubscription('set_laundry_watch', {
+                watch: {...this.laundryWatch, notifyBeforeMins: value},
+            });
+        },
+
+        async setMealSubscription(this: any, enabled: boolean) {
+            await this.mutateLocalSubscription('set_meal_subscription_enabled', {enabled});
+        },
+
+        watchedLaundryLabel(this: any) {
+            if (!this.laundryWatch) return '';
+            const appliance = this.laundryWatch.appliance === 'washer' ? '세탁기' : '건조기';
+            return `${this.machineName(this.laundryWatch.machineId)} ${appliance}`;
         },
 
         applySnapshot(this: any, update: CampusUpdate) {

@@ -247,3 +247,17 @@ test('피드백 메뉴는 허용된 GitHub 이슈 선택 화면만 연다', () =
     assert.match(traySource, /OpenFeedback/);
     assert.match(traySource, /TrayPanelAction::OpenFeedback =>/);
 });
+
+test('홈은 선택된 세탁과 급식 구독만 동적 카드로 표시한다', () => {
+    const html = readFileSync(new URL('./tray-panel.html', import.meta.url), 'utf8');
+    const script = readFileSync(new URL('./tray-panel.ts', import.meta.url), 'utf8');
+
+    assert.match(html, /data-ui="tracked-laundry"/);
+    assert.match(html, /data-ui="subscribed-meals"/);
+    assert.match(html, /dashboard\.laundry/);
+    assert.match(html, /dashboard\.meals/);
+    assert.match(html, /정보 갱신 지연/);
+    assert.match(script, /local-dashboard-updated/);
+    assert.match(script, /get_local_dashboard_snapshot/);
+    assert.match(script, /window\.setInterval/);
+});
