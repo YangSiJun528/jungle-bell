@@ -3,8 +3,10 @@
 //! WebView/IPC/Tauri side effect 없이 AttendanceReport 적용, phase 계산,
 //! 알림 판단, tray snapshot 생성을 담당한다.
 
+use std::collections::BTreeSet;
+
 use chrono::{DateTime, Datelike, FixedOffset, NaiveDate, Timelike, Utc, Weekday};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::attendance_day;
 use crate::config::Config;
@@ -36,15 +38,161 @@ pub struct AttendanceReport {
     pub cohort_end_date: Option<String>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum CohortReportStatus {
     Active,
+    Upcoming,
     Ended,
     #[serde(rename = "none")]
     NoCohort,
     #[default]
     Unknown,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CohortOption {
+    pub id: String,
+    pub label: String,
+    pub start_date: NaiveDate,
+    pub end_date: Option<NaiveDate>,
+    pub is_active: bool,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct CohortResolution {
+    pub cohort_id: Option<String>,
+    pub cohort_status: CohortReportStatus,
+    pub cohort_end_date: Option<NaiveDate>,
+}
+
+pub(crate) fn validate_cohort_options(options: &[CohortOption]) -> Result<(), String> {
+    if options.len() > 32 {
+        return Err("기수 목록이 허용 개수를 초과했습니다.".into());
+    }
+
+    let mut ids = BTreeSet::new();
+    for option in options {
+        crate::config::validate_cohort_id(&option.id)?;
+        let label = option.label.trim();
+        if label.is_empty()
+            || label != option.label
+            || label.chars().count() > 80
+            || label.chars().any(char::is_control)
+        {
+            return Err("잘못된 기수 이름입니다.".into());
+        }
+        if option.end_date.is_some_and(|end_date| end_date < option.start_date) {
+            return Err("기수 종료일이 시작일보다 빠릅니다.".into());
+        }
+        if !ids.insert(option.id.as_str()) {
+            return Err("중복된 기수 ID입니다.".into());
+        }
+    }
+    Ok(())
+}
+
+fn cohort_resolution(option: &CohortOption, today: NaiveDate) -> CohortResolution {
+    if option.end_date.is_some_and(|end_date| end_date < today) {
+        return CohortResolution {
+            cohort_id: None,
+            cohort_status: CohortReportStatus::Ended,
+            cohort_end_date: option.end_date,
+        };
+    }
+    if option.start_date > today {
+        return CohortResolution {
+            cohort_id: None,
+            cohort_status: CohortReportStatus::Upcoming,
+            cohort_end_date: option.end_date,
+        };
+    }
+
+    let in_range = option.end_date.is_none_or(|end_date| today <= end_date);
+    CohortResolution {
+        cohort_id: in_range.then(|| option.id.clone()),
+        cohort_status: if in_range {
+            CohortReportStatus::Active
+        } else {
+            CohortReportStatus::Unknown
+        },
+        cohort_end_date: in_range.then_some(option.end_date).flatten(),
+    }
+}
+
+pub(crate) fn resolve_cohort_selection(
+    options: &[CohortOption],
+    selected_cohort_id: Option<&str>,
+    today: NaiveDate,
+) -> CohortResolution {
+    if let Some(selected) = selected_cohort_id.and_then(|id| options.iter().find(|option| option.id == id)) {
+        return cohort_resolution(selected, today);
+    }
+
+    if let Some(active) = options
+        .iter()
+        .filter(|option| option.start_date <= today && option.end_date.is_some_and(|end_date| today <= end_date))
+        .min_by(|left, right| {
+            left.end_date
+                .cmp(&right.end_date)
+                .then_with(|| right.start_date.cmp(&left.start_date))
+                .then_with(|| left.id.cmp(&right.id))
+        })
+    {
+        return cohort_resolution(active, today);
+    }
+    if let Some(open_ended) = options
+        .iter()
+        .filter(|option| option.start_date <= today && option.end_date.is_none())
+        .max_by(|left, right| {
+            left.start_date
+                .cmp(&right.start_date)
+                .then_with(|| right.id.cmp(&left.id))
+        })
+    {
+        return cohort_resolution(open_ended, today);
+    }
+    if let Some(upcoming) = options
+        .iter()
+        .filter(|option| option.start_date > today && option.end_date.is_some())
+        .min_by(|left, right| {
+            left.end_date
+                .cmp(&right.end_date)
+                .then_with(|| left.start_date.cmp(&right.start_date))
+                .then_with(|| left.id.cmp(&right.id))
+        })
+    {
+        return cohort_resolution(upcoming, today);
+    }
+    if let Some(upcoming) = options
+        .iter()
+        .filter(|option| option.start_date > today && option.end_date.is_none())
+        .min_by(|left, right| {
+            left.start_date
+                .cmp(&right.start_date)
+                .then_with(|| left.id.cmp(&right.id))
+        })
+    {
+        return cohort_resolution(upcoming, today);
+    }
+    if let Some(ended) = options
+        .iter()
+        .filter(|option| option.end_date.is_some_and(|end_date| end_date < today))
+        .max_by_key(|option| option.end_date)
+    {
+        return cohort_resolution(ended, today);
+    }
+
+    CohortResolution {
+        cohort_id: None,
+        cohort_status: if options.is_empty() {
+            CohortReportStatus::NoCohort
+        } else {
+            CohortReportStatus::Unknown
+        },
+        cohort_end_date: None,
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -71,12 +219,20 @@ fn dday_status_from_report(report: &AttendanceReport) -> DdayStatus {
     }
 
     match report.cohort_status {
-        CohortReportStatus::Active => report
-            .cohort_end_date
-            .as_deref()
-            .and_then(parse_report_date)
-            .map(|end_date| DdayStatus::Active { end_date })
-            .unwrap_or(DdayStatus::NoCohort),
+        CohortReportStatus::Active => match report.cohort_end_date.as_deref() {
+            Some(value) => parse_report_date(value)
+                .map(|end_date| DdayStatus::Active { end_date })
+                .unwrap_or(DdayStatus::Unknown),
+            None => DdayStatus::Unavailable,
+        },
+        CohortReportStatus::Upcoming => match report.cohort_end_date.as_deref() {
+            Some(value) => parse_report_date(value)
+                .map(|end_date| DdayStatus::Upcoming {
+                    end_date: Some(end_date),
+                })
+                .unwrap_or(DdayStatus::Unknown),
+            None => DdayStatus::Upcoming { end_date: None },
+        },
         CohortReportStatus::Ended => DdayStatus::Ended,
         CohortReportStatus::NoCohort => DdayStatus::NoCohort,
         CohortReportStatus::Unknown => DdayStatus::Unknown,
@@ -331,6 +487,26 @@ mod tests {
     }
 
     #[test]
+    fn 진행중인_기수에_종료일이_없으면_dday_정보없음으로_구분한다() {
+        let mut state = AppState::new(Config::default());
+        state.checker.status = CheckerRuntimeStatus::Healthy { generation: 1 };
+        let report = AttendanceReport {
+            generation: 1,
+            needs_login: false,
+            morning_done: true,
+            evening_done: false,
+            api_error: false,
+            cohort_status: CohortReportStatus::Active,
+            cohort_end_date: None,
+        };
+
+        let update = apply_attendance_report(&mut state, &report, kst_time(12, 0, 0)).unwrap();
+
+        assert_eq!(update.phase, DailyPhase::Studying);
+        assert_eq!(state.dday_status, DdayStatus::Unavailable);
+    }
+
+    #[test]
     fn notification_decision은_로그인필요와_skip_day를_도메인에서_판단한다() {
         let mut config = Config::default();
         config.skip_attendance = Some("2026-03-17".into());
@@ -343,5 +519,116 @@ mod tests {
         assert!(!login.send);
         assert_eq!(skipped.reason, "skip_attendance");
         assert!(!skipped.send);
+    }
+
+    fn cohort(id: &str, label: &str, start_date: (i32, u32, u32), end_date: (i32, u32, u32)) -> CohortOption {
+        CohortOption {
+            id: id.into(),
+            label: label.into(),
+            start_date: chrono::NaiveDate::from_ymd_opt(start_date.0, start_date.1, start_date.2).unwrap(),
+            end_date: Some(chrono::NaiveDate::from_ymd_opt(end_date.0, end_date.1, end_date.2).unwrap()),
+            is_active: true,
+        }
+    }
+
+    #[test]
+    fn 복수_기수는_사용자가_선택한_기수를_우선한다() {
+        let options = vec![
+            cohort("cohort-1", "1기", (2026, 3, 1), (2026, 8, 1)),
+            cohort("cohort-2", "2기", (2026, 6, 1), (2026, 12, 31)),
+        ];
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 7, 27).unwrap();
+
+        let resolution = resolve_cohort_selection(&options, Some("cohort-1"), today);
+
+        assert_eq!(resolution.cohort_id.as_deref(), Some("cohort-1"));
+        assert_eq!(resolution.cohort_status, CohortReportStatus::Active);
+        assert_eq!(
+            resolution.cohort_end_date,
+            Some(chrono::NaiveDate::from_ymd_opt(2026, 8, 1).unwrap())
+        );
+    }
+
+    #[test]
+    fn 기수_선택이_없으면_종료일이_가장_가까운_활성_기수를_자동_선택한다() {
+        let options = vec![
+            cohort("cohort-1", "1기", (2026, 3, 1), (2026, 8, 1)),
+            cohort("cohort-2", "2기", (2026, 6, 1), (2026, 12, 31)),
+        ];
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 7, 27).unwrap();
+
+        let resolution = resolve_cohort_selection(&options, None, today);
+
+        assert_eq!(resolution.cohort_id.as_deref(), Some("cohort-1"));
+        assert_eq!(resolution.cohort_status, CohortReportStatus::Active);
+    }
+
+    #[test]
+    fn 저장한_기수가_목록에서_사라지면_자동_선택으로_fallback한다() {
+        let options = vec![
+            cohort("cohort-1", "1기", (2026, 3, 1), (2026, 8, 1)),
+            cohort("cohort-2", "2기", (2026, 6, 1), (2026, 12, 31)),
+        ];
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 7, 27).unwrap();
+
+        let resolution = resolve_cohort_selection(&options, Some("removed-cohort"), today);
+
+        assert_eq!(resolution.cohort_id.as_deref(), Some("cohort-1"));
+        assert_eq!(resolution.cohort_status, CohortReportStatus::Active);
+    }
+
+    #[test]
+    fn 미래_기수를_선택하면_upcoming으로_구분하고_종료일을_유지한다() {
+        let options = vec![cohort("cohort-future", "다음 기수", (2026, 8, 10), (2026, 12, 31))];
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 7, 27).unwrap();
+
+        let resolution = resolve_cohort_selection(&options, Some("cohort-future"), today);
+
+        assert_eq!(resolution.cohort_id, None);
+        assert_eq!(resolution.cohort_status, CohortReportStatus::Upcoming);
+        assert_eq!(
+            resolution.cohort_end_date,
+            Some(chrono::NaiveDate::from_ymd_opt(2026, 12, 31).unwrap())
+        );
+    }
+
+    #[test]
+    fn upcoming_기수는_출석을_요구하지_않고_dday는_유지한다() {
+        let mut state = AppState::new(Config::default());
+        state.checker.status = CheckerRuntimeStatus::Healthy { generation: 1 };
+        let report = AttendanceReport {
+            generation: 1,
+            needs_login: false,
+            morning_done: false,
+            evening_done: false,
+            api_error: false,
+            cohort_status: CohortReportStatus::Upcoming,
+            cohort_end_date: Some("2026-12-31".into()),
+        };
+
+        let update = apply_attendance_report(&mut state, &report, kst_time(12, 0, 0)).unwrap();
+
+        assert_eq!(update.phase, DailyPhase::Idle);
+        assert_eq!(
+            state.dday_status,
+            DdayStatus::Upcoming {
+                end_date: Some(chrono::NaiveDate::from_ymd_opt(2026, 12, 31).unwrap())
+            }
+        );
+    }
+
+    #[test]
+    fn 원격_checker가_보낸_기수_목록은_개수와_문자열을_검증한다() {
+        let valid = vec![cohort("cohort-1", "1기", (2026, 3, 1), (2026, 8, 1))];
+        assert!(validate_cohort_options(&valid).is_ok());
+
+        let duplicate = vec![valid[0].clone(), valid[0].clone()];
+        assert!(validate_cohort_options(&duplicate).is_err());
+
+        let forged = vec![CohortOption {
+            label: "1기\n위조".into(),
+            ..valid[0].clone()
+        }];
+        assert!(validate_cohort_options(&forged).is_err());
     }
 }

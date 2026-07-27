@@ -8,6 +8,23 @@ export interface TimeOfDay {
     minute: number;
 }
 
+export type LaundryApplianceKind = 'washer' | 'dryer';
+
+export interface LaundryWatch {
+    machineId: string;
+    appliance: LaundryApplianceKind;
+    sessionId: string;
+    notifyBeforeMins: number;
+}
+
+export interface CohortOption {
+    id: string;
+    label: string;
+    startDate: string;
+    endDate: string | null;
+    isActive: boolean;
+}
+
 export interface SettingsSnapshot {
     revision: number;
     source: string;
@@ -27,6 +44,11 @@ export interface SettingsSnapshot {
     notificationEnd: TimeOfDay;
     startInterval: number;
     endInterval: number;
+    selectedCohortId: string | null;
+    effectiveCohortId: string | null;
+    cohortOptions: CohortOption[];
+    mealSubscription: boolean;
+    laundryWatch: LaundryWatch | null;
 }
 
 export interface SettingsSnapshotTarget {

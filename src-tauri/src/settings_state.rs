@@ -5,12 +5,13 @@ use serde::Serialize;
 use tauri::Emitter;
 use tokio::sync::Mutex;
 
+use crate::attendance::{self, CohortOption, CohortResolution};
 use crate::attendance_day;
-use crate::config::{self, Config, TimeOfDay};
+use crate::config::{self, Config, LaundryWatch, TimeOfDay};
 use crate::state::{self, AppState};
 
 pub const SETTINGS_CHANGED_EVENT: &str = "settings-changed";
-const SETTINGS_WINDOW_LABELS: [&str; 2] = ["settings", "onboarding"];
+const SETTINGS_WINDOW_LABELS: [&str; 3] = ["settings", "onboarding", "campus"];
 
 /// 설정/온보딩 UI가 한 번에 소비하는 설정 read model.
 ///
@@ -37,6 +38,11 @@ pub struct SettingsSnapshot {
     pub notification_end: TimeOfDay,
     pub start_interval: u32,
     pub end_interval: u32,
+    pub selected_cohort_id: Option<String>,
+    pub effective_cohort_id: Option<String>,
+    pub cohort_options: Vec<CohortOption>,
+    pub meal_subscription: bool,
+    pub laundry_watch: Option<LaundryWatch>,
 }
 
 impl SettingsSnapshot {
@@ -61,6 +67,11 @@ impl SettingsSnapshot {
             notification_end: state.config.notification_end.clone(),
             start_interval: state.config.start_notification_interval_mins,
             end_interval: state.config.end_notification_interval_mins,
+            selected_cohort_id: state.config.selected_cohort_id.clone(),
+            effective_cohort_id: state.effective_cohort_id.clone(),
+            cohort_options: state.cohort_options.clone(),
+            meal_subscription: state.config.meal_subscription_enabled,
+            laundry_watch: state.config.laundry_watch.clone(),
         }
     }
 }
@@ -247,6 +258,56 @@ impl SettingsService {
             emit_settings_snapshot(app, &snapshot);
         }
         snapshot
+    }
+
+    pub async fn resolve_cohort_options(
+        &self,
+        app: &tauri::AppHandle,
+        mut options: Vec<CohortOption>,
+        today: chrono::NaiveDate,
+    ) -> CohortResolution {
+        options.sort_by(|left, right| {
+            right
+                .start_date
+                .cmp(&left.start_date)
+                .then_with(|| right.end_date.cmp(&left.end_date))
+        });
+        let (changed, resolution, snapshot) = {
+            let mut state = self.state.lock().await;
+            let resolution =
+                attendance::resolve_cohort_selection(&options, state.config.selected_cohort_id.as_deref(), today);
+            let changed = state.cohort_options != options || state.effective_cohort_id != resolution.cohort_id;
+            if changed {
+                state.cohort_options = options;
+                state.effective_cohort_id = resolution.cohort_id.clone();
+                state.settings_revision = state.settings_revision.saturating_add(1);
+                state.settings_source = "checker_cohorts".into();
+            }
+            (
+                changed,
+                resolution,
+                SettingsSnapshot::from_state(&state, &self.app_version),
+            )
+        };
+        if changed {
+            log::info!(
+                "[checker] cohorts resolved: count={} mode={} status={:?} end_date={}",
+                snapshot.cohort_options.len(),
+                if snapshot.selected_cohort_id.is_some() {
+                    "manual"
+                } else {
+                    "auto"
+                },
+                resolution.cohort_status,
+                if resolution.cohort_end_date.is_some() {
+                    "known"
+                } else {
+                    "missing"
+                },
+            );
+            emit_settings_snapshot(app, &snapshot);
+        }
+        resolution
     }
 }
 

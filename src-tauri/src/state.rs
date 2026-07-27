@@ -4,7 +4,7 @@ use chrono::{DateTime, FixedOffset, NaiveDate, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Notify;
 
-use crate::{config::Config, interval_tasks::JobStore};
+use crate::{attendance::CohortOption, config::Config, interval_tasks::JobStore};
 
 /// 앱 전역 상태. scheduler, checker, tray 모듈에서 공유.
 /// `Arc<Mutex<AppState>>`로 보호되며 Tauri managed state로 접근.
@@ -22,6 +22,10 @@ pub struct AppState {
     pub phase: DailyPhase,
     /// 현재 코호트 종료일 기반 D-Day 상태
     pub dday_status: DdayStatus,
+    /// LMS에서 조회한 사용자 소속 기수 목록.
+    pub cohort_options: Vec<CohortOption>,
+    /// 현재 출석 조회에 실제 적용된 기수 ID.
+    pub effective_cohort_id: Option<String>,
     /// 로그인이 필요한 상태 (API 401 또는 로그인 페이지)
     pub needs_login: bool,
     /// 체커로부터 첫 보고를 받았는지 여부.
@@ -52,6 +56,8 @@ impl AppState {
             evening_checked: false,
             phase: DailyPhase::Idle,
             dday_status: DdayStatus::Unknown,
+            cohort_options: Vec::new(),
+            effective_cohort_id: None,
             needs_login: false,
             data_loaded: false,
             last_reset_day: None,
@@ -139,6 +145,10 @@ pub enum DdayStatus {
     Unknown,
     /// 현재 날짜가 코호트 기간 안에 있고 종료일을 알고 있음.
     Active { end_date: NaiveDate },
+    /// 진행 중인 코호트는 있으나 LMS가 종료일을 제공하지 않음.
+    Unavailable,
+    /// 아직 시작하지 않은 코호트. 종료일이 있으면 수료 D-Day를 표시함.
+    Upcoming { end_date: Option<NaiveDate> },
     /// 소속 코호트가 있으나 현재 날짜 기준 진행 중인 코호트가 없음.
     Ended,
     /// 코호트 데이터가 비어 있거나 종료일을 판단할 수 없음.
@@ -149,7 +159,7 @@ pub enum DdayStatus {
 
 impl DdayStatus {
     pub fn suppress_attendance_phase(&self) -> bool {
-        matches!(self, Self::Ended | Self::NoCohort)
+        matches!(self, Self::Upcoming { .. } | Self::Ended | Self::NoCohort)
     }
 }
 
