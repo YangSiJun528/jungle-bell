@@ -13,6 +13,7 @@ use tokio::sync::Mutex;
 
 use crate::analytics::{self, AttendancePeriod, CampusInteraction, Event, Setting};
 use crate::attendance;
+use crate::attendance_auto_refresh::{self, StartRequestAction};
 use crate::attendance_day;
 use crate::autostart;
 use crate::campus::{CampusDataKind, CampusService};
@@ -85,6 +86,12 @@ pub async fn report_attendance_status(
     let prev_morning = s.morning_checked;
     let prev_evening = s.evening_checked;
     let prev_needs_login = s.needs_login;
+    let reload_attendance = attendance_auto_refresh::confirm_start(
+        &mut s.attendance_auto_refresh,
+        status.morning_done,
+        status.needs_login,
+        status.api_error,
+    );
 
     let phase_update = attendance::apply_attendance_report(&mut s, &status, now);
     let tray_snapshot = match phase_update {
@@ -124,6 +131,10 @@ pub async fn report_attendance_status(
         if !prev_evening && status.evening_done {
             analytics::track(Event::AttendanceCompleted(AttendancePeriod::Evening));
         }
+    }
+
+    if reload_attendance {
+        attendance_auto_refresh::reload_attendance_window(&app);
     }
 
     Ok(())
@@ -683,6 +694,60 @@ pub async fn open_attendance_window(app: tauri::AppHandle) {
     tray::refresh_login_status(&app);
 }
 
+fn is_attendance_check_in_url(value: &str) -> bool {
+    let Ok(url) = reqwest::Url::parse(value) else {
+        return false;
+    };
+    let path = url.path().trim_end_matches('/');
+    url.scheme() == "https"
+        && url.host_str() == Some("jungle-lms.krafton.com")
+        && url.port_or_known_default() == Some(443)
+        && url.username().is_empty()
+        && url.password().is_none()
+        && path == "/check-in"
+}
+
+/// 출석 WebView가 감지한 실제 "학습 시작" 클릭을 수신한다.
+/// 이 명령은 새로고침하지 않고 hidden checker의 서버 확인만 시작한다.
+#[tauri::command]
+pub async fn report_attendance_start_clicked(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    page_url: String,
+) -> Result<(), String> {
+    if window.label() != "attendance" {
+        return Err("허용되지 않은 창입니다.".into());
+    }
+    if !is_attendance_check_in_url(&page_url) {
+        return Err("허용되지 않은 페이지입니다.".into());
+    }
+
+    let action = {
+        let mut state = state.lock().await;
+        let morning_checked = state.morning_checked;
+        attendance_auto_refresh::request_start_confirmation(&mut state.attendance_auto_refresh, morning_checked)
+    };
+
+    match action {
+        StartRequestAction::StartPolling { request_id } => {
+            log::info!(
+                "[attendance-refresh] exact start click observed; waiting for server confirmation: request_id={}",
+                request_id,
+            );
+            attendance_auto_refresh::spawn_confirmation_poll(app, request_id);
+        }
+        StartRequestAction::AlreadyPending => {
+            log::debug!("[attendance-refresh] duplicate start click ignored");
+        }
+        StartRequestAction::AlreadyConfirmed => {
+            log::debug!("[attendance-refresh] start click ignored: attendance already confirmed");
+        }
+    }
+
+    Ok(())
+}
+
 /// 커스텀 트레이 패널이 렌더링할 최신 상태를 반환한다.
 #[tauri::command]
 pub fn get_tray_panel_state(app: tauri::AppHandle) -> Result<tray::TrayPanelState, String> {
@@ -786,7 +851,7 @@ pub async fn open_notification_settings() -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::validate_image_asset_url;
+    use super::{is_attendance_check_in_url, validate_image_asset_url};
 
     #[test]
     fn 이미지_자산_url은_https와_로컬_assets만_허용한다() {
@@ -796,5 +861,24 @@ mod tests {
         assert!(validate_image_asset_url("http://example.com/v1/assets/menu.png").is_err());
         assert!(validate_image_asset_url("https://api.example.com/other/menu.png").is_err());
         assert!(validate_image_asset_url("javascript:alert(1)").is_err());
+    }
+
+    #[test]
+    fn 자동_새로고침_요청은_정확한_lms_출석_url만_허용한다() {
+        assert!(is_attendance_check_in_url("https://jungle-lms.krafton.com/check-in"));
+        assert!(is_attendance_check_in_url("https://jungle-lms.krafton.com/check-in/"));
+        assert!(!is_attendance_check_in_url("http://jungle-lms.krafton.com/check-in"));
+        assert!(!is_attendance_check_in_url(
+            "https://jungle-lms.krafton.com.evil.test/check-in"
+        ));
+        assert!(!is_attendance_check_in_url(
+            "https://jungle-lms.krafton.com/check-in/history"
+        ));
+        assert!(!is_attendance_check_in_url(
+            "https://jungle-lms.krafton.com:444/check-in"
+        ));
+        assert!(!is_attendance_check_in_url(
+            "https://user@jungle-lms.krafton.com/check-in"
+        ));
     }
 }

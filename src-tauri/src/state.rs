@@ -4,7 +4,10 @@ use chrono::{DateTime, FixedOffset, NaiveDate, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Notify;
 
-use crate::{attendance::CohortOption, config::Config, interval_tasks::JobStore};
+use crate::{
+    attendance::CohortOption, attendance_auto_refresh::AttendanceAutoRefreshRuntime, config::Config,
+    interval_tasks::JobStore,
+};
 
 /// 앱 전역 상태. scheduler, checker, tray 모듈에서 공유.
 /// `Arc<Mutex<AppState>>`로 보호되며 Tauri managed state로 접근.
@@ -37,6 +40,8 @@ pub struct AppState {
     pub interval_jobs: JobStore,
     /// hidden checker WebView readiness/report 상태.
     pub checker: CheckerRuntime,
+    /// 사용자가 누른 학습 시작이 서버에 반영됐을 때만 출석 창을 갱신하는 상태.
+    pub attendance_auto_refresh: AttendanceAutoRefreshRuntime,
     /// 로그인 재시도 윈도우 마감 시각.
     /// 출석 페이지가 닫힌 후 일정 시간 동안만 로그인 상태를 재확인.
     pub login_retry_until: Option<DateTime<Utc>>,
@@ -63,6 +68,7 @@ impl AppState {
             last_reset_day: None,
             interval_jobs: JobStore::default(),
             checker: CheckerRuntime::default(),
+            attendance_auto_refresh: AttendanceAutoRefreshRuntime::default(),
             login_retry_until: None,
             pending_update: None,
             scheduler_wakeup: Arc::new(Notify::new()),

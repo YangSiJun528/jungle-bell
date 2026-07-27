@@ -1,5 +1,6 @@
 mod analytics;
 mod attendance;
+mod attendance_auto_refresh;
 mod attendance_day;
 mod autostart;
 mod campus;
@@ -213,6 +214,7 @@ pub fn run() {
             commands::open_onboarding,
             commands::complete_onboarding,
             commands::open_attendance_window,
+            commands::report_attendance_start_clicked,
             commands::get_tray_panel_state,
             commands::get_local_dashboard_snapshot,
             commands::run_tray_panel_action,

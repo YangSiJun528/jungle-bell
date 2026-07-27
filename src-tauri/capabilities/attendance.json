@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "attendance",
+  "description": "Minimal capability for the LMS attendance WebView",
+  "local": false,
+  "remote": {
+    "urls": ["https://jungle-lms.krafton.com/*"]
+  },
+  "windows": ["attendance"],
+  "permissions": [
+    "allow-report-attendance-start-clicked"
+  ]
+}
