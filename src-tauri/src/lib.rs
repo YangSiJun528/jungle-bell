@@ -217,6 +217,7 @@ pub fn run() {
             commands::report_attendance_start_clicked,
             commands::get_tray_panel_state,
             commands::get_local_dashboard_snapshot,
+            commands::dismiss_meal_alert,
             commands::run_tray_panel_action,
             commands::hide_tray_panel,
             commands::get_news_feed,

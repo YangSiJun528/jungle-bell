@@ -1,16 +1,15 @@
 import type {LocalDashboardSnapshot} from './local-dashboard.ts';
 import type {SettingsSnapshot} from './settings-state.ts';
 
-export type HomeTaskKind = 'laundry' | 'meals';
+export type HomeTaskKind = 'laundry';
 
 export interface HomeTaskSubscriptions {
     laundry: boolean;
-    meals: boolean;
 }
 
 export interface HomeTaskVisibility {
     laundry: boolean;
-    meals: boolean;
+    mealAlerts: number;
     count: number;
 }
 
@@ -24,7 +23,6 @@ export function homeTaskSubscriptions(
 ): HomeTaskSubscriptions {
     return {
         laundry: snapshot.laundryWatch !== null,
-        meals: snapshot.mealSubscription,
     };
 }
 
@@ -33,12 +31,12 @@ export function resolveHomeTasks(
     subscriptions: HomeTaskSubscriptions,
 ): HomeTaskVisibility {
     const laundry = subscriptions.laundry && dashboard.laundry !== null;
-    const meals = subscriptions.meals && dashboard.meals !== null;
+    const mealAlerts = dashboard.mealAlerts.length;
 
     return {
         laundry,
-        meals,
-        count: Number(laundry) + Number(meals),
+        mealAlerts,
+        count: Number(laundry) + mealAlerts,
     };
 }
 
@@ -58,11 +56,6 @@ export function homeTaskDismissal(kind: HomeTaskKind): HomeTaskDismissal {
             return {
                 command: 'set_laundry_watch',
                 args: {watch: null},
-            };
-        case 'meals':
-            return {
-                command: 'set_meal_subscription_enabled',
-                args: {enabled: false},
             };
     }
 }

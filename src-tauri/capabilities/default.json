@@ -46,6 +46,7 @@
     "allow-open-attendance-window",
     "allow-report-attendance-start-clicked",
     "allow-get-local-dashboard-snapshot",
+    "allow-dismiss-meal-alert",
     "allow-get-login-status",
     "allow-refresh-login-status"
   ]
