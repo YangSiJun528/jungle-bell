@@ -6,6 +6,11 @@ const campusHtml = readFileSync(new URL('./campus.html', import.meta.url), 'utf8
 const uiStyles = readFileSync(new URL('./ui.css', import.meta.url), 'utf8');
 const mealsPanelStart = campusHtml.indexOf('<section id="meals-panel"');
 const mealsPanel = campusHtml.slice(mealsPanelStart, campusHtml.indexOf('</main>', mealsPanelStart));
+const todayMealsPanelStart = mealsPanel.indexOf('<section aria-labelledby="today-meals-title"');
+const todayMealsPanel = mealsPanel.slice(
+    todayMealsPanelStart,
+    mealsPanel.indexOf('<section aria-labelledby="weekly-meals-title"', todayMealsPanelStart),
+);
 
 test('생활 정보 종류는 메인 화면과 같은 밑줄형 탭으로 표시한다', () => {
     const navigationLabel = campusHtml.indexOf('aria-label="생활 정보 종류"');
@@ -38,7 +43,10 @@ test('모든 식단 이미지는 비율을 유지하며 영역을 채운다', ()
     assert.doesNotMatch(mealsPanel, /\[&_img\]:object-(?:fill|contain)/);
 });
 
-test('오늘의 식단 이미지는 고정 영역의 중앙을 기준으로 비율을 유지하며 잘린다', () => {
+test('오늘의 식단 이미지는 같은 높이의 영역에서 중앙 기준으로 비율을 유지하며 잘린다', () => {
+    assert.match(todayMealsPanel, /<article class="[^"]*\bflex\b[^"]*\bflex-col\b/);
+    assert.match(todayMealsPanel, /<p class="[^"]*\bflex-1\b[^"]*" x-show="!todayMeal\(period\)"/);
+    assert.match(todayMealsPanel, /<div class="[^"]*\bflex-1\b[^"]*" x-show="todayMeal\(period\)"/);
     assert.match(
         uiStyles,
         /section\[aria-labelledby="today-meals-title"] \.cursor-zoom-in\s*{[^}]*position:\s*relative;/s,
