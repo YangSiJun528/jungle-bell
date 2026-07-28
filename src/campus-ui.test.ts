@@ -28,13 +28,13 @@ test('워시타워 상세 카드는 실제 설치 구조대로 건조기를 세�
     );
 });
 
-test('모든 식단 이미지는 영역을 늘려 채운다', () => {
+test('모든 식단 이미지는 비율을 유지하며 영역을 채운다', () => {
     const imageCount = mealsPanel.match(/<img\b/g)?.length ?? 0;
-    const fillCount = mealsPanel.match(/\[&_img\]:object-fill/g)?.length ?? 0;
+    const coverCount = mealsPanel.match(/\[&_img\]:object-cover/g)?.length ?? 0;
 
     assert.ok(imageCount > 0);
-    assert.equal(fillCount, imageCount);
-    assert.doesNotMatch(mealsPanel, /\[&_img\]:object-(?:cover|contain)/);
+    assert.equal(coverCount, imageCount);
+    assert.doesNotMatch(mealsPanel, /\[&_img\]:object-(?:fill|contain)/);
 });
 
 test('오늘의 식단 카드에는 게시 상태 뱃지를 표시하지 않는다', () => {
