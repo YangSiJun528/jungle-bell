@@ -46,6 +46,58 @@
                         <thead><tr><th class="h-6 w-24 p-0 text-left text-[10px] font-semibold text-app-faint" scope="col">기기</th><template x-for="segment in availabilitySegments('washer')" :key="`heading-${segment.number}`"><th class="h-6 p-0 text-center font-mono text-[10px] font-semibold text-app-faint tabular-nums" :class="{'text-app-men': segment.zone === 'men', 'text-app-common': segment.zone === 'common', 'text-app-women': segment.zone === 'women', 'opacity-25 blur-[2px]': (laundryAccess === 'men' && segment.zone === 'women') || (laundryAccess === 'women' && segment.zone === 'men')}" scope="col" :data-zone="segment.zone" x-text="segment.number"></th></template></tr></thead>
                         <tbody><template x-for="row in [{kind:'dryer', label:'건조기'}, {kind:'washer', label:'세탁기'}]" :key="row.kind"><tr :data-kind="row.kind"><th class="h-6 p-0 text-left text-xs font-semibold" :class="{'opacity-25 blur-[2px]': (laundryFilter === 'washerAvailable' && row.kind === 'dryer') || (laundryFilter === 'dryerAvailable' && row.kind === 'washer')}" scope="row"><span x-text="row.label"></span><small class="ml-2 font-mono text-[10px] font-medium text-app-muted tabular-nums"><b class="text-app-success" x-text="typeSummary(row.kind).available"></b>/<span x-text="typeSummary(row.kind).total"></span></small></th><template x-for="segment in availabilitySegments(row.kind)" :key="segment.id"><td class="h-6 p-0 transition" :class="{'opacity-25 blur-[2px]': (laundryAccess === 'men' && segment.zone === 'women') || (laundryAccess === 'women' && segment.zone === 'men') || (laundryFilter === 'washerAvailable' && row.kind === 'dryer') || (laundryFilter === 'dryerAvailable' && row.kind === 'washer')}" :data-zone="segment.zone" :data-state="segment.state" :title="segment.label"><span class="flex h-6 w-full items-center justify-center rounded border font-mono text-[10px] leading-none font-bold text-app-overlay tabular-nums" :class="{'border-app-border bg-app-faint': segment.state !== 'available', 'border-app-men bg-app-men': segment.state === 'available' && segment.zone === 'men', 'border-app-common bg-app-common': segment.state === 'available' && segment.zone === 'common', 'border-app-women bg-app-women': segment.state === 'available' && segment.zone === 'women', 'border-app-success bg-app-success': segment.state === 'available' && segment.zone === 'other'}" aria-hidden="true" x-text="segment.overviewText"></span><span class="sr-only" x-text="segment.label"></span></td></template></tr></template></tbody>
                     </table>
+                    <section class="mt-4 border-t border-app-divider pt-4" data-ui="laundry-access-situations" aria-labelledby="laundry-situation-title">
+                        <header class="mb-2 flex items-end justify-between gap-4">
+                            <h3 id="laundry-situation-title" class="m-0 text-sm font-bold">지금 세탁해도 될까요?</h3>
+                            <p class="m-0 text-[10px] text-app-muted">공용 6·7번은 두 현황에 모두 포함됩니다.</p>
+                        </header>
+                        <div class="grid grid-cols-2 gap-2" aria-live="polite">
+                            <template x-for="situation in laundryAccessSituations()" :key="situation.access">
+                                <article
+                                    class="min-w-0 rounded-lg border p-3"
+                                    :class="{
+                                        'border-app-border bg-app-surface-subtle': situation.state === 'checking',
+                                        'border-app-warning bg-app-warning-soft': situation.state === 'limited' || situation.state === 'dryerBottleneck',
+                                        'border-app-success bg-app-success-soft': situation.state === 'comfortable',
+                                        'border-app-accent bg-app-accent-soft': situation.state === 'available',
+                                    }"
+                                    :data-access="situation.access"
+                                    :data-state="situation.state"
+                                >
+                                    <header class="flex min-w-0 items-center justify-between gap-2">
+                                        <span class="min-w-0">
+                                            <strong class="block truncate text-xs" x-text="laundrySituationAccessLabel(situation)"></strong>
+                                            <small class="block text-[10px] text-app-muted" x-text="situation.access === 'men' ? '1–7번 워시타워' : '6–9번 워시타워'"></small>
+                                        </span>
+                                        <span
+                                            class="flex-none rounded-full bg-app-control px-2 py-1 text-[10px] font-bold text-app-muted"
+                                            :class="{
+                                                'bg-app-warning-soft text-app-warning': situation.state === 'limited' || situation.state === 'dryerBottleneck',
+                                                'bg-app-success-soft text-app-success': situation.state === 'comfortable',
+                                                'bg-app-accent-soft text-app-accent': situation.state === 'available',
+                                            }"
+                                            x-text="laundrySituationStateLabel(situation)"
+                                        ></span>
+                                    </header>
+                                    <p class="mt-2 text-xs font-semibold leading-relaxed" x-text="laundrySituationRecommendationLabel(situation)"></p>
+                                    <p class="mt-1 text-[10px] font-semibold text-app-text" x-show="situation.recommendation !== 'pending'">
+                                        지금 시작 가능 <b class="font-mono tabular-nums" x-text="situation.startableLoads"></b>대
+                                    </p>
+                                    <p class="mt-0.5 font-mono text-[10px] text-app-muted tabular-nums" x-show="situation.recommendation !== 'pending'">
+                                        세탁기 <b x-text="situation.washerUsable"></b>/<span x-text="situation.total"></span>
+                                        · 건조기 <b x-text="situation.dryerUsable"></b>/<span x-text="situation.total"></span> 사용 가능
+                                    </p>
+                                    <p class="mt-0.5 font-mono text-[10px] text-app-muted tabular-nums" x-show="situation.recommendation !== 'pending'">
+                                        가동 중 세탁기 <b x-text="situation.activeWashers"></b>대
+                                        · 건조기 <b x-text="situation.activeDryers"></b>대
+                                    </p>
+                                </article>
+                            </template>
+                        </div>
+                        <p class="mt-2 mb-0 text-[10px] leading-relaxed text-app-muted">
+                            세탁기와 건조기가 동시에 가동 중이면 새 세탁을 추천하지 않습니다. 건조 여유는 빈 건조기에서 건조 예정 세탁물을 뺀 값이며, 완료 표시는 빨래가 남아 있을 수 있어 빈자리에서 제외합니다.
+                        </p>
+                    </section>
                 </div>
 
                 <dialog
@@ -96,7 +148,6 @@
                     <label class="flex flex-none items-center gap-2 text-[10px] font-semibold text-app-muted"><span>종료 전 알림</span><select class="h-8 rounded-lg border border-app-border bg-app-surface px-2 font-mono text-xs text-app-text" :value="laundryWatch?.notifyBeforeMins" :disabled="subscriptionBusy" @change="updateLaundryNotice(Number($event.target.value))"><template x-for="minutes in laundryNoticeMinutes" :key="minutes"><option :value="minutes" x-text="`${minutes}분`"></option></template></select></label>
                     <button type="button" class="inline-flex min-h-8 flex-none items-center justify-center rounded-lg border-0 bg-transparent px-2 text-xs font-semibold text-app-danger hover:bg-app-danger-soft focus-visible:ring-4 focus-visible:ring-app-accent-soft disabled:opacity-50" :disabled="subscriptionBusy" @click="clearLaundryWatch()">해제</button>
                 </section>
-
                 <p class="flex min-h-24 items-center justify-center rounded-lg border border-dashed border-app-border bg-app-surface-subtle p-4 text-center text-xs text-app-muted" x-show="filteredMachines().length === 0" x-text="laundryEmptyMessage()"></p>
                 <div class="grid grid-cols-3 items-start gap-4" aria-live="polite">
                     <template x-for="machine in filteredMachines()" :key="machine.id">
