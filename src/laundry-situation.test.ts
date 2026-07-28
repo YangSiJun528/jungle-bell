@@ -160,7 +160,7 @@ test('건조기와 세탁기가 동시에 가동 중이어도 이후 건조 자�
     assert.equal(result.recommendation, 'recommended');
 });
 
-test('같은 현황에서도 남성은 건조기 부족이고 여성은 한 자리 여유로 이용 가능이다', () => {
+test('같은 현황에서 남성은 건조기 부족이고 여성도 한 자리만 남아 자리 부족이다', () => {
     const observations = machines(
         ['IDLE', 'IDLE', 'RUNNING', 'IDLE', 'RUNNING', 'IDLE', 'IDLE', 'RUNNING', 'IDLE'],
         ['ERROR', 'RUNNING', 'RUNNING', 'RUNNING', 'ERROR', 'RUNNING', 'RUNNING', 'IDLE', 'IDLE'],
@@ -180,8 +180,8 @@ test('같은 현황에서도 남성은 건조기 부족이고 여성은 한 자�
     assert.equal(women.pendingDryerLoads, 1);
     assert.equal(women.dryerHeadroom, 1);
     assert.equal(women.startableLoads, 1);
-    assert.equal(women.state, 'available');
-    assert.equal(women.recommendation, 'recommended');
+    assert.equal(women.state, 'limited');
+    assert.equal(women.recommendation, 'notRecommended');
 });
 
 test('예약 세탁기나 일시정지 건조기는 동시 가동 차단이 아니라 점유·건조 수요로만 계산한다', () => {
@@ -231,11 +231,11 @@ test('일시정지·예약·완료 확인 중 세탁물만 향후 건조기 수�
     assert.equal(result.pendingDryerLoads, 3);
     assert.equal(result.dryerHeadroom, 1);
     assert.equal(result.startableLoads, 1);
-    assert.equal(result.state, 'available');
-    assert.equal(result.recommendation, 'recommended');
+    assert.equal(result.state, 'limited');
+    assert.equal(result.recommendation, 'notRecommended');
 });
 
-test('건조 수요를 빼고 한 자리라도 남으면 이용 가능으로 추천한다', () => {
+test('건조 수요를 빼고 한 자리만 남으면 다른 사용자를 고려해 자리 부족으로 판단한다', () => {
     const result = assessLaundryAccessSituation(
         machines(
             ['IDLE', 'IDLE', 'IDLE', 'IDLE', 'RUNNING', 'RUNNING', 'RUNNING'],
@@ -248,8 +248,8 @@ test('건조 수요를 빼고 한 자리라도 남으면 이용 가능으로 추
     assert.equal(result.pendingDryerLoads, 3);
     assert.equal(result.dryerHeadroom, 1);
     assert.equal(result.startableLoads, 1);
-    assert.equal(result.state, 'available');
-    assert.equal(result.recommendation, 'recommended');
+    assert.equal(result.state, 'limited');
+    assert.equal(result.recommendation, 'notRecommended');
 });
 
 test('오류 또는 비유휴 projection이 남은 IDLE 기기는 추천용 빈자리로 계산하지 않는다', () => {
@@ -274,7 +274,7 @@ test('오류 또는 비유휴 projection이 남은 IDLE 기기는 추천용 빈�
     assert.equal(result.dryerUsable, 0);
 });
 
-test('실제 시작 가능 비율이 60% 이상이면 널널함으로 추천한다', () => {
+test('실제 시작 가능 비율이 3분의 2 이상이면 널널함으로 추천한다', () => {
     const result = assessLaundryAccessSituation(
         machines(
             ['IDLE', 'IDLE', 'IDLE', 'IDLE', 'IDLE', 'UNKNOWN', 'UNKNOWN'],
@@ -288,11 +288,11 @@ test('실제 시작 가능 비율이 60% 이상이면 널널함으로 추천한�
     assert.equal(result.recommendation, 'recommended');
 });
 
-test('널널함 기준에 못 미쳐도 한 자리 이상 있으면 이용 가능으로 추천한다', () => {
+test('남성은 시작 가능 자리가 네 자리여도 널널함 전에는 이용 가능으로 추천한다', () => {
     const result = assessLaundryAccessSituation(
         machines(
-            ['IDLE', 'IDLE', 'IDLE', 'UNKNOWN', 'UNKNOWN', 'UNKNOWN', 'UNKNOWN'],
-            ['IDLE', 'IDLE', 'IDLE', 'UNKNOWN', 'UNKNOWN', 'UNKNOWN', 'UNKNOWN'],
+            ['IDLE', 'IDLE', 'IDLE', 'IDLE', 'UNKNOWN', 'UNKNOWN', 'UNKNOWN'],
+            ['IDLE', 'IDLE', 'IDLE', 'IDLE', 'UNKNOWN', 'UNKNOWN', 'UNKNOWN'],
         ),
         'men',
         true,
@@ -302,7 +302,7 @@ test('널널함 기준에 못 미쳐도 한 자리 이상 있으면 이용 가�
     assert.equal(result.recommendation, 'recommended');
 });
 
-test('실제 시작 가능 비율이 낮아도 한 자리 있으면 이용 가능으로 추천한다', () => {
+test('실제 시작 가능 자리가 한 자리뿐이면 자리 부족으로 판단한다', () => {
     const result = assessLaundryAccessSituation(
         machines(
             ['IDLE', 'UNKNOWN', 'UNKNOWN', 'UNKNOWN', 'UNKNOWN', 'UNKNOWN', 'UNKNOWN'],
@@ -312,11 +312,11 @@ test('실제 시작 가능 비율이 낮아도 한 자리 있으면 이용 가�
         true,
     );
 
-    assert.equal(result.state, 'available');
-    assert.equal(result.recommendation, 'recommended');
+    assert.equal(result.state, 'limited');
+    assert.equal(result.recommendation, 'notRecommended');
 });
 
-test('규모가 다른 구역에도 널널함 비율과 최소 한 자리 기준을 적용한다', () => {
+test('규모가 다른 구역에도 널널함 비율과 최소 두 자리 기준을 적용한다', () => {
     const threeOfFour = machines(
         ['UNKNOWN', 'UNKNOWN', 'UNKNOWN', 'UNKNOWN', 'UNKNOWN', 'IDLE', 'IDLE', 'IDLE', 'UNKNOWN'],
         ['UNKNOWN', 'UNKNOWN', 'UNKNOWN', 'UNKNOWN', 'UNKNOWN', 'IDLE', 'IDLE', 'IDLE', 'UNKNOWN'],
@@ -332,7 +332,7 @@ test('규모가 다른 구역에도 널널함 비율과 최소 한 자리 기준
 
     assert.equal(assessLaundryAccessSituation(threeOfFour, 'women', true).state, 'comfortable');
     assert.equal(assessLaundryAccessSituation(twoOfFour, 'women', true).state, 'available');
-    assert.equal(assessLaundryAccessSituation(oneOfFour, 'women', true).state, 'available');
+    assert.equal(assessLaundryAccessSituation(oneOfFour, 'women', true).state, 'limited');
 });
 
 test('신뢰도는 데이터·오류·원본 상태·스냅샷 나이를 함께 검사한다', () => {

@@ -237,10 +237,10 @@ const LAUNDRY_SITUATION_STATE_LABELS: Record<LaundrySituationState, string> = {
 };
 const LAUNDRY_SITUATION_RECOMMENDATION_LABELS: Record<LaundrySituationState, string> = {
     checking: '현황 확인 중이에요. 잠시 후 다시 봐 주세요.',
-    limited: '빈 세탁기가 적어 조금 기다리는 게 좋아요.',
+    limited: '자리가 금방 찰 수 있어 조금 기다리는 게 좋아요.',
     dryerBottleneck: '세탁 후 건조기가 부족할 수 있어 기다리는 게 좋아요.',
-    comfortable: '세탁기와 건조기 모두 여유 있어 시작해도 괜찮아요.',
-    available: '세탁 후에도 건조기 자리가 남을 것 같아 시작해도 괜찮아요.',
+    comfortable: '여러 대가 남아 있어 시작해도 괜찮을 것 같아요.',
+    available: '한 대를 써도 여유가 남아 시작해도 괜찮을 것 같아요.',
 };
 const LAUNDRY_FILTER_ANALYTICS_VALUES = {
     all: 'all',
