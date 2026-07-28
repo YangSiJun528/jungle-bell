@@ -34,6 +34,7 @@ const APP_COMMANDS: &[&str] = &[
     "open_onboarding",
     "complete_onboarding",
     "open_attendance_window",
+    "get_attendance_cohort_id",
     "report_attendance_start_clicked",
     "get_tray_panel_state",
     "get_local_dashboard_snapshot",

@@ -804,11 +804,46 @@ fn build_attendance_window(app: &tauri::AppHandle) {
     }
 }
 
+fn attendance_cohort_storage_script(cohort_id: Option<&str>) -> String {
+    let cohort_id = serde_json::to_string(&cohort_id).expect("cohort id serialization must succeed");
+    format!(
+        r#"(() => {{
+            if (window.location.origin !== "https://jungle-lms.krafton.com") return;
+            const key = "selected_cohort_id";
+            const nextId = {cohort_id};
+            const next = nextId === null ? null : JSON.stringify(nextId);
+            const current = window.localStorage.getItem(key);
+            if (current === next) return;
+            if (next === null) window.localStorage.removeItem(key);
+            else window.localStorage.setItem(key, next);
+            window.location.reload();
+        }})();"#
+    )
+}
+
+pub fn sync_attendance_cohort_storage(app: &tauri::AppHandle, cohort_id: Option<&str>) {
+    let Some(window) = app.get_webview_window("attendance") else {
+        return;
+    };
+    if let Err(error) = window.eval(attendance_cohort_storage_script(cohort_id)) {
+        log::warn!("[tray] attendance cohort sync failed: {error}");
+    }
+}
+
 pub fn open_attendance_window(app: &tauri::AppHandle) {
     log::info!("[tray] attendance window opened");
     analytics::track(Event::AttendancePageOpened);
 
     if let Some(window) = app.get_webview_window("attendance") {
+        let state: tauri::State<Arc<TokioMutex<AppState>>> = app.state();
+        if let Ok(state) = state.try_lock() {
+            let cohort_id = crate::commands::attendance_cohort_id(
+                state.config.selected_cohort_id.as_deref(),
+                state.effective_cohort_id.as_deref(),
+                &state.cohort_options,
+            );
+            sync_attendance_cohort_storage(app, cohort_id.as_deref());
+        }
         show_foreground_app(app);
         focus_window(&window);
     } else {
@@ -1296,6 +1331,27 @@ mod tests {
     const EXPECTED_TRAY_ICON_SIZE: u32 = 36;
     #[cfg(not(target_os = "macos"))]
     const EXPECTED_TRAY_ICON_SIZE: u32 = 48;
+
+    #[test]
+    fn 출석창_기수_동기화는_lms_origin과_로컬스토리지_key를_고정한다() {
+        let script = attendance_cohort_storage_script(Some("cohort-1"));
+
+        assert!(script.contains(r#"window.location.origin !== "https://jungle-lms.krafton.com""#));
+        assert!(script.contains(r#"const key = "selected_cohort_id""#));
+        assert!(script.contains(r#"const nextId = "cohort-1""#));
+        assert!(script.contains("JSON.stringify(nextId)"));
+        assert!(script.contains("window.localStorage.setItem(key, next)"));
+        assert!(script.contains("window.location.reload()"));
+    }
+
+    #[test]
+    fn 출석창_기수_동기화_script는_id를_json으로_escape한다() {
+        let script = attendance_cohort_storage_script(Some("cohort\";window.injected=true;//"));
+
+        assert!(script.contains(r#"const nextId = "cohort\";window.injected=true;//""#));
+        assert!(!script.contains(r#"const nextId = "cohort";window.injected=true"#));
+        assert!(attendance_cohort_storage_script(None).contains("const nextId = null"));
+    }
 
     fn snapshot(
         phase: DailyPhase,

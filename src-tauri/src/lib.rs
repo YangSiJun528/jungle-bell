@@ -214,6 +214,7 @@ pub fn run() {
             commands::open_onboarding,
             commands::complete_onboarding,
             commands::open_attendance_window,
+            commands::get_attendance_cohort_id,
             commands::report_attendance_start_clicked,
             commands::get_tray_panel_state,
             commands::get_local_dashboard_snapshot,

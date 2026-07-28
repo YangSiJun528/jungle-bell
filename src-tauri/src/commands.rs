@@ -245,7 +245,15 @@ pub async fn resolve_cohort_selection(
 ) -> Result<attendance::CohortResolution, String> {
     attendance::validate_cohort_options(&cohort_options)?;
     let today = chrono::Utc::now().with_timezone(&state::kst()).date_naive();
-    Ok(settings.resolve_cohort_options(&app, cohort_options, today).await)
+    let resolution = settings.resolve_cohort_options(&app, cohort_options, today).await;
+    let snapshot = settings.snapshot().await;
+    let cohort_id = attendance_cohort_id(
+        snapshot.selected_cohort_id.as_deref(),
+        snapshot.effective_cohort_id.as_deref(),
+        &snapshot.cohort_options,
+    );
+    tray::sync_attendance_cohort_storage(&app, cohort_id.as_deref());
+    Ok(resolution)
 }
 
 #[tauri::command]
@@ -268,6 +276,12 @@ pub async fn set_selected_cohort(
         })
         .await?;
     if commit.changed {
+        let today = chrono::Utc::now().with_timezone(&state::kst()).date_naive();
+        let cohort_id =
+            commit.snapshot.selected_cohort_id.clone().or_else(|| {
+                attendance::resolve_cohort_selection(&commit.snapshot.cohort_options, None, today).cohort_id
+            });
+        tray::sync_attendance_cohort_storage(&app, cohort_id.as_deref());
         checker::trigger_current_check(&app);
     }
     Ok(commit.snapshot)
@@ -699,12 +713,52 @@ fn is_attendance_check_in_url(value: &str) -> bool {
         return false;
     };
     let path = url.path().trim_end_matches('/');
+    is_lms_url(&url) && path == "/check-in"
+}
+
+fn is_lms_url(url: &reqwest::Url) -> bool {
     url.scheme() == "https"
         && url.host_str() == Some("jungle-lms.krafton.com")
         && url.port_or_known_default() == Some(443)
         && url.username().is_empty()
         && url.password().is_none()
-        && path == "/check-in"
+}
+
+fn is_lms_page_url(value: &str) -> bool {
+    reqwest::Url::parse(value).is_ok_and(|url| is_lms_url(&url))
+}
+
+pub(crate) fn attendance_cohort_id(
+    selected_cohort_id: Option<&str>,
+    effective_cohort_id: Option<&str>,
+    cohort_options: &[attendance::CohortOption],
+) -> Option<String> {
+    selected_cohort_id
+        .filter(|selected| cohort_options.is_empty() || cohort_options.iter().any(|option| option.id == *selected))
+        .or(effective_cohort_id)
+        .map(str::to_owned)
+}
+
+/// LMS 출석 WebView가 Jungle Bell과 같은 기수를 표시하도록 사용하는 최소 read model.
+#[tauri::command]
+pub async fn get_attendance_cohort_id(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    page_url: String,
+) -> Result<Option<String>, String> {
+    if window.label() != "attendance" {
+        return Err("허용되지 않은 창입니다.".into());
+    }
+    if !is_lms_page_url(&page_url) {
+        return Err("허용되지 않은 페이지입니다.".into());
+    }
+
+    let state = state.lock().await;
+    Ok(attendance_cohort_id(
+        state.config.selected_cohort_id.as_deref(),
+        state.effective_cohort_id.as_deref(),
+        &state.cohort_options,
+    ))
 }
 
 /// 출석 WebView가 감지한 실제 "학습 시작" 클릭을 수신한다.
@@ -861,7 +915,18 @@ pub async fn open_notification_settings() -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_attendance_check_in_url, validate_image_asset_url};
+    use super::{attendance_cohort_id, is_attendance_check_in_url, is_lms_page_url, validate_image_asset_url};
+    use crate::attendance::CohortOption;
+
+    fn cohort(id: &str) -> CohortOption {
+        CohortOption {
+            id: id.into(),
+            label: id.into(),
+            is_active: true,
+            start_date: chrono::NaiveDate::from_ymd_opt(2026, 3, 1).unwrap(),
+            end_date: Some(chrono::NaiveDate::from_ymd_opt(2026, 7, 30).unwrap()),
+        }
+    }
 
     #[test]
     fn 이미지_자산_url은_https와_로컬_assets만_허용한다() {
@@ -890,5 +955,37 @@ mod tests {
         assert!(!is_attendance_check_in_url(
             "https://user@jungle-lms.krafton.com/check-in"
         ));
+    }
+
+    #[test]
+    fn 출석창에는_수동_선택을_우선하고_자동선택을_fallback한다() {
+        let options = vec![cohort("manual-cohort"), cohort("effective-cohort")];
+        assert_eq!(
+            attendance_cohort_id(Some("manual-cohort"), Some("effective-cohort"), &options),
+            Some("manual-cohort".into())
+        );
+        assert_eq!(
+            attendance_cohort_id(None, Some("effective-cohort"), &options),
+            Some("effective-cohort".into())
+        );
+        assert_eq!(
+            attendance_cohort_id(Some("removed-cohort"), Some("effective-cohort"), &options),
+            Some("effective-cohort".into())
+        );
+        assert_eq!(
+            attendance_cohort_id(Some("manual-cohort"), None, &[]),
+            Some("manual-cohort".into())
+        );
+        assert_eq!(attendance_cohort_id(None, None, &options), None);
+    }
+
+    #[test]
+    fn 기수_동기화는_정확한_lms_origin만_허용한다() {
+        assert!(is_lms_page_url("https://jungle-lms.krafton.com/check-in"));
+        assert!(is_lms_page_url("https://jungle-lms.krafton.com/check-in/history"));
+        assert!(!is_lms_page_url("http://jungle-lms.krafton.com/check-in"));
+        assert!(!is_lms_page_url("https://jungle-lms.krafton.com.evil.test/check-in"));
+        assert!(!is_lms_page_url("https://jungle-lms.krafton.com:444/check-in"));
+        assert!(!is_lms_page_url("https://user@jungle-lms.krafton.com/check-in"));
     }
 }
