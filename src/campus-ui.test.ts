@@ -3,6 +3,7 @@ import {readFileSync} from 'node:fs';
 import {test} from 'vitest';
 
 const campusHtml = readFileSync(new URL('./campus.html', import.meta.url), 'utf8');
+const uiStyles = readFileSync(new URL('./ui.css', import.meta.url), 'utf8');
 const mealsPanelStart = campusHtml.indexOf('<section id="meals-panel"');
 const mealsPanel = campusHtml.slice(mealsPanelStart, campusHtml.indexOf('</main>', mealsPanelStart));
 
@@ -35,6 +36,17 @@ test('모든 식단 이미지는 비율을 유지하며 영역을 채운다', ()
     assert.ok(imageCount > 0);
     assert.equal(coverCount, imageCount);
     assert.doesNotMatch(mealsPanel, /\[&_img\]:object-(?:fill|contain)/);
+});
+
+test('오늘의 식단 이미지는 고정 영역의 중앙을 기준으로 비율을 유지하며 잘린다', () => {
+    assert.match(
+        uiStyles,
+        /section\[aria-labelledby="today-meals-title"] \.cursor-zoom-in\s*{[^}]*position:\s*relative;/s,
+    );
+    assert.match(
+        uiStyles,
+        /section\[aria-labelledby="today-meals-title"] \.cursor-zoom-in > img\s*{[^}]*position:\s*absolute;[^}]*inset:\s*0;[^}]*width:\s*100%;[^}]*height:\s*100%;[^}]*object-fit:\s*cover;[^}]*object-position:\s*center;/s,
+    );
 });
 
 test('오늘의 식단 카드에는 게시 상태 뱃지를 표시하지 않는다', () => {
