@@ -29,6 +29,16 @@ use state::AppState;
 /// 로그 파일 최대 크기 (5 MB). 초과 시 이전 파일 삭제 후 새 파일 시작.
 const MAX_LOG_FILE_SIZE: u128 = 5_000_000;
 
+#[cfg(desktop)]
+fn window_size_should_persist(label: &str) -> bool {
+    label == "image-viewer"
+}
+
+#[cfg(desktop)]
+fn persisted_window_state_flags() -> tauri_plugin_window_state::StateFlags {
+    tauri_plugin_window_state::StateFlags::SIZE
+}
+
 fn sync_auto_start_setting(app: &tauri::AppHandle, shared_state: &Arc<Mutex<AppState>>) {
     let auto_start = shared_state.try_lock().map(|s| s.config.auto_start).unwrap_or(true);
 
@@ -231,7 +241,8 @@ pub fn run() {
             #[cfg(desktop)]
             app.handle().plugin(
                 tauri_plugin_window_state::Builder::default()
-                    .with_state_flags(tauri_plugin_window_state::StateFlags::SIZE)
+                    .with_state_flags(persisted_window_state_flags())
+                    .with_filter(window_size_should_persist)
                     .build(),
             )?;
 
@@ -274,4 +285,29 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(all(test, desktop))]
+mod tests {
+    use super::*;
+    use tauri_plugin_window_state::StateFlags;
+
+    #[test]
+    fn 이미지_뷰어만_변경한_크기를_기억한다() {
+        assert!(!window_size_should_persist("attendance"));
+        assert!(window_size_should_persist("image-viewer"));
+        assert!(!window_size_should_persist("campus"));
+        assert!(!window_size_should_persist("settings"));
+        assert!(!window_size_should_persist("alert-overlay"));
+        assert!(!window_size_should_persist("tray-panel"));
+    }
+
+    #[test]
+    fn 창_상태는_위치나_최대화가_아닌_크기만_저장한다() {
+        let flags = persisted_window_state_flags();
+        assert_eq!(flags.bits(), StateFlags::SIZE.bits());
+        assert!(!flags.contains(StateFlags::POSITION));
+        assert!(!flags.contains(StateFlags::MAXIMIZED));
+        assert!(!flags.contains(StateFlags::VISIBLE));
+    }
 }
