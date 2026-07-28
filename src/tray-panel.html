@@ -272,33 +272,34 @@
                     </button>
                 </div>
 
-                <div class="flex min-h-14 items-stretch" data-task="meals" x-show="homeTasks.meals" x-cloak>
-                    <button
-                        type="button"
-                        class="flex min-w-0 flex-1 items-center gap-2.5 border-0 bg-transparent px-3 py-1.5 text-left transition-colors hover:bg-app-surface-subtle focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-app-accent-soft disabled:opacity-50"
-                        :disabled="busyAction !== null || taskBusy !== null"
-                        @click="perform('open_meals')"
-                    >
-                        <span class="flex size-8 flex-none items-center justify-center rounded-[10px] bg-app-success-soft text-app-success">
-                            <svg class="size-4" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v7m-2-7v5a2 2 0 0 0 4 0V3m-2 7v11m8-18v18m0-18c3 2 3 7 0 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                        </span>
-                        <span class="min-w-0 flex-1">
-                            <small class="block text-[10px] font-bold text-app-success">급식 알림</small>
-                            <strong class="mt-0.5 block truncate text-[13px] leading-snug">새 식단 알림</strong>
-                            <small class="mt-0.5 block truncate text-[10px] text-app-muted" x-text="mealSummary()"></small>
-                            <small class="mt-0.5 block text-[10px] font-bold text-app-warning" x-show="mealSourceWarning()">정보 갱신 지연</small>
-                        </span>
-                    </button>
-                    <button
-                        type="button"
-                        class="flex w-10 flex-none items-center justify-center border-0 bg-transparent text-app-faint transition-colors hover:bg-app-danger-soft hover:text-app-danger focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-app-danger-soft disabled:opacity-40"
-                        aria-label="급식 알림 끄기"
-                        :disabled="busyAction !== null || taskBusy !== null"
-                        @click.prevent.stop="dismissHomeTask('meals')"
-                    >
-                        <svg class="size-4" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-                    </button>
-                </div>
+                <template x-for="alert in dashboard.mealAlerts" :key="alert.id">
+                    <div class="flex min-h-14 items-stretch" data-task="meal-alert">
+                        <button
+                            type="button"
+                            class="flex min-w-0 flex-1 items-center gap-2.5 border-0 bg-transparent px-3 py-1.5 text-left transition-colors hover:bg-app-surface-subtle focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-app-accent-soft disabled:opacity-50"
+                            :disabled="busyAction !== null || taskBusy !== null || mealAlertBusy !== null"
+                            @click="perform('open_meals')"
+                        >
+                            <span class="flex size-8 flex-none items-center justify-center rounded-[10px] bg-app-success-soft text-app-success">
+                                <svg class="size-4" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v7m-2-7v5a2 2 0 0 0 4 0V3m-2 7v11m8-18v18m0-18c3 2 3 7 0 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            </span>
+                            <span class="min-w-0 flex-1">
+                                <small class="block text-[10px] font-bold text-app-success" x-text="alert.period === 'lunch' ? '중식 알림' : '석식 알림'"></small>
+                                <strong class="mt-0.5 block truncate text-[13px] leading-snug" x-text="alert.title"></strong>
+                                <small class="mt-0.5 line-clamp-2 text-[10px] leading-snug text-app-muted" x-text="alert.preview"></small>
+                            </span>
+                        </button>
+                        <button
+                            type="button"
+                            class="flex w-10 flex-none items-center justify-center border-0 bg-transparent text-app-faint transition-colors hover:bg-app-danger-soft hover:text-app-danger focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-app-danger-soft disabled:opacity-40"
+                            :aria-label="`${alert.period === 'lunch' ? '중식' : '석식'} 알림 제거`"
+                            :disabled="busyAction !== null || taskBusy !== null || mealAlertBusy !== null"
+                            @click.prevent.stop="dismissMealAlert(alert.id)"
+                        >
+                            <svg class="size-4" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+                        </button>
+                    </div>
+                </template>
             </div>
         </section>
 

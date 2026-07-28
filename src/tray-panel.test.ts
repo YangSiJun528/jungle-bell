@@ -275,7 +275,7 @@ test('피드백 메뉴는 허용된 GitHub 이슈 선택 화면만 연다', () =
     assert.match(traySource, /TrayPanelAction::OpenFeedback =>/);
 });
 
-test('홈은 세탁·급식 예약과 발생 이벤트를 D-Day 아래 생활 알림으로 표시한다', () => {
+test('홈은 세탁 예약과 실제 급식 게시 이벤트를 D-Day 아래 알림 피드로 표시한다', () => {
     const html = readFileSync(new URL('./tray-panel.html', import.meta.url), 'utf8');
     const script = readFileSync(new URL('./tray-panel.ts', import.meta.url), 'utf8');
     const ddayStart = html.indexOf('data-ui="dday"');
@@ -290,15 +290,18 @@ test('홈은 세탁·급식 예약과 발생 이벤트를 D-Day 아래 생활 �
     assert.ok(alertsStart > ddayEnd);
     assert.match(html, /x-text="homeTasks\.count"/);
     assert.match(html, /data-task="laundry"/);
-    assert.match(html, /data-task="meals"/);
+    assert.match(html, /data-task="meal-alert"/);
     assert.match(html, /x-show="homeTasks\.laundry"/);
-    assert.match(html, /x-show="homeTasks\.meals"/);
+    assert.match(html, /x-for="alert in dashboard\.mealAlerts"/);
+    assert.match(html, /x-text="alert\.title"/);
+    assert.match(html, /x-text="alert\.preview"/);
     assert.match(html, /@click="perform\('open_laundry'\)"/);
     assert.match(html, /@click="perform\('open_meals'\)"/);
     assert.match(html, /@click\.prevent\.stop="dismissHomeTask\('laundry'\)"/);
-    assert.match(html, /@click\.prevent\.stop="dismissHomeTask\('meals'\)"/);
+    assert.match(html, /@click\.prevent\.stop="dismissMealAlert\(alert\.id\)"/);
     assert.match(html, /aria-label="세탁 추적 취소"/);
-    assert.match(html, /aria-label="급식 알림 끄기"/);
+    assert.match(html, /:aria-label="`\$\{alert\.period === 'lunch' \? '중식' : '석식'\} 알림 제거`"/);
+    assert.doesNotMatch(html, /급식 알림 끄기|dismissHomeTask\('meals'\)/);
     assert.doesNotMatch(html, /data-task="attendance"|homeTasks\.attendance|dismissHomeTask\('attendance'\)/);
     assert.match(html, /data-ui="home-task-error"/);
     assert.match(html, /role="alert"/);
@@ -309,6 +312,8 @@ test('홈은 세탁·급식 예약과 발생 이벤트를 D-Day 아래 생활 �
     assert.match(script, /homeTaskSubscriptions/);
     assert.match(script, /withoutHomeTask/);
     assert.match(script, /dismissHomeTask/);
+    assert.match(script, /dismissMealAlert/);
+    assert.match(script, /dismiss_meal_alert/);
     assert.match(script, /local-dashboard-updated/);
     assert.match(script, /get_local_dashboard_snapshot/);
     assert.match(script, /window\.setInterval/);
@@ -333,24 +338,27 @@ test('생활 알림과 생활 정보는 같은 섹션 제목 스타일을 사용
     );
 });
 
-test('생활 알림 항목은 여러 개 쌓여도 낮은 높이로 표시한다', () => {
+test('생활 알림 항목은 여러 개 쌓이고 급식 메뉴는 두 줄까지만 미리 보여준다', () => {
     const html = readFileSync(new URL('./tray-panel.html', import.meta.url), 'utf8');
     const alertsStart = html.indexOf('data-ui="home-tasks"');
     const alertsEnd = html.indexOf('</section>', alertsStart);
     const alerts = html.slice(alertsStart, alertsEnd);
 
-    assert.equal(alerts.match(/data-task="(?:laundry|meals)"/g)?.length, 2);
-    assert.equal(alerts.match(/class="flex min-h-14 items-stretch"/g)?.length, 2);
-    assert.equal(alerts.match(/\bpy-1\.5\b/g)?.length, 2);
-    assert.equal(alerts.match(/\bsize-8\b/g)?.length, 2);
-    assert.equal(alerts.match(/\bw-10\b/g)?.length, 2);
+    assert.match(alerts, /data-task="laundry"/);
+    assert.match(alerts, /data-task="meal-alert"/);
+    assert.match(alerts, /x-for="alert in dashboard\.mealAlerts"/);
+    assert.match(alerts, /\bline-clamp-2\b/);
+    assert.match(alerts, /\bmin-h-14\b/);
+    assert.match(alerts, /\bsize-8\b/);
+    assert.match(alerts, /\bw-10\b/);
     assert.doesNotMatch(alerts, /\bmin-h-16\b|\bsize-9\b|\bpy-2\.5\b|\bw-11\b/);
 });
 
-test('트레이 홈은 설정을 조회하고 세탁·식단 생활 알림을 취소할 권한을 가진다', () => {
+test('트레이 홈은 세탁 예약과 개별 급식 알림을 취소할 권한을 가진다', () => {
     assert.ok(trayCapability.permissions.includes('allow-get-settings-snapshot'));
     assert.ok(trayCapability.permissions.includes('allow-set-laundry-watch'));
-    assert.ok(trayCapability.permissions.includes('allow-set-meal-subscription-enabled'));
+    assert.ok(trayCapability.permissions.includes('allow-dismiss-meal-alert'));
+    assert.ok(!trayCapability.permissions.includes('allow-set-meal-subscription-enabled'));
 });
 
 test('출석은 생활 알림이 아니라 항상 보이는 단일 상태 카드로 유지한다', () => {

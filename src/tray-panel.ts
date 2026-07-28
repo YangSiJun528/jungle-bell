@@ -19,11 +19,9 @@ import {
     type TrayPanelState,
 } from './tray-panel-state.ts';
 import {
-    dashboardDataIsStale,
     EMPTY_LOCAL_DASHBOARD,
     laundryDashboardHasSourceWarning,
     laundryDashboardRemaining,
-    mealDashboardSummary,
     type LocalDashboardSnapshot,
 } from './local-dashboard.ts';
 import {
@@ -63,6 +61,7 @@ interface TrayPanelComponent {
     newsError: boolean;
     busyAction: PanelAction | null;
     taskBusy: HomeTaskKind | null;
+    mealAlertBusy: string | null;
     get presentation(): StatusPresentation;
     get statusTextParts(): StatusTextParts;
     get homeTasks(): HomeTaskVisibility;
@@ -86,9 +85,8 @@ interface TrayPanelComponent {
     ddayProgressLabel(): string;
     laundryRemaining(): string;
     laundrySourceWarning(): boolean;
-    mealSummary(): string;
-    mealSourceWarning(): boolean;
     dismissHomeTask(kind: HomeTaskKind): Promise<void>;
+    dismissMealAlert(alertId: string): Promise<void>;
     perform(action: PanelAction): Promise<void>;
     hide(): Promise<void>;
 }
@@ -113,8 +111,8 @@ function trayPanel(): TrayPanelComponent {
         activeTab: 'home',
         menuOpen: false,
         state: {...INITIAL_STATE},
-        dashboard: {...EMPTY_LOCAL_DASHBOARD},
-        taskSubscriptions: {laundry: false, meals: false},
+        dashboard: {...EMPTY_LOCAL_DASHBOARD, mealAlerts: []},
+        taskSubscriptions: {laundry: false},
         taskError: null,
         clockNow: Date.now(),
         clockTimer: null,
@@ -125,6 +123,7 @@ function trayPanel(): TrayPanelComponent {
         newsError: false,
         busyAction: null,
         taskBusy: null,
+        mealAlertBusy: null,
 
         get presentation() {
             return statusPresentation(this.state.status);
@@ -289,18 +288,8 @@ function trayPanel(): TrayPanelComponent {
                 : false;
         },
 
-        mealSummary() {
-            return this.dashboard.meals ? mealDashboardSummary(this.dashboard.meals) : '';
-        },
-
-        mealSourceWarning() {
-            return this.dashboard.meals
-                ? dashboardDataIsStale(this.dashboard.meals.updatedAt, this.clockNow, 10 * 60_000)
-                : false;
-        },
-
         async dismissHomeTask(kind) {
-            if (this.busyAction || this.taskBusy) return;
+            if (this.busyAction || this.taskBusy || this.mealAlertBusy) return;
             const previousSubscriptions = this.taskSubscriptions;
             this.taskBusy = kind;
             this.taskError = null;
@@ -314,17 +303,38 @@ function trayPanel(): TrayPanelComponent {
                 this.taskSubscriptions = homeTaskSubscriptions(snapshot);
             } catch (error) {
                 this.taskSubscriptions = previousSubscriptions;
-                this.taskError = kind === 'laundry'
-                    ? '세탁 추적을 취소하지 못했어요. 잠시 후 다시 시도해 주세요.'
-                    : '급식 알림을 끄지 못했어요. 잠시 후 다시 시도해 주세요.';
+                this.taskError = '세탁 추적을 취소하지 못했어요. 잠시 후 다시 시도해 주세요.';
                 console.error(`[tray-panel] ${dismissal.command} failed`, error);
             } finally {
                 this.taskBusy = null;
             }
         },
 
+        async dismissMealAlert(alertId) {
+            if (this.busyAction || this.taskBusy || this.mealAlertBusy) return;
+            const previousDashboard = this.dashboard;
+            this.mealAlertBusy = alertId;
+            this.taskError = null;
+            this.dashboard = {
+                ...this.dashboard,
+                mealAlerts: this.dashboard.mealAlerts.filter((alert) => alert.id !== alertId),
+            };
+            try {
+                this.dashboard = await invoke<LocalDashboardSnapshot>(
+                    'dismiss_meal_alert',
+                    {alertId},
+                );
+            } catch (error) {
+                this.dashboard = previousDashboard;
+                this.taskError = '급식 알림을 제거하지 못했어요. 잠시 후 다시 시도해 주세요.';
+                console.error('[tray-panel] dismiss_meal_alert failed', error);
+            } finally {
+                this.mealAlertBusy = null;
+            }
+        },
+
         async perform(action) {
-            if (this.busyAction || this.taskBusy) return;
+            if (this.busyAction || this.taskBusy || this.mealAlertBusy) return;
             this.closeMenu();
             this.busyAction = action;
             try {

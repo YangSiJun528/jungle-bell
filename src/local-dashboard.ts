@@ -18,25 +18,24 @@ export interface LaundryDashboardCard {
     sourceFreshness: string | null;
 }
 
-export type MealDashboardStatus = 'loading' | 'awaitingUpdate' | 'available';
-
-export interface MealDashboardCard {
-    targetWeekKey: string | null;
-    title: string | null;
-    status: MealDashboardStatus;
-    lunchTitle: string | null;
-    dinnerTitle: string | null;
-    updatedAt: number | null;
+export interface MealAlertCard {
+    id: string;
+    period: 'lunch' | 'dinner';
+    title: string;
+    preview: string;
+    dateKey: string;
+    publishedAt: string | null;
+    createdAt: number;
 }
 
 export interface LocalDashboardSnapshot {
     laundry: LaundryDashboardCard | null;
-    meals: MealDashboardCard | null;
+    mealAlerts: MealAlertCard[];
 }
 
 export const EMPTY_LOCAL_DASHBOARD: LocalDashboardSnapshot = {
     laundry: null,
-    meals: null,
+    mealAlerts: [],
 };
 
 export function laundryDashboardRemaining(card: LaundryDashboardCard, now: number): string {
@@ -66,10 +65,4 @@ export function laundryDashboardHasSourceWarning(card: LaundryDashboardCard, now
     return dashboardDataIsStale(card.updatedAt, now, 2 * 60_000)
         || card.sourceFreshness === 'REFRESH_OVERDUE'
         || card.sourceFreshness === 'COLLECTION_GAP';
-}
-
-export function mealDashboardSummary(card: MealDashboardCard): string {
-    const lunch = card.lunchTitle ? '중식 게시' : '중식 대기';
-    const dinner = card.dinnerTitle ? '석식 게시' : '석식 대기';
-    return `${lunch} · ${dinner}`;
 }

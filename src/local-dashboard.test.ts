@@ -4,9 +4,8 @@ import {test} from 'vitest';
 import {
     dashboardDataIsStale,
     laundryDashboardRemaining,
-    mealDashboardSummary,
     type LaundryDashboardCard,
-    type MealDashboardCard,
+    type MealAlertCard,
 } from './local-dashboard';
 
 function laundry(overrides: Partial<LaundryDashboardCard> = {}): LaundryDashboardCard {
@@ -40,15 +39,17 @@ test('홈 카드는 종류별 허용 시간보다 오래되면 지연 상태를 
     assert.equal(dashboardDataIsStale(Date.parse('2026-07-27T09:00:00Z'), Date.parse('2026-07-27T09:01:00Z'), 120_000), false);
 });
 
-test('급식 홈 카드는 오늘 중식과 석식 게시 상태를 요약한다', () => {
-    const card: MealDashboardCard = {
-        targetWeekKey: '2026-07-27',
-        title: '7월 4주차 식단',
-        status: 'available',
-        lunchTitle: '7월 27일 중식',
-        dinnerTitle: null,
-        updatedAt: Date.parse('2026-07-27T09:00:00Z'),
+test('급식 홈 알림은 게시 이벤트별 메뉴 미리보기와 이동 날짜를 가진다', () => {
+    const alert: MealAlertCard = {
+        id: 'meals.daily.lunch:2026-07-27:lunch-sha',
+        period: 'lunch',
+        title: '오늘 중식이 올라왔어요',
+        preview: '쌀밥 · 김치찌개 · 계란말이',
+        dateKey: '2026-07-27',
+        publishedAt: '2026-07-27T01:05:00Z',
+        createdAt: Date.parse('2026-07-27T01:05:00Z'),
     };
 
-    assert.equal(mealDashboardSummary(card), '중식 게시 · 석식 대기');
+    assert.equal(alert.preview, '쌀밥 · 김치찌개 · 계란말이');
+    assert.equal(alert.dateKey, '2026-07-27');
 });
