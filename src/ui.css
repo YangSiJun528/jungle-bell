@@ -107,3 +107,17 @@
         animation-iteration-count: 1 !important;
     }
 }
+
+section[aria-labelledby="today-meals-title"] .cursor-zoom-in {
+    position: relative;
+}
+
+section[aria-labelledby="today-meals-title"] .cursor-zoom-in > img {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+}
