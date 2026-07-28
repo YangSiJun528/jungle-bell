@@ -47,9 +47,8 @@
                         <tbody><template x-for="row in [{kind:'dryer', label:'건조기'}, {kind:'washer', label:'세탁기'}]" :key="row.kind"><tr :data-kind="row.kind"><th class="h-6 p-0 text-left text-xs font-semibold" :class="{'opacity-25 blur-[2px]': (laundryFilter === 'washerAvailable' && row.kind === 'dryer') || (laundryFilter === 'dryerAvailable' && row.kind === 'washer')}" scope="row"><span x-text="row.label"></span><small class="ml-2 font-mono text-[10px] font-medium text-app-muted tabular-nums"><b class="text-app-success" x-text="typeSummary(row.kind).available"></b>/<span x-text="typeSummary(row.kind).total"></span></small></th><template x-for="segment in availabilitySegments(row.kind)" :key="segment.id"><td class="h-6 p-0 transition" :class="{'opacity-25 blur-[2px]': (laundryAccess === 'men' && segment.zone === 'women') || (laundryAccess === 'women' && segment.zone === 'men') || (laundryFilter === 'washerAvailable' && row.kind === 'dryer') || (laundryFilter === 'dryerAvailable' && row.kind === 'washer')}" :data-zone="segment.zone" :data-state="segment.state" :title="segment.label"><span class="flex h-6 w-full items-center justify-center rounded border font-mono text-[10px] leading-none font-bold text-app-overlay tabular-nums" :class="{'border-app-border bg-app-faint': segment.state !== 'available', 'border-app-men bg-app-men': segment.state === 'available' && segment.zone === 'men', 'border-app-common bg-app-common': segment.state === 'available' && segment.zone === 'common', 'border-app-women bg-app-women': segment.state === 'available' && segment.zone === 'women', 'border-app-success bg-app-success': segment.state === 'available' && segment.zone === 'other'}" aria-hidden="true" x-text="segment.overviewText"></span><span class="sr-only" x-text="segment.label"></span></td></template></tr></template></tbody>
                     </table>
                     <section class="mt-4 border-t border-app-divider pt-4" data-ui="laundry-access-situations" aria-labelledby="laundry-situation-title">
-                        <header class="mb-2 flex items-end justify-between gap-4">
+                        <header class="mb-2">
                             <h3 id="laundry-situation-title" class="m-0 text-sm font-bold">지금 세탁해도 될까요?</h3>
-                            <p class="m-0 text-[10px] text-app-muted">공용 6·7번은 두 현황에 모두 포함됩니다.</p>
                         </header>
                         <div class="grid grid-cols-2 gap-2" aria-live="polite">
                             <template x-for="situation in laundryAccessSituations()" :key="situation.access">
@@ -65,10 +64,7 @@
                                     :data-state="situation.state"
                                 >
                                     <header class="flex min-w-0 items-center justify-between gap-2">
-                                        <span class="min-w-0">
-                                            <strong class="block truncate text-xs" x-text="laundrySituationAccessLabel(situation)"></strong>
-                                            <small class="block text-[10px] text-app-muted" x-text="situation.access === 'men' ? '1–7번 워시타워' : '6–9번 워시타워'"></small>
-                                        </span>
+                                        <strong class="min-w-0 truncate text-xs" x-text="laundrySituationAccessLabel(situation)"></strong>
                                         <span
                                             class="flex-none rounded-full bg-app-control px-2 py-1 text-[10px] font-bold text-app-muted"
                                             :class="{
@@ -80,23 +76,9 @@
                                         ></span>
                                     </header>
                                     <p class="mt-2 text-xs font-semibold leading-relaxed" x-text="laundrySituationRecommendationLabel(situation)"></p>
-                                    <p class="mt-1 text-[10px] font-semibold text-app-text" x-show="situation.recommendation !== 'pending'">
-                                        지금 시작 가능 <b class="font-mono tabular-nums" x-text="situation.startableLoads"></b>대
-                                    </p>
-                                    <p class="mt-0.5 font-mono text-[10px] text-app-muted tabular-nums" x-show="situation.recommendation !== 'pending'">
-                                        세탁기 <b x-text="situation.washerUsable"></b>/<span x-text="situation.total"></span>
-                                        · 건조기 <b x-text="situation.dryerUsable"></b>/<span x-text="situation.total"></span> 사용 가능
-                                    </p>
-                                    <p class="mt-0.5 font-mono text-[10px] text-app-muted tabular-nums" x-show="situation.recommendation !== 'pending'">
-                                        가동 중 세탁기 <b x-text="situation.activeWashers"></b>대
-                                        · 건조기 <b x-text="situation.activeDryers"></b>대
-                                    </p>
                                 </article>
                             </template>
                         </div>
-                        <p class="mt-2 mb-0 text-[10px] leading-relaxed text-app-muted">
-                            세탁기와 건조기가 동시에 가동 중이면 새 세탁을 추천하지 않습니다. 건조 여유는 빈 건조기에서 건조 예정 세탁물을 뺀 값이며, 완료 표시는 빨래가 남아 있을 수 있어 빈자리에서 제외합니다.
-                        </p>
                     </section>
                 </div>
 
