@@ -116,7 +116,7 @@ test('상단 표 아래에 필터와 독립적인 남성·여성 세탁 현황 �
     assert.match(script, /assessLaundryAccessSituation\(machines, 'men', reliable\)/);
     assert.match(script, /assessLaundryAccessSituation\(machines, 'women', reliable\)/);
     assert.match(script, /세탁 후 건조기가 부족할 수 있어 기다리는 게 좋아요\./);
-    assert.match(script, /세탁 후에도 건조기 자리가 남을 것 같아 시작해도 괜찮아요\./);
+    assert.match(script, /한 대를 써도 여유가 남아 시작해도 괜찮을 것 같아요\./);
     assert.doesNotMatch(situationMethod, /this\.laundryAccess|this\.laundryFilter/);
 });
 

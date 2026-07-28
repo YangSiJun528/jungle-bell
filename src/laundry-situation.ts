@@ -6,8 +6,8 @@ import {
 } from './laundry-status.ts';
 
 export const LAUNDRY_SITUATION_RULES = {
-    comfortableStartableRatio: 0.6,
-    minimumStartableLoads: 1,
+    comfortableStartableRatio: 2 / 3,
+    availableStartableLoads: 2,
     maxSnapshotAgeMs: 120_000,
     activeOperationalStatuses: [
         'RUNNING',
@@ -145,7 +145,7 @@ export function assessLaundryAccessSituation(
     if (startableLoadRatio >= LAUNDRY_SITUATION_RULES.comfortableStartableRatio) {
         return {...base, state: 'comfortable', recommendation: 'recommended'};
     }
-    if (startableLoads >= LAUNDRY_SITUATION_RULES.minimumStartableLoads) {
+    if (startableLoads >= LAUNDRY_SITUATION_RULES.availableStartableLoads) {
         return {...base, state: 'available', recommendation: 'recommended'};
     }
     return {...base, state: 'limited', recommendation: 'notRecommended'};
