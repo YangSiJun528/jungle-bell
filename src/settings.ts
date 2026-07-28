@@ -4,6 +4,10 @@ import {invoke} from '@tauri-apps/api/core';
 import type {UnlistenFn} from '@tauri-apps/api/event';
 import {confirm, message} from '@tauri-apps/plugin-dialog';
 import {
+    AUTO_UPDATE_DISABLE_CONFIRMATION,
+    requiresAutoUpdateDisableConfirmation,
+} from './settings-confirmation';
+import {
     connectSettingsSnapshots,
     invokeSettingsMutation,
     refreshSettingsSnapshot,
@@ -53,6 +57,7 @@ interface SettingsComponent {
     saveStartInterval(): Promise<void>;
     saveEndInterval(): Promise<void>;
     saveSelectedCohort(): Promise<void>;
+    toggleAutoUpdate(): Promise<void>;
     toggleDebugMode(): Promise<void>;
     openNotificationSettings(): Promise<void>;
     command(command: string): Promise<void>;
@@ -257,6 +262,31 @@ function settings(): SettingsComponent {
             } catch (error) {
                 await this.restoreSettings('set_selected_cohort', error, () => {
                     this.selectedCohortId = previous;
+                });
+            }
+        },
+
+        async toggleAutoUpdate() {
+            const value = this.autoUpdate;
+            if (requiresAutoUpdateDisableConfirmation(value)) {
+                const accepted = await confirm(
+                    AUTO_UPDATE_DISABLE_CONFIRMATION.message,
+                    {
+                        title: AUTO_UPDATE_DISABLE_CONFIRMATION.title,
+                        okLabel: AUTO_UPDATE_DISABLE_CONFIRMATION.okLabel,
+                        cancelLabel: AUTO_UPDATE_DISABLE_CONFIRMATION.cancelLabel,
+                    },
+                );
+                if (!accepted) {
+                    this.autoUpdate = true;
+                    return;
+                }
+            }
+            try {
+                await invokeSettingsMutation(this, projectSettings, 'set_auto_update', {enabled: value});
+            } catch (error) {
+                await this.restoreSettings('set_auto_update', error, () => {
+                    this.autoUpdate = !value;
                 });
             }
         },

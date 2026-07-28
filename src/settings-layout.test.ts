@@ -124,6 +124,21 @@ test('앱 탭은 일반, 권한 및 개인정보, 도움말, 고급 설정으로
     assert.equal(settings.match(/command\('check_and_notify_update'\)/g)?.length, 1);
 });
 
+test('자동 업데이트를 끄기 전에는 호환성 경고를 확인한다', () => {
+    assert.match(
+        settings,
+        /aria-label="자동 업데이트"[^>]*x-model="autoUpdate"[^>]*@change="toggleAutoUpdate\(\)"/,
+    );
+    assert.match(settingsScript, /async toggleAutoUpdate\(\)/);
+    assert.match(settingsScript, /requiresAutoUpdateDisableConfirmation\(value\)/);
+    assert.match(settingsScript, /AUTO_UPDATE_DISABLE_CONFIRMATION\.message/);
+    assert.match(settingsScript, /this\.autoUpdate = true/);
+    assert.match(
+        settingsScript,
+        /invokeSettingsMutation\(this,\s*projectSettings,\s*'set_auto_update',\s*\{enabled: value\}\)/,
+    );
+});
+
 test('설정 행이 아닌 우측 스위치를 직접 눌렀을 때만 토글한다', () => {
     const checkboxCount = settings.match(/type="checkbox"/g)?.length ?? 0;
     const toggleTargetCount = settings.match(/<label[^>]*data-ui="settings-toggle"/g)?.length ?? 0;
