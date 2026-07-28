@@ -138,7 +138,10 @@ pub fn run() {
         shared_state.clone(),
         env!("CARGO_PKG_VERSION").to_string(),
     ));
-    let local_consumption_service = Arc::new(LocalConsumptionService::new(shared_state.clone()));
+    let local_consumption_service = Arc::new(LocalConsumptionService::new(
+        shared_state.clone(),
+        alert_overlay_service.clone(),
+    ));
     let campus_service = Arc::new(campus::CampusService::new());
     let news_service = Arc::new(news::NewsService::new());
 
