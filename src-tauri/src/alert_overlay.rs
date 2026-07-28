@@ -90,6 +90,8 @@ pub struct AlertOverlayItem {
     pub title: String,
     pub body: String,
     pub action: AlertOverlayAction,
+    #[serde(skip)]
+    dedupe_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
@@ -114,13 +116,34 @@ impl AlertOverlayQueue {
         }
     }
 
-    fn push(&mut self, title: String, body: String, action: AlertOverlayAction) -> AlertOverlaySnapshot {
+    fn push_with_dedupe(
+        &mut self,
+        title: String,
+        body: String,
+        action: AlertOverlayAction,
+        dedupe_key: Option<String>,
+    ) -> AlertOverlaySnapshot {
+        if let Some(key) = dedupe_key.as_deref() {
+            if let Some(existing) = self
+                .alerts
+                .iter_mut()
+                .find(|alert| alert.dedupe_key.as_deref() == Some(key))
+            {
+                existing.title = title;
+                existing.body = body;
+                existing.action = action;
+                self.revision = self.revision.saturating_add(1);
+                return self.snapshot();
+            }
+        }
+
         self.next_id = self.next_id.saturating_add(1);
         self.alerts.push_back(AlertOverlayItem {
             id: self.next_id.to_string(),
             title,
             body,
             action,
+            dedupe_key,
         });
         self.revision = self.revision.saturating_add(1);
         self.snapshot()
@@ -150,18 +173,19 @@ pub struct AlertOverlayService {
 }
 
 impl AlertOverlayService {
-    pub fn enqueue(
+    pub fn enqueue_with_dedupe(
         &self,
         app: &tauri::AppHandle,
         title: impl Into<String>,
         body: impl Into<String>,
         action: AlertOverlayAction,
+        dedupe_key: Option<&str>,
     ) -> Result<AlertOverlaySnapshot, String> {
         let snapshot = self
             .queue
             .lock()
             .map_err(|_| "알림 창 큐 잠금이 손상되었습니다.".to_string())?
-            .push(title.into(), body.into(), action);
+            .push_with_dedupe(title.into(), body.into(), action, dedupe_key.map(str::to_owned));
         schedule_snapshot(app, snapshot.clone())?;
         Ok(snapshot)
     }
@@ -315,16 +339,18 @@ mod tests {
     #[test]
     fn 알림은_닫기전까지_큐에_남고_닫으면_다음_알림이_표시된다() {
         let mut queue = AlertOverlayQueue::default();
-        let first = queue.push(
+        let first = queue.push_with_dedupe(
             "출석 알림".into(),
             "학습 시작을 확인해 주세요.".into(),
             AlertOverlayAction::Attendance,
+            None,
         );
         let first_id = first.alerts[0].id.clone();
-        let second = queue.push(
+        let second = queue.push_with_dedupe(
             "세탁 알림".into(),
             "세탁이 끝났습니다.".into(),
             AlertOverlayAction::Laundry,
+            None,
         );
 
         assert_eq!(second.alerts.len(), 2);
@@ -340,15 +366,17 @@ mod tests {
     #[test]
     fn 같은_화면으로_이동하는_후속_알림도_각각_목록에_남는다() {
         let mut queue = AlertOverlayQueue::default();
-        queue.push(
+        queue.push_with_dedupe(
             "세탁 종료 5분 전".into(),
             "3번 세탁기가 곧 끝납니다.".into(),
             AlertOverlayAction::Laundry,
+            None,
         );
-        let snapshot = queue.push(
+        let snapshot = queue.push_with_dedupe(
             "세탁 완료".into(),
             "3번 세탁기가 끝났습니다.".into(),
             AlertOverlayAction::Laundry,
+            None,
         );
 
         assert_eq!(snapshot.alerts.len(), 2);
@@ -357,6 +385,28 @@ mod tests {
             .alerts
             .iter()
             .all(|alert| alert.action == AlertOverlayAction::Laundry));
+    }
+
+    #[test]
+    fn 같은_dedupe_key의_반복_알림은_기존_항목을_갱신한다() {
+        let mut queue = AlertOverlayQueue::default();
+        let first = queue.push_with_dedupe(
+            "출석 알림".into(),
+            "첫 번째 안내".into(),
+            AlertOverlayAction::Attendance,
+            Some("attendance".into()),
+        );
+        let first_id = first.alerts[0].id.clone();
+        let updated = queue.push_with_dedupe(
+            "출석 알림".into(),
+            "새로운 안내".into(),
+            AlertOverlayAction::Attendance,
+            Some("attendance".into()),
+        );
+
+        assert_eq!(updated.alerts.len(), 1);
+        assert_eq!(updated.alerts[0].id, first_id);
+        assert_eq!(updated.alerts[0].body, "새로운 안내");
     }
 
     #[test]
