@@ -1,6 +1,7 @@
 // LMS 출석 WebView에서 실행되는 최소 권한 스크립트.
-// 사용자의 정확한 "학습 시작" 클릭만 Rust에 알리며,
-// 새로고침 여부는 hidden checker의 서버 조회 결과로 결정한다.
+// Jungle Bell의 기수 선택을 LMS 로컬 스토리지에 맞추고,
+// 사용자의 정확한 "학습 시작" 클릭만 Rust에 알린다.
+// 학습 시작 후 새로고침 여부는 hidden checker의 서버 조회 결과로 결정한다.
 
 interface TauriGlobal {
     core: {
@@ -12,7 +13,45 @@ interface Window {
     __TAURI__: TauriGlobal;
 }
 
+const LMS_ORIGIN = 'https://jungle-lms.krafton.com';
+const SELECTED_COHORT_STORAGE_KEY = 'selected_cohort_id';
+
 let interactionReportInFlight = false;
+let cohortSyncInFlight = false;
+
+async function syncSelectedCohortStorage(): Promise<void> {
+    if (window.location.origin !== LMS_ORIGIN || !window.__TAURI__?.core || cohortSyncInFlight) {
+        return;
+    }
+
+    cohortSyncInFlight = true;
+    try {
+        let current = window.localStorage.getItem(SELECTED_COHORT_STORAGE_KEY);
+        if (current !== null && !isSerializedLmsSelectedCohortId(current)) {
+            window.localStorage.removeItem(SELECTED_COHORT_STORAGE_KEY);
+            current = null;
+        }
+
+        const cohortId = await window.__TAURI__.core.invoke<string | null>(
+            'get_attendance_cohort_id',
+            {pageUrl: window.location.href},
+        );
+        const next = serializeLmsSelectedCohortId(cohortId);
+        current = window.localStorage.getItem(SELECTED_COHORT_STORAGE_KEY);
+        if (current === next) return;
+
+        if (next === null) {
+            window.localStorage.removeItem(SELECTED_COHORT_STORAGE_KEY);
+        } else {
+            window.localStorage.setItem(SELECTED_COHORT_STORAGE_KEY, next);
+        }
+        window.location.reload();
+    } catch {
+        // LMS 페이지 자체 동작은 기수 동기화 실패와 무관하게 유지한다.
+    } finally {
+        cohortSyncInFlight = false;
+    }
+}
 
 function attendanceButtonLabel(button: HTMLButtonElement): string {
     const ariaLabel = normalizeAttendanceLabel(button.getAttribute('aria-label'));
@@ -55,3 +94,4 @@ function handleAttendanceClick(event: MouseEvent): void {
 }
 
 document.addEventListener('click', handleAttendanceClick, true);
+void syncSelectedCohortStorage();

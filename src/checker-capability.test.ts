@@ -101,14 +101,27 @@ test('원격 checker는 필요한 명령과 event listen 권한만 가진다', (
     assert.deepEqual(sorted(checkerCapability.permissions), expectedPermissions);
 });
 
-test('원격 출석 창은 클릭 보고 명령 하나만 허용한다', () => {
+test('원격 출석 창은 클릭 보고와 기수 동기화 명령만 허용한다', () => {
     const invoked = sorted(new Set(attendanceInvokeCommands()));
 
     assert.deepEqual(attendanceCapability.windows, ['attendance']);
     assert.equal(attendanceCapability.local, false);
     assert.deepEqual(attendanceCapability.remote.urls, ['https://jungle-lms.krafton.com/*']);
     assert.deepEqual(sorted(attendanceCapability.permissions), invoked.map(allowPermission));
-    assert.deepEqual(invoked, ['report_attendance_start_clicked']);
+    assert.deepEqual(invoked, [
+        'get_attendance_cohort_id',
+        'report_attendance_start_clicked',
+    ]);
+});
+
+test('출석 창은 페이지를 열 때 Jungle Bell 기수와 LMS 로컬 스토리지를 동기화한다', () => {
+    assert.match(attendanceSource, /selected_cohort_id/);
+    assert.match(attendanceSource, /get_attendance_cohort_id/);
+    assert.match(attendanceSource, /localStorage\.getItem/);
+    assert.match(attendanceSource, /localStorage\.(?:setItem|removeItem)/);
+    assert.match(attendanceSource, /serializeLmsSelectedCohortId/);
+    assert.match(attendanceSource, /isSerializedLmsSelectedCohortId/);
+    assert.match(attendanceSource, /window\.location\.reload\(\)/);
 });
 
 test('checker는 LMS 기수 목록을 로컬 선택 규칙으로 해석한 뒤 해당 출석만 조회한다', () => {

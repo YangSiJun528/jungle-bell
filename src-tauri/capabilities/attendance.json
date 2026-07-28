@@ -8,6 +8,7 @@
   },
   "windows": ["attendance"],
   "permissions": [
+    "allow-get-attendance-cohort-id",
     "allow-report-attendance-start-clicked"
   ]
 }

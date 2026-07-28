@@ -21,6 +21,18 @@ function normalizeAttendancePath(pathname: string): string {
     return withoutTrailingSlash || '/';
 }
 
+function serializeLmsSelectedCohortId(cohortId: string | null): string | null {
+    return cohortId === null ? null : JSON.stringify(cohortId);
+}
+
+function isSerializedLmsSelectedCohortId(value: string): boolean {
+    try {
+        return typeof JSON.parse(value) === 'string';
+    } catch {
+        return false;
+    }
+}
+
 function shouldReportAttendanceStartClick(evidence: AttendanceStartClickEvidence): boolean {
     return evidence.trusted
         && evidence.origin === ATTENDANCE_CHECK_IN_ORIGIN
