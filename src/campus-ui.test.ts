@@ -60,6 +60,10 @@ test('세탁 알림은 명시적인 추가 버튼과 모달 대화상자에서 �
     assert.match(campusHtml, /종료\s*전\s*알림/);
     assert.match(script, /set_laundry_watch/);
     assert.match(script, /laundryAlertOptions/);
+    assert.match(
+        script,
+        /label:\s*`\$\{this\.machineName\(machine\.id\)\}\s+\$\{appliance === 'washer' \? '세탁기' : '건조기'\}\(\$\{this\.machineZoneLabel\(machine\.id\)\}\)\s*·\s*\$\{status\}`/,
+    );
     assert.match(script, /saveLaundryAlert/);
     assert.match(script, /\.showModal\(\)/);
     assert.match(script, /\.close\(\)/);
