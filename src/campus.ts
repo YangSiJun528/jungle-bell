@@ -330,7 +330,6 @@ function campus(): Record<string, unknown> {
         settingsRevision: -1,
         laundryWatch: null as LaundryWatch | null,
         subscriptionBusy: false,
-        laundryAlertPickerOpen: false,
         laundryAlertSelection: '',
         laundryAlertNotice: 5,
         laundryNoticeMinutes: [...LAUNDRY_NOTICE_MINUTES],
@@ -470,11 +469,13 @@ function campus(): Record<string, unknown> {
                 && option.sessionId === this.laundryWatch.sessionId);
             this.laundryAlertSelection = current?.value ?? options[0]?.value ?? '';
             this.laundryAlertNotice = this.laundryWatch?.notifyBeforeMins ?? 5;
-            this.laundryAlertPickerOpen = true;
+            const dialog = this.$refs.laundryAlertDialog as HTMLDialogElement | undefined;
+            if (dialog && !dialog.open) dialog.showModal();
         },
 
         closeLaundryAlertPicker(this: any) {
-            this.laundryAlertPickerOpen = false;
+            const dialog = this.$refs.laundryAlertDialog as HTMLDialogElement | undefined;
+            if (dialog?.open) dialog.close();
         },
 
         async saveLaundryAlert(this: any) {

@@ -41,25 +41,33 @@ test('오늘의 식단 카드에는 게시 상태 뱃지를 표시하지 않는�
     assert.doesNotMatch(mealsPanel, /게시됨|게시 전/);
 });
 
-test('세탁 알림은 기기마다 버튼을 두지 않고 단일 알림받기 화면에서 세션을 선택한다', () => {
+test('세탁 알림은 명시적인 추가 버튼과 모달 대화상자에서 세션을 선택한다', () => {
     const script = readFileSync(new URL('./campus.ts', import.meta.url), 'utf8');
     const laundryPanel = campusHtml.slice(
         campusHtml.indexOf('<section id="laundry-panel"'),
         campusHtml.indexOf('<section id="meals-panel"'),
     );
 
-    assert.equal(laundryPanel.match(/>알림받기<\/button>/g)?.length, 1);
-    assert.match(laundryPanel, /data-ui="laundry-alert-picker"/);
+    assert.equal(laundryPanel.match(/세탁 알림 추가/g)?.length, 1);
+    assert.match(laundryPanel, /<dialog[^>]*data-ui="laundry-alert-dialog"/);
+    assert.match(laundryPanel, /aria-labelledby="laundry-alert-dialog-title"/);
+    assert.match(laundryPanel, /id="laundry-alert-dialog-title"/);
     assert.match(laundryPanel, /@click="openLaundryAlertPicker\(\)"/);
     assert.match(laundryPanel, /x-for="option in laundryAlertOptions\(\)"/);
     assert.match(laundryPanel, /x-model="laundryAlertSelection"/);
     assert.match(laundryPanel, /@click="saveLaundryAlert\(\)"/);
+    assert.match(laundryPanel, />알림 추가<\/button>/);
     assert.match(campusHtml, /종료\s*전\s*알림/);
     assert.match(script, /set_laundry_watch/);
     assert.match(script, /laundryAlertOptions/);
     assert.match(script, /saveLaundryAlert/);
+    assert.match(script, /\.showModal\(\)/);
+    assert.match(script, /\.close\(\)/);
     assert.match(script, /connectSettingsSnapshots/);
-    assert.doesNotMatch(laundryPanel, /toggleLaundryWatch|홈에 표시 중|>\s*홈에 표시\s*</);
+    assert.doesNotMatch(
+        laundryPanel,
+        /data-ui="laundry-alert-picker"|x-show="laundryAlertPickerOpen"|toggleLaundryWatch|홈에 표시 중|>\s*홈에 표시\s*</,
+    );
     assert.doesNotMatch(mealsPanel, /새 식단 알림|setMealSubscription/);
     assert.doesNotMatch(script, /setMealSubscription|set_meal_subscription_enabled|mealSubscription/);
 });
