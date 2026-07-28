@@ -27,6 +27,33 @@ pub struct LaundryWatch {
     pub notify_before_mins: u32,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum NotificationDelivery {
+    Overlay,
+    System,
+    #[default]
+    Both,
+}
+
+impl NotificationDelivery {
+    pub fn uses_overlay(self) -> bool {
+        matches!(self, Self::Overlay | Self::Both)
+    }
+
+    pub fn uses_system(self) -> bool {
+        matches!(self, Self::System | Self::Both)
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Overlay => "overlay",
+            Self::System => "system",
+            Self::Both => "both",
+        }
+    }
+}
+
 /// 출석 체크 시간대 설정.
 ///
 /// 하루가 다음 시간대로 나뉨:
@@ -52,6 +79,9 @@ pub struct Config {
     /// 종료 출석 알림 활성화 여부
     #[serde(default = "default_true")]
     pub end_notification_enabled: bool,
+    /// 상황 알림을 전용 알림 창, OS 알림 또는 양쪽으로 표시할지 여부.
+    #[serde(default)]
+    pub notification_delivery: NotificationDelivery,
     /// 시작 출석 알림 간격 (분)
     #[serde(default = "default_notification_interval")]
     pub start_notification_interval_mins: u32,
@@ -312,6 +342,7 @@ impl Default for Config {
             auto_start: true,
             start_notification_enabled: true,
             end_notification_enabled: true,
+            notification_delivery: NotificationDelivery::Both,
             start_notification_interval_mins: 15,
             end_notification_interval_mins: 15,
             notification_start: TimeOfDay { hour: 9, minute: 0 },
@@ -545,6 +576,23 @@ mod tests {
         let config: Config = serde_json::from_value(value).unwrap();
 
         assert!(config.show_app_icon);
+    }
+
+    #[test]
+    fn 알림_표시_방식은_기본적으로_알림창과_os_알림을_함께_사용한다() {
+        assert_eq!(Config::default().notification_delivery, NotificationDelivery::Both);
+
+        let mut legacy = serde_json::to_value(Config::default()).unwrap();
+        legacy.as_object_mut().unwrap().remove("notification_delivery");
+        let migrated: Config = serde_json::from_value(legacy).unwrap();
+
+        assert_eq!(migrated.notification_delivery, NotificationDelivery::Both);
+        assert!(NotificationDelivery::Overlay.uses_overlay());
+        assert!(!NotificationDelivery::Overlay.uses_system());
+        assert!(!NotificationDelivery::System.uses_overlay());
+        assert!(NotificationDelivery::System.uses_system());
+        assert!(NotificationDelivery::Both.uses_overlay());
+        assert!(NotificationDelivery::Both.uses_system());
     }
 
     #[test]

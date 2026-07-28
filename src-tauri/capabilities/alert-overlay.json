@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "alert-overlay",
+  "description": "Minimal permissions for the persistent alert overlay",
+  "windows": ["alert-overlay"],
+  "permissions": [
+    "core:event:allow-listen",
+    "core:window:allow-start-dragging",
+    "allow-get-alert-overlay-snapshot",
+    "allow-dismiss-alert-overlay",
+    "allow-activate-alert-overlay"
+  ]
+}

@@ -96,6 +96,7 @@ export default defineConfig({
                 campus: resolve(import.meta.dirname, 'src/campus.html'),
                 imageViewer: resolve(import.meta.dirname, 'src/image-viewer.html'),
                 trayPanel: resolve(import.meta.dirname, 'src/tray-panel.html'),
+                alertOverlay: resolve(import.meta.dirname, 'src/alert-overlay.html'),
             },
         },
     },
