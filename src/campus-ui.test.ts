@@ -56,7 +56,7 @@ test('세탁 알림은 명시적인 추가 버튼과 모달 대화상자에서 �
     assert.match(laundryPanel, /x-for="option in laundryAlertOptions\(\)"/);
     assert.match(laundryPanel, /x-model="laundryAlertSelection"/);
     assert.match(laundryPanel, /@click="saveLaundryAlert\(\)"/);
-    assert.match(laundryPanel, />알림 추가<\/button>/);
+    assert.match(laundryPanel, /laundryWatch \? '알림 변경' : '알림 추가'/);
     assert.match(campusHtml, /종료\s*전\s*알림/);
     assert.match(script, /set_laundry_watch/);
     assert.match(script, /laundryAlertOptions/);
