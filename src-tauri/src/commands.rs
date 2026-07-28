@@ -357,46 +357,6 @@ pub async fn set_laundry_watch(
 }
 
 #[tauri::command]
-pub async fn set_start_notification_interval(
-    app: tauri::AppHandle,
-    settings: tauri::State<'_, Arc<SettingsService>>,
-    value: u32,
-) -> Result<SettingsSnapshot, String> {
-    let value = config::validate_notification_interval(value)?;
-    log::info!("[settings] 시작 출석 알림 간격 변경: {}", value);
-    let commit = settings
-        .update_config(&app, "set_start_notification_interval", move |config| {
-            config.start_notification_interval_mins = value;
-            Ok(())
-        })
-        .await?;
-    if commit.changed {
-        analytics::track(Event::SettingChanged(Setting::StartNotificationIntervalMinutes(value)));
-    }
-    Ok(commit.snapshot)
-}
-
-#[tauri::command]
-pub async fn set_end_notification_interval(
-    app: tauri::AppHandle,
-    settings: tauri::State<'_, Arc<SettingsService>>,
-    value: u32,
-) -> Result<SettingsSnapshot, String> {
-    let value = config::validate_notification_interval(value)?;
-    log::info!("[settings] 종료 출석 알림 간격 변경: {}", value);
-    let commit = settings
-        .update_config(&app, "set_end_notification_interval", move |config| {
-            config.end_notification_interval_mins = value;
-            Ok(())
-        })
-        .await?;
-    if commit.changed {
-        analytics::track(Event::SettingChanged(Setting::EndNotificationIntervalMinutes(value)));
-    }
-    Ok(commit.snapshot)
-}
-
-#[tauri::command]
 pub async fn set_notification_start(
     app: tauri::AppHandle,
     settings: tauri::State<'_, Arc<SettingsService>>,

@@ -85,12 +85,6 @@ pub struct Config {
     /// 상황 알림을 전용 알림 창, OS 알림 또는 양쪽으로 표시할지 여부.
     #[serde(default)]
     pub notification_delivery: NotificationDelivery,
-    /// 시작 출석 알림 간격 (분)
-    #[serde(default = "default_notification_interval")]
-    pub start_notification_interval_mins: u32,
-    /// 종료 출석 알림 간격 (분)
-    #[serde(default = "default_notification_interval")]
-    pub end_notification_interval_mins: u32,
     /// 알림 시작 시각 — 이 시각 이전에는 아침 알림을 보내지 않음
     #[serde(default = "default_notification_start")]
     pub notification_start: TimeOfDay,
@@ -143,10 +137,6 @@ fn default_true() -> bool {
     true
 }
 
-fn default_notification_interval() -> u32 {
-    15
-}
-
 fn default_notification_start() -> TimeOfDay {
     TimeOfDay { hour: 9, minute: 0 }
 }
@@ -155,7 +145,6 @@ fn default_notification_end() -> TimeOfDay {
     TimeOfDay { hour: 4, minute: 0 }
 }
 
-const ALLOWED_NOTIFICATION_INTERVAL_MINS: [u32; 6] = [1, 3, 5, 10, 15, 30];
 pub const ALLOWED_LAUNDRY_NOTICE_MINS: [u32; 6] = [1, 3, 5, 10, 15, 30];
 
 impl TimeOfDay {
@@ -183,14 +172,6 @@ pub fn validate_notification_end(hour: u32, minute: u32) -> Result<TimeOfDay, St
         return Err("알림 종료 시각은 00:00부터 04:00 사이여야 합니다.".into());
     }
     Ok(TimeOfDay { hour, minute })
-}
-
-pub fn validate_notification_interval(value: u32) -> Result<u32, String> {
-    if ALLOWED_NOTIFICATION_INTERVAL_MINS.contains(&value) {
-        Ok(value)
-    } else {
-        Err("알림 간격은 1, 3, 5, 10, 15, 30분 중 하나여야 합니다.".into())
-    }
 }
 
 pub fn validate_laundry_watch(watch: &LaundryWatch) -> Result<(), String> {
@@ -293,18 +274,6 @@ impl Config {
         if normalize_notification_end(&mut self.notification_end) {
             changed = true;
         }
-        if normalize_notification_interval(
-            &mut self.start_notification_interval_mins,
-            "start_notification_interval_mins",
-        ) {
-            changed = true;
-        }
-        if normalize_notification_interval(
-            &mut self.end_notification_interval_mins,
-            "end_notification_interval_mins",
-        ) {
-            changed = true;
-        }
         if self
             .laundry_watch
             .as_ref()
@@ -347,8 +316,6 @@ impl Default for Config {
             start_notification_enabled: true,
             end_notification_enabled: true,
             notification_delivery: NotificationDelivery::Both,
-            start_notification_interval_mins: 15,
-            end_notification_interval_mins: 15,
             notification_start: TimeOfDay { hour: 9, minute: 0 },
             notification_end: TimeOfDay { hour: 4, minute: 0 },
             debug_mode: false,
@@ -409,32 +376,6 @@ fn normalize_notification_end(time: &mut TimeOfDay) -> bool {
         );
     }
     changed
-}
-
-fn normalize_notification_interval(value: &mut u32, field_name: &str) -> bool {
-    if ALLOWED_NOTIFICATION_INTERVAL_MINS.contains(value) {
-        return false;
-    }
-
-    let original = *value;
-    *value = nearest_notification_interval(*value);
-    log::info!("[config] {} {}분 → {}분으로 마이그레이션", field_name, original, *value);
-    true
-}
-
-fn nearest_notification_interval(value: u32) -> u32 {
-    let mut best = ALLOWED_NOTIFICATION_INTERVAL_MINS[0];
-    let mut best_distance = best.abs_diff(value);
-
-    for candidate in ALLOWED_NOTIFICATION_INTERVAL_MINS.iter().copied().skip(1) {
-        let distance = candidate.abs_diff(value);
-        if distance < best_distance || (distance == best_distance && candidate < best) {
-            best = candidate;
-            best_distance = distance;
-        }
-    }
-
-    best
 }
 
 pub(crate) fn write_file_atomically(path: &Path, data: &[u8]) -> std::io::Result<()> {
@@ -538,9 +479,12 @@ mod tests {
     }
 
     #[test]
-    fn validate_notification_interval_rejects_unknown_values() {
-        assert_eq!(validate_notification_interval(15).unwrap(), 15);
-        assert!(validate_notification_interval(2).is_err());
+    fn 출석_반복_간격은_사용자_설정으로_저장하지_않는다() {
+        let value = serde_json::to_value(Config::default()).unwrap();
+        let object = value.as_object().unwrap();
+
+        assert!(!object.contains_key("start_notification_interval_mins"));
+        assert!(!object.contains_key("end_notification_interval_mins"));
     }
 
     #[test]
@@ -548,8 +492,6 @@ mod tests {
         let mut config = Config {
             notification_start: TimeOfDay { hour: 10, minute: 30 },
             notification_end: TimeOfDay { hour: 23, minute: 45 },
-            start_notification_interval_mins: 2,
-            end_notification_interval_mins: 99,
             ..Config::default()
         };
 
@@ -558,8 +500,6 @@ mod tests {
         assert_eq!(config.notification_start.minute, 0);
         assert_eq!(config.notification_end.hour, 0);
         assert_eq!(config.notification_end.minute, 0);
-        assert_eq!(config.start_notification_interval_mins, 1);
-        assert_eq!(config.end_notification_interval_mins, 30);
     }
 
     #[test]

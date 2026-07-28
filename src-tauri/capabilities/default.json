@@ -28,8 +28,6 @@
     "allow-set-notification-delivery",
     "allow-set-meal-subscription-enabled",
     "allow-set-laundry-watch",
-    "allow-set-start-notification-interval",
-    "allow-set-end-notification-interval",
     "allow-set-notification-start",
     "allow-set-notification-end",
     "allow-set-skip-attendance",

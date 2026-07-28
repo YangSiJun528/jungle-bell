@@ -27,5 +27,6 @@ test('560x720 Tauri 창에서 알림 일정 카드의 컨트롤이 테두리 안
     assert.ok(schedulesStart >= 0);
     assert.match(schedules, /\bgap-3\b/);
     assert.equal(schedules.match(/<label class="flex min-h-10\b/g)?.length, 2);
-    assert.equal(schedules.match(/<button[^>]*class="[^"]*\bmin-h-10\b[^"]*"[^>]*role="combobox"/g)?.length, 4);
+    assert.equal(schedules.match(/<button[^>]*class="[^"]*\bmin-h-10\b[^"]*"[^>]*role="combobox"/g)?.length, 2);
+    assert.doesNotMatch(schedules, /간격|startInterval|endInterval|saveInterval/);
 });

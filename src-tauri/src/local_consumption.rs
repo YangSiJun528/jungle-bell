@@ -23,6 +23,7 @@ const MEAL_DINNER_CURSOR_KEY: &str = "meals.daily.dinner";
 const ATTENDANCE_START_CURSOR_KEY: &str = "attendance.start";
 const ATTENDANCE_END_CURSOR_KEY: &str = "attendance.end";
 const ATTENDANCE_URGENT_CURSOR_KEY: &str = "attendance.end-deadline";
+const ATTENDANCE_NOTIFICATION_REPEAT_MINS: i64 = 15;
 pub const LOCAL_DASHBOARD_UPDATED_EVENT: &str = "local-dashboard-updated";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1233,18 +1234,14 @@ fn evaluate_attendance(
         _ => None,
     };
     if let Some(cursor_key) = regular_cursor_key {
-        let interval_mins = match state.phase {
-            DailyPhase::NeedStart | DailyPhase::StartOverdue => config.start_notification_interval_mins,
-            DailyPhase::NeedEnd => config.end_notification_interval_mins,
-            _ => 0,
-        };
         let mark = CursorMark {
             key: cursor_key.into(),
             fingerprint: state.attendance_date.clone(),
         };
         let cooldown_elapsed = cursors.events.get(cursor_key).is_none_or(|cursor| {
             cursor.fingerprint != mark.fingerprint
-                || now.signed_duration_since(cursor.emitted_at) >= Duration::minutes(i64::from(interval_mins))
+                || now.signed_duration_since(cursor.emitted_at)
+                    >= Duration::minutes(ATTENDANCE_NOTIFICATION_REPEAT_MINS)
         });
         if cooldown_elapsed {
             let (title, body) = decision
@@ -2054,6 +2051,70 @@ mod tests {
 
         assert_eq!(urgent.notifications.len(), 1);
         assert_eq!(urgent.notifications[0].title, "!!! 퇴근 출석 마감 임박");
+    }
+
+    #[test]
+    fn 출석_알림은_사용자_설정없이_15분_주기로_반복한다() {
+        let kst = FixedOffset::east_opt(9 * 3600)
+            .unwrap()
+            .with_ymd_and_hms(2026, 7, 28, 9, 0, 0)
+            .unwrap();
+        let first_at = kst.with_timezone(&Utc);
+        let state = AttendanceLocalState {
+            phase: DailyPhase::NeedStart,
+            remaining: Some(3600),
+            needs_login: false,
+            attendance_date: "2026-07-28".into(),
+        };
+        let mut cursors = EventCursorStore::default();
+
+        let first = evaluate_attendance(&Config::default(), &state, first_at, &cursors);
+        assert_eq!(first.notifications.len(), 1);
+        assert_eq!(first.notifications[0].action, NotificationAction::Attendance);
+        cursors.record_notification(&first.notifications[0], first_at);
+
+        let before_boundary = evaluate_attendance(
+            &Config::default(),
+            &state,
+            first_at + Duration::minutes(15) - Duration::seconds(1),
+            &cursors,
+        );
+        assert!(before_boundary.notifications.is_empty());
+
+        let at_boundary = evaluate_attendance(&Config::default(), &state, first_at + Duration::minutes(15), &cursors);
+        assert_eq!(at_boundary.notifications.len(), 1);
+    }
+
+    #[test]
+    fn 종료_출석_알림도_같은_15분_주기로_반복한다() {
+        let kst = FixedOffset::east_opt(9 * 3600)
+            .unwrap()
+            .with_ymd_and_hms(2026, 7, 28, 23, 0, 0)
+            .unwrap();
+        let first_at = kst.with_timezone(&Utc);
+        let state = AttendanceLocalState {
+            phase: DailyPhase::NeedEnd,
+            remaining: Some(5 * 60 * 60),
+            needs_login: false,
+            attendance_date: "2026-07-28".into(),
+        };
+        let mut cursors = EventCursorStore::default();
+
+        let first = evaluate_attendance(&Config::default(), &state, first_at, &cursors);
+        assert_eq!(first.notifications.len(), 1);
+        assert_eq!(first.notifications[0].action, NotificationAction::Attendance);
+        cursors.record_notification(&first.notifications[0], first_at);
+
+        let before_boundary = evaluate_attendance(
+            &Config::default(),
+            &state,
+            first_at + Duration::minutes(15) - Duration::seconds(1),
+            &cursors,
+        );
+        assert!(before_boundary.notifications.is_empty());
+
+        let at_boundary = evaluate_attendance(&Config::default(), &state, first_at + Duration::minutes(15), &cursors);
+        assert_eq!(at_boundary.notifications.len(), 1);
     }
 
     #[test]
