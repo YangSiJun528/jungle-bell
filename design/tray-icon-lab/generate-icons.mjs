@@ -10,7 +10,7 @@ const tile = {
   x: 2,
   y: 2,
   size: 40,
-  radius: 8.5,
+  radius: 12.5,
 };
 const tileCompass = {
   scale: 1.5,

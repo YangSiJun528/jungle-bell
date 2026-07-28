@@ -1524,11 +1524,14 @@ mod tests {
             assert!(svg.contains("translate(22 22) scale(1.5)"));
             assert!(svg.contains("translate(22 22) scale(0.78) translate(-22 -22)"));
             assert!(svg.contains("stroke-width=\"1.62\""));
-            assert!(svg.contains("<rect x=\"2\" y=\"2\" width=\"40\" height=\"40\" rx=\"8.5\""));
+            assert!(svg.contains("<rect x=\"2\" y=\"2\" width=\"40\" height=\"40\" rx=\"12.5\""));
         }
 
         let macos = Image::from_bytes(include_bytes!("../icons/tray-normal-light.png")).unwrap();
         let windows = Image::from_bytes(include_bytes!("../icons/tray-normal-light-windows.png")).unwrap();
+
+        assert!(rgba_at(&macos, 4, 4)[3] < 128);
+        assert!(rgba_at(&windows, 5, 5)[3] < 128);
 
         for image in [&macos, &windows] {
             let (min_x, min_y, max_x, max_y) = transparent_cutout_bounds(image);
