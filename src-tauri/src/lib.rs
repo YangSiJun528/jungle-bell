@@ -222,8 +222,6 @@ pub fn run() {
             commands::set_notification_delivery,
             commands::set_meal_subscription_enabled,
             commands::set_laundry_watch,
-            commands::set_start_notification_interval,
-            commands::set_end_notification_interval,
             commands::set_notification_start,
             commands::set_notification_end,
             commands::set_skip_attendance,

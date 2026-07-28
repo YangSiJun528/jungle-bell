@@ -39,8 +39,6 @@ interface SettingsComponent {
     mealSubscription: boolean;
     notificationStart: number;
     notificationEnd: number;
-    startInterval: number;
-    endInterval: number;
     selectedCohortId: string;
     effectiveCohortId: string | null;
     cohortOptions: CohortOption[];
@@ -56,8 +54,6 @@ interface SettingsComponent {
     saveToggle(command: string, field: BooleanField): Promise<void>;
     saveStartTime(): Promise<void>;
     saveEndTime(): Promise<void>;
-    saveStartInterval(): Promise<void>;
-    saveEndInterval(): Promise<void>;
     saveNotificationDelivery(): Promise<void>;
     saveSelectedCohort(): Promise<void>;
     toggleAutoUpdate(): Promise<void>;
@@ -95,8 +91,6 @@ function projectSettings(target: SettingsComponent, snapshot: SettingsSnapshot):
     target.mealSubscription = snapshot.mealSubscription;
     target.notificationStart = snapshot.notificationStart.hour;
     target.notificationEnd = snapshot.notificationEnd.hour;
-    target.startInterval = snapshot.startInterval;
-    target.endInterval = snapshot.endInterval;
     target.cohortOptions = snapshot.cohortOptions;
     target.selectedCohortId = snapshot.selectedCohortId
         && snapshot.cohortOptions.some((cohort) => cohort.id === snapshot.selectedCohortId)
@@ -128,8 +122,6 @@ function settings(): SettingsComponent {
         mealSubscription: true,
         notificationStart: 4,
         notificationEnd: 4,
-        startInterval: 15,
-        endInterval: 15,
         selectedCohortId: '',
         effectiveCohortId: null,
         cohortOptions: [],
@@ -235,26 +227,6 @@ function settings(): SettingsComponent {
                 });
             } catch (error) {
                 await this.restoreSettings('set_notification_end', error);
-            }
-        },
-
-        async saveStartInterval() {
-            try {
-                await invokeSettingsMutation(this, projectSettings, 'set_start_notification_interval', {
-                    value: this.startInterval,
-                });
-            } catch (error) {
-                await this.restoreSettings('set_start_notification_interval', error);
-            }
-        },
-
-        async saveEndInterval() {
-            try {
-                await invokeSettingsMutation(this, projectSettings, 'set_end_notification_interval', {
-                    value: this.endInterval,
-                });
-            } catch (error) {
-                await this.restoreSettings('set_end_notification_interval', error);
             }
         },
 

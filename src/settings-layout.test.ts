@@ -198,10 +198,22 @@ test('종료 출석 설정은 마감 5분 전 긴급 알림을 안내한다', ()
 
     assert.match(
         endSection,
-        /종료 출석을 하지 않으면 반복 간격과 관계없이 마감 5분 전에 긴급 알림을 한 번 보냅니다\./,
+        /종료 출석을 하지 않으면 마감 5분 전에 긴급 알림을 한 번 더 보냅니다\./,
     );
     assert.match(endSection, /data-ui="settings-description"/);
     assert.match(endSection, /x-show="endNotification"/);
+});
+
+test('출석 알림은 앱의 고정 주기로 반복하고 사용자 간격 설정을 노출하지 않는다', () => {
+    const notificationSectionStart = settings.indexOf('<section id="notification-settings"');
+    const appSectionStart = settings.indexOf('<section id="app-settings"');
+    const notificationSection = settings.slice(notificationSectionStart, appSectionStart);
+
+    assert.doesNotMatch(notificationSection, /반복 간격|startInterval|endInterval|saveStartInterval|saveEndInterval/);
+    assert.doesNotMatch(
+        settingsScript,
+        /startInterval|endInterval|saveStartInterval|saveEndInterval|set_start_notification_interval|set_end_notification_interval/,
+    );
 });
 
 test('복수 기수가 조회되면 알림 탭에서 출석 확인 기수를 선택한다', () => {

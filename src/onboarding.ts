@@ -74,8 +74,6 @@ interface OnboardingComponent {
     endNotification: boolean;
     notificationStart: number;
     notificationEnd: number;
-    startInterval: number;
-    endInterval: number;
     unlistenLogin: UnlistenFn | null;
     unlistenSettings: UnlistenFn | null;
     loginRefreshTimer: number | null;
@@ -109,7 +107,6 @@ interface OnboardingComponent {
     restoreNotificationSettings(context: string, error: unknown, fallback?: () => void): Promise<void>;
     saveToggle(command: string, field: 'startNotification' | 'endNotification'): Promise<void>;
     saveTime(command: string, hour: number): Promise<void>;
-    saveInterval(command: string, value: number): Promise<void>;
     openNotificationSettings(): Promise<void>;
 }
 
@@ -121,8 +118,6 @@ function projectNotificationSettings(
     target.endNotification = snapshot.endNotification;
     target.notificationStart = snapshot.notificationStart.hour;
     target.notificationEnd = snapshot.notificationEnd.hour;
-    target.startInterval = snapshot.startInterval;
-    target.endInterval = snapshot.endInterval;
     target.lastSettingsSnapshot = snapshot;
 }
 
@@ -143,8 +138,6 @@ function onboarding(): OnboardingComponent {
         endNotification: true,
         notificationStart: 4,
         notificationEnd: 4,
-        startInterval: 15,
-        endInterval: 15,
         unlistenLogin: null,
         unlistenSettings: null,
         loginRefreshTimer: null,
@@ -343,14 +336,6 @@ function onboarding(): OnboardingComponent {
         async saveTime(command, hour) {
             try {
                 await invokeSettingsMutation(this, projectNotificationSettings, command, {hour, minute: 0});
-            } catch (error) {
-                await this.restoreNotificationSettings(command, error);
-            }
-        },
-
-        async saveInterval(command, value) {
-            try {
-                await invokeSettingsMutation(this, projectNotificationSettings, command, {value});
             } catch (error) {
                 await this.restoreNotificationSettings(command, error);
             }

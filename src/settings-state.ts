@@ -44,8 +44,6 @@ export interface SettingsSnapshot {
     notificationDelivery: NotificationDelivery;
     notificationStart: TimeOfDay;
     notificationEnd: TimeOfDay;
-    startInterval: number;
-    endInterval: number;
     selectedCohortId: string | null;
     effectiveCohortId: string | null;
     cohortOptions: CohortOption[];
