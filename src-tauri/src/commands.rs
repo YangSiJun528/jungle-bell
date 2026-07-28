@@ -11,6 +11,7 @@ use serde::Serialize;
 use tauri::{Emitter, Manager};
 use tokio::sync::Mutex;
 
+use crate::alert_overlay::{self, AlertOverlayService, AlertOverlaySnapshot};
 use crate::analytics::{self, AttendancePeriod, CampusInteraction, Event, Setting};
 use crate::attendance;
 use crate::attendance_auto_refresh::{self, StartRequestAction};
@@ -228,6 +229,25 @@ setting_bool!(
 setting_bool!(set_skip_sunday, skip_sunday, "일요일 알림 끄기", SkipSunday);
 
 // ── 커스텀 설정 커맨드 ───────────────────────────────────
+
+#[tauri::command]
+pub async fn set_notification_delivery(
+    app: tauri::AppHandle,
+    settings: tauri::State<'_, Arc<SettingsService>>,
+    delivery: config::NotificationDelivery,
+) -> Result<SettingsSnapshot, String> {
+    log::info!("[settings] 알림 표시 방식 변경: {}", delivery.as_str());
+    let commit = settings
+        .update_config(&app, "set_notification_delivery", move |config| {
+            config.notification_delivery = delivery;
+            Ok(())
+        })
+        .await?;
+    if commit.changed {
+        analytics::track(Event::SettingChanged(Setting::NotificationDelivery(delivery.as_str())));
+    }
+    Ok(commit.snapshot)
+}
 
 /// 설정 UI가 초기화/재동기화에 사용하는 단일 snapshot.
 #[tauri::command]
@@ -813,6 +833,37 @@ pub async fn get_local_dashboard_snapshot(
     local_consumption: tauri::State<'_, Arc<LocalConsumptionService>>,
 ) -> Result<LocalDashboardSnapshot, String> {
     Ok(local_consumption.dashboard_snapshot().await)
+}
+
+#[tauri::command]
+pub fn get_alert_overlay_snapshot(
+    window: tauri::WebviewWindow,
+    alert_overlay: tauri::State<'_, Arc<AlertOverlayService>>,
+) -> Result<AlertOverlaySnapshot, String> {
+    alert_overlay::ensure_overlay_window(&window)?;
+    alert_overlay.snapshot()
+}
+
+#[tauri::command]
+pub fn dismiss_alert_overlay(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    alert_overlay: tauri::State<'_, Arc<AlertOverlayService>>,
+    id: String,
+) -> Result<AlertOverlaySnapshot, String> {
+    alert_overlay::ensure_overlay_window(&window)?;
+    alert_overlay.dismiss(&app, &id)
+}
+
+#[tauri::command]
+pub fn activate_alert_overlay(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    alert_overlay: tauri::State<'_, Arc<AlertOverlayService>>,
+    id: String,
+) -> Result<AlertOverlaySnapshot, String> {
+    alert_overlay::ensure_overlay_window(&window)?;
+    alert_overlay.activate(&app, &id)
 }
 
 /// 사용자가 홈 알림 센터에서 선택한 급식 게시 이벤트 하나를 제거한다.

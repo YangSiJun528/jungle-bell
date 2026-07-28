@@ -73,11 +73,33 @@ test('시스템 알림 설정은 알림 탭의 설명이 있는 독립 항목으
     assert.ok(systemSettingsStart < appSectionStart);
     assert.match(systemSettings, /<legend[^>]*>시스템 알림<\/legend>/);
     assert.match(systemSettings, /<strong[^>]*>시스템 알림 설정<\/strong>/);
-    assert.match(systemSettings, /<small[^>]*>운영체제 설정에서 Jungle Bell 알림이 허용되어 있어야 출석 알림이 전송됩니다\.<\/small>/);
+    assert.match(systemSettings, /<small[^>]*>OS 알림을 사용할 때는 운영체제 설정에서 Jungle Bell 알림을 허용해야 합니다\.<\/small>/);
     assert.match(systemSettings, /@click="openNotificationSettings\(\)"[^>]*>열기<\/button>/);
     assert.equal(settings.match(/@click="openNotificationSettings\(\)"/g)?.length, 1);
     assert.doesNotMatch(navigation, /openNotificationSettings/);
     assert.doesNotMatch(settings, /class="notification-actions/);
+});
+
+test('알림 표시 방식은 알림창, OS 알림, 둘 다 중 하나를 선택한다', () => {
+    const notificationSectionStart = settings.indexOf('<section id="notification-settings"');
+    const appSectionStart = settings.indexOf('<section id="app-settings"');
+    const notificationSection = settings.slice(notificationSectionStart, appSectionStart);
+    const deliveryStart = notificationSection.indexOf('data-ui="notification-delivery-settings"');
+    const deliveryEnd = notificationSection.indexOf('</fieldset>', deliveryStart);
+    const delivery = notificationSection.slice(deliveryStart, deliveryEnd);
+
+    assert.ok(deliveryStart >= 0);
+    assert.match(delivery, /<legend[^>]*>알림 표시 방식<\/legend>/);
+    assert.match(delivery, /x-model="notificationDelivery"/);
+    assert.match(delivery, /@change="saveNotificationDelivery\(\)"/);
+    assert.match(delivery, /value="overlay"[^>]*>알림 창만<\/option>/);
+    assert.match(delivery, /value="system"[^>]*>OS 알림만<\/option>/);
+    assert.match(delivery, /value="both"[^>]*>알림 창 \+ OS 알림<\/option>/);
+    assert.doesNotMatch(delivery, /확인할 때까지|유지됩니다/);
+    assert.match(settingsScript, /target\.notificationDelivery = snapshot\.notificationDelivery/);
+    assert.match(settingsScript, /notificationDelivery:\s*'both'/);
+    assert.match(settingsScript, /async saveNotificationDelivery\(\)/);
+    assert.match(settingsScript, /'set_notification_delivery'/);
 });
 
 test('새 식단 알림은 식단 화면이 아니라 설정 알림 탭에서 관리한다', () => {

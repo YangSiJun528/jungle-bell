@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta name="color-scheme" content="light"/>
+    <link rel="stylesheet" href="ui.css"/>
+    <link rel="license" href="assets/fonts/Pretendard-LICENSE.txt"/>
+    <title>Jungle Bell 알림</title>
+    <style>
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: transparent !important;
+            scrollbar-gutter: auto;
+        }
+
+        [data-alert-list]::-webkit-scrollbar-track,
+        [data-alert-list]::-webkit-scrollbar-corner {
+            background: transparent;
+        }
+
+        [data-alert-list]::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        [data-alert-list]::-webkit-scrollbar-thumb {
+            border: 1px solid transparent;
+            background: var(--scrollbar-thumb);
+            background-clip: content-box;
+        }
+    </style>
+</head>
+<body class="h-screen overflow-hidden bg-transparent p-2 font-sans text-app-text">
+<section class="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-app-border bg-app-overlay shadow-[0_10px_30px_rgb(15_23_42/16%)]"
+         data-alert-center role="region" aria-label="Jungle Bell 알림 센터">
+    <header class="flex flex-none cursor-grab items-center gap-2.5 border-b border-app-divider px-4 py-2.5 select-none active:cursor-grabbing"
+            data-tauri-drag-region>
+        <img class="size-7 flex-none rounded-lg object-cover" src="assets/logo.png" alt="" data-tauri-drag-region/>
+        <strong class="min-w-0 flex-1 truncate text-sm font-bold" data-tauri-drag-region>Jungle Bell</strong>
+        <span class="text-xs font-semibold tabular-nums text-app-faint"
+              data-alert-total data-tauri-drag-region>0개</span>
+    </header>
+
+    <ul class="m-0 min-h-0 flex-1 list-none divide-y divide-app-divider overflow-y-auto p-0"
+        data-alert-list aria-live="assertive" aria-relevant="additions removals"></ul>
+</section>
+
+<template data-alert-item-template>
+    <li class="group flex min-h-[84px] items-start gap-3 bg-transparent px-4 py-3 transition-colors hover:bg-app-surface-subtle"
+        role="article">
+        <button type="button"
+                class="flex min-w-0 flex-1 cursor-pointer items-start gap-3 border-0 bg-transparent p-0 text-left text-app-text focus-visible:rounded-lg focus-visible:ring-4 focus-visible:ring-app-accent-soft"
+                data-alert-item-open>
+            <span class="mt-[7px] size-1.5 flex-none rounded-full bg-app-accent" aria-hidden="true"></span>
+            <span class="min-w-0 flex-1">
+                <strong class="block truncate text-sm leading-5 font-bold" data-alert-item-title></strong>
+                <span class="mt-1 block line-clamp-2 text-xs leading-[1.5] text-app-muted"
+                      data-alert-item-body></span>
+            </span>
+        </button>
+        <button type="button"
+                class="mt-0.5 flex size-8 flex-none items-center justify-center rounded-full border-0 bg-transparent text-app-muted transition-colors hover:bg-app-control hover:text-app-text focus-visible:ring-4 focus-visible:ring-app-accent-soft disabled:opacity-40"
+                data-alert-item-close aria-label="알림 닫기">
+            <svg class="size-4" data-icon="close" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="m7 7 10 10M17 7 7 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+        </button>
+    </li>
+</template>
+<script type="module" src="/alert-overlay.ts"></script>
+</body>
+</html>

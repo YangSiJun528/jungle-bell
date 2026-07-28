@@ -16,6 +16,7 @@ const APP_COMMANDS: &[&str] = &[
     "set_auto_start",
     "set_start_notification_enabled",
     "set_end_notification_enabled",
+    "set_notification_delivery",
     "set_meal_subscription_enabled",
     "set_laundry_watch",
     "set_start_notification_interval",
@@ -45,6 +46,9 @@ const APP_COMMANDS: &[&str] = &[
     "open_news_item",
     "get_login_status",
     "refresh_login_status",
+    "get_alert_overlay_snapshot",
+    "dismiss_alert_overlay",
+    "activate_alert_overlay",
 ];
 
 fn main() {

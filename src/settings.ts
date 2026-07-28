@@ -12,6 +12,7 @@ import {
     invokeSettingsMutation,
     refreshSettingsSnapshot,
     type CohortOption,
+    type NotificationDelivery,
     type SettingsSnapshot,
 } from './settings-state';
 
@@ -34,6 +35,7 @@ interface SettingsComponent {
     skipSunday: boolean;
     startNotification: boolean;
     endNotification: boolean;
+    notificationDelivery: NotificationDelivery;
     mealSubscription: boolean;
     notificationStart: number;
     notificationEnd: number;
@@ -56,6 +58,7 @@ interface SettingsComponent {
     saveEndTime(): Promise<void>;
     saveStartInterval(): Promise<void>;
     saveEndInterval(): Promise<void>;
+    saveNotificationDelivery(): Promise<void>;
     saveSelectedCohort(): Promise<void>;
     toggleAutoUpdate(): Promise<void>;
     toggleDebugMode(): Promise<void>;
@@ -88,6 +91,7 @@ function projectSettings(target: SettingsComponent, snapshot: SettingsSnapshot):
     target.skipSunday = snapshot.skipSunday;
     target.startNotification = snapshot.startNotification;
     target.endNotification = snapshot.endNotification;
+    target.notificationDelivery = snapshot.notificationDelivery;
     target.mealSubscription = snapshot.mealSubscription;
     target.notificationStart = snapshot.notificationStart.hour;
     target.notificationEnd = snapshot.notificationEnd.hour;
@@ -120,6 +124,7 @@ function settings(): SettingsComponent {
         skipSunday: false,
         startNotification: true,
         endNotification: true,
+        notificationDelivery: 'both',
         mealSubscription: true,
         notificationStart: 4,
         notificationEnd: 4,
@@ -250,6 +255,16 @@ function settings(): SettingsComponent {
                 });
             } catch (error) {
                 await this.restoreSettings('set_end_notification_interval', error);
+            }
+        },
+
+        async saveNotificationDelivery() {
+            try {
+                await invokeSettingsMutation(this, projectSettings, 'set_notification_delivery', {
+                    delivery: this.notificationDelivery,
+                });
+            } catch (error) {
+                await this.restoreSettings('set_notification_delivery', error);
             }
         },
 

@@ -1,3 +1,4 @@
+mod alert_overlay;
 mod analytics;
 mod attendance;
 mod attendance_auto_refresh;
@@ -21,6 +22,7 @@ mod updater;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+use alert_overlay::AlertOverlayService;
 use config::Config;
 use local_consumption::LocalConsumptionService;
 use settings_state::SettingsService;
@@ -131,6 +133,7 @@ pub fn run() {
         log::LevelFilter::Info
     };
     let shared_state = Arc::new(Mutex::new(AppState::new(config)));
+    let alert_overlay_service = Arc::new(AlertOverlayService::default());
     let settings_service = Arc::new(SettingsService::new(
         shared_state.clone(),
         env!("CARGO_PKG_VERSION").to_string(),
@@ -183,6 +186,7 @@ pub fn run() {
         // AppState를 Tauri의 managed state로 등록.
         // 핸들러에서 `tauri::State<Arc<Mutex<AppState>>>`로 받아 사용.
         .manage(shared_state.clone())
+        .manage(alert_overlay_service)
         .manage(settings_service)
         .manage(local_consumption_service)
         .manage(campus_service.clone())
@@ -206,6 +210,7 @@ pub fn run() {
             commands::set_auto_start,
             commands::set_start_notification_enabled,
             commands::set_end_notification_enabled,
+            commands::set_notification_delivery,
             commands::set_meal_subscription_enabled,
             commands::set_laundry_watch,
             commands::set_start_notification_interval,
@@ -235,6 +240,9 @@ pub fn run() {
             commands::open_news_item,
             commands::get_login_status,
             commands::refresh_login_status,
+            commands::get_alert_overlay_snapshot,
+            commands::dismiss_alert_overlay,
+            commands::activate_alert_overlay,
         ])
         // setup(): 앱 초기화 후 이벤트 루프 시작 전에 한 번 실행.
         .setup(move |app| {
