@@ -1,7 +1,7 @@
 <svg width="44" height="44" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
   <title>둥근 사각형 · 밝은 배경용 · 출석 필요</title>
 
-    <rect x="2" y="2" width="40" height="40" rx="8.5" fill="#B4232C"/>
+    <rect x="2" y="2" width="40" height="40" rx="12.5" fill="#B4232C"/>
 
     <g transform="translate(22 22) scale(1.5) translate(-22 -22)">
       <circle cx="22" cy="22" r="9.8" fill="none" stroke="#FFFFFF" stroke-width="1.62"/>
