@@ -82,7 +82,7 @@
                     </div>
                     <footer class="flex justify-end gap-2 border-t border-app-divider bg-app-surface-subtle px-5 py-3">
                         <button type="button" class="inline-flex h-9 items-center justify-center rounded-lg border border-app-border bg-app-surface px-3 text-xs font-semibold text-app-text transition-colors hover:bg-app-control focus-visible:ring-4 focus-visible:ring-app-accent-soft" :disabled="subscriptionBusy" @click="closeLaundryAlertPicker()">취소</button>
-                        <button type="button" class="inline-flex h-9 items-center justify-center rounded-lg border border-app-accent bg-app-accent px-3 text-xs font-semibold text-white transition-colors hover:bg-app-accent-hover focus-visible:ring-4 focus-visible:ring-app-accent-soft disabled:opacity-50" :disabled="laundryAlertOptions().length === 0 || subscriptionBusy" @click="saveLaundryAlert()">알림 추가</button>
+                        <button type="button" class="inline-flex h-9 items-center justify-center rounded-lg border border-app-accent bg-app-accent px-3 text-xs font-semibold text-white transition-colors hover:bg-app-accent-hover focus-visible:ring-4 focus-visible:ring-app-accent-soft disabled:opacity-50" :disabled="laundryAlertOptions().length === 0 || subscriptionBusy" @click="saveLaundryAlert()" x-text="laundryWatch ? '알림 변경' : '알림 추가'"></button>
                     </footer>
                 </dialog>
 
