@@ -15,6 +15,13 @@ import {
     laundryZoneMatchesAccess,
     summarizeLaundryAvailability,
 } from './laundry-status';
+import {
+    assessLaundryAccessSituation,
+    laundrySituationDataIsReliable,
+    type LaundryAccessSituation,
+    type LaundrySituationMachine,
+    type LaundrySituationState,
+} from './laundry-situation';
 import {relativeTimeKo} from './live-time';
 import {sortMealPostsByPeriod} from './meal-display';
 import {isSafeImageAssetUrl} from './image-asset-url';
@@ -221,6 +228,20 @@ const PROJECTION_LABELS: Record<string, string> = {
     OBSERVED: '관측값', ESTIMATED_RUNNING: '작동 중', AWAITING_COMPLETION_CONFIRMATION: '완료 확인 중',
     CONFIRMED_COMPLETED: '완료', PAUSED: '일시 정지', ERROR: '오류', IDLE: '사용 가능', UNKNOWN: '확인 불가',
 };
+const LAUNDRY_SITUATION_STATE_LABELS: Record<LaundrySituationState, string> = {
+    checking: '현황 확인 중',
+    limited: '자리 부족',
+    dryerBottleneck: '건조 대기 예상',
+    comfortable: '널널함',
+    available: '이용 가능',
+};
+const LAUNDRY_SITUATION_RECOMMENDATION_LABELS: Record<LaundrySituationState, string> = {
+    checking: '추천 판단을 기다리고 있습니다.',
+    limited: '지금은 세탁을 미루는 편이 좋습니다.',
+    dryerBottleneck: '건조 대기가 예상되어 새 세탁을 추천하지 않습니다.',
+    comfortable: '지금 세탁하기 좋습니다.',
+    available: '지금 세탁할 수 있습니다.',
+};
 const LAUNDRY_FILTER_ANALYTICS_VALUES = {
     all: 'all',
     washerAvailable: 'washer_available',
@@ -326,6 +347,7 @@ function campus(): Record<string, unknown> {
         laundryFilter: laundryPreferences.filter,
         laundryAccess: laundryPreferences.access,
         laundry: null as LaundryData | null,
+        laundrySnapshotSavedAt: null as number | null,
         meals: null as MealsPayload | null,
         settingsRevision: -1,
         laundryWatch: null as LaundryWatch | null,
@@ -538,6 +560,7 @@ function campus(): Record<string, unknown> {
             this.clockNow = Date.now();
             if (kind === 'laundry' && this.isLaundryPayload(snapshot.data)) {
                 this.laundry = snapshot.data;
+                this.laundrySnapshotSavedAt = snapshot.savedAt;
                 this.source.laundry = {
                     label: this.laundry.quality?.lastCheckedAt
                         ? `${this.relativeTime(this.laundry.quality.lastCheckedAt)} 갱신`
@@ -813,6 +836,47 @@ function campus(): Record<string, unknown> {
 
         typeSummary(this: any, kind: ApplianceKind): TypeSummary {
             return summarizeLaundryAvailability(this.availabilitySegments(kind), this.laundryAccess);
+        },
+
+        laundrySituationMachines(this: any): LaundrySituationMachine[] {
+            return Array.from({length: WASH_TOWER_COUNT}, (_, index) => {
+                const number = index + 1;
+                const machine = this.laundry?.machines.find(
+                    (item: Machine) => machineNumber(item.id) === number,
+                );
+                return {
+                    zone: machineZone(String(number)),
+                    washer: machine?.washer,
+                    dryer: machine?.dryer,
+                };
+            });
+        },
+
+        laundryAccessSituations(this: any): LaundryAccessSituation[] {
+            const reliable = laundrySituationDataIsReliable({
+                hasData: Boolean(this.laundry),
+                error: this.errors.laundry,
+                sourceFreshness: this.laundry?.quality?.sourceFreshness,
+                snapshotSavedAt: this.laundrySnapshotSavedAt,
+                nowMs: this.clockNow,
+            });
+            const machines = this.laundrySituationMachines();
+            return [
+                assessLaundryAccessSituation(machines, 'men', reliable),
+                assessLaundryAccessSituation(machines, 'women', reliable),
+            ];
+        },
+
+        laundrySituationAccessLabel(situation: LaundryAccessSituation): string {
+            return situation.access === 'men' ? '남성 가능' : '여성 가능';
+        },
+
+        laundrySituationStateLabel(situation: LaundryAccessSituation): string {
+            return LAUNDRY_SITUATION_STATE_LABELS[situation.state];
+        },
+
+        laundrySituationRecommendationLabel(situation: LaundryAccessSituation): string {
+            return LAUNDRY_SITUATION_RECOMMENDATION_LABELS[situation.state];
         },
 
         availabilitySegments(this: any, kind: ApplianceKind): AvailabilitySegment[] {

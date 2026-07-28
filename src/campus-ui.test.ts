@@ -75,3 +75,46 @@ test('세탁 알림은 명시적인 추가 버튼과 모달 대화상자에서 �
     assert.doesNotMatch(mealsPanel, /새 식단 알림|setMealSubscription/);
     assert.doesNotMatch(script, /setMealSubscription|set_meal_subscription_enabled|mealSubscription/);
 });
+
+test('상단 표 아래에 필터와 독립적인 남성·여성 세탁 현황 카드를 표시한다', () => {
+    const script = readFileSync(new URL('./campus.ts', import.meta.url), 'utf8');
+    const laundryPanel = campusHtml.slice(
+        campusHtml.indexOf('<section id="laundry-panel"'),
+        campusHtml.indexOf('<section id="meals-panel"'),
+    );
+    const overviewTable = laundryPanel.indexOf('<table');
+    const situationCards = laundryPanel.indexOf('data-ui="laundry-access-situations"');
+    const filters = laundryPanel.indexOf('name="laundry-access"');
+    const situationMethodStart = script.indexOf('laundryAccessSituations(');
+    const situationMethodEnd = script.indexOf('laundrySituationAccessLabel(', situationMethodStart);
+    const situationMethod = script.slice(situationMethodStart, situationMethodEnd);
+
+    assert.ok(overviewTable >= 0);
+    assert.ok(situationCards > overviewTable);
+    assert.ok(filters > situationCards);
+    assert.match(laundryPanel, /지금 세탁해도 될까요\?/);
+    assert.match(laundryPanel, /x-for="situation in laundryAccessSituations\(\)"/);
+    assert.match(laundryPanel, /1–7번 워시타워/);
+    assert.match(laundryPanel, /6–9번 워시타워/);
+    assert.match(laundryPanel, /공용 6·7번은 두 현황에 모두 포함됩니다/);
+    assert.match(laundryPanel, /situation\.washerUsable/);
+    assert.match(laundryPanel, /situation\.dryerUsable/);
+    assert.match(laundryPanel, /situation\.activeWashers/);
+    assert.match(laundryPanel, /situation\.activeDryers/);
+    assert.match(script, /assessLaundryAccessSituation\(machines, 'men', reliable\)/);
+    assert.match(script, /assessLaundryAccessSituation\(machines, 'women', reliable\)/);
+    assert.doesNotMatch(situationMethod, /this\.laundryAccess|this\.laundryFilter/);
+});
+
+test('빈자리 알림 기능은 제거하고 기존 기기 종료 알림만 유지한다', () => {
+    const script = readFileSync(new URL('./campus.ts', import.meta.url), 'utf8');
+    const laundryPanel = campusHtml.slice(
+        campusHtml.indexOf('<section id="laundry-panel"'),
+        campusHtml.indexOf('<section id="meals-panel"'),
+    );
+
+    assert.match(laundryPanel, /종료 전 알림/);
+    assert.match(script, /set_laundry_watch/);
+    assert.doesNotMatch(laundryPanel, /laundryVacancy|laundry-vacancy|빈자리 알림/);
+    assert.doesNotMatch(script, /laundryVacancy|laundry-vacancy|set_laundry_vacancy_watch|laundryAlertMode/);
+});
