@@ -446,7 +446,7 @@ function campus(): Record<string, unknown> {
                         : this.remainingText(state);
                     options.push({
                         value: `${machine.id}:${appliance}:${state.sessionId}`,
-                        label: `${this.machineName(machine.id)} ${appliance === 'washer' ? '세탁기' : '건조기'} · ${status}`,
+                        label: `${this.machineName(machine.id)} ${appliance === 'washer' ? '세탁기' : '건조기'}(${this.machineZoneLabel(machine.id)}) · ${status}`,
                         machineId: machine.id,
                         appliance,
                         sessionId: state.sessionId,
