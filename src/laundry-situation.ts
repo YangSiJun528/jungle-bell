@@ -1,4 +1,5 @@
 import {
+    laundryAvailabilityState,
     laundryZoneMatchesAccess,
     type LaundryMachineZone,
     type LaundryStatusAppliance,
@@ -6,9 +7,8 @@ import {
 
 export const LAUNDRY_SITUATION_RULES = {
     comfortableStartableRatio: 0.6,
-    availableStartableRatio: 0.4,
+    minimumStartableLoads: 1,
     maxSnapshotAgeMs: 120_000,
-    blockWhenWasherAndDryerActive: true,
     activeOperationalStatuses: [
         'RUNNING',
         'COURSE_RUNNING',
@@ -22,14 +22,12 @@ export const LAUNDRY_SITUATION_RULES = {
         'COURSE_RUNNING',
         'PAUSED',
         'SCHEDULED',
-        'COMPLETED',
     ],
     pendingDryerLoadProjectionStatuses: [
         'OBSERVED',
         'ESTIMATED_RUNNING',
         'AWAITING_COMPLETION_CONFIRMATION',
         'PAUSED',
-        'CONFIRMED_COMPLETED',
     ],
     reliableSourceFreshness: [
         'REFRESH_OBSERVED',
@@ -89,15 +87,7 @@ const ACTIVE_OPERATIONAL_STATUSES = new Set<string>(LAUNDRY_SITUATION_RULES.acti
 const ACTIVE_PROJECTION_STATUSES = new Set<string>(LAUNDRY_SITUATION_RULES.activeProjectionStatuses);
 
 function recommendationUsable(appliance?: LaundryStatusAppliance | null): boolean {
-    if (
-        appliance?.operationalStatus !== 'IDLE'
-        || appliance.errorCode
-        || appliance.projection?.status === 'ERROR'
-    ) {
-        return false;
-    }
-    const projectionStatus = appliance.projection?.status;
-    return projectionStatus === undefined || projectionStatus === 'IDLE';
+    return laundryAvailabilityState(appliance) === 'available';
 }
 
 function pendingDryerLoad(appliance?: LaundryStatusAppliance | null): boolean {
@@ -123,12 +113,7 @@ export function assessLaundryAccessSituation(
     const activeDryers = accessible.filter((machine) => activeCycle(machine.dryer)).length;
     const pendingDryerLoads = accessible.filter((machine) => pendingDryerLoad(machine.washer)).length;
     const dryerHeadroom = Math.max(0, dryerUsable - pendingDryerLoads);
-    const simultaneousCyclesBlocked = LAUNDRY_SITUATION_RULES.blockWhenWasherAndDryerActive
-        && activeWashers > 0
-        && activeDryers > 0;
-    const startableLoads = simultaneousCyclesBlocked
-        ? 0
-        : Math.min(washerUsable, dryerHeadroom);
+    const startableLoads = Math.min(washerUsable, dryerHeadroom);
     const washerUsableRatio = total === 0 ? 0 : washerUsable / total;
     const dryerUsableRatio = total === 0 ? 0 : dryerUsable / total;
     const startableLoadRatio = total === 0 ? 0 : startableLoads / total;
@@ -154,13 +139,13 @@ export function assessLaundryAccessSituation(
     if (washerUsable === 0) {
         return {...base, state: 'limited', recommendation: 'notRecommended'};
     }
-    if (simultaneousCyclesBlocked || dryerHeadroom === 0) {
+    if (dryerHeadroom === 0) {
         return {...base, state: 'dryerBottleneck', recommendation: 'notRecommended'};
     }
     if (startableLoadRatio >= LAUNDRY_SITUATION_RULES.comfortableStartableRatio) {
         return {...base, state: 'comfortable', recommendation: 'recommended'};
     }
-    if (startableLoadRatio >= LAUNDRY_SITUATION_RULES.availableStartableRatio) {
+    if (startableLoads >= LAUNDRY_SITUATION_RULES.minimumStartableLoads) {
         return {...base, state: 'available', recommendation: 'recommended'};
     }
     return {...base, state: 'limited', recommendation: 'notRecommended'};

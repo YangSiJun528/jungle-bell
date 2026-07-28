@@ -236,11 +236,11 @@ const LAUNDRY_SITUATION_STATE_LABELS: Record<LaundrySituationState, string> = {
     available: '이용 가능',
 };
 const LAUNDRY_SITUATION_RECOMMENDATION_LABELS: Record<LaundrySituationState, string> = {
-    checking: '추천 판단을 기다리고 있습니다.',
-    limited: '지금은 세탁을 미루는 편이 좋습니다.',
-    dryerBottleneck: '건조 대기가 예상되어 새 세탁을 추천하지 않습니다.',
-    comfortable: '지금 세탁하기 좋습니다.',
-    available: '지금 세탁할 수 있습니다.',
+    checking: '현황 확인 중이에요. 잠시 후 다시 봐 주세요.',
+    limited: '빈 세탁기가 적어 조금 기다리는 게 좋아요.',
+    dryerBottleneck: '세탁 후 건조기가 부족할 수 있어 기다리는 게 좋아요.',
+    comfortable: '세탁기와 건조기 모두 여유 있어 시작해도 괜찮아요.',
+    available: '세탁 후에도 건조기 자리가 남을 것 같아 시작해도 괜찮아요.',
 };
 const LAUNDRY_FILTER_ANALYTICS_VALUES = {
     all: 'all',
