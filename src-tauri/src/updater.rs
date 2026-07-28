@@ -7,10 +7,10 @@ use std::sync::Arc;
 
 use tauri::Manager;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
-use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_updater::UpdaterExt;
 use tokio::sync::Mutex;
 
+use crate::notification_service::{NotificationRequest, NotificationService};
 use crate::settings_state::SettingsService;
 use crate::state::AppState;
 
@@ -107,12 +107,12 @@ pub(crate) async fn auto_install_update(app: tauri::AppHandle) {
         Ok(Some(update)) => {
             let version = update.version.clone();
             log::info!("[updater] 자동 업데이트: v{} 발견, 설치 시작", version);
-            let _ = app
-                .notification()
-                .builder()
-                .title("Jungle Bell 업데이트")
-                .body(format!("v{}로 업데이트합니다. 잠시 후 재시작됩니다.", version))
-                .show();
+            let body = format!("v{}로 업데이트합니다. 잠시 후 재시작됩니다.", version);
+            let notifications: tauri::State<Arc<NotificationService>> = app.state();
+            notifications.deliver(
+                &app,
+                NotificationRequest::system("updater.installing", "Jungle Bell 업데이트", &body),
+            );
             match update.download_and_install(|_, _| {}, || {}).await {
                 Ok(_) => {
                     log::info!("[updater] 자동 업데이트 완료, 재시작");

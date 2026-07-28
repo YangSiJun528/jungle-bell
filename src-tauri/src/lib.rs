@@ -12,6 +12,8 @@ mod data_api;
 mod interval_tasks;
 mod local_consumption;
 mod news;
+#[cfg(desktop)]
+mod notification_service;
 mod runtime;
 mod scheduler;
 mod settings_state;
@@ -25,6 +27,7 @@ use tokio::sync::Mutex;
 use alert_overlay::AlertOverlayService;
 use config::Config;
 use local_consumption::LocalConsumptionService;
+use notification_service::{NotificationRequest, NotificationService};
 use settings_state::SettingsService;
 use state::AppState;
 
@@ -50,30 +53,33 @@ fn sync_auto_start_setting(app: &tauri::AppHandle, shared_state: &Arc<Mutex<AppS
     }
 }
 
-fn notify_startup_status(app: &tauri::AppHandle, shared_state: &Arc<Mutex<AppState>>) {
-    use tauri_plugin_notification::NotificationExt;
-
+fn notify_startup_status(
+    app: &tauri::AppHandle,
+    shared_state: &Arc<Mutex<AppState>>,
+    notifications: &NotificationService,
+) {
     let current = shared_state.try_lock().unwrap().config.clone();
     let current_version = app.package_info().version.to_string();
     let should_open_onboarding = !current.onboarding_completed;
 
     match &current.last_version {
         None => {
-            let _ = app
-                .notification()
-                .builder()
-                .title("Jungle Bell 설치 완료")
-                .body("트레이 아이콘에서 출석 창을 열고 LMS에 로그인해 주세요.")
-                .show();
+            notifications.deliver(
+                app,
+                NotificationRequest::system(
+                    "app.installed",
+                    "Jungle Bell 설치 완료",
+                    "트레이 아이콘에서 출석 창을 열고 LMS에 로그인해 주세요.",
+                ),
+            );
             log::info!("[app] 환영 알림 발송 (첫 설치)");
         }
         Some(last) if last != &current_version => {
-            let _ = app
-                .notification()
-                .builder()
-                .title("Jungle Bell 업데이트 완료")
-                .body(format!("v{} → v{}로 업데이트되었습니다.", last, current_version))
-                .show();
+            let body = format!("v{} → v{}로 업데이트되었습니다.", last, current_version);
+            notifications.deliver(
+                app,
+                NotificationRequest::system("app.updated", "Jungle Bell 업데이트 완료", &body),
+            );
             log::info!("[app] 업데이트 완료 알림 발송: v{} → v{}", last, current_version);
             analytics::prepare_app_updated(last.clone(), current_version.clone());
         }
@@ -134,13 +140,14 @@ pub fn run() {
     };
     let shared_state = Arc::new(Mutex::new(AppState::new(config)));
     let alert_overlay_service = Arc::new(AlertOverlayService::default());
+    let notification_service = Arc::new(NotificationService::new(alert_overlay_service.clone()));
     let settings_service = Arc::new(SettingsService::new(
         shared_state.clone(),
         env!("CARGO_PKG_VERSION").to_string(),
     ));
     let local_consumption_service = Arc::new(LocalConsumptionService::new(
         shared_state.clone(),
-        alert_overlay_service.clone(),
+        notification_service.clone(),
     ));
     let campus_service = Arc::new(campus::CampusService::new());
     let news_service = Arc::new(news::NewsService::new());
@@ -184,12 +191,11 @@ pub fn run() {
         // updater 플러그인: 자동 업데이트 지원
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
-        // notification 플러그인: OS 네이티브 알림 지원
-        .plugin(tauri_plugin_notification::init())
         // AppState를 Tauri의 managed state로 등록.
         // 핸들러에서 `tauri::State<Arc<Mutex<AppState>>>`로 받아 사용.
         .manage(shared_state.clone())
         .manage(alert_overlay_service)
+        .manage(notification_service.clone())
         .manage(settings_service)
         .manage(local_consumption_service)
         .manage(campus_service.clone())
@@ -275,6 +281,15 @@ pub fn run() {
             // 기본값이 true이므로 첫 설치 시 자동으로 등록됨.
             sync_auto_start_setting(app.handle(), &shared_state);
             tray::setup_tray(app)?;
+            let uses_system_notifications = shared_state
+                .try_lock()
+                .map(|state| state.config.notification_delivery.uses_system())
+                .unwrap_or(true);
+            if uses_system_notifications {
+                if let Err(error) = notification_service.initialize_system_backend() {
+                    log::warn!("[notification] OS backend initialization failed: {error}");
+                }
+            }
             let checker_window = checker::build_webview(app.handle())?;
             match checker_window.theme() {
                 Ok(theme) => {
@@ -284,7 +299,7 @@ pub fn run() {
                 }
                 Err(error) => log::warn!("[app] system theme detection failed: {error}"),
             }
-            notify_startup_status(app.handle(), &shared_state);
+            notify_startup_status(app.handle(), &shared_state, &notification_service);
             spawn_startup_update_check(app.handle().clone(), shared_state.clone());
             spawn_periodic_update_check(app.handle().clone(), shared_state.clone());
 

@@ -7,7 +7,6 @@
     "core:default",
     "opener:default",
     "updater:default",
-    "notification:default",
     "dialog:default",
     "allow-report-attendance-status",
     "allow-report-checker-ready",

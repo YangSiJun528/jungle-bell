@@ -9,13 +9,12 @@ use chrono::{DateTime, Datelike, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tauri::{Emitter, Manager};
-use tauri_plugin_notification::NotificationExt;
 use tokio::sync::Mutex;
 
-use crate::alert_overlay::{AlertOverlayAction, AlertOverlayService};
 use crate::attendance_day;
 use crate::campus::{CampusDataKind, CampusSnapshot};
 use crate::config::{Config, LaundryApplianceKind, LaundryWatch, NotificationDelivery};
+use crate::notification_service::{NotificationAction, NotificationRequest, NotificationService};
 use crate::settings_state::SettingsService;
 use crate::state::{AppState, DailyPhase};
 
@@ -25,18 +24,6 @@ const ATTENDANCE_START_CURSOR_KEY: &str = "attendance.start";
 const ATTENDANCE_END_CURSOR_KEY: &str = "attendance.end";
 const ATTENDANCE_URGENT_CURSOR_KEY: &str = "attendance.end-deadline";
 pub const LOCAL_DASHBOARD_UPDATED_EVENT: &str = "local-dashboard-updated";
-
-fn alert_overlay_action(cursor_key: &str) -> Option<AlertOverlayAction> {
-    if cursor_key.starts_with("attendance.") {
-        Some(AlertOverlayAction::Attendance)
-    } else if cursor_key.starts_with("laundry.") {
-        Some(AlertOverlayAction::Laundry)
-    } else if cursor_key.starts_with("meals.") {
-        Some(AlertOverlayAction::Meals)
-    } else {
-        None
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CursorMark {
@@ -49,6 +36,7 @@ struct LocalNotification {
     cursor: CursorMark,
     title: String,
     body: String,
+    action: NotificationAction,
     conflict_key: Option<String>,
     priority: u8,
     coalesced_cursors: Vec<CursorMark>,
@@ -246,19 +234,19 @@ struct LocalRuntime {
 
 pub struct LocalConsumptionService {
     state: Arc<Mutex<AppState>>,
-    alert_overlay: Arc<AlertOverlayService>,
+    notifications: Arc<NotificationService>,
     runtime: Mutex<LocalRuntime>,
 }
 
 impl LocalConsumptionService {
-    pub fn new(state: Arc<Mutex<AppState>>, alert_overlay: Arc<AlertOverlayService>) -> Self {
+    pub fn new(state: Arc<Mutex<AppState>>, notifications: Arc<NotificationService>) -> Self {
         let cursors = EventCursorStore::load().unwrap_or_else(|error| {
             log::warn!("[local-consumption] {error}; 빈 이벤트 커서로 시작합니다");
             EventCursorStore::default()
         });
         Self {
             state,
-            alert_overlay,
+            notifications,
             runtime: Mutex::new(LocalRuntime {
                 cursors,
                 ..LocalRuntime::default()
@@ -457,69 +445,21 @@ impl LocalConsumptionService {
             changed |= runtime.cursors.append_meal_alert(alert);
         }
         for notification in evaluation.notifications {
-            let mut delivered = false;
+            let dedupe_key =
+                (notification.action == NotificationAction::Attendance).then_some("attendance-notification");
+            let report = self.notifications.deliver(
+                app,
+                NotificationRequest {
+                    key: &notification.cursor.key,
+                    title: &notification.title,
+                    body: &notification.body,
+                    delivery,
+                    action: Some(notification.action),
+                    dedupe_key,
+                },
+            );
 
-            if delivery.uses_overlay() {
-                match alert_overlay_action(&notification.cursor.key) {
-                    Some(action) => {
-                        match self.alert_overlay.enqueue(
-                            app,
-                            notification.title.clone(),
-                            notification.body.clone(),
-                            action,
-                        ) {
-                            Ok(_) => {
-                                delivered = true;
-                                log::info!(
-                                    "[local-consumption] alert overlay queued: key={} priority={}",
-                                    notification.cursor.key,
-                                    notification.priority
-                                );
-                            }
-                            Err(error) => {
-                                log::error!(
-                                    "[local-consumption] alert overlay failed: key={} error={error}",
-                                    notification.cursor.key
-                                );
-                            }
-                        }
-                    }
-                    None => {
-                        log::error!(
-                            "[local-consumption] alert overlay action missing: key={}",
-                            notification.cursor.key
-                        );
-                    }
-                }
-            }
-
-            if delivery.uses_system() {
-                let builder = app
-                    .notification()
-                    .builder()
-                    .title(&notification.title)
-                    .body(&notification.body);
-                #[cfg(target_os = "macos")]
-                let builder = builder.sound("Ping");
-                match builder.show() {
-                    Ok(_) => {
-                        delivered = true;
-                        log::info!(
-                            "[local-consumption] OS notification queued: key={} priority={}",
-                            notification.cursor.key,
-                            notification.priority
-                        );
-                    }
-                    Err(error) => {
-                        log::error!(
-                            "[local-consumption] OS notification failed: key={} error={error}",
-                            notification.cursor.key
-                        );
-                    }
-                }
-            }
-
-            if delivered {
+            if report.any_delivered() {
                 runtime.cursors.record_notification(&notification, now);
                 changed = true;
             }
@@ -866,6 +806,7 @@ fn evaluate_laundry(
                     "{} {appliance_device_label}가 끝났습니다. 세탁물을 꺼내 주세요.",
                     laundry_machine_name(&watch.machine_id)
                 ),
+                action: NotificationAction::Laundry,
                 conflict_key: session_conflict,
                 priority: 80,
                 coalesced_cursors: Vec::new(),
@@ -953,6 +894,7 @@ fn evaluate_laundry(
                 cursor: mark,
                 title,
                 body,
+                action: NotificationAction::Laundry,
                 conflict_key: session_conflict,
                 priority: 80,
                 coalesced_cursors: Vec::new(),
@@ -981,6 +923,7 @@ fn evaluate_laundry(
                     "{} {appliance_device_label}가 끝났거나 중단됐습니다. 상태를 확인해 주세요.",
                     laundry_machine_name(&watch.machine_id)
                 ),
+                action: NotificationAction::Laundry,
                 conflict_key: session_conflict,
                 priority: 80,
                 coalesced_cursors: Vec::new(),
@@ -1034,6 +977,7 @@ fn evaluate_laundry(
                 cursor: mark,
                 title,
                 body,
+                action: NotificationAction::Laundry,
                 conflict_key: session_conflict,
                 priority,
                 coalesced_cursors: Vec::new(),
@@ -1071,6 +1015,7 @@ fn evaluate_laundry(
                 "{} {appliance_device_label}가 곧 끝납니다.",
                 laundry_machine_name(&watch.machine_id)
             ),
+            action: NotificationAction::Laundry,
             conflict_key: session_conflict,
             priority: 60,
             coalesced_cursors: Vec::new(),
@@ -1213,6 +1158,7 @@ fn evaluate_meals(data: &Value, enabled: bool, now: DateTime<Utc>, cursors: &Eve
                 cursor: mark,
                 title,
                 body: preview,
+                action: NotificationAction::Meals,
                 conflict_key: Some("meal-publication".to_string()),
                 priority: 30,
                 coalesced_cursors: Vec::new(),
@@ -1309,6 +1255,7 @@ fn evaluate_attendance(
                 cursor: mark,
                 title: title.into(),
                 body,
+                action: NotificationAction::Attendance,
                 conflict_key: Some("attendance-notification".into()),
                 priority: 10,
                 coalesced_cursors: Vec::new(),
@@ -1327,6 +1274,7 @@ fn evaluate_attendance(
                 cursor: mark,
                 title: "!!! 퇴근 출석 마감 임박".into(),
                 body,
+                action: NotificationAction::Attendance,
                 conflict_key: Some("attendance-notification".into()),
                 priority: 100,
                 coalesced_cursors: Vec::new(),
@@ -1464,23 +1412,6 @@ mod tests {
     }
 
     #[test]
-    fn 알림_종류는_클릭시_열_화면으로_변환된다() {
-        assert_eq!(
-            alert_overlay_action("attendance.start"),
-            Some(AlertOverlayAction::Attendance)
-        );
-        assert_eq!(
-            alert_overlay_action("laundry.washer.completed"),
-            Some(AlertOverlayAction::Laundry)
-        );
-        assert_eq!(
-            alert_overlay_action("meals.daily.lunch"),
-            Some(AlertOverlayAction::Meals)
-        );
-        assert_eq!(alert_overlay_action("unknown"), None);
-    }
-
-    #[test]
     fn 선택한_세탁_세션은_종료_n분전에_한번만_알린다() {
         let now = utc(9, 0, 0);
         let data = laundry("RUNNING", "ESTIMATED_RUNNING", "2026-07-27T09:05:00Z", "session-1");
@@ -1489,6 +1420,7 @@ mod tests {
         let first = evaluate_laundry(&data, &watch(5), now, &cursors);
         assert_eq!(first.notifications.len(), 1);
         assert!(first.notifications[0].title.contains("5분 전"));
+        assert_eq!(first.notifications[0].action, NotificationAction::Laundry);
         cursors.record_notification(&first.notifications[0], now);
 
         let repeated = evaluate_laundry(&data, &watch(5), now + chrono::Duration::seconds(30), &cursors);
@@ -2052,6 +1984,8 @@ mod tests {
         let result = evaluate_meals(&published, true, now + Duration::hours(8), &cursors);
 
         assert_eq!(result.meal_alerts.len(), 2);
+        assert_eq!(result.notifications.len(), 1);
+        assert_eq!(result.notifications[0].action, NotificationAction::Meals);
         assert_eq!(result.meal_alerts[0].period, MealAlertPeriod::Lunch);
         assert_eq!(result.meal_alerts[1].period, MealAlertPeriod::Dinner);
     }

@@ -1,0 +1,335 @@
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+
+use notify_rust::{Notification, NotificationResponse};
+
+use crate::alert_overlay::{AlertOverlayAction, AlertOverlayService};
+use crate::config::NotificationDelivery;
+use crate::tray::{self, TrayPanelAction};
+
+const OPEN_ACTION_ID: &str = "open";
+// 출석 알림의 다음 고정 발송(15분) 직전에 기존 액션 listener를 정리한다.
+const SYSTEM_NOTIFICATION_TIMEOUT_MS: u32 = 14 * 60 * 1_000;
+const _: () = assert!(SYSTEM_NOTIFICATION_TIMEOUT_MS < 15 * 60 * 1_000);
+const _: () = assert!(SYSTEM_NOTIFICATION_TIMEOUT_MS >= 10 * 60 * 1_000);
+const MAX_ACTION_RESPONSE_LISTENERS: usize = 64;
+static ACTIVE_ACTION_RESPONSE_LISTENERS: AtomicUsize = AtomicUsize::new(0);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NotificationAction {
+    Attendance,
+    Laundry,
+    Meals,
+}
+
+impl NotificationAction {
+    fn button_label(self) -> &'static str {
+        match self {
+            Self::Attendance => "출석 페이지 열기",
+            Self::Laundry => "워시타워 열기",
+            Self::Meals => "식단 열기",
+        }
+    }
+
+    fn overlay_action(self) -> AlertOverlayAction {
+        match self {
+            Self::Attendance => AlertOverlayAction::Attendance,
+            Self::Laundry => AlertOverlayAction::Laundry,
+            Self::Meals => AlertOverlayAction::Meals,
+        }
+    }
+
+    fn tray_action(self) -> TrayPanelAction {
+        match self {
+            Self::Attendance => TrayPanelAction::OpenAttendance,
+            Self::Laundry => TrayPanelAction::OpenLaundry,
+            Self::Meals => TrayPanelAction::OpenMeals,
+        }
+    }
+}
+
+pub struct NotificationRequest<'a> {
+    pub key: &'a str,
+    pub title: &'a str,
+    pub body: &'a str,
+    pub delivery: NotificationDelivery,
+    pub action: Option<NotificationAction>,
+    pub dedupe_key: Option<&'a str>,
+}
+
+impl<'a> NotificationRequest<'a> {
+    pub fn system(key: &'a str, title: &'a str, body: &'a str) -> Self {
+        Self {
+            key,
+            title,
+            body,
+            delivery: NotificationDelivery::System,
+            action: None,
+            dedupe_key: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct DeliveryReport {
+    pub overlay_delivered: bool,
+    pub system_delivered: bool,
+}
+
+impl DeliveryReport {
+    pub fn any_delivered(self) -> bool {
+        self.overlay_delivered || self.system_delivered
+    }
+}
+
+pub struct NotificationService {
+    overlay: Arc<AlertOverlayService>,
+}
+
+impl NotificationService {
+    pub fn new(overlay: Arc<AlertOverlayService>) -> Self {
+        Self { overlay }
+    }
+
+    pub fn initialize_system_backend(&self) -> Result<(), String> {
+        #[cfg(target_os = "macos")]
+        {
+            match notify_rust::request_auth_blocking() {
+                Ok(true) => Ok(()),
+                Ok(false) => Err("macOS 알림 권한이 거부되었습니다.".into()),
+                Err(error) => Err(format!("macOS 알림 권한 확인 실패: {error}")),
+            }
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        Ok(())
+    }
+
+    pub fn deliver(&self, app: &tauri::AppHandle, request: NotificationRequest<'_>) -> DeliveryReport {
+        let mut report = DeliveryReport::default();
+
+        if request.delivery.uses_overlay() {
+            match request.action {
+                Some(action) => match self.overlay.enqueue_with_dedupe(
+                    app,
+                    request.title,
+                    request.body,
+                    action.overlay_action(),
+                    request.dedupe_key,
+                ) {
+                    Ok(_) => {
+                        report.overlay_delivered = true;
+                        log::info!("[notification] overlay queued: key={}", request.key);
+                    }
+                    Err(error) => {
+                        log::error!("[notification] overlay failed: key={} error={error}", request.key);
+                    }
+                },
+                None => {
+                    log::error!(
+                        "[notification] overlay action missing for an overlay delivery: key={}",
+                        request.key
+                    );
+                }
+            }
+        }
+
+        if request.delivery.uses_system() {
+            match show_system(app, request.title, request.body, request.action) {
+                Ok(()) => {
+                    report.system_delivered = true;
+                    log::info!("[notification] OS notification queued: key={}", request.key);
+                }
+                Err(error) => {
+                    log::error!(
+                        "[notification] OS notification failed: key={} error={error}",
+                        request.key
+                    );
+                }
+            }
+        }
+
+        report
+    }
+}
+
+struct ActionResponseListenerSlot;
+
+impl ActionResponseListenerSlot {
+    fn reserve() -> Option<Self> {
+        ACTIVE_ACTION_RESPONSE_LISTENERS
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |active| {
+                (active < MAX_ACTION_RESPONSE_LISTENERS).then_some(active + 1)
+            })
+            .ok()
+            .map(|_| Self)
+    }
+}
+
+impl Drop for ActionResponseListenerSlot {
+    fn drop(&mut self) {
+        ACTIVE_ACTION_RESPONSE_LISTENERS.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
+fn opens_action(response: &NotificationResponse, action: NotificationAction) -> bool {
+    match response {
+        NotificationResponse::Default => true,
+        NotificationResponse::Action(value) => value == OPEN_ACTION_ID || value == action.button_label(),
+        NotificationResponse::Reply(_) | NotificationResponse::Closed(_) => false,
+    }
+}
+
+pub fn show_system(
+    app: &tauri::AppHandle,
+    title: &str,
+    body: &str,
+    action: Option<NotificationAction>,
+) -> Result<(), String> {
+    let mut notification = Notification::new();
+    notification
+        .appname("Jungle Bell")
+        .summary(title)
+        .body(body)
+        .timeout(notify_rust::Timeout::Milliseconds(SYSTEM_NOTIFICATION_TIMEOUT_MS));
+
+    if let Some(action) = action {
+        notification.action(OPEN_ACTION_ID, action.button_label());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        notification.sound_name("Ping");
+    }
+
+    #[cfg(windows)]
+    configure_windows_identity(app, &mut notification)?;
+
+    let listener_slot = action.and_then(|_| ActionResponseListenerSlot::reserve());
+    let handle = notification
+        .show()
+        .map_err(|error| format!("운영체제 알림 표시 실패: {error}"))?;
+
+    let Some(action) = action else {
+        drop(handle);
+        return Ok(());
+    };
+    let Some(listener_slot) = listener_slot else {
+        log::warn!("[notification] action response listener limit reached; notification shown without a new listener");
+        drop(handle);
+        return Ok(());
+    };
+
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let _listener_slot = listener_slot;
+        if let Err(error) = handle.wait_for_response(move |response: &NotificationResponse| {
+            if !opens_action(response, action) {
+                return;
+            }
+
+            let app_for_action = app.clone();
+            if let Err(error) = app.run_on_main_thread(move || {
+                if let Err(error) = tray::run_tray_panel_action(&app_for_action, action.tray_action()) {
+                    log::warn!("[notification] action failed: {error}");
+                }
+            }) {
+                log::warn!("[notification] action scheduling failed: {error}");
+            }
+        }) {
+            log::debug!("[notification] response listener ended: {error}");
+        }
+    });
+
+    Ok(())
+}
+
+#[cfg(windows)]
+fn configure_windows_identity(app: &tauri::AppHandle, notification: &mut Notification) -> Result<(), String> {
+    use std::path::MAIN_SEPARATOR;
+
+    let executable =
+        tauri::utils::platform::current_exe().map_err(|error| format!("실행 파일 경로 확인 실패: {error}"))?;
+    let directory = executable
+        .parent()
+        .ok_or_else(|| "실행 파일 상위 경로를 확인할 수 없습니다.".to_string())?
+        .display()
+        .to_string();
+    let debug_suffix = format!("{MAIN_SEPARATOR}target{MAIN_SEPARATOR}debug");
+    let release_suffix = format!("{MAIN_SEPARATOR}target{MAIN_SEPARATOR}release");
+    if !directory.ends_with(&debug_suffix) && !directory.ends_with(&release_suffix) {
+        notification.app_id(&app.config().identifier);
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn 기본_클릭과_열기_버튼만_요청된_액션을_실행한다() {
+        let action = NotificationAction::Attendance;
+
+        assert!(opens_action(&NotificationResponse::Default, action));
+        assert!(opens_action(
+            &NotificationResponse::Action(OPEN_ACTION_ID.into()),
+            action
+        ));
+        assert!(opens_action(
+            &NotificationResponse::Action(action.button_label().into()),
+            action
+        ));
+        assert!(!opens_action(&NotificationResponse::Action("other".into()), action));
+        assert!(!opens_action(&NotificationResponse::Reply("답장".into()), action));
+        assert!(!opens_action(
+            &NotificationResponse::Closed(notify_rust::CloseReason::Dismissed),
+            action
+        ));
+    }
+
+    #[test]
+    fn 모든_알림_액션은_overlay와_tray와_os_버튼_표현을_가진다() {
+        let cases = [
+            (
+                NotificationAction::Attendance,
+                AlertOverlayAction::Attendance,
+                TrayPanelAction::OpenAttendance,
+                "출석 페이지 열기",
+            ),
+            (
+                NotificationAction::Laundry,
+                AlertOverlayAction::Laundry,
+                TrayPanelAction::OpenLaundry,
+                "워시타워 열기",
+            ),
+            (
+                NotificationAction::Meals,
+                AlertOverlayAction::Meals,
+                TrayPanelAction::OpenMeals,
+                "식단 열기",
+            ),
+        ];
+
+        for (action, overlay, tray, label) in cases {
+            assert_eq!(action.overlay_action(), overlay);
+            assert_eq!(action.tray_action(), tray);
+            assert_eq!(action.button_label(), label);
+        }
+    }
+
+    #[test]
+    fn 한_채널만_성공해도_발송한_것으로_판단한다() {
+        assert!(DeliveryReport {
+            overlay_delivered: true,
+            system_delivered: false,
+        }
+        .any_delivered());
+        assert!(DeliveryReport {
+            overlay_delivered: false,
+            system_delivered: true,
+        }
+        .any_delivered());
+        assert!(!DeliveryReport::default().any_delivered());
+    }
+}
