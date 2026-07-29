@@ -60,10 +60,14 @@ test('560x720 Tauri 창에서 알림 일정 카드의 컨트롤이 테두리 안
 });
 
 test('최소 높이에서도 단계 내용은 스크롤되고 하단 이동 버튼은 고정된다', () => {
-    assert.match(
-        onboarding,
-        /<article[^>]*data-ui="onboarding-step-scroll"[^>]*class="[^"]*\bui-scroll-region\b/,
-    );
+    const stepScroll = onboarding.match(
+        /<article[^>]*data-ui="onboarding-step-scroll"[^>]*class="([^"]+)"/,
+    )?.[1] ?? '';
+
+    assert.match(stepScroll, /\bui-scroll-region\b/);
+    assert.match(stepScroll, /\bui-scroll-region--inset\b/);
+    assert.match(stepScroll, /\bpy-3\b/);
+    assert.doesNotMatch(stepScroll, /\bp-3\b|\bpx-/);
     assert.match(onboarding, /<footer[^>]*class="[^"]*\bflex-none\b/);
     assert.doesNotMatch(onboarding, /<article[^>]*class="[^"]*\boverflow-hidden\b/);
 });

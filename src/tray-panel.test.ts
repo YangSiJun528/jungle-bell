@@ -356,16 +356,18 @@ test('홈은 D-Day를 다른 상태와 알림보다 먼저 보여주고 생활 �
 
 test('홈과 소식의 내부 스크롤은 좌우에 같은 scrollbar gutter를 예약한다', () => {
     const html = readFileSync(new URL('./tray-panel.html', import.meta.url), 'utf8');
+    const panelClasses = [...html.matchAll(
+        /<section id="tray-(?:home|news)-panel" class="([^"]+)"/g,
+    )].map((match) => match[1] ?? '');
 
-    assert.match(
-        html,
-        /<section id="tray-home-panel" class="[^"]*\bui-scroll-region\b/,
-    );
-    assert.match(
-        html,
-        /<section id="tray-news-panel" class="[^"]*\bui-scroll-region\b/,
-    );
-    assert.equal(html.match(/\bui-scroll-region\b/g)?.length, 2);
+    assert.equal(panelClasses.length, 2);
+    for (const classNames of panelClasses) {
+        assert.match(classNames, /\bui-scroll-region\b/);
+        assert.match(classNames, /\bui-scroll-region--inset\b/);
+        assert.match(classNames, /\[--scroll-region-inset:var\(--space-4\)\]/);
+        assert.doesNotMatch(classNames, /\bpx-4\b/);
+    }
+    assert.equal(html.match(/\bui-scroll-region(?=[\s"])/g)?.length, 2);
 });
 
 test('생활 알림과 생활 정보는 같은 섹션 제목 스타일을 사용한다', () => {
