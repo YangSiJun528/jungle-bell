@@ -12,6 +12,8 @@
     "allow-run-tray-panel-action",
     "allow-hide-tray-panel",
     "allow-get-news-feed",
-    "allow-open-news-item"
+    "allow-open-news-item",
+    "allow-get-notification-inbox-snapshot",
+    "allow-activate-notification"
   ]
 }

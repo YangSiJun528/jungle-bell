@@ -609,6 +609,7 @@ fn focus_window_checked(window: &WebviewWindow<tauri::Wry>) -> Result<(), String
             .unminimize()
             .map_err(|error| format!("창 최소화 해제 실패: {error}"))?;
     }
+    crate::notification_inbox::sync_badge_for_window(window);
 
     #[cfg(target_os = "macos")]
     {
