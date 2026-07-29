@@ -6,10 +6,8 @@ use notify_rust::{Notification, NotificationResponse};
 use crate::notification_inbox::NotificationInboxService;
 
 const OPEN_ACTION_ID: &str = "open";
-// 출석 알림의 다음 고정 발송(15분) 직전에 기존 액션 listener를 정리한다.
+// 반복 알림이 겹쳐도 액션 listener가 장시간 누적되지 않도록 유한 시간 뒤 정리한다.
 const SYSTEM_NOTIFICATION_TIMEOUT_MS: u32 = 14 * 60 * 1_000;
-const _: () = assert!(SYSTEM_NOTIFICATION_TIMEOUT_MS < 15 * 60 * 1_000);
-const _: () = assert!(SYSTEM_NOTIFICATION_TIMEOUT_MS >= 10 * 60 * 1_000);
 const MAX_ACTION_RESPONSE_LISTENERS: usize = 64;
 static ACTIVE_ACTION_RESPONSE_LISTENERS: AtomicUsize = AtomicUsize::new(0);
 

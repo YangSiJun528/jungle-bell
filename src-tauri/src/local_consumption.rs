@@ -24,7 +24,6 @@ const MEAL_DINNER_CURSOR_KEY: &str = "meals.daily.dinner";
 const ATTENDANCE_START_CURSOR_KEY: &str = "attendance.start";
 const ATTENDANCE_END_CURSOR_KEY: &str = "attendance.end";
 const ATTENDANCE_URGENT_CURSOR_KEY: &str = "attendance.end-deadline";
-const ATTENDANCE_NOTIFICATION_REPEAT_MINS: i64 = 15;
 pub const LOCAL_DASHBOARD_UPDATED_EVENT: &str = "local-dashboard-updated";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -252,7 +251,7 @@ impl LocalConsumptionService {
             }
         };
         let finished_laundry_activity = evaluation.finished_laundry_activity.clone();
-        cursors_changed |= self.apply_evaluation(app, &mut runtime, evaluation, now);
+        cursors_changed |= self.apply_evaluation(app, &config, &mut runtime, evaluation, now);
         let finished_laundry_activity = finished_laundry_activity
             .filter(|activity| finished_laundry_notification_recorded(&runtime.cursors, &activity.watch));
         if cursors_changed {
@@ -293,7 +292,7 @@ impl LocalConsumptionService {
         };
         let mut runtime = self.runtime.lock().await;
         let evaluation = evaluate_attendance(&config, &attendance, now, &runtime.cursors);
-        let cursors_changed = self.apply_evaluation(app, &mut runtime, evaluation, now);
+        let cursors_changed = self.apply_evaluation(app, &config, &mut runtime, evaluation, now);
         if cursors_changed {
             persist_event_cursors(runtime.cursors.clone()).await;
         }
@@ -324,7 +323,7 @@ impl LocalConsumptionService {
             );
         }
         let finished_laundry_activity = evaluation.finished_laundry_activity.clone();
-        cursor_changed |= self.apply_evaluation(app, &mut runtime, evaluation, now);
+        cursor_changed |= self.apply_evaluation(app, &config, &mut runtime, evaluation, now);
         let finished_laundry_activity = finished_laundry_activity
             .filter(|activity| finished_laundry_notification_recorded(&runtime.cursors, &activity.watch));
         if cursor_changed {
@@ -390,6 +389,7 @@ impl LocalConsumptionService {
     fn apply_evaluation(
         &self,
         app: &tauri::AppHandle,
+        config: &Config,
         runtime: &mut LocalRuntime,
         mut evaluation: LocalEvaluation,
         now: DateTime<Utc>,
@@ -402,7 +402,7 @@ impl LocalConsumptionService {
         runtime.cursors.record_baselines(&evaluation.baselines, now);
         for notification in evaluation.notifications {
             let source_key = notification_source_key(&notification);
-            let repeat_after_ms = notification_repeat_after_ms(&notification);
+            let repeat_after_ms = notification_repeat_after_ms(&notification, config);
             let report = self.notifications.deliver(
                 app,
                 NotificationRequest {
@@ -445,12 +445,13 @@ fn notification_source_key(notification: &LocalNotification) -> String {
     )
 }
 
-fn notification_repeat_after_ms(notification: &LocalNotification) -> Option<i64> {
-    matches!(
-        notification.cursor.key.as_str(),
-        ATTENDANCE_START_CURSOR_KEY | ATTENDANCE_END_CURSOR_KEY
-    )
-    .then_some(ATTENDANCE_NOTIFICATION_REPEAT_MINS * 60 * 1_000)
+fn notification_repeat_after_ms(notification: &LocalNotification, config: &Config) -> Option<i64> {
+    let interval_mins = match notification.cursor.key.as_str() {
+        ATTENDANCE_START_CURSOR_KEY => config.start_notification_interval_mins,
+        ATTENDANCE_END_CURSOR_KEY => config.end_notification_interval_mins,
+        _ => return None,
+    };
+    Some(i64::from(interval_mins) * 60 * 1_000)
 }
 
 async fn persist_event_cursors_checked(cursors: EventCursorStore) -> Result<(), String> {
@@ -1256,20 +1257,21 @@ fn evaluate_attendance(
     }
 
     let mut candidates = Vec::new();
-    let regular_cursor_key = match state.phase {
-        DailyPhase::NeedStart | DailyPhase::StartOverdue => Some(ATTENDANCE_START_CURSOR_KEY),
-        DailyPhase::NeedEnd => Some(ATTENDANCE_END_CURSOR_KEY),
+    let regular_notification = match state.phase {
+        DailyPhase::NeedStart | DailyPhase::StartOverdue => {
+            Some((ATTENDANCE_START_CURSOR_KEY, config.start_notification_interval_mins))
+        }
+        DailyPhase::NeedEnd => Some((ATTENDANCE_END_CURSOR_KEY, config.end_notification_interval_mins)),
         _ => None,
     };
-    if let Some(cursor_key) = regular_cursor_key {
+    if let Some((cursor_key, interval_mins)) = regular_notification {
         let mark = CursorMark {
             key: cursor_key.into(),
             fingerprint: state.attendance_date.clone(),
         };
         let cooldown_elapsed = cursors.events.get(cursor_key).is_none_or(|cursor| {
             cursor.fingerprint != mark.fingerprint
-                || now.signed_duration_since(cursor.emitted_at)
-                    >= Duration::minutes(ATTENDANCE_NOTIFICATION_REPEAT_MINS)
+                || now.signed_duration_since(cursor.emitted_at) >= Duration::minutes(i64::from(interval_mins))
         });
         if cooldown_elapsed {
             let (title, body) = decision
@@ -2195,8 +2197,8 @@ mod tests {
     }
 
     #[test]
-    fn 일반_출퇴근_알림만_15분_반복을_허용한다() {
-        let regular = LocalNotification {
+    fn 일반_출퇴근_알림은_시작과_종료_설정에_맞춰_반복한다() {
+        let start = LocalNotification {
             cursor: CursorMark {
                 key: ATTENDANCE_START_CURSOR_KEY.into(),
                 fingerprint: "2026-07-29".into(),
@@ -2208,19 +2210,29 @@ mod tests {
             priority: 10,
             coalesced_cursors: Vec::new(),
         };
+        let end = LocalNotification {
+            cursor: CursorMark {
+                key: ATTENDANCE_END_CURSOR_KEY.into(),
+                fingerprint: "2026-07-29".into(),
+            },
+            ..start.clone()
+        };
         let urgent = LocalNotification {
             cursor: CursorMark {
                 key: ATTENDANCE_URGENT_CURSOR_KEY.into(),
                 fingerprint: "2026-07-29".into(),
             },
-            ..regular.clone()
+            ..start.clone()
+        };
+        let config = Config {
+            start_notification_interval_mins: 3,
+            end_notification_interval_mins: 10,
+            ..Config::default()
         };
 
-        assert_eq!(
-            notification_repeat_after_ms(&regular),
-            Some(ATTENDANCE_NOTIFICATION_REPEAT_MINS * 60 * 1_000)
-        );
-        assert_eq!(notification_repeat_after_ms(&urgent), None);
+        assert_eq!(notification_repeat_after_ms(&start, &config), Some(3 * 60 * 1_000));
+        assert_eq!(notification_repeat_after_ms(&end, &config), Some(10 * 60 * 1_000));
+        assert_eq!(notification_repeat_after_ms(&urgent, &config), None);
     }
 
     #[test]
@@ -2270,7 +2282,7 @@ mod tests {
     }
 
     #[test]
-    fn 출석_알림은_사용자_설정없이_15분_주기로_반복한다() {
+    fn 시작_출석_알림은_사용자가_고른_간격으로_반복한다() {
         let kst = FixedOffset::east_opt(9 * 3600)
             .unwrap()
             .with_ymd_and_hms(2026, 7, 28, 9, 0, 0)
@@ -2283,26 +2295,30 @@ mod tests {
             attendance_date: "2026-07-28".into(),
         };
         let mut cursors = EventCursorStore::default();
+        let config = Config {
+            start_notification_interval_mins: 3,
+            ..Config::default()
+        };
 
-        let first = evaluate_attendance(&Config::default(), &state, first_at, &cursors);
+        let first = evaluate_attendance(&config, &state, first_at, &cursors);
         assert_eq!(first.notifications.len(), 1);
         assert_eq!(first.notifications[0].action, NotificationAction::Attendance);
         cursors.record_notification(&first.notifications[0], first_at);
 
         let before_boundary = evaluate_attendance(
-            &Config::default(),
+            &config,
             &state,
-            first_at + Duration::minutes(15) - Duration::seconds(1),
+            first_at + Duration::minutes(3) - Duration::seconds(1),
             &cursors,
         );
         assert!(before_boundary.notifications.is_empty());
 
-        let at_boundary = evaluate_attendance(&Config::default(), &state, first_at + Duration::minutes(15), &cursors);
+        let at_boundary = evaluate_attendance(&config, &state, first_at + Duration::minutes(3), &cursors);
         assert_eq!(at_boundary.notifications.len(), 1);
     }
 
     #[test]
-    fn 종료_출석_알림도_같은_15분_주기로_반복한다() {
+    fn 종료_출석_알림은_별도로_고른_간격으로_반복한다() {
         let kst = FixedOffset::east_opt(9 * 3600)
             .unwrap()
             .with_ymd_and_hms(2026, 7, 28, 23, 0, 0)
@@ -2315,21 +2331,25 @@ mod tests {
             attendance_date: "2026-07-28".into(),
         };
         let mut cursors = EventCursorStore::default();
+        let config = Config {
+            end_notification_interval_mins: 10,
+            ..Config::default()
+        };
 
-        let first = evaluate_attendance(&Config::default(), &state, first_at, &cursors);
+        let first = evaluate_attendance(&config, &state, first_at, &cursors);
         assert_eq!(first.notifications.len(), 1);
         assert_eq!(first.notifications[0].action, NotificationAction::Attendance);
         cursors.record_notification(&first.notifications[0], first_at);
 
         let before_boundary = evaluate_attendance(
-            &Config::default(),
+            &config,
             &state,
-            first_at + Duration::minutes(15) - Duration::seconds(1),
+            first_at + Duration::minutes(10) - Duration::seconds(1),
             &cursors,
         );
         assert!(before_boundary.notifications.is_empty());
 
-        let at_boundary = evaluate_attendance(&Config::default(), &state, first_at + Duration::minutes(15), &cursors);
+        let at_boundary = evaluate_attendance(&config, &state, first_at + Duration::minutes(10), &cursors);
         assert_eq!(at_boundary.notifications.len(), 1);
     }
 
