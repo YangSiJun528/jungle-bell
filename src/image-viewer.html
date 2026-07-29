@@ -8,42 +8,111 @@
     <link rel="license" href="assets/fonts/Pretendard-LICENSE.txt"/>
     <title>이미지 뷰어</title>
 </head>
-<body class="h-full overflow-hidden bg-app-bg font-sans">
-<main id="image-viewer" class="fixed inset-0 overflow-hidden" aria-busy="true">
-    <div
-        id="image-fit-layer"
-        class="invisible absolute left-1/2 top-1/2 origin-center will-change-transform"
-    >
-        <img
-            id="viewer-image"
-            class="block h-full w-full max-h-none max-w-none select-none"
-            alt="이미지"
-            draggable="false"
-        />
-    </div>
-    <section
-        id="image-viewer-loading"
-        class="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center text-app-muted"
-        role="status"
-        aria-live="polite"
-    >
-        <span class="size-8 animate-spin rounded-full border-2 border-app-border border-t-app-accent" aria-hidden="true"></span>
-        <p class="m-0 text-sm">이미지를 불러오는 중입니다.</p>
-    </section>
-    <section
-        id="image-viewer-error"
-        class="absolute inset-0 hidden flex-col items-center justify-center gap-3 text-center"
-        role="alert"
-    >
-        <strong class="text-sm">이미지를 불러오지 못했습니다.</strong>
-        <p class="m-0 text-xs text-app-muted">네트워크 연결을 확인한 후 다시 시도해 주세요.</p>
-        <button
-            id="image-viewer-retry"
-            type="button"
-            class="inline-flex min-h-8 items-center justify-center rounded-lg border border-app-border bg-app-surface px-3 py-1 text-xs font-semibold text-app-text transition-colors duration-200 hover:border-app-border-strong hover:bg-app-surface-subtle focus-visible:ring-4 focus-visible:ring-app-accent-soft"
+<body class="h-full overflow-hidden bg-app-bg font-sans" data-ui-page="image-viewer">
+<main id="image-viewer" class="fixed inset-0 flex flex-col overflow-hidden" aria-busy="true">
+    <header class="flex min-h-12 flex-none items-center justify-center border-b border-app-divider bg-app-raised px-3 py-2">
+        <div class="flex items-center justify-center gap-2" role="group" aria-label="이미지 배율">
+            <button
+                id="image-viewer-zoom-out"
+                type="button"
+                class="ui-button ui-button--secondary ui-button--compact ui-button--icon"
+                title="축소 (-)"
+                aria-label="축소"
+                disabled
+            >
+                <svg class="size-4" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M6 12h12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+            </button>
+            <output
+                id="image-viewer-zoom"
+                class="min-w-12 text-center font-mono text-ui-label text-app-muted tabular-nums"
+                aria-live="polite"
+                aria-label="현재 배율"
+            >—</output>
+            <button
+                id="image-viewer-zoom-in"
+                type="button"
+                class="ui-button ui-button--secondary ui-button--compact ui-button--icon"
+                title="확대 (+)"
+                aria-label="확대"
+                disabled
+            >
+                <svg class="size-4" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 6v12M6 12h12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+            </button>
+            <button
+                id="image-viewer-actual-size"
+                type="button"
+                class="ui-button ui-button--secondary ui-button--compact aria-pressed:border-app-accent aria-pressed:bg-app-accent-soft aria-pressed:text-app-accent"
+                title="원본 크기 (0)"
+                aria-label="100% 원본 크기"
+                aria-pressed="false"
+                disabled
+            >
+                100%
+            </button>
+            <button
+                id="image-viewer-fit"
+                type="button"
+                class="ui-button ui-button--secondary ui-button--compact aria-pressed:border-app-accent aria-pressed:bg-app-accent-soft aria-pressed:text-app-accent"
+                title="화면 맞춤 (F)"
+                aria-label="화면 맞춤"
+                aria-pressed="true"
+                disabled
+            >
+                맞춤
+            </button>
+        </div>
+    </header>
+    <section class="relative min-h-0 flex-1" aria-label="이미지 보기 영역">
+        <div
+            id="image-viewer-viewport"
+            class="absolute inset-0 overflow-auto overscroll-contain bg-app-bg"
+            role="region"
+            aria-label="이미지 탐색 영역. 확대된 이미지는 방향키로 이동할 수 있습니다."
+            tabindex="0"
         >
-            다시 시도
-        </button>
+            <div id="image-viewer-canvas" class="flex min-h-full min-w-full p-4">
+                <div
+                    id="image-fit-layer"
+                    class="invisible m-auto flex-none overflow-hidden rounded-ui-control bg-app-raised shadow-sm"
+                >
+                    <img
+                        id="viewer-image"
+                        class="block h-full w-full max-h-none max-w-none select-none"
+                        alt="이미지"
+                        draggable="false"
+                    />
+                </div>
+            </div>
+        </div>
+        <section
+            id="image-viewer-loading"
+            class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-app-bg text-center text-app-muted"
+            role="status"
+            aria-live="polite"
+            tabindex="-1"
+        >
+            <span class="size-8 animate-spin rounded-full border-2 border-app-border border-t-app-accent motion-reduce:animate-none" aria-hidden="true"></span>
+            <p class="m-0 text-ui-label">이미지를 불러오는 중입니다.</p>
+        </section>
+        <section
+            id="image-viewer-error"
+            class="absolute inset-0 hidden flex-col items-center justify-center gap-3 bg-app-bg text-center"
+            role="alert"
+        >
+            <strong class="text-ui-label">이미지를 불러오지 못했습니다.</strong>
+            <p class="m-0 text-ui-caption text-app-muted">네트워크 연결을 확인한 후 다시 시도해 주세요.</p>
+            <button
+                id="image-viewer-retry"
+                type="button"
+                class="ui-button ui-button--secondary ui-button--compact"
+            >
+                다시 시도
+            </button>
+        </section>
     </section>
 </main>
 <script type="module" src="/image-viewer.ts"></script>
