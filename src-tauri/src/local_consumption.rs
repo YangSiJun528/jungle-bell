@@ -195,6 +195,7 @@ pub struct LaundryDashboardCard {
     pub session_id: String,
     pub notify_before_mins: u32,
     pub status: LaundryDashboardStatus,
+    pub total_minutes: Option<u32>,
     pub estimated_finish_at: Option<String>,
     pub updated_at: Option<i64>,
     pub source_freshness: Option<String>,
@@ -634,6 +635,14 @@ fn build_laundry_dashboard_card(watch: &LaundryWatch, runtime: &LocalRuntime) ->
         session_id: watch.session_id.clone(),
         notify_before_mins: watch.notify_before_mins,
         status,
+        total_minutes: current_matches
+            .then(|| {
+                appliance
+                    .and_then(|appliance| appliance.get("totalMinutes"))
+                    .and_then(Value::as_u64)
+                    .and_then(|minutes| u32::try_from(minutes).ok())
+            })
+            .flatten(),
         estimated_finish_at: current_matches
             .then(|| {
                 appliance
@@ -1347,6 +1356,7 @@ mod tests {
                     "appliance": "washer",
                     "operationalStatus": status,
                     "projection": { "status": projection },
+                    "totalMinutes": 60,
                     "estimatedFinishAt": finish_at,
                     "sessionId": session_id
                 },
@@ -1375,6 +1385,7 @@ mod tests {
                     "appliance": "dryer",
                     "operationalStatus": status,
                     "projection": { "status": projection },
+                    "totalMinutes": 60,
                     "estimatedFinishAt": finish_at,
                     "sessionId": session_id
                 }
@@ -2282,6 +2293,7 @@ mod tests {
             snapshot.laundry.as_ref().map(|card| card.status),
             Some(LaundryDashboardStatus::Running)
         );
+        assert_eq!(snapshot.laundry.as_ref().and_then(|card| card.total_minutes), Some(60));
         assert_eq!(snapshot.meal_alerts.len(), 1);
 
         config.laundry_watch = None;

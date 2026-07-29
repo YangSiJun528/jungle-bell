@@ -20,20 +20,16 @@ import {
 } from './tray-panel-state.ts';
 import {
     EMPTY_LOCAL_DASHBOARD,
+    laundryDashboardExpectedEnd,
     laundryDashboardHasSourceWarning,
+    laundryDashboardProgress,
     laundryDashboardRemaining,
     type LocalDashboardSnapshot,
 } from './local-dashboard.ts';
 import {
-    homeTaskDismissal,
-    homeTaskSubscriptions,
     resolveHomeTasks,
-    withoutHomeTask,
-    type HomeTaskKind,
-    type HomeTaskSubscriptions,
     type HomeTaskVisibility,
 } from './home-tasks.ts';
-import type {SettingsSnapshot} from './settings-state.ts';
 
 type PanelTab = 'home' | 'news';
 type PanelAction =
@@ -50,17 +46,15 @@ interface TrayPanelComponent {
     menuOpen: boolean;
     state: TrayPanelState;
     dashboard: LocalDashboardSnapshot;
-    taskSubscriptions: HomeTaskSubscriptions;
     taskError: string | null;
     clockNow: number;
     clockTimer: number | null;
-    ddayExpanded: boolean;
     ddayToday: string;
     newsFeed: NewsFeed;
     newsLoading: boolean;
     newsError: boolean;
     busyAction: PanelAction | null;
-    taskBusy: HomeTaskKind | null;
+    taskBusy: 'laundry' | null;
     mealAlertBusy: string | null;
     get presentation(): StatusPresentation;
     get statusTextParts(): StatusTextParts;
@@ -71,21 +65,23 @@ interface TrayPanelComponent {
     destroy(): void;
     refresh(): Promise<void>;
     refreshDashboard(): Promise<void>;
-    refreshSettings(): Promise<void>;
     refreshNews(): Promise<void>;
     toggleMenu(): void;
-    closeMenu(): void;
+    closeMenu(restoreFocus?: boolean): void;
+    handleMenuKey(event: KeyboardEvent): void;
     selectTab(tab: PanelTab): void;
     openNewsItem(item: NewsItem): Promise<void>;
     newsLabel(item: NewsItem): string;
     newsSummary(item: NewsItem): string;
     newsDate(item: NewsItem): string;
-    toggleDday(): void;
     ddayRange(): string;
     ddayProgressLabel(): string;
     laundryRemaining(): string;
+    laundryExpectedEnd(): string;
+    laundryProgress(): number | null;
+    laundryProgressText(): string;
     laundrySourceWarning(): boolean;
-    dismissHomeTask(kind: HomeTaskKind): Promise<void>;
+    stopLaundryTracking(): Promise<void>;
     dismissMealAlert(alertId: string): Promise<void>;
     perform(action: PanelAction): Promise<void>;
     hide(): Promise<void>;
@@ -112,11 +108,9 @@ function trayPanel(): TrayPanelComponent {
         menuOpen: false,
         state: {...INITIAL_STATE},
         dashboard: {...EMPTY_LOCAL_DASHBOARD, mealAlerts: []},
-        taskSubscriptions: {laundry: false},
         taskError: null,
         clockNow: Date.now(),
         clockTimer: null,
-        ddayExpanded: false,
         ddayToday: kstDateString(),
         newsFeed: {...INITIAL_NEWS_FEED},
         newsLoading: true,
@@ -134,7 +128,7 @@ function trayPanel(): TrayPanelComponent {
         },
 
         get homeTasks() {
-            return resolveHomeTasks(this.dashboard, this.taskSubscriptions);
+            return resolveHomeTasks(this.dashboard);
         },
 
         get ddayProgress() {
@@ -162,13 +156,11 @@ function trayPanel(): TrayPanelComponent {
             window.addEventListener('focus', () => {
                 void this.refresh();
                 void this.refreshDashboard();
-                void this.refreshSettings();
                 void this.refreshNews();
             });
             await Promise.all([
                 this.refresh(),
                 this.refreshDashboard(),
-                this.refreshSettings(),
                 this.refreshNews(),
             ]);
         },
@@ -194,15 +186,6 @@ function trayPanel(): TrayPanelComponent {
             }
         },
 
-        async refreshSettings() {
-            try {
-                const snapshot = await invoke<SettingsSnapshot>('get_settings_snapshot');
-                this.taskSubscriptions = homeTaskSubscriptions(snapshot);
-            } catch (error) {
-                console.error('[tray-panel] settings refresh failed', error);
-            }
-        },
-
         async refreshNews() {
             this.newsLoading = this.newsItems.length === 0;
             try {
@@ -218,10 +201,48 @@ function trayPanel(): TrayPanelComponent {
 
         toggleMenu() {
             this.menuOpen = !this.menuOpen;
+            if (this.menuOpen) {
+                void Alpine.nextTick(() => {
+                    document
+                        .querySelector<HTMLButtonElement>('#app-menu [role="menuitem"]:not(:disabled)')
+                        ?.focus();
+                });
+            }
         },
 
-        closeMenu() {
+        closeMenu(restoreFocus = false) {
             this.menuOpen = false;
+            if (restoreFocus) {
+                void Alpine.nextTick(() => {
+                    const menuTrigger = document.querySelector<HTMLButtonElement>('[data-ui="menu-trigger"]');
+                    menuTrigger?.focus();
+                });
+            }
+        },
+
+        handleMenuKey(event) {
+            const items = Array.from(
+                document.querySelectorAll<HTMLButtonElement>('#app-menu [role="menuitem"]:not(:disabled)'),
+            );
+            if (items.length === 0) return;
+
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                event.stopPropagation();
+                this.closeMenu(true);
+                return;
+            }
+
+            const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
+            let nextIndex: number | null = null;
+            if (event.key === 'ArrowDown') nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % items.length;
+            if (event.key === 'ArrowUp') nextIndex = currentIndex < 0 ? items.length - 1 : (currentIndex - 1 + items.length) % items.length;
+            if (event.key === 'Home') nextIndex = 0;
+            if (event.key === 'End') nextIndex = items.length - 1;
+            if (nextIndex === null) return;
+
+            event.preventDefault();
+            items[nextIndex]?.focus();
         },
 
         selectTab(tab) {
@@ -254,11 +275,6 @@ function trayPanel(): TrayPanelComponent {
             }).format(date);
         },
 
-        toggleDday() {
-            if (!this.ddayProgress) return;
-            this.ddayExpanded = !this.ddayExpanded;
-        },
-
         ddayRange() {
             const period = this.state.ddayPeriod;
             if (!period) return '';
@@ -282,29 +298,38 @@ function trayPanel(): TrayPanelComponent {
                 : '';
         },
 
+        laundryExpectedEnd() {
+            return this.dashboard.laundry
+                ? laundryDashboardExpectedEnd(this.dashboard.laundry)
+                : '';
+        },
+
+        laundryProgress() {
+            return this.dashboard.laundry
+                ? laundryDashboardProgress(this.dashboard.laundry, this.clockNow)
+                : null;
+        },
+
+        laundryProgressText() {
+            const progress = this.laundryProgress();
+            return progress === null ? '' : `세탁 진행률 ${progress}%`;
+        },
+
         laundrySourceWarning() {
             return this.dashboard.laundry
                 ? laundryDashboardHasSourceWarning(this.dashboard.laundry, this.clockNow)
                 : false;
         },
 
-        async dismissHomeTask(kind) {
+        async stopLaundryTracking() {
             if (this.busyAction || this.taskBusy || this.mealAlertBusy) return;
-            const previousSubscriptions = this.taskSubscriptions;
-            this.taskBusy = kind;
+            this.taskBusy = 'laundry';
             this.taskError = null;
-            this.taskSubscriptions = withoutHomeTask(this.taskSubscriptions, kind);
-            const dismissal = homeTaskDismissal(kind);
             try {
-                const snapshot = await invoke<SettingsSnapshot>(
-                    dismissal.command,
-                    dismissal.args,
-                );
-                this.taskSubscriptions = homeTaskSubscriptions(snapshot);
+                await invoke('set_laundry_watch', {watch: null});
             } catch (error) {
-                this.taskSubscriptions = previousSubscriptions;
-                this.taskError = '세탁 추적을 취소하지 못했어요. 잠시 후 다시 시도해 주세요.';
-                console.error(`[tray-panel] ${dismissal.command} failed`, error);
+                this.taskError = '세탁 추적을 종료하지 못했어요. 잠시 후 다시 시도해 주세요.';
+                console.error('[tray-panel] set_laundry_watch failed', error);
             } finally {
                 this.taskBusy = null;
             }
@@ -335,7 +360,7 @@ function trayPanel(): TrayPanelComponent {
 
         async perform(action) {
             if (this.busyAction || this.taskBusy || this.mealAlertBusy) return;
-            this.closeMenu();
+            this.closeMenu(true);
             this.busyAction = action;
             try {
                 await invoke('run_tray_panel_action', {action});
