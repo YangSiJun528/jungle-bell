@@ -33,6 +33,10 @@ const STATUS_COURSE_CHECKING: &str = "코스 확인 중";
 const UTILITY_WINDOW_WIDTH: f64 = 560.0;
 const CONTENT_WINDOW_WIDTH: f64 = 720.0;
 const STANDARD_WINDOW_HEIGHT: f64 = 720.0;
+const UTILITY_WINDOW_MIN_WIDTH: f64 = 520.0;
+const UTILITY_WINDOW_MIN_HEIGHT: f64 = 600.0;
+const CAMPUS_WINDOW_MIN_WIDTH: f64 = 640.0;
+const CAMPUS_WINDOW_MIN_HEIGHT: f64 = 600.0;
 const ATTENDANCE_MIN_SIZE: f64 = 640.0;
 const IMAGE_VIEWER_WIDTH: f64 = 1120.0;
 const IMAGE_VIEWER_HEIGHT: f64 = 840.0;
@@ -914,9 +918,10 @@ fn build_campus_window(app: &tauri::AppHandle, tab: CampusTab) {
     .title("생활 정보")
     .theme(Some(tauri::Theme::Light))
     .inner_size(CONTENT_WINDOW_WIDTH, STANDARD_WINDOW_HEIGHT)
-    .resizable(false)
+    .min_inner_size(CAMPUS_WINDOW_MIN_WIDTH, CAMPUS_WINDOW_MIN_HEIGHT)
+    .resizable(true)
     .minimizable(true)
-    .maximizable(false)
+    .maximizable(true)
     .skip_taskbar(foreground_window_skip_taskbar(app))
     .focused(true)
     .build()
@@ -953,8 +958,9 @@ fn build_settings_window(app: &tauri::AppHandle) {
         .title("설정")
         .theme(Some(tauri::Theme::Light))
         .inner_size(UTILITY_WINDOW_WIDTH, STANDARD_WINDOW_HEIGHT)
-        .resizable(false)
-        .minimizable(false)
+        .min_inner_size(UTILITY_WINDOW_MIN_WIDTH, UTILITY_WINDOW_MIN_HEIGHT)
+        .resizable(true)
+        .minimizable(true)
         .maximizable(false)
         .skip_taskbar(foreground_window_skip_taskbar(app))
         .focused(true)
@@ -977,8 +983,9 @@ fn build_onboarding_window(app: &tauri::AppHandle) {
             .title("Jungle Bell 시작하기")
             .theme(Some(tauri::Theme::Light))
             .inner_size(UTILITY_WINDOW_WIDTH, STANDARD_WINDOW_HEIGHT)
-            .resizable(false)
-            .minimizable(false)
+            .min_inner_size(UTILITY_WINDOW_MIN_WIDTH, UTILITY_WINDOW_MIN_HEIGHT)
+            .resizable(true)
+            .minimizable(true)
             .maximizable(false)
             .skip_taskbar(foreground_window_skip_taskbar(app))
             .focused(true)
