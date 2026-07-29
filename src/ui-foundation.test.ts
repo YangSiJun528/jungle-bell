@@ -10,6 +10,14 @@ test('공통 스크롤바 gutter는 양쪽 여백을 대칭으로 유지한다',
     assert.match(uiStyles, /overflow-y:\s*scroll/);
     assert.match(uiStyles, /scrollbar-gutter:\s*stable both-edges/);
     assert.match(uiStyles, /\*::\-webkit-scrollbar-track\s*{\s*background:\s*var\(--color-bg\)/);
+    assert.match(
+        uiStyles,
+        /\.ui-scroll-region\s*\{[^}]*overflow-y:\s*auto;[^}]*scrollbar-gutter:\s*stable both-edges;/s,
+    );
+    assert.match(
+        uiStyles,
+        /\.ui-scroll-region--bleed\s*\{[^}]*scrollbar-gutter:\s*auto;/s,
+    );
 });
 
 test('모든 페이지는 재정의 가능한 전역 gutter를 사용한다', () => {
@@ -24,4 +32,9 @@ test('모든 페이지는 재정의 가능한 전역 gutter를 사용한다', ()
     const imageViewer = templates[3] ?? '';
     assert.match(imageViewer, /<html\b[^>]*\bdata-page-layout=["']bleed["']/);
     assert.match(imageViewer, /<main\b[^>]*\bfixed\b[^>]*\binset-0\b/);
+
+    const settings = templates[0] ?? '';
+    const campus = templates[2] ?? '';
+    assert.doesNotMatch(settings, /<html\b[^>]*\bdata-page-layout=["']bleed["']/);
+    assert.doesNotMatch(campus, /<html\b[^>]*\bdata-page-layout=["']bleed["']/);
 });

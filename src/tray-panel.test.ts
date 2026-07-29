@@ -351,6 +351,20 @@ test('홈은 진행 중인 세탁을 D-Day보다 먼저 보여주고 생활 알�
     assert.match(script, /laundryProgressText\(\)/);
 });
 
+test('홈과 소식의 내부 스크롤은 좌우에 같은 scrollbar gutter를 예약한다', () => {
+    const html = readFileSync(new URL('./tray-panel.html', import.meta.url), 'utf8');
+
+    assert.match(
+        html,
+        /<section id="tray-home-panel" class="[^"]*\bui-scroll-region\b/,
+    );
+    assert.match(
+        html,
+        /<section id="tray-news-panel" class="[^"]*\bui-scroll-region\b/,
+    );
+    assert.equal(html.match(/\bui-scroll-region\b/g)?.length, 2);
+});
+
 test('생활 알림과 생활 정보는 같은 섹션 제목 스타일을 사용한다', () => {
     const html = readFileSync(new URL('./tray-panel.html', import.meta.url), 'utf8');
     const alertTitle = html.match(/<h2 id="home-alerts-title" class="([^"]+)">생활 알림<\/h2>/);
