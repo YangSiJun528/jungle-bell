@@ -79,9 +79,10 @@ fn notify_startup_status(
         }
         Some(last) if last != &current_version => {
             let body = format!("v{} → v{}로 업데이트되었습니다.", last, current_version);
+            let notification_key = format!("app.updated:{current_version}");
             notifications.deliver(
                 app,
-                NotificationRequest::system("app.updated", "Jungle Bell 업데이트 완료", &body),
+                NotificationRequest::system(&notification_key, "Jungle Bell 업데이트 완료", &body),
             );
             log::info!("[app] 업데이트 완료 알림 발송: v{} → v{}", last, current_version);
             analytics::prepare_app_updated(last.clone(), current_version.clone());

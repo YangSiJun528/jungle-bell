@@ -108,10 +108,11 @@ pub(crate) async fn auto_install_update(app: tauri::AppHandle) {
             let version = update.version.clone();
             log::info!("[updater] 자동 업데이트: v{} 발견, 설치 시작", version);
             let body = format!("v{}로 업데이트합니다. 잠시 후 재시작됩니다.", version);
+            let notification_key = format!("updater.installing:{version}");
             let notifications: tauri::State<Arc<NotificationService>> = app.state();
             notifications.deliver(
                 &app,
-                NotificationRequest::system("updater.installing", "Jungle Bell 업데이트", &body),
+                NotificationRequest::system(&notification_key, "Jungle Bell 업데이트", &body),
             );
             match update.download_and_install(|_, _| {}, || {}).await {
                 Ok(_) => {

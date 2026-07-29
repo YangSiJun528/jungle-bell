@@ -447,27 +447,57 @@ impl LocalConsumptionService {
             changed |= runtime.cursors.append_meal_alert(alert);
         }
         for notification in evaluation.notifications {
-            let dedupe_key =
-                (notification.action == NotificationAction::Attendance).then_some("attendance-notification");
+            let source_key = notification_source_key(&notification);
+            let repeat_after_ms = notification_repeat_after_ms(&notification);
             let report = self.notifications.deliver(
                 app,
                 NotificationRequest {
-                    key: &notification.cursor.key,
+                    key: &source_key,
                     title: &notification.title,
                     body: &notification.body,
                     delivery,
                     action: Some(notification.action),
-                    dedupe_key,
+                    repeat_after_ms,
                 },
             );
 
             if report.any_delivered() {
-                runtime.cursors.record_notification(&notification, now);
+                let recorded_at = notification_recorded_at(&report, now);
+                runtime.cursors.record_notification(&notification, recorded_at);
                 changed = true;
             }
         }
         changed
     }
+}
+
+fn notification_recorded_at(
+    report: &crate::notification_service::DeliveryReport,
+    fallback: DateTime<Utc>,
+) -> DateTime<Utc> {
+    report
+        .inbox_created_at
+        .and_then(DateTime::<Utc>::from_timestamp_millis)
+        .unwrap_or(fallback)
+}
+
+fn notification_source_key(notification: &LocalNotification) -> String {
+    format!(
+        "local:{}",
+        serde_json::to_string(&(
+            notification.cursor.key.as_str(),
+            notification.cursor.fingerprint.as_str()
+        ))
+        .expect("cursor mark tuple is serializable")
+    )
+}
+
+fn notification_repeat_after_ms(notification: &LocalNotification) -> Option<i64> {
+    matches!(
+        notification.cursor.key.as_str(),
+        ATTENDANCE_START_CURSOR_KEY | ATTENDANCE_END_CURSOR_KEY
+    )
+    .then_some(ATTENDANCE_NOTIFICATION_REPEAT_MINS * 60 * 1_000)
 }
 
 async fn persist_event_cursors_checked(cursors: EventCursorStore) -> Result<(), String> {
@@ -2067,6 +2097,76 @@ mod tests {
             &cursors,
         );
         assert!(repeated.notifications.is_empty());
+    }
+
+    #[test]
+    fn 로컬_알림_source_key는_병합_cursor_구성과_무관하게_primary_identity를_사용한다() {
+        let first = LocalNotification {
+            cursor: CursorMark {
+                key: "source.b".into(),
+                fingerprint: "fingerprint-b".into(),
+            },
+            title: "알림".into(),
+            body: "내용".into(),
+            action: NotificationAction::Meals,
+            conflict_key: Some("conflict".into()),
+            priority: 10,
+            coalesced_cursors: vec![CursorMark {
+                key: "source.a".into(),
+                fingerprint: "fingerprint-a".into(),
+            }],
+        };
+        let without_coalesced = LocalNotification {
+            coalesced_cursors: Vec::new(),
+            ..first.clone()
+        };
+
+        assert_eq!(
+            notification_source_key(&first),
+            notification_source_key(&without_coalesced)
+        );
+    }
+
+    #[test]
+    fn 일반_출퇴근_알림만_15분_반복을_허용한다() {
+        let regular = LocalNotification {
+            cursor: CursorMark {
+                key: ATTENDANCE_START_CURSOR_KEY.into(),
+                fingerprint: "2026-07-29".into(),
+            },
+            title: "출석".into(),
+            body: "내용".into(),
+            action: NotificationAction::Attendance,
+            conflict_key: None,
+            priority: 10,
+            coalesced_cursors: Vec::new(),
+        };
+        let urgent = LocalNotification {
+            cursor: CursorMark {
+                key: ATTENDANCE_URGENT_CURSOR_KEY.into(),
+                fingerprint: "2026-07-29".into(),
+            },
+            ..regular.clone()
+        };
+
+        assert_eq!(
+            notification_repeat_after_ms(&regular),
+            Some(ATTENDANCE_NOTIFICATION_REPEAT_MINS * 60 * 1_000)
+        );
+        assert_eq!(notification_repeat_after_ms(&urgent), None);
+    }
+
+    #[test]
+    fn 재시작_복구는_현재시각이_아니라_기존_inbox_발송시각으로_cursor를_복원한다() {
+        let fallback = utc(9, 30, 0);
+        let original = utc(9, 0, 0);
+        let report = crate::notification_service::DeliveryReport {
+            inbox_recorded: true,
+            inbox_created_at: Some(original.timestamp_millis()),
+            ..crate::notification_service::DeliveryReport::default()
+        };
+
+        assert_eq!(notification_recorded_at(&report, fallback), original);
     }
 
     #[test]

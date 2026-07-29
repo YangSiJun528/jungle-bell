@@ -41,7 +41,7 @@ pub struct NotificationRequest<'a> {
     pub body: &'a str,
     pub delivery: NotificationDelivery,
     pub action: Option<NotificationAction>,
-    pub dedupe_key: Option<&'a str>,
+    pub repeat_after_ms: Option<i64>,
 }
 
 impl<'a> NotificationRequest<'a> {
@@ -52,7 +52,7 @@ impl<'a> NotificationRequest<'a> {
             body,
             delivery: NotificationDelivery::System,
             action: None,
-            dedupe_key: None,
+            repeat_after_ms: None,
         }
     }
 }
@@ -60,6 +60,7 @@ impl<'a> NotificationRequest<'a> {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct DeliveryReport {
     pub inbox_recorded: bool,
+    pub inbox_created_at: Option<i64>,
     pub overlay_delivered: bool,
     pub system_delivered: bool,
 }
@@ -102,10 +103,18 @@ impl NotificationService {
             request.title,
             request.body,
             request.action,
-            request.dedupe_key,
+            request.repeat_after_ms,
         ) {
-            Ok((id, _)) => {
+            Ok((id, snapshot, inserted)) => {
                 report.inbox_recorded = true;
+                report.inbox_created_at = snapshot
+                    .items
+                    .iter()
+                    .find(|item| item.id == id)
+                    .map(|item| item.created_at);
+                if !inserted {
+                    return report;
+                }
                 id
             }
             Err(error) => {
@@ -124,7 +133,7 @@ impl NotificationService {
                     request.title,
                     request.body,
                     action.overlay_action(),
-                    request.dedupe_key,
+                    None,
                 ) {
                     Ok(_) => {
                         report.overlay_delivered = true;
@@ -198,6 +207,14 @@ fn opens_action(response: &NotificationResponse, action: Option<NotificationActi
     }
 }
 
+fn response_timeout(action: Option<NotificationAction>) -> notify_rust::Timeout {
+    if action.is_some() {
+        notify_rust::Timeout::Milliseconds(SYSTEM_NOTIFICATION_TIMEOUT_MS)
+    } else {
+        notify_rust::Timeout::Default
+    }
+}
+
 pub fn show_system(
     app: &tauri::AppHandle,
     title: &str,
@@ -211,7 +228,7 @@ pub fn show_system(
         .appname("Jungle Bell")
         .summary(title)
         .body(body)
-        .timeout(notify_rust::Timeout::Milliseconds(SYSTEM_NOTIFICATION_TIMEOUT_MS));
+        .timeout(response_timeout(action));
 
     if let Some(action) = action {
         notification.action(OPEN_ACTION_ID, action.button_label());
@@ -308,6 +325,15 @@ mod tests {
     }
 
     #[test]
+    fn 정보성_알림은_os_기본_만료를_사용하고_화면_이동_알림만_listener를_제한한다() {
+        assert_eq!(response_timeout(None), notify_rust::Timeout::Default);
+        assert_eq!(
+            response_timeout(Some(NotificationAction::Attendance)),
+            notify_rust::Timeout::Milliseconds(SYSTEM_NOTIFICATION_TIMEOUT_MS)
+        );
+    }
+
+    #[test]
     fn 모든_알림_액션은_overlay와_tray와_os_버튼_표현을_가진다() {
         let cases = [
             (
@@ -341,12 +367,14 @@ mod tests {
     fn 앱_알림함에_저장된_경우에만_발송한_것으로_판단한다() {
         assert!(DeliveryReport {
             inbox_recorded: true,
+            inbox_created_at: Some(1_000),
             overlay_delivered: true,
             system_delivered: false,
         }
         .any_delivered());
         assert!(!DeliveryReport {
             inbox_recorded: false,
+            inbox_created_at: None,
             overlay_delivered: false,
             system_delivered: true,
         }
