@@ -256,13 +256,17 @@ test('종료 출석 설정은 마감 5분 전 긴급 알림을 안내한다', ()
     assert.match(endSection, /x-show="endNotification"/);
 });
 
-test('출석 알림은 앱의 고정 주기로 반복하고 사용자 간격 설정을 노출하지 않는다', () => {
+test('출석 알림 반복 간격을 시작과 종료 일정별로 설정한다', () => {
     const attendanceSectionStart = settings.indexOf('<section id="attendance-settings"');
     const notificationSectionStart = settings.indexOf('<section id="notification-settings"');
     const attendanceSection = settings.slice(attendanceSectionStart, notificationSectionStart);
 
-    assert.doesNotMatch(attendanceSection, /반복 간격|startInterval|endInterval|saveStartInterval|saveEndInterval/);
-    assert.doesNotMatch(
+    assert.equal(attendanceSection.match(/>반복 간격<\/span>/g)?.length, 2);
+    assert.match(attendanceSection, /x-effect="syncValue\(startInterval\)"/);
+    assert.match(attendanceSection, /@change="saveStartInterval\(\)"/);
+    assert.match(attendanceSection, /x-effect="syncValue\(endInterval\)"/);
+    assert.match(attendanceSection, /@change="saveEndInterval\(\)"/);
+    assert.match(
         settingsScript,
         /startInterval|endInterval|saveStartInterval|saveEndInterval|set_start_notification_interval|set_end_notification_interval/,
     );

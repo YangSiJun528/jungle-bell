@@ -44,6 +44,8 @@ function snapshot(revision: number, autoStart: boolean): SettingsSnapshot {
         endNotification: true,
         notificationStart: {hour: 9, minute: 0},
         notificationEnd: {hour: 4, minute: 0},
+        startInterval: 3,
+        endInterval: 10,
         selectedCohortId: null,
         effectiveCohortId: null,
         cohortOptions: [],
