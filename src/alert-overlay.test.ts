@@ -149,9 +149,18 @@ test('초기 목록 전체가 아니라 이후 추가된 새 알림만 정중하
 
 test('알림 센터는 하나의 둥근 표면 안에서 평면 목록으로 알림을 구분한다', () => {
     assert.match(html, /html,\s*body\s*\{[\s\S]*?background:\s*transparent\s*!important/);
+    assert.match(
+        html,
+        /<html\b[^>]*\bdata-page-layout="bleed"[^>]*class="[^"]*\bh-full\b[^"]*\boverflow-hidden\b[^"]*\bbg-transparent\b/,
+    );
+    assert.match(
+        html,
+        /<body\b[^>]*class="[^"]*\bh-full\b[^"]*\boverflow-hidden\b[^"]*\bbg-transparent\b/,
+    );
     assert.match(html, /ui-floating-surface[^"]*"[\s\S]*data-alert-center/);
     assert.match(html, /divide-y[^"]*divide-app-divider[^"]*"[\s\S]*data-alert-list/);
     assert.match(html, /m-0[^"]*p-0[^"]*"[\s\S]*data-alert-list/);
+    assert.match(html, /\bui-scroll-region\b[^"]*"[\s\S]*data-alert-list/);
     assert.match(itemTemplate, /min-h-\[84px\]/);
     assert.match(itemTemplate, /bg-transparent/);
     assert.match(itemTemplate, /hover:bg-app-surface-subtle/);
