@@ -13,7 +13,7 @@ test('공통 스크롤바 gutter는 양쪽 여백을 대칭으로 유지한다',
 });
 
 test('모든 페이지는 재정의 가능한 전역 gutter를 사용한다', () => {
-    assert.match(uiStyles, /--page-gutter:\s*16px/);
+    assert.match(uiStyles, /--page-gutter:\s*var\(--space-4\)/);
     assert.match(uiStyles, /body\s*{\s*padding:\s*var\(--page-gutter\)/);
     assert.match(uiStyles, /html\[data-page-layout=["']bleed["']\]\s*{\s*scrollbar-gutter:\s*auto/);
 
