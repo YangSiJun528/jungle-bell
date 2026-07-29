@@ -147,6 +147,16 @@
 }
 
 @layer components {
+    .ui-scroll-region {
+        min-height: 0;
+        overflow-y: auto;
+        scrollbar-gutter: stable both-edges;
+    }
+
+    .ui-scroll-region--bleed {
+        scrollbar-gutter: auto;
+    }
+
     .ui-page-header {
         display: flex;
         min-height: var(--space-16);

@@ -50,6 +50,10 @@ test('이미지 뷰어는 이미지를 화면에 맞추고 확대 시 스크롤�
     assert.doesNotMatch(script, /\bcaption\b/);
     assert.doesNotMatch(html, /\bobject-contain\b/);
     assert.match(html, /\bid="image-viewer-viewport"[^>]*\boverflow-auto\b/);
+    assert.match(
+        html,
+        /\bid="image-viewer-viewport"[^>]*\bui-scroll-region\b[^>]*\bui-scroll-region--bleed\b/,
+    );
     assert.match(html, /\bid="image-viewer-canvas"/);
     assert.match(html, /\bid="image-fit-layer"/);
     assert.match(html, /<main\b[^>]*\bfixed\b[^>]*\binset-0\b/);
