@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko">
+<html lang="ko" data-page-layout="bleed" class="h-full overflow-hidden bg-transparent">
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -33,7 +33,7 @@
         }
     </style>
 </head>
-<body class="h-screen overflow-hidden bg-transparent p-2 font-sans text-app-text" data-ui-page="alert-overlay">
+<body class="h-full overflow-hidden bg-transparent p-2 font-sans text-app-text" data-ui-page="alert-overlay">
 <section class="ui-floating-surface flex h-full min-h-0 flex-col overflow-hidden"
          data-alert-center role="region" aria-label="Jungle Bell 알림 센터">
     <header class="flex h-12 flex-none cursor-grab items-center gap-3 border-b border-app-divider px-4 select-none active:cursor-grabbing"
@@ -45,7 +45,7 @@
     </header>
 
     <p class="sr-only" data-alert-announcer role="status" aria-live="polite"></p>
-    <ul class="m-0 min-h-0 flex-1 list-none divide-y divide-app-divider overflow-y-auto p-0"
+    <ul class="ui-scroll-region m-0 min-h-0 flex-1 list-none divide-y divide-app-divider p-0"
         data-alert-list></ul>
 </section>
 
