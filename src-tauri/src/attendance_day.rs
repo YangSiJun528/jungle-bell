@@ -39,16 +39,20 @@ mod tests {
 
     #[test]
     fn morning_start_이전에는_전날을_출석일로_본다() {
-        let mut config = Config::default();
-        config.skip_attendance = Some("2026-03-17".into());
+        let config = Config {
+            skip_attendance: Some("2026-03-17".into()),
+            ..Default::default()
+        };
 
         assert!(is_skip_attendance_active(&config, kst_dt(2, 0, 0)));
     }
 
     #[test]
     fn morning_start_이후에는_오늘을_출석일로_본다() {
-        let mut config = Config::default();
-        config.skip_attendance = Some("2026-03-18".into());
+        let config = Config {
+            skip_attendance: Some("2026-03-18".into()),
+            ..Default::default()
+        };
 
         assert!(is_skip_attendance_active(&config, kst_dt(9, 0, 0)));
     }

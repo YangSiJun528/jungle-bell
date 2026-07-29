@@ -535,8 +535,10 @@ mod tests {
 
     #[test]
     fn notification_decision은_로그인필요와_skip_day를_도메인에서_판단한다() {
-        let mut config = Config::default();
-        config.skip_attendance = Some("2026-03-17".into());
+        let config = Config {
+            skip_attendance: Some("2026-03-17".into()),
+            ..Default::default()
+        };
         let kst_now = kst_time(9, 30, 0).with_timezone(&crate::state::kst());
 
         let login = notification_decision(&config, DailyPhase::NeedStart, Some(3600), true, kst_now);

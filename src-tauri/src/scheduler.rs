@@ -690,8 +690,10 @@ mod tests {
     #[test]
     fn 시작_알림_비활성화시_시작_알림을_보내지_않는다() {
         // given
-        let mut config = Config::default();
-        config.start_notification_enabled = false;
+        let config = Config {
+            start_notification_enabled: false,
+            ..Default::default()
+        };
 
         // when
         let d = should_notify(&config, DailyPhase::NeedStart, Some(3600), false, kst_dt(9, 30, 0));
@@ -703,8 +705,10 @@ mod tests {
     #[test]
     fn 종료_알림_비활성화시_종료_알림을_보내지_않는다() {
         // given
-        let mut config = Config::default();
-        config.end_notification_enabled = false;
+        let config = Config {
+            end_notification_enabled: false,
+            ..Default::default()
+        };
 
         // when: KST 23:30 — 저녁 윈도우 내
         let d = should_notify(&config, DailyPhase::NeedEnd, Some(3600), false, kst_dt(23, 30, 0));
@@ -716,8 +720,10 @@ mod tests {
     #[test]
     fn 시작_알림_비활성화시에도_종료_알림은_발송된다() {
         // given
-        let mut config = Config::default();
-        config.start_notification_enabled = false;
+        let config = Config {
+            start_notification_enabled: false,
+            ..Default::default()
+        };
 
         // when: KST 23:30 — 저녁 윈도우 내
         let d = should_notify(&config, DailyPhase::NeedEnd, Some(3600), false, kst_dt(23, 30, 0));
@@ -1264,8 +1270,10 @@ mod tests {
     #[test]
     fn 이번_출석_알림_끄기_활성화시_알림을_보내지_않는다() {
         // given
-        let mut config = Config::default();
-        config.skip_attendance = Some("2026-03-17".into()); // kst_dt의 날짜와 동일
+        let config = Config {
+            skip_attendance: Some("2026-03-17".into()), // kst_dt의 날짜와 동일
+            ..Default::default()
+        };
 
         // when
         let d = should_notify(&config, DailyPhase::NeedStart, Some(3600), false, kst_dt(9, 30, 0));
@@ -1277,8 +1285,10 @@ mod tests {
     #[test]
     fn 이번_출석_알림_끄기_날짜가_다르면_알림이_발송된다() {
         // given: morning_start 이후에는 전날 skip이 무효
-        let mut config = Config::default();
-        config.skip_attendance = Some("2026-03-16".into()); // 어제 날짜
+        let config = Config {
+            skip_attendance: Some("2026-03-16".into()), // 어제 날짜
+            ..Default::default()
+        };
 
         // when: 09:30 (morning_start=04:00 이후)
         let d = should_notify(&config, DailyPhase::NeedStart, Some(3600), false, kst_dt(9, 30, 0));
@@ -1290,8 +1300,10 @@ mod tests {
     #[test]
     fn 이번_출석_알림_끄기_자정_이후_morning_start_이전에는_전날_skip이_유효하다() {
         // given: 전날(03-17) skip 설정, 현재 03-18 02:00 (morning_start=04:00 이전)
-        let mut config = Config::default();
-        config.skip_attendance = Some("2026-03-17".into());
+        let config = Config {
+            skip_attendance: Some("2026-03-17".into()),
+            ..Default::default()
+        };
         let kst = FixedOffset::east_opt(9 * 3600)
             .unwrap()
             .with_ymd_and_hms(2026, 3, 18, 2, 0, 0)
@@ -1307,8 +1319,10 @@ mod tests {
     #[test]
     fn 이번_출석_알림_끄기_morning_start_이후에는_전날_skip이_해제된다() {
         // given: 전날(03-17) skip 설정, 현재 03-18 09:30 (morning_start=04:00 이후, 알림윈도우 내)
-        let mut config = Config::default();
-        config.skip_attendance = Some("2026-03-17".into());
+        let config = Config {
+            skip_attendance: Some("2026-03-17".into()),
+            ..Default::default()
+        };
         let kst = FixedOffset::east_opt(9 * 3600)
             .unwrap()
             .with_ymd_and_hms(2026, 3, 18, 9, 30, 0)
@@ -1326,8 +1340,10 @@ mod tests {
     #[test]
     fn 일요일_알림_끄기_활성화시_일요일에_알림을_보내지_않는다() {
         // given: 2026-03-22는 일요일
-        let mut config = Config::default();
-        config.skip_sunday = true;
+        let config = Config {
+            skip_sunday: true,
+            ..Default::default()
+        };
         let sunday = FixedOffset::east_opt(9 * 3600)
             .unwrap()
             .with_ymd_and_hms(2026, 3, 22, 9, 30, 0)
@@ -1343,8 +1359,10 @@ mod tests {
     #[test]
     fn 일요일_알림_끄기_활성화시_월요일에는_알림이_발송된다() {
         // given: 2026-03-23는 월요일
-        let mut config = Config::default();
-        config.skip_sunday = true;
+        let config = Config {
+            skip_sunday: true,
+            ..Default::default()
+        };
         let monday = FixedOffset::east_opt(9 * 3600)
             .unwrap()
             .with_ymd_and_hms(2026, 3, 23, 9, 30, 0)
