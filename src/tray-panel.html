@@ -44,12 +44,22 @@
         <div class="flex flex-none items-center gap-1">
             <button
                 type="button"
+                class="ui-button ui-button--ghost ui-button--compact border-0 bg-transparent px-2 text-ui-caption text-app-muted hover:bg-app-danger-soft hover:text-app-danger disabled:opacity-50"
+                data-ui="notification-clear-all"
+                x-show="notificationOpen && notificationInbox.items.length > 0"
+                x-cloak
+                :disabled="busyAction !== null || taskBusy !== null || notificationBusy !== null || notificationClearBusy"
+                @click="clearNotifications()"
+                x-text="notificationClearBusy ? '지우는 중' : '모두 지우기'"
+            >모두 지우기</button>
+            <button
+                type="button"
                 class="ui-button ui-button--compact ui-button--icon relative size-8 rounded-full border-0 bg-transparent p-0 text-app-faint hover:bg-app-surface-subtle hover:text-app-text disabled:opacity-50"
                 :aria-label="notificationTriggerLabel()"
                 :aria-expanded="notificationOpen"
                 aria-controls="tray-notification-panel"
                 data-ui="notification-trigger"
-                :disabled="busyAction !== null || notificationBusy !== null"
+                :disabled="busyAction !== null || notificationBusy !== null || notificationClearBusy"
                 x-show="!notificationOpen"
                 @click="toggleNotifications()"
             >
@@ -152,7 +162,7 @@
                         class="flex h-full min-w-0 flex-1 cursor-pointer items-start gap-2 border-0 bg-transparent px-2 py-1 text-left text-app-text disabled:opacity-50"
                         :class="item.readAt === null ? 'bg-app-surface' : 'bg-transparent'"
                         :aria-label="notificationItemLabel(item)"
-                        :disabled="notificationBusy !== null || busyAction !== null || taskBusy !== null"
+                        :disabled="notificationBusy !== null || notificationClearBusy || busyAction !== null || taskBusy !== null"
                         @click="activateNotification(item.id)"
                     >
                         <span

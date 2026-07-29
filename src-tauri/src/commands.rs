@@ -857,6 +857,17 @@ pub fn activate_notification(
     inbox.activate(&app, &id)
 }
 
+/// 트레이 패널의 영속 앱 알림을 모두 삭제한다.
+#[tauri::command]
+pub fn clear_notification_inbox(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    inbox: tauri::State<'_, Arc<NotificationInboxService>>,
+) -> Result<NotificationInboxSnapshot, String> {
+    notification_inbox::ensure_tray_panel_window(&window)?;
+    inbox.clear(&app)
+}
+
 /// 커스텀 트레이 패널에서 선택한 허용된 액션을 실행한다.
 #[tauri::command]
 pub fn run_tray_panel_action(app: tauri::AppHandle, action: tray::TrayPanelAction) -> Result<(), String> {

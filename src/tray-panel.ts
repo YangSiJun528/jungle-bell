@@ -63,6 +63,7 @@ interface TrayPanelComponent {
     notificationLoading: boolean;
     notificationError: string | null;
     notificationBusy: string | null;
+    notificationClearBusy: boolean;
     taskError: string | null;
     clockNow: number;
     clockTimer: number | null;
@@ -93,6 +94,7 @@ interface TrayPanelComponent {
     notificationTime(createdAt: number): string;
     notificationDateTime(createdAt: number): string;
     activateNotification(id: string): Promise<void>;
+    clearNotifications(): Promise<void>;
     selectTab(tab: PanelTab): void;
     openNewsItem(item: NewsItem): Promise<void>;
     newsLabel(item: NewsItem): string;
@@ -145,6 +147,7 @@ function trayPanel(): TrayPanelComponent {
         notificationLoading: true,
         notificationError: null,
         notificationBusy: null,
+        notificationClearBusy: false,
         taskError: null,
         clockNow: Date.now(),
         clockTimer: null,
@@ -321,7 +324,7 @@ function trayPanel(): TrayPanelComponent {
         },
 
         async activateNotification(id) {
-            if (this.busyAction || this.taskBusy || this.notificationBusy) return;
+            if (this.busyAction || this.taskBusy || this.notificationBusy || this.notificationClearBusy) return;
             this.notificationBusy = id;
             this.notificationError = null;
             try {
@@ -337,6 +340,34 @@ function trayPanel(): TrayPanelComponent {
                 console.error('[tray-panel] notification activation failed', error);
             } finally {
                 this.notificationBusy = null;
+            }
+        },
+
+        async clearNotifications() {
+            if (
+                this.busyAction
+                || this.taskBusy
+                || this.notificationBusy
+                || this.notificationClearBusy
+                || this.notificationInbox.items.length === 0
+            ) return;
+            this.notificationClearBusy = true;
+            this.notificationError = null;
+            try {
+                const snapshot = await invoke<NotificationInboxSnapshot>(
+                    'clear_notification_inbox',
+                );
+                if (!this.applyNotificationSnapshot(snapshot)) {
+                    throw new Error('잘못된 알림함 응답입니다.');
+                }
+                void Alpine.nextTick(() => {
+                    document.querySelector<HTMLElement>('#tray-notification-title')?.focus();
+                });
+            } catch (error) {
+                this.notificationError = '알림을 지우지 못했어요.';
+                console.error('[tray-panel] notification clear failed', error);
+            } finally {
+                this.notificationClearBusy = false;
             }
         },
 

@@ -4,6 +4,7 @@ use std::sync::Arc;
 use notify_rust::{Notification, NotificationResponse};
 
 use crate::notification_inbox::NotificationInboxService;
+use crate::tray::{self, TrayPanelAction};
 
 const OPEN_ACTION_ID: &str = "open";
 // 반복 알림이 겹쳐도 액션 listener가 장시간 누적되지 않도록 유한 시간 뒤 정리한다.
@@ -171,6 +172,10 @@ fn response_timeout(action: Option<NotificationAction>) -> notify_rust::Timeout 
     }
 }
 
+fn system_notification_tray_action(action: Option<NotificationAction>) -> Option<TrayPanelAction> {
+    action.map(NotificationAction::tray_action)
+}
+
 pub fn show_system(
     app: &tauri::AppHandle,
     title: &str,
@@ -216,8 +221,13 @@ pub fn show_system(
             if !opens_action(response, action) {
                 return;
             }
-            if let Err(error) = inbox.activate(&app, &notification_id) {
-                log::warn!("[notification] inbox activation failed: {error}");
+            if let Err(error) = inbox.mark_read_from_system(&app, &notification_id) {
+                log::warn!("[notification] inbox read failed: {error}");
+            }
+            if let Some(action) = system_notification_tray_action(action) {
+                if let Err(error) = tray::run_tray_panel_action(&app, action) {
+                    log::warn!("[notification] system action failed: {error}");
+                }
             }
         }) {
             log::debug!("[notification] response listener ended: {error}");
@@ -249,7 +259,6 @@ fn configure_windows_identity(app: &tauri::AppHandle, notification: &mut Notific
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tray::TrayPanelAction;
 
     #[test]
     fn 기본_클릭과_열기_버튼만_요청된_액션을_실행한다() {
@@ -287,6 +296,15 @@ mod tests {
             response_timeout(Some(NotificationAction::Attendance)),
             notify_rust::Timeout::Milliseconds(SYSTEM_NOTIFICATION_TIMEOUT_MS)
         );
+    }
+
+    #[test]
+    fn 삭제된_알림의_os_클릭은_원래_액션으로_fallback한다() {
+        assert_eq!(
+            system_notification_tray_action(Some(NotificationAction::Laundry)),
+            Some(TrayPanelAction::OpenLaundry)
+        );
+        assert_eq!(system_notification_tray_action(None), None);
     }
 
     #[test]
