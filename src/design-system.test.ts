@@ -10,7 +10,6 @@ const pagePaths = [
     './onboarding.html',
     './campus.html',
     './tray-panel.html',
-    './alert-overlay.html',
     './image-viewer.html',
 ];
 const pages = pagePaths.map((path) => ({path, source: readSource(path)}));

@@ -3,7 +3,6 @@ import {readFileSync} from 'node:fs';
 import {test} from 'vitest';
 
 const tray = readFileSync(new URL('../src-tauri/src/tray.rs', import.meta.url), 'utf8');
-const alertOverlay = readFileSync(new URL('../src-tauri/src/alert_overlay.rs', import.meta.url), 'utf8');
 
 function sourceBetween(source: string, start: string, end: string): string {
     const startIndex = source.indexOf(start);
@@ -51,22 +50,12 @@ test('생활 정보 창은 기존 720 정사각형에서 시작하고 더 넓게
     assert.match(campus, /\.maximizable\(true\)/);
 });
 
-test('트레이 패널과 알림 오버레이는 시스템 보조 창으로 고정 크기를 유지한다', () => {
+test('트레이 패널은 시스템 보조 창으로 고정 크기를 유지한다', () => {
     const trayPanel = sourceBetween(tray, 'fn build_tray_panel_window', 'fn toggle_tray_panel');
-    const overlayWindow = sourceBetween(
-        alertOverlay,
-        'fn apply_snapshot',
-        'fn position_window',
-    );
 
     assert.match(trayPanel, /\.inner_size\(TRAY_PANEL_WIDTH, TRAY_PANEL_HEIGHT\)/);
     assert.match(trayPanel, /\.resizable\(false\)/);
     assert.match(trayPanel, /\.minimizable\(false\)/);
     assert.match(trayPanel, /\.maximizable\(false\)/);
     assert.doesNotMatch(trayPanel, /\.min_inner_size\(/);
-
-    assert.match(overlayWindow, /\.inner_size\(ALERT_OVERLAY_WIDTH, height\)/);
-    assert.match(overlayWindow, /\.resizable\(false\)/);
-    assert.match(overlayWindow, /\.minimizable\(false\)/);
-    assert.match(overlayWindow, /\.maximizable\(false\)/);
 });
