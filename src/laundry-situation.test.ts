@@ -34,7 +34,26 @@ function machines(
     }));
 }
 
-test('모든 기기가 비어 있으면 남성·여성 구역 모두 널널함으로 추천한다', () => {
+const FORECAST_NOW_MS = Date.parse('2026-07-28T14:27:00.000Z');
+
+function timedAppliance(
+    operationalStatus: string,
+    remainingMinutes: number | null,
+    projectionStatus = operationalStatus === 'IDLE' ? 'IDLE' : 'ESTIMATED_RUNNING',
+): LaundryStatusAppliance {
+    return {
+        operationalStatus,
+        estimatedFinishAt: remainingMinutes === null
+            ? null
+            : new Date(FORECAST_NOW_MS + remainingMinutes * 60_000).toISOString(),
+        projection: {
+            status: projectionStatus,
+            ...(remainingMinutes === null ? {} : {remainingMinutes}),
+        },
+    };
+}
+
+test('모든 기기가 비어 있으면 남성·여성 구역 모두 여유 있음으로 추천한다', () => {
     const allIdle = Array(9).fill('IDLE');
     const observations = machines(allIdle, allIdle);
 
@@ -160,7 +179,7 @@ test('건조기와 세탁기가 동시에 가동 중이어도 이후 건조 자�
     assert.equal(result.recommendation, 'recommended');
 });
 
-test('같은 현황에서 남성은 건조기 부족이고 여성도 한 자리만 남아 자리 부족이다', () => {
+test('같은 현황에서 남성은 건조기 부족이고 여성은 한 자리를 시작할 수 있다', () => {
     const observations = machines(
         ['IDLE', 'IDLE', 'RUNNING', 'IDLE', 'RUNNING', 'IDLE', 'IDLE', 'RUNNING', 'IDLE'],
         ['ERROR', 'RUNNING', 'RUNNING', 'RUNNING', 'ERROR', 'RUNNING', 'RUNNING', 'IDLE', 'IDLE'],
@@ -180,8 +199,103 @@ test('같은 현황에서 남성은 건조기 부족이고 여성도 한 자리�
     assert.equal(women.pendingDryerLoads, 1);
     assert.equal(women.dryerHeadroom, 1);
     assert.equal(women.startableLoads, 1);
-    assert.equal(women.state, 'limited');
-    assert.equal(women.recommendation, 'notRecommended');
+    assert.equal(women.state, 'available');
+    assert.equal(women.recommendation, 'recommended');
+});
+
+test('화면 사례는 한 시간 안에 끝나는 건조기와 세탁기만 반영한다', () => {
+    const observations: LaundrySituationMachine[] = zones.map((zone, index) => ({
+        zone,
+        washer: [
+            timedAppliance('IDLE', null),
+            timedAppliance('IDLE', null),
+            timedAppliance('IDLE', null),
+            timedAppliance('RUNNING', 159),
+            timedAppliance('IDLE', null),
+            timedAppliance('IDLE', null),
+            timedAppliance('RUNNING', 0, 'AWAITING_COMPLETION_CONFIRMATION'),
+            timedAppliance('IDLE', null),
+            timedAppliance('IDLE', null),
+        ][index],
+        dryer: [
+            timedAppliance('IDLE', null),
+            {...timedAppliance('ERROR', null, 'ERROR'), errorCode: 'EMPTY_WATER_ALERT_ERROR'},
+            timedAppliance('RUNNING', 96),
+            timedAppliance('RUNNING', 148),
+            timedAppliance('RUNNING', 62),
+            timedAppliance('RUNNING', 61),
+            timedAppliance('RUNNING', 4),
+            timedAppliance('IDLE', null),
+            timedAppliance('IDLE', null),
+        ][index],
+    }));
+
+    const men = assessLaundryAccessSituation(observations, 'men', true, FORECAST_NOW_MS);
+    const women = assessLaundryAccessSituation(observations, 'women', true, FORECAST_NOW_MS);
+
+    assert.equal(men.washerUsable, 5);
+    assert.equal(men.dryerUsable, 1);
+    assert.equal(men.pendingDryerLoads, 1);
+    assert.equal(men.dryerHeadroom, 1);
+    assert.equal(men.startableLoads, 1);
+    assert.equal(men.state, 'available');
+
+    assert.equal(women.washerUsable, 3);
+    assert.equal(women.dryerUsable, 2);
+    assert.equal(women.pendingDryerLoads, 1);
+    assert.equal(women.dryerHeadroom, 2);
+    assert.equal(women.startableLoads, 2);
+    assert.equal(women.state, 'comfortable');
+});
+
+test('종료 전망은 60분을 포함하고 61분부터 제외한다', () => {
+    const result = assessLaundryAccessSituation([
+        {
+            zone: 'men',
+            washer: timedAppliance('IDLE', null),
+            dryer: timedAppliance('RUNNING', 60),
+        },
+        {
+            zone: 'men',
+            washer: timedAppliance('IDLE', null),
+            dryer: timedAppliance('RUNNING', 61),
+        },
+    ], 'men', true, FORECAST_NOW_MS);
+
+    assert.equal(result.dryerUsable, 0);
+    assert.equal(result.dryerHeadroom, 1);
+    assert.equal(result.startableLoads, 1);
+});
+
+test('종료 시각을 우선하고 유효하지 않으면 남은 시간을 사용한다', () => {
+    const validLateDryer = {
+        ...timedAppliance('RUNNING', 61),
+        projection: {status: 'ESTIMATED_RUNNING', remainingMinutes: 30},
+    };
+    const fallbackDryer = {
+        ...timedAppliance('RUNNING', 30),
+        estimatedFinishAt: 'invalid',
+    };
+    const dryerResult = assessLaundryAccessSituation([
+        {zone: 'men', washer: timedAppliance('IDLE', null), dryer: validLateDryer},
+        {zone: 'men', washer: timedAppliance('IDLE', null), dryer: fallbackDryer},
+    ], 'men', true, FORECAST_NOW_MS);
+
+    const validLateWasher = {
+        ...timedAppliance('RUNNING', 61),
+        projection: {status: 'ESTIMATED_RUNNING', remainingMinutes: 30},
+    };
+    const fallbackWasher = {
+        ...timedAppliance('RUNNING', 30),
+        estimatedFinishAt: 'invalid',
+    };
+    const washerResult = assessLaundryAccessSituation([
+        {zone: 'men', washer: validLateWasher, dryer: timedAppliance('IDLE', null)},
+        {zone: 'men', washer: fallbackWasher, dryer: timedAppliance('IDLE', null)},
+    ], 'men', true, FORECAST_NOW_MS);
+
+    assert.equal(dryerResult.dryerHeadroom, 1);
+    assert.equal(washerResult.pendingDryerLoads, 1);
 });
 
 test('예약 세탁기나 일시정지 건조기는 동시 가동 차단이 아니라 점유·건조 수요로만 계산한다', () => {
@@ -210,7 +324,7 @@ test('예약 세탁기나 일시정지 건조기는 동시 가동 차단이 아�
     assert.equal(pausedDryer.recommendation, 'recommended');
 });
 
-test('일시정지·예약·완료 확인 중 세탁물만 향후 건조기 수요로 계산한다', () => {
+test('일시정지·예약·완료 확인 중 세탁물을 보수적인 건조기 수요로 계산한다', () => {
     const observations = machines(
         ['IDLE', 'PAUSED', 'SCHEDULED', 'COMPLETED', 'IDLE', 'IDLE', 'UNKNOWN'],
         ['IDLE', 'IDLE', 'IDLE', 'IDLE', 'UNKNOWN', 'UNKNOWN', 'UNKNOWN'],
@@ -231,11 +345,11 @@ test('일시정지·예약·완료 확인 중 세탁물만 향후 건조기 수�
     assert.equal(result.pendingDryerLoads, 3);
     assert.equal(result.dryerHeadroom, 1);
     assert.equal(result.startableLoads, 1);
-    assert.equal(result.state, 'limited');
-    assert.equal(result.recommendation, 'notRecommended');
+    assert.equal(result.state, 'available');
+    assert.equal(result.recommendation, 'recommended');
 });
 
-test('건조 수요를 빼고 한 자리만 남으면 다른 사용자를 고려해 자리 부족으로 판단한다', () => {
+test('건조 수요를 빼고 한 자리만 남아도 이용 가능으로 판단한다', () => {
     const result = assessLaundryAccessSituation(
         machines(
             ['IDLE', 'IDLE', 'IDLE', 'IDLE', 'RUNNING', 'RUNNING', 'RUNNING'],
@@ -248,8 +362,8 @@ test('건조 수요를 빼고 한 자리만 남으면 다른 사용자를 고려
     assert.equal(result.pendingDryerLoads, 3);
     assert.equal(result.dryerHeadroom, 1);
     assert.equal(result.startableLoads, 1);
-    assert.equal(result.state, 'limited');
-    assert.equal(result.recommendation, 'notRecommended');
+    assert.equal(result.state, 'available');
+    assert.equal(result.recommendation, 'recommended');
 });
 
 test('오류 또는 비유휴 projection이 남은 IDLE 기기는 추천용 빈자리로 계산하지 않는다', () => {
@@ -274,7 +388,7 @@ test('오류 또는 비유휴 projection이 남은 IDLE 기기는 추천용 빈�
     assert.equal(result.dryerUsable, 0);
 });
 
-test('실제 시작 가능 비율이 3분의 2 이상이면 널널함으로 추천한다', () => {
+test('시작 가능한 기기가 여러 대면 여유 있음으로 추천한다', () => {
     const result = assessLaundryAccessSituation(
         machines(
             ['IDLE', 'IDLE', 'IDLE', 'IDLE', 'IDLE', 'UNKNOWN', 'UNKNOWN'],
@@ -288,7 +402,7 @@ test('실제 시작 가능 비율이 3분의 2 이상이면 널널함으로 추�
     assert.equal(result.recommendation, 'recommended');
 });
 
-test('남성은 시작 가능 자리가 네 자리여도 널널함 전에는 이용 가능으로 추천한다', () => {
+test('시작 가능 자리가 두 자리 이상이면 여유 있음으로 추천한다', () => {
     const result = assessLaundryAccessSituation(
         machines(
             ['IDLE', 'IDLE', 'IDLE', 'IDLE', 'UNKNOWN', 'UNKNOWN', 'UNKNOWN'],
@@ -298,11 +412,11 @@ test('남성은 시작 가능 자리가 네 자리여도 널널함 전에는 이
         true,
     );
 
-    assert.equal(result.state, 'available');
+    assert.equal(result.state, 'comfortable');
     assert.equal(result.recommendation, 'recommended');
 });
 
-test('실제 시작 가능 자리가 한 자리뿐이면 자리 부족으로 판단한다', () => {
+test('실제 시작 가능 자리가 한 자리면 이용 가능으로 판단한다', () => {
     const result = assessLaundryAccessSituation(
         machines(
             ['IDLE', 'UNKNOWN', 'UNKNOWN', 'UNKNOWN', 'UNKNOWN', 'UNKNOWN', 'UNKNOWN'],
@@ -312,11 +426,11 @@ test('실제 시작 가능 자리가 한 자리뿐이면 자리 부족으로 판
         true,
     );
 
-    assert.equal(result.state, 'limited');
-    assert.equal(result.recommendation, 'notRecommended');
+    assert.equal(result.state, 'available');
+    assert.equal(result.recommendation, 'recommended');
 });
 
-test('규모가 다른 구역에도 널널함 비율과 최소 두 자리 기준을 적용한다', () => {
+test('규모와 관계없이 두 자리부터 여유 있고 한 자리도 이용 가능하다', () => {
     const threeOfFour = machines(
         ['UNKNOWN', 'UNKNOWN', 'UNKNOWN', 'UNKNOWN', 'UNKNOWN', 'IDLE', 'IDLE', 'IDLE', 'UNKNOWN'],
         ['UNKNOWN', 'UNKNOWN', 'UNKNOWN', 'UNKNOWN', 'UNKNOWN', 'IDLE', 'IDLE', 'IDLE', 'UNKNOWN'],
@@ -331,8 +445,8 @@ test('규모가 다른 구역에도 널널함 비율과 최소 두 자리 기준
     );
 
     assert.equal(assessLaundryAccessSituation(threeOfFour, 'women', true).state, 'comfortable');
-    assert.equal(assessLaundryAccessSituation(twoOfFour, 'women', true).state, 'available');
-    assert.equal(assessLaundryAccessSituation(oneOfFour, 'women', true).state, 'limited');
+    assert.equal(assessLaundryAccessSituation(twoOfFour, 'women', true).state, 'comfortable');
+    assert.equal(assessLaundryAccessSituation(oneOfFour, 'women', true).state, 'available');
 });
 
 test('신뢰도는 데이터·오류·원본 상태·스냅샷 나이를 함께 검사한다', () => {

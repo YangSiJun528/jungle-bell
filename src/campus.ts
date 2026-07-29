@@ -206,14 +206,6 @@ interface AvailabilitySegment {
     label: string;
 }
 
-interface LaundryAlertOption {
-    value: string;
-    label: string;
-    machineId: string;
-    appliance: ApplianceKind;
-    sessionId: string;
-}
-
 const ACTIVE_STATUSES = new Set(['RUNNING', 'PAUSED', 'SCHEDULED']);
 const SIGNIFICANT_ETA_CHANGE_MINUTES = 5;
 const WASH_TOWER_COUNT = 9;
@@ -229,18 +221,11 @@ const PROJECTION_LABELS: Record<string, string> = {
     CONFIRMED_COMPLETED: '완료', PAUSED: '일시 정지', ERROR: '오류', IDLE: '사용 가능', UNKNOWN: '확인 불가',
 };
 const LAUNDRY_SITUATION_STATE_LABELS: Record<LaundrySituationState, string> = {
-    checking: '현황 확인 중',
-    limited: '자리 부족',
+    checking: '확인 중',
+    limited: '세탁기 없음',
     dryerBottleneck: '건조 대기 예상',
-    comfortable: '널널함',
+    comfortable: '여유 있음',
     available: '이용 가능',
-};
-const LAUNDRY_SITUATION_RECOMMENDATION_LABELS: Record<LaundrySituationState, string> = {
-    checking: '현황 확인 중이에요. 잠시 후 다시 봐 주세요.',
-    limited: '자리가 금방 찰 수 있어 조금 기다리는 게 좋아요.',
-    dryerBottleneck: '세탁 후 건조기가 부족할 수 있어 기다리는 게 좋아요.',
-    comfortable: '여러 대가 남아 있어 시작해도 괜찮을 것 같아요.',
-    available: '한 대를 써도 여유가 남아 시작해도 괜찮을 것 같아요.',
 };
 const LAUNDRY_FILTER_ANALYTICS_VALUES = {
     all: 'all',
@@ -336,6 +321,12 @@ function sourceMealWeekLabel(post?: MealPost | null): string {
 
 function projectCampusSettings(target: any, snapshot: SettingsSnapshot): void {
     target.laundryWatch = snapshot.laundryWatch;
+    if (snapshot.laundryWatch
+        && LAUNDRY_NOTICE_MINUTES.includes(
+            snapshot.laundryWatch.notifyBeforeMins as typeof LAUNDRY_NOTICE_MINUTES[number],
+        )) {
+        target.laundryAlertNotice = snapshot.laundryWatch.notifyBeforeMins;
+    }
 }
 
 function campus(): Record<string, unknown> {
@@ -352,7 +343,6 @@ function campus(): Record<string, unknown> {
         settingsRevision: -1,
         laundryWatch: null as LaundryWatch | null,
         subscriptionBusy: false,
-        laundryAlertSelection: '',
         laundryAlertNotice: 5,
         laundryNoticeMinutes: [...LAUNDRY_NOTICE_MINUTES],
         mealHistory: [] as MealPost[],
@@ -453,68 +443,41 @@ function campus(): Record<string, unknown> {
             void this.recoverMissingData();
         },
 
-        laundryAlertOptions(this: any): LaundryAlertOption[] {
-            if (!this.laundry) return [];
-            const options: LaundryAlertOption[] = [];
-            for (const machine of this.laundry.machines as Machine[]) {
-                if (!laundryZoneMatchesAccess(machineZone(machine.id), this.laundryAccess)) continue;
-                for (const appliance of ['dryer', 'washer'] as const) {
-                    const state = machine[appliance];
-                    if (!state?.sessionId || (!this.applianceIsActive(state) && !this.applianceHasError(state))) {
-                        continue;
-                    }
-                    const status = this.applianceHasError(state)
-                        ? this.projectionView(state).label
-                        : this.remainingText(state);
-                    options.push({
-                        value: `${machine.id}:${appliance}:${state.sessionId}`,
-                        label: `${this.machineName(machine.id)} ${appliance === 'washer' ? '세탁기' : '건조기'}(${this.machineZoneLabel(machine.id)}) · ${status}`,
-                        machineId: machine.id,
-                        appliance,
-                        sessionId: state.sessionId,
-                    });
-                }
-            }
-            return options.sort((left, right) => {
-                const leftNumber = machineNumber(left.machineId) ?? Number.MAX_SAFE_INTEGER;
-                const rightNumber = machineNumber(right.machineId) ?? Number.MAX_SAFE_INTEGER;
-                if (leftNumber !== rightNumber) return leftNumber - rightNumber;
-                return left.appliance === right.appliance ? 0 : left.appliance === 'dryer' ? -1 : 1;
-            });
+        canWatchLaundry(this: any, appliance?: Appliance | null) {
+            return Boolean(appliance?.sessionId && this.applianceIsActive(appliance));
         },
 
-        openLaundryAlertPicker(this: any) {
-            const options = this.laundryAlertOptions() as LaundryAlertOption[];
-            const current = options.find((option) => this.laundryWatch
-                && option.machineId === this.laundryWatch.machineId
-                && option.appliance === this.laundryWatch.appliance
-                && option.sessionId === this.laundryWatch.sessionId);
-            this.laundryAlertSelection = current?.value ?? options[0]?.value ?? '';
-            this.laundryAlertNotice = this.laundryWatch?.notifyBeforeMins ?? 5;
-            const dialog = this.$refs.laundryAlertDialog as HTMLDialogElement | undefined;
-            if (dialog && !dialog.open) dialog.showModal();
+        isWatchedLaundry(
+            this: any,
+            machineId: string,
+            appliance: ApplianceKind,
+            sessionId?: string | null,
+        ) {
+            return Boolean(sessionId
+                && this.laundryWatch
+                && this.laundryWatch.machineId === machineId
+                && this.laundryWatch.appliance === appliance
+                && this.laundryWatch.sessionId === sessionId);
         },
 
-        closeLaundryAlertPicker(this: any) {
-            const dialog = this.$refs.laundryAlertDialog as HTMLDialogElement | undefined;
-            if (dialog?.open) dialog.close();
-        },
-
-        async saveLaundryAlert(this: any) {
-            const option = (this.laundryAlertOptions() as LaundryAlertOption[])
-                .find((candidate) => candidate.value === this.laundryAlertSelection);
-            if (!option || !LAUNDRY_NOTICE_MINUTES.includes(
-                this.laundryAlertNotice as typeof LAUNDRY_NOTICE_MINUTES[number],
-            )) return;
-            const saved = await this.mutateLocalSubscription('set_laundry_watch', {
+        async watchLaundry(
+            this: any,
+            machineId: string,
+            appliance: ApplianceKind,
+            sessionId?: string | null,
+        ) {
+            if (!sessionId || (appliance !== 'washer' && appliance !== 'dryer')
+                || !LAUNDRY_NOTICE_MINUTES.includes(
+                    this.laundryAlertNotice as typeof LAUNDRY_NOTICE_MINUTES[number],
+                )) return false;
+            return this.mutateLocalSubscription('set_laundry_watch', {
                 watch: {
-                    machineId: option.machineId,
-                    appliance: option.appliance,
-                    sessionId: option.sessionId,
+                    machineId,
+                    appliance,
+                    sessionId,
                     notifyBeforeMins: this.laundryAlertNotice,
                 },
             });
-            if (saved) this.closeLaundryAlertPicker();
         },
 
         async mutateLocalSubscription(this: any, command: string, args: Record<string, unknown>) {
@@ -536,22 +499,25 @@ function campus(): Record<string, unknown> {
         },
 
         async clearLaundryWatch(this: any) {
-            await this.mutateLocalSubscription('set_laundry_watch', {watch: null});
+            return this.mutateLocalSubscription('set_laundry_watch', {watch: null});
         },
 
-        async updateLaundryNotice(this: any, value: number) {
+        async updateLaundryNotice(
+            this: any,
+            value: number,
+            selectElement?: HTMLSelectElement,
+        ) {
             if (!this.laundryWatch || !LAUNDRY_NOTICE_MINUTES.includes(value as typeof LAUNDRY_NOTICE_MINUTES[number])) {
-                return;
+                return false;
             }
-            await this.mutateLocalSubscription('set_laundry_watch', {
+            const previousNotifyBeforeMins = this.laundryWatch.notifyBeforeMins;
+            const saved = await this.mutateLocalSubscription('set_laundry_watch', {
                 watch: {...this.laundryWatch, notifyBeforeMins: value},
             });
-        },
-
-        watchedLaundryLabel(this: any) {
-            if (!this.laundryWatch) return '';
-            const appliance = this.laundryWatch.appliance === 'washer' ? '세탁기' : '건조기';
-            return `${this.machineName(this.laundryWatch.machineId)} ${appliance}`;
+            if (!saved && selectElement) {
+                selectElement.value = String(previousNotifyBeforeMins);
+            }
+            return saved;
         },
 
         applySnapshot(this: any, update: CampusUpdate) {
@@ -862,8 +828,8 @@ function campus(): Record<string, unknown> {
             });
             const machines = this.laundrySituationMachines();
             return [
-                assessLaundryAccessSituation(machines, 'men', reliable),
-                assessLaundryAccessSituation(machines, 'women', reliable),
+                assessLaundryAccessSituation(machines, 'men', reliable, this.clockNow),
+                assessLaundryAccessSituation(machines, 'women', reliable, this.clockNow),
             ];
         },
 
@@ -876,7 +842,10 @@ function campus(): Record<string, unknown> {
         },
 
         laundrySituationRecommendationLabel(situation: LaundryAccessSituation): string {
-            return LAUNDRY_SITUATION_RECOMMENDATION_LABELS[situation.state];
+            if (situation.state === 'checking') return '정보 확인 중';
+            if (situation.state === 'limited') return '빈 세탁기 없음';
+            if (situation.state === 'dryerBottleneck') return '건조 자리 대기 예상';
+            return '건조 대기 가능성 낮음';
         },
 
         availabilitySegments(this: any, kind: ApplianceKind): AvailabilitySegment[] {
@@ -905,9 +874,14 @@ function campus(): Record<string, unknown> {
             return [...this.laundry.machines]
                 .filter((machine) => {
                     const zone = machineZone(machine.id);
-                    if (!laundryZoneMatchesAccess(zone, this.laundryAccess)) return false;
-                    if (this.laundryFilter === 'washerAvailable') return this.applianceIsAvailable(machine.washer);
-                    if (this.laundryFilter === 'dryerAvailable') return this.applianceIsAvailable(machine.dryer);
+                    const watchedMachine = this.laundryWatch?.machineId === machine.id;
+                    if (!watchedMachine && !laundryZoneMatchesAccess(zone, this.laundryAccess)) return false;
+                    if (!watchedMachine && this.laundryFilter === 'washerAvailable') {
+                        return this.applianceIsAvailable(machine.washer);
+                    }
+                    if (!watchedMachine && this.laundryFilter === 'dryerAvailable') {
+                        return this.applianceIsAvailable(machine.dryer);
+                    }
                     return true;
                 })
                 .sort((left, right) => {
