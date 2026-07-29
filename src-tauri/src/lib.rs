@@ -252,6 +252,7 @@ pub fn run() {
             commands::refresh_login_status,
             commands::get_notification_inbox_snapshot,
             commands::activate_notification,
+            commands::clear_notification_inbox,
         ])
         // setup(): 앱 초기화 후 이벤트 루프 시작 전에 한 번 실행.
         .setup(move |app| {

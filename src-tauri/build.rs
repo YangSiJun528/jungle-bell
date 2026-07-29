@@ -47,6 +47,7 @@ const APP_COMMANDS: &[&str] = &[
     "refresh_login_status",
     "get_notification_inbox_snapshot",
     "activate_notification",
+    "clear_notification_inbox",
 ];
 
 fn main() {

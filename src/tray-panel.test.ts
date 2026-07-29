@@ -456,6 +456,27 @@ test('알림 화면은 snapshot과 갱신 이벤트를 사용하고 선택한 �
     assert.ok(trayCapability.permissions.includes('allow-activate-notification'));
 });
 
+test('알림 화면은 모든 항목을 한 번에 지운다', () => {
+    const html = readFileSync(new URL('./tray-panel.html', import.meta.url), 'utf8');
+    const script = readFileSync(new URL('./tray-panel.ts', import.meta.url), 'utf8');
+
+    assert.match(html, /data-ui="notification-clear-all"/);
+    assert.match(html, /x-show="notificationOpen && notificationInbox\.items\.length > 0"/);
+    assert.match(html, /@click="clearNotifications\(\)"/);
+    assert.match(html, />모두 지우기<\/button>/);
+    assert.match(
+        script,
+        /invoke<NotificationInboxSnapshot>\(\s*'clear_notification_inbox',?\s*\)/,
+    );
+    assert.match(script, /async clearNotifications\(\)/);
+    assert.match(script, /this\.notificationError = '알림을 지우지 못했어요\.'/);
+    assert.match(
+        script,
+        /async clearNotifications\(\)[\s\S]*Alpine\.nextTick\(\(\) =>[\s\S]*#tray-notification-title/,
+    );
+    assert.ok(trayCapability.permissions.includes('allow-clear-notification-inbox'));
+});
+
 test('알림 목록은 72px 고정 높이에서 본문 두 줄과 읽음 상태를 유지한다', () => {
     const html = readFileSync(new URL('./tray-panel.html', import.meta.url), 'utf8');
     const panelStart = html.indexOf('id="tray-notification-panel"');
