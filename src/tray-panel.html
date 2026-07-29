@@ -14,14 +14,34 @@
     @keydown.window.escape="menuOpen ? closeMenu(true) : (notificationOpen ? closeNotifications(true) : hide())"
 >
     <header class="flex h-14 flex-none items-center justify-between px-4">
-        <div class="flex min-w-0 items-center gap-3">
+        <div class="flex min-w-0 items-center gap-3" data-ui="tray-brand" x-show="!notificationOpen">
             <img class="size-8 flex-none rounded-ui-control object-cover" src="assets/logo.png" alt=""/>
             <span class="min-w-0">
                 <strong class="block truncate text-ui-body font-bold leading-tight">Jungle Bell</strong>
                 <small class="mt-1 block text-ui-caption leading-none text-app-faint" x-text="state.currentVersion ? `v${state.currentVersion}` : '불러오는 중'"></small>
             </span>
         </div>
-        <div class="flex items-center gap-1">
+        <div class="flex min-w-0 flex-1 items-center gap-1" data-ui="notification-header" x-show="notificationOpen" x-cloak>
+            <button
+                type="button"
+                class="ui-button ui-button--compact ui-button--icon size-8 flex-none rounded-full border-0 bg-transparent p-0 text-app-muted hover:bg-app-control hover:text-app-text"
+                aria-label="이전 화면으로 돌아가기"
+                data-ui="notification-back"
+                @click="closeNotifications(true)"
+            >
+                <svg class="size-4" data-icon="chevron-left" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="m15 6-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </button>
+            <h2 id="tray-notification-title" class="m-0 flex-none text-ui-body font-bold" tabindex="-1">알림</h2>
+            <span class="mx-1 size-1 flex-none rounded-full bg-app-divider" aria-hidden="true"></span>
+            <small
+                class="min-w-0 truncate text-ui-caption font-bold text-app-faint tabular-nums"
+                data-ui="notification-count"
+                x-text="notificationInbox.unreadCount > 0 ? `읽지 않음 ${notificationInbox.unreadCount}개` : `${notificationInbox.items.length}개`"
+            ></small>
+        </div>
+        <div class="flex flex-none items-center gap-1">
             <button
                 type="button"
                 class="ui-button ui-button--compact ui-button--icon relative size-8 rounded-full border-0 bg-transparent p-0 text-app-faint hover:bg-app-surface-subtle hover:text-app-text disabled:opacity-50"
@@ -30,6 +50,7 @@
                 aria-controls="tray-notification-panel"
                 data-ui="notification-trigger"
                 :disabled="busyAction !== null || notificationBusy !== null"
+                x-show="!notificationOpen"
                 @click="toggleNotifications()"
             >
                 <svg class="size-4" data-icon="bell" viewBox="0 0 24 24" aria-hidden="true">
@@ -92,33 +113,12 @@
 
     <section
         id="tray-notification-panel"
-        class="ui-scroll-region ui-scroll-region--inset min-h-0 flex-1 [--scroll-region-inset:var(--space-4)] pb-3"
+        class="ui-scroll-region ui-scroll-region--inset min-h-0 flex-1 [--scroll-region-inset:var(--space-4)] pt-2 pb-3"
         role="region"
         aria-labelledby="tray-notification-title"
         x-show="notificationOpen"
         x-cloak
     >
-        <div class="sticky top-0 z-10 mb-2 flex h-10 items-center justify-between bg-app-bg px-1">
-            <div class="flex min-w-0 items-center gap-1">
-                <button
-                    type="button"
-                    class="ui-button ui-button--compact ui-button--icon size-8 flex-none rounded-full border-0 bg-transparent p-0 text-app-muted hover:bg-app-control hover:text-app-text"
-                    aria-label="이전 화면으로 돌아가기"
-                    data-ui="notification-back"
-                    @click="closeNotifications(true)"
-                >
-                    <svg class="size-4" data-icon="chevron-left" viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="m15 6-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                </button>
-                <h2 id="tray-notification-title" class="m-0 truncate text-ui-body font-bold" tabindex="-1">알림</h2>
-            </div>
-            <small
-                class="text-ui-caption font-bold text-app-faint tabular-nums"
-                x-text="notificationInbox.unreadCount > 0 ? `읽지 않음 ${notificationInbox.unreadCount}개` : `${notificationInbox.items.length}개`"
-            ></small>
-        </div>
-
         <p
             class="ui-card m-0 mb-2 border border-app-danger bg-app-danger-soft px-3 py-2 text-ui-caption font-normal text-app-danger"
             role="alert"

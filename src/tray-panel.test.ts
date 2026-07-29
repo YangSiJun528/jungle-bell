@@ -362,17 +362,21 @@ test('nut 아이콘 앞의 알림 버튼은 미읽음 상태와 내장 알림 �
     const panelHeader = html.slice(html.indexOf('<header'), html.indexOf('</header>') + 9);
     const notificationTrigger = panelHeader.indexOf('data-ui="notification-trigger"');
     const menuTrigger = panelHeader.indexOf('data-ui="menu-trigger"');
+    const notificationButtonStart = panelHeader.lastIndexOf('<button', notificationTrigger);
+    const notificationButtonEnd = panelHeader.indexOf('</button>', notificationTrigger) + 9;
+    const notificationButton = panelHeader.slice(notificationButtonStart, notificationButtonEnd);
 
     assert.ok(notificationTrigger >= 0);
     assert.ok(menuTrigger > notificationTrigger);
-    assert.match(panelHeader, /data-ui="notification-trigger"/);
-    assert.match(panelHeader, /data-icon="bell"/);
-    assert.match(panelHeader, /:aria-label="notificationTriggerLabel\(\)"/);
-    assert.match(panelHeader, /:aria-expanded="notificationOpen"/);
-    assert.match(panelHeader, /aria-controls="tray-notification-panel"/);
-    assert.match(panelHeader, /x-show="notificationInbox\.unreadCount > 0"/);
-    assert.match(panelHeader, /\bbg-app-danger\b/);
-    assert.match(panelHeader, /aria-hidden="true"/);
+    assert.match(notificationButton, /data-ui="notification-trigger"/);
+    assert.match(notificationButton, /data-icon="bell"/);
+    assert.match(notificationButton, /:aria-label="notificationTriggerLabel\(\)"/);
+    assert.match(notificationButton, /:aria-expanded="notificationOpen"/);
+    assert.match(notificationButton, /aria-controls="tray-notification-panel"/);
+    assert.match(notificationButton, /x-show="!notificationOpen"/);
+    assert.match(notificationButton, /x-show="notificationInbox\.unreadCount > 0"/);
+    assert.match(notificationButton, /\bbg-app-danger\b/);
+    assert.match(notificationButton, /aria-hidden="true"/);
 
     assert.match(html, /id="tray-notification-panel"/);
     assert.match(html, /x-show="notificationOpen"/);
@@ -385,21 +389,38 @@ test('nut 아이콘 앞의 알림 버튼은 미읽음 상태와 내장 알림 �
     assert.match(script, /toggleNotifications\(\)/);
 });
 
-test('알림 서브 화면은 명시적인 뒤로가기와 Escape로 직전 탭을 복원한다', () => {
+test('알림 서브 화면은 앱 헤더를 복귀용 헤더로 전환하고 직전 탭을 복원한다', () => {
     const html = readFileSync(new URL('./tray-panel.html', import.meta.url), 'utf8');
     const script = readFileSync(new URL('./tray-panel.ts', import.meta.url), 'utf8');
+    const panelHeader = html.slice(html.indexOf('<header'), html.indexOf('</header>') + 9);
     const panelStart = html.indexOf('id="tray-notification-panel"');
     const panelEnd = html.indexOf('</section>', panelStart);
     const panel = html.slice(panelStart, panelEnd);
-    const backButton = panel.indexOf('data-ui="notification-back"');
-    const title = panel.indexOf('id="tray-notification-title"');
+    const notificationHeaderStart = panelHeader.indexOf('data-ui="notification-header"');
+    const notificationHeaderEnd = panelHeader.indexOf('</div>', notificationHeaderStart) + 6;
+    const notificationHeader = panelHeader.slice(notificationHeaderStart, notificationHeaderEnd);
+    const backButton = notificationHeader.indexOf('data-ui="notification-back"');
+    const title = notificationHeader.indexOf('id="tray-notification-title"');
+    const count = notificationHeader.indexOf('data-ui="notification-count"');
 
+    assert.match(panelHeader, /data-ui="tray-brand"[^>]*x-show="!notificationOpen"/);
+    assert.ok(notificationHeaderStart >= 0);
     assert.ok(backButton >= 0);
     assert.ok(title > backButton);
-    assert.match(panel, /class="[^"]*\bsticky\b[^"]*\btop-0\b[^"]*\bbg-app-bg\b[^"]*"/);
-    assert.match(panel, /aria-label="이전 화면으로 돌아가기"/);
-    assert.match(panel, /data-icon="chevron-left"/);
-    assert.match(panel, /@click="closeNotifications\(true\)"/);
+    assert.ok(count > title);
+    assert.match(notificationHeader, /x-show="notificationOpen"/);
+    assert.match(notificationHeader, /x-cloak/);
+    assert.match(notificationHeader, /aria-label="이전 화면으로 돌아가기"/);
+    assert.match(notificationHeader, /data-icon="chevron-left"/);
+    assert.match(notificationHeader, /@click="closeNotifications\(true\)"/);
+    assert.match(
+        notificationHeader,
+        /x-text="notificationInbox\.unreadCount > 0 \? `읽지 않음 \$\{notificationInbox\.unreadCount\}개` : `\$\{notificationInbox\.items\.length\}개`"/,
+    );
+    assert.equal(html.match(/id="tray-notification-title"/g)?.length, 1);
+    assert.match(panel, /\bpt-2\b/);
+    assert.doesNotMatch(panel, /data-ui="notification-back"/);
+    assert.doesNotMatch(panel, /class="[^"]*\bsticky\b[^"]*"/);
     assert.match(
         html,
         /@keydown\.window\.escape="menuOpen \? closeMenu\(true\) : \(notificationOpen \? closeNotifications\(true\) : hide\(\)\)"/,
