@@ -11,7 +11,7 @@
 <main
     class="flex h-full flex-col overflow-hidden rounded-ui-window border border-app-border bg-app-bg shadow-none"
     x-data="trayPanel"
-    @keydown.window.escape="menuOpen ? closeMenu(true) : hide()"
+    @keydown.window.escape="menuOpen ? closeMenu(true) : (notificationOpen ? closeNotifications(true) : hide())"
 >
     <header class="flex h-14 flex-none items-center justify-between px-4">
         <div class="flex min-w-0 items-center gap-3">
@@ -22,6 +22,27 @@
             </span>
         </div>
         <div class="flex items-center gap-1">
+            <button
+                type="button"
+                class="ui-button ui-button--compact ui-button--icon relative size-8 rounded-full border-0 bg-transparent p-0 text-app-faint hover:bg-app-surface-subtle hover:text-app-text disabled:opacity-50"
+                :aria-label="notificationTriggerLabel()"
+                :aria-expanded="notificationOpen"
+                aria-controls="tray-notification-panel"
+                data-ui="notification-trigger"
+                :disabled="busyAction !== null || notificationBusy !== null"
+                @click="toggleNotifications()"
+            >
+                <svg class="size-4" data-icon="bell" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M6.5 9.5a5.5 5.5 0 0 1 11 0c0 6 2.5 6 2.5 7.5H4c0-1.5 2.5-1.5 2.5-7.5ZM9.5 20h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span
+                    class="absolute top-1 right-1 size-2 rounded-full bg-app-danger ring-2 ring-app-bg"
+                    x-show="notificationInbox.unreadCount > 0"
+                    x-cloak
+                    data-ui="notification-unread-dot"
+                    aria-hidden="true"
+                ></span>
+            </button>
             <div class="relative" @click.outside="closeMenu()">
                 <button
                     type="button"
@@ -69,7 +90,82 @@
         </div>
     </header>
 
-    <nav class="ui-tabs flex-none px-4" role="tablist" aria-label="트레이 패널">
+    <section
+        id="tray-notification-panel"
+        class="ui-scroll-region ui-scroll-region--inset min-h-0 flex-1 [--scroll-region-inset:var(--space-4)] pb-3"
+        role="region"
+        aria-labelledby="tray-notification-title"
+        x-show="notificationOpen"
+        x-cloak
+    >
+        <div class="mb-2 flex h-10 items-center justify-between px-1">
+            <h2 id="tray-notification-title" class="m-0 text-ui-body font-bold" tabindex="-1">알림</h2>
+            <small
+                class="text-ui-caption font-bold text-app-faint tabular-nums"
+                x-text="notificationInbox.unreadCount > 0 ? `읽지 않음 ${notificationInbox.unreadCount}개` : `${notificationInbox.items.length}개`"
+            ></small>
+        </div>
+
+        <p
+            class="ui-card m-0 mb-2 border border-app-danger bg-app-danger-soft px-3 py-2 text-ui-caption font-normal text-app-danger"
+            role="alert"
+            x-show="notificationError && notificationInbox.items.length > 0"
+            x-cloak
+            x-text="notificationError"
+        ></p>
+
+        <div
+            class="ui-empty-state m-0 min-h-24 bg-app-surface-subtle px-3 py-4 text-app-muted"
+            data-ui="notification-empty"
+            x-show="notificationInbox.items.length === 0"
+            x-cloak
+        >
+            <svg class="size-5 flex-none text-app-faint" data-icon="bell" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M6.5 9.5a5.5 5.5 0 0 1 11 0c0 6 2.5 6 2.5 7.5H4c0-1.5 2.5-1.5 2.5-7.5ZM9.5 20h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span x-text="notificationLoading ? '알림을 불러오는 중...' : (notificationError ?? '알림이 없어요')">알림이 없어요</span>
+        </div>
+
+        <ul
+            class="ui-card m-0 list-none divide-y divide-app-divider overflow-hidden bg-app-surface-subtle p-0"
+            aria-label="앱 알림"
+            x-show="notificationInbox.items.length > 0"
+            x-cloak
+        >
+            <template x-for="item in notificationInbox.items" :key="item.id">
+                <li class="flex h-[72px] items-center overflow-hidden transition-colors hover:bg-app-control">
+                    <button
+                        type="button"
+                        class="flex h-full min-w-0 flex-1 cursor-pointer items-start gap-2 border-0 bg-transparent px-2 py-1 text-left text-app-text disabled:opacity-50"
+                        :class="item.readAt === null ? 'bg-app-surface' : 'bg-transparent'"
+                        :aria-label="notificationItemLabel(item)"
+                        :disabled="notificationBusy !== null || busyAction !== null || taskBusy !== null || mealAlertBusy !== null"
+                        @click="activateNotification(item.id)"
+                    >
+                        <span
+                            class="mt-2 size-2 flex-none rounded-full"
+                            :class="item.readAt === null ? 'bg-app-danger' : 'bg-transparent'"
+                            data-ui="notification-unread-dot"
+                            aria-hidden="true"
+                        ></span>
+                        <span class="min-w-0 flex-1">
+                            <span class="flex min-w-0 items-center gap-2">
+                                <strong class="min-w-0 flex-1 truncate text-ui-label leading-5 font-bold" x-text="item.title"></strong>
+                                <time
+                                    class="flex-none text-ui-caption text-app-faint tabular-nums"
+                                    :datetime="notificationDateTime(item.createdAt)"
+                                    x-text="notificationTime(item.createdAt)"
+                                ></time>
+                            </span>
+                            <span class="mt-1 block line-clamp-2 text-ui-caption leading-[1.5] text-app-muted" x-text="item.body"></span>
+                        </span>
+                    </button>
+                </li>
+            </template>
+        </ul>
+    </section>
+
+    <nav class="ui-tabs flex-none px-4" role="tablist" aria-label="트레이 패널" x-show="!notificationOpen">
         <button
             id="tray-tab-home"
             x-ref="homeTab"
@@ -98,7 +194,7 @@
         >소식</button>
     </nav>
 
-    <section id="tray-home-panel" class="ui-scroll-region ui-scroll-region--inset min-h-0 flex-1 [--scroll-region-inset:var(--space-4)] pb-3" role="tabpanel" aria-labelledby="tray-tab-home" x-show="activeTab === 'home'">
+    <section id="tray-home-panel" class="ui-scroll-region ui-scroll-region--inset min-h-0 flex-1 [--scroll-region-inset:var(--space-4)] pb-3" role="tabpanel" aria-labelledby="tray-tab-home" x-show="!notificationOpen && activeTab === 'home'">
         <aside
             class="ui-card overflow-hidden p-0"
             data-ui="dday"
@@ -402,7 +498,7 @@
 
     </section>
 
-    <section id="tray-news-panel" class="ui-scroll-region ui-scroll-region--inset min-h-0 flex-1 [--scroll-region-inset:var(--space-4)] pb-3" role="tabpanel" aria-labelledby="tray-tab-news" x-show="activeTab === 'news'" x-cloak>
+    <section id="tray-news-panel" class="ui-scroll-region ui-scroll-region--inset min-h-0 flex-1 [--scroll-region-inset:var(--space-4)] pb-3" role="tabpanel" aria-labelledby="tray-tab-news" x-show="!notificationOpen && activeTab === 'news'" x-cloak>
         <section aria-labelledby="news-title">
             <h2 id="news-title" class="mb-2 text-xs font-bold text-app-muted">소식</h2>
 

@@ -30,6 +30,15 @@ import {
     resolveHomeTasks,
     type HomeTaskVisibility,
 } from './home-tasks.ts';
+import {
+    EMPTY_NOTIFICATION_INBOX,
+    normalizeNotificationInboxSnapshot,
+    notificationItemLabel as buildNotificationItemLabel,
+    notificationTimeLabel,
+    notificationTriggerLabel as buildNotificationTriggerLabel,
+    type NotificationInboxItem,
+    type NotificationInboxSnapshot,
+} from './notification-inbox.ts';
 
 type PanelTab = 'home' | 'news';
 type PanelAction =
@@ -44,9 +53,14 @@ type PanelAction =
 interface TrayPanelComponent {
     activeTab: PanelTab;
     menuOpen: boolean;
+    notificationOpen: boolean;
     ddayExpanded: boolean;
     state: TrayPanelState;
     dashboard: LocalDashboardSnapshot;
+    notificationInbox: NotificationInboxSnapshot;
+    notificationLoading: boolean;
+    notificationError: string | null;
+    notificationBusy: string | null;
     taskError: string | null;
     clockNow: number;
     clockTimer: number | null;
@@ -67,9 +81,18 @@ interface TrayPanelComponent {
     refresh(): Promise<void>;
     refreshDashboard(): Promise<void>;
     refreshNews(): Promise<void>;
+    refreshNotifications(): Promise<void>;
+    applyNotificationSnapshot(value: unknown): boolean;
     toggleMenu(): void;
     closeMenu(restoreFocus?: boolean): void;
     handleMenuKey(event: KeyboardEvent): void;
+    toggleNotifications(): void;
+    closeNotifications(restoreFocus?: boolean): void;
+    notificationTriggerLabel(): string;
+    notificationItemLabel(item: NotificationInboxItem): string;
+    notificationTime(createdAt: number): string;
+    notificationDateTime(createdAt: number): string;
+    activateNotification(id: string): Promise<void>;
     selectTab(tab: PanelTab): void;
     openNewsItem(item: NewsItem): Promise<void>;
     newsLabel(item: NewsItem): string;
@@ -108,9 +131,14 @@ function trayPanel(): TrayPanelComponent {
     return {
         activeTab: 'home',
         menuOpen: false,
+        notificationOpen: false,
         ddayExpanded: false,
         state: {...INITIAL_STATE},
         dashboard: {...EMPTY_LOCAL_DASHBOARD, mealAlerts: []},
+        notificationInbox: {...EMPTY_NOTIFICATION_INBOX, items: []},
+        notificationLoading: true,
+        notificationError: null,
+        notificationBusy: null,
         taskError: null,
         clockNow: Date.now(),
         clockTimer: null,
@@ -150,6 +178,11 @@ function trayPanel(): TrayPanelComponent {
             await listen<LocalDashboardSnapshot>('local-dashboard-updated', (event) => {
                 this.dashboard = event.payload;
             }).catch((error) => console.error('[tray-panel] dashboard listener failed', error));
+            await listen<NotificationInboxSnapshot>('notification-inbox-updated', (event) => {
+                if (!this.applyNotificationSnapshot(event.payload)) {
+                    console.error('[tray-panel] invalid notification inbox event');
+                }
+            }).catch((error) => console.error('[tray-panel] notification listener failed', error));
             this.clockTimer = window.setInterval(() => {
                 this.clockNow = Date.now();
                 const today = kstDateString(this.clockNow);
@@ -160,11 +193,13 @@ function trayPanel(): TrayPanelComponent {
                 void this.refresh();
                 void this.refreshDashboard();
                 void this.refreshNews();
+                void this.refreshNotifications();
             });
             await Promise.all([
                 this.refresh(),
                 this.refreshDashboard(),
                 this.refreshNews(),
+                this.refreshNotifications(),
             ]);
         },
 
@@ -202,6 +237,30 @@ function trayPanel(): TrayPanelComponent {
             }
         },
 
+        async refreshNotifications() {
+            try {
+                const snapshot = await invoke<NotificationInboxSnapshot>('get_notification_inbox_snapshot');
+                if (!this.applyNotificationSnapshot(snapshot)) {
+                    throw new Error('잘못된 알림함 응답입니다.');
+                }
+                this.notificationError = null;
+            } catch (error) {
+                this.notificationError = '알림을 불러오지 못했어요.';
+                console.error('[tray-panel] notification refresh failed', error);
+            } finally {
+                this.notificationLoading = false;
+            }
+        },
+
+        applyNotificationSnapshot(value) {
+            const snapshot = normalizeNotificationInboxSnapshot(value);
+            if (!snapshot) return false;
+            if (snapshot.revision < this.notificationInbox.revision) return true;
+            this.notificationInbox = snapshot;
+            this.notificationLoading = false;
+            return true;
+        },
+
         toggleMenu() {
             this.menuOpen = !this.menuOpen;
             if (this.menuOpen) {
@@ -220,6 +279,63 @@ function trayPanel(): TrayPanelComponent {
                     const menuTrigger = document.querySelector<HTMLButtonElement>('[data-ui="menu-trigger"]');
                     menuTrigger?.focus();
                 });
+            }
+        },
+
+        toggleNotifications() {
+            this.closeMenu();
+            this.notificationOpen = !this.notificationOpen;
+            if (this.notificationOpen) {
+                void Alpine.nextTick(() => {
+                    const heading = document.querySelector<HTMLElement>('#tray-notification-title');
+                    heading?.focus();
+                });
+            }
+        },
+
+        closeNotifications(restoreFocus = false) {
+            this.notificationOpen = false;
+            if (restoreFocus) {
+                void Alpine.nextTick(() => {
+                    const trigger = document.querySelector<HTMLButtonElement>('[data-ui="notification-trigger"]');
+                    trigger?.focus();
+                });
+            }
+        },
+
+        notificationTriggerLabel() {
+            return buildNotificationTriggerLabel(this.notificationInbox.unreadCount);
+        },
+
+        notificationItemLabel(item) {
+            return buildNotificationItemLabel(item);
+        },
+
+        notificationTime(createdAt) {
+            return notificationTimeLabel(createdAt, this.clockNow);
+        },
+
+        notificationDateTime(createdAt) {
+            return new Date(createdAt).toISOString();
+        },
+
+        async activateNotification(id) {
+            if (this.busyAction || this.taskBusy || this.mealAlertBusy || this.notificationBusy) return;
+            this.notificationBusy = id;
+            this.notificationError = null;
+            try {
+                const snapshot = await invoke<NotificationInboxSnapshot>(
+                    'activate_notification',
+                    {id},
+                );
+                if (!this.applyNotificationSnapshot(snapshot)) {
+                    throw new Error('잘못된 알림함 응답입니다.');
+                }
+            } catch (error) {
+                this.notificationError = '알림을 열지 못했어요.';
+                console.error('[tray-panel] notification activation failed', error);
+            } finally {
+                this.notificationBusy = null;
             }
         },
 
@@ -250,6 +366,7 @@ function trayPanel(): TrayPanelComponent {
 
         selectTab(tab) {
             this.closeMenu();
+            this.closeNotifications();
             this.activeTab = tab;
         },
 
@@ -330,7 +447,7 @@ function trayPanel(): TrayPanelComponent {
         },
 
         async stopLaundryTracking() {
-            if (this.busyAction || this.taskBusy || this.mealAlertBusy) return;
+            if (this.busyAction || this.taskBusy || this.mealAlertBusy || this.notificationBusy) return;
             this.taskBusy = 'laundry';
             this.taskError = null;
             try {
@@ -344,7 +461,7 @@ function trayPanel(): TrayPanelComponent {
         },
 
         async dismissMealAlert(alertId) {
-            if (this.busyAction || this.taskBusy || this.mealAlertBusy) return;
+            if (this.busyAction || this.taskBusy || this.mealAlertBusy || this.notificationBusy) return;
             const previousDashboard = this.dashboard;
             this.mealAlertBusy = alertId;
             this.taskError = null;
@@ -367,7 +484,7 @@ function trayPanel(): TrayPanelComponent {
         },
 
         async perform(action) {
-            if (this.busyAction || this.taskBusy || this.mealAlertBusy) return;
+            if (this.busyAction || this.taskBusy || this.mealAlertBusy || this.notificationBusy) return;
             this.closeMenu(true);
             this.busyAction = action;
             try {

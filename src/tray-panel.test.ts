@@ -357,17 +357,95 @@ test('홈은 D-Day를 다른 상태와 알림보다 먼저 보여주고 생활 �
 test('홈과 소식의 내부 스크롤은 좌우에 같은 scrollbar gutter를 예약한다', () => {
     const html = readFileSync(new URL('./tray-panel.html', import.meta.url), 'utf8');
     const panelClasses = [...html.matchAll(
-        /<section id="tray-(?:home|news)-panel" class="([^"]+)"/g,
+        /<section\s+id="tray-(?:home|news|notification)-panel"\s+class="([^"]+)"/g,
     )].map((match) => match[1] ?? '');
 
-    assert.equal(panelClasses.length, 2);
+    assert.equal(panelClasses.length, 3);
     for (const classNames of panelClasses) {
         assert.match(classNames, /\bui-scroll-region\b/);
         assert.match(classNames, /\bui-scroll-region--inset\b/);
         assert.match(classNames, /\[--scroll-region-inset:var\(--space-4\)\]/);
         assert.doesNotMatch(classNames, /\bpx-4\b/);
     }
-    assert.equal(html.match(/\bui-scroll-region(?=[\s"])/g)?.length, 2);
+    assert.equal(html.match(/\bui-scroll-region(?=[\s"])/g)?.length, 3);
+});
+
+test('nut 아이콘 앞의 알림 버튼은 미읽음 상태와 내장 알림 화면을 연결한다', () => {
+    const html = readFileSync(new URL('./tray-panel.html', import.meta.url), 'utf8');
+    const script = readFileSync(new URL('./tray-panel.ts', import.meta.url), 'utf8');
+    const panelHeader = html.slice(html.indexOf('<header'), html.indexOf('</header>') + 9);
+    const notificationTrigger = panelHeader.indexOf('data-ui="notification-trigger"');
+    const menuTrigger = panelHeader.indexOf('data-ui="menu-trigger"');
+
+    assert.ok(notificationTrigger >= 0);
+    assert.ok(menuTrigger > notificationTrigger);
+    assert.match(panelHeader, /data-ui="notification-trigger"/);
+    assert.match(panelHeader, /data-icon="bell"/);
+    assert.match(panelHeader, /:aria-label="notificationTriggerLabel\(\)"/);
+    assert.match(panelHeader, /:aria-expanded="notificationOpen"/);
+    assert.match(panelHeader, /aria-controls="tray-notification-panel"/);
+    assert.match(panelHeader, /x-show="notificationInbox\.unreadCount > 0"/);
+    assert.match(panelHeader, /\bbg-app-danger\b/);
+    assert.match(panelHeader, /aria-hidden="true"/);
+
+    assert.match(html, /id="tray-notification-panel"/);
+    assert.match(html, /x-show="notificationOpen"/);
+    assert.match(html, /id="tray-notification-title"[^>]*>알림<\/h2>/);
+    assert.match(html, /x-show="!notificationOpen"/);
+    assert.match(html, /x-show="!notificationOpen && activeTab === 'home'"/);
+    assert.match(html, /x-show="!notificationOpen && activeTab === 'news'"/);
+    assert.match(html, /알림이 없어요/);
+    assert.match(script, /notificationOpen:\s*false/);
+    assert.match(script, /toggleNotifications\(\)/);
+    assert.match(html, /closeNotifications\(true\)/);
+    assert.match(
+        html,
+        /@keydown\.window\.escape="menuOpen \? closeMenu\(true\) : \(notificationOpen \? closeNotifications\(true\) : hide\(\)\)"/,
+    );
+});
+
+test('알림 화면은 snapshot과 갱신 이벤트를 사용하고 선택한 알림을 활성화한다', () => {
+    const html = readFileSync(new URL('./tray-panel.html', import.meta.url), 'utf8');
+    const script = readFileSync(new URL('./tray-panel.ts', import.meta.url), 'utf8');
+
+    assert.match(script, /listen<NotificationInboxSnapshot>\('notification-inbox-updated'/);
+    assert.match(script, /invoke<NotificationInboxSnapshot>\('get_notification_inbox_snapshot'\)/);
+    assert.match(
+        script,
+        /invoke<NotificationInboxSnapshot>\(\s*'activate_notification',\s*\{id\},\s*\)/,
+    );
+    assert.match(script, /normalizeNotificationInboxSnapshot/);
+    assert.match(script, /snapshot\.revision < this\.notificationInbox\.revision/);
+    assert.match(html, /x-for="item in notificationInbox\.items"/);
+    assert.match(html, /@click="activateNotification\(item\.id\)"/);
+    assert.match(html, /:aria-label="notificationItemLabel\(item\)"/);
+    assert.match(html, /x-text="notificationTime\(item\.createdAt\)"/);
+    assert.ok(trayCapability.permissions.includes('allow-get-notification-inbox-snapshot'));
+    assert.ok(trayCapability.permissions.includes('allow-activate-notification'));
+});
+
+test('알림 목록은 72px 고정 높이에서 본문 두 줄과 읽음 상태를 유지한다', () => {
+    const html = readFileSync(new URL('./tray-panel.html', import.meta.url), 'utf8');
+    const panelStart = html.indexOf('id="tray-notification-panel"');
+    const panelEnd = html.indexOf('</section>', panelStart);
+    const panel = html.slice(panelStart, panelEnd);
+
+    assert.match(panel, /\bui-scroll-region\b/);
+    assert.match(panel, /\bui-scroll-region--inset\b/);
+    assert.match(panel, /h-\[72px\]/);
+    assert.match(panel, /\bline-clamp-2\b/);
+    assert.match(
+        panel,
+        /class="[^"]*\bh-full\b[^"]*\bpx-2\b[^"]*\bpy-1\b[^"]*"[\s\S]*@click="activateNotification\(item\.id\)"/,
+    );
+    assert.doesNotMatch(
+        panel,
+        /class="[^"]*\bh-full\b[^"]*\bpx-3\b[^"]*"[\s\S]*@click="activateNotification\(item\.id\)"/,
+    );
+    assert.match(panel, /item\.readAt === null/);
+    assert.match(panel, /data-ui="notification-unread-dot"/);
+    assert.match(panel, /data-ui="notification-empty"/);
+    assert.doesNotMatch(panel, /data-alert-item-close|알림 제거/);
 });
 
 test('생활 알림과 생활 정보는 같은 섹션 제목 스타일을 사용한다', () => {
