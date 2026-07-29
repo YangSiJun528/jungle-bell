@@ -55,8 +55,11 @@ test('560x720 Tauri 창에서 알림 일정 카드의 컨트롤이 테두리 안
     assert.match(schedules, /\bgap-3\b/);
     assert.equal(schedules.match(/<label class="ui-settings-row\b/g)?.length, 2);
     assert.equal(schedules.match(/<span class="ui-toggle">/g)?.length, 2);
-    assert.equal(schedules.match(/<button[^>]*class="[^"]*\bui-control\b[^"]*"[^>]*role="combobox"/g)?.length, 2);
-    assert.doesNotMatch(schedules, /간격|startInterval|endInterval|saveInterval/);
+    assert.equal(schedules.match(/<button[^>]*class="[^"]*\bui-control\b[^"]*"[^>]*role="combobox"/g)?.length, 4);
+    assert.match(schedules, /간격/);
+    assert.match(schedules, /startInterval/);
+    assert.match(schedules, /endInterval/);
+    assert.match(schedules, /saveInterval/);
 });
 
 test('최소 높이에서도 단계 내용은 스크롤되고 하단 이동 버튼은 고정된다', () => {
