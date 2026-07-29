@@ -139,7 +139,7 @@
                         class="flex h-full min-w-0 flex-1 cursor-pointer items-start gap-2 border-0 bg-transparent px-2 py-1 text-left text-app-text disabled:opacity-50"
                         :class="item.readAt === null ? 'bg-app-surface' : 'bg-transparent'"
                         :aria-label="notificationItemLabel(item)"
-                        :disabled="notificationBusy !== null || busyAction !== null || taskBusy !== null || mealAlertBusy !== null"
+                        :disabled="notificationBusy !== null || busyAction !== null || taskBusy !== null"
                         @click="activateNotification(item.id)"
                     >
                         <span
@@ -408,50 +408,6 @@
                     @click.prevent.stop="stopLaundryTracking()"
                 >추적 종료</button>
             </article>
-        </section>
-
-        <section
-            class="mt-4"
-            data-ui="home-tasks"
-            aria-labelledby="home-alerts-title"
-            x-show="homeTasks.mealAlerts > 0"
-            x-cloak
-        >
-            <header class="mb-2 flex items-center justify-between px-1">
-                <h2 id="home-alerts-title" class="m-0 text-xs font-bold text-app-muted">생활 알림</h2>
-                <small class="rounded-full bg-app-control px-2 py-1 text-ui-caption font-bold text-app-muted tabular-nums" x-text="homeTasks.count"></small>
-            </header>
-
-            <div class="ui-card divide-y divide-app-divider overflow-hidden p-0">
-                <template x-for="alert in dashboard.mealAlerts" :key="alert.id">
-                    <div class="flex min-h-14 items-stretch" data-task="meal-alert">
-                        <button
-                            type="button"
-                            class="ui-button min-h-14 min-w-0 flex-1 justify-start gap-3 rounded-none border-0 bg-transparent px-3 py-2 text-left font-normal text-app-text hover:bg-app-surface-subtle focus-visible:z-10"
-                            :disabled="busyAction !== null || taskBusy !== null || mealAlertBusy !== null"
-                            @click="perform('open_meals')"
-                        >
-                            <span class="flex size-8 flex-none items-center justify-center rounded-ui-control bg-app-success-soft text-app-success">
-                                <svg class="size-4" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v7m-2-7v5a2 2 0 0 0 4 0V3m-2 7v11m8-18v18m0-18c3 2 3 7 0 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                            </span>
-                            <span class="min-w-0 flex-1">
-                                <small class="block text-ui-caption font-bold text-app-success" x-text="alert.period === 'lunch' ? '중식 알림' : '석식 알림'"></small>
-                                <strong class="mt-1 block truncate text-ui-label leading-snug" x-text="alert.title"></strong>
-                                <small class="mt-1 line-clamp-2 text-ui-caption leading-snug text-app-muted" x-text="alert.preview"></small>
-                            </span>
-                        </button>
-                        <button
-                            type="button"
-                            class="ui-button ui-button--compact ui-button--icon w-10 flex-none rounded-none border-0 bg-transparent p-0 text-app-faint hover:bg-app-danger-soft hover:text-app-danger focus-visible:z-10 disabled:opacity-40"
-                            :aria-label="`${alert.period === 'lunch' ? '중식' : '석식'} 알림 제거`"
-                            :disabled="busyAction !== null || taskBusy !== null || mealAlertBusy !== null"
-                            @click.prevent.stop="dismissMealAlert(alert.id)"
-                        >
-                            <svg class="size-4" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-                        </button>
-                    </div>
-                </template>
-            </div>
         </section>
 
         <p

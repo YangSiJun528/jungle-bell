@@ -74,7 +74,6 @@ struct LaundryTrackingState {
 struct LocalEvaluation {
     baselines: Vec<CursorMark>,
     notifications: Vec<LocalNotification>,
-    meal_alerts: Vec<MealAlertCard>,
     finished_laundry_watch: Option<LaundryWatch>,
     laundry_tracking: Option<LaundryTrackingState>,
 }
@@ -89,7 +88,6 @@ struct EventCursor {
 #[serde(default)]
 struct EventCursorStore {
     events: BTreeMap<String, EventCursor>,
-    meal_alerts: Vec<MealAlertCard>,
     laundry_tracking: Option<LaundryTrackingState>,
 }
 
@@ -122,22 +120,6 @@ impl EventCursorStore {
                 },
             );
         }
-    }
-
-    fn append_meal_alert(&mut self, alert: MealAlertCard) -> bool {
-        if self.meal_alerts.iter().any(|existing| existing.id == alert.id) {
-            return false;
-        }
-        self.meal_alerts.push(alert);
-        self.meal_alerts
-            .sort_by_key(|alert| (std::cmp::Reverse(alert.created_at), alert.id.clone()));
-        true
-    }
-
-    fn dismiss_meal_alert(&mut self, alert_id: &str) -> bool {
-        let before = self.meal_alerts.len();
-        self.meal_alerts.retain(|alert| alert.id != alert_id);
-        self.meal_alerts.len() != before
     }
 
     fn load() -> Result<Self, String> {
@@ -201,30 +183,10 @@ pub struct LaundryDashboardCard {
     pub source_freshness: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum MealAlertPeriod {
-    Lunch,
-    Dinner,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MealAlertCard {
-    pub id: String,
-    pub period: MealAlertPeriod,
-    pub title: String,
-    pub preview: String,
-    pub date_key: String,
-    pub published_at: Option<String>,
-    pub created_at: i64,
-}
-
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LocalDashboardSnapshot {
     pub laundry: Option<LaundryDashboardCard>,
-    pub meal_alerts: Vec<MealAlertCard>,
 }
 
 #[derive(Debug, Default)]
@@ -371,25 +333,6 @@ impl LocalConsumptionService {
         build_dashboard_snapshot(&config, &runtime, Utc::now())
     }
 
-    pub async fn dismiss_meal_alert(
-        &self,
-        app: &tauri::AppHandle,
-        alert_id: &str,
-    ) -> Result<LocalDashboardSnapshot, String> {
-        validate_meal_alert_id(alert_id)?;
-        let config = self.state.lock().await.config.clone();
-        let mut runtime = self.runtime.lock().await;
-        let mut next_cursors = runtime.cursors.clone();
-        if next_cursors.dismiss_meal_alert(alert_id) {
-            persist_event_cursors_checked(next_cursors.clone()).await?;
-            runtime.cursors = next_cursors;
-        }
-        let dashboard = build_dashboard_snapshot(&config, &runtime, Utc::now());
-        drop(runtime);
-        emit_dashboard_snapshot(app, &dashboard);
-        Ok(dashboard)
-    }
-
     async fn clear_finished_laundry_watch(&self, app: &tauri::AppHandle, finished: LaundryWatch) {
         let settings = app.state::<Arc<SettingsService>>().inner().clone();
         let finished_for_update = finished.clone();
@@ -442,9 +385,6 @@ impl LocalConsumptionService {
             runtime.cursors.laundry_tracking = Some(tracking);
         }
         runtime.cursors.record_baselines(&evaluation.baselines, now);
-        for alert in evaluation.meal_alerts.drain(..) {
-            changed |= runtime.cursors.append_meal_alert(alert);
-        }
         for notification in evaluation.notifications {
             let source_key = notification_source_key(&notification);
             let repeat_after_ms = notification_repeat_after_ms(&notification);
@@ -519,7 +459,6 @@ fn emit_dashboard_snapshot(app: &tauri::AppHandle, snapshot: &LocalDashboardSnap
 fn merge_evaluation(target: &mut LocalEvaluation, mut source: LocalEvaluation) {
     target.baselines.append(&mut source.baselines);
     target.notifications.append(&mut source.notifications);
-    target.meal_alerts.append(&mut source.meal_alerts);
     if target.finished_laundry_watch.is_none() {
         target.finished_laundry_watch = source.finished_laundry_watch.take();
     }
@@ -568,7 +507,6 @@ fn build_dashboard_snapshot(config: &Config, runtime: &LocalRuntime, _now: DateT
             .laundry_watch
             .as_ref()
             .map(|watch| build_laundry_dashboard_card(watch, runtime)),
-        meal_alerts: runtime.cursors.meal_alerts.clone(),
     }
 }
 
@@ -1156,10 +1094,7 @@ fn evaluate_meals(data: &Value, enabled: bool, now: DateTime<Utc>, cursors: &Eve
     if let Some(daily_menus) = meals.get("dailyMenus").and_then(Value::as_array) {
         let kst_now = now.with_timezone(&crate::state::kst());
         let date_key = kst_now.format("%Y-%m-%d").to_string();
-        for (period_label, period, cursor_key) in [
-            ("중식", MealAlertPeriod::Lunch, MEAL_LUNCH_CURSOR_KEY),
-            ("석식", MealAlertPeriod::Dinner, MEAL_DINNER_CURSOR_KEY),
-        ] {
+        for (period_label, cursor_key) in [("중식", MEAL_LUNCH_CURSOR_KEY), ("석식", MEAL_DINNER_CURSOR_KEY)] {
             let post = daily_menus.iter().find(|post| {
                 meal_post_is_today(post, kst_now)
                     && post
@@ -1185,24 +1120,12 @@ fn evaluate_meals(data: &Value, enabled: bool, now: DateTime<Utc>, cursors: &Eve
             let post = post.expect("a missing meal post is handled as a baseline");
             let title = format!("오늘 {period_label}이 올라왔어요");
             let preview = meal_alert_preview(post);
-            // 홈 알림 피드에 저장된 시점부터 이 게시 이벤트는 소비된 것으로 본다.
-            // OS 알림 전송 실패가 사용자가 제거한 항목을 다시 만들면 안 된다.
-            evaluation.baselines.push(mark.clone());
-            evaluation.meal_alerts.push(MealAlertCard {
-                id: format!("{}:{}", mark.key, mark.fingerprint),
-                period,
-                title: title.clone(),
-                preview: preview.clone(),
-                date_key: date_key.clone(),
-                published_at: post.get("publishedAt").and_then(Value::as_str).map(str::to_owned),
-                created_at: now.timestamp_millis(),
-            });
             evaluation.notifications.push(LocalNotification {
                 cursor: mark,
                 title,
                 body: preview,
                 action: NotificationAction::Meals,
-                conflict_key: Some("meal-publication".to_string()),
+                conflict_key: None,
                 priority: 30,
                 coalesced_cursors: Vec::new(),
             });
@@ -1226,13 +1149,6 @@ fn meal_alert_preview(post: &Value) -> String {
         preview.push('…');
     }
     preview
-}
-
-fn validate_meal_alert_id(alert_id: &str) -> Result<(), String> {
-    if alert_id.is_empty() || alert_id.len() > 512 || alert_id.chars().any(char::is_control) {
-        return Err("유효하지 않은 급식 알림 ID입니다.".into());
-    }
-    Ok(())
 }
 
 fn meal_post_is_today(post: &Value, kst_now: DateTime<chrono::FixedOffset>) -> bool {
@@ -1324,7 +1240,6 @@ fn evaluate_attendance(
     LocalEvaluation {
         baselines: Vec::new(),
         notifications: coalesce_notifications(candidates),
-        meal_alerts: Vec::new(),
         finished_laundry_watch: None,
         laundry_tracking: None,
     }
@@ -1959,9 +1874,7 @@ mod tests {
         let baseline = evaluate_meals(&first, true, utc(8, 0, 0), &EventCursorStore::default());
         let changed = evaluate_meals(&changed, true, utc(8, 1, 0), &EventCursorStore::default());
         assert!(baseline.notifications.is_empty());
-        assert!(baseline.meal_alerts.is_empty());
         assert!(changed.notifications.is_empty());
-        assert!(changed.meal_alerts.is_empty());
     }
 
     #[test]
@@ -2004,15 +1917,13 @@ mod tests {
         let result = evaluate_meals(&lunch, true, now + Duration::minutes(5), &cursors);
         assert_eq!(result.notifications.len(), 1);
         assert!(result.notifications[0].title.contains("중식"));
-        assert_eq!(result.baselines.len(), 1);
-        assert_eq!(result.meal_alerts.len(), 1);
-        assert_eq!(result.meal_alerts[0].period, MealAlertPeriod::Lunch);
-        assert_eq!(result.meal_alerts[0].preview, "쌀밥 · 김치찌개 · 계란말이");
-        assert_eq!(result.meal_alerts[0].date_key, "2026-07-27");
+        assert_eq!(result.notifications[0].body, "쌀밥 · 김치찌개 · 계란말이");
+        assert_eq!(result.notifications[0].conflict_key, None);
+        assert!(result.baselines.is_empty());
     }
 
     #[test]
-    fn 중식과_석식이_함께_올라오면_홈에는_두_알림이_쌓인다() {
+    fn 중식과_석식이_함께_올라오면_공통_알림을_각각_만든다() {
         let empty = serde_json::json!({
             "data": {
                 "dailyMenus": [],
@@ -2057,11 +1968,40 @@ mod tests {
 
         let result = evaluate_meals(&published, true, now + Duration::hours(8), &cursors);
 
-        assert_eq!(result.meal_alerts.len(), 2);
-        assert_eq!(result.notifications.len(), 1);
-        assert_eq!(result.notifications[0].action, NotificationAction::Meals);
-        assert_eq!(result.meal_alerts[0].period, MealAlertPeriod::Lunch);
-        assert_eq!(result.meal_alerts[1].period, MealAlertPeriod::Dinner);
+        assert!(result.baselines.is_empty());
+        assert_eq!(result.notifications.len(), 2);
+        assert!(result
+            .notifications
+            .iter()
+            .all(|notification| notification.action == NotificationAction::Meals));
+        assert!(result
+            .notifications
+            .iter()
+            .all(|notification| notification.conflict_key.is_none()));
+        assert!(result
+            .notifications
+            .iter()
+            .any(|notification| notification.title.contains("중식")));
+        assert!(result
+            .notifications
+            .iter()
+            .any(|notification| notification.title.contains("석식")));
+        let lunch_notification = result
+            .notifications
+            .iter()
+            .find(|notification| notification.cursor.key == MEAL_LUNCH_CURSOR_KEY)
+            .unwrap();
+        let dinner_notification = result
+            .notifications
+            .iter()
+            .find(|notification| notification.cursor.key == MEAL_DINNER_CURSOR_KEY)
+            .unwrap();
+        assert_eq!(lunch_notification.body, "쌀밥 · 김치찌개");
+        assert_eq!(dinner_notification.body, "카레라이스 · 샐러드");
+        assert_ne!(
+            notification_source_key(lunch_notification),
+            notification_source_key(dinner_notification)
+        );
     }
 
     #[test]
@@ -2279,15 +2219,6 @@ mod tests {
             }],
             utc(8, 0, 0),
         );
-        cursors.meal_alerts.push(MealAlertCard {
-            id: "meal-alert-1".into(),
-            period: MealAlertPeriod::Lunch,
-            title: "오늘 중식이 올라왔어요".into(),
-            preview: "쌀밥 · 김치찌개".into(),
-            date_key: "2026-07-27".into(),
-            published_at: Some("2026-07-27T01:05:00Z".into()),
-            created_at: utc(1, 5, 0).timestamp_millis(),
-        });
         cursors.laundry_tracking = Some(LaundryTrackingState {
             watch_fingerprint: laundry_watch_fingerprint(&watch(5)),
             phase: LaundryTrackingPhase::AwaitingCompletion,
@@ -2306,7 +2237,7 @@ mod tests {
         assert_eq!(restored, cursors);
         let saved = fs::read_to_string(&path).unwrap();
         assert!(saved.contains(MEAL_LUNCH_CURSOR_KEY));
-        assert!(saved.contains("meal-alert-1"));
+        assert!(!saved.contains("meal_alerts"));
         assert!(saved.contains("awaitingCompletion"));
         assert!(saved.contains("session-2"));
         assert!(!saved.contains("next_due_at"));
@@ -2314,76 +2245,67 @@ mod tests {
     }
 
     #[test]
-    fn 급식_알림은_id로_하나씩_제거하고_같은_요청은_멱등적이다() {
-        let mut cursors = EventCursorStore::default();
-        cursors.meal_alerts.push(MealAlertCard {
-            id: "meal-alert-1".into(),
-            period: MealAlertPeriod::Lunch,
-            title: "오늘 중식이 올라왔어요".into(),
-            preview: "쌀밥 · 김치찌개".into(),
-            date_key: "2026-07-27".into(),
-            published_at: Some("2026-07-27T01:05:00Z".into()),
-            created_at: utc(1, 5, 0).timestamp_millis(),
+    fn 이전_cursor의_meal_alerts는_읽은뒤_다시_저장하지_않는다() {
+        let path = std::env::temp_dir().join(format!(
+            "jungle-bell-local-cursors-legacy-meals-{}-{}.json",
+            std::process::id(),
+            now_unique_suffix()
+        ));
+        let legacy = serde_json::json!({
+            "events": {
+                "meals.daily.lunch": {
+                    "fingerprint": "2026-07-27:lunch-sha",
+                    "emitted_at": "2026-07-27T01:05:00Z"
+                }
+            },
+            "meal_alerts": [{
+                "id": "meal-alert-1",
+                "period": "lunch",
+                "title": "오늘 중식이 올라왔어요",
+                "preview": "쌀밥 · 김치찌개",
+                "dateKey": "2026-07-27",
+                "publishedAt": "2026-07-27T01:05:00Z",
+                "createdAt": utc(1, 5, 0).timestamp_millis()
+            }],
+            "laundry_tracking": null
         });
-        cursors.meal_alerts.push(MealAlertCard {
-            id: "meal-alert-2".into(),
-            period: MealAlertPeriod::Dinner,
-            title: "오늘 석식이 올라왔어요".into(),
-            preview: "카레라이스 · 샐러드".into(),
-            date_key: "2026-07-27".into(),
-            published_at: Some("2026-07-27T08:05:00Z".into()),
-            created_at: utc(8, 5, 0).timestamp_millis(),
-        });
+        fs::write(&path, serde_json::to_vec_pretty(&legacy).unwrap()).unwrap();
 
-        assert!(cursors.dismiss_meal_alert("meal-alert-1"));
-        assert_eq!(cursors.meal_alerts.len(), 1);
-        assert_eq!(cursors.meal_alerts[0].id, "meal-alert-2");
-        assert!(!cursors.dismiss_meal_alert("meal-alert-1"));
+        let restored = EventCursorStore::load_from(&path).unwrap();
+        assert_eq!(
+            restored.events.get(MEAL_LUNCH_CURSOR_KEY),
+            Some(&EventCursor {
+                fingerprint: "2026-07-27:lunch-sha".into(),
+                emitted_at: utc(1, 5, 0),
+            })
+        );
+        restored.save_to(&path).unwrap();
+        let reloaded = EventCursorStore::load_from(&path).unwrap();
+        let saved = fs::read_to_string(&path).unwrap();
+
+        assert_eq!(
+            reloaded.events.get(MEAL_LUNCH_CURSOR_KEY),
+            restored.events.get(MEAL_LUNCH_CURSOR_KEY)
+        );
+        assert!(!saved.contains("meal_alerts"));
+        assert!(!saved.contains("meal-alert-1"));
+        fs::remove_file(path).unwrap();
     }
 
     #[test]
-    fn 급식_알림_id는_빈값과_제어문자를_거부한다() {
-        assert!(validate_meal_alert_id("").is_err());
-        assert!(validate_meal_alert_id("meal\nalert").is_err());
-        assert!(validate_meal_alert_id("meals.daily.lunch:2026-07-27:sha").is_ok());
-    }
-
-    #[test]
-    fn 대시보드는_세탁_예약과_사용자가_제거하지_않은_급식_이벤트만_투영한다() {
+    fn 대시보드는_세탁_예약만_투영한다() {
         let mut config = Config {
             laundry_watch: Some(watch(5)),
             meal_subscription_enabled: true,
             ..Config::default()
         };
-        let mut runtime = LocalRuntime {
+        let runtime = LocalRuntime {
             laundry: Some(CampusSnapshot {
                 saved_at: utc(9, 0, 0).timestamp_millis(),
                 data: laundry("RUNNING", "ESTIMATED_RUNNING", "2026-07-27T09:05:00Z", "session-1"),
             }),
-            meals: Some(CampusSnapshot {
-                saved_at: utc(8, 0, 0).timestamp_millis(),
-                data: serde_json::json!({
-                    "data": {
-                        "currentWeeklyMenu": {
-                            "targetWeekKey": "2026-07-27",
-                            "status": "AVAILABLE",
-                            "contentSha": "sha-1",
-                            "post": { "title": "7월 4주차 식단" }
-                        }
-                    }
-                }),
-            }),
             ..LocalRuntime::default()
         };
-        runtime.cursors.meal_alerts.push(MealAlertCard {
-            id: "meal-alert-1".into(),
-            period: MealAlertPeriod::Lunch,
-            title: "오늘 중식이 올라왔어요".into(),
-            preview: "쌀밥 · 김치찌개".into(),
-            date_key: "2026-07-27".into(),
-            published_at: Some("2026-07-27T01:05:00Z".into()),
-            created_at: utc(1, 5, 0).timestamp_millis(),
-        });
 
         let snapshot = build_dashboard_snapshot(&config, &runtime, utc(9, 0, 0));
 
@@ -2392,13 +2314,16 @@ mod tests {
             Some(LaundryDashboardStatus::Running)
         );
         assert_eq!(snapshot.laundry.as_ref().and_then(|card| card.total_minutes), Some(60));
-        assert_eq!(snapshot.meal_alerts.len(), 1);
+        assert!(!serde_json::to_value(&snapshot)
+            .unwrap()
+            .as_object()
+            .unwrap()
+            .contains_key("mealAlerts"));
 
         config.laundry_watch = None;
         config.meal_subscription_enabled = false;
         let hidden = build_dashboard_snapshot(&config, &runtime, utc(9, 0, 0));
         assert!(hidden.laundry.is_none());
-        assert_eq!(hidden.meal_alerts.len(), 1);
     }
 
     fn now_unique_suffix() -> u128 {

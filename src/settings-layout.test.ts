@@ -152,6 +152,10 @@ test('새 식단 알림은 식단 화면이 아니라 설정 알림 탭에서 �
     assert.ok(mealSettingsStart >= 0);
     assert.match(mealSettings, /<legend[^>]*>생활 알림<\/legend>/);
     assert.match(mealSettings, /<strong[^>]*>새 식단 알림<\/strong>/);
+    assert.match(
+        mealSettings,
+        /<small[^>]*>중식·석식이 게시되면 알림함과 OS 알림으로 알려드려요\.<\/small>/,
+    );
     assert.match(mealSettings, /aria-label="새 식단 알림"/);
     assert.match(mealSettings, /x-model="mealSubscription"/);
     assert.match(

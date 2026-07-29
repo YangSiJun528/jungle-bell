@@ -234,7 +234,7 @@ test('트레이 패널은 홈과 소식 화면 및 기존 주요 액션을 제�
     assert.match(html, /워시타워/);
     assert.match(html, /오늘의 식단/);
     assert.doesNotMatch(laundryAction, /data-icon="chevron-right"/);
-    assert.doesNotMatch(mealsAction, /data-icon="chevron-right"/);
+    assert.match(mealsAction, /data-icon="chevron-right"/);
     assert.match(panelHeader, /aria-label="앱 메뉴"/);
     assert.match(panelHeader, /data-icon="nut"/);
     assert.doesNotMatch(panelHeader, /data-icon="bolt"/);
@@ -298,54 +298,40 @@ test('피드백 메뉴는 허용된 GitHub 이슈 선택 화면만 연다', () =
     assert.match(traySource, /TrayPanelAction::OpenFeedback =>/);
 });
 
-test('홈은 D-Day를 다른 상태와 알림보다 먼저 보여주고 생활 알림에는 급식 게시 이벤트만 표시한다', () => {
+test('홈은 D-Day와 상태를 먼저 보여주고 급식 알림은 알림함으로 일원화한다', () => {
     const html = readFileSync(new URL('./tray-panel.html', import.meta.url), 'utf8');
     const script = readFileSync(new URL('./tray-panel.ts', import.meta.url), 'utf8');
     const ddayStart = html.indexOf('data-ui="dday"');
     const ddayEnd = html.indexOf('</aside>', ddayStart) + 8;
     const attendanceStart = html.indexOf('data-ui="attendance-status"');
     const activityStart = html.indexOf('data-ui="laundry-activity"');
-    const alertsStart = html.indexOf('data-ui="home-tasks"');
 
     assert.match(html, /data-ui="laundry-activity"/);
-    assert.match(html, /data-ui="home-tasks"/);
     assert.match(html, /id="laundry-activity-title"[^>]*>진행 중</);
-    assert.match(html, /aria-labelledby="home-alerts-title"/);
-    assert.match(html, /id="home-alerts-title"[^>]*>생활 알림</);
-    assert.doesNotMatch(html, /id="home-(?:tasks|alerts)-title"[^>]*>할 일</);
     assert.ok(ddayStart >= 0);
     assert.ok(attendanceStart >= 0);
     assert.ok(activityStart >= 0);
     assert.ok(ddayEnd < attendanceStart);
     assert.ok(attendanceStart < activityStart);
-    assert.ok(activityStart < alertsStart);
-    assert.match(html, /x-text="homeTasks\.count"/);
     assert.match(html, /x-show="dashboard\.laundry"/);
     assert.match(html, /class="ui-progress/);
     assert.match(html, /:value="laundryProgress\(\) \?\? 0"/);
     assert.match(html, /:aria-valuetext="laundryProgressText\(\)"/);
-    assert.match(html, /data-task="meal-alert"/);
-    assert.match(html, /x-show="homeTasks\.mealAlerts > 0"/);
-    assert.match(html, /x-for="alert in dashboard\.mealAlerts"/);
-    assert.match(html, /x-text="alert\.title"/);
-    assert.match(html, /x-text="alert\.preview"/);
     assert.match(html, /@click="perform\('open_laundry'\)"/);
     assert.match(html, /@click="perform\('open_meals'\)"/);
     assert.match(html, /@click\.prevent\.stop="stopLaundryTracking\(\)"/);
-    assert.match(html, /@click\.prevent\.stop="dismissMealAlert\(alert\.id\)"/);
     assert.match(html, /aria-label="세탁 추적 종료"/);
-    assert.match(html, /:aria-label="`\$\{alert\.period === 'lunch' \? '중식' : '석식'\} 알림 제거`"/);
-    assert.doesNotMatch(html, /급식 알림 끄기|dismissHomeTask\('meals'\)/);
-    assert.doesNotMatch(html, /data-task="laundry"|homeTasks\.laundry|dismissHomeTask/);
-    assert.doesNotMatch(html, /data-task="attendance"|homeTasks\.attendance/);
+    assert.doesNotMatch(html, /data-ui="home-tasks"|home-alerts-title|data-task="meal-alert"/);
+    assert.doesNotMatch(html, /dashboard\.mealAlerts|homeTasks|dismissMealAlert|mealAlertBusy/);
     assert.match(html, /data-ui="home-task-error"/);
     assert.match(html, /role="alert"/);
     assert.match(html, /정보 갱신 지연/);
     assert.match(script, /stopLaundryTracking/);
     assert.match(script, /set_laundry_watch/);
-    assert.doesNotMatch(script, /get_settings_snapshot|homeTaskDismissal|homeTaskSubscriptions|withoutHomeTask|dismissHomeTask/);
-    assert.match(script, /dismissMealAlert/);
-    assert.match(script, /dismiss_meal_alert/);
+    assert.doesNotMatch(
+        script,
+        /get_settings_snapshot|homeTaskDismissal|homeTaskSubscriptions|withoutHomeTask|dismissHomeTask|dismissMealAlert|dismiss_meal_alert|mealAlertBusy|homeTasks|resolveHomeTasks/,
+    );
     assert.match(script, /local-dashboard-updated/);
     assert.match(script, /get_local_dashboard_snapshot/);
     assert.match(script, /window\.setInterval/);
@@ -448,23 +434,20 @@ test('알림 목록은 72px 고정 높이에서 본문 두 줄과 읽음 상태�
     assert.doesNotMatch(panel, /data-alert-item-close|알림 제거/);
 });
 
-test('생활 알림과 생활 정보는 같은 섹션 제목 스타일을 사용한다', () => {
+test('홈에는 중복 생활 알림 섹션 없이 생활 정보 진입점만 둔다', () => {
     const html = readFileSync(new URL('./tray-panel.html', import.meta.url), 'utf8');
-    const alertTitle = html.match(/<h2 id="home-alerts-title" class="([^"]+)">생활 알림<\/h2>/);
     const campusTitle = html.match(/<h2 id="campus-action-title" class="([^"]+)">생활 정보<\/h2>/);
-    const alertTitleClass = alertTitle?.[1];
     const campusTitleClass = campusTitle?.[1];
 
-    assert.ok(alertTitleClass);
     assert.ok(campusTitleClass);
-    assert.equal(alertTitleClass, campusTitleClass);
-    assert.match(alertTitleClass, /\btext-xs\b/);
-    assert.match(alertTitleClass, /\bfont-bold\b/);
-    assert.match(alertTitleClass, /\btext-app-muted\b/);
+    assert.match(campusTitleClass, /\btext-xs\b/);
+    assert.match(campusTitleClass, /\bfont-bold\b/);
+    assert.match(campusTitleClass, /\btext-app-muted\b/);
     assert.match(
         html,
         /<section class="mt-4" aria-labelledby="campus-action-title">\s*<header class="mb-2 flex items-center justify-between px-1">/,
     );
+    assert.doesNotMatch(html, /home-alerts-title|data-ui="home-tasks"/);
 });
 
 test('트레이 패널은 공통 UI 프리미티브와 제한된 토큰을 사용한다', () => {
@@ -494,25 +477,16 @@ test('트레이 패널은 공통 UI 프리미티브와 제한된 토큰을 사�
     );
 });
 
-test('생활 알림에는 급식 항목만 여러 개 쌓이고 메뉴는 두 줄까지만 미리 보여준다', () => {
+test('급식 게시 이벤트는 홈에 별도 카드로 중복 표시하지 않는다', () => {
     const html = readFileSync(new URL('./tray-panel.html', import.meta.url), 'utf8');
-    const alertsStart = html.indexOf('data-ui="home-tasks"');
-    const alertsEnd = html.indexOf('</section>', alertsStart);
-    const alerts = html.slice(alertsStart, alertsEnd);
+    const script = readFileSync(new URL('./tray-panel.ts', import.meta.url), 'utf8');
 
-    assert.match(alerts, /data-task="meal-alert"/);
-    assert.match(alerts, /x-for="alert in dashboard\.mealAlerts"/);
-    assert.doesNotMatch(alerts, /laundry|세탁/);
-    assert.match(alerts, /\bline-clamp-2\b/);
-    assert.match(alerts, /\bmin-h-14\b/);
-    assert.match(alerts, /\bsize-8\b/);
-    assert.match(alerts, /\bw-10\b/);
-    assert.doesNotMatch(alerts, /\bmin-h-16\b|\bsize-9\b|\bpy-2\.5\b|\bw-11\b/);
+    assert.doesNotMatch(html, /data-task="meal-alert"|dashboard\.mealAlerts|dismissMealAlert/);
+    assert.doesNotMatch(script, /MealAlert|mealAlerts|dismiss_meal_alert|dismissMealAlert/);
 });
 
-test('트레이 홈은 세탁 추적 종료와 개별 급식 알림 제거에 필요한 권한만 가진다', () => {
+test('트레이 홈은 세탁 추적 종료에 필요한 권한을 가진다', () => {
     assert.ok(trayCapability.permissions.includes('allow-set-laundry-watch'));
-    assert.ok(trayCapability.permissions.includes('allow-dismiss-meal-alert'));
     assert.ok(!trayCapability.permissions.includes('allow-get-settings-snapshot'));
     assert.ok(!trayCapability.permissions.includes('allow-set-meal-subscription-enabled'));
 });
@@ -537,10 +511,9 @@ test('출석은 생활 알림이 아니라 항상 보이는 단일 상태 카드
     const attendanceEnd = html.indexOf('</button>', attendanceMarker) + 9;
     const attendanceCard = html.slice(attendanceStart, attendanceEnd);
     const attendanceOpeningTag = attendanceCard.slice(0, attendanceCard.indexOf('>') + 1);
-    const tasksStart = html.indexOf('data-ui="home-tasks"');
 
     assert.ok(attendanceMarker >= 0);
-    assert.ok(tasksStart > attendanceEnd);
+    assert.doesNotMatch(html, /data-ui="home-tasks"/);
     assert.doesNotMatch(attendanceOpeningTag, /x-show=|x-cloak/);
     assert.doesNotMatch(attendanceCard, /dismissHomeTask/);
     assert.match(attendanceCard, /perform\('open_attendance'\)/);

@@ -7,7 +7,6 @@
     "core:event:allow-listen",
     "allow-get-tray-panel-state",
     "allow-get-local-dashboard-snapshot",
-    "allow-dismiss-meal-alert",
     "allow-set-laundry-watch",
     "allow-run-tray-panel-action",
     "allow-hide-tray-panel",

@@ -36,7 +36,6 @@ const APP_COMMANDS: &[&str] = &[
     "report_attendance_start_clicked",
     "get_tray_panel_state",
     "get_local_dashboard_snapshot",
-    "dismiss_meal_alert",
     "run_tray_panel_action",
     "hide_tray_panel",
     "get_news_feed",
