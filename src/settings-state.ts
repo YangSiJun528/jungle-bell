@@ -118,6 +118,33 @@ export async function connectSettingsSnapshots<T extends SettingsSnapshotTarget>
     return unlisten;
 }
 
+export async function connectRequiredSettingsSnapshots<T extends SettingsSnapshotTarget>(
+    target: T,
+    project: ProjectSnapshot<T>,
+): Promise<UnlistenFn> {
+    let unlisten: UnlistenFn;
+    try {
+        unlisten = await listen<SettingsSnapshot>(SETTINGS_CHANGED_EVENT, (event) => {
+            applySettingsSnapshot(target, event.payload, (value) => project(target, value));
+        });
+    } catch (error) {
+        throw new Error('settings event subscription failed', {cause: error});
+    }
+
+    try {
+        await refreshSettingsSnapshot(target, project);
+    } catch (error) {
+        try {
+            unlisten();
+        } catch (unlistenError) {
+            console.error('[settings-state] failed subscription cleanup failed', unlistenError);
+        }
+        throw new Error('settings snapshot refresh failed', {cause: error});
+    }
+
+    return unlisten;
+}
+
 export async function invokeSettingsMutation<T extends SettingsSnapshotTarget>(
     target: T,
     project: ProjectSnapshot<T>,
