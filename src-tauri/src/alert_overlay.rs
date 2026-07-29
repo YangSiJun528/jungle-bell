@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 use std::sync::Mutex;
 
+use chrono::Utc;
 use serde::Serialize;
 use tauri::{Emitter, LogicalSize, Manager, PhysicalPosition};
 
@@ -89,6 +90,7 @@ pub struct AlertOverlayItem {
     pub id: String,
     pub title: String,
     pub body: String,
+    pub created_at: i64,
     pub action: AlertOverlayAction,
     #[serde(skip)]
     dedupe_key: Option<String>,
@@ -123,6 +125,7 @@ impl AlertOverlayQueue {
         action: AlertOverlayAction,
         dedupe_key: Option<String>,
     ) -> AlertOverlaySnapshot {
+        let created_at = Utc::now().timestamp_millis();
         if let Some(key) = dedupe_key.as_deref() {
             if let Some(existing) = self
                 .alerts
@@ -132,6 +135,7 @@ impl AlertOverlayQueue {
                 existing.title = title;
                 existing.body = body;
                 existing.action = action;
+                existing.created_at = created_at;
                 self.revision = self.revision.saturating_add(1);
                 return self.snapshot();
             }
@@ -142,6 +146,7 @@ impl AlertOverlayQueue {
             id: self.next_id.to_string(),
             title,
             body,
+            created_at,
             action,
             dedupe_key,
         });
@@ -356,6 +361,7 @@ mod tests {
         assert_eq!(second.alerts.len(), 2);
         assert_eq!(second.alerts[0].title, "출석 알림");
         assert_eq!(second.alerts[1].action, AlertOverlayAction::Laundry);
+        assert!(second.alerts.iter().all(|alert| alert.created_at > 0));
 
         let after_dismiss = queue.dismiss(&first_id).unwrap();
         assert_eq!(after_dismiss.alerts.len(), 1);
