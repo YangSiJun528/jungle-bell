@@ -8,7 +8,7 @@ import {
     requiresAutoUpdateDisableConfirmation,
 } from './settings-confirmation';
 import {
-    connectSettingsSnapshots,
+    connectRequiredSettingsSnapshots,
     invokeSettingsMutation,
     refreshSettingsSnapshot,
     type CohortOption,
@@ -16,10 +16,13 @@ import {
     type SettingsSnapshot,
 } from './settings-state';
 
-type SettingsTab = 'notification' | 'app';
+type SettingsTab = 'attendance' | 'notification' | 'app';
 
 interface SettingsComponent {
     activeTab: SettingsTab;
+    settingsReady: boolean;
+    settingsLoading: boolean;
+    settingsLoadError: string;
     settingsRevision: number;
     lastSettingsSnapshot: SettingsSnapshot | null;
     unlistenSettings: UnlistenFn | null;
@@ -33,6 +36,9 @@ interface SettingsComponent {
     debugMode: boolean;
     skipAttendance: boolean;
     skipSunday: boolean;
+    saveMessage: string;
+    saveFailed: boolean;
+    saveMessageTimer: number | null;
     startNotification: boolean;
     endNotification: boolean;
     notificationDelivery: NotificationDelivery;
@@ -43,14 +49,19 @@ interface SettingsComponent {
     effectiveCohortId: string | null;
     cohortOptions: CohortOption[];
     get attendanceNotificationEnabled(): boolean;
+    get sundayNotificationEnabled(): boolean;
     get skipAttendanceHint(): string;
     init(): Promise<void>;
+    loadSettings(): Promise<void>;
+    retrySettings(): Promise<void>;
     destroy(): void;
     selectTab(tab: SettingsTab): Promise<void>;
     refreshSettings(): Promise<void>;
     restoreSettings(context: string, error: unknown, fallback?: () => void): Promise<void>;
     onFocus(): Promise<void>;
+    announceSave(message?: string, failed?: boolean): void;
     setAttendanceNotification(enabled: boolean): Promise<void>;
+    setSundayNotification(enabled: boolean): Promise<void>;
     saveToggle(command: string, field: BooleanField): Promise<void>;
     saveStartTime(): Promise<void>;
     saveEndTime(): Promise<void>;
@@ -102,7 +113,10 @@ function projectSettings(target: SettingsComponent, snapshot: SettingsSnapshot):
 
 function settings(): SettingsComponent {
     return {
-        activeTab: 'notification',
+        activeTab: 'attendance',
+        settingsReady: false,
+        settingsLoading: true,
+        settingsLoadError: '',
         settingsRevision: -1,
         lastSettingsSnapshot: null,
         unlistenSettings: null,
@@ -116,6 +130,9 @@ function settings(): SettingsComponent {
         debugMode: false,
         skipAttendance: false,
         skipSunday: false,
+        saveMessage: '',
+        saveFailed: false,
+        saveMessageTimer: null,
         startNotification: true,
         endNotification: true,
         notificationDelivery: 'both',
@@ -130,29 +147,61 @@ function settings(): SettingsComponent {
             return !this.skipAttendance;
         },
 
+        get sundayNotificationEnabled() {
+            return !this.skipSunday;
+        },
+
         get skipAttendanceHint() {
             const tomorrow = new Date();
             tomorrow.setDate(tomorrow.getDate() + 1);
             const month = String(tomorrow.getMonth() + 1).padStart(2, '0');
             const day = String(tomorrow.getDate()).padStart(2, '0');
-            return `내일(${month}/${day}) 출석 시작 시각에 자동으로 다시 켜집니다.`;
+            return `내일(${month}/${day}) 출석 시작 시각에 자동으로 다시 켜져요.`;
         },
 
         async init() {
-            this.unlistenSettings = await connectSettingsSnapshots(
-                this,
-                projectSettings,
-                (context, error) => console.error(`[settings] ${context} failed`, error),
-            );
+            await this.loadSettings();
+        },
+
+        async loadSettings() {
+            this.settingsLoading = true;
+            this.settingsLoadError = '';
+            this.settingsReady = false;
+            this.unlistenSettings?.();
+            this.unlistenSettings = null;
+            try {
+                this.unlistenSettings = await connectRequiredSettingsSnapshots(
+                    this,
+                    projectSettings,
+                );
+                this.settingsReady = true;
+            } catch (error) {
+                console.error('[settings] initialization failed', error);
+                this.settingsLoadError = '저장된 설정을 확인하지 못했어요. 잠시 후 다시 시도해 주세요.';
+            } finally {
+                this.settingsLoading = false;
+            }
+        },
+
+        async retrySettings() {
+            await this.loadSettings();
+            if (!this.settingsReady) return;
+            void Alpine.nextTick(() => {
+                document.getElementById(`settings-tab-${this.activeTab}`)?.focus();
+            });
         },
 
         destroy() {
             this.unlistenSettings?.();
             this.unlistenSettings = null;
+            if (this.saveMessageTimer !== null) window.clearTimeout(this.saveMessageTimer);
+            this.saveMessageTimer = null;
         },
 
         async selectTab(tab) {
+            if (!this.settingsReady) return;
             this.activeTab = tab;
+            window.scrollTo(0, 0);
             if (tab === 'app') await this.refreshSettings();
         },
 
@@ -177,7 +226,19 @@ function settings(): SettingsComponent {
 
         async onFocus() {
             await invoke('log_from_js', {level: 'info', message: '[settings] window focus'}).catch(console.error);
+            if (!this.settingsReady) return;
             await this.refreshSettings();
+        },
+
+        announceSave(message = '저장했어요', failed = false) {
+            if (this.saveMessageTimer !== null) window.clearTimeout(this.saveMessageTimer);
+            this.saveMessage = message;
+            this.saveFailed = failed;
+            this.saveMessageTimer = window.setTimeout(() => {
+                this.saveMessage = '';
+                this.saveFailed = false;
+                this.saveMessageTimer = null;
+            }, 2500);
         },
 
         async setAttendanceNotification(enabled) {
@@ -190,10 +251,31 @@ function settings(): SettingsComponent {
                     'set_skip_attendance',
                     {enabled: this.skipAttendance},
                 );
+                this.announceSave();
             } catch (error) {
                 await this.restoreSettings('set_skip_attendance', error, () => {
                     this.skipAttendance = previous;
                 });
+                this.announceSave('저장하지 못했어요', true);
+            }
+        },
+
+        async setSundayNotification(enabled) {
+            const previous = this.skipSunday;
+            this.skipSunday = !enabled;
+            try {
+                await invokeSettingsMutation(
+                    this,
+                    projectSettings,
+                    'set_skip_sunday',
+                    {enabled: this.skipSunday},
+                );
+                this.announceSave();
+            } catch (error) {
+                await this.restoreSettings('set_skip_sunday', error, () => {
+                    this.skipSunday = previous;
+                });
+                this.announceSave('저장하지 못했어요', true);
             }
         },
 
@@ -201,10 +283,12 @@ function settings(): SettingsComponent {
             const value = this[field];
             try {
                 await invokeSettingsMutation(this, projectSettings, command, {enabled: value});
+                this.announceSave();
             } catch (error) {
                 await this.restoreSettings(command, error, () => {
                     this[field] = !value;
                 });
+                this.announceSave('저장하지 못했어요', true);
             }
         },
 
@@ -214,8 +298,10 @@ function settings(): SettingsComponent {
                     hour: this.notificationStart,
                     minute: 0,
                 });
+                this.announceSave();
             } catch (error) {
                 await this.restoreSettings('set_notification_start', error);
+                this.announceSave('저장하지 못했어요', true);
             }
         },
 
@@ -225,8 +311,10 @@ function settings(): SettingsComponent {
                     hour: this.notificationEnd,
                     minute: 0,
                 });
+                this.announceSave();
             } catch (error) {
                 await this.restoreSettings('set_notification_end', error);
+                this.announceSave('저장하지 못했어요', true);
             }
         },
 
@@ -235,8 +323,10 @@ function settings(): SettingsComponent {
                 await invokeSettingsMutation(this, projectSettings, 'set_notification_delivery', {
                     delivery: this.notificationDelivery,
                 });
+                this.announceSave();
             } catch (error) {
                 await this.restoreSettings('set_notification_delivery', error);
+                this.announceSave('저장하지 못했어요', true);
             }
         },
 
@@ -246,10 +336,12 @@ function settings(): SettingsComponent {
                 await invokeSettingsMutation(this, projectSettings, 'set_selected_cohort', {
                     cohortId: this.selectedCohortId || null,
                 });
+                this.announceSave();
             } catch (error) {
                 await this.restoreSettings('set_selected_cohort', error, () => {
                     this.selectedCohortId = previous;
                 });
+                this.announceSave('저장하지 못했어요', true);
             }
         },
 
@@ -271,10 +363,12 @@ function settings(): SettingsComponent {
             }
             try {
                 await invokeSettingsMutation(this, projectSettings, 'set_auto_update', {enabled: value});
+                this.announceSave();
             } catch (error) {
                 await this.restoreSettings('set_auto_update', error, () => {
                     this.autoUpdate = !value;
                 });
+                this.announceSave('저장하지 못했어요', true);
             }
         },
 
@@ -293,10 +387,12 @@ function settings(): SettingsComponent {
             }
             try {
                 await invokeSettingsMutation(this, projectSettings, 'set_debug_mode', {enabled: value});
+                this.announceSave();
             } catch (error) {
                 await this.restoreSettings('set_debug_mode', error, () => {
                     this.debugMode = !value;
                 });
+                this.announceSave('저장하지 못했어요', true);
             }
         },
 
