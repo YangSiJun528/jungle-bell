@@ -39,7 +39,7 @@
         <button type="button" class="ui-button ui-button--primary" @click="retrySettings()">다시 시도</button>
     </section>
 
-    <section id="attendance-settings" class="flex-1" role="tabpanel" aria-labelledby="settings-tab-attendance" x-show="settingsReady && activeTab === 'attendance'" x-cloak>
+    <section id="attendance-settings" class="flex-1 pb-6" role="tabpanel" aria-labelledby="settings-tab-attendance" x-show="settingsReady && activeTab === 'attendance'" x-cloak>
         <fieldset class="ui-settings-section" data-ui="cohort-selection"
                   x-show="cohortOptions.length > 1" x-cloak>
             <legend class="ui-section-title">출석 확인 기수</legend>
@@ -121,7 +121,7 @@
         </fieldset>
     </section>
 
-    <section id="notification-settings" class="flex-1" role="tabpanel" aria-labelledby="settings-tab-notification" x-show="settingsReady && activeTab === 'notification'" x-cloak>
+    <section id="notification-settings" class="flex-1 pb-6" role="tabpanel" aria-labelledby="settings-tab-notification" x-show="settingsReady && activeTab === 'notification'" x-cloak>
         <fieldset class="ui-settings-section" data-ui="meal-notification-settings">
             <legend class="ui-section-title">생활 알림</legend>
             <div class="ui-settings-row">
@@ -152,7 +152,7 @@
 
     </section>
 
-    <section id="app-settings" class="flex-1" role="tabpanel" aria-labelledby="settings-tab-app" x-show="settingsReady && activeTab === 'app'" x-cloak>
+    <section id="app-settings" class="flex-1 pb-6" role="tabpanel" aria-labelledby="settings-tab-app" x-show="settingsReady && activeTab === 'app'" x-cloak>
         <aside class="mb-4 flex min-h-16 items-center justify-between gap-4 rounded-lg bg-app-accent-soft p-4" aria-live="polite" x-show="pendingVersion" x-cloak>
             <span class="min-w-0"><strong class="block text-sm">업데이트 가능</strong><small class="ui-settings-description" data-ui="settings-description" x-text="pendingVersion ? `v${pendingVersion} 버전을 설치할 수 있습니다.` : ''"></small></span>
             <button type="button" class="ui-button ui-button--primary ui-button--compact" @click="command('check_and_notify_update')">업데이트</button>
