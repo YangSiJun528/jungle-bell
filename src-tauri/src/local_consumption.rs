@@ -824,21 +824,15 @@ fn evaluate_laundry(
             .and_then(|appliance| appliance.get("sessionId"))
             .and_then(Value::as_str)
             .filter(|session_id| !session_id.is_empty());
-        let replacement_is_active =
-            replacement_session_id.is_some() && laundry_is_actively_running(operational_status, projection_status);
-
-        if !replacement_is_active {
+        let Some(replacement_session_id) = replacement_session_id else {
             if let Some(mut tracking) = tracking.cloned() {
                 if tracking.replacement_candidate.take().is_some() {
                     evaluation.laundry_tracking = Some(tracking);
                 }
             }
             return evaluation;
-        }
-
-        let Some(replacement_session_id) = replacement_session_id else {
-            return evaluation;
         };
+        let replacement_is_active = laundry_is_actively_running(operational_status, projection_status);
         let Some(observed_at) = observed_at else {
             return evaluation;
         };
@@ -879,12 +873,21 @@ fn evaluate_laundry(
                     laundry_machine_name(&watch.machine_id)
                 ),
             )
-        } else {
+        } else if replacement_is_active {
             (
                 laundry_replacement_mark(watch),
                 format!("새 {appliance_label} 시작 감지"),
                 format!(
                     "{} {appliance_device_label}에서 새 작업이 시작되어 기존 추적을 종료합니다.",
+                    laundry_machine_name(&watch.machine_id)
+                ),
+            )
+        } else {
+            (
+                laundry_replacement_mark(watch),
+                format!("{appliance_label} 추적 종료"),
+                format!(
+                    "{} {appliance_device_label}의 선택한 작업이 끝나 기존 추적을 종료합니다.",
                     laundry_machine_name(&watch.machine_id)
                 ),
             )
@@ -916,6 +919,7 @@ fn evaluate_laundry(
     });
     if needs_check {
         let mark = laundry_needs_check_mark(watch);
+        evaluation.finished_laundry_watch = Some(watch.clone());
         if !cursors.has_fingerprint(&mark) {
             evaluation.notifications.push(LocalNotification {
                 cursor: mark,
@@ -1083,6 +1087,7 @@ fn laundry_attention_mark(watch: &LaundryWatch, attention_kind: &str) -> CursorM
 fn finished_laundry_notification_recorded(cursors: &EventCursorStore, watch: &LaundryWatch) -> bool {
     cursors.has_fingerprint(&laundry_completion_mark(watch))
         || cursors.has_fingerprint(&laundry_replacement_mark(watch))
+        || cursors.has_fingerprint(&laundry_needs_check_mark(watch))
         || cursors.has_fingerprint(&laundry_attention_mark(watch, "error"))
 }
 
@@ -1463,9 +1468,10 @@ mod tests {
     #[test]
     fn 종료_임박_후_end를_놓치고_전원이_꺼지면_상태_확인_경고를_보낸다() {
         let now = utc(9, 0, 0);
+        let watched = watch(5);
         let nearing = laundry("RUNNING", "ESTIMATED_RUNNING", "2026-07-27T09:05:00Z", "session-1");
         let mut cursors = EventCursorStore::default();
-        let before = evaluate_laundry(&nearing, &watch(5), now, &cursors);
+        let before = evaluate_laundry(&nearing, &watched, now, &cursors);
         cursors.record_notification(&before.notifications[0], now);
 
         let mut powered_off = laundry("IDLE", "IDLE", "", "session-1");
@@ -1479,17 +1485,20 @@ mod tests {
             "currentState": "POWER_OFF"
         }]);
 
-        let result = evaluate_laundry(&powered_off, &watch(5), now + chrono::Duration::minutes(5), &cursors);
+        let result = evaluate_laundry(&powered_off, &watched, now + chrono::Duration::minutes(5), &cursors);
 
         assert_eq!(result.notifications.len(), 1);
         assert_eq!(result.notifications[0].cursor.key, "laundry.washer.needs-check");
         assert_eq!(result.notifications[0].title, "세탁 상태 확인");
         assert!(result.notifications[0].body.contains("끝났거나 중단됐습니다"));
         assert!(result.baselines.is_empty());
+        assert_eq!(result.finished_laundry_watch, Some(watched.clone()));
 
         cursors.record_notification(&result.notifications[0], now + chrono::Duration::minutes(5));
-        let repeated = evaluate_laundry(&powered_off, &watch(5), now + chrono::Duration::minutes(6), &cursors);
+        assert!(finished_laundry_notification_recorded(&cursors, &watched));
+        let repeated = evaluate_laundry(&powered_off, &watched, now + chrono::Duration::minutes(6), &cursors);
         assert!(repeated.notifications.is_empty());
+        assert_eq!(repeated.finished_laundry_watch, Some(watched));
     }
 
     #[test]
@@ -1625,6 +1634,35 @@ mod tests {
         assert_eq!(second_result.finished_laundry_watch, Some(watch.clone()));
         cursors.record_notification(&second_result.notifications[0], utc(9, 10, 30));
         assert!(finished_laundry_notification_recorded(&cursors, &watch));
+    }
+
+    #[test]
+    fn 다른_세션이_두번_확인되면_idle이어도_기존_추적을_끝낸다() {
+        let watched = watch(5);
+        let mut cursors = EventCursorStore::default();
+        let initial = checked_at(
+            laundry("RUNNING", "ESTIMATED_RUNNING", "2026-07-27T09:40:00Z", "session-1"),
+            "2026-07-27T09:00:00Z",
+        );
+        let initial_result = evaluate_laundry(&initial, &watched, utc(9, 0, 0), &cursors);
+        apply_laundry_tracking(&mut cursors, &initial_result);
+
+        let first = checked_at(laundry("IDLE", "IDLE", "", "session-2"), "2026-07-27T09:10:00Z");
+        let first_result = evaluate_laundry(&first, &watched, utc(9, 10, 0), &cursors);
+        assert!(first_result.finished_laundry_watch.is_none());
+        assert!(first_result
+            .laundry_tracking
+            .as_ref()
+            .and_then(|tracking| tracking.replacement_candidate.as_ref())
+            .is_some());
+        apply_laundry_tracking(&mut cursors, &first_result);
+
+        let second = checked_at(laundry("IDLE", "IDLE", "", "session-2"), "2026-07-27T09:10:30Z");
+        let second_result = evaluate_laundry(&second, &watched, utc(9, 10, 30), &cursors);
+
+        assert_eq!(second_result.notifications.len(), 1);
+        assert_eq!(second_result.notifications[0].title, "세탁 추적 종료");
+        assert_eq!(second_result.finished_laundry_watch, Some(watched));
     }
 
     #[test]
