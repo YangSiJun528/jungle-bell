@@ -85,7 +85,8 @@
 
 @layer base {
     :root {
-        --page-gutter: var(--space-4);
+        --page-gutter: var(--space-3);
+        --scrollbar-size: 6px;
         --scrollbar-thumb: oklch(20% 0.01 145 / 28%);
         --scrollbar-thumb-active: oklch(20% 0.01 145 / 48%);
     }
@@ -101,23 +102,28 @@
     }
 
     body {
-        padding: var(--page-gutter);
+        padding-block: var(--page-gutter);
+        padding-inline: calc(var(--page-gutter) - var(--scrollbar-size));
+    }
+
+    html[data-page-layout="bleed"] body {
+        padding-inline: var(--page-gutter);
     }
 
     body[data-ui-page="tray-panel"],
     body[data-ui-page="alert-overlay"] {
-        --page-gutter: var(--space-2);
+        padding: var(--space-2);
         font-size: var(--font-size-label);
         line-height: var(--line-height-label);
     }
 
     body[data-ui-page="image-viewer"] {
-        --page-gutter: 0px;
+        padding: 0;
     }
 
     *::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
+        width: var(--scrollbar-size);
+        height: var(--scrollbar-size);
     }
 
     *::-webkit-scrollbar-track { background: var(--color-bg); }
@@ -147,16 +153,6 @@
 }
 
 @layer components {
-    .ui-scroll-region {
-        min-height: 0;
-        overflow-y: auto;
-        scrollbar-gutter: stable both-edges;
-    }
-
-    .ui-scroll-region--bleed {
-        scrollbar-gutter: auto;
-    }
-
     .ui-page-header {
         display: flex;
         min-height: var(--space-16);
@@ -236,6 +232,27 @@
         border-radius: var(--radius-card);
         background: var(--color-surface);
         padding: var(--space-4);
+    }
+
+    .ui-scroll-region {
+        --scroll-region-inset: var(--page-gutter);
+        min-height: 0;
+        overflow-y: scroll;
+        scrollbar-gutter: stable both-edges;
+    }
+
+    .ui-scroll-region--inset {
+        padding-inline: calc(var(--scroll-region-inset) - var(--scrollbar-size));
+    }
+
+    .ui-scroll-region__content {
+        padding-inline: calc(var(--scroll-region-inset) - var(--scrollbar-size));
+    }
+
+    .ui-scroll-region--bleed {
+        overflow-y: auto;
+        padding-inline: 0;
+        scrollbar-gutter: auto;
     }
 
     .ui-badge {

@@ -27,7 +27,7 @@
         <label class="relative"><input class="peer sr-only" type="radio" name="onboarding-os" value="win" :checked="currentOs === 'win'" @change="setOs('win')"/><span class="ui-button ui-button--secondary ui-button--compact cursor-pointer text-app-muted peer-checked:border-app-accent peer-checked:bg-app-accent-soft peer-checked:text-app-accent ui-focus-proxy">Windows</span></label>
     </fieldset>
 
-    <article data-ui="onboarding-step-scroll" class="ui-card ui-scroll-region min-h-0 flex-1 p-3" :data-step="step">
+    <article data-ui="onboarding-step-scroll" class="ui-card ui-scroll-region ui-scroll-region--inset min-h-0 flex-1 py-3" :data-step="step">
         <section class="flex h-full flex-col" data-step-panel="0" x-show="step === 0" x-cloak aria-labelledby="onboarding-welcome-title">
             <header class="ui-page-header mb-2 min-h-0 flex-none flex-col items-start gap-1">
                 <p class="text-ui-caption font-bold text-app-muted">트레이 패널</p>
