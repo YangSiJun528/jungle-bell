@@ -22,10 +22,6 @@
             background: transparent;
         }
 
-        [data-alert-list]::-webkit-scrollbar {
-            width: 6px;
-        }
-
         [data-alert-list]::-webkit-scrollbar-thumb {
             border: 1px solid transparent;
             background: var(--scrollbar-thumb);
@@ -33,7 +29,7 @@
         }
     </style>
 </head>
-<body class="h-full overflow-hidden bg-transparent p-2 font-sans text-app-text" data-ui-page="alert-overlay">
+<body class="h-full overflow-hidden bg-transparent font-sans text-app-text" data-ui-page="alert-overlay">
 <section class="ui-floating-surface flex h-full min-h-0 flex-col overflow-hidden shadow-none"
          data-alert-center role="region" aria-label="Jungle Bell 알림 센터">
     <header class="flex h-12 flex-none cursor-grab items-center gap-3 border-b border-app-divider px-4 select-none active:cursor-grabbing"
@@ -45,14 +41,16 @@
     </header>
 
     <p class="sr-only" data-alert-announcer role="status" aria-live="polite"></p>
-    <ul class="ui-scroll-region m-0 min-h-0 flex-1 list-none divide-y divide-app-divider p-0"
-        data-alert-list></ul>
+    <div class="min-h-0 flex-1 p-2" data-alert-list-frame>
+        <ul class="ui-scroll-region m-0 h-full min-h-0 list-none divide-y divide-app-divider rounded-ui-card bg-app-surface-subtle px-0 py-1 [--scroll-region-inset:var(--space-2)]"
+            data-alert-list></ul>
+    </div>
 </section>
 
 <template data-alert-item-template>
-    <li class="group flex min-h-[84px] items-start gap-3 bg-transparent px-4 py-3 transition-colors hover:bg-app-surface-subtle">
+    <li class="ui-scroll-region__content group flex h-[72px] flex-none items-center gap-2 overflow-hidden bg-transparent py-1 transition-colors hover:bg-app-control">
         <button type="button"
-                class="flex min-w-0 flex-1 cursor-pointer items-start gap-3 border-0 bg-transparent p-0 text-left text-app-text focus-visible:rounded-lg"
+                class="flex min-w-0 flex-1 self-stretch cursor-pointer items-start gap-2 border-0 bg-transparent p-0 text-left text-app-text focus-visible:rounded-lg"
                 data-alert-item-open>
             <span class="mt-2 size-2 flex-none rounded-full bg-app-info" aria-hidden="true"></span>
             <span class="min-w-0 flex-1">
@@ -60,7 +58,7 @@
                     <strong class="min-w-0 flex-1 truncate text-sm leading-5 font-bold" data-alert-item-title></strong>
                     <time class="flex-none text-ui-caption text-app-faint tabular-nums"
                           data-alert-item-time></time>
-                    <span class="ui-badge min-h-0 bg-app-info-soft py-0 text-app-info"
+                    <span class="sr-only"
                           data-alert-item-action></span>
                 </span>
                 <span class="mt-1 block line-clamp-2 text-xs leading-[1.5] text-app-muted"
@@ -68,7 +66,7 @@
             </span>
         </button>
         <button type="button"
-                class="mt-1 flex size-8 flex-none items-center justify-center rounded-full border-0 bg-transparent text-app-muted transition-colors hover:bg-app-control hover:text-app-text disabled:opacity-40"
+                class="flex size-8 flex-none items-center justify-center rounded-full border-0 bg-transparent text-app-muted transition-colors hover:bg-app-control hover:text-app-text disabled:opacity-40"
                 data-alert-item-close aria-label="알림 닫기">
             <svg class="size-4" data-icon="close" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <path d="m7 7 10 10M17 7 7 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
