@@ -208,8 +208,49 @@
     </nav>
 
     <section id="tray-home-panel" class="ui-scroll-region ui-scroll-region--inset min-h-0 flex-1 [--scroll-region-inset:var(--space-4)] pb-3" role="tabpanel" aria-labelledby="tray-tab-home" x-show="!notificationOpen && activeTab === 'home'">
+        <button
+            type="button"
+            class="ui-card min-h-14 w-full px-3 py-2 text-left transition-[filter,transform] duration-200 hover:brightness-[.98] active:scale-[.99] disabled:pointer-events-none disabled:opacity-50"
+            data-ui="attendance-status"
+            :class="{
+                'bg-app-surface-subtle': presentation.tone === 'neutral',
+                'bg-app-warning-soft': presentation.tone === 'warning',
+                'bg-app-danger-soft': presentation.tone === 'danger',
+                'bg-app-success-soft': presentation.tone === 'success',
+                'bg-app-accent-soft': presentation.tone === 'accent'
+            }"
+            :aria-label="`${presentation.actionLabel ?? '출석 상태 확인'} — ${state.statusText}`"
+            aria-live="polite"
+            :disabled="busyAction !== null || taskBusy !== null"
+            @click="perform('open_attendance')"
+        >
+            <span class="flex items-center gap-3">
+                <span
+                    class="flex size-9 flex-none items-center justify-center rounded-ui-control"
+                    :class="{
+                        'bg-app-overlay text-app-faint': presentation.tone === 'neutral',
+                        'bg-app-warning text-app-on-accent': presentation.tone === 'warning',
+                        'bg-app-danger text-app-on-accent': presentation.tone === 'danger',
+                        'bg-app-success text-app-on-accent': presentation.tone === 'success',
+                        'bg-app-accent text-app-on-accent': presentation.tone === 'accent'
+                    }"
+                >
+                    <svg class="size-5" viewBox="0 0 24 24" aria-hidden="true">
+                        <path x-show="presentation.tone === 'success'" d="m6.5 12.5 3.5 3.5 7.5-8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path x-show="presentation.tone === 'danger' || presentation.tone === 'warning'" d="M12 8v5m0 3.5v.1M10.3 4.8 3.7 17a2 2 0 0 0 1.8 3h13a2 2 0 0 0 1.8-3L13.7 4.8a2 2 0 0 0-3.4 0Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path x-show="presentation.tone === 'neutral' || presentation.tone === 'accent'" d="M12 3.5a8.5 8.5 0 1 0 8.5 8.5A8.5 8.5 0 0 0 12 3.5Zm0 4v5l3 1.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </span>
+                <span class="min-w-0 flex-1">
+                    <strong class="block text-ui-label font-bold" x-text="statusTextParts.title"></strong>
+                    <small class="block text-ui-caption font-normal text-app-muted" x-show="statusTextParts.detail" x-text="statusTextParts.detail"></small>
+                </span>
+                <svg class="size-4 flex-none text-app-faint" data-icon="chevron-right" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+        </button>
+
         <aside
-            class="ui-card overflow-hidden p-0"
+            class="ui-card mt-2 overflow-hidden p-0"
             data-ui="dday"
             x-show="state.ddayText"
             x-cloak
@@ -323,47 +364,6 @@
                 </div>
             </div>
         </aside>
-
-        <button
-            type="button"
-            class="ui-card mt-2 min-h-14 w-full px-3 py-2 text-left transition-[filter,transform] duration-200 hover:brightness-[.98] active:scale-[.99] disabled:pointer-events-none disabled:opacity-50"
-            data-ui="attendance-status"
-            :class="{
-                'bg-app-surface-subtle': presentation.tone === 'neutral',
-                'bg-app-warning-soft': presentation.tone === 'warning',
-                'bg-app-danger-soft': presentation.tone === 'danger',
-                'bg-app-success-soft': presentation.tone === 'success',
-                'bg-app-accent-soft': presentation.tone === 'accent'
-            }"
-            :aria-label="`${presentation.actionLabel ?? '출석 상태 확인'} — ${state.statusText}`"
-            aria-live="polite"
-            :disabled="busyAction !== null || taskBusy !== null"
-            @click="perform('open_attendance')"
-        >
-            <span class="flex items-center gap-3">
-                <span
-                    class="flex size-9 flex-none items-center justify-center rounded-ui-control"
-                    :class="{
-                        'bg-app-overlay text-app-faint': presentation.tone === 'neutral',
-                        'bg-app-warning text-app-on-accent': presentation.tone === 'warning',
-                        'bg-app-danger text-app-on-accent': presentation.tone === 'danger',
-                        'bg-app-success text-app-on-accent': presentation.tone === 'success',
-                        'bg-app-accent text-app-on-accent': presentation.tone === 'accent'
-                    }"
-                >
-                    <svg class="size-5" viewBox="0 0 24 24" aria-hidden="true">
-                        <path x-show="presentation.tone === 'success'" d="m6.5 12.5 3.5 3.5 7.5-8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-                        <path x-show="presentation.tone === 'danger' || presentation.tone === 'warning'" d="M12 8v5m0 3.5v.1M10.3 4.8 3.7 17a2 2 0 0 0 1.8 3h13a2 2 0 0 0 1.8-3L13.7 4.8a2 2 0 0 0-3.4 0Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                        <path x-show="presentation.tone === 'neutral' || presentation.tone === 'accent'" d="M12 3.5a8.5 8.5 0 1 0 8.5 8.5A8.5 8.5 0 0 0 12 3.5Zm0 4v5l3 1.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                </span>
-                <span class="min-w-0 flex-1">
-                    <strong class="block text-ui-label font-bold" x-text="statusTextParts.title"></strong>
-                    <small class="block text-ui-caption font-normal text-app-muted" x-show="statusTextParts.detail" x-text="statusTextParts.detail"></small>
-                </span>
-                <svg class="size-4 flex-none text-app-faint" data-icon="chevron-right" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </span>
-        </button>
 
         <section
             class="mt-4"
