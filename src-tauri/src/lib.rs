@@ -1,4 +1,3 @@
-mod alert_overlay;
 mod analytics;
 mod attendance;
 mod attendance_auto_refresh;
@@ -26,7 +25,6 @@ mod updater;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use alert_overlay::AlertOverlayService;
 use config::Config;
 use local_consumption::LocalConsumptionService;
 use notification_inbox::NotificationInboxService;
@@ -143,7 +141,6 @@ pub fn run() {
         log::LevelFilter::Info
     };
     let shared_state = Arc::new(Mutex::new(AppState::new(config)));
-    let alert_overlay_service = Arc::new(AlertOverlayService::default());
     let notification_inbox_service = Arc::new(NotificationInboxService::load());
     let notification_service = Arc::new(NotificationService::new(notification_inbox_service.clone()));
     let settings_service = Arc::new(SettingsService::new(
@@ -199,7 +196,6 @@ pub fn run() {
         // AppState를 Tauri의 managed state로 등록.
         // 핸들러에서 `tauri::State<Arc<Mutex<AppState>>>`로 받아 사용.
         .manage(shared_state.clone())
-        .manage(alert_overlay_service)
         .manage(notification_inbox_service.clone())
         .manage(notification_service.clone())
         .manage(settings_service)
@@ -254,9 +250,6 @@ pub fn run() {
             commands::refresh_login_status,
             commands::get_notification_inbox_snapshot,
             commands::activate_notification,
-            commands::get_alert_overlay_snapshot,
-            commands::dismiss_alert_overlay,
-            commands::activate_alert_overlay,
         ])
         // setup(): 앱 초기화 후 이벤트 루프 시작 전에 한 번 실행.
         .setup(move |app| {
@@ -324,7 +317,6 @@ mod tests {
         assert!(window_size_should_persist("image-viewer"));
         assert!(!window_size_should_persist("campus"));
         assert!(!window_size_should_persist("settings"));
-        assert!(!window_size_should_persist("alert-overlay"));
         assert!(!window_size_should_persist("tray-panel"));
     }
 

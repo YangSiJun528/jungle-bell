@@ -11,7 +11,6 @@ use serde::Serialize;
 use tauri::{Emitter, Manager};
 use tokio::sync::Mutex;
 
-use crate::alert_overlay::{self, AlertOverlayService, AlertOverlaySnapshot};
 use crate::analytics::{self, AttendancePeriod, CampusInteraction, Event, Setting};
 use crate::attendance;
 use crate::attendance_auto_refresh::{self, StartRequestAction};
@@ -797,37 +796,6 @@ pub fn activate_notification(
 ) -> Result<NotificationInboxSnapshot, String> {
     notification_inbox::ensure_tray_panel_window(&window)?;
     inbox.activate(&app, &id)
-}
-
-#[tauri::command]
-pub fn get_alert_overlay_snapshot(
-    window: tauri::WebviewWindow,
-    alert_overlay: tauri::State<'_, Arc<AlertOverlayService>>,
-) -> Result<AlertOverlaySnapshot, String> {
-    alert_overlay::ensure_overlay_window(&window)?;
-    alert_overlay.snapshot()
-}
-
-#[tauri::command]
-pub fn dismiss_alert_overlay(
-    app: tauri::AppHandle,
-    window: tauri::WebviewWindow,
-    alert_overlay: tauri::State<'_, Arc<AlertOverlayService>>,
-    id: String,
-) -> Result<AlertOverlaySnapshot, String> {
-    alert_overlay::ensure_overlay_window(&window)?;
-    alert_overlay.dismiss(&app, &id)
-}
-
-#[tauri::command]
-pub fn activate_alert_overlay(
-    app: tauri::AppHandle,
-    window: tauri::WebviewWindow,
-    alert_overlay: tauri::State<'_, Arc<AlertOverlayService>>,
-    id: String,
-) -> Result<AlertOverlaySnapshot, String> {
-    alert_overlay::ensure_overlay_window(&window)?;
-    alert_overlay.activate(&app, &id)
 }
 
 /// 사용자가 홈 알림 센터에서 선택한 급식 게시 이벤트 하나를 제거한다.

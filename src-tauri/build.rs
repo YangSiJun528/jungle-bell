@@ -45,9 +45,6 @@ const APP_COMMANDS: &[&str] = &[
     "refresh_login_status",
     "get_notification_inbox_snapshot",
     "activate_notification",
-    "get_alert_overlay_snapshot",
-    "dismiss_alert_overlay",
-    "activate_alert_overlay",
 ];
 
 fn main() {

@@ -7,7 +7,6 @@
 @source "./campus.html";
 @source "./image-viewer.html";
 @source "./tray-panel.html";
-@source "./alert-overlay.html";
 
 @theme inline {
     --font-sans: var(--font-family);
@@ -110,8 +109,7 @@
         padding-inline: var(--page-gutter);
     }
 
-    body[data-ui-page="tray-panel"],
-    body[data-ui-page="alert-overlay"] {
+    body[data-ui-page="tray-panel"] {
         padding: var(--space-2);
         font-size: var(--font-size-label);
         line-height: var(--line-height-label);
