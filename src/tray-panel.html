@@ -199,40 +199,119 @@
         </section>
 
         <aside
-            class="ui-card mt-2 p-3"
+            class="ui-card mt-2 overflow-hidden p-0"
             data-ui="dday"
             x-show="state.ddayText"
             x-cloak
-            aria-live="polite"
         >
-            <div x-show="ddayProgress" x-cloak>
-                <header class="flex items-end justify-between gap-3">
-                    <span class="min-w-0">
-                        <small class="block text-ui-caption font-bold text-app-common">D-Day</small>
-                        <strong class="mt-1 block truncate text-ui-label" x-text="ddayRange()"></strong>
-                    </span>
+            <button
+                type="button"
+                class="flex min-h-14 w-full items-center gap-2 border-0 bg-transparent px-3 py-2 text-left text-app-text transition-colors hover:bg-app-surface-subtle disabled:cursor-default disabled:hover:bg-transparent"
+                :class="ddayProgress ? 'cursor-pointer' : 'cursor-default'"
+                :aria-expanded="Boolean(ddayProgress && ddayExpanded)"
+                :aria-label="ddayProgress ? `${state.ddayText}, ${ddayExpanded ? '진행도 접기' : '진행도 펼치기'}` : state.ddayText"
+                aria-controls="dday-calendar"
+                :disabled="!ddayProgress"
+                @click="toggleDday()"
+            >
+                <span class="flex size-9 flex-none items-center justify-center rounded-ui-control bg-app-common-soft text-app-common">
+                    <svg class="size-5" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M7 3.5v17m0-15h10l-2.5 3L17 12H7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </span>
+                <span class="min-w-0 flex-1">
+                    <small class="block text-ui-caption font-bold text-app-common">D-Day</small>
                     <strong
-                        class="flex-none font-mono text-ui-title text-app-common tabular-nums"
-                        x-text="ddayProgress ? `${ddayProgress.percent}%` : ''"
+                        class="block truncate text-ui-label"
+                        aria-live="polite"
+                        x-text="state.ddayText"
                     ></strong>
-                </header>
-                <progress
-                    class="ui-progress mt-3 text-app-common"
-                    max="100"
-                    :value="ddayProgress?.percent ?? 0"
-                    aria-label="D-Day 진행률"
-                    :aria-valuetext="ddayProgressLabel()"
-                ></progress>
-                <p class="mt-2 flex items-center justify-between gap-2 text-ui-caption text-app-muted tabular-nums">
-                    <span x-text="ddayProgress ? `완료 ${ddayProgress.elapsed}일` : ''"></span>
-                    <span x-text="ddayProgress ? `남음 ${ddayProgress.remaining}일` : ''"></span>
-                </p>
+                </span>
+                <svg
+                    class="size-4 flex-none text-app-faint transition-transform duration-200"
+                    :class="ddayExpanded && 'rotate-180'"
+                    data-icon="chevron-down"
+                    viewBox="0 0 24 24"
+                    x-show="ddayProgress"
+                    aria-hidden="true"
+                >
+                    <path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </button>
+
+            <div
+                id="dday-calendar"
+                class="grid transition-[grid-template-rows,opacity] duration-200 ease-out"
+                :class="ddayExpanded && ddayProgress ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'"
+                :aria-hidden="!(ddayExpanded && ddayProgress)"
+            >
+                <div class="min-h-0 overflow-hidden">
+                    <div class="px-3 pb-3 pt-1" data-ui-density="micro">
+                        <div class="flex items-center gap-2 text-[9px] text-app-muted tabular-nums">
+                            <small
+                                class="mr-auto whitespace-nowrap text-[10px] font-medium text-app-muted"
+                                x-text="ddayRange()"
+                            ></small>
+                            <span class="inline-flex items-center gap-1 whitespace-nowrap">
+                                <i class="size-1.5 rounded-[2px] bg-app-common"></i>
+                                <span x-text="ddayProgress ? `완료 ${ddayProgress.elapsed}일` : ''"></span>
+                            </span>
+                            <span class="inline-flex items-center gap-1 whitespace-nowrap">
+                                <i class="size-1.5 rounded-[2px] ring-1 ring-inset ring-app-border-strong"></i>
+                                <span x-text="ddayProgress ? `남음 ${ddayProgress.remaining}일` : ''"></span>
+                            </span>
+                            <strong
+                                class="whitespace-nowrap text-app-common"
+                                x-text="ddayProgress ? `${ddayProgress.percent}%` : ''"
+                            ></strong>
+                        </div>
+
+                        <div
+                            class="mt-2 grid grid-cols-[24px_minmax(0,1fr)] gap-x-1 gap-y-[2px]"
+                            role="img"
+                            :aria-label="ddayProgressLabel()"
+                        >
+                            <small class="self-end text-center text-[7px] font-semibold text-app-faint" aria-hidden="true">월</small>
+                            <div class="grid grid-cols-[repeat(31,minmax(0,1fr))] gap-[1px]" aria-hidden="true">
+                                <template x-for="day in 31" :key="day">
+                                    <small
+                                        class="flex min-w-0 justify-center overflow-visible whitespace-nowrap text-[7px] font-semibold leading-none text-app-faint tabular-nums"
+                                        x-text="(day === 1 || day === 10 || day === 20 || day === 31) ? day : ''"
+                                    ></small>
+                                </template>
+                            </div>
+
+                            <template x-for="row in ddayProgress?.rows ?? []" :key="row.key">
+                                <div class="contents">
+                                    <small
+                                        class="self-center truncate text-right text-[9px] font-semibold leading-none text-app-muted tabular-nums"
+                                        :title="row.label"
+                                        x-text="row.shortLabel"
+                                        aria-hidden="true"
+                                    ></small>
+                                    <div class="grid grid-cols-[repeat(31,minmax(0,1fr))] gap-[1px]" aria-hidden="true">
+                                        <template x-for="(cell, dayIndex) in row.cells" :key="`${row.key}-${dayIndex + 1}`">
+                                            <span
+                                                class="aspect-square min-w-0 rounded-[2px]"
+                                                :class="cell === null
+                                                    ? 'bg-transparent'
+                                                    : cell.state === 'elapsed'
+                                                        ? 'bg-app-common'
+                                                        : cell.state === 'current'
+                                                            ? 'bg-app-common-soft ring-1 ring-inset ring-app-common'
+                                                            : 'bg-transparent ring-1 ring-inset ring-app-border-strong'"
+                                                :title="cell ? (cell.state === 'current' ? `${cell.label} · 오늘` : cell.label) : ''"
+                                                aria-hidden="true"
+                                            ></span>
+                                        </template>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                    <!-- ui-density:micro:end -->
+                </div>
             </div>
-            <strong
-                class="block text-ui-label"
-                x-show="!ddayProgress"
-                x-text="state.ddayText"
-            ></strong>
         </aside>
 
         <section
