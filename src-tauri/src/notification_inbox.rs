@@ -51,7 +51,6 @@ pub struct NotificationInboxItem {
 struct StoredNotification {
     item: NotificationInboxItem,
     key: String,
-    dedupe_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
@@ -98,42 +97,34 @@ impl NotificationInboxStore {
         title: String,
         body: String,
         action: Option<NotificationAction>,
-        dedupe_key: Option<String>,
+        repeat_after_ms: Option<i64>,
         created_at: i64,
-    ) -> NotificationInboxSnapshot {
-        if let Some(position) = dedupe_key.as_deref().and_then(|dedupe_key| {
-            self.items
-                .iter()
-                .position(|stored| stored.dedupe_key.as_deref() == Some(dedupe_key))
-        }) {
-            if let Some(mut existing) = self.items.remove(position) {
-                existing.item.title = title;
-                existing.item.body = body;
-                existing.item.action = action;
-                existing.item.created_at = created_at;
-                existing.item.read_at = None;
-                existing.key = key;
-                self.items.push_front(existing);
+    ) -> (String, NotificationInboxSnapshot, bool) {
+        if let Some(existing) = self.items.iter().find(|stored| stored.key == key) {
+            let should_reuse =
+                repeat_after_ms.is_none_or(|interval| created_at.saturating_sub(existing.item.created_at) < interval);
+            if should_reuse {
+                return (existing.item.id.clone(), self.snapshot(), false);
             }
-        } else {
-            self.next_id = self.next_id.saturating_add(1);
-            self.items.push_front(StoredNotification {
-                item: NotificationInboxItem {
-                    id: self.next_id.to_string(),
-                    title,
-                    body,
-                    created_at,
-                    read_at: None,
-                    action,
-                },
-                key,
-                dedupe_key,
-            });
         }
+
+        self.next_id = self.next_id.saturating_add(1);
+        let id = self.next_id.to_string();
+        self.items.push_front(StoredNotification {
+            item: NotificationInboxItem {
+                id: id.clone(),
+                title,
+                body,
+                created_at,
+                read_at: None,
+                action,
+            },
+            key,
+        });
 
         self.items.truncate(MAX_NOTIFICATION_ITEMS);
         self.revision = self.revision.saturating_add(1);
-        self.snapshot()
+        (id, self.snapshot(), true)
     }
 
     fn mark_read(&mut self, id: &str, read_at: i64) -> Result<Option<NotificationAction>, String> {
@@ -158,6 +149,14 @@ impl NotificationInboxStore {
         };
         let mut store: Self =
             serde_json::from_slice(&data).map_err(|error| format!("알림함({}) 파싱 실패: {error}", path.display()))?;
+        if store.version > NOTIFICATION_INBOX_VERSION {
+            return Err(format!(
+                "알림함({}) 안전한 로드 실패: 지원하지 않는 미래 버전 {}입니다(현재 {}).",
+                path.display(),
+                store.version,
+                NOTIFICATION_INBOX_VERSION
+            ));
+        }
         store.version = NOTIFICATION_INBOX_VERSION;
         store.items.truncate(MAX_NOTIFICATION_ITEMS);
         store.next_id = store
@@ -183,31 +182,36 @@ impl NotificationInboxStore {
 pub struct NotificationInboxService {
     path: Option<PathBuf>,
     store: Mutex<NotificationInboxStore>,
+    publication: Mutex<()>,
 }
 
 impl NotificationInboxService {
     pub fn load() -> Self {
-        let path = notification_inbox_path();
-        let store = path
-            .as_deref()
-            .map(NotificationInboxStore::load_from)
-            .transpose()
-            .unwrap_or_else(|error| {
-                log::error!("[notification-inbox] {error}; 빈 알림함으로 시작합니다");
-                None
-            })
-            .unwrap_or_default();
+        Self::load_with_path(notification_inbox_path())
+    }
+
+    fn load_with_path(path: Option<PathBuf>) -> Self {
+        let (path, store) = match path {
+            Some(path) => match NotificationInboxStore::load_from(&path) {
+                Ok(store) => (Some(path), store),
+                Err(error) => {
+                    log::error!(
+                        "[notification-inbox] 안전한 로드 실패: {error}; 기존 파일 보호를 위해 쓰기를 비활성화합니다"
+                    );
+                    (None, NotificationInboxStore::default())
+                }
+            },
+            None => (None, NotificationInboxStore::default()),
+        };
         Self {
             path,
             store: Mutex::new(store),
+            publication: Mutex::new(()),
         }
     }
 
     pub fn initialize(&self, app: &tauri::AppHandle) {
-        match self.snapshot() {
-            Ok(snapshot) => apply_unread_badge(app, snapshot.unread_count),
-            Err(error) => log::error!("[notification-inbox] 초기 배지 적용 실패: {error}"),
-        }
+        apply_unread_badge(app);
     }
 
     pub fn record(
@@ -217,35 +221,31 @@ impl NotificationInboxService {
         title: &str,
         body: &str,
         action: Option<NotificationAction>,
-        dedupe_key: Option<&str>,
-    ) -> Result<(String, NotificationInboxSnapshot), String> {
-        let path = self
-            .path
-            .as_deref()
-            .ok_or_else(|| "운영체제 설정 디렉토리를 확인할 수 없습니다.".to_string())?;
+        repeat_after_ms: Option<i64>,
+    ) -> Result<(String, NotificationInboxSnapshot, bool), String> {
+        let path = self.path.as_deref().ok_or_else(writes_disabled_error)?;
         let mut store = self
             .store
             .lock()
             .map_err(|_| "알림함 잠금이 손상되었습니다.".to_string())?;
         let mut next = store.clone();
-        let snapshot = next.push(
+        let (id, snapshot, inserted) = next.push(
             key.to_owned(),
             title.to_owned(),
             body.to_owned(),
             action,
-            dedupe_key.map(str::to_owned),
+            repeat_after_ms,
             Utc::now().timestamp_millis(),
         );
-        let id = snapshot
-            .items
-            .first()
-            .map(|item| item.id.clone())
-            .ok_or_else(|| "저장된 알림 ID를 확인할 수 없습니다.".to_string())?;
-        next.save_to(path)?;
-        *store = next;
+        if inserted {
+            next.save_to(path)?;
+            *store = next;
+        }
         drop(store);
-        publish_snapshot(app, &snapshot);
-        Ok((id, snapshot))
+        if inserted {
+            self.publish_if_current(app, &snapshot);
+        }
+        Ok((id, snapshot, inserted))
     }
 
     pub fn snapshot(&self) -> Result<NotificationInboxSnapshot, String> {
@@ -256,10 +256,7 @@ impl NotificationInboxService {
     }
 
     pub fn activate(&self, app: &tauri::AppHandle, id: &str) -> Result<NotificationInboxSnapshot, String> {
-        let path = self
-            .path
-            .as_deref()
-            .ok_or_else(|| "운영체제 설정 디렉토리를 확인할 수 없습니다.".to_string())?;
+        let path = self.path.as_deref().ok_or_else(writes_disabled_error)?;
         let mut store = self
             .store
             .lock()
@@ -275,12 +272,32 @@ impl NotificationInboxService {
         drop(store);
 
         if snapshot.revision != previous_revision {
-            publish_snapshot(app, &snapshot);
+            self.publish_if_current(app, &snapshot);
         }
         if let Some(action) = action {
             tray::run_tray_panel_action(app, action.tray_action())?;
         }
         Ok(snapshot)
+    }
+
+    fn publish_if_current(&self, app: &tauri::AppHandle, snapshot: &NotificationInboxSnapshot) {
+        let _publication = match self.publication.lock() {
+            Ok(publication) => publication,
+            Err(_) => {
+                log::error!("[notification-inbox] 발행 잠금이 손상되어 snapshot 발행을 건너뜁니다");
+                return;
+            }
+        };
+        let current_revision = match self.store.lock() {
+            Ok(store) => store.revision,
+            Err(_) => {
+                log::error!("[notification-inbox] 알림함 잠금이 손상되어 snapshot 발행을 건너뜁니다");
+                return;
+            }
+        };
+        if current_revision == snapshot.revision {
+            publish_snapshot(app, snapshot);
+        }
     }
 }
 
@@ -323,16 +340,32 @@ fn validate_notification_id(id: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn writes_disabled_error() -> String {
+    "알림함 안전 로드에 실패했거나 저장 경로를 확인할 수 없어 기존 파일 보호를 위해 쓰기가 비활성화되었습니다.".into()
+}
+
 fn publish_snapshot(app: &tauri::AppHandle, snapshot: &NotificationInboxSnapshot) {
     if let Err(error) = app.emit_to("tray-panel", NOTIFICATION_INBOX_UPDATED_EVENT, snapshot) {
         log::debug!("[notification-inbox] snapshot emit skipped: {error}");
     }
-    apply_unread_badge(app, snapshot.unread_count);
+    apply_unread_badge(app);
 }
 
-fn apply_unread_badge(app: &tauri::AppHandle, unread_count: usize) {
+fn apply_unread_badge(app: &tauri::AppHandle) {
     let app = app.clone();
     if let Err(error) = app.clone().run_on_main_thread(move || {
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        let unread_count = {
+            let service = app.state::<std::sync::Arc<NotificationInboxService>>();
+            match service.snapshot() {
+                Ok(snapshot) => snapshot.unread_count,
+                Err(error) => {
+                    log::debug!("[notification-inbox] 최신 배지 상태 확인 생략: {error}");
+                    return;
+                }
+            }
+        };
+
         #[cfg(target_os = "macos")]
         if let Some(window) = app.get_webview_window("tray-panel") {
             let label = (unread_count > 0).then(|| "•".to_string());
@@ -387,17 +420,18 @@ mod tests {
 
     fn push(
         store: &mut NotificationInboxStore,
+        key: &str,
         title: &str,
         action: Option<NotificationAction>,
-        dedupe_key: Option<&str>,
+        repeat_after_ms: Option<i64>,
         created_at: i64,
-    ) -> NotificationInboxSnapshot {
+    ) -> (String, NotificationInboxSnapshot, bool) {
         store.push(
-            "test.key".into(),
+            key.into(),
             title.into(),
             "알림 내용".into(),
             action,
-            dedupe_key.map(str::to_owned),
+            repeat_after_ms,
             created_at,
         )
     }
@@ -405,15 +439,24 @@ mod tests {
     #[test]
     fn 새_알림은_최신순으로_쌓이고_미읽음_수에_포함된다() {
         let mut store = NotificationInboxStore::default();
-        push(&mut store, "첫 알림", Some(NotificationAction::Attendance), None, 1_000);
-        let snapshot = push(
+        push(
             &mut store,
+            "source.first",
+            "첫 알림",
+            Some(NotificationAction::Attendance),
+            None,
+            1_000,
+        );
+        let (_, snapshot, inserted) = push(
+            &mut store,
+            "source.second",
             "두 번째 알림",
             Some(NotificationAction::Laundry),
             None,
             2_000,
         );
 
+        assert!(inserted);
         assert_eq!(snapshot.unread_count, 2);
         assert_eq!(snapshot.items[0].title, "두 번째 알림");
         assert_eq!(snapshot.items[1].title, "첫 알림");
@@ -421,39 +464,161 @@ mod tests {
     }
 
     #[test]
-    fn 같은_dedupe_key는_기존_id를_갱신하고_다시_미읽음으로_만든다() {
+    fn 같은_source의_one_shot은_기존_id와_revision을_그대로_재사용한다() {
         let mut store = NotificationInboxStore::default();
-        let first = push(
+        let (id, first, inserted) = push(
             &mut store,
+            "attendance:2026-07-29",
             "출석 알림",
             Some(NotificationAction::Attendance),
-            Some("attendance"),
+            None,
             1_000,
         );
-        let id = first.items[0].id.clone();
+        assert!(inserted);
+        assert_eq!(first.items[0].id, id);
         store.mark_read(&id, 1_500).unwrap();
+        let revision = store.revision;
 
-        let updated = push(
+        let (reused_id, unchanged, inserted) = push(
             &mut store,
+            "attendance:2026-07-29",
             "출석 재알림",
             Some(NotificationAction::Attendance),
-            Some("attendance"),
+            None,
             2_000,
         );
 
-        assert_eq!(updated.items.len(), 1);
-        assert_eq!(updated.items[0].id, id);
-        assert_eq!(updated.items[0].title, "출석 재알림");
-        assert_eq!(updated.items[0].read_at, None);
-        assert_eq!(updated.unread_count, 1);
+        assert!(!inserted);
+        assert_eq!(reused_id, id);
+        assert_eq!(unchanged.revision, revision);
+        assert_eq!(unchanged.items.len(), 1);
+        assert_eq!(unchanged.items[0].title, "출석 알림");
+        assert_eq!(unchanged.items[0].created_at, 1_000);
+        assert_eq!(unchanged.items[0].read_at, Some(1_500));
+        assert_eq!(unchanged.unread_count, 0);
+    }
+
+    #[test]
+    fn 같은_source의_반복_알림은_주기_안에서_억제된다() {
+        let mut store = NotificationInboxStore::default();
+        let (id, first, _) = push(
+            &mut store,
+            "attendance.start:2026-07-29",
+            "출석 알림",
+            Some(NotificationAction::Attendance),
+            Some(15 * 60 * 1_000),
+            1_000,
+        );
+
+        let (reused_id, unchanged, inserted) = push(
+            &mut store,
+            "attendance.start:2026-07-29",
+            "출석 재알림",
+            Some(NotificationAction::Attendance),
+            Some(15 * 60 * 1_000),
+            1_000 + 15 * 60 * 1_000 - 1,
+        );
+
+        assert!(!inserted);
+        assert_eq!(reused_id, id);
+        assert_eq!(unchanged.revision, first.revision);
+        assert_eq!(unchanged.items.len(), 1);
+        assert_eq!(unchanged.items[0].title, "출석 알림");
+    }
+
+    #[test]
+    fn 같은_source의_반복_알림은_주기_경계에서_새_id로_추가된다() {
+        let mut store = NotificationInboxStore::default();
+        let (first_id, first, _) = push(
+            &mut store,
+            "attendance.end:2026-07-29",
+            "퇴근 출석 알림",
+            Some(NotificationAction::Attendance),
+            Some(15 * 60 * 1_000),
+            1_000,
+        );
+
+        let (second_id, repeated, inserted) = push(
+            &mut store,
+            "attendance.end:2026-07-29",
+            "퇴근 출석 재알림",
+            Some(NotificationAction::Attendance),
+            Some(15 * 60 * 1_000),
+            1_000 + 15 * 60 * 1_000,
+        );
+
+        assert!(inserted);
+        assert_ne!(second_id, first_id);
+        assert_eq!(repeated.revision, first.revision + 1);
+        assert_eq!(repeated.items.len(), 2);
+        assert_eq!(repeated.items[0].id, second_id);
+        assert_eq!(repeated.items[1].id, first_id);
+    }
+
+    #[test]
+    fn 반복해서_추가된_알림은_각_id로_독립적으로_읽을_수_있다() {
+        let mut store = NotificationInboxStore::default();
+        let (first_id, _, _) = push(
+            &mut store,
+            "attendance.start:2026-07-29",
+            "첫 출석 알림",
+            Some(NotificationAction::Attendance),
+            Some(100),
+            1_000,
+        );
+        let (second_id, _, _) = push(
+            &mut store,
+            "attendance.start:2026-07-29",
+            "두 번째 출석 알림",
+            Some(NotificationAction::Attendance),
+            Some(100),
+            1_100,
+        );
+
+        store.mark_read(&first_id, 1_200).unwrap();
+        let after_first = store.snapshot();
+        assert_eq!(
+            after_first
+                .items
+                .iter()
+                .find(|item| item.id == first_id)
+                .unwrap()
+                .read_at,
+            Some(1_200)
+        );
+        assert_eq!(
+            after_first
+                .items
+                .iter()
+                .find(|item| item.id == second_id)
+                .unwrap()
+                .read_at,
+            None
+        );
+
+        store.mark_read(&second_id, 1_300).unwrap();
+        assert_eq!(store.snapshot().unread_count, 0);
     }
 
     #[test]
     fn 알림_활성화는_해당_항목만_읽음으로_바꾸고_이동_대상을_반환한다() {
         let mut store = NotificationInboxStore::default();
-        let first = push(&mut store, "출석", Some(NotificationAction::Attendance), None, 1_000);
-        let first_id = first.items[0].id.clone();
-        push(&mut store, "식단", Some(NotificationAction::Meals), None, 2_000);
+        let (first_id, _, _) = push(
+            &mut store,
+            "attendance",
+            "출석",
+            Some(NotificationAction::Attendance),
+            None,
+            1_000,
+        );
+        push(
+            &mut store,
+            "meals",
+            "식단",
+            Some(NotificationAction::Meals),
+            None,
+            2_000,
+        );
 
         let action = store.mark_read(&first_id, 3_000).unwrap();
         let snapshot = store.snapshot();
@@ -470,7 +635,14 @@ mod tests {
     fn 알림함은_최신_백개만_보존한다() {
         let mut store = NotificationInboxStore::default();
         for index in 0..=MAX_NOTIFICATION_ITEMS {
-            push(&mut store, &format!("알림 {index}"), None, None, index as i64 + 1);
+            push(
+                &mut store,
+                &format!("source.{index}"),
+                &format!("알림 {index}"),
+                None,
+                None,
+                index as i64 + 1,
+            );
         }
 
         let snapshot = store.snapshot();
@@ -487,13 +659,56 @@ mod tests {
         let _ = std::fs::remove_dir_all(&temp_dir);
 
         let mut store = NotificationInboxStore::default();
-        let snapshot = push(&mut store, "세탁 완료", Some(NotificationAction::Laundry), None, 1_000);
-        let id = snapshot.items[0].id.clone();
+        let (id, _, _) = push(
+            &mut store,
+            "laundry",
+            "세탁 완료",
+            Some(NotificationAction::Laundry),
+            None,
+            1_000,
+        );
         store.mark_read(&id, 2_000).unwrap();
         store.save_to(&path).unwrap();
 
         let restored = NotificationInboxStore::load_from(&path).unwrap();
         assert_eq!(restored.snapshot(), store.snapshot());
+
+        let _ = std::fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn 미래_버전_알림함은_안전하게_거부한다() {
+        let temp_dir =
+            std::env::temp_dir().join(format!("jungle-bell-notification-inbox-future-{}", std::process::id()));
+        let path = temp_dir.join("notifications.json");
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let store = NotificationInboxStore {
+            version: NOTIFICATION_INBOX_VERSION + 1,
+            ..NotificationInboxStore::default()
+        };
+        std::fs::write(&path, serde_json::to_vec(&store).unwrap()).unwrap();
+
+        let error = NotificationInboxStore::load_from(&path).unwrap_err();
+        assert!(error.contains("미래 버전"));
+
+        let _ = std::fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn 안전한_로드가_실패하면_기존_파일_보호를_위해_쓰기를_비활성화한다() {
+        let temp_dir =
+            std::env::temp_dir().join(format!("jungle-bell-notification-inbox-invalid-{}", std::process::id()));
+        let path = temp_dir.join("notifications.json");
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        std::fs::write(&path, b"{invalid-json").unwrap();
+
+        let service = NotificationInboxService::load_with_path(Some(path));
+
+        assert!(service.path.is_none());
+        assert!(service.snapshot().unwrap().items.is_empty());
 
         let _ = std::fs::remove_dir_all(temp_dir);
     }
