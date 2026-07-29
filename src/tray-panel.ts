@@ -44,6 +44,7 @@ type PanelAction =
 interface TrayPanelComponent {
     activeTab: PanelTab;
     menuOpen: boolean;
+    ddayExpanded: boolean;
     state: TrayPanelState;
     dashboard: LocalDashboardSnapshot;
     taskError: string | null;
@@ -74,6 +75,7 @@ interface TrayPanelComponent {
     newsLabel(item: NewsItem): string;
     newsSummary(item: NewsItem): string;
     newsDate(item: NewsItem): string;
+    toggleDday(): void;
     ddayRange(): string;
     ddayProgressLabel(): string;
     laundryRemaining(): string;
@@ -106,6 +108,7 @@ function trayPanel(): TrayPanelComponent {
     return {
         activeTab: 'home',
         menuOpen: false,
+        ddayExpanded: false,
         state: {...INITIAL_STATE},
         dashboard: {...EMPTY_LOCAL_DASHBOARD, mealAlerts: []},
         taskError: null,
@@ -273,6 +276,11 @@ function trayPanel(): TrayPanelComponent {
                 month: 'short',
                 day: 'numeric',
             }).format(date);
+        },
+
+        toggleDday() {
+            if (!this.ddayProgress) return;
+            this.ddayExpanded = !this.ddayExpanded;
         },
 
         ddayRange() {

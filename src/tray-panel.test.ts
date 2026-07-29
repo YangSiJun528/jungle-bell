@@ -141,7 +141,8 @@ test('트레이 패널은 홈과 소식 화면 및 기존 주요 액션을 제�
     const attendanceCardStart = html.lastIndexOf('<button', attendanceCardMarker);
     const attendanceCardEnd = html.indexOf('</button>', attendanceCardMarker) + 9;
     const attendanceCard = html.slice(attendanceCardStart, attendanceCardEnd);
-    const ddayCardStart = html.indexOf('data-ui="dday"');
+    const ddayCardMarker = html.indexOf('data-ui="dday"');
+    const ddayCardStart = html.lastIndexOf('<aside', ddayCardMarker);
     const ddayCardEnd = html.indexOf('</aside>', ddayCardStart) + 8;
     const ddayCard = html.slice(ddayCardStart, ddayCardEnd);
     const laundryActionStart = html.indexOf('@click="perform(\'open_laundry\')"');
@@ -198,22 +199,36 @@ test('트레이 패널은 홈과 소식 화면 및 기존 주요 액션을 제�
     assert.doesNotMatch(attendanceCard, /state\.ddayText/);
     assert.ok(ddayCardStart > attendanceCardEnd);
     assert.match(ddayCard, /state\.ddayText/);
-    assert.match(ddayCard, /x-show="ddayProgress"/);
-    assert.match(ddayCard, /x-show="!ddayProgress"/);
+    assert.match(ddayCard, /class="ui-card[^"]*\boverflow-hidden\b[^"]*\bp-0\b"/);
+    assert.match(ddayCard, /<button[^>]*type="button"[\s\S]*@click="toggleDday\(\)"/);
+    assert.match(ddayCard, /class="[^"]*\bmin-h-14\b[^"]*"/);
+    assert.match(ddayCard, /:disabled="!ddayProgress"/);
+    assert.match(ddayCard, /:aria-expanded="Boolean\(ddayProgress && ddayExpanded\)"/);
+    assert.match(ddayCard, /aria-controls="dday-calendar"/);
+    assert.match(ddayCard, /id="dday-calendar"/);
+    assert.match(ddayCard, /:aria-hidden="!\(ddayExpanded && ddayProgress\)"/);
+    assert.match(ddayCard, /grid-rows-\[1fr\]/);
+    assert.match(ddayCard, /grid-rows-\[0fr\]/);
+    assert.match(ddayCard, /grid-cols-\[repeat\(31,minmax\(0,1fr\)\)\]/);
+    assert.match(ddayCard, /data-ui-density="micro"/);
+    assert.match(ddayCard, /role="img"/);
+    assert.match(ddayCard, /:aria-label="ddayProgressLabel\(\)"/);
+    assert.match(ddayCard, /x-for="day in 31"/);
+    assert.match(ddayCard, /x-for="row in ddayProgress\?\.rows \?\? \[\]"/);
+    assert.match(ddayCard, /cell\.state === 'elapsed'/);
+    assert.match(ddayCard, /cell\.state === 'current'/);
+    assert.match(ddayCard, /aria-hidden="true"/);
     assert.match(ddayCard, /x-text="ddayRange\(\)"/);
     assert.match(ddayCard, /`완료 \$\{ddayProgress\.elapsed\}일`/);
     assert.match(ddayCard, /`남음 \$\{ddayProgress\.remaining\}일`/);
     assert.match(ddayCard, /`\$\{ddayProgress\.percent\}%`/);
-    assert.match(ddayCard, /<progress\s+class="ui-progress[^"]*"/);
-    assert.match(ddayCard, /:value="ddayProgress\?\.percent \?\? 0"/);
-    assert.match(ddayCard, /aria-label="D-Day 진행률"/);
-    assert.match(ddayCard, /:aria-valuetext="ddayProgressLabel\(\)"/);
-    assert.doesNotMatch(
-        ddayCard,
-        /<button|toggleDday|ddayExpanded|aria-expanded|aria-controls|dday-calendar|data-ui-density|grid-cols-\[repeat\(31|x-for="day in 31"|x-for="row in ddayProgress/,
-    );
+    assert.doesNotMatch(ddayCard, /<progress|aria-label="D-Day 진행률"/);
     assert.match(script, /buildDdayProgress/);
-    assert.doesNotMatch(script, /ddayExpanded|toggleDday/);
+    assert.match(script, /ddayExpanded:\s*false/);
+    assert.match(
+        script,
+        /toggleDday\(\)\s*\{\s*if \(!this\.ddayProgress\) return;\s*this\.ddayExpanded = !this\.ddayExpanded;\s*\}/,
+    );
     assert.doesNotMatch(script, /ddayUnit|setDdayUnit/);
     assert.doesNotMatch(html, /quick-action-title/);
     assert.match(html, /워시타워/);
@@ -357,18 +372,29 @@ test('생활 알림과 생활 정보는 같은 섹션 제목 스타일을 사용
 
 test('트레이 패널은 공통 UI 프리미티브와 제한된 토큰을 사용한다', () => {
     const html = readFileSync(new URL('./tray-panel.html', import.meta.url), 'utf8');
+    const standardDensityHtml = html.replace(
+        /<[^>]+data-ui-density="micro"[\s\S]*?<!-- ui-density:micro:end -->/g,
+        '',
+    );
 
     assert.match(html, /\bui-card\b/);
     assert.match(html, /\bui-button\b/);
     assert.match(html, /\bui-button--compact\b/);
     assert.match(html, /\bui-empty-state\b/);
     assert.match(html, /\bui-progress\b/);
-    assert.doesNotMatch(html, /data-ui-density="micro"/);
-    assert.doesNotMatch(html, /\btext-\[[0-9]+px\]/);
-    assert.doesNotMatch(html, /\bfont-(?:thin|extralight|light|medium|semibold|extrabold|black)\b/);
-    assert.doesNotMatch(html, /\b(?:text|bg)-(?:black|white)\b/);
-    assert.doesNotMatch(html, /\b(?:m[trblxy]?|p[trblxy]?|gap)-\[[^\]]+\]/);
-    assert.doesNotMatch(html, /\b(?:m[trblxy]?|p[trblxy]?|gap(?:-x|-y)?|space-[xy])-[0-9]+\.5\b/);
+    assert.equal(html.match(/data-ui-density="micro"/g)?.length, 1);
+    assert.equal(html.match(/<!-- ui-density:micro:end -->/g)?.length, 1);
+    assert.doesNotMatch(standardDensityHtml, /\btext-\[[0-9]+px\]/);
+    assert.doesNotMatch(
+        standardDensityHtml,
+        /\bfont-(?:thin|extralight|light|medium|semibold|extrabold|black)\b/,
+    );
+    assert.doesNotMatch(standardDensityHtml, /\b(?:text|bg)-(?:black|white)\b/);
+    assert.doesNotMatch(standardDensityHtml, /\b(?:m[trblxy]?|p[trblxy]?|gap)-\[[^\]]+\]/);
+    assert.doesNotMatch(
+        standardDensityHtml,
+        /\b(?:m[trblxy]?|p[trblxy]?|gap(?:-x|-y)?|space-[xy])-[0-9]+\.5\b/,
+    );
 });
 
 test('생활 알림에는 급식 항목만 여러 개 쌓이고 메뉴는 두 줄까지만 미리 보여준다', () => {
