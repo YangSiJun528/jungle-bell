@@ -2,6 +2,7 @@ import Alpine from 'alpinejs';
 import './select-control';
 import {invoke} from '@tauri-apps/api/core';
 import {listen, type UnlistenFn} from '@tauri-apps/api/event';
+import {getCurrentWindow} from '@tauri-apps/api/window';
 import {message} from '@tauri-apps/plugin-dialog';
 import {
     connectSettingsSnapshots,
@@ -11,58 +12,19 @@ import {
 } from './settings-state';
 
 type OsName = 'mac' | 'win';
-type ScenarioName = 'morning' | 'day' | 'night';
-type TrayStatusIcon = 'alert' | 'normal';
 
 interface LoginStatus {
     dataLoaded: boolean;
     needsLogin: boolean;
 }
 
-interface Scenario {
-    icon: TrayStatusIcon;
-    status: string;
-    time: string;
-    caption: Record<OsName, string[]>;
-}
-
-const TOTAL_STEPS = 6;
+const TOTAL_STEPS = 4;
 const LOGIN_STEP = 1;
-const SCENARIO_STEP = 4;
-const SCENARIO_ORDER: ScenarioName[] = ['morning', 'day', 'night'];
-const TRAY_ICONS: Record<TrayStatusIcon, string> = {
-    alert: new URL('./assets/tray-mini-alert.png', import.meta.url).href,
-    normal: new URL('./assets/tray-mini-normal.png', import.meta.url).href,
-};
-const SCENARIOS: Record<ScenarioName, Scenario> = {
-    morning: {
-        icon: 'alert', status: '출석 시작 가능', time: '09:24',
-        caption: {
-            mac: ['빨간 아이콘은 출석 시작이 필요한 상태예요.', '출석 페이지를 열어 체크인해 주세요.'],
-            win: ['빨간 아이콘은 출석 시작이 필요한 상태예요.', '출석 페이지를 열어 체크인해 주세요.'],
-        },
-    },
-    day: {
-        icon: 'normal', status: '학습 중', time: '14:08',
-        caption: {
-            mac: ['테마에 섞이는 컷아웃은 지금 필요한 조작이 없다는 뜻이에요.', '종료 가능 시각까지 별도 작업은 필요 없어요.'],
-            win: ['테마에 섞이는 컷아웃은 지금 필요한 조작이 없다는 뜻이에요.', '종료 가능 시각까지 별도 작업은 필요 없어요.'],
-        },
-    },
-    night: {
-        icon: 'alert', status: '출석 종료 가능', time: '23:30',
-        caption: {
-            mac: ['빨간 아이콘은 출석 종료가 필요한 상태예요.', '출석 페이지를 열어 체크아웃해 주세요.'],
-            win: ['빨간 아이콘은 출석 종료가 필요한 상태예요.', '출석 페이지를 열어 체크아웃해 주세요.'],
-        },
-    },
-};
 
 interface OnboardingComponent {
     step: number;
     totalSteps: number;
     currentOs: OsName;
-    scenarioName: ScenarioName;
     loginDataLoaded: boolean;
     needsLogin: boolean;
     onboardingCompleted: boolean;
@@ -77,24 +39,19 @@ interface OnboardingComponent {
     unlistenLogin: UnlistenFn | null;
     unlistenSettings: UnlistenFn | null;
     loginRefreshTimer: number | null;
-    completionScheduled: boolean;
     get isLast(): boolean;
     get nextDisabled(): boolean;
+    get finalActionDisabled(): boolean;
     get nextLabel(): string;
     get finalDescription(): string;
-    get scenario(): Scenario;
-    get scenarioIcon(): string;
-    get scenarioCaption(): string[];
     init(): Promise<void>;
     destroy(): void;
     setOs(os: OsName): void;
-    setScenario(name: ScenarioName): void;
     previous(): void;
-    next(): void;
+    next(): Promise<void>;
     skip(): void;
     handleKey(event: KeyboardEvent): void;
-    enterStep(nextStep: number, scenario?: ScenarioName): void;
-    moveScenario(delta: number): boolean;
+    enterStep(nextStep: number): void;
     applyLoginStatus(status: LoginStatus | boolean): void;
     syncLoginStatus(): Promise<void>;
     requestLoginRefresh(): void;
@@ -102,7 +59,6 @@ interface OnboardingComponent {
     stopLoginRefresh(): void;
     openAttendance(): Promise<void>;
     complete(): Promise<void>;
-    scheduleComplete(): void;
     hydrateNotificationSettings(): Promise<void>;
     restoreNotificationSettings(context: string, error: unknown, fallback?: () => void): Promise<void>;
     saveToggle(command: string, field: 'startNotification' | 'endNotification'): Promise<void>;
@@ -126,7 +82,6 @@ function onboarding(): OnboardingComponent {
         step: 0,
         totalSteps: TOTAL_STEPS,
         currentOs: /Win/i.test(navigator.userAgent) ? 'win' : 'mac',
-        scenarioName: 'morning',
         loginDataLoaded: false,
         needsLogin: true,
         onboardingCompleted: false,
@@ -141,25 +96,24 @@ function onboarding(): OnboardingComponent {
         unlistenLogin: null,
         unlistenSettings: null,
         loginRefreshTimer: null,
-        completionScheduled: false,
 
         get isLast() { return this.step === TOTAL_STEPS - 1; },
         get nextDisabled() { return this.step === LOGIN_STEP && (!this.loginDataLoaded || this.needsLogin); },
+        get finalActionDisabled() { return this.completionPending; },
         get nextLabel() {
             if (!this.isLast) return '다음';
-            if (this.onboardingCompleted) return '완료됨';
+            if (this.completionPending) return '시작하는 중';
             if (this.completionFailed) return '다시 시도';
-            return '완료 중';
+            return '시작하기';
         },
         get finalDescription() {
-            if (this.onboardingCompleted) return '완료됐어요. 창을 직접 닫아주세요.';
+            if (this.completionPending) return '설정을 저장한 뒤 창을 닫고 있어요.';
+            if (this.completionFailed && this.onboardingCompleted) {
+                return '설정은 저장됐지만 창을 닫지 못했어요. 다시 시도해 주세요.';
+            }
             if (this.completionFailed) return '완료 저장에 실패했어요. 다시 시도해 주세요.';
-            return '완료 처리 중이에요.';
+            return '설정을 확인한 뒤 시작하기를 눌러 완료해 주세요.';
         },
-        get scenario() { return SCENARIOS[this.scenarioName]; },
-        get scenarioIcon() { return TRAY_ICONS[this.scenario.icon]; },
-        get scenarioCaption() { return this.scenario.caption[this.currentOs]; },
-
         async init() {
             try {
                 this.unlistenLogin = await listen<LoginStatus>('login-status-changed', (event) => {
@@ -181,21 +135,19 @@ function onboarding(): OnboardingComponent {
         },
 
         setOs(os) { this.currentOs = os; },
-        setScenario(name) { this.scenarioName = name; },
 
         previous() {
-            if (this.step === SCENARIO_STEP && this.moveScenario(-1)) return;
-            if (this.step > 0) {
-                const nextStep = this.step - 1;
-                this.enterStep(nextStep, nextStep === SCENARIO_STEP ? 'night' : undefined);
-            }
+            if (this.completionPending) return;
+            if (this.step > 0) this.enterStep(this.step - 1);
         },
 
-        next() {
+        async next() {
             if (this.nextDisabled) return;
-            if (this.step === SCENARIO_STEP && this.moveScenario(1)) return;
-            if (!this.isLast) this.enterStep(this.step + 1);
-            else if (this.completionFailed) void this.complete();
+            if (!this.isLast) {
+                this.enterStep(this.step + 1);
+                return;
+            }
+            await this.complete();
         },
 
         skip() {
@@ -209,26 +161,21 @@ function onboarding(): OnboardingComponent {
                 || target instanceof HTMLButtonElement
                 || target instanceof HTMLAnchorElement
                 || (target instanceof HTMLElement && target.isContentEditable)) return;
-            if (event.key === 'ArrowRight' && !this.nextDisabled) this.next();
-            if (event.key === 'ArrowLeft' && this.step > 0) this.previous();
+            if (event.key === 'ArrowRight' && !this.nextDisabled) void this.next();
+            if (event.key === 'ArrowLeft' && this.step > 0 && !this.completionPending) this.previous();
         },
 
-        enterStep(nextStep, scenario) {
+        enterStep(nextStep) {
             this.step = nextStep;
-            if (nextStep === SCENARIO_STEP) this.scenarioName = scenario ?? 'morning';
+            window.requestAnimationFrame(() => {
+                void Alpine.nextTick(() => {
+                    document
+                        .querySelector<HTMLElement>(`[data-step-panel="${nextStep}"] h2`)
+                        ?.focus();
+                });
+            });
             if (nextStep === LOGIN_STEP && (!this.loginDataLoaded || this.needsLogin)) this.startLoginRefresh();
             else this.stopLoginRefresh();
-            if (this.isLast && !this.onboardingCompleted && !this.completionPending && !this.completionFailed) {
-                this.scheduleComplete();
-            }
-        },
-
-        moveScenario(delta) {
-            const current = SCENARIO_ORDER.indexOf(this.scenarioName);
-            const next = SCENARIO_ORDER[current + delta];
-            if (!next) return false;
-            this.scenarioName = next;
-            return true;
         },
 
         applyLoginStatus(status) {
@@ -276,28 +223,23 @@ function onboarding(): OnboardingComponent {
         },
 
         async complete() {
-            if (this.onboardingCompleted || this.completionPending) return;
+            if (this.completionPending) return;
             this.completionPending = true;
             this.completionFailed = false;
             this.stopLoginRefresh();
             try {
-                await invoke('complete_onboarding');
-                this.onboardingCompleted = true;
+                if (!this.onboardingCompleted) {
+                    await invoke('complete_onboarding');
+                    this.onboardingCompleted = true;
+                }
+                await getCurrentWindow().close();
             } catch (error) {
-                console.error('[onboarding] complete failed', error);
+                const context = this.onboardingCompleted ? 'window close' : 'complete';
+                console.error(`[onboarding] ${context} failed`, error);
                 this.completionFailed = true;
             } finally {
                 this.completionPending = false;
             }
-        },
-
-        scheduleComplete() {
-            if (this.completionScheduled) return;
-            this.completionScheduled = true;
-            window.setTimeout(() => {
-                this.completionScheduled = false;
-                void this.complete();
-            }, 0);
         },
 
         async hydrateNotificationSettings() {
