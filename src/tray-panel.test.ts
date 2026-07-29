@@ -383,11 +383,35 @@ test('nut 아이콘 앞의 알림 버튼은 미읽음 상태와 내장 알림 �
     assert.match(html, /알림이 없어요/);
     assert.match(script, /notificationOpen:\s*false/);
     assert.match(script, /toggleNotifications\(\)/);
-    assert.match(html, /closeNotifications\(true\)/);
+});
+
+test('알림 서브 화면은 명시적인 뒤로가기와 Escape로 직전 탭을 복원한다', () => {
+    const html = readFileSync(new URL('./tray-panel.html', import.meta.url), 'utf8');
+    const script = readFileSync(new URL('./tray-panel.ts', import.meta.url), 'utf8');
+    const panelStart = html.indexOf('id="tray-notification-panel"');
+    const panelEnd = html.indexOf('</section>', panelStart);
+    const panel = html.slice(panelStart, panelEnd);
+    const backButton = panel.indexOf('data-ui="notification-back"');
+    const title = panel.indexOf('id="tray-notification-title"');
+
+    assert.ok(backButton >= 0);
+    assert.ok(title > backButton);
+    assert.match(panel, /class="[^"]*\bsticky\b[^"]*\btop-0\b[^"]*\bbg-app-bg\b[^"]*"/);
+    assert.match(panel, /aria-label="이전 화면으로 돌아가기"/);
+    assert.match(panel, /data-icon="chevron-left"/);
+    assert.match(panel, /@click="closeNotifications\(true\)"/);
     assert.match(
         html,
         /@keydown\.window\.escape="menuOpen \? closeMenu\(true\) : \(notificationOpen \? closeNotifications\(true\) : hide\(\)\)"/,
     );
+    const notificationControls = script.slice(
+        script.indexOf('toggleNotifications() {'),
+        script.indexOf('notificationTriggerLabel() {'),
+    );
+    assert.match(notificationControls, /this\.notificationOpen = !this\.notificationOpen/);
+    assert.match(notificationControls, /closeNotifications\(restoreFocus = false\)/);
+    assert.match(notificationControls, /notification-trigger/);
+    assert.doesNotMatch(notificationControls, /this\.activeTab\s*=/);
 });
 
 test('알림 화면은 snapshot과 갱신 이벤트를 사용하고 선택한 알림을 활성화한다', () => {
