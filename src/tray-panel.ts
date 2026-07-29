@@ -24,7 +24,13 @@ import {
     laundryDashboardHasSourceWarning,
     laundryDashboardProgress,
     laundryDashboardRemaining,
+    laundryTerminalActivityDateTime,
+    laundryTerminalActivityDetail,
+    laundryTerminalActivityTime,
+    laundryTerminalActivityTitle,
+    laundryTerminalActivityTone,
     type LocalDashboardSnapshot,
+    type LaundryTerminalActivity,
 } from './local-dashboard.ts';
 import {
     EMPTY_NOTIFICATION_INBOX,
@@ -65,7 +71,7 @@ interface TrayPanelComponent {
     newsLoading: boolean;
     newsError: boolean;
     busyAction: PanelAction | null;
-    taskBusy: 'laundry' | null;
+    taskBusy: string | null;
     get presentation(): StatusPresentation;
     get statusTextParts(): StatusTextParts;
     get ddayProgress(): DdayProgress | null;
@@ -100,7 +106,14 @@ interface TrayPanelComponent {
     laundryProgress(): number | null;
     laundryProgressText(): string;
     laundrySourceWarning(): boolean;
+    laundryTerminalTitle(activity: LaundryTerminalActivity): string;
+    laundryTerminalDetail(activity: LaundryTerminalActivity): string;
+    laundryTerminalTime(activity: LaundryTerminalActivity): string;
+    laundryTerminalDateTime(activity: LaundryTerminalActivity): string;
+    laundryTerminalTone(activity: LaundryTerminalActivity): string;
+    laundryTerminalRemoveLabel(activity: LaundryTerminalActivity): string;
     stopLaundryTracking(): Promise<void>;
+    dismissLaundryActivity(activity: LaundryTerminalActivity): Promise<void>;
     perform(action: PanelAction): Promise<void>;
     hide(): Promise<void>;
 }
@@ -434,6 +447,30 @@ function trayPanel(): TrayPanelComponent {
                 : false;
         },
 
+        laundryTerminalTitle(activity) {
+            return laundryTerminalActivityTitle(activity);
+        },
+
+        laundryTerminalDetail(activity) {
+            return laundryTerminalActivityDetail(activity);
+        },
+
+        laundryTerminalTime(activity) {
+            return laundryTerminalActivityTime(activity, this.clockNow);
+        },
+
+        laundryTerminalDateTime(activity) {
+            return laundryTerminalActivityDateTime(activity);
+        },
+
+        laundryTerminalTone(activity) {
+            return laundryTerminalActivityTone(activity);
+        },
+
+        laundryTerminalRemoveLabel(activity) {
+            return `${activity.machineLabel} ${laundryTerminalActivityTitle(activity)} 항목 목록에서 제거`;
+        },
+
         async stopLaundryTracking() {
             if (this.busyAction || this.taskBusy || this.notificationBusy) return;
             this.taskBusy = 'laundry';
@@ -443,6 +480,45 @@ function trayPanel(): TrayPanelComponent {
             } catch (error) {
                 this.taskError = '세탁 추적을 종료하지 못했어요. 잠시 후 다시 시도해 주세요.';
                 console.error('[tray-panel] set_laundry_watch failed', error);
+            } finally {
+                this.taskBusy = null;
+            }
+        },
+
+        async dismissLaundryActivity(activity) {
+            if (this.busyAction || this.taskBusy || this.notificationBusy) return;
+            const removedIndex = this.dashboard.laundryTerminalActivities
+                .findIndex((candidate) => candidate.id === activity.id);
+            this.taskBusy = `laundry-terminal:${activity.id}`;
+            this.taskError = null;
+            try {
+                this.dashboard = await invoke<LocalDashboardSnapshot>(
+                    'dismiss_laundry_activity',
+                    {activityId: activity.id},
+                );
+                void Alpine.nextTick(() => {
+                    const removeButtons = Array.from(
+                        document.querySelectorAll<HTMLButtonElement>(
+                            '[data-ui="laundry-terminal-remove"]',
+                        ),
+                    );
+                    const nextButton = removeButtons[
+                        Math.min(Math.max(removedIndex, 0), removeButtons.length - 1)
+                    ];
+                    if (nextButton) {
+                        nextButton.focus();
+                    } else {
+                        const fallbackAction = this.dashboard.laundry
+                            ? '[data-ui="laundry-activity"] article > button'
+                            : '[aria-labelledby="campus-action-title"] button';
+                        document
+                            .querySelector<HTMLButtonElement>(fallbackAction)
+                            ?.focus();
+                    }
+                });
+            } catch (error) {
+                this.taskError = '세탁 항목을 제거하지 못했어요. 잠시 후 다시 시도해 주세요.';
+                console.error('[tray-panel] dismiss_laundry_activity failed', error);
             } finally {
                 this.taskBusy = null;
             }

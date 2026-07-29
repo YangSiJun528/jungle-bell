@@ -532,8 +532,37 @@ test('급식 게시 이벤트는 홈에 별도 카드로 중복 표시하지 않
 
 test('트레이 홈은 세탁 추적 종료에 필요한 권한을 가진다', () => {
     assert.ok(trayCapability.permissions.includes('allow-set-laundry-watch'));
+    assert.ok(trayCapability.permissions.includes('allow-dismiss-laundry-activity'));
     assert.ok(!trayCapability.permissions.includes('allow-get-settings-snapshot'));
     assert.ok(!trayCapability.permissions.includes('allow-set-meal-subscription-enabled'));
+});
+
+test('완료되거나 오류가 난 세탁은 확인 필요 목록에서 직접 제거한다', () => {
+    const html = readFileSync(new URL('./tray-panel.html', import.meta.url), 'utf8');
+    const script = readFileSync(new URL('./tray-panel.ts', import.meta.url), 'utf8');
+    const terminalStart = html.indexOf('data-ui="laundry-terminal-activities"');
+    const terminalEnd = html.indexOf('</section>', terminalStart);
+    const terminalPanel = html.slice(terminalStart, terminalEnd);
+
+    assert.ok(terminalStart >= 0);
+    assert.match(terminalPanel, />확인 필요</);
+    assert.match(terminalPanel, /dashboard\.laundryTerminalActivities/);
+    assert.match(terminalPanel, /laundryTerminalTitle\(activity\)/);
+    assert.match(terminalPanel, /laundryTerminalDetail\(activity\)/);
+    assert.match(terminalPanel, /laundryTerminalTime\(activity\)/);
+    assert.match(terminalPanel, /laundryTerminalDateTime\(activity\)/);
+    assert.match(terminalPanel, /laundryTerminalTone\(activity\)/);
+    assert.match(terminalPanel, /dismissLaundryActivity\(activity\)/);
+    assert.match(terminalPanel, /워시타워 열기/);
+    assert.match(terminalPanel, /data-ui="laundry-terminal-remove"/);
+    assert.match(terminalPanel, /laundryTerminalRemoveLabel\(activity\)/);
+    assert.match(terminalPanel, />제거</);
+    assert.doesNotMatch(terminalPanel, /laundryProgress|예상 종료|종료 .*분 전 알림|추적 종료<\/button>/);
+    assert.match(script, /dismiss_laundry_activity/);
+    assert.match(script, /세탁 항목을 제거하지 못했어요/);
+    assert.match(script, /activity\.machineLabel/);
+    assert.match(script, /removeButtons/);
+    assert.match(script, /fallbackAction/);
 });
 
 test('세탁 진행 카드는 남은 시간을 가장 크게, 기기와 예상 종료를 보조 정보로 표시한다', () => {
