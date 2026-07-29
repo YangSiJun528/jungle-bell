@@ -21,7 +21,7 @@ test('font-sans와 font-mono는 모두 번들된 전역 폰트를 사용한다',
     assert.match(styles, /button,\s*input,\s*select,\s*textarea,\s*code,\s*kbd,\s*samp,\s*pre\s*{\s*font:\s*inherit/);
 
     for (const template of templates) {
-        assert.match(template, /<body class="[^"]*\bfont-sans\b/);
+        assert.match(template, /<body\b[^>]*class="[^"]*\bfont-sans\b/);
         for (const match of template.matchAll(/class="([^"]*\btabular-nums\b[^"]*)"/g)) {
             const className = match[1];
             assert.ok(className);

@@ -298,22 +298,53 @@ a, area, button, input, label, select, summary, textarea, [tabindex] {
 :root {
     color-scheme: only light;
 
-    /* Jungle Bell primitives: fog, paper, leaf, bell, and campus zones. */
-    --jungle-fog: oklch(96.5% 0.006 145);
-    --jungle-paper: oklch(99% 0.004 145);
-    --jungle-overlay: oklch(100% 0 0);
-    --jungle-inset: oklch(93% 0.008 145);
+    /* 4px spacing scale. Use relationship, not density, to choose a step. */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --space-12: 48px;
+    --space-16: 64px;
+
+    /* Five readable type roles and two emphasis weights. */
+    --font-size-caption: 12px;
+    --font-size-label: 14px;
+    --font-size-body: 16px;
+    --font-size-title: 20px;
+    --font-size-display: 24px;
+    --line-height-caption: 18px;
+    --line-height-label: 20px;
+    --line-height-body: 24px;
+    --line-height-title: 28px;
+    --line-height-display: 32px;
+    --font-weight-regular: 400;
+    --font-weight-emphasis: 700;
+
+    /* Nested corners retain the same visual inset: 8px → 12px → 20px. */
+    --radius-control: 8px;
+    --radius-card: 12px;
+    --radius-window: 20px;
+
+    /* Jungle Bell primitives: cool leaf-tinted neutrals and semantic hues. */
+    --jungle-fog: oklch(96% 0.008 145);
+    --jungle-paper: oklch(98.4% 0.006 145);
+    --jungle-overlay: oklch(99.2% 0.004 145);
+    --jungle-inset: oklch(92.5% 0.012 145);
     --jungle-ink: oklch(22% 0.012 145);
-    --jungle-ink-secondary: oklch(43% 0.012 145);
-    --jungle-ink-tertiary: oklch(56% 0.01 145);
-    --jungle-ink-muted: oklch(70% 0.008 145);
-    --jungle-leaf: oklch(50% 0.16 148);
-    --jungle-bell: oklch(50% 0.2 28);
-    --jungle-login: oklch(50% 0.14 70);
-    --jungle-info: oklch(52% 0.15 245);
-    --jungle-men: oklch(50% 0.13 245);
-    --jungle-common: oklch(50% 0.11 300);
-    --jungle-women: oklch(50% 0.12 355);
+    --jungle-ink-secondary: oklch(40% 0.014 145);
+    --jungle-ink-tertiary: oklch(48% 0.012 145);
+    --jungle-ink-muted: oklch(64% 0.01 145);
+    --jungle-leaf: oklch(43% 0.12 148);
+    --jungle-success: oklch(43% 0.11 172);
+    --jungle-bell: oklch(45% 0.18 28);
+    --jungle-login: oklch(42% 0.09 70);
+    --jungle-info: oklch(44% 0.11 245);
+    --jungle-neutral: oklch(48% 0.012 145);
+    --jungle-men: oklch(44% 0.11 245);
+    --jungle-common: oklch(44% 0.1 300);
+    --jungle-women: oklch(44% 0.11 355);
 
     --color-bg: var(--jungle-fog);
     --color-text: var(--jungle-ink);
@@ -323,8 +354,8 @@ a, area, button, input, label, select, summary, textarea, [tabindex] {
     --color-accent: var(--jungle-leaf);
     --color-accent-hover: color-mix(in oklch, var(--jungle-leaf), var(--jungle-ink) 12%);
     --color-accent-soft: color-mix(in oklch, var(--jungle-leaf), transparent 88%);
-    --color-success: var(--jungle-leaf);
-    --color-success-soft: color-mix(in oklch, var(--jungle-leaf), transparent 90%);
+    --color-success: var(--jungle-success);
+    --color-success-soft: color-mix(in oklch, var(--jungle-success), transparent 90%);
     --color-warning: var(--jungle-login);
     --color-warning-soft: color-mix(in oklch, var(--jungle-login), transparent 88%);
     --color-danger: var(--jungle-bell);
@@ -332,13 +363,19 @@ a, area, button, input, label, select, summary, textarea, [tabindex] {
     --color-info: var(--jungle-info);
     --color-info-hover: color-mix(in oklch, var(--jungle-info), var(--jungle-ink) 12%);
     --color-info-soft: color-mix(in oklch, var(--jungle-info), transparent 90%);
-    --color-border: oklch(0% 0 0 / 10%);
-    --color-border-strong: oklch(0% 0 0 / 18%);
+    --color-border: oklch(0% 0 0 / 6%);
+    --color-border-strong: oklch(0% 0 0 / 12%);
     --color-divider-subtle: oklch(0% 0 0 / 6%);
     --color-surface: var(--jungle-paper);
+    --color-surface-raised: var(--jungle-overlay);
     --color-surface-subtle: color-mix(in oklch, var(--jungle-paper), var(--jungle-fog) 48%);
     --color-surface-overlay: var(--jungle-overlay);
+    --color-surface-inverse: var(--jungle-ink);
     --color-control: var(--jungle-inset);
+    --color-control-border: oklch(58% 0.014 145);
+    --color-on-accent: var(--jungle-overlay);
+    --color-on-inverse: var(--jungle-paper);
+    --color-status-neutral: var(--jungle-neutral);
     --color-overlay: oklch(8% 0.008 145 / 72%);
     --color-image-outline: oklch(0% 0 0 / 10%);
     --color-men: var(--jungle-men);
@@ -348,7 +385,8 @@ a, area, button, input, label, select, summary, textarea, [tabindex] {
     --color-women: var(--jungle-women);
     --color-women-soft: color-mix(in oklch, var(--jungle-women), transparent 90%);
     --font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue", "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
-    --focus-ring: 0 0 0 4px color-mix(in oklch, var(--jungle-leaf), transparent 72%);
+    --focus-ring: 0 0 0 4px color-mix(in oklch, var(--jungle-leaf), transparent 32%);
+    --shadow-floating: 0 12px 24px color-mix(in oklch, var(--jungle-ink), transparent 84%);
 }
 
 html,
@@ -358,7 +396,9 @@ body {
 
 body {
     font-family: var(--font-family);
-    font-size: 14px;
+    font-size: var(--font-size-body);
+    line-height: var(--line-height-body);
+    font-weight: var(--font-weight-regular);
     color: var(--color-text);
     background: var(--color-bg);
     -webkit-font-smoothing: antialiased;
