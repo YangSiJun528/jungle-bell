@@ -423,6 +423,91 @@
             </article>
         </section>
 
+        <section
+            class="mt-4"
+            data-ui="laundry-terminal-activities"
+            aria-labelledby="laundry-terminal-title"
+            x-show="dashboard.laundryTerminalActivities.length > 0"
+            x-cloak
+        >
+            <header class="mb-2 flex items-center justify-between px-1">
+                <h2 id="laundry-terminal-title" class="m-0 text-xs font-bold text-app-muted">확인 필요</h2>
+                <small
+                    class="text-ui-caption font-bold text-app-faint tabular-nums"
+                    x-text="`${dashboard.laundryTerminalActivities.length}건`"
+                ></small>
+            </header>
+            <div class="ui-card grid gap-2 p-2">
+                <template
+                    x-for="activity in dashboard.laundryTerminalActivities"
+                    :key="activity.id"
+                >
+                    <article
+                        class="flex min-h-20 items-stretch overflow-hidden rounded-ui-control border border-app-divider"
+                        :class="{
+                            'bg-app-success-soft': laundryTerminalTone(activity) === 'success',
+                            'bg-app-danger-soft': laundryTerminalTone(activity) === 'danger',
+                            'bg-app-warning-soft': laundryTerminalTone(activity) === 'warning',
+                            'bg-app-surface-subtle': laundryTerminalTone(activity) === 'neutral'
+                        }"
+                        :data-tone="laundryTerminalTone(activity)"
+                    >
+                        <button
+                            type="button"
+                            class="min-w-0 flex-1 border-0 bg-transparent px-3 py-2 text-left text-app-text transition-colors hover:bg-app-overlay focus-visible:z-10 disabled:opacity-50"
+                            :aria-label="`${laundryTerminalTitle(activity)} — ${laundryTerminalDetail(activity)} — 워시타워 열기`"
+                            :disabled="busyAction !== null || taskBusy !== null"
+                            @click="perform('open_laundry')"
+                        >
+                            <span class="flex items-start gap-2">
+                                <span
+                                    class="flex size-8 flex-none items-center justify-center rounded-ui-control bg-app-overlay"
+                                    :class="{
+                                        'text-app-success': laundryTerminalTone(activity) === 'success',
+                                        'text-app-danger': laundryTerminalTone(activity) === 'danger',
+                                        'text-app-warning': laundryTerminalTone(activity) === 'warning',
+                                        'text-app-muted': laundryTerminalTone(activity) === 'neutral'
+                                    }"
+                                    aria-hidden="true"
+                                >
+                                    <svg class="size-5" viewBox="0 0 24 24">
+                                        <path x-show="activity.status === 'completed'" d="m6.5 12.5 3.5 3.5 7.5-8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                                        <path x-show="activity.status !== 'completed'" d="M12 8v5m0 3.5v.1M10.3 4.8 3.7 17a2 2 0 0 0 1.8 3h13a2 2 0 0 0 1.8-3L13.7 4.8a2 2 0 0 0-3.4 0Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                </span>
+                                <span class="min-w-0 flex-1">
+                                    <span class="flex min-w-0 items-baseline justify-between gap-2">
+                                        <strong
+                                            class="truncate text-ui-label font-bold"
+                                            x-text="laundryTerminalTitle(activity)"
+                                        ></strong>
+                                        <time
+                                            class="flex-none text-ui-caption text-app-faint tabular-nums"
+                                            :datetime="laundryTerminalDateTime(activity)"
+                                            x-text="laundryTerminalTime(activity)"
+                                        ></time>
+                                    </span>
+                                    <small
+                                        class="mt-1 block line-clamp-2 text-ui-caption leading-relaxed text-app-muted"
+                                        x-text="laundryTerminalDetail(activity)"
+                                    ></small>
+                                </span>
+                                <svg class="size-4 flex-none self-center text-app-faint" data-icon="chevron-right" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            </span>
+                        </button>
+                        <button
+                            type="button"
+                            data-ui="laundry-terminal-remove"
+                            class="ui-button ui-button--ghost ui-button--compact w-16 flex-none rounded-none border-0 bg-transparent px-2 text-ui-caption text-app-muted hover:bg-app-overlay hover:text-app-danger focus-visible:z-10 disabled:opacity-40"
+                            :aria-label="laundryTerminalRemoveLabel(activity)"
+                            :disabled="busyAction !== null || taskBusy !== null"
+                            @click.prevent.stop="dismissLaundryActivity(activity)"
+                        >제거</button>
+                    </article>
+                </template>
+            </div>
+        </section>
+
         <p
             class="ui-card m-0 mt-2 border border-app-danger bg-app-danger-soft px-3 py-2 text-ui-caption font-normal leading-relaxed text-app-danger"
             data-ui="home-task-error"

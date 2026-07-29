@@ -1,3 +1,5 @@
+import {notificationTimeLabel} from './notification-inbox.ts';
+
 export type LaundryDashboardStatus =
     | 'running'
     | 'paused'
@@ -19,13 +21,94 @@ export interface LaundryDashboardCard {
     sourceFreshness: string | null;
 }
 
+export type LaundryTerminalStatus =
+    | 'completed'
+    | 'error'
+    | 'needsCheck'
+    | 'replaced';
+
+export interface LaundryTerminalActivity {
+    id: string;
+    machineId: string;
+    machineLabel: string;
+    appliance: 'washer' | 'dryer';
+    sessionId: string;
+    status: LaundryTerminalStatus;
+    finishedAt: number;
+}
+
 export interface LocalDashboardSnapshot {
     laundry: LaundryDashboardCard | null;
+    laundryTerminalActivities: LaundryTerminalActivity[];
 }
 
 export const EMPTY_LOCAL_DASHBOARD: LocalDashboardSnapshot = {
     laundry: null,
+    laundryTerminalActivities: [],
 };
+
+export type LaundryTerminalTone = 'success' | 'danger' | 'warning' | 'neutral';
+
+function laundryActionLabel(activity: LaundryTerminalActivity): string {
+    return activity.appliance === 'washer' ? '세탁' : '건조';
+}
+
+function laundryDeviceLabel(activity: LaundryTerminalActivity): string {
+    return activity.appliance === 'washer' ? '세탁기' : '건조기';
+}
+
+export function laundryTerminalActivityTitle(
+    activity: LaundryTerminalActivity,
+): string {
+    const action = laundryActionLabel(activity);
+    if (activity.status === 'completed') return `${action} 완료`;
+    if (activity.status === 'error') return `${laundryDeviceLabel(activity)} 오류`;
+    if (activity.status === 'needsCheck') return `${action} 상태 확인`;
+    return `${action} 추적 종료`;
+}
+
+export function laundryTerminalActivityDetail(
+    activity: LaundryTerminalActivity,
+): string {
+    const machine = activity.machineLabel;
+    const device = laundryDeviceLabel(activity);
+    if (activity.status === 'completed') {
+        return `${machine} ${device}의 세탁물을 꺼냈다면 목록에서 제거해 주세요.`;
+    }
+    if (activity.status === 'error') {
+        return `${machine} ${device} 상태를 확인한 뒤 목록에서 제거해 주세요.`;
+    }
+    if (activity.status === 'needsCheck') {
+        return `${machine} ${device}가 끝났거나 중단됐습니다. 상태를 확인해 주세요.`;
+    }
+    return `${machine} ${device}에서 다른 작업이 감지됐습니다. 이전 작업을 확인해 주세요.`;
+}
+
+export function laundryTerminalActivityTone(
+    activity: LaundryTerminalActivity,
+): LaundryTerminalTone {
+    if (activity.status === 'completed') return 'success';
+    if (activity.status === 'error') return 'danger';
+    if (activity.status === 'needsCheck') return 'warning';
+    return 'neutral';
+}
+
+export function laundryTerminalActivityTime(
+    activity: LaundryTerminalActivity,
+    now = Date.now(),
+): string {
+    const label = notificationTimeLabel(activity.finishedAt, now);
+    if (!label) return '';
+    return label.includes(':') ? `${label} 감지` : label;
+}
+
+export function laundryTerminalActivityDateTime(
+    activity: LaundryTerminalActivity,
+): string {
+    if (!Number.isFinite(activity.finishedAt)) return '';
+    const date = new Date(activity.finishedAt);
+    return Number.isNaN(date.getTime()) ? '' : date.toISOString();
+}
 
 export function laundryDashboardRemaining(card: LaundryDashboardCard, now: number): string {
     if (card.status === 'completed') return '완료';
