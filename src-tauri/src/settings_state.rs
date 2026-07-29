@@ -36,6 +36,8 @@ pub struct SettingsSnapshot {
     pub end_notification: bool,
     pub notification_start: TimeOfDay,
     pub notification_end: TimeOfDay,
+    pub start_interval: u32,
+    pub end_interval: u32,
     pub selected_cohort_id: Option<String>,
     pub effective_cohort_id: Option<String>,
     pub cohort_options: Vec<CohortOption>,
@@ -63,6 +65,8 @@ impl SettingsSnapshot {
             end_notification: state.config.end_notification_enabled,
             notification_start: state.config.notification_start.clone(),
             notification_end: state.config.notification_end.clone(),
+            start_interval: state.config.start_notification_interval_mins,
+            end_interval: state.config.end_notification_interval_mins,
             selected_cohort_id: state.config.selected_cohort_id.clone(),
             effective_cohort_id: state.effective_cohort_id.clone(),
             cohort_options: state.cohort_options.clone(),
@@ -471,8 +475,8 @@ mod tests {
         assert!(object.contains_key("autoStart"));
         assert!(object.contains_key("notificationStart"));
         assert!(!object.contains_key("notificationDelivery"));
-        assert!(!object.contains_key("startInterval"));
-        assert!(!object.contains_key("endInterval"));
+        assert_eq!(object.get("startInterval").unwrap(), 15);
+        assert_eq!(object.get("endInterval").unwrap(), 15);
         assert!(!object.contains_key("onboardingCompleted"));
         assert!(!object.contains_key("welcomeNotificationSent"));
         assert!(!object.contains_key("lastVersion"));
