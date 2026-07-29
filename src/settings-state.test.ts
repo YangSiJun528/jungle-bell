@@ -42,7 +42,6 @@ function snapshot(revision: number, autoStart: boolean): SettingsSnapshot {
         skipSunday: false,
         startNotification: true,
         endNotification: true,
-        notificationDelivery: 'both',
         notificationStart: {hour: 9, minute: 0},
         notificationEnd: {hour: 4, minute: 0},
         selectedCohortId: null,

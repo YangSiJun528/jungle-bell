@@ -25,7 +25,6 @@
     "allow-set-auto-start",
     "allow-set-start-notification-enabled",
     "allow-set-end-notification-enabled",
-    "allow-set-notification-delivery",
     "allow-set-meal-subscription-enabled",
     "allow-set-laundry-watch",
     "allow-set-notification-start",

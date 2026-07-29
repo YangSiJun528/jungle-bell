@@ -23,7 +23,6 @@ use crate::config;
 use crate::local_consumption::{LocalConsumptionService, LocalDashboardSnapshot};
 use crate::news::{self, NewsFeed, NewsService};
 use crate::notification_inbox::{self, NotificationInboxService, NotificationInboxSnapshot};
-use crate::notification_service::NotificationService;
 use crate::settings_state::{SettingsService, SettingsSnapshot};
 use crate::state::{self, AppState};
 use crate::tray;
@@ -231,34 +230,6 @@ setting_bool!(
 setting_bool!(set_skip_sunday, skip_sunday, "일요일 알림 끄기", SkipSunday);
 
 // ── 커스텀 설정 커맨드 ───────────────────────────────────
-
-#[tauri::command]
-pub async fn set_notification_delivery(
-    app: tauri::AppHandle,
-    settings: tauri::State<'_, Arc<SettingsService>>,
-    notifications: tauri::State<'_, Arc<NotificationService>>,
-    delivery: config::NotificationDelivery,
-) -> Result<SettingsSnapshot, String> {
-    log::info!("[settings] 알림 표시 방식 변경: {}", delivery.as_str());
-    let commit = settings
-        .update_config(&app, "set_notification_delivery", move |config| {
-            config.notification_delivery = delivery;
-            Ok(())
-        })
-        .await?;
-    if commit.changed {
-        analytics::track(Event::SettingChanged(Setting::NotificationDelivery(delivery.as_str())));
-    }
-    if delivery.uses_system() {
-        let notifications = Arc::clone(notifications.inner());
-        match tauri::async_runtime::spawn_blocking(move || notifications.initialize_system_backend()).await {
-            Ok(Ok(())) => {}
-            Ok(Err(error)) => log::warn!("[notification] OS backend initialization failed: {error}"),
-            Err(error) => log::warn!("[notification] OS backend initialization task failed: {error}"),
-        }
-    }
-    Ok(commit.snapshot)
-}
 
 /// 설정 UI가 초기화/재동기화에 사용하는 단일 snapshot.
 #[tauri::command]

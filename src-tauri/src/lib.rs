@@ -145,10 +145,7 @@ pub fn run() {
     let shared_state = Arc::new(Mutex::new(AppState::new(config)));
     let alert_overlay_service = Arc::new(AlertOverlayService::default());
     let notification_inbox_service = Arc::new(NotificationInboxService::load());
-    let notification_service = Arc::new(NotificationService::new(
-        alert_overlay_service.clone(),
-        notification_inbox_service.clone(),
-    ));
+    let notification_service = Arc::new(NotificationService::new(notification_inbox_service.clone()));
     let settings_service = Arc::new(SettingsService::new(
         shared_state.clone(),
         env!("CARGO_PKG_VERSION").to_string(),
@@ -228,7 +225,6 @@ pub fn run() {
             commands::set_auto_start,
             commands::set_start_notification_enabled,
             commands::set_end_notification_enabled,
-            commands::set_notification_delivery,
             commands::set_meal_subscription_enabled,
             commands::set_laundry_watch,
             commands::set_notification_start,
@@ -291,14 +287,8 @@ pub fn run() {
             sync_auto_start_setting(app.handle(), &shared_state);
             tray::setup_tray(app)?;
             notification_inbox_service.initialize(app.handle());
-            let uses_system_notifications = shared_state
-                .try_lock()
-                .map(|state| state.config.notification_delivery.uses_system())
-                .unwrap_or(true);
-            if uses_system_notifications {
-                if let Err(error) = notification_service.initialize_system_backend() {
-                    log::warn!("[notification] OS backend initialization failed: {error}");
-                }
+            if let Err(error) = notification_service.initialize_system_backend() {
+                log::warn!("[notification] OS backend initialization failed: {error}");
             }
             let checker_window = checker::build_webview(app.handle())?;
             match checker_window.theme() {

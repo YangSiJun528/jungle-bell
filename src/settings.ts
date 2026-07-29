@@ -12,7 +12,6 @@ import {
     invokeSettingsMutation,
     refreshSettingsSnapshot,
     type CohortOption,
-    type NotificationDelivery,
     type SettingsSnapshot,
 } from './settings-state';
 
@@ -41,7 +40,6 @@ interface SettingsComponent {
     saveMessageTimer: number | null;
     startNotification: boolean;
     endNotification: boolean;
-    notificationDelivery: NotificationDelivery;
     mealSubscription: boolean;
     notificationStart: number;
     notificationEnd: number;
@@ -65,7 +63,6 @@ interface SettingsComponent {
     saveToggle(command: string, field: BooleanField): Promise<void>;
     saveStartTime(): Promise<void>;
     saveEndTime(): Promise<void>;
-    saveNotificationDelivery(): Promise<void>;
     saveSelectedCohort(): Promise<void>;
     toggleAutoUpdate(): Promise<void>;
     toggleDebugMode(): Promise<void>;
@@ -98,7 +95,6 @@ function projectSettings(target: SettingsComponent, snapshot: SettingsSnapshot):
     target.skipSunday = snapshot.skipSunday;
     target.startNotification = snapshot.startNotification;
     target.endNotification = snapshot.endNotification;
-    target.notificationDelivery = snapshot.notificationDelivery;
     target.mealSubscription = snapshot.mealSubscription;
     target.notificationStart = snapshot.notificationStart.hour;
     target.notificationEnd = snapshot.notificationEnd.hour;
@@ -135,7 +131,6 @@ function settings(): SettingsComponent {
         saveMessageTimer: null,
         startNotification: true,
         endNotification: true,
-        notificationDelivery: 'both',
         mealSubscription: true,
         notificationStart: 4,
         notificationEnd: 4,
@@ -314,18 +309,6 @@ function settings(): SettingsComponent {
                 this.announceSave();
             } catch (error) {
                 await this.restoreSettings('set_notification_end', error);
-                this.announceSave('저장하지 못했어요', true);
-            }
-        },
-
-        async saveNotificationDelivery() {
-            try {
-                await invokeSettingsMutation(this, projectSettings, 'set_notification_delivery', {
-                    delivery: this.notificationDelivery,
-                });
-                this.announceSave();
-            } catch (error) {
-                await this.restoreSettings('set_notification_delivery', error);
                 this.announceSave('저장하지 못했어요', true);
             }
         },

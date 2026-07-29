@@ -75,6 +75,7 @@ fn preserve_visible_position(
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[allow(dead_code)] // 알림 전달 단일화 다음 단계에서 overlay 전체를 제거할 때 함께 삭제한다.
 pub enum AlertOverlayAction {
     #[serde(rename = "openAttendance")]
     Attendance,
@@ -178,6 +179,7 @@ pub struct AlertOverlayService {
 }
 
 impl AlertOverlayService {
+    #[allow(dead_code)] // 알림 전달 단일화 다음 단계에서 overlay 전체를 제거할 때 함께 삭제한다.
     pub fn enqueue_with_dedupe(
         &self,
         app: &tauri::AppHandle,
