@@ -197,7 +197,7 @@ test('트레이 패널은 홈과 소식 화면 및 기존 주요 액션을 제�
     assert.match(attendanceCard, /data-icon="chevron-right"/);
     assert.doesNotMatch(attendanceCard, /<footer|x-text="presentation\.actionLabel/);
     assert.doesNotMatch(attendanceCard, /state\.ddayText/);
-    assert.ok(ddayCardStart > attendanceCardEnd);
+    assert.ok(ddayCardEnd < attendanceCardStart);
     assert.match(ddayCard, /state\.ddayText/);
     assert.match(ddayCard, /class="ui-card[^"]*\boverflow-hidden\b[^"]*\bp-0\b"/);
     assert.match(ddayCard, /<button[^>]*type="button"[\s\S]*@click="toggleDday\(\)"/);
@@ -298,11 +298,12 @@ test('피드백 메뉴는 허용된 GitHub 이슈 선택 화면만 연다', () =
     assert.match(traySource, /TrayPanelAction::OpenFeedback =>/);
 });
 
-test('홈은 진행 중인 세탁을 D-Day보다 먼저 보여주고 생활 알림에는 급식 게시 이벤트만 표시한다', () => {
+test('홈은 D-Day를 다른 상태와 알림보다 먼저 보여주고 생활 알림에는 급식 게시 이벤트만 표시한다', () => {
     const html = readFileSync(new URL('./tray-panel.html', import.meta.url), 'utf8');
     const script = readFileSync(new URL('./tray-panel.ts', import.meta.url), 'utf8');
     const ddayStart = html.indexOf('data-ui="dday"');
     const ddayEnd = html.indexOf('</aside>', ddayStart) + 8;
+    const attendanceStart = html.indexOf('data-ui="attendance-status"');
     const activityStart = html.indexOf('data-ui="laundry-activity"');
     const alertsStart = html.indexOf('data-ui="home-tasks"');
 
@@ -313,9 +314,11 @@ test('홈은 진행 중인 세탁을 D-Day보다 먼저 보여주고 생활 알�
     assert.match(html, /id="home-alerts-title"[^>]*>생활 알림</);
     assert.doesNotMatch(html, /id="home-(?:tasks|alerts)-title"[^>]*>할 일</);
     assert.ok(ddayStart >= 0);
+    assert.ok(attendanceStart >= 0);
     assert.ok(activityStart >= 0);
-    assert.ok(activityStart < ddayStart);
-    assert.ok(alertsStart > ddayEnd);
+    assert.ok(ddayEnd < attendanceStart);
+    assert.ok(attendanceStart < activityStart);
+    assert.ok(activityStart < alertsStart);
     assert.match(html, /x-text="homeTasks\.count"/);
     assert.match(html, /x-show="dashboard\.laundry"/);
     assert.match(html, /class="ui-progress/);
