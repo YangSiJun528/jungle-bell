@@ -7,7 +7,7 @@ use tokio::sync::Mutex;
 
 use crate::attendance::{self, CohortOption, CohortResolution};
 use crate::attendance_day;
-use crate::config::{self, Config, LaundryWatch, NotificationDelivery, TimeOfDay};
+use crate::config::{self, Config, LaundryWatch, TimeOfDay};
 use crate::state::{self, AppState};
 
 pub const SETTINGS_CHANGED_EVENT: &str = "settings-changed";
@@ -34,7 +34,6 @@ pub struct SettingsSnapshot {
     pub skip_sunday: bool,
     pub start_notification: bool,
     pub end_notification: bool,
-    pub notification_delivery: NotificationDelivery,
     pub notification_start: TimeOfDay,
     pub notification_end: TimeOfDay,
     pub selected_cohort_id: Option<String>,
@@ -62,7 +61,6 @@ impl SettingsSnapshot {
             skip_sunday: state.config.skip_sunday,
             start_notification: state.config.start_notification_enabled,
             end_notification: state.config.end_notification_enabled,
-            notification_delivery: state.config.notification_delivery,
             notification_start: state.config.notification_start.clone(),
             notification_end: state.config.notification_end.clone(),
             selected_cohort_id: state.config.selected_cohort_id.clone(),
@@ -472,7 +470,7 @@ mod tests {
         assert_eq!(object.get("appVersion").unwrap(), "0.4.4");
         assert!(object.contains_key("autoStart"));
         assert!(object.contains_key("notificationStart"));
-        assert_eq!(object.get("notificationDelivery").unwrap(), "both");
+        assert!(!object.contains_key("notificationDelivery"));
         assert!(!object.contains_key("startInterval"));
         assert!(!object.contains_key("endInterval"));
         assert!(!object.contains_key("onboardingCompleted"));

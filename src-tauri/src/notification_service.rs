@@ -3,8 +3,6 @@ use std::sync::Arc;
 
 use notify_rust::{Notification, NotificationResponse};
 
-use crate::alert_overlay::{AlertOverlayAction, AlertOverlayService};
-use crate::config::NotificationDelivery;
 use crate::notification_inbox::NotificationInboxService;
 
 const OPEN_ACTION_ID: &str = "open";
@@ -23,14 +21,6 @@ impl NotificationAction {
             Self::Meals => "식단 열기",
         }
     }
-
-    fn overlay_action(self) -> AlertOverlayAction {
-        match self {
-            Self::Attendance => AlertOverlayAction::Attendance,
-            Self::Laundry => AlertOverlayAction::Laundry,
-            Self::Meals => AlertOverlayAction::Meals,
-        }
-    }
 }
 
 pub use crate::notification_inbox::NotificationAction;
@@ -39,7 +29,6 @@ pub struct NotificationRequest<'a> {
     pub key: &'a str,
     pub title: &'a str,
     pub body: &'a str,
-    pub delivery: NotificationDelivery,
     pub action: Option<NotificationAction>,
     pub repeat_after_ms: Option<i64>,
 }
@@ -50,7 +39,6 @@ impl<'a> NotificationRequest<'a> {
             key,
             title,
             body,
-            delivery: NotificationDelivery::System,
             action: None,
             repeat_after_ms: None,
         }
@@ -61,7 +49,6 @@ impl<'a> NotificationRequest<'a> {
 pub struct DeliveryReport {
     pub inbox_recorded: bool,
     pub inbox_created_at: Option<i64>,
-    pub overlay_delivered: bool,
     pub system_delivered: bool,
 }
 
@@ -72,13 +59,12 @@ impl DeliveryReport {
 }
 
 pub struct NotificationService {
-    overlay: Arc<AlertOverlayService>,
     inbox: Arc<NotificationInboxService>,
 }
 
 impl NotificationService {
-    pub fn new(overlay: Arc<AlertOverlayService>, inbox: Arc<NotificationInboxService>) -> Self {
-        Self { overlay, inbox }
+    pub fn new(inbox: Arc<NotificationInboxService>) -> Self {
+        Self { inbox }
     }
 
     pub fn initialize_system_backend(&self) -> Result<(), String> {
@@ -126,51 +112,23 @@ impl NotificationService {
             }
         };
 
-        if request.delivery.uses_overlay() {
-            match request.action {
-                Some(action) => match self.overlay.enqueue_with_dedupe(
-                    app,
-                    request.title,
-                    request.body,
-                    action.overlay_action(),
-                    None,
-                ) {
-                    Ok(_) => {
-                        report.overlay_delivered = true;
-                        log::info!("[notification] overlay queued: key={}", request.key);
-                    }
-                    Err(error) => {
-                        log::error!("[notification] overlay failed: key={} error={error}", request.key);
-                    }
-                },
-                None => {
-                    log::error!(
-                        "[notification] overlay action missing for an overlay delivery: key={}",
-                        request.key
-                    );
-                }
+        match show_system(
+            app,
+            request.title,
+            request.body,
+            request.action,
+            notification_id,
+            self.inbox.clone(),
+        ) {
+            Ok(()) => {
+                report.system_delivered = true;
+                log::info!("[notification] OS notification queued: key={}", request.key);
             }
-        }
-
-        if request.delivery.uses_system() {
-            match show_system(
-                app,
-                request.title,
-                request.body,
-                request.action,
-                notification_id,
-                self.inbox.clone(),
-            ) {
-                Ok(()) => {
-                    report.system_delivered = true;
-                    log::info!("[notification] OS notification queued: key={}", request.key);
-                }
-                Err(error) => {
-                    log::error!(
-                        "[notification] OS notification failed: key={} error={error}",
-                        request.key
-                    );
-                }
+            Err(error) => {
+                log::error!(
+                    "[notification] OS notification failed: key={} error={error}",
+                    request.key
+                );
             }
         }
 
@@ -334,30 +292,22 @@ mod tests {
     }
 
     #[test]
-    fn 모든_알림_액션은_overlay와_tray와_os_버튼_표현을_가진다() {
+    fn 모든_알림_액션은_tray와_os_버튼_표현을_가진다() {
         let cases = [
             (
                 NotificationAction::Attendance,
-                AlertOverlayAction::Attendance,
                 TrayPanelAction::OpenAttendance,
                 "출석 페이지 열기",
             ),
             (
                 NotificationAction::Laundry,
-                AlertOverlayAction::Laundry,
                 TrayPanelAction::OpenLaundry,
                 "워시타워 열기",
             ),
-            (
-                NotificationAction::Meals,
-                AlertOverlayAction::Meals,
-                TrayPanelAction::OpenMeals,
-                "식단 열기",
-            ),
+            (NotificationAction::Meals, TrayPanelAction::OpenMeals, "식단 열기"),
         ];
 
-        for (action, overlay, tray, label) in cases {
-            assert_eq!(action.overlay_action(), overlay);
+        for (action, tray, label) in cases {
             assert_eq!(action.tray_action(), tray);
             assert_eq!(action.button_label(), label);
         }
@@ -368,14 +318,12 @@ mod tests {
         assert!(DeliveryReport {
             inbox_recorded: true,
             inbox_created_at: Some(1_000),
-            overlay_delivered: true,
             system_delivered: false,
         }
         .any_delivered());
         assert!(!DeliveryReport {
             inbox_recorded: false,
             inbox_created_at: None,
-            overlay_delivered: false,
             system_delivered: true,
         }
         .any_delivered());

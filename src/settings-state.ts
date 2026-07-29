@@ -9,7 +9,6 @@ export interface TimeOfDay {
 }
 
 export type LaundryApplianceKind = 'washer' | 'dryer';
-export type NotificationDelivery = 'overlay' | 'system' | 'both';
 
 export interface LaundryWatch {
     machineId: string;
@@ -41,7 +40,6 @@ export interface SettingsSnapshot {
     skipSunday: boolean;
     startNotification: boolean;
     endNotification: boolean;
-    notificationDelivery: NotificationDelivery;
     notificationStart: TimeOfDay;
     notificationEnd: TimeOfDay;
     selectedCohortId: string | null;

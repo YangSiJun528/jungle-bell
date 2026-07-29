@@ -13,7 +13,7 @@ use tokio::sync::Mutex;
 
 use crate::attendance_day;
 use crate::campus::{CampusDataKind, CampusSnapshot};
-use crate::config::{Config, LaundryApplianceKind, LaundryWatch, NotificationDelivery};
+use crate::config::{Config, LaundryApplianceKind, LaundryWatch};
 use crate::notification_service::{NotificationAction, NotificationRequest, NotificationService};
 use crate::settings_state::SettingsService;
 use crate::state::{AppState, DailyPhase};
@@ -276,7 +276,7 @@ impl LocalConsumptionService {
             }
         };
         let finished_laundry_watch = evaluation.finished_laundry_watch.clone();
-        cursors_changed |= self.apply_evaluation(app, &mut runtime, evaluation, now, config.notification_delivery);
+        cursors_changed |= self.apply_evaluation(app, &mut runtime, evaluation, now);
         let finished_laundry_watch =
             finished_laundry_watch.filter(|watch| finished_laundry_notification_recorded(&runtime.cursors, watch));
         if cursors_changed {
@@ -317,7 +317,7 @@ impl LocalConsumptionService {
         };
         let mut runtime = self.runtime.lock().await;
         let evaluation = evaluate_attendance(&config, &attendance, now, &runtime.cursors);
-        let cursors_changed = self.apply_evaluation(app, &mut runtime, evaluation, now, config.notification_delivery);
+        let cursors_changed = self.apply_evaluation(app, &mut runtime, evaluation, now);
         if cursors_changed {
             persist_event_cursors(runtime.cursors.clone()).await;
         }
@@ -348,7 +348,7 @@ impl LocalConsumptionService {
             );
         }
         let finished_laundry_watch = evaluation.finished_laundry_watch.clone();
-        cursor_changed |= self.apply_evaluation(app, &mut runtime, evaluation, now, config.notification_delivery);
+        cursor_changed |= self.apply_evaluation(app, &mut runtime, evaluation, now);
         let finished_laundry_watch =
             finished_laundry_watch.filter(|watch| finished_laundry_notification_recorded(&runtime.cursors, watch));
         if cursor_changed {
@@ -435,7 +435,6 @@ impl LocalConsumptionService {
         runtime: &mut LocalRuntime,
         mut evaluation: LocalEvaluation,
         now: DateTime<Utc>,
-        delivery: NotificationDelivery,
     ) -> bool {
         let mut changed = !evaluation.baselines.is_empty();
         if let Some(tracking) = evaluation.laundry_tracking.take() {
@@ -455,7 +454,6 @@ impl LocalConsumptionService {
                     key: &source_key,
                     title: &notification.title,
                     body: &notification.body,
-                    delivery,
                     action: Some(notification.action),
                     repeat_after_ms,
                 },

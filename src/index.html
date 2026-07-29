@@ -139,30 +139,12 @@
             </div>
         </fieldset>
 
-        <fieldset class="ui-settings-section" data-ui="notification-delivery-settings">
-            <legend class="ui-section-title">알림 표시 방식</legend>
-            <div class="ui-settings-row">
-                <span class="min-w-0 flex-1">
-                    <strong class="ui-settings-label">알림을 표시할 위치</strong>
-                </span>
-                <select class="ui-control max-w-48"
-                        aria-label="알림 표시 방식"
-                        x-model="notificationDelivery"
-                        @change="saveNotificationDelivery()">
-                    <option value="overlay">알림 창만</option>
-                    <option value="system">OS 알림만</option>
-                    <option value="both">알림 창 + OS 알림</option>
-                </select>
-            </div>
-        </fieldset>
-
-        <fieldset class="ui-settings-section" data-ui="system-notification-settings"
-                  x-show="notificationDelivery !== 'overlay'" x-cloak>
+        <fieldset class="ui-settings-section" data-ui="system-notification-settings">
             <legend class="ui-section-title">시스템 알림</legend>
             <div class="ui-settings-row">
                 <span class="min-w-0 flex-1">
                     <strong class="ui-settings-label">시스템 알림 설정</strong>
-                    <small class="ui-settings-description" data-ui="settings-description">OS 알림을 받으려면 운영체제에서 Jungle Bell 알림을 허용해 주세요.</small>
+                    <small class="ui-settings-description" data-ui="settings-description">앱 알림은 알림함에 저장하고 OS 알림으로도 보내요. 운영체제에서 Jungle Bell 알림을 허용해 주세요.</small>
                 </span>
                 <button type="button" class="ui-button ui-button--secondary ui-button--compact" @click="openNotificationSettings()">열기</button>
             </div>

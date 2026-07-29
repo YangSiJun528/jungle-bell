@@ -40,7 +40,7 @@ Project API Key가 `analytics.rs`에 하드코딩되어 **릴리스 빌드**에�
 - `campus_interaction`: `action`, 선택적으로 `value`
 
 `setting_changed.setting`은 `auto_update`, `auto_start`, `start_notification_enabled`,
-`end_notification_enabled`, `notification_delivery`, `notification_start`,
+`end_notification_enabled`, `notification_start`,
 `notification_end`, `skip_attendance`, `skip_sunday`, `debug_mode`, `show_dday`,
 `show_app_icon` 중 하나입니다.
 시각은 `HH:mm`, 불리언은 `"true"` 또는 `"false"` 문자열로 기록합니다.
