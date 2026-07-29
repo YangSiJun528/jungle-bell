@@ -7,29 +7,31 @@
     <title>Jungle Bell</title>
     <link rel="stylesheet" href="/ui.css"/>
 </head>
-<body class="h-full overflow-hidden bg-transparent p-2 font-sans text-app-text antialiased">
+<body class="h-full overflow-hidden bg-transparent font-sans text-app-text antialiased" data-ui-page="tray-panel">
 <main
-    class="flex h-full flex-col overflow-hidden rounded-[20px] border border-app-border bg-app-bg shadow-none"
+    class="flex h-full flex-col overflow-hidden rounded-ui-window border border-app-border bg-app-bg shadow-none"
     x-data="trayPanel"
-    @keydown.window.escape="menuOpen ? closeMenu() : hide()"
+    @keydown.window.escape="menuOpen ? closeMenu(true) : hide()"
 >
     <header class="flex h-14 flex-none items-center justify-between px-4">
-        <div class="flex min-w-0 items-center gap-2.5">
-            <img class="size-8 flex-none rounded-[10px] object-cover" src="assets/logo.png" alt=""/>
+        <div class="flex min-w-0 items-center gap-3">
+            <img class="size-8 flex-none rounded-ui-control object-cover" src="assets/logo.png" alt=""/>
             <span class="min-w-0">
-                <strong class="block truncate text-[15px] font-bold leading-tight">Jungle Bell</strong>
-                <small class="mt-0.5 block text-[11px] leading-none text-app-faint" x-text="state.currentVersion ? `v${state.currentVersion}` : '불러오는 중'"></small>
+                <strong class="block truncate text-ui-body font-bold leading-tight">Jungle Bell</strong>
+                <small class="mt-1 block text-ui-caption leading-none text-app-faint" x-text="state.currentVersion ? `v${state.currentVersion}` : '불러오는 중'"></small>
             </span>
         </div>
         <div class="flex items-center gap-1">
             <div class="relative" @click.outside="closeMenu()">
                 <button
                     type="button"
-                    class="flex size-8 items-center justify-center rounded-full border-0 bg-transparent text-app-faint transition-colors hover:bg-app-surface-subtle hover:text-app-text focus-visible:ring-4 focus-visible:ring-app-accent-soft disabled:opacity-50"
+                    class="ui-button ui-button--compact ui-button--icon size-8 rounded-full border-0 bg-transparent p-0 text-app-faint hover:bg-app-surface-subtle hover:text-app-text disabled:opacity-50"
                     aria-label="앱 메뉴"
                     aria-haspopup="menu"
                     :aria-expanded="menuOpen"
                     aria-controls="app-menu"
+                    x-ref="menuTrigger"
+                    data-ui="menu-trigger"
                     :disabled="busyAction !== null"
                     @click="toggleMenu()"
                 >
@@ -42,60 +44,71 @@
                 <div
                     id="app-menu"
                     data-ui="app-menu"
-                    class="absolute top-full right-0 z-50 mt-1 w-52 overflow-hidden rounded-xl border border-app-border-strong bg-app-overlay p-1 shadow-lg"
+                    class="ui-card absolute top-full right-0 z-50 mt-1 w-52 overflow-hidden bg-app-overlay p-1 shadow-lg"
                     role="menu"
+                    @keydown="handleMenuKey($event)"
                     x-show="menuOpen"
                     x-cloak
                     x-transition:enter="transition ease-out duration-150"
                     x-transition:enter-start="opacity-0 -translate-y-1 scale-95"
                     x-transition:enter-end="opacity-100 translate-y-0 scale-100"
                 >
-                    <button type="button" class="flex min-h-9 w-full items-center justify-between gap-2 rounded-lg border-0 bg-transparent px-3 text-left text-xs font-medium text-app-text transition-colors hover:bg-app-surface-subtle focus-visible:bg-app-surface-subtle focus-visible:ring-0 disabled:opacity-50" role="menuitem" :disabled="busyAction !== null" @click="perform('check_update')">
+                    <button type="button" class="ui-button ui-button--compact w-full justify-between border-0 bg-transparent text-left font-normal text-app-text hover:bg-app-surface-subtle focus-visible:bg-app-surface-subtle" role="menuitem" :disabled="busyAction !== null" @click="perform('check_update')">
                         <span>업데이트 확인</span>
-                        <span class="flex-none text-[10px] font-bold text-app-accent" x-show="state.pendingUpdate" x-cloak>(업데이트 필요)</span>
+                        <span class="flex-none text-ui-caption font-bold text-app-accent" x-show="state.pendingUpdate" x-cloak>(업데이트 필요)</span>
                     </button>
-                    <button type="button" class="flex min-h-9 w-full items-center rounded-lg border-0 bg-transparent px-3 text-left text-xs font-medium text-app-text transition-colors hover:bg-app-surface-subtle focus-visible:bg-app-surface-subtle focus-visible:ring-0 disabled:opacity-50" role="menuitem" :disabled="busyAction !== null" @click="perform('open_settings')">설정</button>
-                    <button type="button" class="flex min-h-9 w-full items-center justify-between gap-2 rounded-lg border-0 bg-transparent px-3 text-left text-xs font-medium text-app-text transition-colors hover:bg-app-surface-subtle focus-visible:bg-app-surface-subtle focus-visible:ring-0 disabled:opacity-50" role="menuitem" :disabled="busyAction !== null" @click="perform('open_feedback')">
+                    <button type="button" class="ui-button ui-button--compact w-full justify-start border-0 bg-transparent text-left font-normal text-app-text hover:bg-app-surface-subtle focus-visible:bg-app-surface-subtle" role="menuitem" :disabled="busyAction !== null" @click="perform('open_settings')">설정</button>
+                    <button type="button" class="ui-button ui-button--compact w-full justify-between border-0 bg-transparent text-left font-normal text-app-text hover:bg-app-surface-subtle focus-visible:bg-app-surface-subtle" role="menuitem" :disabled="busyAction !== null" @click="perform('open_feedback')">
                         <span>피드백</span>
                         <svg class="size-3.5 text-app-faint" data-icon="external-link" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 16 16 8m-5 0h5v5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </button>
                     <div class="my-1 border-t border-app-divider" role="separator"></div>
-                    <button type="button" class="flex min-h-9 w-full items-center rounded-lg border-0 bg-transparent px-3 text-left text-xs font-medium text-app-text transition-colors hover:bg-app-danger-soft hover:text-app-danger focus-visible:bg-app-danger-soft focus-visible:text-app-danger focus-visible:ring-0 disabled:opacity-50" role="menuitem" :disabled="busyAction !== null" @click="perform('quit')">종료</button>
+                    <button type="button" class="ui-button ui-button--compact w-full justify-start border-0 bg-transparent text-left font-normal text-app-text hover:bg-app-danger-soft hover:text-app-danger focus-visible:bg-app-danger-soft focus-visible:text-app-danger" role="menuitem" :disabled="busyAction !== null" @click="perform('quit')">종료</button>
                 </div>
             </div>
         </div>
     </header>
 
-    <nav class="mb-3 flex h-10 flex-none items-stretch gap-5 border-b border-app-divider px-4" role="tablist" aria-label="트레이 패널">
+    <nav class="ui-tabs flex-none px-4" role="tablist" aria-label="트레이 패널">
         <button
+            id="tray-tab-home"
+            x-ref="homeTab"
             type="button"
-            class="relative flex h-full items-center border-0 bg-transparent px-1 text-xs font-semibold transition-colors duration-200 after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:rounded-full after:content-[''] focus-visible:ring-4 focus-visible:ring-app-accent-soft"
-            :class="activeTab === 'home' ? 'text-app-accent after:bg-app-accent' : 'text-app-muted after:bg-transparent hover:text-app-text'"
+            class="ui-tab"
             role="tab"
             :aria-selected="activeTab === 'home'"
+            :tabindex="activeTab === 'home' ? 0 : -1"
+            aria-controls="tray-home-panel"
             @click="selectTab('home')"
+            @keydown.arrow-left.prevent="selectTab('news'); $nextTick(() => $refs.newsTab.focus())"
+            @keydown.arrow-right.prevent="selectTab('news'); $nextTick(() => $refs.newsTab.focus())"
         >홈</button>
         <button
+            id="tray-tab-news"
+            x-ref="newsTab"
             type="button"
-            class="relative flex h-full items-center border-0 bg-transparent px-1 text-xs font-semibold transition-colors duration-200 after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:rounded-full after:content-[''] focus-visible:ring-4 focus-visible:ring-app-accent-soft"
-            :class="activeTab === 'news' ? 'text-app-accent after:bg-app-accent' : 'text-app-muted after:bg-transparent hover:text-app-text'"
+            class="ui-tab"
             role="tab"
             :aria-selected="activeTab === 'news'"
+            :tabindex="activeTab === 'news' ? 0 : -1"
+            aria-controls="tray-news-panel"
             @click="selectTab('news')"
+            @keydown.arrow-left.prevent="selectTab('home'); $nextTick(() => $refs.homeTab.focus())"
+            @keydown.arrow-right.prevent="selectTab('home'); $nextTick(() => $refs.homeTab.focus())"
         >소식</button>
     </nav>
 
-    <section class="min-h-0 flex-1 overflow-y-auto px-4 pb-3" x-show="activeTab === 'home'">
+    <section id="tray-home-panel" class="min-h-0 flex-1 overflow-y-auto px-4 pb-3" role="tabpanel" aria-labelledby="tray-tab-home" x-show="activeTab === 'home'">
         <button
             type="button"
-            class="w-full rounded-2xl border p-4 text-left transition-[filter,transform] duration-200 hover:brightness-[.98] active:scale-[.99] focus-visible:ring-4 focus-visible:ring-app-accent-soft disabled:pointer-events-none disabled:opacity-50"
+            class="ui-card min-h-14 w-full px-3 py-2 text-left transition-[filter,transform] duration-200 hover:brightness-[.98] active:scale-[.99] disabled:pointer-events-none disabled:opacity-50"
             data-ui="attendance-status"
             :class="{
-                'border-app-border bg-app-surface-subtle': presentation.tone === 'neutral',
-                'border-app-warning bg-app-warning-soft': presentation.tone === 'warning',
-                'border-app-danger bg-app-danger-soft': presentation.tone === 'danger',
-                'border-app-success bg-app-success-soft': presentation.tone === 'success',
-                'border-app-accent bg-app-accent-soft': presentation.tone === 'accent'
+                'bg-app-surface-subtle': presentation.tone === 'neutral',
+                'bg-app-warning-soft': presentation.tone === 'warning',
+                'bg-app-danger-soft': presentation.tone === 'danger',
+                'bg-app-success-soft': presentation.tone === 'success',
+                'bg-app-accent-soft': presentation.tone === 'accent'
             }"
             :aria-label="`${presentation.actionLabel ?? '출석 상태 확인'} — ${state.statusText}`"
             aria-live="polite"
@@ -104,13 +117,13 @@
         >
             <span class="flex items-center gap-3">
                 <span
-                    class="flex size-10 flex-none items-center justify-center rounded-xl"
+                    class="flex size-9 flex-none items-center justify-center rounded-ui-control"
                     :class="{
                         'bg-app-overlay text-app-faint': presentation.tone === 'neutral',
-                        'bg-app-warning text-white': presentation.tone === 'warning',
-                        'bg-app-danger text-white': presentation.tone === 'danger',
-                        'bg-app-success text-white': presentation.tone === 'success',
-                        'bg-app-accent text-white': presentation.tone === 'accent'
+                        'bg-app-warning text-app-on-accent': presentation.tone === 'warning',
+                        'bg-app-danger text-app-on-accent': presentation.tone === 'danger',
+                        'bg-app-success text-app-on-accent': presentation.tone === 'success',
+                        'bg-app-accent text-app-on-accent': presentation.tone === 'accent'
                     }"
                 >
                     <svg class="size-5" viewBox="0 0 24 24" aria-hidden="true">
@@ -120,178 +133,141 @@
                     </svg>
                 </span>
                 <span class="min-w-0 flex-1">
-                    <strong class="block text-[17px] font-bold leading-snug" x-text="statusTextParts.title"></strong>
-                    <small class="mt-1 block text-xs font-medium leading-snug text-app-muted" x-show="statusTextParts.detail" x-text="statusTextParts.detail"></small>
+                    <strong class="block text-ui-label font-bold" x-text="statusTextParts.title"></strong>
+                    <small class="block text-ui-caption font-normal text-app-muted" x-show="statusTextParts.detail" x-text="statusTextParts.detail"></small>
                 </span>
                 <svg class="size-4 flex-none text-app-faint" data-icon="chevron-right" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </span>
         </button>
 
+        <section
+            class="mt-4"
+            data-ui="laundry-activity"
+            aria-labelledby="laundry-activity-title"
+            x-show="dashboard.laundry"
+            x-cloak
+        >
+            <header class="mb-2 flex items-center justify-between px-1">
+                <h2 id="laundry-activity-title" class="m-0 text-xs font-bold text-app-muted">진행 중</h2>
+            </header>
+            <article class="ui-card flex min-h-24 items-stretch overflow-hidden bg-app-info-soft p-0">
+                <button
+                    type="button"
+                    class="min-w-0 flex-1 border-0 bg-transparent px-3 py-3 text-left text-app-text transition-colors hover:bg-app-surface-subtle focus-visible:z-10 disabled:opacity-50"
+                    :disabled="busyAction !== null || taskBusy !== null"
+                    @click="perform('open_laundry')"
+                >
+                    <span class="flex items-start gap-3">
+                        <span class="flex size-9 flex-none items-center justify-center rounded-ui-control bg-app-overlay text-app-info">
+                            <svg class="size-5" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3.5h14v17H5v-17Zm3 3h.1M12 6.5h4M12 10a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </span>
+                        <span class="min-w-0 flex-1">
+                            <strong x-text="laundryRemaining()" class="block truncate font-mono text-ui-title leading-tight tabular-nums"></strong>
+                            <small
+                                class="mt-1 block truncate text-ui-caption font-bold text-app-info"
+                                x-text="dashboard.laundry ? `${dashboard.laundry.machineLabel} · ${dashboard.laundry.appliance === 'washer' ? '세탁기' : '건조기'}` : ''"
+                            ></small>
+                            <span class="mt-2 block" x-show="laundryProgress() !== null">
+                                <small
+                                    class="mb-1 block text-ui-caption font-bold text-app-info tabular-nums"
+                                    x-text="laundryProgressText()"
+                                ></small>
+                                <progress
+                                    class="ui-progress text-app-info"
+                                    max="100"
+                                    :value="laundryProgress() ?? 0"
+                                    aria-label="세탁 진행률"
+                                    :aria-valuetext="laundryProgressText()"
+                                ></progress>
+                            </span>
+                            <span class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-ui-caption text-app-muted">
+                                <small x-show="laundryExpectedEnd()" x-text="laundryExpectedEnd()"></small>
+                                <small x-text="dashboard.laundry ? `종료 ${dashboard.laundry.notifyBeforeMins}분 전 알림` : ''"></small>
+                            </span>
+                            <small class="mt-1 block text-ui-caption font-bold text-app-warning" x-show="laundrySourceWarning()">정보 갱신 지연</small>
+                        </span>
+                    </span>
+                </button>
+                <button
+                    type="button"
+                    class="ui-button ui-button--ghost ui-button--compact w-20 flex-none rounded-none border-0 bg-transparent px-2 text-ui-caption text-app-muted hover:bg-app-danger-soft hover:text-app-danger focus-visible:z-10 disabled:opacity-40"
+                    aria-label="세탁 추적 종료"
+                    :disabled="busyAction !== null || taskBusy !== null"
+                    @click.prevent.stop="stopLaundryTracking()"
+                >추적 종료</button>
+            </article>
+        </section>
+
         <aside
-            class="mt-2 overflow-hidden rounded-2xl border border-app-border bg-app-surface"
+            class="ui-card mt-2 p-3"
             data-ui="dday"
             x-show="state.ddayText"
             x-cloak
             aria-live="polite"
         >
-            <button
-                type="button"
-                class="flex min-h-14 w-full items-center gap-2.5 border-0 bg-transparent px-3 text-left transition-colors hover:bg-app-surface-subtle focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-app-common-soft disabled:pointer-events-none"
-                :class="ddayProgress ? 'cursor-pointer' : 'cursor-default'"
-                :aria-expanded="Boolean(ddayProgress && ddayExpanded)"
-                :aria-label="ddayProgress ? `${state.ddayText}, ${ddayExpanded ? '진행도 접기' : '진행도 펼치기'}` : state.ddayText"
-                aria-controls="dday-calendar"
-                :disabled="!ddayProgress"
-                @click="toggleDday()"
-            >
-                <span class="flex size-9 flex-none items-center justify-center rounded-[10px] bg-app-common-soft text-app-common">
-                    <svg class="size-5" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3.5v17m0-15h10l-2.5 3L17 12H7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                </span>
-                <span class="min-w-0 flex-1">
-                    <small class="block text-[10px] font-bold text-app-common">D-Day</small>
-                    <strong class="mt-0.5 block truncate text-sm" x-text="state.ddayText"></strong>
-                </span>
-                <svg
-                    class="size-4 flex-none text-app-faint transition-transform duration-200"
-                    :class="ddayExpanded && 'rotate-180'"
-                    data-icon="chevron-down"
-                    viewBox="0 0 24 24"
-                    x-show="ddayProgress"
-                    aria-hidden="true"
-                >
-                    <path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-            </button>
-
-            <div
-                id="dday-calendar"
-                class="grid transition-[grid-template-rows,opacity] duration-200 ease-out"
-                :class="ddayExpanded && ddayProgress ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'"
-                :aria-hidden="!ddayExpanded"
-            >
-                <div class="min-h-0 overflow-hidden">
-                    <div class="px-3 pb-3 pt-0.5">
-                        <div class="flex items-center gap-2 text-[9px] text-app-muted tabular-nums">
-                            <small class="mr-auto whitespace-nowrap text-[10px] font-medium text-app-muted" x-text="ddayRange()"></small>
-                            <span class="inline-flex items-center gap-1 whitespace-nowrap">
-                                <i class="size-1.5 rounded-[2px] bg-app-common"></i>
-                                <span x-text="ddayProgress ? `완료 ${ddayProgress.elapsed}일` : ''"></span>
-                            </span>
-                            <span class="inline-flex items-center gap-1 whitespace-nowrap">
-                                <i class="size-1.5 rounded-[2px] bg-app-control"></i>
-                                <span x-text="ddayProgress ? `남음 ${ddayProgress.remaining}일` : ''"></span>
-                            </span>
-                            <strong class="whitespace-nowrap text-app-common" x-text="ddayProgress ? `${ddayProgress.percent}%` : ''"></strong>
-                        </div>
-
-                        <div
-                            class="mt-2 grid grid-cols-[24px_minmax(0,1fr)] gap-x-1 gap-y-[2px]"
-                            role="img"
-                            :aria-label="ddayProgressLabel()"
-                        >
-                            <small class="self-end text-center text-[7px] font-semibold text-app-faint">월</small>
-                            <div class="grid grid-cols-[repeat(31,minmax(0,1fr))] gap-[1px]" aria-hidden="true">
-                                <template x-for="day in 31" :key="day">
-                                    <small
-                                        class="flex min-w-0 justify-center overflow-visible whitespace-nowrap text-[7px] font-semibold leading-none text-app-faint tabular-nums"
-                                        x-text="(day === 1 || day === 10 || day === 20 || day === 31) ? day : ''"
-                                    ></small>
-                                </template>
-                            </div>
-
-                            <template x-for="row in ddayProgress?.rows ?? []" :key="row.key">
-                                <div class="contents">
-                                    <small
-                                        class="self-center truncate text-right text-[9px] font-semibold leading-none text-app-muted tabular-nums"
-                                        :title="row.label"
-                                        x-text="row.shortLabel"
-                                        aria-hidden="true"
-                                    ></small>
-                                    <div class="grid grid-cols-[repeat(31,minmax(0,1fr))] gap-[1px]" :aria-label="row.label">
-                                        <template x-for="(cell, dayIndex) in row.cells" :key="`${row.key}-${dayIndex + 1}`">
-                                            <span
-                                                class="aspect-square min-w-0 rounded-[2px]"
-                                                :class="cell === null
-                                                    ? 'bg-transparent'
-                                                    : cell.state === 'elapsed'
-                                                        ? 'bg-app-common'
-                                                        : cell.state === 'current'
-                                                            ? 'bg-app-common-soft ring-1 ring-inset ring-app-common'
-                                                            : 'bg-app-control'"
-                                                :title="cell ? (cell.state === 'current' ? `${cell.label} · 오늘` : cell.label) : ''"
-                                                aria-hidden="true"
-                                            ></span>
-                                        </template>
-                                    </div>
-                                </div>
-                            </template>
-                        </div>
-                    </div>
-                </div>
+            <div x-show="ddayProgress" x-cloak>
+                <header class="flex items-end justify-between gap-3">
+                    <span class="min-w-0">
+                        <small class="block text-ui-caption font-bold text-app-common">D-Day</small>
+                        <strong class="mt-1 block truncate text-ui-label" x-text="ddayRange()"></strong>
+                    </span>
+                    <strong
+                        class="flex-none font-mono text-ui-title text-app-common tabular-nums"
+                        x-text="ddayProgress ? `${ddayProgress.percent}%` : ''"
+                    ></strong>
+                </header>
+                <progress
+                    class="ui-progress mt-3 text-app-common"
+                    max="100"
+                    :value="ddayProgress?.percent ?? 0"
+                    aria-label="D-Day 진행률"
+                    :aria-valuetext="ddayProgressLabel()"
+                ></progress>
+                <p class="mt-2 flex items-center justify-between gap-2 text-ui-caption text-app-muted tabular-nums">
+                    <span x-text="ddayProgress ? `완료 ${ddayProgress.elapsed}일` : ''"></span>
+                    <span x-text="ddayProgress ? `남음 ${ddayProgress.remaining}일` : ''"></span>
+                </p>
             </div>
+            <strong
+                class="block text-ui-label"
+                x-show="!ddayProgress"
+                x-text="state.ddayText"
+            ></strong>
         </aside>
 
         <section
             class="mt-4"
             data-ui="home-tasks"
             aria-labelledby="home-alerts-title"
-            x-show="homeTasks.count > 0"
+            x-show="homeTasks.mealAlerts > 0"
             x-cloak
         >
-            <header class="mb-2 flex items-center justify-between px-0.5">
+            <header class="mb-2 flex items-center justify-between px-1">
                 <h2 id="home-alerts-title" class="m-0 text-xs font-bold text-app-muted">생활 알림</h2>
-                <small class="rounded-full bg-app-control px-2 py-0.5 text-[10px] font-bold text-app-muted tabular-nums" x-text="homeTasks.count"></small>
+                <small class="rounded-full bg-app-control px-2 py-1 text-ui-caption font-bold text-app-muted tabular-nums" x-text="homeTasks.count"></small>
             </header>
 
-            <div class="divide-y divide-app-divider overflow-hidden rounded-2xl border border-app-border bg-app-surface">
-                <div class="flex min-h-14 items-stretch" data-task="laundry" x-show="homeTasks.laundry" x-cloak>
-                    <button
-                        type="button"
-                        class="flex min-w-0 flex-1 items-center gap-2.5 border-0 bg-transparent px-3 py-1.5 text-left transition-colors hover:bg-app-surface-subtle focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-app-accent-soft disabled:opacity-50"
-                        :disabled="busyAction !== null || taskBusy !== null"
-                        @click="perform('open_laundry')"
-                    >
-                        <span class="flex size-8 flex-none items-center justify-center rounded-[10px] bg-app-men-soft text-app-men">
-                            <svg class="size-4" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3.5h14v17H5v-17Zm3 3h.1M12 6.5h4M12 10a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                        </span>
-                        <span class="min-w-0 flex-1">
-                            <small class="block truncate text-[10px] font-bold text-app-men" x-text="dashboard.laundry ? `${dashboard.laundry.machineLabel} ${dashboard.laundry.appliance === 'washer' ? '세탁기' : '건조기'}` : ''"></small>
-                            <strong class="mt-0.5 block truncate text-[13px] leading-snug" x-text="laundryRemaining()" aria-live="polite"></strong>
-                            <small class="mt-0.5 block truncate text-[10px] text-app-muted" x-text="dashboard.laundry ? `종료 ${dashboard.laundry.notifyBeforeMins}분 전 알림` : ''"></small>
-                            <small class="mt-0.5 block text-[10px] font-bold text-app-warning" x-show="laundrySourceWarning()">정보 갱신 지연</small>
-                        </span>
-                    </button>
-                    <button
-                        type="button"
-                        class="flex w-10 flex-none items-center justify-center border-0 bg-transparent text-app-faint transition-colors hover:bg-app-danger-soft hover:text-app-danger focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-app-danger-soft disabled:opacity-40"
-                        aria-label="세탁 추적 취소"
-                        :disabled="busyAction !== null || taskBusy !== null"
-                        @click.prevent.stop="dismissHomeTask('laundry')"
-                    >
-                        <svg class="size-4" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-                    </button>
-                </div>
-
+            <div class="ui-card divide-y divide-app-divider overflow-hidden p-0">
                 <template x-for="alert in dashboard.mealAlerts" :key="alert.id">
                     <div class="flex min-h-14 items-stretch" data-task="meal-alert">
                         <button
                             type="button"
-                            class="flex min-w-0 flex-1 items-center gap-2.5 border-0 bg-transparent px-3 py-1.5 text-left transition-colors hover:bg-app-surface-subtle focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-app-accent-soft disabled:opacity-50"
+                            class="ui-button min-h-14 min-w-0 flex-1 justify-start gap-3 rounded-none border-0 bg-transparent px-3 py-2 text-left font-normal text-app-text hover:bg-app-surface-subtle focus-visible:z-10"
                             :disabled="busyAction !== null || taskBusy !== null || mealAlertBusy !== null"
                             @click="perform('open_meals')"
                         >
-                            <span class="flex size-8 flex-none items-center justify-center rounded-[10px] bg-app-success-soft text-app-success">
+                            <span class="flex size-8 flex-none items-center justify-center rounded-ui-control bg-app-success-soft text-app-success">
                                 <svg class="size-4" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v7m-2-7v5a2 2 0 0 0 4 0V3m-2 7v11m8-18v18m0-18c3 2 3 7 0 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
                             </span>
                             <span class="min-w-0 flex-1">
-                                <small class="block text-[10px] font-bold text-app-success" x-text="alert.period === 'lunch' ? '중식 알림' : '석식 알림'"></small>
-                                <strong class="mt-0.5 block truncate text-[13px] leading-snug" x-text="alert.title"></strong>
-                                <small class="mt-0.5 line-clamp-2 text-[10px] leading-snug text-app-muted" x-text="alert.preview"></small>
+                                <small class="block text-ui-caption font-bold text-app-success" x-text="alert.period === 'lunch' ? '중식 알림' : '석식 알림'"></small>
+                                <strong class="mt-1 block truncate text-ui-label leading-snug" x-text="alert.title"></strong>
+                                <small class="mt-1 line-clamp-2 text-ui-caption leading-snug text-app-muted" x-text="alert.preview"></small>
                             </span>
                         </button>
                         <button
                             type="button"
-                            class="flex w-10 flex-none items-center justify-center border-0 bg-transparent text-app-faint transition-colors hover:bg-app-danger-soft hover:text-app-danger focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-app-danger-soft disabled:opacity-40"
+                            class="ui-button ui-button--compact ui-button--icon w-10 flex-none rounded-none border-0 bg-transparent p-0 text-app-faint hover:bg-app-danger-soft hover:text-app-danger focus-visible:z-10 disabled:opacity-40"
                             :aria-label="`${alert.period === 'lunch' ? '중식' : '석식'} 알림 제거`"
                             :disabled="busyAction !== null || taskBusy !== null || mealAlertBusy !== null"
                             @click.prevent.stop="dismissMealAlert(alert.id)"
@@ -304,7 +280,7 @@
         </section>
 
         <p
-            class="m-0 mt-2 rounded-xl border border-app-danger bg-app-danger-soft px-3 py-2 text-[11px] font-medium leading-relaxed text-app-danger"
+            class="ui-card m-0 mt-2 border border-app-danger bg-app-danger-soft px-3 py-2 text-ui-caption font-normal leading-relaxed text-app-danger"
             data-ui="home-task-error"
             role="alert"
             x-show="taskError"
@@ -314,17 +290,17 @@
         </p>
 
         <section class="mt-4" aria-labelledby="campus-action-title">
-            <header class="mb-2 flex items-center justify-between px-0.5">
+            <header class="mb-2 flex items-center justify-between px-1">
                 <h2 id="campus-action-title" class="m-0 text-xs font-bold text-app-muted">생활 정보</h2>
             </header>
             <div class="grid grid-cols-2 gap-2">
                 <button
                     type="button"
-                    class="min-h-20 rounded-xl border border-app-border bg-app-surface p-3 text-left transition-colors hover:border-app-border-strong hover:bg-app-surface-subtle focus-visible:ring-4 focus-visible:ring-app-accent-soft disabled:opacity-50"
+                    class="ui-card min-h-20 p-3 text-left transition-colors hover:bg-app-surface-subtle disabled:opacity-50"
                     :disabled="busyAction !== null"
                     @click="perform('open_laundry')"
                 >
-                    <span class="flex size-8 items-center justify-center rounded-lg bg-app-men-soft text-app-men"><svg class="size-[18px]" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3.5h14v17H5v-17Zm3 3h.1M12 6.5h4M12 10a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+                    <span class="flex size-8 items-center justify-center rounded-ui-control bg-app-info-soft text-app-info"><svg class="size-5" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3.5h14v17H5v-17Zm3 3h.1M12 6.5h4M12 10a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
                     <span class="mt-2 flex items-center justify-between gap-2">
                         <strong class="text-xs">워시타워</strong>
                         <svg class="size-3.5 flex-none text-app-faint" data-icon="chevron-right" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -332,11 +308,11 @@
                 </button>
                 <button
                     type="button"
-                    class="min-h-20 rounded-xl border border-app-border bg-app-surface p-3 text-left transition-colors hover:border-app-border-strong hover:bg-app-surface-subtle focus-visible:ring-4 focus-visible:ring-app-accent-soft disabled:opacity-50"
+                    class="ui-card min-h-20 p-3 text-left transition-colors hover:bg-app-surface-subtle disabled:opacity-50"
                     :disabled="busyAction !== null"
                     @click="perform('open_meals')"
                 >
-                    <span class="flex size-8 items-center justify-center rounded-lg bg-app-success-soft text-app-success"><svg class="size-[18px]" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v7m-2-7v5a2 2 0 0 0 4 0V3m-2 7v11m8-18v18m0-18c3 2 3 7 0 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+                    <span class="flex size-8 items-center justify-center rounded-ui-control bg-app-success-soft text-app-success"><svg class="size-5" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v7m-2-7v5a2 2 0 0 0 4 0V3m-2 7v11m8-18v18m0-18c3 2 3 7 0 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
                     <span class="mt-2 flex items-center justify-between gap-2">
                         <strong class="text-xs">오늘의 식단</strong>
                         <svg class="size-3.5 flex-none text-app-faint" data-icon="chevron-right" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -347,35 +323,35 @@
 
     </section>
 
-    <section class="min-h-0 flex-1 overflow-y-auto px-4 pb-3" x-show="activeTab === 'news'" x-cloak>
+    <section id="tray-news-panel" class="min-h-0 flex-1 overflow-y-auto px-4 pb-3" role="tabpanel" aria-labelledby="tray-tab-news" x-show="activeTab === 'news'" x-cloak>
         <section aria-labelledby="news-title">
             <h2 id="news-title" class="mb-2 text-xs font-bold text-app-muted">소식</h2>
 
-            <article class="rounded-2xl border border-app-info bg-app-info-soft p-4" x-show="state.pendingUpdate" x-cloak>
+            <article class="ui-card bg-app-info-soft" x-show="state.pendingUpdate" x-cloak>
                 <div class="flex items-start gap-3">
-                    <span class="flex size-9 flex-none items-center justify-center rounded-xl bg-app-info text-white">
+                    <span class="flex size-9 flex-none items-center justify-center rounded-ui-control bg-app-info text-app-on-accent">
                         <svg class="size-5" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0 4-4m-4 4-4-4M5 19.5h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </span>
                     <span class="min-w-0 flex-1">
-                        <small class="block text-[10px] font-bold text-app-info">새 버전</small>
+                        <small class="block text-ui-caption font-bold text-app-info">새 버전</small>
                         <strong class="mt-1 block text-sm" x-text="state.pendingUpdate ? `Jungle Bell v${state.pendingUpdate}` : ''"></strong>
                     </span>
                 </div>
                 <button
                     type="button"
-                    class="mt-3 min-h-9 w-full rounded-lg border-0 bg-app-info px-3 text-xs font-semibold text-white transition-colors hover:bg-app-info-hover focus-visible:ring-4 focus-visible:ring-app-overlay disabled:opacity-50"
+                    class="ui-button mt-3 w-full border-0 bg-app-info text-app-on-accent hover:bg-app-info-hover"
                     :disabled="busyAction !== null"
                     @click="perform('check_update')"
                 >업데이트하기</button>
             </article>
 
-            <p class="m-0 flex min-h-12 items-center gap-2 rounded-xl border border-app-border bg-app-surface px-3 text-xs font-medium text-app-muted"
+            <p class="ui-empty-state m-0 min-h-12 justify-start bg-app-surface px-3 py-2 text-left font-normal"
                x-show="newsLoading">
                 <svg class="size-4 flex-none text-app-info" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4.5h12v15H6v-15Zm3 4h6m-6 3h6m-6 3h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 소식을 불러오는 중...
             </p>
 
-            <p class="m-0 flex min-h-12 items-center gap-2 rounded-xl border border-app-danger bg-app-danger-soft px-3 text-xs font-medium text-app-danger"
+            <p class="ui-empty-state m-0 min-h-12 justify-start border border-app-danger bg-app-danger-soft px-3 py-2 text-left font-normal text-app-danger"
                x-show="newsError && newsItems.length === 0 && !newsLoading"
                x-cloak>
                 소식을 불러오지 못했어요
@@ -385,19 +361,19 @@
                 <template x-for="item in newsItems" :key="item.id">
                     <button
                         type="button"
-                        class="block w-full rounded-xl border border-app-border bg-app-surface p-3 text-left transition-colors hover:border-app-border-strong hover:bg-app-surface-subtle focus-visible:ring-4 focus-visible:ring-app-accent-soft"
+                        class="ui-card block w-full p-3 text-left transition-colors hover:bg-app-surface-subtle"
                         @click="openNewsItem(item)"
                     >
                         <span class="flex items-center justify-between gap-2">
                             <small
-                                class="rounded-md bg-app-info-soft px-1.5 py-0.5 text-[10px] font-bold text-app-info"
+                                class="rounded-ui-control bg-app-info-soft px-2 py-1 text-ui-caption font-bold text-app-info"
                                 x-text="newsLabel(item)"
                             ></small>
-                            <small class="text-[10px] text-app-faint" x-text="newsDate(item)"></small>
+                            <small class="text-ui-caption text-app-faint" x-text="newsDate(item)"></small>
                         </span>
                         <strong class="mt-2 block text-sm leading-snug" x-text="item.title"></strong>
                         <span
-                            class="mt-1 line-clamp-2 text-[11px] leading-relaxed text-app-muted"
+                            class="mt-1 line-clamp-2 text-ui-caption leading-relaxed text-app-muted"
                             x-show="newsSummary(item)"
                             x-text="newsSummary(item)"
                         ></span>
@@ -405,7 +381,7 @@
                 </template>
             </div>
 
-            <p class="m-0 flex min-h-12 items-center gap-2 rounded-xl border border-app-border bg-app-surface px-3 text-xs font-medium text-app-muted"
+            <p class="ui-empty-state m-0 min-h-12 justify-start bg-app-surface px-3 py-2 text-left font-normal"
                x-show="!state.pendingUpdate && newsItems.length === 0 && !newsLoading && !newsError">
                 <svg class="size-4 flex-none text-app-info" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4.5h12v15H6v-15Zm3 4h6m-6 3h6m-6 3h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 등록된 소식이 없어요

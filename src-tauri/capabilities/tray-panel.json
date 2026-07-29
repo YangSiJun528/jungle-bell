@@ -5,7 +5,6 @@
   "windows": ["tray-panel"],
   "permissions": [
     "core:event:allow-listen",
-    "allow-get-settings-snapshot",
     "allow-get-tray-panel-state",
     "allow-get-local-dashboard-snapshot",
     "allow-dismiss-meal-alert",

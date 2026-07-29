@@ -154,17 +154,22 @@ test('트레이 패널은 홈과 소식 화면 및 기존 주요 액션을 제�
     const appMenuStart = panelHeader.indexOf('data-ui="app-menu"');
     const appMenu = panelHeader.slice(appMenuStart);
 
-    assert.match(html, /rounded-\[20px\]/);
+    assert.match(html, /<body[^>]*data-ui-page="tray-panel"/);
+    assert.match(html, /rounded-ui-window/);
     assert.match(html, /<main\s+class="[^"]*\bshadow-none\b[^"]*"/);
     assert.match(html, /<main\s+class="[^"]*\bbg-app-bg\b[^"]*"/);
     assert.doesNotMatch(html, /<main\s+class="[^"]*\bbg-app-overlay\b[^"]*"/);
     assert.match(html, /<img class="size-8[^"]*" src="assets\/logo\.png"/);
-    assert.match(html, /activeTab === 'home' \? 'text-app-accent after:bg-app-accent'/);
-    assert.match(html, /activeTab === 'news' \? 'text-app-accent after:bg-app-accent'/);
-    assert.doesNotMatch(html, /activeTab === '(?:home|news)' \? 'bg-app-(?:surface|accent)/);
-    assert.match(html, /<nav class="[^"]*\bflex\b[^"]*" role="tablist"/);
+    assert.match(html, /<nav class="[^"]*\bui-tabs\b[^"]*" role="tablist"/);
+    assert.equal(html.match(/class="ui-tab"/g)?.length, 2);
+    assert.match(html, /:aria-selected="activeTab === 'home'"/);
+    assert.match(html, /:aria-selected="activeTab === 'news'"/);
+    assert.equal(html.match(/@keydown\.arrow-left\.prevent=/g)?.length, 2);
+    assert.equal(html.match(/@keydown\.arrow-right\.prevent=/g)?.length, 2);
+    assert.equal(html.match(/\$nextTick\(\(\) => \$refs\.(?:homeTab|newsTab)\.focus\(\)\)/g)?.length, 4);
     assert.doesNotMatch(html, /<nav class="[^"]*(?:grid-cols-2|bg-app-control)[^"]*" role="tablist"/);
-    assert.match(html, /after:absolute after:inset-x-0 after:bottom-0/);
+    assert.match(uiStyles, /\.ui-tab\[aria-selected="true"\]/);
+    assert.doesNotMatch(html, /after:absolute after:inset-x-0 after:bottom-0/);
     assert.match(html, />홈</);
     assert.match(html, />\s*소식\s*<\/button>/);
     assert.match(html, />소식</);
@@ -185,7 +190,7 @@ test('트레이 패널은 홈과 소식 화면 및 기존 주요 액션을 제�
     assert.match(attendanceCard, /presentation\.actionLabel \?\? '출석 상태 확인'/);
     assert.match(attendanceCard, /x-text="statusTextParts\.title"/);
     assert.match(attendanceCard, /x-show="statusTextParts\.detail"/);
-    assert.match(attendanceCard, /text-xs[^"]*text-app-muted/);
+    assert.match(attendanceCard, /text-ui-caption[^"]*text-app-muted/);
     assert.doesNotMatch(attendanceCard, /<strong[^>]*x-text="state\.statusText"/);
     assert.doesNotMatch(attendanceCard, /presentation\.label/);
     assert.match(attendanceCard, /data-icon="chevron-right"/);
@@ -193,27 +198,22 @@ test('트레이 패널은 홈과 소식 화면 및 기존 주요 액션을 제�
     assert.doesNotMatch(attendanceCard, /state\.ddayText/);
     assert.ok(ddayCardStart > attendanceCardEnd);
     assert.match(ddayCard, /state\.ddayText/);
-    assert.match(ddayCard, /@click="toggleDday\(\)"/);
-    assert.match(ddayCard, /:aria-expanded="Boolean\(ddayProgress && ddayExpanded\)"/);
-    assert.match(ddayCard, /aria-controls="dday-calendar"/);
-    assert.match(ddayCard, /id="dday-calendar"/);
-    assert.match(ddayCard, /grid-rows-\[1fr\]/);
-    assert.match(ddayCard, /grid-rows-\[0fr\]/);
-    assert.match(ddayCard, /grid-cols-\[repeat\(31,minmax\(0,1fr\)\)\]/);
-    assert.match(ddayCard, /gap-\[1px\]/);
-    assert.match(ddayCard, /x-for="day in 31"/);
-    assert.match(ddayCard, /day === 1 \|\| day === 10 \|\| day === 20 \|\| day === 31/);
-    assert.match(ddayCard, /x-for="row in ddayProgress\?\.rows \?\? \[\]"/);
-    assert.match(
+    assert.match(ddayCard, /x-show="ddayProgress"/);
+    assert.match(ddayCard, /x-show="!ddayProgress"/);
+    assert.match(ddayCard, /x-text="ddayRange\(\)"/);
+    assert.match(ddayCard, /`완료 \$\{ddayProgress\.elapsed\}일`/);
+    assert.match(ddayCard, /`남음 \$\{ddayProgress\.remaining\}일`/);
+    assert.match(ddayCard, /`\$\{ddayProgress\.percent\}%`/);
+    assert.match(ddayCard, /<progress\s+class="ui-progress[^"]*"/);
+    assert.match(ddayCard, /:value="ddayProgress\?\.percent \?\? 0"/);
+    assert.match(ddayCard, /aria-label="D-Day 진행률"/);
+    assert.match(ddayCard, /:aria-valuetext="ddayProgressLabel\(\)"/);
+    assert.doesNotMatch(
         ddayCard,
-        /class="mr-auto whitespace-nowrap text-\[10px\] font-medium text-app-muted" x-text="ddayRange\(\)"/,
+        /<button|toggleDday|ddayExpanded|aria-expanded|aria-controls|dday-calendar|data-ui-density|grid-cols-\[repeat\(31|x-for="day in 31"|x-for="row in ddayProgress/,
     );
-    assert.doesNotMatch(ddayCard, /aria-label="D-Day 표시 단위"/);
-    assert.doesNotMatch(ddayCard, /divide-x/);
-    assert.doesNotMatch(ddayCard, /day % 5|월\/일|border-app-border-strong/);
     assert.match(script, /buildDdayProgress/);
-    assert.match(script, /ddayExpanded:\s*false/);
-    assert.match(script, /toggleDday\(\)/);
+    assert.doesNotMatch(script, /ddayExpanded|toggleDday/);
     assert.doesNotMatch(script, /ddayUnit|setDdayUnit/);
     assert.doesNotMatch(html, /quick-action-title/);
     assert.match(html, /워시타워/);
@@ -226,7 +226,9 @@ test('트레이 패널은 홈과 소식 화면 및 기존 주요 액션을 제�
     assert.doesNotMatch(panelHeader, /aria-label="패널 닫기"/);
     assert.doesNotMatch(panelHeader, /@click="hide\(\)"/);
     assert.match(panelHeader, /@click="toggleMenu\(\)"/);
+    assert.match(panelHeader, /x-ref="menuTrigger"/);
     assert.match(appMenu, /role="menu"/);
+    assert.match(appMenu, /@keydown="handleMenuKey\(\$event\)"/);
     assert.match(appMenu, /x-transition:enter=/);
     assert.doesNotMatch(appMenu, /x-transition:leave/);
     assert.match(appMenu, /업데이트 확인/);
@@ -244,6 +246,12 @@ test('트레이 패널은 홈과 소식 화면 및 기존 주요 액션을 제�
     assert.match(script, /\|\s*'open_feedback'/);
     assert.match(script, /\|\s*'quit'/);
     assert.match(script, /menuOpen:\s*false/);
+    assert.match(script, /event\.key === 'ArrowDown'/);
+    assert.match(script, /event\.key === 'ArrowUp'/);
+    assert.match(script, /event\.key === 'Home'/);
+    assert.match(script, /event\.key === 'End'/);
+    assert.match(script, /closeMenu\(true\)/);
+    assert.match(script, /menuTrigger\?\.focus\(\)/);
     assert.match(script, /window\.addEventListener\('blur',\s*\(\)\s*=>\s*this\.closeMenu\(\)\)/);
     assert.doesNotMatch(html, /<footer class="flex h-12/);
     assert.match(styles, /--jungle-info:/);
@@ -275,48 +283,57 @@ test('피드백 메뉴는 허용된 GitHub 이슈 선택 화면만 연다', () =
     assert.match(traySource, /TrayPanelAction::OpenFeedback =>/);
 });
 
-test('홈은 세탁 예약과 실제 급식 게시 이벤트를 D-Day 아래 알림 피드로 표시한다', () => {
+test('홈은 진행 중인 세탁을 D-Day보다 먼저 보여주고 생활 알림에는 급식 게시 이벤트만 표시한다', () => {
     const html = readFileSync(new URL('./tray-panel.html', import.meta.url), 'utf8');
     const script = readFileSync(new URL('./tray-panel.ts', import.meta.url), 'utf8');
     const ddayStart = html.indexOf('data-ui="dday"');
     const ddayEnd = html.indexOf('</aside>', ddayStart) + 8;
+    const activityStart = html.indexOf('data-ui="laundry-activity"');
     const alertsStart = html.indexOf('data-ui="home-tasks"');
 
+    assert.match(html, /data-ui="laundry-activity"/);
     assert.match(html, /data-ui="home-tasks"/);
+    assert.match(html, /id="laundry-activity-title"[^>]*>진행 중</);
     assert.match(html, /aria-labelledby="home-alerts-title"/);
     assert.match(html, /id="home-alerts-title"[^>]*>생활 알림</);
     assert.doesNotMatch(html, /id="home-(?:tasks|alerts)-title"[^>]*>할 일</);
     assert.ok(ddayStart >= 0);
+    assert.ok(activityStart >= 0);
+    assert.ok(activityStart < ddayStart);
     assert.ok(alertsStart > ddayEnd);
     assert.match(html, /x-text="homeTasks\.count"/);
-    assert.match(html, /data-task="laundry"/);
+    assert.match(html, /x-show="dashboard\.laundry"/);
+    assert.match(html, /class="ui-progress/);
+    assert.match(html, /:value="laundryProgress\(\) \?\? 0"/);
+    assert.match(html, /:aria-valuetext="laundryProgressText\(\)"/);
     assert.match(html, /data-task="meal-alert"/);
-    assert.match(html, /x-show="homeTasks\.laundry"/);
+    assert.match(html, /x-show="homeTasks\.mealAlerts > 0"/);
     assert.match(html, /x-for="alert in dashboard\.mealAlerts"/);
     assert.match(html, /x-text="alert\.title"/);
     assert.match(html, /x-text="alert\.preview"/);
     assert.match(html, /@click="perform\('open_laundry'\)"/);
     assert.match(html, /@click="perform\('open_meals'\)"/);
-    assert.match(html, /@click\.prevent\.stop="dismissHomeTask\('laundry'\)"/);
+    assert.match(html, /@click\.prevent\.stop="stopLaundryTracking\(\)"/);
     assert.match(html, /@click\.prevent\.stop="dismissMealAlert\(alert\.id\)"/);
-    assert.match(html, /aria-label="세탁 추적 취소"/);
+    assert.match(html, /aria-label="세탁 추적 종료"/);
     assert.match(html, /:aria-label="`\$\{alert\.period === 'lunch' \? '중식' : '석식'\} 알림 제거`"/);
     assert.doesNotMatch(html, /급식 알림 끄기|dismissHomeTask\('meals'\)/);
-    assert.doesNotMatch(html, /data-task="attendance"|homeTasks\.attendance|dismissHomeTask\('attendance'\)/);
+    assert.doesNotMatch(html, /data-task="laundry"|homeTasks\.laundry|dismissHomeTask/);
+    assert.doesNotMatch(html, /data-task="attendance"|homeTasks\.attendance/);
     assert.match(html, /data-ui="home-task-error"/);
     assert.match(html, /role="alert"/);
-    assert.doesNotMatch(html, /data-ui="tracked-laundry"|data-ui="subscribed-meals"/);
     assert.match(html, /정보 갱신 지연/);
-    assert.match(script, /get_settings_snapshot/);
-    assert.match(script, /homeTaskDismissal/);
-    assert.match(script, /homeTaskSubscriptions/);
-    assert.match(script, /withoutHomeTask/);
-    assert.match(script, /dismissHomeTask/);
+    assert.match(script, /stopLaundryTracking/);
+    assert.match(script, /set_laundry_watch/);
+    assert.doesNotMatch(script, /get_settings_snapshot|homeTaskDismissal|homeTaskSubscriptions|withoutHomeTask|dismissHomeTask/);
     assert.match(script, /dismissMealAlert/);
     assert.match(script, /dismiss_meal_alert/);
     assert.match(script, /local-dashboard-updated/);
     assert.match(script, /get_local_dashboard_snapshot/);
     assert.match(script, /window\.setInterval/);
+    assert.match(script, /laundryDashboardProgress/);
+    assert.match(script, /laundryProgress\(\)/);
+    assert.match(script, /laundryProgressText\(\)/);
 });
 
 test('생활 알림과 생활 정보는 같은 섹션 제목 스타일을 사용한다', () => {
@@ -334,19 +351,35 @@ test('생활 알림과 생활 정보는 같은 섹션 제목 스타일을 사용
     assert.match(alertTitleClass, /\btext-app-muted\b/);
     assert.match(
         html,
-        /<section class="mt-4" aria-labelledby="campus-action-title">\s*<header class="mb-2 flex items-center justify-between px-0\.5">/,
+        /<section class="mt-4" aria-labelledby="campus-action-title">\s*<header class="mb-2 flex items-center justify-between px-1">/,
     );
 });
 
-test('생활 알림 항목은 여러 개 쌓이고 급식 메뉴는 두 줄까지만 미리 보여준다', () => {
+test('트레이 패널은 공통 UI 프리미티브와 제한된 토큰을 사용한다', () => {
+    const html = readFileSync(new URL('./tray-panel.html', import.meta.url), 'utf8');
+
+    assert.match(html, /\bui-card\b/);
+    assert.match(html, /\bui-button\b/);
+    assert.match(html, /\bui-button--compact\b/);
+    assert.match(html, /\bui-empty-state\b/);
+    assert.match(html, /\bui-progress\b/);
+    assert.doesNotMatch(html, /data-ui-density="micro"/);
+    assert.doesNotMatch(html, /\btext-\[[0-9]+px\]/);
+    assert.doesNotMatch(html, /\bfont-(?:thin|extralight|light|medium|semibold|extrabold|black)\b/);
+    assert.doesNotMatch(html, /\b(?:text|bg)-(?:black|white)\b/);
+    assert.doesNotMatch(html, /\b(?:m[trblxy]?|p[trblxy]?|gap)-\[[^\]]+\]/);
+    assert.doesNotMatch(html, /\b(?:m[trblxy]?|p[trblxy]?|gap(?:-x|-y)?|space-[xy])-[0-9]+\.5\b/);
+});
+
+test('생활 알림에는 급식 항목만 여러 개 쌓이고 메뉴는 두 줄까지만 미리 보여준다', () => {
     const html = readFileSync(new URL('./tray-panel.html', import.meta.url), 'utf8');
     const alertsStart = html.indexOf('data-ui="home-tasks"');
     const alertsEnd = html.indexOf('</section>', alertsStart);
     const alerts = html.slice(alertsStart, alertsEnd);
 
-    assert.match(alerts, /data-task="laundry"/);
     assert.match(alerts, /data-task="meal-alert"/);
     assert.match(alerts, /x-for="alert in dashboard\.mealAlerts"/);
+    assert.doesNotMatch(alerts, /laundry|세탁/);
     assert.match(alerts, /\bline-clamp-2\b/);
     assert.match(alerts, /\bmin-h-14\b/);
     assert.match(alerts, /\bsize-8\b/);
@@ -354,11 +387,24 @@ test('생활 알림 항목은 여러 개 쌓이고 급식 메뉴는 두 줄까�
     assert.doesNotMatch(alerts, /\bmin-h-16\b|\bsize-9\b|\bpy-2\.5\b|\bw-11\b/);
 });
 
-test('트레이 홈은 세탁 예약과 개별 급식 알림을 취소할 권한을 가진다', () => {
-    assert.ok(trayCapability.permissions.includes('allow-get-settings-snapshot'));
+test('트레이 홈은 세탁 추적 종료와 개별 급식 알림 제거에 필요한 권한만 가진다', () => {
     assert.ok(trayCapability.permissions.includes('allow-set-laundry-watch'));
     assert.ok(trayCapability.permissions.includes('allow-dismiss-meal-alert'));
+    assert.ok(!trayCapability.permissions.includes('allow-get-settings-snapshot'));
     assert.ok(!trayCapability.permissions.includes('allow-set-meal-subscription-enabled'));
+});
+
+test('세탁 진행 카드는 남은 시간을 가장 크게, 기기와 예상 종료를 보조 정보로 표시한다', () => {
+    const html = readFileSync(new URL('./tray-panel.html', import.meta.url), 'utf8');
+    const activityStart = html.indexOf('data-ui="laundry-activity"');
+    const activityEnd = html.indexOf('</section>', activityStart);
+    const activity = html.slice(activityStart, activityEnd);
+
+    assert.match(activity, /x-text="laundryRemaining\(\)"[^>]*class="[^"]*\btext-ui-title\b/);
+    assert.match(activity, /dashboard\.laundry\.machineLabel/);
+    assert.match(activity, /x-text="laundryExpectedEnd\(\)"/);
+    assert.match(activity, />추적 종료</);
+    assert.doesNotMatch(activity, /<path d="m7 7 10 10M17 7 7 17"/);
 });
 
 test('출석은 생활 알림이 아니라 항상 보이는 단일 상태 카드로 유지한다', () => {
@@ -375,4 +421,21 @@ test('출석은 생활 알림이 아니라 항상 보이는 단일 상태 카드
     assert.doesNotMatch(attendanceOpeningTag, /x-show=|x-cloak/);
     assert.doesNotMatch(attendanceCard, /dismissHomeTask/);
     assert.match(attendanceCard, /perform\('open_attendance'\)/);
+});
+
+test('출석 상태 카드는 다른 홈 카드와 같은 밀도로 표시한다', () => {
+    const html = readFileSync(new URL('./tray-panel.html', import.meta.url), 'utf8');
+    const attendanceMarker = html.indexOf('data-ui="attendance-status"');
+    const attendanceStart = html.lastIndexOf('<button', attendanceMarker);
+    const attendanceEnd = html.indexOf('</button>', attendanceMarker) + 9;
+    const attendanceCard = html.slice(attendanceStart, attendanceEnd);
+    const attendanceOpeningTag = attendanceCard.slice(0, attendanceCard.indexOf('>') + 1);
+
+    assert.match(attendanceOpeningTag, /\bmin-h-14\b/);
+    assert.match(attendanceOpeningTag, /\bpx-3\b/);
+    assert.match(attendanceOpeningTag, /\bpy-2\b/);
+    assert.match(attendanceCard, /\bsize-9\b/);
+    assert.match(attendanceCard, /\btext-ui-label\b/);
+    assert.match(attendanceCard, /\btext-ui-caption\b/);
+    assert.doesNotMatch(attendanceCard, /\bsize-10\b|\btext-ui-title\b/);
 });
