@@ -8,35 +8,47 @@
     <link rel="license" href="assets/fonts/Pretendard-LICENSE.txt"/>
     <title>Jungle Bell 설정</title>
 </head>
-<body class="h-screen bg-app-bg font-sans text-app-text" x-data="settings" @focus.window="onFocus()">
-<main class="mx-auto flex min-h-full w-full flex-col">
-    <header class="mb-4 flex min-h-12 items-center gap-2">
-        <img src="assets/logo.png" alt="" class="size-12 flex-none rounded-lg object-cover"/>
+<body class="h-screen bg-app-bg font-sans text-app-text" data-ui-page="settings" x-data="settings" @focus.window="onFocus()">
+<main class="mx-auto flex min-h-full w-full flex-col" :aria-busy="settingsLoading">
+    <header class="ui-page-header">
+        <img src="assets/logo.png" alt="" class="size-12 flex-none rounded-ui-card object-cover"/>
         <hgroup class="min-w-0 flex-1">
-            <h1 class="m-0 text-[22px] leading-[1.2] font-bold tracking-normal">설정</h1>
-            <p class="mt-1 text-xs leading-[1.4] font-medium text-app-muted">Jungle Bell <span class="ml-1 font-mono text-app-faint tabular-nums" x-text="appVersion ? `v${appVersion}` : ''"></span></p>
+            <h1 class="ui-page-title">설정</h1>
+            <p class="ui-page-subtitle">Jungle Bell <span class="ml-1 font-mono text-app-faint tabular-nums" x-text="appVersion ? `v${appVersion}` : ''"></span></p>
         </hgroup>
-        <nav class="flex flex-none items-center gap-1" aria-label="앱 정보">
-            <a class="inline-flex min-h-8 items-center rounded-lg px-2 py-1 text-xs font-semibold text-app-accent transition-colors hover:bg-app-accent-soft hover:text-app-accent-hover focus-visible:ring-4 focus-visible:ring-app-accent-soft" href="https://github.com/YangSiJun528/jungle-bell/releases" target="_blank" rel="noopener noreferrer">릴리즈</a>
-            <a class="inline-flex min-h-8 items-center rounded-lg px-2 py-1 text-xs font-semibold text-app-accent transition-colors hover:bg-app-accent-soft hover:text-app-accent-hover focus-visible:ring-4 focus-visible:ring-app-accent-soft" href="https://github.com/YangSiJun528/jungle-bell" target="_blank" rel="noopener noreferrer">GitHub</a>
-        </nav>
+        <p class="ui-badge flex-none"
+           :class="saveFailed ? 'bg-app-danger-soft text-app-danger' : 'bg-app-success-soft text-app-success'"
+           role="status" aria-live="polite" x-show="saveMessage" x-cloak x-text="saveMessage"></p>
     </header>
 
-    <nav class="mb-4 flex h-10 flex-none items-stretch gap-5 border-b border-app-divider" role="tablist" aria-label="설정 분류">
-        <button type="button" class="relative flex h-full items-center border-0 bg-transparent px-1 text-xs font-semibold transition-colors duration-200 after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:rounded-full after:content-[''] focus-visible:ring-4 focus-visible:ring-app-accent-soft" :class="activeTab === 'notification' ? 'text-app-accent after:bg-app-accent' : 'text-app-muted after:bg-transparent hover:text-app-text'" role="tab" :aria-selected="activeTab === 'notification'" aria-controls="notification-settings" @click="selectTab('notification')">알림</button>
-        <button type="button" class="relative flex h-full items-center border-0 bg-transparent px-1 text-xs font-semibold transition-colors duration-200 after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:rounded-full after:content-[''] focus-visible:ring-4 focus-visible:ring-app-accent-soft" :class="activeTab === 'app' ? 'text-app-accent after:bg-app-accent' : 'text-app-muted after:bg-transparent hover:text-app-text'" role="tab" :aria-selected="activeTab === 'app'" aria-controls="app-settings" @click="selectTab('app')">앱</button>
+    <nav class="ui-tabs" role="tablist" aria-label="설정 분류">
+        <button id="settings-tab-attendance" x-ref="attendanceTab" type="button" class="ui-tab" role="tab" :aria-selected="activeTab === 'attendance'" :tabindex="activeTab === 'attendance' ? 0 : -1" aria-controls="attendance-settings" :disabled="!settingsReady" @click="selectTab('attendance')" @keydown.arrow-left.prevent="selectTab('app'); $nextTick(() => $refs.appTab.focus())" @keydown.arrow-right.prevent="selectTab('notification'); $nextTick(() => $refs.notificationTab.focus())">출석</button>
+        <button id="settings-tab-notification" x-ref="notificationTab" type="button" class="ui-tab" role="tab" :aria-selected="activeTab === 'notification'" :tabindex="activeTab === 'notification' ? 0 : -1" aria-controls="notification-settings" :disabled="!settingsReady" @click="selectTab('notification')" @keydown.arrow-left.prevent="selectTab('attendance'); $nextTick(() => $refs.attendanceTab.focus())" @keydown.arrow-right.prevent="selectTab('app'); $nextTick(() => $refs.appTab.focus())">알림</button>
+        <button id="settings-tab-app" x-ref="appTab" type="button" class="ui-tab" role="tab" :aria-selected="activeTab === 'app'" :tabindex="activeTab === 'app' ? 0 : -1" aria-controls="app-settings" :disabled="!settingsReady" @click="selectTab('app')" @keydown.arrow-left.prevent="selectTab('notification'); $nextTick(() => $refs.notificationTab.focus())" @keydown.arrow-right.prevent="selectTab('attendance'); $nextTick(() => $refs.attendanceTab.focus())">앱</button>
     </nav>
 
-    <section id="notification-settings" class="flex-1" x-show="activeTab === 'notification'" x-cloak>
-        <fieldset class="m-0 min-w-0 border-0 p-0" data-ui="cohort-selection"
+    <section class="ui-empty-state flex-1 flex-col" role="status" aria-live="polite" x-show="settingsLoading">
+        <span class="ui-skeleton h-5 w-32" aria-hidden="true"></span>
+        <span>설정을 불러오고 있어요</span>
+    </section>
+
+    <section class="ui-empty-state flex-1 flex-col" data-ui="settings-load-error" role="alert"
+             x-show="!settingsLoading && settingsLoadError" x-cloak>
+        <strong class="text-ui-body text-app-text">설정을 불러오지 못했어요</strong>
+        <p class="max-w-prose text-ui-label text-app-muted" x-text="settingsLoadError"></p>
+        <button type="button" class="ui-button ui-button--primary" @click="retrySettings()">다시 시도</button>
+    </section>
+
+    <section id="attendance-settings" class="flex-1" role="tabpanel" aria-labelledby="settings-tab-attendance" x-show="settingsReady && activeTab === 'attendance'" x-cloak>
+        <fieldset class="ui-settings-section" data-ui="cohort-selection"
                   x-show="cohortOptions.length > 1" x-cloak>
-            <legend class="w-full p-0 text-base leading-[1.4] font-bold tracking-normal">출석 확인 기수</legend>
-            <div class="mt-2 flex min-h-12 w-full items-center justify-between gap-3 py-1">
+            <legend class="ui-section-title">출석 확인 기수</legend>
+            <div class="ui-settings-row">
                 <span class="min-w-0 flex-1">
-                    <strong class="block text-sm leading-[1.35] font-semibold">기수 선택</strong>
-                    <small class="mt-1 block text-xs leading-[1.45] text-app-muted" data-ui="settings-description">선택한 기수의 출석 상태와 D-Day를 확인합니다.</small>
+                    <strong class="ui-settings-label">기수 선택</strong>
+                    <small class="ui-settings-description" data-ui="settings-description">선택한 기수의 출석 상태와 D-Day를 확인해요.</small>
                 </span>
-                <select class="min-h-8 max-w-48 rounded-lg border border-app-border bg-app-surface px-2 py-1 text-xs font-semibold text-app-text focus-visible:ring-4 focus-visible:ring-app-accent-soft"
+                <select class="ui-control max-w-48"
                         aria-label="출석 확인 기수"
                         x-model="selectedCohortId"
                         @change="saveSelectedCohort()">
@@ -50,89 +62,90 @@
             </div>
         </fieldset>
 
-        <fieldset class="attendance-notification m-0 min-w-0 border-0 p-0"
-                  :class="cohortOptions.length > 1 ? 'mt-4' : ''">
-            <legend class="w-full p-0 text-base leading-[1.4] font-bold tracking-normal">이번 출석</legend>
-            <div class="mt-2 flex min-h-12 w-full items-center justify-between gap-2 py-1">
+        <fieldset class="attendance-notification ui-settings-section">
+            <legend class="ui-section-title">오늘 출석</legend>
+            <div class="ui-settings-row">
                 <span class="min-w-0 flex-1">
-                    <strong class="block text-sm leading-[1.35] font-semibold">이번 출석 알림</strong>
-                    <small id="attendance-notification-hint" class="mt-1 block text-xs leading-[1.45] text-app-muted" data-ui="settings-description" x-show="skipAttendance" x-cloak x-text="skipAttendanceHint"></small>
+                    <strong class="ui-settings-label">오늘 출석 알림</strong>
+                    <small id="attendance-notification-hint" class="ui-settings-description" data-ui="settings-description" x-show="skipAttendance" x-cloak x-text="skipAttendanceHint"></small>
                 </span>
-                <label class="relative inline-flex h-6 w-12 flex-none items-center" data-ui="settings-toggle">
+                <label class="ui-toggle" data-ui="settings-toggle">
                     <input class="peer sr-only" type="checkbox" :checked="attendanceNotificationEnabled"
-                           aria-label="이번 출석 알림"
+                           aria-label="오늘 출석 알림"
                            :aria-describedby="skipAttendance ? 'attendance-notification-hint' : undefined"
                            @change="setAttendanceNotification($event.currentTarget.checked)"/>
-                    <span class="h-6 w-12 rounded-full border border-app-border-strong bg-app-control transition-colors duration-200 peer-checked:border-app-accent peer-checked:bg-app-accent peer-focus-visible:ring-4 peer-focus-visible:ring-app-accent-soft peer-disabled:opacity-50" aria-hidden="true"></span>
-                    <span class="pointer-events-none absolute left-1 size-4 rounded-full bg-app-overlay shadow-[inset_0_0_0_2px_var(--color-border)] transition-transform duration-200 ease-out peer-checked:translate-x-6 peer-disabled:opacity-50" aria-hidden="true"></span>
+                    <span class="ui-toggle__track" aria-hidden="true"></span>
+                    <span class="ui-toggle__thumb" aria-hidden="true"></span>
                 </label>
             </div>
         </fieldset>
 
-        <fieldset class="notification-schedule mt-4 m-0 min-w-0 border-0 p-0">
-            <legend class="w-full p-0 text-base leading-[1.4] font-bold tracking-normal">알림 일정</legend>
+        <fieldset class="notification-schedule ui-settings-section">
+            <legend class="ui-section-title">알림 일정</legend>
             <section class="mt-2 py-1" aria-labelledby="start-notification-title">
                 <div class="flex min-h-8 w-full items-center justify-between gap-2">
-                    <span class="min-w-0 flex-1"><strong id="start-notification-title" class="block text-sm leading-[1.35] font-semibold">시작 출석 알림</strong></span>
-                    <label class="relative inline-flex h-6 w-12 flex-none items-center" data-ui="settings-toggle"><input class="peer sr-only" type="checkbox" aria-label="시작 출석 알림" x-model="startNotification" @change="saveToggle('set_start_notification_enabled', 'startNotification')"/><span class="h-6 w-12 rounded-full border border-app-border-strong bg-app-control transition-colors duration-200 peer-checked:border-app-accent peer-checked:bg-app-accent peer-focus-visible:ring-4 peer-focus-visible:ring-app-accent-soft" aria-hidden="true"></span><span class="pointer-events-none absolute left-1 size-4 rounded-full bg-app-overlay shadow-[inset_0_0_0_2px_var(--color-border)] transition-transform duration-200 ease-out peer-checked:translate-x-6" aria-hidden="true"></span></label>
+                    <span class="min-w-0 flex-1"><strong id="start-notification-title" class="ui-settings-label">시작 출석 알림</strong></span>
+                    <label class="ui-toggle" data-ui="settings-toggle"><input class="peer sr-only" type="checkbox" aria-label="시작 출석 알림" x-model="startNotification" @change="saveToggle('set_start_notification_enabled', 'startNotification')"/><span class="ui-toggle__track" aria-hidden="true"></span><span class="ui-toggle__thumb" aria-hidden="true"></span></label>
                 </div>
                 <div class="pt-2" x-show="startNotification" x-cloak>
-                    <div class="min-w-0"><span class="mb-1 block text-xs font-semibold text-app-muted">알림 시간대</span>
+                    <div class="min-w-0"><span class="mb-1 block text-xs font-bold text-app-muted">알림 시간대</span>
                         <div class="relative w-full" x-data="selectControl" x-effect="syncValue(notificationStart)" @click.outside="close()">
                             <select hidden x-ref="native" tabindex="-1" aria-hidden="true" x-model.number="notificationStart" @change="saveStartTime()" :disabled="!startNotification">
                                 <option value="4">04:00 - 10:00</option><option value="5">05:00 - 10:00</option><option value="6">06:00 - 10:00</option><option value="7">07:00 - 10:00</option><option value="8">08:00 - 10:00</option><option value="9">09:00 - 10:00</option>
                             </select>
-                            <button type="button" class="flex min-h-8 w-full items-center justify-between gap-2 rounded-lg border border-app-border bg-app-control px-2 py-1 text-left text-xs font-semibold whitespace-nowrap text-app-text transition-colors hover:border-app-border-strong active:scale-[.97] disabled:text-app-disabled disabled:opacity-50" role="combobox" aria-haspopup="listbox" x-ref="trigger" aria-label="시작 출석 알림 시간대" :aria-expanded="open" :aria-controls="listboxId" :disabled="!startNotification" @click="toggle()" @keydown="handleTriggerKey($event)"><span x-text="selectedLabel"></span><svg class="size-4 flex-none transition-transform" :class="{'rotate-180': open}" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-                            <div class="absolute inset-x-0 top-full z-30 mt-1 grid gap-1 rounded-lg border border-app-border-strong bg-app-overlay p-1" x-show="open" x-cloak :id="listboxId" role="listbox" @keydown="handleOptionKey($event)"><template x-for="option in options" :key="option.value"><button type="button" class="min-h-8 rounded-lg border-0 bg-transparent p-2 text-left text-xs font-medium text-app-muted hover:bg-app-surface-subtle hover:text-app-text focus-visible:bg-app-surface-subtle aria-selected:bg-app-accent-soft aria-selected:font-bold aria-selected:text-app-accent" role="option" :data-value="option.value" :aria-selected="selectedValue === option.value" :disabled="option.disabled" @click="choose(option.value)" x-text="option.label"></button></template></div>
+                            <button type="button" class="ui-control flex w-full items-center justify-between gap-2 text-left whitespace-nowrap" role="combobox" aria-haspopup="listbox" x-ref="trigger" aria-label="시작 출석 알림 시간대" :aria-expanded="open" :aria-controls="listboxId" :disabled="!startNotification" @click="toggle()" @keydown="handleTriggerKey($event)"><span x-text="selectedLabel"></span><svg class="size-4 flex-none transition-transform" :class="{'rotate-180': open}" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                            <div class="absolute inset-x-0 top-full z-30 mt-1 grid gap-1 rounded-lg bg-app-overlay p-1 shadow-lg" x-show="open" x-cloak :id="listboxId" role="listbox" @keydown="handleOptionKey($event)"><template x-for="option in options" :key="option.value"><button type="button" class="min-h-8 rounded-lg border-0 bg-transparent p-2 text-left text-xs font-normal text-app-muted hover:bg-app-surface-subtle hover:text-app-text focus-visible:bg-app-surface-subtle aria-selected:bg-app-accent-soft aria-selected:font-bold aria-selected:text-app-accent" role="option" :data-value="option.value" :aria-selected="selectedValue === option.value" :disabled="option.disabled" @click="choose(option.value)" x-text="option.label"></button></template></div>
                         </div>
                     </div>
                 </div>
-                <small class="mt-1 block text-xs leading-[1.45] text-app-muted" data-ui="settings-description" x-show="startNotification" x-cloak>10:00까지 체크인하지 않으면 이후에도 알림이 계속됩니다.</small>
+                <small class="ui-settings-description" data-ui="settings-description" x-show="startNotification" x-cloak>10:00까지 체크인하지 않으면 이후에도 계속 알려드려요.</small>
             </section>
 
             <section class="mt-2 border-t border-app-divider pt-2" aria-labelledby="end-notification-title">
                 <div class="flex min-h-8 w-full items-center justify-between gap-2">
-                    <span class="min-w-0 flex-1"><strong id="end-notification-title" class="block text-sm leading-[1.35] font-semibold">종료 출석 알림</strong></span>
-                    <label class="relative inline-flex h-6 w-12 flex-none items-center" data-ui="settings-toggle"><input class="peer sr-only" type="checkbox" aria-label="종료 출석 알림" x-model="endNotification" @change="saveToggle('set_end_notification_enabled', 'endNotification')"/><span class="h-6 w-12 rounded-full border border-app-border-strong bg-app-control transition-colors duration-200 peer-checked:border-app-accent peer-checked:bg-app-accent peer-focus-visible:ring-4 peer-focus-visible:ring-app-accent-soft" aria-hidden="true"></span><span class="pointer-events-none absolute left-1 size-4 rounded-full bg-app-overlay shadow-[inset_0_0_0_2px_var(--color-border)] transition-transform duration-200 ease-out peer-checked:translate-x-6" aria-hidden="true"></span></label>
+                    <span class="min-w-0 flex-1"><strong id="end-notification-title" class="ui-settings-label">종료 출석 알림</strong></span>
+                    <label class="ui-toggle" data-ui="settings-toggle"><input class="peer sr-only" type="checkbox" aria-label="종료 출석 알림" x-model="endNotification" @change="saveToggle('set_end_notification_enabled', 'endNotification')"/><span class="ui-toggle__track" aria-hidden="true"></span><span class="ui-toggle__thumb" aria-hidden="true"></span></label>
                 </div>
                 <div class="pt-2" x-show="endNotification" x-cloak>
-                    <div class="min-w-0"><span class="mb-1 block text-xs font-semibold text-app-muted">알림 시간대</span>
+                    <div class="min-w-0"><span class="mb-1 block text-xs font-bold text-app-muted">알림 시간대</span>
                         <div class="relative w-full" x-data="selectControl" x-effect="syncValue(notificationEnd)" @click.outside="close()">
                             <select hidden x-ref="native" tabindex="-1" aria-hidden="true" x-model.number="notificationEnd" @change="saveEndTime()" :disabled="!endNotification"><option value="0">23:00 - 00:00</option><option value="1">23:00 - 01:00</option><option value="2">23:00 - 02:00</option><option value="3">23:00 - 03:00</option><option value="4">23:00 - 04:00</option></select>
-                            <button type="button" class="flex min-h-8 w-full items-center justify-between gap-2 rounded-lg border border-app-border bg-app-control px-2 py-1 text-left text-xs font-semibold whitespace-nowrap text-app-text transition-colors hover:border-app-border-strong active:scale-[.97] disabled:text-app-disabled disabled:opacity-50" role="combobox" aria-haspopup="listbox" x-ref="trigger" aria-label="종료 출석 알림 시간대" :aria-expanded="open" :aria-controls="listboxId" :disabled="!endNotification" @click="toggle()" @keydown="handleTriggerKey($event)"><span x-text="selectedLabel"></span><svg class="size-4 flex-none transition-transform" :class="{'rotate-180': open}" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-                            <div class="absolute inset-x-0 top-full z-30 mt-1 grid gap-1 rounded-lg border border-app-border-strong bg-app-overlay p-1" x-show="open" x-cloak :id="listboxId" role="listbox" @keydown="handleOptionKey($event)"><template x-for="option in options" :key="option.value"><button type="button" class="min-h-8 rounded-lg border-0 bg-transparent p-2 text-left text-xs font-medium text-app-muted hover:bg-app-surface-subtle hover:text-app-text focus-visible:bg-app-surface-subtle aria-selected:bg-app-accent-soft aria-selected:font-bold aria-selected:text-app-accent" role="option" :data-value="option.value" :aria-selected="selectedValue === option.value" :disabled="option.disabled" @click="choose(option.value)" x-text="option.label"></button></template></div>
+                            <button type="button" class="ui-control flex w-full items-center justify-between gap-2 text-left whitespace-nowrap" role="combobox" aria-haspopup="listbox" x-ref="trigger" aria-label="종료 출석 알림 시간대" :aria-expanded="open" :aria-controls="listboxId" :disabled="!endNotification" @click="toggle()" @keydown="handleTriggerKey($event)"><span x-text="selectedLabel"></span><svg class="size-4 flex-none transition-transform" :class="{'rotate-180': open}" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                            <div class="absolute inset-x-0 top-full z-30 mt-1 grid gap-1 rounded-lg bg-app-overlay p-1 shadow-lg" x-show="open" x-cloak :id="listboxId" role="listbox" @keydown="handleOptionKey($event)"><template x-for="option in options" :key="option.value"><button type="button" class="min-h-8 rounded-lg border-0 bg-transparent p-2 text-left text-xs font-normal text-app-muted hover:bg-app-surface-subtle hover:text-app-text focus-visible:bg-app-surface-subtle aria-selected:bg-app-accent-soft aria-selected:font-bold aria-selected:text-app-accent" role="option" :data-value="option.value" :aria-selected="selectedValue === option.value" :disabled="option.disabled" @click="choose(option.value)" x-text="option.label"></button></template></div>
                         </div>
                     </div>
                 </div>
-                <small class="mt-1 block text-xs leading-[1.45] text-app-muted" data-ui="settings-description" x-show="endNotification" x-cloak>종료 출석을 하지 않으면 마감 5분 전에 긴급 알림을 한 번 더 보냅니다.</small>
+                <small class="ui-settings-description" data-ui="settings-description" x-show="endNotification" x-cloak>종료 출석을 하지 않으면 마감 5분 전에 긴급 알림을 한 번 더 보내요.</small>
             </section>
-            <div class="mt-2 flex min-h-12 w-full items-center justify-between gap-2 border-t border-app-divider py-2"><span class="min-w-0 flex-1"><strong class="block text-sm leading-[1.35] font-semibold">일요일에는 알림 보내지 않기</strong></span><label class="relative inline-flex h-6 w-12 flex-none items-center" data-ui="settings-toggle"><input class="peer sr-only" type="checkbox" aria-label="일요일에는 알림 보내지 않기" x-model="skipSunday" @change="saveToggle('set_skip_sunday', 'skipSunday')"/><span class="h-6 w-12 rounded-full border border-app-border-strong bg-app-control transition-colors duration-200 peer-checked:border-app-accent peer-checked:bg-app-accent peer-focus-visible:ring-4 peer-focus-visible:ring-app-accent-soft" aria-hidden="true"></span><span class="pointer-events-none absolute left-1 size-4 rounded-full bg-app-overlay shadow-[inset_0_0_0_2px_var(--color-border)] transition-transform duration-200 ease-out peer-checked:translate-x-6" aria-hidden="true"></span></label></div>
+            <div class="ui-settings-row border-t border-app-divider"><span class="min-w-0 flex-1"><strong class="ui-settings-label">일요일 출석 알림</strong><small class="ui-settings-description" data-ui="settings-description">일요일에도 출석 상태가 필요할 때 알려드려요.</small></span><label class="ui-toggle" data-ui="settings-toggle"><input class="peer sr-only" type="checkbox" aria-label="일요일 출석 알림" :checked="sundayNotificationEnabled" @change="setSundayNotification($event.currentTarget.checked)"/><span class="ui-toggle__track" aria-hidden="true"></span><span class="ui-toggle__thumb" aria-hidden="true"></span></label></div>
         </fieldset>
+    </section>
 
-        <fieldset class="mt-4 m-0 min-w-0 border-0 p-0" data-ui="meal-notification-settings">
-            <legend class="w-full p-0 text-base font-bold tracking-normal">생활 알림</legend>
-            <div class="mt-2 flex min-h-12 w-full items-center justify-between gap-2 py-1">
+    <section id="notification-settings" class="flex-1" role="tabpanel" aria-labelledby="settings-tab-notification" x-show="settingsReady && activeTab === 'notification'" x-cloak>
+        <fieldset class="ui-settings-section" data-ui="meal-notification-settings">
+            <legend class="ui-section-title">생활 알림</legend>
+            <div class="ui-settings-row">
                 <span class="min-w-0 flex-1">
-                    <strong class="block text-sm font-semibold">새 식단 알림</strong>
-                    <small class="mt-1 block text-xs leading-[1.45] text-app-muted" data-ui="settings-description">중식·석식·주간 식단이 게시되면 홈에 표시하고 알립니다.</small>
+                    <strong class="ui-settings-label">새 식단 알림</strong>
+                    <small class="ui-settings-description" data-ui="settings-description">중식·석식·주간 식단이 게시되면 홈에서 알려드려요.</small>
                 </span>
-                <label class="relative inline-flex h-6 w-12 flex-none items-center" data-ui="settings-toggle">
+                <label class="ui-toggle" data-ui="settings-toggle">
                     <input class="peer sr-only" type="checkbox" aria-label="새 식단 알림"
                            x-model="mealSubscription"
                            @change="saveToggle('set_meal_subscription_enabled', 'mealSubscription')"/>
-                    <span class="h-6 w-12 rounded-full border border-app-border-strong bg-app-control transition-colors duration-200 peer-checked:border-app-accent peer-checked:bg-app-accent peer-focus-visible:ring-4 peer-focus-visible:ring-app-accent-soft" aria-hidden="true"></span>
-                    <span class="pointer-events-none absolute left-1 size-4 rounded-full bg-app-overlay shadow-[inset_0_0_0_2px_var(--color-border)] transition-transform duration-200 ease-out peer-checked:translate-x-6" aria-hidden="true"></span>
+                    <span class="ui-toggle__track" aria-hidden="true"></span>
+                    <span class="ui-toggle__thumb" aria-hidden="true"></span>
                 </label>
             </div>
         </fieldset>
 
-        <fieldset class="mt-4 m-0 min-w-0 border-0 p-0" data-ui="notification-delivery-settings">
-            <legend class="w-full p-0 text-base font-bold tracking-normal">알림 표시 방식</legend>
-            <div class="mt-2 flex min-h-12 w-full items-center justify-between gap-3 py-1">
+        <fieldset class="ui-settings-section" data-ui="notification-delivery-settings">
+            <legend class="ui-section-title">알림 표시 방식</legend>
+            <div class="ui-settings-row">
                 <span class="min-w-0 flex-1">
-                    <strong class="block text-sm font-semibold">알림을 표시할 위치</strong>
+                    <strong class="ui-settings-label">알림을 표시할 위치</strong>
                 </span>
-                <select class="min-h-8 max-w-48 rounded-lg border border-app-border bg-app-surface px-2 py-1 text-xs font-semibold text-app-text focus-visible:ring-4 focus-visible:ring-app-accent-soft"
+                <select class="ui-control max-w-48"
                         aria-label="알림 표시 방식"
                         x-model="notificationDelivery"
                         @change="saveNotificationDelivery()">
@@ -143,45 +156,61 @@
             </div>
         </fieldset>
 
-        <fieldset class="mt-4 m-0 min-w-0 border-0 p-0" data-ui="system-notification-settings">
-            <legend class="w-full p-0 text-base font-bold tracking-normal">시스템 알림</legend>
-            <div class="mt-2 flex min-h-12 w-full items-center justify-between gap-2 py-1">
+        <fieldset class="ui-settings-section" data-ui="system-notification-settings"
+                  x-show="notificationDelivery !== 'overlay'" x-cloak>
+            <legend class="ui-section-title">시스템 알림</legend>
+            <div class="ui-settings-row">
                 <span class="min-w-0 flex-1">
-                    <strong class="block text-sm font-semibold">시스템 알림 설정</strong>
-                    <small class="mt-1 block text-xs leading-[1.45] text-app-muted" data-ui="settings-description">OS 알림을 사용할 때는 운영체제 설정에서 Jungle Bell 알림을 허용해야 합니다.</small>
+                    <strong class="ui-settings-label">시스템 알림 설정</strong>
+                    <small class="ui-settings-description" data-ui="settings-description">OS 알림을 받으려면 운영체제에서 Jungle Bell 알림을 허용해 주세요.</small>
                 </span>
-                <button type="button" class="inline-flex min-h-8 items-center justify-center rounded-lg border border-app-border bg-app-surface px-2 py-1 text-xs font-semibold text-app-text transition-colors duration-200 hover:border-app-border-strong hover:bg-app-surface-subtle focus-visible:ring-4 focus-visible:ring-app-accent-soft disabled:pointer-events-none disabled:opacity-50" @click="openNotificationSettings()">열기</button>
+                <button type="button" class="ui-button ui-button--secondary ui-button--compact" @click="openNotificationSettings()">열기</button>
             </div>
         </fieldset>
 
     </section>
 
-    <section id="app-settings" class="flex-1" x-show="activeTab === 'app'" x-cloak>
-        <aside class="mb-4 flex min-h-16 items-center justify-between gap-4 rounded-lg border border-app-border bg-app-accent-soft p-4" aria-live="polite" x-show="pendingVersion" x-cloak>
-            <span class="min-w-0"><strong class="block text-sm">업데이트 가능</strong><small class="mt-1 block text-xs leading-[1.45] text-app-muted" data-ui="settings-description" x-text="pendingVersion ? `v${pendingVersion} 버전을 설치할 수 있습니다.` : ''"></small></span>
-            <button type="button" class="inline-flex min-h-8 items-center justify-center rounded-lg border border-app-accent bg-app-accent px-2 py-1 text-xs font-semibold text-white transition-colors duration-200 hover:bg-app-accent-hover focus-visible:ring-4 focus-visible:ring-app-accent-soft disabled:pointer-events-none disabled:opacity-50" @click="command('check_and_notify_update')">업데이트</button>
+    <section id="app-settings" class="flex-1" role="tabpanel" aria-labelledby="settings-tab-app" x-show="settingsReady && activeTab === 'app'" x-cloak>
+        <aside class="mb-4 flex min-h-16 items-center justify-between gap-4 rounded-lg bg-app-accent-soft p-4" aria-live="polite" x-show="pendingVersion" x-cloak>
+            <span class="min-w-0"><strong class="block text-sm">업데이트 가능</strong><small class="ui-settings-description" data-ui="settings-description" x-text="pendingVersion ? `v${pendingVersion} 버전을 설치할 수 있습니다.` : ''"></small></span>
+            <button type="button" class="ui-button ui-button--primary ui-button--compact" @click="command('check_and_notify_update')">업데이트</button>
         </aside>
 
-        <fieldset class="m-0 min-w-0 border-0 p-0" data-ui="general-settings">
-            <legend class="w-full p-0 text-base font-bold tracking-normal">일반</legend>
-            <div class="mt-2 flex min-h-12 w-full items-center justify-between gap-2 py-1"><span class="min-w-0 flex-1"><strong class="block text-sm font-semibold">자동 시작</strong></span><label class="relative inline-flex h-6 w-12 flex-none items-center" data-ui="settings-toggle"><input class="peer sr-only" type="checkbox" aria-label="자동 시작" x-model="autoStart" @change="saveToggle('set_auto_start', 'autoStart')"/><span class="h-6 w-12 rounded-full border border-app-border-strong bg-app-control transition-colors duration-200 peer-checked:border-app-accent peer-checked:bg-app-accent peer-focus-visible:ring-4 peer-focus-visible:ring-app-accent-soft" aria-hidden="true"></span><span class="pointer-events-none absolute left-1 size-4 rounded-full bg-app-overlay shadow-[inset_0_0_0_2px_var(--color-border)] transition-transform duration-200 ease-out peer-checked:translate-x-6" aria-hidden="true"></span></label></div>
-            <div class="flex min-h-12 w-full items-center justify-between gap-2 border-t border-app-divider py-1"><span class="min-w-0 flex-1"><strong class="block text-sm font-semibold">자동 업데이트</strong></span><label class="relative inline-flex h-6 w-12 flex-none items-center" data-ui="settings-toggle"><input class="peer sr-only" type="checkbox" aria-label="자동 업데이트" x-model="autoUpdate" @change="toggleAutoUpdate()"/><span class="h-6 w-12 rounded-full border border-app-border-strong bg-app-control transition-colors duration-200 peer-checked:border-app-accent peer-checked:bg-app-accent peer-focus-visible:ring-4 peer-focus-visible:ring-app-accent-soft" aria-hidden="true"></span><span class="pointer-events-none absolute left-1 size-4 rounded-full bg-app-overlay shadow-[inset_0_0_0_2px_var(--color-border)] transition-transform duration-200 ease-out peer-checked:translate-x-6" aria-hidden="true"></span></label></div>
-            <div class="flex min-h-12 w-full items-center justify-between gap-2 border-t border-app-divider py-1"><span class="min-w-0 flex-1"><strong class="block text-sm font-semibold">앱 아이콘 표시</strong><small class="mt-1 block text-xs leading-[1.45] text-app-muted" data-ui="settings-description">Dock 또는 작업 표시줄에 앱 아이콘을 표시합니다.</small></span><label class="relative inline-flex h-6 w-12 flex-none items-center" data-ui="settings-toggle"><input class="peer sr-only" type="checkbox" aria-label="앱 아이콘 표시" x-model="showAppIcon" @change="saveToggle('set_show_app_icon', 'showAppIcon')"/><span class="h-6 w-12 rounded-full border border-app-border-strong bg-app-control transition-colors duration-200 peer-checked:border-app-accent peer-checked:bg-app-accent peer-focus-visible:ring-4 peer-focus-visible:ring-app-accent-soft" aria-hidden="true"></span><span class="pointer-events-none absolute left-1 size-4 rounded-full bg-app-overlay shadow-[inset_0_0_0_2px_var(--color-border)] transition-transform duration-200 ease-out peer-checked:translate-x-6" aria-hidden="true"></span></label></div>
-            <div class="flex min-h-12 w-full items-center justify-between gap-2 border-t border-app-divider py-1"><span class="min-w-0 flex-1"><strong class="block text-sm font-semibold">D-Day 표시</strong><small class="mt-1 block text-xs leading-[1.45] text-app-muted" data-ui="settings-description">트레이 패널에 남은 날짜를 표시합니다.</small></span><label class="relative inline-flex h-6 w-12 flex-none items-center" data-ui="settings-toggle"><input class="peer sr-only" type="checkbox" aria-label="D-Day 표시" x-model="showDday" @change="saveToggle('set_show_dday', 'showDday')"/><span class="h-6 w-12 rounded-full border border-app-border-strong bg-app-control transition-colors duration-200 peer-checked:border-app-accent peer-checked:bg-app-accent peer-focus-visible:ring-4 peer-focus-visible:ring-app-accent-soft" aria-hidden="true"></span><span class="pointer-events-none absolute left-1 size-4 rounded-full bg-app-overlay shadow-[inset_0_0_0_2px_var(--color-border)] transition-transform duration-200 ease-out peer-checked:translate-x-6" aria-hidden="true"></span></label></div>
+        <fieldset class="ui-settings-section" data-ui="general-settings">
+            <legend class="ui-section-title">일반</legend>
+            <div class="ui-settings-row"><span class="min-w-0 flex-1"><strong class="ui-settings-label">자동 시작</strong></span><label class="ui-toggle" data-ui="settings-toggle"><input class="peer sr-only" type="checkbox" aria-label="자동 시작" x-model="autoStart" @change="saveToggle('set_auto_start', 'autoStart')"/><span class="ui-toggle__track" aria-hidden="true"></span><span class="ui-toggle__thumb" aria-hidden="true"></span></label></div>
+            <div class="ui-settings-row border-t border-app-divider"><span class="min-w-0 flex-1"><strong class="ui-settings-label">자동 업데이트</strong></span><label class="ui-toggle" data-ui="settings-toggle"><input class="peer sr-only" type="checkbox" aria-label="자동 업데이트" x-model="autoUpdate" @change="toggleAutoUpdate()"/><span class="ui-toggle__track" aria-hidden="true"></span><span class="ui-toggle__thumb" aria-hidden="true"></span></label></div>
+            <div class="ui-settings-row border-t border-app-divider"><span class="min-w-0 flex-1"><strong class="ui-settings-label">앱 아이콘 표시</strong><small class="ui-settings-description" data-ui="settings-description">Dock 또는 작업 표시줄에 앱 아이콘을 표시해요.</small></span><label class="ui-toggle" data-ui="settings-toggle"><input class="peer sr-only" type="checkbox" aria-label="앱 아이콘 표시" x-model="showAppIcon" @change="saveToggle('set_show_app_icon', 'showAppIcon')"/><span class="ui-toggle__track" aria-hidden="true"></span><span class="ui-toggle__thumb" aria-hidden="true"></span></label></div>
+            <div class="ui-settings-row border-t border-app-divider"><span class="min-w-0 flex-1"><strong class="ui-settings-label">D-Day 표시</strong><small class="ui-settings-description" data-ui="settings-description">트레이 패널에 남은 날짜를 표시해요.</small></span><label class="ui-toggle" data-ui="settings-toggle"><input class="peer sr-only" type="checkbox" aria-label="D-Day 표시" x-model="showDday" @change="saveToggle('set_show_dday', 'showDday')"/><span class="ui-toggle__track" aria-hidden="true"></span><span class="ui-toggle__thumb" aria-hidden="true"></span></label></div>
         </fieldset>
-        <fieldset class="mt-4 m-0 min-w-0 border-0 p-0" data-ui="privacy-settings"><legend class="w-full p-0 text-base font-bold tracking-normal">권한 및 개인정보</legend><div class="mt-2 flex min-h-12 w-full items-center justify-between gap-2 py-1"><span class="min-w-0 flex-1"><strong class="block text-sm font-semibold">사용 통계</strong><small class="mt-1 block text-xs leading-[1.45] text-app-muted" data-ui="settings-description">앱 기능 사용 기록을 서비스 개선에 사용합니다.</small></span><label class="relative inline-flex h-6 w-12 flex-none items-center" data-ui="settings-toggle"><input class="peer sr-only" type="checkbox" aria-label="사용 통계" x-model="usageAnalytics" @change="saveToggle('set_usage_analytics_enabled', 'usageAnalytics')"/><span class="h-6 w-12 rounded-full border border-app-border-strong bg-app-control transition-colors duration-200 peer-checked:border-app-accent peer-checked:bg-app-accent peer-focus-visible:ring-4 peer-focus-visible:ring-app-accent-soft" aria-hidden="true"></span><span class="pointer-events-none absolute left-1 size-4 rounded-full bg-app-overlay shadow-[inset_0_0_0_2px_var(--color-border)] transition-transform duration-200 ease-out peer-checked:translate-x-6" aria-hidden="true"></span></label></div></fieldset>
+        <fieldset class="ui-settings-section" data-ui="privacy-settings"><legend class="ui-section-title">권한 및 개인정보</legend><div class="ui-settings-row"><span class="min-w-0 flex-1"><strong class="ui-settings-label">사용 통계</strong><small class="ui-settings-description" data-ui="settings-description">앱 기능 사용 기록을 서비스 개선에 사용해요.</small></span><label class="ui-toggle" data-ui="settings-toggle"><input class="peer sr-only" type="checkbox" aria-label="사용 통계" x-model="usageAnalytics" @change="saveToggle('set_usage_analytics_enabled', 'usageAnalytics')"/><span class="ui-toggle__track" aria-hidden="true"></span><span class="ui-toggle__thumb" aria-hidden="true"></span></label></div></fieldset>
 
-        <fieldset class="mt-4 m-0 min-w-0 border-0 p-0" data-ui="help-settings">
-            <legend class="w-full p-0 text-base font-bold tracking-normal">도움말</legend>
-            <div class="mt-2 flex min-h-12 w-full items-center justify-between gap-2 py-1" data-ui="onboarding-settings">
-                <strong class="text-sm font-semibold">앱 사용 안내</strong>
-                <button type="button" class="inline-flex min-h-8 items-center justify-center rounded-lg border border-app-border bg-app-surface px-2 py-1 text-xs font-semibold text-app-text transition-colors duration-200 hover:border-app-border-strong hover:bg-app-surface-subtle focus-visible:ring-4 focus-visible:ring-app-accent-soft disabled:pointer-events-none disabled:opacity-50" @click="command('open_onboarding')">다시 보기</button>
+        <fieldset class="ui-settings-section" data-ui="help-settings">
+            <legend class="ui-section-title">도움말</legend>
+            <div class="ui-settings-row" data-ui="onboarding-settings">
+                <strong class="ui-settings-label">앱 사용 안내</strong>
+                <button type="button" class="ui-button ui-button--secondary ui-button--compact" @click="command('open_onboarding')">다시 보기</button>
             </div>
         </fieldset>
 
-        <details class="group mt-4 border-y border-app-divider">
-            <summary class="flex min-h-12 cursor-pointer items-center justify-between gap-2 text-base font-bold"><span>고급 설정</span><svg class="size-4 transition-transform group-open:rotate-180" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
-            <fieldset class="m-0 min-w-0 border-0 pb-2"><legend class="sr-only">진단</legend><div class="flex min-h-12 w-full items-center justify-between gap-2 py-1"><span class="min-w-0 flex-1"><strong class="block text-sm font-semibold">디버그 모드</strong></span><label class="relative inline-flex h-6 w-12 flex-none items-center" data-ui="settings-toggle"><input class="peer sr-only" type="checkbox" aria-label="디버그 모드" x-model="debugMode" @change="toggleDebugMode()"/><span class="h-6 w-12 rounded-full border border-app-border-strong bg-app-control transition-colors duration-200 peer-checked:border-app-accent peer-checked:bg-app-accent peer-focus-visible:ring-4 peer-focus-visible:ring-app-accent-soft" aria-hidden="true"></span><span class="pointer-events-none absolute left-1 size-4 rounded-full bg-app-overlay shadow-[inset_0_0_0_2px_var(--color-border)] transition-transform duration-200 ease-out peer-checked:translate-x-6" aria-hidden="true"></span></label></div><section class="flex min-h-12 w-full items-center justify-between gap-2 border-t border-app-divider py-1"><span class="min-w-0 flex-1"><strong class="block text-sm font-semibold">로그 폴더</strong></span><button type="button" class="inline-flex min-h-8 items-center justify-center rounded-lg border border-app-border bg-app-surface px-2 py-1 text-xs font-semibold text-app-text transition-colors duration-200 hover:border-app-border-strong hover:bg-app-surface-subtle focus-visible:ring-4 focus-visible:ring-app-accent-soft disabled:pointer-events-none disabled:opacity-50" @click="command('open_log_folder')">열기</button></section></fieldset>
+        <fieldset class="ui-settings-section" data-ui="app-info-settings">
+            <legend class="ui-section-title">앱 정보</legend>
+            <div class="ui-settings-row">
+                <span class="min-w-0 flex-1">
+                    <strong class="ui-settings-label">Jungle Bell</strong>
+                    <small class="ui-settings-description" data-ui="settings-description"
+                           x-text="appVersion ? `현재 버전 v${appVersion}` : '버전을 확인하고 있어요'"></small>
+                </span>
+                <nav class="flex flex-none items-center gap-1" aria-label="프로젝트 링크">
+                    <a class="ui-button ui-button--ghost ui-button--compact" href="https://github.com/YangSiJun528/jungle-bell/releases" target="_blank" rel="noopener noreferrer">릴리즈</a>
+                    <a class="ui-button ui-button--ghost ui-button--compact" href="https://github.com/YangSiJun528/jungle-bell" target="_blank" rel="noopener noreferrer">GitHub</a>
+                </nav>
+            </div>
+        </fieldset>
+
+        <details class="group mt-6 border-y border-app-divider">
+            <summary class="flex min-h-12 cursor-pointer items-center justify-between gap-2"><span class="ui-section-title">고급 설정</span><svg class="size-4 transition-transform group-open:rotate-180" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
+            <fieldset class="pb-2"><legend class="sr-only">진단</legend><div class="ui-settings-row"><span class="min-w-0 flex-1"><strong class="ui-settings-label">디버그 모드</strong></span><label class="ui-toggle" data-ui="settings-toggle"><input class="peer sr-only" type="checkbox" aria-label="디버그 모드" x-model="debugMode" @change="toggleDebugMode()"/><span class="ui-toggle__track" aria-hidden="true"></span><span class="ui-toggle__thumb" aria-hidden="true"></span></label></div><section class="ui-settings-row border-t border-app-divider"><span class="min-w-0 flex-1"><strong class="ui-settings-label">로그 폴더</strong></span><button type="button" class="ui-button ui-button--secondary ui-button--compact" @click="command('open_log_folder')">열기</button></section></fieldset>
         </details>
     </section>
 
