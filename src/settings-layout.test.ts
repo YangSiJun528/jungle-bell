@@ -80,6 +80,18 @@ test('설정 탭을 바꾸면 이전 탭의 스크롤 위치를 이어받지 않
     assert.match(selectTab, /window\.scrollTo\(0,\s*0\);/);
 });
 
+test('각 설정 탭은 마지막 항목 뒤에 읽기 여백을 유지한다', () => {
+    const panelClasses = [...settings.matchAll(
+        /<section id="(?:attendance|notification|app)-settings" class="([^"]+)"/g,
+    )].map((match) => match[1] ?? '');
+
+    assert.equal(panelClasses.length, 3);
+    for (const classNames of panelClasses) {
+        assert.match(classNames, /\bflex-1\b/);
+        assert.match(classNames, /\bpb-6\b/);
+    }
+});
+
 test('초기 설정 연결 실패는 기본값 편집 대신 명확한 오류와 재시도를 제공한다', () => {
     const errorStart = settings.indexOf('data-ui="settings-load-error"');
     const errorEnd = settings.indexOf('</section>', errorStart);
