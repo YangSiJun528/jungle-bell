@@ -12,10 +12,10 @@ pub const ALERT_OVERLAY_UPDATED_EVENT: &str = "alert-overlay-updated";
 
 const ALERT_OVERLAY_BACKGROUND: tauri::webview::Color = tauri::webview::Color(0, 0, 0, 0);
 const ALERT_OVERLAY_WIDTH: f64 = 400.0;
-const ALERT_OVERLAY_MIN_HEIGHT: f64 = 151.0;
-const ALERT_OVERLAY_MAX_HEIGHT: f64 = 520.0;
-const ALERT_OVERLAY_HEADER_HEIGHT: f64 = 67.0;
-const ALERT_OVERLAY_ITEM_HEIGHT: f64 = 84.0;
+const ALERT_OVERLAY_MIN_HEIGHT: f64 = 162.0;
+const ALERT_OVERLAY_MAX_HEIGHT: f64 = 522.0;
+const ALERT_OVERLAY_FIXED_HEIGHT: f64 = 90.0;
+const ALERT_OVERLAY_ITEM_HEIGHT: f64 = 72.0;
 const ALERT_OVERLAY_MARGIN: f64 = 18.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -26,7 +26,7 @@ enum OverlayPlacement {
 
 fn overlay_height(alert_count: usize) -> f64 {
     let count = alert_count.max(1) as f64;
-    let desired = ALERT_OVERLAY_HEADER_HEIGHT + ALERT_OVERLAY_ITEM_HEIGHT * count;
+    let desired = ALERT_OVERLAY_FIXED_HEIGHT + ALERT_OVERLAY_ITEM_HEIGHT * count;
     desired.clamp(ALERT_OVERLAY_MIN_HEIGHT, ALERT_OVERLAY_MAX_HEIGHT)
 }
 
@@ -443,9 +443,13 @@ mod tests {
 
     #[test]
     fn 알림_수에_따라_창_높이가_늘어나고_최대_높이를_넘지_않는다() {
-        assert_eq!(overlay_height(1), 151.0);
-        assert_eq!(overlay_height(3), 319.0);
-        assert_eq!(overlay_height(20), 520.0);
+        assert_eq!(overlay_height(0), 162.0);
+        assert_eq!(overlay_height(1), 162.0);
+        assert_eq!(overlay_height(2), 234.0);
+        assert_eq!(overlay_height(3), 306.0);
+        assert_eq!(overlay_height(6), 522.0);
+        assert_eq!(overlay_height(7), 522.0);
+        assert_eq!(overlay_height(20), 522.0);
     }
 
     #[test]
@@ -461,12 +465,12 @@ mod tests {
     fn 사용자가_옮긴_창은_새_알림으로_높이가_바뀌어도_현재_기준점을_유지한다() {
         let current = PhysicalPosition::new(320, 240);
         assert_eq!(
-            preserve_visible_position(current, 151, 319, OverlayPlacement::TopRight),
+            preserve_visible_position(current, 162, 306, OverlayPlacement::TopRight),
             current
         );
         assert_eq!(
-            preserve_visible_position(current, 151, 319, OverlayPlacement::BottomRight),
-            PhysicalPosition::new(320, 72)
+            preserve_visible_position(current, 162, 306, OverlayPlacement::BottomRight),
+            PhysicalPosition::new(320, 96)
         );
     }
 }

@@ -104,7 +104,11 @@ test('알림을 선택하면 관련 창으로 이동하고 해당 항목을 제�
     assert.equal(alertActionLabel('openAttendance'), '출석 열기');
     assert.equal(alertActionLabel('openLaundry'), '워시타워 열기');
     assert.equal(alertActionLabel('openMeals'), '식단 열기');
-    assert.match(source, /open\.setAttribute\('aria-label', `새 알림, \$\{alert\.title\}, \$\{actionLabel\}`\)/);
+    assert.doesNotMatch(source, /open\.setAttribute\('aria-label'/);
+    assert.match(
+        itemTemplate,
+        /data-alert-item-open[\s\S]*data-alert-item-title[\s\S]*data-alert-item-time[\s\S]*data-alert-item-action[\s\S]*data-alert-item-body[\s\S]*<\/button>/,
+    );
     assert.ok(capability.permissions.includes('allow-activate-alert-overlay'));
 });
 
@@ -148,7 +152,7 @@ test('초기 목록 전체가 아니라 이후 추가된 새 알림만 정중하
     assert.match(source, /announcer\.textContent =/);
 });
 
-test('알림 센터는 하나의 둥근 표면 안에서 평면 목록으로 알림을 구분한다', () => {
+test('알림 센터는 좌측 기본 여백을 제거한 목록 박스 안에 고정 높이 알림을 표시한다', () => {
     assert.match(html, /html,\s*body\s*\{[\s\S]*?background:\s*transparent\s*!important/);
     assert.match(
         html,
@@ -160,16 +164,25 @@ test('알림 센터는 하나의 둥근 표면 안에서 평면 목록으로 알
     );
     assert.match(nativeSource, /\.shadow\(false\)\s*\.transparent\(true\)/);
     assert.match(html, /ui-floating-surface[^"]*\bshadow-none\b[^"]*"[\s\S]*data-alert-center/);
+    assert.match(html, /class="[^"]*\bmin-h-0\b[^"]*\bflex-1\b[^"]*\bp-2\b"[^>]*data-alert-list-frame/);
     assert.match(html, /divide-y[^"]*divide-app-divider[^"]*"[\s\S]*data-alert-list/);
-    assert.match(html, /m-0[^"]*p-0[^"]*"[\s\S]*data-alert-list/);
+    assert.match(html, /m-0[^"]*\brounded-ui-card\b[^"]*\bbg-app-surface-subtle\b[^"]*\bpx-0\b[^"]*\bpy-1\b[^"]*"[\s\S]*data-alert-list/);
     assert.match(html, /\bui-scroll-region\b[^"]*"[\s\S]*data-alert-list/);
-    assert.match(itemTemplate, /min-h-\[84px\]/);
+    assert.match(html, /\[--scroll-region-inset:var\(--space-2\)\][^"]*"[\s\S]*data-alert-list/);
+    assert.match(itemTemplate, /\bh-\[72px\](?:\s|")/);
+    assert.match(itemTemplate, /\bitems-center\b/);
+    assert.match(itemTemplate, /\bpy-1\b/);
+    assert.match(itemTemplate, /\bui-scroll-region__content\b/);
+    assert.doesNotMatch(itemTemplate, /\bpx-4\b/);
     assert.match(itemTemplate, /bg-transparent/);
-    assert.match(itemTemplate, /hover:bg-app-surface-subtle/);
+    assert.match(itemTemplate, /hover:bg-app-control/);
+    assert.match(itemTemplate, /\bline-clamp-2\b/);
+    assert.match(itemTemplate, /class="sr-only"[^>]*data-alert-item-action/);
+    assert.doesNotMatch(itemTemplate, /\bui-badge\b|\bmin-h-14\b|min-h-\[84px\]|\bline-clamp-1\b/);
     assert.doesNotMatch(itemTemplate, /rounded-xl|border-app-border|bg-app-overlay|shadow-sm|inset-y-3/);
     assert.doesNotMatch(itemTemplate, /<li\b[^>]*role="article"/);
     assert.doesNotMatch(html, /space-y-2|px-2 pb-2/);
-    assert.match(html, /\[data-alert-list\]::\-webkit-scrollbar\s*\{[\s\S]*?width:\s*6px/);
+    assert.doesNotMatch(html, /\[data-alert-list\]::\-webkit-scrollbar\s*\{[^}]*\bwidth:/s);
 });
 
 test('헤더와 닫기 동작은 장식보다 정보와 조작을 우선한다', () => {

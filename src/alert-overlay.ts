@@ -178,7 +178,6 @@ function startAlertOverlay(): void {
             time.dateTime = new Date(alert.createdAt).toISOString();
             time.textContent = alertTimeLabel(alert.createdAt);
             action.textContent = actionLabel;
-            open.setAttribute('aria-label', `새 알림, ${alert.title}, ${actionLabel}`);
             close.setAttribute('aria-label', `${alert.title} 알림 닫기`);
             open.dataset.alertId = alert.id;
             open.dataset.alertControl = 'open';
