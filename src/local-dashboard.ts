@@ -19,24 +19,12 @@ export interface LaundryDashboardCard {
     sourceFreshness: string | null;
 }
 
-export interface MealAlertCard {
-    id: string;
-    period: 'lunch' | 'dinner';
-    title: string;
-    preview: string;
-    dateKey: string;
-    publishedAt: string | null;
-    createdAt: number;
-}
-
 export interface LocalDashboardSnapshot {
     laundry: LaundryDashboardCard | null;
-    mealAlerts: MealAlertCard[];
 }
 
 export const EMPTY_LOCAL_DASHBOARD: LocalDashboardSnapshot = {
     laundry: null,
-    mealAlerts: [],
 };
 
 export function laundryDashboardRemaining(card: LaundryDashboardCard, now: number): string {

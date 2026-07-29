@@ -798,16 +798,6 @@ pub fn activate_notification(
     inbox.activate(&app, &id)
 }
 
-/// 사용자가 홈 알림 센터에서 선택한 급식 게시 이벤트 하나를 제거한다.
-#[tauri::command]
-pub async fn dismiss_meal_alert(
-    app: tauri::AppHandle,
-    local_consumption: tauri::State<'_, Arc<LocalConsumptionService>>,
-    alert_id: String,
-) -> Result<LocalDashboardSnapshot, String> {
-    local_consumption.dismiss_meal_alert(&app, &alert_id).await
-}
-
 /// 커스텀 트레이 패널에서 선택한 허용된 액션을 실행한다.
 #[tauri::command]
 pub fn run_tray_panel_action(app: tauri::AppHandle, action: tray::TrayPanelAction) -> Result<(), String> {

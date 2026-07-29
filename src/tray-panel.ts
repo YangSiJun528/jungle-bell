@@ -27,10 +27,6 @@ import {
     type LocalDashboardSnapshot,
 } from './local-dashboard.ts';
 import {
-    resolveHomeTasks,
-    type HomeTaskVisibility,
-} from './home-tasks.ts';
-import {
     EMPTY_NOTIFICATION_INBOX,
     normalizeNotificationInboxSnapshot,
     notificationItemLabel as buildNotificationItemLabel,
@@ -70,10 +66,8 @@ interface TrayPanelComponent {
     newsError: boolean;
     busyAction: PanelAction | null;
     taskBusy: 'laundry' | null;
-    mealAlertBusy: string | null;
     get presentation(): StatusPresentation;
     get statusTextParts(): StatusTextParts;
-    get homeTasks(): HomeTaskVisibility;
     get ddayProgress(): DdayProgress | null;
     get newsItems(): NewsItem[];
     init(): Promise<void>;
@@ -107,7 +101,6 @@ interface TrayPanelComponent {
     laundryProgressText(): string;
     laundrySourceWarning(): boolean;
     stopLaundryTracking(): Promise<void>;
-    dismissMealAlert(alertId: string): Promise<void>;
     perform(action: PanelAction): Promise<void>;
     hide(): Promise<void>;
 }
@@ -134,7 +127,7 @@ function trayPanel(): TrayPanelComponent {
         notificationOpen: false,
         ddayExpanded: false,
         state: {...INITIAL_STATE},
-        dashboard: {...EMPTY_LOCAL_DASHBOARD, mealAlerts: []},
+        dashboard: {...EMPTY_LOCAL_DASHBOARD},
         notificationInbox: {...EMPTY_NOTIFICATION_INBOX, items: []},
         notificationLoading: true,
         notificationError: null,
@@ -148,7 +141,6 @@ function trayPanel(): TrayPanelComponent {
         newsError: false,
         busyAction: null,
         taskBusy: null,
-        mealAlertBusy: null,
 
         get presentation() {
             return statusPresentation(this.state.status);
@@ -156,10 +148,6 @@ function trayPanel(): TrayPanelComponent {
 
         get statusTextParts() {
             return splitStatusText(this.state.statusText);
-        },
-
-        get homeTasks() {
-            return resolveHomeTasks(this.dashboard);
         },
 
         get ddayProgress() {
@@ -320,7 +308,7 @@ function trayPanel(): TrayPanelComponent {
         },
 
         async activateNotification(id) {
-            if (this.busyAction || this.taskBusy || this.mealAlertBusy || this.notificationBusy) return;
+            if (this.busyAction || this.taskBusy || this.notificationBusy) return;
             this.notificationBusy = id;
             this.notificationError = null;
             try {
@@ -447,7 +435,7 @@ function trayPanel(): TrayPanelComponent {
         },
 
         async stopLaundryTracking() {
-            if (this.busyAction || this.taskBusy || this.mealAlertBusy || this.notificationBusy) return;
+            if (this.busyAction || this.taskBusy || this.notificationBusy) return;
             this.taskBusy = 'laundry';
             this.taskError = null;
             try {
@@ -460,31 +448,8 @@ function trayPanel(): TrayPanelComponent {
             }
         },
 
-        async dismissMealAlert(alertId) {
-            if (this.busyAction || this.taskBusy || this.mealAlertBusy || this.notificationBusy) return;
-            const previousDashboard = this.dashboard;
-            this.mealAlertBusy = alertId;
-            this.taskError = null;
-            this.dashboard = {
-                ...this.dashboard,
-                mealAlerts: this.dashboard.mealAlerts.filter((alert) => alert.id !== alertId),
-            };
-            try {
-                this.dashboard = await invoke<LocalDashboardSnapshot>(
-                    'dismiss_meal_alert',
-                    {alertId},
-                );
-            } catch (error) {
-                this.dashboard = previousDashboard;
-                this.taskError = '급식 알림을 제거하지 못했어요. 잠시 후 다시 시도해 주세요.';
-                console.error('[tray-panel] dismiss_meal_alert failed', error);
-            } finally {
-                this.mealAlertBusy = null;
-            }
-        },
-
         async perform(action) {
-            if (this.busyAction || this.taskBusy || this.mealAlertBusy || this.notificationBusy) return;
+            if (this.busyAction || this.taskBusy || this.notificationBusy) return;
             this.closeMenu(true);
             this.busyAction = action;
             try {
