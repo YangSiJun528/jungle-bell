@@ -19,11 +19,14 @@ test('생활 정보 종류는 메인 화면과 같은 밑줄형 탭으로 표시
     const navigation = campusHtml.slice(navigationStart, navigationEnd);
 
     assert.match(navigation, /role="tablist"/);
-    assert.match(navigation, /\bflex\b/);
-    assert.match(navigation, /\bborder-b\b/);
-    assert.match(navigation, /role="tab"/);
+    assert.match(navigation, /\bui-tabs\b/);
+    assert.equal(navigation.match(/class="ui-tab"/g)?.length, 2);
+    assert.equal(navigation.match(/role="tab"/g)?.length, 2);
     assert.match(navigation, /:aria-selected=/);
-    assert.match(navigation, /after:bg-app-accent/);
+    assert.match(navigation, /:tabindex=/);
+    assert.equal(navigation.match(/@keydown\.arrow-left\.prevent=/g)?.length, 2);
+    assert.equal(navigation.match(/@keydown\.arrow-right\.prevent=/g)?.length, 2);
+    assert.equal(navigation.match(/\$nextTick\(\(\) => \$refs\.(?:laundryTab|mealsTab)\.focus\(\)\)/g)?.length, 4);
     assert.doesNotMatch(navigation, /\bgrid-cols-2\b|\bbg-app-control\b|aria-current/);
 });
 
@@ -32,6 +35,19 @@ test('워시타워 상세 카드는 실제 설치 구조대로 건조기를 세�
         campusHtml,
         /x-for="entry in \[\{kind:'dryer', appliance:machine\.dryer}, \{kind:'washer', appliance:machine\.washer}]/,
     );
+});
+
+test('워시타워 카드는 알림 버튼 유무와 관계없이 기기 행과 카드 하단을 맞춘다', () => {
+    const laundryPanel = campusHtml.slice(
+        campusHtml.indexOf('<section id="laundry-panel"'),
+        campusHtml.indexOf('<section id="meals-panel"'),
+    );
+
+    assert.match(laundryPanel, /class="grid grid-cols-3 items-stretch gap-4"/);
+    assert.match(laundryPanel, /grid-rows-\[32px_112px_112px\]/);
+    assert.match(laundryPanel, /<section class="h-28 min-w-0 p-2/);
+    assert.match(laundryPanel, /data-skeleton="laundry"[\s\S]*<section class="h-28 /);
+    assert.doesNotMatch(laundryPanel, /items-start|minmax\(88px,auto\)|min-h-\[88px\]/);
 });
 
 test('모든 식단 이미지는 비율을 유지하며 영역을 채운다', () => {
@@ -61,39 +77,75 @@ test('오늘의 식단 카드에는 게시 상태 뱃지를 표시하지 않는�
     assert.doesNotMatch(mealsPanel, /게시됨|게시 전/);
 });
 
-test('세탁 알림은 명시적인 추가 버튼과 모달 대화상자에서 세션을 선택한다', () => {
+test('세탁 알림은 작동 중인 기기 안에서 시작하고 같은 자리에서 조정한다', () => {
     const script = readFileSync(new URL('./campus.ts', import.meta.url), 'utf8');
     const laundryPanel = campusHtml.slice(
         campusHtml.indexOf('<section id="laundry-panel"'),
         campusHtml.indexOf('<section id="meals-panel"'),
     );
 
-    assert.equal(laundryPanel.match(/세탁 알림 추가/g)?.length, 1);
-    assert.match(laundryPanel, /<dialog[^>]*data-ui="laundry-alert-dialog"/);
-    assert.match(laundryPanel, /aria-labelledby="laundry-alert-dialog-title"/);
-    assert.match(laundryPanel, /id="laundry-alert-dialog-title"/);
-    assert.match(laundryPanel, /@click="openLaundryAlertPicker\(\)"/);
-    assert.match(laundryPanel, /x-for="option in laundryAlertOptions\(\)"/);
-    assert.match(laundryPanel, /x-model="laundryAlertSelection"/);
-    assert.match(laundryPanel, /@click="saveLaundryAlert\(\)"/);
-    assert.match(laundryPanel, /laundryWatch \? '알림 변경' : '알림 추가'/);
-    assert.match(campusHtml, /종료\s*전\s*알림/);
-    assert.match(script, /set_laundry_watch/);
-    assert.match(script, /laundryAlertOptions/);
+    assert.match(laundryPanel, /data-ui="laundry-inline-watch"/);
     assert.match(
-        script,
-        /label:\s*`\$\{this\.machineName\(machine\.id\)\}\s+\$\{appliance === 'washer' \? '세탁기' : '건조기'\}\(\$\{this\.machineZoneLabel\(machine\.id\)\}\)\s*·\s*\$\{status\}`/,
+        laundryPanel,
+        /isWatchedLaundry\(machine\.id,\s*entry\.kind,\s*entry\.appliance\?\.sessionId\)/,
     );
-    assert.match(script, /saveLaundryAlert/);
-    assert.match(script, /\.showModal\(\)/);
-    assert.match(script, /\.close\(\)/);
+    assert.match(laundryPanel, /canWatchLaundry\(entry\.appliance\)/);
+    assert.match(laundryPanel, /'알림 설정'\s*:\s*'알림 받기'/);
+    assert.match(laundryPanel, /이 작업이 끝나면 알림 받기/);
+    assert.match(laundryPanel, /알림을 받을 예정이에요/);
+    assert.match(laundryPanel, /추적 종료/);
+    assert.match(laundryPanel, /종료 전 알림/);
+    assert.match(
+        laundryPanel,
+        /watchLaundry\(machine\.id,\s*entry\.kind,\s*entry\.appliance\?\.sessionId\)/,
+    );
+    assert.match(
+        laundryPanel,
+        /updateLaundryNotice\(Number\(\$event\.currentTarget\.value\), \$event\.currentTarget\)/,
+    );
+    assert.match(laundryPanel, /clearLaundryWatch\(\)/);
+    assert.match(script, /set_laundry_watch/);
+    assert.match(script, /isWatchedLaundry/);
+    assert.match(script, /canWatchLaundry/);
+    assert.match(script, /watchLaundry/);
+    assert.match(script, /const watchedMachine = this\.laundryWatch\?\.machineId === machine\.id/);
+    assert.match(script, /if \(!watchedMachine && !laundryZoneMatchesAccess/);
     assert.match(script, /connectSettingsSnapshots/);
     assert.doesNotMatch(
         laundryPanel,
-        /data-ui="laundry-alert-picker"|x-show="laundryAlertPickerOpen"|toggleLaundryWatch|홈에 표시 중|>\s*홈에 표시\s*</,
+        /<dialog|data-ui="laundry-alert-dialog"|openLaundryAlertPicker|laundryAlertSelection|세탁 알림 추가|알림받는 중/,
     );
+    assert.doesNotMatch(script, /laundryAlertOptions|openLaundryAlertPicker|closeLaundryAlertPicker|saveLaundryAlert|watchedLaundryLabel/);
     assert.doesNotMatch(mealsPanel, /새 식단 알림|setMealSubscription/);
     assert.doesNotMatch(script, /setMealSubscription|set_meal_subscription_enabled|mealSubscription/);
+});
+
+test('매초 바뀌는 세탁 현황은 live region으로 반복 낭독하지 않는다', () => {
+    const laundryPanel = campusHtml.slice(
+        campusHtml.indexOf('<section id="laundry-panel"'),
+        campusHtml.indexOf('<section id="meals-panel"'),
+    );
+
+    assert.doesNotMatch(laundryPanel, /class="grid grid-cols-2 gap-2"\s+aria-live=/);
+    assert.doesNotMatch(laundryPanel, /class="grid grid-cols-3 items-stretch gap-4"\s+aria-live=/);
+});
+
+test('세탁 알림 설정은 저장 성공 뒤에만 닫고 실패한 시간 선택을 원래 값으로 복원한다', () => {
+    const script = readFileSync(new URL('./campus.ts', import.meta.url), 'utf8');
+    const laundryPanel = campusHtml.slice(
+        campusHtml.indexOf('<section id="laundry-panel"'),
+        campusHtml.indexOf('<section id="meals-panel"'),
+    );
+
+    assert.match(laundryPanel, /watchLaundry\([^)]*\)\.then\(\(saved\)/);
+    assert.match(laundryPanel, /clearLaundryWatch\(\)\.then\(\(saved\)/);
+    assert.doesNotMatch(
+        laundryPanel,
+        /watchLaundry\(machine\.id,\s*entry\.kind,\s*entry\.appliance\?\.sessionId\);\s*watchMenuOpen = false/,
+    );
+    assert.match(script, /const previousNotifyBeforeMins = this\.laundryWatch\.notifyBeforeMins/);
+    assert.match(script, /selectElement\.value = String\(previousNotifyBeforeMins\)/);
+    assert.match(script, /return saved/);
 });
 
 test('상단 표 아래에 필터와 독립적인 남성·여성 세탁 현황 카드를 표시한다', () => {
@@ -121,10 +173,14 @@ test('상단 표 아래에 필터와 독립적인 남성·여성 세탁 현황 �
         /situation\.(?:startableLoads|washerUsable|dryerUsable|activeWashers|activeDryers|total)/,
     );
     assert.doesNotMatch(laundryPanel, /건조 여유|완료 표시는|동시에 가동 중이면/);
-    assert.match(script, /assessLaundryAccessSituation\(machines, 'men', reliable\)/);
-    assert.match(script, /assessLaundryAccessSituation\(machines, 'women', reliable\)/);
-    assert.match(script, /세탁 후 건조기가 부족할 수 있어 기다리는 게 좋아요\./);
-    assert.match(script, /한 대를 써도 여유가 남아 시작해도 괜찮을 것 같아요\./);
+    assert.match(script, /assessLaundryAccessSituation\(machines, 'men', reliable, this\.clockNow\)/);
+    assert.match(script, /assessLaundryAccessSituation\(machines, 'women', reliable, this\.clockNow\)/);
+    assert.match(script, /comfortable: '여유 있음'/);
+    assert.match(script, /return '건조 대기 가능성 낮음'/);
+    assert.doesNotMatch(
+        script,
+        /현재 기준|situation\.startableLoads|기다리는 게 좋아요|괜찮을 것 같아요|널널함|자리 부족/,
+    );
     assert.doesNotMatch(situationMethod, /this\.laundryAccess|this\.laundryFilter/);
 });
 
