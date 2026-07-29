@@ -98,8 +98,21 @@
         x-show="notificationOpen"
         x-cloak
     >
-        <div class="mb-2 flex h-10 items-center justify-between px-1">
-            <h2 id="tray-notification-title" class="m-0 text-ui-body font-bold" tabindex="-1">알림</h2>
+        <div class="sticky top-0 z-10 mb-2 flex h-10 items-center justify-between bg-app-bg px-1">
+            <div class="flex min-w-0 items-center gap-1">
+                <button
+                    type="button"
+                    class="ui-button ui-button--compact ui-button--icon size-8 flex-none rounded-full border-0 bg-transparent p-0 text-app-muted hover:bg-app-control hover:text-app-text"
+                    aria-label="이전 화면으로 돌아가기"
+                    data-ui="notification-back"
+                    @click="closeNotifications(true)"
+                >
+                    <svg class="size-4" data-icon="chevron-left" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="m15 6-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+                <h2 id="tray-notification-title" class="m-0 truncate text-ui-body font-bold" tabindex="-1">알림</h2>
+            </div>
             <small
                 class="text-ui-caption font-bold text-app-faint tabular-nums"
                 x-text="notificationInbox.unreadCount > 0 ? `읽지 않음 ${notificationInbox.unreadCount}개` : `${notificationInbox.items.length}개`"
