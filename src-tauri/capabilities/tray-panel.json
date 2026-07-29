@@ -8,6 +8,7 @@
     "allow-get-tray-panel-state",
     "allow-get-local-dashboard-snapshot",
     "allow-set-laundry-watch",
+    "allow-dismiss-laundry-activity",
     "allow-run-tray-panel-action",
     "allow-hide-tray-panel",
     "allow-get-news-feed",

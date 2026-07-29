@@ -328,6 +328,25 @@ pub async fn set_laundry_watch(
 }
 
 #[tauri::command]
+pub async fn dismiss_laundry_activity(
+    app: tauri::AppHandle,
+    settings: tauri::State<'_, Arc<SettingsService>>,
+    local_consumption: tauri::State<'_, Arc<LocalConsumptionService>>,
+    activity_id: String,
+) -> Result<LocalDashboardSnapshot, String> {
+    config::validate_laundry_terminal_activity_id(&activity_id)?;
+    let commit = settings
+        .update_config(&app, "dismiss_laundry_activity", move |config| {
+            Ok(config.dismiss_laundry_terminal_activity(&activity_id))
+        })
+        .await?;
+    if commit.changed {
+        local_consumption.on_settings_changed(&app, false).await;
+    }
+    Ok(local_consumption.dashboard_snapshot().await)
+}
+
+#[tauri::command]
 pub async fn set_notification_start(
     app: tauri::AppHandle,
     settings: tauri::State<'_, Arc<SettingsService>>,

@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::Path;
@@ -25,6 +26,24 @@ pub struct LaundryWatch {
     pub appliance: LaundryApplianceKind,
     pub session_id: String,
     pub notify_before_mins: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum LaundryTerminalStatus {
+    Completed,
+    Error,
+    NeedsCheck,
+    Replaced,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LaundryTerminalActivity {
+    pub id: String,
+    pub watch: LaundryWatch,
+    pub status: LaundryTerminalStatus,
+    pub finished_at: i64,
 }
 
 /// 출석 체크 시간대 설정.
@@ -101,6 +120,9 @@ pub struct Config {
     /// 홈에서 추적하고 종료 임박·완료 알림을 받을 세탁 작업.
     #[serde(default)]
     pub laundry_watch: Option<LaundryWatch>,
+    /// 추적은 끝났지만 사용자가 아직 확인·제거하지 않은 세탁 작업.
+    #[serde(default)]
+    pub laundry_terminal_activities: Vec<LaundryTerminalActivity>,
 }
 
 fn default_true() -> bool {
@@ -157,6 +179,23 @@ pub fn validate_laundry_watch(watch: &LaundryWatch) -> Result<(), String> {
     validate_text(&watch.session_id, "세탁 세션 ID", 240)?;
     if !ALLOWED_LAUNDRY_NOTICE_MINS.contains(&watch.notify_before_mins) {
         return Err("세탁 종료 전 알림은 1, 3, 5, 10, 15, 30분 중 하나여야 합니다.".into());
+    }
+    Ok(())
+}
+
+pub fn validate_laundry_terminal_activity(activity: &LaundryTerminalActivity) -> Result<(), String> {
+    validate_laundry_watch(&activity.watch)?;
+    validate_laundry_terminal_activity_id(&activity.id)?;
+    if activity.finished_at <= 0 {
+        return Err("잘못된 세탁 종료 시각입니다.".into());
+    }
+    Ok(())
+}
+
+pub fn validate_laundry_terminal_activity_id(id: &str) -> Result<(), String> {
+    let trimmed = id.trim();
+    if trimmed.is_empty() || trimmed != id || trimmed.chars().count() > 512 || trimmed.chars().any(char::is_control) {
+        return Err("잘못된 세탁 종료 항목 ID입니다.".into());
     }
     Ok(())
 }
@@ -235,6 +274,13 @@ impl Config {
             .map_err(|error| format!("설정 파일({}) 저장 실패: {error}", path.display()))
     }
 
+    pub fn dismiss_laundry_terminal_activity(&mut self, activity_id: &str) -> bool {
+        let original_len = self.laundry_terminal_activities.len();
+        self.laundry_terminal_activities
+            .retain(|activity| activity.id != activity_id);
+        self.laundry_terminal_activities.len() != original_len
+    }
+
     fn normalize_loaded_values(&mut self) -> bool {
         let mut changed = false;
 
@@ -251,6 +297,15 @@ impl Config {
         {
             log::warn!("[config] 잘못된 세탁 추적 설정을 제거합니다");
             self.laundry_watch = None;
+            changed = true;
+        }
+        let original_terminal_count = self.laundry_terminal_activities.len();
+        let mut terminal_ids = BTreeSet::new();
+        self.laundry_terminal_activities.retain(|activity| {
+            validate_laundry_terminal_activity(activity).is_ok() && terminal_ids.insert(activity.id.clone())
+        });
+        if self.laundry_terminal_activities.len() != original_terminal_count {
+            log::warn!("[config] 잘못되거나 중복된 세탁 종료 항목을 제거합니다");
             changed = true;
         }
         if self
@@ -299,6 +354,7 @@ impl Default for Config {
             selected_cohort_id: None,
             meal_subscription_enabled: true,
             laundry_watch: None,
+            laundry_terminal_activities: Vec::new(),
         }
     }
 }
@@ -510,6 +566,85 @@ mod tests {
 
         assert!(config.meal_subscription_enabled);
         assert!(config.laundry_watch.is_none());
+        assert!(config.laundry_terminal_activities.is_empty());
+    }
+
+    #[test]
+    fn 종료된_세탁_항목이_없는_기존_config도_빈_목록으로_읽는다() {
+        let mut value = serde_json::to_value(Config::default()).unwrap();
+        value.as_object_mut().unwrap().remove("laundry_terminal_activities");
+
+        let config: Config = serde_json::from_value(value).unwrap();
+
+        assert!(config.laundry_terminal_activities.is_empty());
+    }
+
+    #[test]
+    fn 세탁_종료_항목은_지정된_id만_제거한다() {
+        let watched = LaundryWatch {
+            machine_id: "tower6".into(),
+            appliance: LaundryApplianceKind::Washer,
+            session_id: "session-1".into(),
+            notify_before_mins: 5,
+        };
+        let first = LaundryTerminalActivity {
+            id: "activity-1".into(),
+            watch: watched.clone(),
+            status: LaundryTerminalStatus::Completed,
+            finished_at: 1_785_118_700_000,
+        };
+        let second = LaundryTerminalActivity {
+            id: "activity-2".into(),
+            watch: LaundryWatch {
+                appliance: LaundryApplianceKind::Dryer,
+                session_id: "session-2".into(),
+                ..watched
+            },
+            status: LaundryTerminalStatus::Error,
+            finished_at: 1_785_122_300_000,
+        };
+        let mut config = Config {
+            laundry_terminal_activities: vec![first, second.clone()],
+            ..Config::default()
+        };
+
+        assert!(config.dismiss_laundry_terminal_activity("activity-1"));
+        assert_eq!(config.laundry_terminal_activities, vec![second]);
+        assert!(!config.dismiss_laundry_terminal_activity("missing"));
+    }
+
+    #[test]
+    fn 세탁_종료_항목은_설정_파일에_저장되어_재시작후에도_복구된다() {
+        let root = std::env::temp_dir().join(format!(
+            "jungle-bell-laundry-terminal-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos(),
+        ));
+        let path = root.join("config.json");
+        let activity = LaundryTerminalActivity {
+            id: "activity-persisted".into(),
+            watch: LaundryWatch {
+                machine_id: "tower6".into(),
+                appliance: LaundryApplianceKind::Washer,
+                session_id: "session-1".into(),
+                notify_before_mins: 5,
+            },
+            status: LaundryTerminalStatus::Completed,
+            finished_at: 1_785_118_700_000,
+        };
+        let config = Config {
+            laundry_terminal_activities: vec![activity.clone()],
+            ..Config::default()
+        };
+
+        config.save_to(&path).unwrap();
+        let restored: Config = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+
+        assert_eq!(restored.laundry_terminal_activities, vec![activity]);
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
