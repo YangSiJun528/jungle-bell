@@ -5,7 +5,7 @@ use notify_rust::{Notification, NotificationResponse};
 
 use crate::alert_overlay::{AlertOverlayAction, AlertOverlayService};
 use crate::config::NotificationDelivery;
-use crate::tray::{self, TrayPanelAction};
+use crate::notification_inbox::NotificationInboxService;
 
 const OPEN_ACTION_ID: &str = "open";
 // 출석 알림의 다음 고정 발송(15분) 직전에 기존 액션 listener를 정리한다.
@@ -14,13 +14,6 @@ const _: () = assert!(SYSTEM_NOTIFICATION_TIMEOUT_MS < 15 * 60 * 1_000);
 const _: () = assert!(SYSTEM_NOTIFICATION_TIMEOUT_MS >= 10 * 60 * 1_000);
 const MAX_ACTION_RESPONSE_LISTENERS: usize = 64;
 static ACTIVE_ACTION_RESPONSE_LISTENERS: AtomicUsize = AtomicUsize::new(0);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum NotificationAction {
-    Attendance,
-    Laundry,
-    Meals,
-}
 
 impl NotificationAction {
     fn button_label(self) -> &'static str {
@@ -38,15 +31,9 @@ impl NotificationAction {
             Self::Meals => AlertOverlayAction::Meals,
         }
     }
-
-    fn tray_action(self) -> TrayPanelAction {
-        match self {
-            Self::Attendance => TrayPanelAction::OpenAttendance,
-            Self::Laundry => TrayPanelAction::OpenLaundry,
-            Self::Meals => TrayPanelAction::OpenMeals,
-        }
-    }
 }
+
+pub use crate::notification_inbox::NotificationAction;
 
 pub struct NotificationRequest<'a> {
     pub key: &'a str,
@@ -72,23 +59,25 @@ impl<'a> NotificationRequest<'a> {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct DeliveryReport {
+    pub inbox_recorded: bool,
     pub overlay_delivered: bool,
     pub system_delivered: bool,
 }
 
 impl DeliveryReport {
     pub fn any_delivered(self) -> bool {
-        self.overlay_delivered || self.system_delivered
+        self.inbox_recorded
     }
 }
 
 pub struct NotificationService {
     overlay: Arc<AlertOverlayService>,
+    inbox: Arc<NotificationInboxService>,
 }
 
 impl NotificationService {
-    pub fn new(overlay: Arc<AlertOverlayService>) -> Self {
-        Self { overlay }
+    pub fn new(overlay: Arc<AlertOverlayService>, inbox: Arc<NotificationInboxService>) -> Self {
+        Self { overlay, inbox }
     }
 
     pub fn initialize_system_backend(&self) -> Result<(), String> {
@@ -107,6 +96,26 @@ impl NotificationService {
 
     pub fn deliver(&self, app: &tauri::AppHandle, request: NotificationRequest<'_>) -> DeliveryReport {
         let mut report = DeliveryReport::default();
+        let notification_id = match self.inbox.record(
+            app,
+            request.key,
+            request.title,
+            request.body,
+            request.action,
+            request.dedupe_key,
+        ) {
+            Ok((id, _)) => {
+                report.inbox_recorded = true;
+                id
+            }
+            Err(error) => {
+                log::error!(
+                    "[notification] inbox persistence failed: key={} error={error}",
+                    request.key
+                );
+                return report;
+            }
+        };
 
         if request.delivery.uses_overlay() {
             match request.action {
@@ -135,7 +144,14 @@ impl NotificationService {
         }
 
         if request.delivery.uses_system() {
-            match show_system(app, request.title, request.body, request.action) {
+            match show_system(
+                app,
+                request.title,
+                request.body,
+                request.action,
+                notification_id,
+                self.inbox.clone(),
+            ) {
                 Ok(()) => {
                     report.system_delivered = true;
                     log::info!("[notification] OS notification queued: key={}", request.key);
@@ -172,10 +188,12 @@ impl Drop for ActionResponseListenerSlot {
     }
 }
 
-fn opens_action(response: &NotificationResponse, action: NotificationAction) -> bool {
+fn opens_action(response: &NotificationResponse, action: Option<NotificationAction>) -> bool {
     match response {
         NotificationResponse::Default => true,
-        NotificationResponse::Action(value) => value == OPEN_ACTION_ID || value == action.button_label(),
+        NotificationResponse::Action(value) => {
+            action.is_some_and(|action| value == OPEN_ACTION_ID || value == action.button_label())
+        }
         NotificationResponse::Reply(_) | NotificationResponse::Closed(_) => false,
     }
 }
@@ -185,6 +203,8 @@ pub fn show_system(
     title: &str,
     body: &str,
     action: Option<NotificationAction>,
+    notification_id: String,
+    inbox: Arc<NotificationInboxService>,
 ) -> Result<(), String> {
     let mut notification = Notification::new();
     notification
@@ -205,15 +225,11 @@ pub fn show_system(
     #[cfg(windows)]
     configure_windows_identity(app, &mut notification)?;
 
-    let listener_slot = action.and_then(|_| ActionResponseListenerSlot::reserve());
+    let listener_slot = ActionResponseListenerSlot::reserve();
     let handle = notification
         .show()
         .map_err(|error| format!("운영체제 알림 표시 실패: {error}"))?;
 
-    let Some(action) = action else {
-        drop(handle);
-        return Ok(());
-    };
     let Some(listener_slot) = listener_slot else {
         log::warn!("[notification] action response listener limit reached; notification shown without a new listener");
         drop(handle);
@@ -227,14 +243,8 @@ pub fn show_system(
             if !opens_action(response, action) {
                 return;
             }
-
-            let app_for_action = app.clone();
-            if let Err(error) = app.run_on_main_thread(move || {
-                if let Err(error) = tray::run_tray_panel_action(&app_for_action, action.tray_action()) {
-                    log::warn!("[notification] action failed: {error}");
-                }
-            }) {
-                log::warn!("[notification] action scheduling failed: {error}");
+            if let Err(error) = inbox.activate(&app, &notification_id) {
+                log::warn!("[notification] inbox activation failed: {error}");
             }
         }) {
             log::debug!("[notification] response listener ended: {error}");
@@ -266,25 +276,34 @@ fn configure_windows_identity(app: &tauri::AppHandle, notification: &mut Notific
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tray::TrayPanelAction;
 
     #[test]
     fn 기본_클릭과_열기_버튼만_요청된_액션을_실행한다() {
         let action = NotificationAction::Attendance;
 
-        assert!(opens_action(&NotificationResponse::Default, action));
+        assert!(opens_action(&NotificationResponse::Default, Some(action)));
         assert!(opens_action(
             &NotificationResponse::Action(OPEN_ACTION_ID.into()),
-            action
+            Some(action)
         ));
         assert!(opens_action(
             &NotificationResponse::Action(action.button_label().into()),
-            action
+            Some(action)
         ));
-        assert!(!opens_action(&NotificationResponse::Action("other".into()), action));
-        assert!(!opens_action(&NotificationResponse::Reply("답장".into()), action));
+        assert!(!opens_action(
+            &NotificationResponse::Action("other".into()),
+            Some(action)
+        ));
+        assert!(!opens_action(&NotificationResponse::Reply("답장".into()), Some(action)));
         assert!(!opens_action(
             &NotificationResponse::Closed(notify_rust::CloseReason::Dismissed),
-            action
+            Some(action)
+        ));
+        assert!(opens_action(&NotificationResponse::Default, None));
+        assert!(!opens_action(
+            &NotificationResponse::Action(OPEN_ACTION_ID.into()),
+            None
         ));
     }
 
@@ -319,13 +338,15 @@ mod tests {
     }
 
     #[test]
-    fn 한_채널만_성공해도_발송한_것으로_판단한다() {
+    fn 앱_알림함에_저장된_경우에만_발송한_것으로_판단한다() {
         assert!(DeliveryReport {
+            inbox_recorded: true,
             overlay_delivered: true,
             system_delivered: false,
         }
         .any_delivered());
-        assert!(DeliveryReport {
+        assert!(!DeliveryReport {
+            inbox_recorded: false,
             overlay_delivered: false,
             system_delivered: true,
         }

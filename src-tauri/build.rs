@@ -44,6 +44,8 @@ const APP_COMMANDS: &[&str] = &[
     "open_news_item",
     "get_login_status",
     "refresh_login_status",
+    "get_notification_inbox_snapshot",
+    "activate_notification",
     "get_alert_overlay_snapshot",
     "dismiss_alert_overlay",
     "activate_alert_overlay",

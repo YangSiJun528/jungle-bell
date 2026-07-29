@@ -13,6 +13,8 @@ mod interval_tasks;
 mod local_consumption;
 mod news;
 #[cfg(desktop)]
+mod notification_inbox;
+#[cfg(desktop)]
 mod notification_service;
 mod runtime;
 mod scheduler;
@@ -27,6 +29,7 @@ use tokio::sync::Mutex;
 use alert_overlay::AlertOverlayService;
 use config::Config;
 use local_consumption::LocalConsumptionService;
+use notification_inbox::NotificationInboxService;
 use notification_service::{NotificationRequest, NotificationService};
 use settings_state::SettingsService;
 use state::AppState;
@@ -140,7 +143,11 @@ pub fn run() {
     };
     let shared_state = Arc::new(Mutex::new(AppState::new(config)));
     let alert_overlay_service = Arc::new(AlertOverlayService::default());
-    let notification_service = Arc::new(NotificationService::new(alert_overlay_service.clone()));
+    let notification_inbox_service = Arc::new(NotificationInboxService::load());
+    let notification_service = Arc::new(NotificationService::new(
+        alert_overlay_service.clone(),
+        notification_inbox_service.clone(),
+    ));
     let settings_service = Arc::new(SettingsService::new(
         shared_state.clone(),
         env!("CARGO_PKG_VERSION").to_string(),
@@ -195,6 +202,7 @@ pub fn run() {
         // 핸들러에서 `tauri::State<Arc<Mutex<AppState>>>`로 받아 사용.
         .manage(shared_state.clone())
         .manage(alert_overlay_service)
+        .manage(notification_inbox_service.clone())
         .manage(notification_service.clone())
         .manage(settings_service)
         .manage(local_consumption_service)
@@ -247,6 +255,8 @@ pub fn run() {
             commands::open_news_item,
             commands::get_login_status,
             commands::refresh_login_status,
+            commands::get_notification_inbox_snapshot,
+            commands::activate_notification,
             commands::get_alert_overlay_snapshot,
             commands::dismiss_alert_overlay,
             commands::activate_alert_overlay,
@@ -279,6 +289,7 @@ pub fn run() {
             // 기본값이 true이므로 첫 설치 시 자동으로 등록됨.
             sync_auto_start_setting(app.handle(), &shared_state);
             tray::setup_tray(app)?;
+            notification_inbox_service.initialize(app.handle());
             let uses_system_notifications = shared_state
                 .try_lock()
                 .map(|state| state.config.notification_delivery.uses_system())

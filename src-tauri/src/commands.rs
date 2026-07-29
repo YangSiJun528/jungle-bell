@@ -22,6 +22,7 @@ use crate::checker;
 use crate::config;
 use crate::local_consumption::{LocalConsumptionService, LocalDashboardSnapshot};
 use crate::news::{self, NewsFeed, NewsService};
+use crate::notification_inbox::{self, NotificationInboxService, NotificationInboxSnapshot};
 use crate::notification_service::NotificationService;
 use crate::settings_state::{SettingsService, SettingsSnapshot};
 use crate::state::{self, AppState};
@@ -803,6 +804,28 @@ pub async fn get_local_dashboard_snapshot(
     local_consumption: tauri::State<'_, Arc<LocalConsumptionService>>,
 ) -> Result<LocalDashboardSnapshot, String> {
     Ok(local_consumption.dashboard_snapshot().await)
+}
+
+/// 트레이 패널에 표시할 영속 앱 알림 목록을 반환한다.
+#[tauri::command]
+pub fn get_notification_inbox_snapshot(
+    window: tauri::WebviewWindow,
+    inbox: tauri::State<'_, Arc<NotificationInboxService>>,
+) -> Result<NotificationInboxSnapshot, String> {
+    notification_inbox::ensure_tray_panel_window(&window)?;
+    inbox.snapshot()
+}
+
+/// 앱 또는 OS 알림에서 선택한 항목을 읽음 처리하고 연결된 화면을 연다.
+#[tauri::command]
+pub fn activate_notification(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    inbox: tauri::State<'_, Arc<NotificationInboxService>>,
+    id: String,
+) -> Result<NotificationInboxSnapshot, String> {
+    notification_inbox::ensure_tray_panel_window(&window)?;
+    inbox.activate(&app, &id)
 }
 
 #[tauri::command]
