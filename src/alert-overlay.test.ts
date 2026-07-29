@@ -13,6 +13,7 @@ import {
 
 const html = readFileSync(new URL('./alert-overlay.html', import.meta.url), 'utf8');
 const source = readFileSync(new URL('./alert-overlay.ts', import.meta.url), 'utf8');
+const nativeSource = readFileSync(new URL('../src-tauri/src/alert_overlay.rs', import.meta.url), 'utf8');
 const capability = JSON.parse(
     readFileSync(new URL('../src-tauri/capabilities/alert-overlay.json', import.meta.url), 'utf8'),
 ) as {permissions: string[]};
@@ -157,7 +158,8 @@ test('알림 센터는 하나의 둥근 표면 안에서 평면 목록으로 알
         html,
         /<body\b[^>]*class="[^"]*\bh-full\b[^"]*\boverflow-hidden\b[^"]*\bbg-transparent\b/,
     );
-    assert.match(html, /ui-floating-surface[^"]*"[\s\S]*data-alert-center/);
+    assert.match(nativeSource, /\.shadow\(false\)\s*\.transparent\(true\)/);
+    assert.match(html, /ui-floating-surface[^"]*\bshadow-none\b[^"]*"[\s\S]*data-alert-center/);
     assert.match(html, /divide-y[^"]*divide-app-divider[^"]*"[\s\S]*data-alert-list/);
     assert.match(html, /m-0[^"]*p-0[^"]*"[\s\S]*data-alert-list/);
     assert.match(html, /\bui-scroll-region\b[^"]*"[\s\S]*data-alert-list/);
