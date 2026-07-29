@@ -8,12 +8,13 @@ use std::sync::Arc;
 use chrono::{DateTime, Datelike, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use tauri::{Emitter, Manager};
 use tokio::sync::Mutex;
 
 use crate::attendance_day;
 use crate::campus::{CampusDataKind, CampusSnapshot};
-use crate::config::{Config, LaundryApplianceKind, LaundryWatch};
+use crate::config::{Config, LaundryApplianceKind, LaundryTerminalActivity, LaundryTerminalStatus, LaundryWatch};
 use crate::notification_service::{NotificationAction, NotificationRequest, NotificationService};
 use crate::settings_state::SettingsService;
 use crate::state::{AppState, DailyPhase};
@@ -74,7 +75,7 @@ struct LaundryTrackingState {
 struct LocalEvaluation {
     baselines: Vec<CursorMark>,
     notifications: Vec<LocalNotification>,
-    finished_laundry_watch: Option<LaundryWatch>,
+    finished_laundry_activity: Option<LaundryTerminalActivity>,
     laundry_tracking: Option<LaundryTrackingState>,
 }
 
@@ -183,10 +184,23 @@ pub struct LaundryDashboardCard {
     pub source_freshness: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LaundryTerminalDashboardCard {
+    pub id: String,
+    pub machine_id: String,
+    pub machine_label: String,
+    pub appliance: LaundryApplianceKind,
+    pub session_id: String,
+    pub status: LaundryTerminalStatus,
+    pub finished_at: i64,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LocalDashboardSnapshot {
     pub laundry: Option<LaundryDashboardCard>,
+    pub laundry_terminal_activities: Vec<LaundryTerminalDashboardCard>,
 }
 
 #[derive(Debug, Default)]
@@ -237,16 +251,16 @@ impl LocalConsumptionService {
                 evaluate_meals(&snapshot.data, config.meal_subscription_enabled, now, &runtime.cursors)
             }
         };
-        let finished_laundry_watch = evaluation.finished_laundry_watch.clone();
+        let finished_laundry_activity = evaluation.finished_laundry_activity.clone();
         cursors_changed |= self.apply_evaluation(app, &mut runtime, evaluation, now);
-        let finished_laundry_watch =
-            finished_laundry_watch.filter(|watch| finished_laundry_notification_recorded(&runtime.cursors, watch));
+        let finished_laundry_activity = finished_laundry_activity
+            .filter(|activity| finished_laundry_notification_recorded(&runtime.cursors, &activity.watch));
         if cursors_changed {
             persist_event_cursors(runtime.cursors.clone()).await;
         }
         drop(runtime);
-        if let Some(finished) = finished_laundry_watch {
-            self.clear_finished_laundry_watch(app, finished).await;
+        if let Some(finished) = finished_laundry_activity {
+            self.retain_finished_laundry_activity(app, finished).await;
         }
         let config = self.state.lock().await.config.clone();
         let runtime = self.runtime.lock().await;
@@ -309,16 +323,16 @@ impl LocalConsumptionService {
                 evaluate_meals(&snapshot.data, config.meal_subscription_enabled, now, &runtime.cursors),
             );
         }
-        let finished_laundry_watch = evaluation.finished_laundry_watch.clone();
+        let finished_laundry_activity = evaluation.finished_laundry_activity.clone();
         cursor_changed |= self.apply_evaluation(app, &mut runtime, evaluation, now);
-        let finished_laundry_watch =
-            finished_laundry_watch.filter(|watch| finished_laundry_notification_recorded(&runtime.cursors, watch));
+        let finished_laundry_activity = finished_laundry_activity
+            .filter(|activity| finished_laundry_notification_recorded(&runtime.cursors, &activity.watch));
         if cursor_changed {
             persist_event_cursors(runtime.cursors.clone()).await;
         }
         drop(runtime);
-        if let Some(finished) = finished_laundry_watch {
-            self.clear_finished_laundry_watch(app, finished).await;
+        if let Some(finished) = finished_laundry_activity {
+            self.retain_finished_laundry_activity(app, finished).await;
         }
         let config = self.state.lock().await.config.clone();
         let runtime = self.runtime.lock().await;
@@ -333,27 +347,28 @@ impl LocalConsumptionService {
         build_dashboard_snapshot(&config, &runtime, Utc::now())
     }
 
-    async fn clear_finished_laundry_watch(&self, app: &tauri::AppHandle, finished: LaundryWatch) {
+    async fn retain_finished_laundry_activity(&self, app: &tauri::AppHandle, finished: LaundryTerminalActivity) {
         let settings = app.state::<Arc<SettingsService>>().inner().clone();
         let finished_for_update = finished.clone();
         match settings
             .update_config(app, "laundry_terminal", move |config| {
-                Ok(clear_finished_laundry_watch(config, &finished_for_update))
+                Ok(retain_finished_laundry_activity(config, &finished_for_update))
             })
             .await
         {
             Ok(commit) if commit.changed => {
                 log::info!(
-                    "[local-consumption] finished laundry watch cleared: machine={} session={}",
-                    finished.machine_id,
-                    finished.session_id
+                    "[local-consumption] finished laundry activity retained: machine={} session={} status={:?}",
+                    finished.watch.machine_id,
+                    finished.watch.session_id,
+                    finished.status,
                 );
                 let mut runtime = self.runtime.lock().await;
                 if runtime
                     .cursors
                     .laundry_tracking
                     .as_ref()
-                    .is_some_and(|tracking| laundry_tracking_matches_watch(tracking, &finished))
+                    .is_some_and(|tracking| laundry_tracking_matches_watch(tracking, &finished.watch))
                 {
                     runtime.cursors.laundry_tracking = None;
                     let cursors = runtime.cursors.clone();
@@ -364,9 +379,9 @@ impl LocalConsumptionService {
             Ok(_) => {}
             Err(error) => {
                 log::error!(
-                    "[local-consumption] finished laundry watch clear failed: machine={} session={} error={error}",
-                    finished.machine_id,
-                    finished.session_id
+                    "[local-consumption] finished laundry activity retain failed: machine={} session={} error={error}",
+                    finished.watch.machine_id,
+                    finished.watch.session_id,
                 );
             }
         }
@@ -459,8 +474,8 @@ fn emit_dashboard_snapshot(app: &tauri::AppHandle, snapshot: &LocalDashboardSnap
 fn merge_evaluation(target: &mut LocalEvaluation, mut source: LocalEvaluation) {
     target.baselines.append(&mut source.baselines);
     target.notifications.append(&mut source.notifications);
-    if target.finished_laundry_watch.is_none() {
-        target.finished_laundry_watch = source.finished_laundry_watch.take();
+    if target.finished_laundry_activity.is_none() {
+        target.finished_laundry_activity = source.finished_laundry_activity.take();
     }
     if target.laundry_tracking.is_none() {
         target.laundry_tracking = source.laundry_tracking.take();
@@ -493,20 +508,69 @@ fn reconcile_laundry_tracking(cursors: &mut EventCursorStore, watch: Option<&Lau
     true
 }
 
-fn clear_finished_laundry_watch(config: &mut Config, finished: &LaundryWatch) -> bool {
-    if config.laundry_watch.as_ref() != Some(finished) {
+fn retain_finished_laundry_activity(config: &mut Config, finished: &LaundryTerminalActivity) -> bool {
+    let Some(active_watch) = config.laundry_watch.as_ref() else {
         return false;
+    };
+    let finished_watch_is_active = active_watch == &finished.watch;
+    if finished_watch_is_active {
+        config.laundry_watch = None;
     }
-    config.laundry_watch = None;
-    true
+    let activity_added = !config
+        .laundry_terminal_activities
+        .iter()
+        .any(|activity| activity.id == finished.id);
+    if activity_added {
+        config.laundry_terminal_activities.push(finished.clone());
+    }
+    finished_watch_is_active || activity_added
 }
 
 fn build_dashboard_snapshot(config: &Config, runtime: &LocalRuntime, _now: DateTime<Utc>) -> LocalDashboardSnapshot {
+    let mut laundry_terminal_activities = config
+        .laundry_terminal_activities
+        .iter()
+        .map(build_laundry_terminal_dashboard_card)
+        .collect::<Vec<_>>();
+    laundry_terminal_activities.sort_by_key(|activity| std::cmp::Reverse(activity.finished_at));
     LocalDashboardSnapshot {
         laundry: config
             .laundry_watch
             .as_ref()
             .map(|watch| build_laundry_dashboard_card(watch, runtime)),
+        laundry_terminal_activities,
+    }
+}
+
+fn build_laundry_terminal_dashboard_card(activity: &LaundryTerminalActivity) -> LaundryTerminalDashboardCard {
+    LaundryTerminalDashboardCard {
+        id: activity.id.clone(),
+        machine_id: activity.watch.machine_id.clone(),
+        machine_label: laundry_machine_name(&activity.watch.machine_id),
+        appliance: activity.watch.appliance,
+        session_id: activity.watch.session_id.clone(),
+        status: activity.status,
+        finished_at: activity.finished_at,
+    }
+}
+
+fn finished_laundry_activity(
+    watch: &LaundryWatch,
+    status: LaundryTerminalStatus,
+    now: DateTime<Utc>,
+) -> LaundryTerminalActivity {
+    let identity = serde_json::to_vec(&(watch.machine_id.as_str(), watch.appliance, watch.session_id.as_str()))
+        .expect("laundry activity identity is serializable");
+    let activity_hash = Sha256::digest(identity);
+    let activity_id = activity_hash
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    LaundryTerminalActivity {
+        id: format!("laundry-{activity_id}"),
+        watch: watch.clone(),
+        status,
+        finished_at: now.timestamp_millis(),
     }
 }
 
@@ -773,7 +837,8 @@ fn evaluate_laundry(
     ));
     if completed {
         let mark = laundry_completion_mark(watch);
-        evaluation.finished_laundry_watch = Some(watch.clone());
+        evaluation.finished_laundry_activity =
+            Some(finished_laundry_activity(watch, LaundryTerminalStatus::Completed, now));
         if !cursors.has_fingerprint(&mark) {
             evaluation.notifications.push(LocalNotification {
                 cursor: mark,
@@ -839,7 +904,7 @@ fn evaluate_laundry(
             return evaluation;
         }
 
-        let (mark, title, body) = if next_tracking.phase == LaundryTrackingPhase::AwaitingCompletion {
+        let (mark, title, body, terminal_status) = if next_tracking.phase == LaundryTrackingPhase::AwaitingCompletion {
             (
                 laundry_completion_mark(watch),
                 format!("{appliance_label} 완료"),
@@ -847,6 +912,7 @@ fn evaluate_laundry(
                     "{} {appliance_device_label}가 끝났습니다. 세탁물을 꺼내 주세요.",
                     laundry_machine_name(&watch.machine_id)
                 ),
+                LaundryTerminalStatus::Completed,
             )
         } else if replacement_is_active {
             (
@@ -856,6 +922,7 @@ fn evaluate_laundry(
                     "{} {appliance_device_label}에서 새 작업이 시작되어 기존 추적을 종료합니다.",
                     laundry_machine_name(&watch.machine_id)
                 ),
+                LaundryTerminalStatus::Replaced,
             )
         } else {
             (
@@ -865,9 +932,10 @@ fn evaluate_laundry(
                     "{} {appliance_device_label}의 선택한 작업이 끝나 기존 추적을 종료합니다.",
                     laundry_machine_name(&watch.machine_id)
                 ),
+                LaundryTerminalStatus::Replaced,
             )
         };
-        evaluation.finished_laundry_watch = Some(watch.clone());
+        evaluation.finished_laundry_activity = Some(finished_laundry_activity(watch, terminal_status, now));
         if !cursors.has_fingerprint(&mark) {
             evaluation.notifications.push(LocalNotification {
                 cursor: mark,
@@ -894,7 +962,8 @@ fn evaluate_laundry(
     });
     if needs_check {
         let mark = laundry_needs_check_mark(watch);
-        evaluation.finished_laundry_watch = Some(watch.clone());
+        evaluation.finished_laundry_activity =
+            Some(finished_laundry_activity(watch, LaundryTerminalStatus::NeedsCheck, now));
         if !cursors.has_fingerprint(&mark) {
             evaluation.notifications.push(LocalNotification {
                 cursor: mark,
@@ -950,7 +1019,8 @@ fn evaluate_laundry(
     if let Some((attention_kind, title, body, priority)) = attention {
         let mark = laundry_attention_mark(watch, attention_kind);
         if attention_kind == "error" {
-            evaluation.finished_laundry_watch = Some(watch.clone());
+            evaluation.finished_laundry_activity =
+                Some(finished_laundry_activity(watch, LaundryTerminalStatus::Error, now));
         }
         if !cursors.has_fingerprint(&mark) {
             evaluation.notifications.push(LocalNotification {
@@ -1240,7 +1310,7 @@ fn evaluate_attendance(
     LocalEvaluation {
         baselines: Vec::new(),
         notifications: coalesce_notifications(candidates),
-        finished_laundry_watch: None,
+        finished_laundry_activity: None,
         laundry_tracking: None,
     }
 }
@@ -1287,6 +1357,20 @@ mod tests {
             session_id: "session-1".into(),
             notify_before_mins,
         }
+    }
+
+    fn finished_watch(evaluation: &LocalEvaluation) -> Option<LaundryWatch> {
+        evaluation
+            .finished_laundry_activity
+            .as_ref()
+            .map(|activity| activity.watch.clone())
+    }
+
+    fn finished_status(evaluation: &LocalEvaluation) -> Option<LaundryTerminalStatus> {
+        evaluation
+            .finished_laundry_activity
+            .as_ref()
+            .map(|activity| activity.status)
     }
 
     fn laundry(status: &str, projection: &str, finish_at: &str, session_id: &str) -> Value {
@@ -1397,7 +1481,8 @@ mod tests {
         assert_eq!(result.notifications.len(), 1);
         assert!(result.notifications[0].title.contains("완료"));
         assert!(result.notifications[0].body.contains("꺼내 주세요"));
-        assert_eq!(result.finished_laundry_watch, Some(watch));
+        assert_eq!(finished_watch(&result), Some(watch));
+        assert_eq!(finished_status(&result), Some(LaundryTerminalStatus::Completed),);
     }
 
     #[test]
@@ -1446,13 +1531,14 @@ mod tests {
         assert_eq!(result.notifications[0].title, "세탁 상태 확인");
         assert!(result.notifications[0].body.contains("끝났거나 중단됐습니다"));
         assert!(result.baselines.is_empty());
-        assert_eq!(result.finished_laundry_watch, Some(watched.clone()));
+        assert_eq!(finished_watch(&result), Some(watched.clone()));
+        assert_eq!(finished_status(&result), Some(LaundryTerminalStatus::NeedsCheck),);
 
         cursors.record_notification(&result.notifications[0], now + chrono::Duration::minutes(5));
         assert!(finished_laundry_notification_recorded(&cursors, &watched));
         let repeated = evaluate_laundry(&powered_off, &watched, now + chrono::Duration::minutes(6), &cursors);
         assert!(repeated.notifications.is_empty());
-        assert_eq!(repeated.finished_laundry_watch, Some(watched));
+        assert_eq!(finished_watch(&repeated), Some(watched));
     }
 
     #[test]
@@ -1466,7 +1552,7 @@ mod tests {
     }
 
     #[test]
-    fn 완료_알림이_등록되면_추적을_해제해_대시보드에서_제거한다() {
+    fn 완료_알림이_등록되면_추적을_끝내고_사용자가_제거할때까지_대시보드에_남긴다() {
         let completed_at = utc(9, 5, 0);
         let completed = laundry("COMPLETED", "CONFIRMED_COMPLETED", "2026-07-27T09:05:00Z", "session-1");
         let finished = watch(5);
@@ -1488,9 +1574,17 @@ mod tests {
             ..Config::default()
         };
 
-        assert!(clear_finished_laundry_watch(&mut config, &finished));
+        let finished_activity = evaluation.finished_laundry_activity.unwrap();
+        assert!(retain_finished_laundry_activity(&mut config, &finished_activity,));
+        assert!(config.laundry_watch.is_none());
+        assert_eq!(config.laundry_terminal_activities, vec![finished_activity]);
         let dashboard = build_dashboard_snapshot(&config, &runtime, utc(9, 10, 0));
         assert!(dashboard.laundry.is_none());
+        assert_eq!(dashboard.laundry_terminal_activities.len(), 1);
+        assert_eq!(
+            dashboard.laundry_terminal_activities[0].status,
+            LaundryTerminalStatus::Completed,
+        );
     }
 
     #[test]
@@ -1533,12 +1627,12 @@ mod tests {
         );
         let first = evaluate_laundry(&replacement_first, &watch, utc(9, 6, 0), &cursors);
         assert!(first.notifications.is_empty());
-        assert!(first.finished_laundry_watch.is_none());
+        assert!(first.finished_laundry_activity.is_none());
         apply_laundry_tracking(&mut cursors, &first);
 
         let repeated_snapshot = evaluate_laundry(&replacement_first, &watch, utc(9, 6, 10), &cursors);
         assert!(repeated_snapshot.notifications.is_empty());
-        assert!(repeated_snapshot.finished_laundry_watch.is_none());
+        assert!(repeated_snapshot.finished_laundry_activity.is_none());
 
         let replacement_confirmed = checked_at(
             observed_at(
@@ -1552,7 +1646,7 @@ mod tests {
         assert_eq!(confirmed.notifications.len(), 1);
         assert_eq!(confirmed.notifications[0].title, "세탁 완료");
         assert!(!confirmed.notifications[0].body.contains("새 작업"));
-        assert_eq!(confirmed.finished_laundry_watch, Some(watch));
+        assert_eq!(finished_watch(&confirmed), Some(watch));
     }
 
     #[test]
@@ -1585,7 +1679,8 @@ mod tests {
         assert_eq!(second_result.notifications.len(), 1);
         assert_eq!(second_result.notifications[0].title, "새 건조 시작 감지");
         assert!(second_result.notifications[0].body.contains("기존 추적을 종료"));
-        assert_eq!(second_result.finished_laundry_watch, Some(watch.clone()));
+        assert_eq!(finished_watch(&second_result), Some(watch.clone()));
+        assert_eq!(finished_status(&second_result), Some(LaundryTerminalStatus::Replaced),);
         cursors.record_notification(&second_result.notifications[0], utc(9, 10, 30));
         assert!(finished_laundry_notification_recorded(&cursors, &watch));
     }
@@ -1603,7 +1698,7 @@ mod tests {
 
         let first = checked_at(laundry("IDLE", "IDLE", "", "session-2"), "2026-07-27T09:10:00Z");
         let first_result = evaluate_laundry(&first, &watched, utc(9, 10, 0), &cursors);
-        assert!(first_result.finished_laundry_watch.is_none());
+        assert!(first_result.finished_laundry_activity.is_none());
         assert!(first_result
             .laundry_tracking
             .as_ref()
@@ -1616,7 +1711,7 @@ mod tests {
 
         assert_eq!(second_result.notifications.len(), 1);
         assert_eq!(second_result.notifications[0].title, "세탁 추적 종료");
-        assert_eq!(second_result.finished_laundry_watch, Some(watched));
+        assert_eq!(finished_watch(&second_result), Some(watched));
     }
 
     #[test]
@@ -1637,7 +1732,7 @@ mod tests {
             "2026-07-27T09:01:00Z",
         );
         let extended_result = evaluate_laundry(&extended, &watch, utc(9, 1, 0), &cursors);
-        assert!(extended_result.finished_laundry_watch.is_none());
+        assert!(extended_result.finished_laundry_activity.is_none());
         apply_laundry_tracking(&mut cursors, &extended_result);
 
         for status in ["SCHEDULED", "IDLE"] {
@@ -1648,7 +1743,7 @@ mod tests {
             );
             let result = evaluate_laundry(&replacement, &watch, utc(9, 2, 0), &cursors);
             assert!(result.notifications.is_empty());
-            assert!(result.finished_laundry_watch.is_none());
+            assert!(result.finished_laundry_activity.is_none());
         }
 
         let stale = observed_at(
@@ -1658,7 +1753,7 @@ mod tests {
         );
         let stale_result = evaluate_laundry(&stale, &watch, utc(9, 3, 0), &cursors);
         assert!(stale_result.notifications.is_empty());
-        assert!(stale_result.finished_laundry_watch.is_none());
+        assert!(stale_result.finished_laundry_activity.is_none());
     }
 
     #[test]
@@ -1695,7 +1790,7 @@ mod tests {
         let second = evaluate_laundry(&restarted("2026-07-27T09:10:30Z"), &watch, utc(9, 10, 30), &cursors);
         assert_eq!(second.notifications.len(), 1);
         assert_eq!(second.notifications[0].title, "새 세탁 시작 감지");
-        assert_eq!(second.finished_laundry_watch, Some(watch));
+        assert_eq!(finished_watch(&second), Some(watch));
     }
 
     #[test]
@@ -1734,12 +1829,13 @@ mod tests {
         assert!(first.notifications[0].title.starts_with("!!!"));
         assert!(first.notifications[0].title.contains("오류"));
         assert!(first.notifications[0].body.contains("확인해 주세요"));
-        assert_eq!(first.finished_laundry_watch, Some(watch.clone()));
+        assert_eq!(finished_watch(&first), Some(watch.clone()));
+        assert_eq!(finished_status(&first), Some(LaundryTerminalStatus::Error),);
         cursors.record_notification(&first.notifications[0], utc(9, 1, 0));
 
         let repeated = evaluate_laundry(&data, &watch, utc(9, 2, 0), &cursors);
         assert!(repeated.notifications.is_empty());
-        assert_eq!(repeated.finished_laundry_watch, Some(watch));
+        assert_eq!(finished_watch(&repeated), Some(watch));
     }
 
     #[test]
@@ -1747,12 +1843,12 @@ mod tests {
         let nearing = laundry("RUNNING", "ESTIMATED_RUNNING", "2026-07-27T09:05:00Z", "session-1");
         let before = evaluate_laundry(&nearing, &watch(5), utc(9, 0, 0), &EventCursorStore::default());
         assert_eq!(before.notifications.len(), 1);
-        assert!(before.finished_laundry_watch.is_none());
+        assert!(before.finished_laundry_activity.is_none());
 
         let paused = laundry("PAUSED", "PAUSED", "2026-07-27T09:05:00Z", "session-1");
         let paused_result = evaluate_laundry(&paused, &watch(5), utc(9, 0, 0), &EventCursorStore::default());
         assert_eq!(paused_result.notifications.len(), 1);
-        assert!(paused_result.finished_laundry_watch.is_none());
+        assert!(paused_result.finished_laundry_activity.is_none());
     }
 
     #[test]
@@ -1786,12 +1882,12 @@ mod tests {
             assert_eq!(first.notifications.len(), 1);
             assert_eq!(first.notifications[0].title, expected_title);
             assert!(first.notifications[0].cursor.key.ends_with(".awaiting-completion"));
-            assert!(first.finished_laundry_watch.is_none());
+            assert!(first.finished_laundry_activity.is_none());
 
             cursors.record_notification(&first.notifications[0], now);
             let repeated = evaluate_laundry(&data, &watch, now + chrono::Duration::seconds(30), &cursors);
             assert!(repeated.notifications.is_empty());
-            assert!(repeated.finished_laundry_watch.is_none());
+            assert!(repeated.finished_laundry_activity.is_none());
         }
     }
 
@@ -1811,28 +1907,61 @@ mod tests {
 
             assert_eq!(result.notifications.len(), 1);
             assert!(result.notifications[0].title.contains(expected_title));
-            assert_eq!(result.finished_laundry_watch, Some(watch.clone()));
+            assert_eq!(finished_watch(&result), Some(watch.clone()));
         }
     }
 
     #[test]
-    fn 종결된_세션과_일치하는_추적만_자동_해제한다() {
+    fn 늦게_도착한_종결_처리는_새_추적을_보존하며_종료_항목만_추가한다() {
         let finished = watch(5);
+        let activity = finished_laundry_activity(&finished, LaundryTerminalStatus::Completed, utc(9, 5, 0));
         let mut config = Config {
             laundry_watch: Some(finished.clone()),
             ..Config::default()
         };
 
-        assert!(clear_finished_laundry_watch(&mut config, &finished));
+        assert!(retain_finished_laundry_activity(&mut config, &activity));
         assert!(config.laundry_watch.is_none());
+        assert_eq!(config.laundry_terminal_activities, vec![activity.clone()]);
 
         let replacement = LaundryWatch {
             session_id: "session-2".into(),
             ..watch(5)
         };
-        config.laundry_watch = Some(replacement.clone());
-        assert!(!clear_finished_laundry_watch(&mut config, &finished));
-        assert_eq!(config.laundry_watch, Some(replacement));
+        let mut raced_config = Config {
+            laundry_watch: Some(replacement.clone()),
+            ..Config::default()
+        };
+        assert!(retain_finished_laundry_activity(&mut raced_config, &activity,));
+        assert_eq!(raced_config.laundry_watch, Some(replacement));
+        assert_eq!(raced_config.laundry_terminal_activities, vec![activity]);
+    }
+
+    #[test]
+    fn 같은_세탁_세션의_종료_항목_id는_재평가_시각과_결과에_관계없이_안정적이다() {
+        let watched = watch(5);
+        let completed = finished_laundry_activity(&watched, LaundryTerminalStatus::Completed, utc(9, 5, 0));
+        let retried = finished_laundry_activity(&watched, LaundryTerminalStatus::Error, utc(9, 6, 0));
+
+        assert_eq!(completed.id, retried.id);
+    }
+
+    #[test]
+    fn 세탁_종료_항목_id는_구분자가_포함된_기기와_세션도_충돌하지_않는다() {
+        let first_watch = LaundryWatch {
+            machine_id: "a".into(),
+            session_id: "b:washer:c".into(),
+            ..watch(5)
+        };
+        let second_watch = LaundryWatch {
+            machine_id: "a:washer:b".into(),
+            session_id: "c".into(),
+            ..watch(5)
+        };
+        let first = finished_laundry_activity(&first_watch, LaundryTerminalStatus::Completed, utc(9, 5, 0));
+        let second = finished_laundry_activity(&second_watch, LaundryTerminalStatus::Completed, utc(9, 5, 0));
+
+        assert_ne!(first.id, second.id);
     }
 
     #[test]
@@ -2324,6 +2453,43 @@ mod tests {
         config.meal_subscription_enabled = false;
         let hidden = build_dashboard_snapshot(&config, &runtime, utc(9, 0, 0));
         assert!(hidden.laundry.is_none());
+    }
+
+    #[test]
+    fn 대시보드는_새_추적과_제거하지_않은_종료_항목을_함께_투영한다() {
+        let completed = finished_laundry_activity(&watch(5), LaundryTerminalStatus::Completed, utc(8, 30, 0));
+        let errored = finished_laundry_activity(&dryer_watch(5), LaundryTerminalStatus::Error, utc(8, 40, 0));
+        let config = Config {
+            laundry_watch: Some(LaundryWatch {
+                session_id: "session-2".into(),
+                ..watch(5)
+            }),
+            laundry_terminal_activities: vec![completed, errored],
+            ..Config::default()
+        };
+        let runtime = LocalRuntime {
+            laundry: Some(CampusSnapshot {
+                saved_at: utc(9, 0, 0).timestamp_millis(),
+                data: laundry("RUNNING", "ESTIMATED_RUNNING", "2026-07-27T09:30:00Z", "session-2"),
+            }),
+            ..LocalRuntime::default()
+        };
+
+        let dashboard = build_dashboard_snapshot(&config, &runtime, utc(9, 0, 0));
+
+        assert_eq!(
+            dashboard.laundry.as_ref().map(|activity| &activity.session_id),
+            Some(&"session-2".to_string()),
+        );
+        assert_eq!(dashboard.laundry_terminal_activities.len(), 2);
+        assert_eq!(
+            dashboard.laundry_terminal_activities[0].status,
+            LaundryTerminalStatus::Error,
+        );
+        assert_eq!(
+            dashboard.laundry_terminal_activities[1].status,
+            LaundryTerminalStatus::Completed,
+        );
     }
 
     fn now_unique_suffix() -> u128 {

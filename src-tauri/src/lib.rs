@@ -223,6 +223,7 @@ pub fn run() {
             commands::set_end_notification_enabled,
             commands::set_meal_subscription_enabled,
             commands::set_laundry_watch,
+            commands::dismiss_laundry_activity,
             commands::set_notification_start,
             commands::set_notification_end,
             commands::set_skip_attendance,
