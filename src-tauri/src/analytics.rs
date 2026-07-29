@@ -56,6 +56,8 @@ pub enum Setting {
     AutoStart(bool),
     StartNotificationEnabled(bool),
     EndNotificationEnabled(bool),
+    StartNotificationIntervalMinutes(u32),
+    EndNotificationIntervalMinutes(u32),
     NotificationStart { hour: u32, minute: u32 },
     NotificationEnd { hour: u32, minute: u32 },
     SkipAttendance(bool),
@@ -162,6 +164,8 @@ impl Setting {
             Self::AutoStart(value) => ("auto_start", bool_value(value).into()),
             Self::StartNotificationEnabled(value) => ("start_notification_enabled", bool_value(value).into()),
             Self::EndNotificationEnabled(value) => ("end_notification_enabled", bool_value(value).into()),
+            Self::StartNotificationIntervalMinutes(value) => ("start_notification_interval_minutes", value.to_string()),
+            Self::EndNotificationIntervalMinutes(value) => ("end_notification_interval_minutes", value.to_string()),
             Self::NotificationStart { hour, minute } => ("notification_start", time_value(hour, minute)),
             Self::NotificationEnd { hour, minute } => ("notification_end", time_value(hour, minute)),
             Self::SkipAttendance(value) => ("skip_attendance", bool_value(value).into()),
@@ -429,6 +433,15 @@ mod tests {
         assert_eq!(
             setting.properties,
             vec![("setting", "notification_start".into()), ("value", "04:00".into()),]
+        );
+
+        let interval = Event::SettingChanged(Setting::StartNotificationIntervalMinutes(3)).into_payload();
+        assert_eq!(
+            interval.properties,
+            vec![
+                ("setting", "start_notification_interval_minutes".into()),
+                ("value", "3".into()),
+            ]
         );
 
         let campus = Event::CampusInteraction(CampusInteraction::LaundryFilterChanged(LaundryFilter::WasherAvailable))

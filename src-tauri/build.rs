@@ -19,6 +19,8 @@ const APP_COMMANDS: &[&str] = &[
     "set_meal_subscription_enabled",
     "set_laundry_watch",
     "dismiss_laundry_activity",
+    "set_start_notification_interval",
+    "set_end_notification_interval",
     "set_notification_start",
     "set_notification_end",
     "set_skip_attendance",
