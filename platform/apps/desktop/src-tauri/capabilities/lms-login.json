@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "lms-login",
+  "description": "Normalized LMS state callback for the exact persistent Jungle LMS WebView",
+  "local": false,
+  "remote": {
+    "urls": ["https://jungle-lms.krafton.com/*"]
+  },
+  "windows": ["lms-login"],
+  "permissions": ["allow-report-lms-agent-event"]
+}
