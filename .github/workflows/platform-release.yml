@@ -1,0 +1,659 @@
+name: Platform Release
+run-name: Platform release ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
+on:
+  push:
+    tags:
+      - "platform-v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Immutable release tag (for example platform-v0.1.0)"
+        required: true
+        type: string
+      ref:
+        description: "Commit, branch, or tag to release; defaults to the triggering commit"
+        required: false
+        type: string
+      app_origin:
+        description: "HTTPS web app origin; defaults to repository variable JB_APP_ORIGIN"
+        required: false
+        type: string
+      api_origin:
+        description: "HTTPS API origin; defaults to repository variable JB_API_ORIGIN"
+        required: false
+        type: string
+      prerelease:
+        description: "Publish as a prerelease"
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: platform-release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "24"
+
+jobs:
+  prepare:
+    name: Validate immutable release inputs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      api_origin: ${{ steps.release.outputs.api_origin }}
+      app_origin: ${{ steps.release.outputs.app_origin }}
+      image: ${{ steps.release.outputs.image }}
+      prerelease: ${{ steps.release.outputs.prerelease }}
+      sha: ${{ steps.release.outputs.sha }}
+      tag: ${{ steps.release.outputs.tag }}
+      version: ${{ steps.release.outputs.version }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Resolve and validate release metadata
+        id: release
+        env:
+          DISPATCH_API_ORIGIN: ${{ inputs.api_origin }}
+          DISPATCH_APP_ORIGIN: ${{ inputs.app_origin }}
+          DISPATCH_PRERELEASE: ${{ inputs.prerelease }}
+          DISPATCH_REF: ${{ inputs.ref }}
+          DISPATCH_TAG: ${{ inputs.tag }}
+          REPOSITORY_API_ORIGIN: ${{ vars.JB_API_ORIGIN }}
+          REPOSITORY_APP_ORIGIN: ${{ vars.JB_APP_ORIGIN }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            tag="$GITHUB_REF_NAME"
+            sha="$(git rev-parse "${GITHUB_SHA}^{commit}")"
+          else
+            tag="$DISPATCH_TAG"
+            requested_ref="${DISPATCH_REF:-$GITHUB_SHA}"
+            requested_sha="$(git rev-parse "${requested_ref}^{commit}")"
+            existing_tag_sha="$(git rev-list -n 1 "$tag" 2>/dev/null || true)"
+            if [[ -n "$existing_tag_sha" ]]; then
+              if [[ -n "$DISPATCH_REF" && "$existing_tag_sha" != "$requested_sha" ]]; then
+                echo "::error::The existing tag does not point to the requested ref."
+                exit 1
+              fi
+              sha="$existing_tag_sha"
+            else
+              sha="$requested_sha"
+            fi
+          fi
+
+          if [[ ! "$tag" =~ ^platform-v([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$ ]]; then
+            echo "::error::The tag must match platform-vMAJOR.MINOR.PATCH[-PRERELEASE]."
+            exit 1
+          fi
+          version="${BASH_REMATCH[1]}"
+
+          git checkout --detach "$sha"
+          package_version="$(node -p "require('./platform/package.json').version")"
+          tauri_version="$(node -p "require('./platform/apps/desktop/src-tauri/tauri.conf.json').version")"
+          cargo_version="$(
+            sed -nE 's/^version = "([^"]+)"$/\1/p' \
+              platform/apps/desktop/src-tauri/Cargo.toml |
+              head -n 1
+          )"
+          if [[ "$version" != "$package_version" ||
+                "$version" != "$tauri_version" ||
+                "$version" != "$cargo_version" ]]; then
+            echo "::error::Tag, platform package, Tauri config, and Cargo versions must match."
+            exit 1
+          fi
+
+          app_origin="${DISPATCH_APP_ORIGIN:-$REPOSITORY_APP_ORIGIN}"
+          api_origin="${DISPATCH_API_ORIGIN:-$REPOSITORY_API_ORIGIN}"
+          normalized_origins="$(
+            APP_ORIGIN="$app_origin" API_ORIGIN="$api_origin" node <<'NODE'
+          const values = [
+            ["JB_APP_ORIGIN", process.env.APP_ORIGIN],
+            ["JB_API_ORIGIN", process.env.API_ORIGIN],
+          ];
+          const normalized = values.map(([name, raw]) => {
+            if (!raw) throw new Error(`${name} is required`);
+            const value = new URL(raw);
+            if (
+              value.protocol !== "https:" ||
+              value.username ||
+              value.password ||
+              value.pathname !== "/" ||
+              value.search ||
+              value.hash
+            ) {
+              throw new Error(`${name} must be an HTTPS origin without credentials, path, query, or fragment`);
+            }
+            return value.origin;
+          });
+          if (normalized[0] !== normalized[1]) {
+            throw new Error("JB_APP_ORIGIN and JB_API_ORIGIN must be the same production origin");
+          }
+          process.stdout.write(`${normalized[0]}\n${normalized[1]}\n`);
+          NODE
+          )"
+          app_origin="$(sed -n '1p' <<<"$normalized_origins")"
+          api_origin="$(sed -n '2p' <<<"$normalized_origins")"
+
+          prerelease=false
+          if [[ "$version" == *-* ||
+                ("$GITHUB_EVENT_NAME" == "workflow_dispatch" &&
+                 "$DISPATCH_PRERELEASE" == "true") ]]; then
+            prerelease=true
+          fi
+
+          repository_lower="$(
+            tr '[:upper:]' '[:lower:]' <<<"$GITHUB_REPOSITORY"
+          )"
+          {
+            echo "api_origin=$api_origin"
+            echo "app_origin=$app_origin"
+            echo "image=ghcr.io/${repository_lower}-platform-server"
+            echo "prerelease=$prerelease"
+            echo "sha=$sha"
+            echo "tag=$tag"
+            echo "version=$version"
+          } >>"$GITHUB_OUTPUT"
+
+  quality:
+    name: Release quality gate
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      checks: write
+      contents: read
+    defaults:
+      run:
+        shell: bash
+        working-directory: platform
+
+    steps:
+      - name: Check out immutable revision
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          ref: ${{ needs.prepare.outputs.sha }}
+
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            build-essential \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            patchelf
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: platform/package-lock.json
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy,rustfmt
+
+      - name: Cache Rust build outputs
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: platform/apps/desktop/src-tauri -> target
+          cache-on-failure: false
+
+      - name: Audit Rust dependencies
+        uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998 # v2.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          working-directory: platform/apps/desktop/src-tauri
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Audit production and development dependencies
+        run: npm audit --audit-level=high
+
+      - name: Verify platform
+        run: npm run verify
+
+      - name: Run deterministic 200-user smoke
+        run: npm run smoke:platform
+
+      - name: Build and exercise the production container
+        run: npm run smoke:container
+
+      - name: Scan the production container
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          exit-code: "1"
+          format: table
+          image-ref: jungle-bell-platform:smoke
+          ignore-unfixed: false
+          severity: CRITICAL,HIGH
+          vuln-type: os,library
+
+  draft-release:
+    name: Create draft release
+    needs:
+      - prepare
+      - quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      release_id: ${{ steps.draft.outputs.release_id }}
+
+    steps:
+      - name: Create or reuse an unpublished draft
+        id: draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+          RELEASE_SHA: ${{ needs.prepare.outputs.sha }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          if existing="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" 2>/dev/null)"; then
+            if [[ "$(jq -r '.draft' <<<"$existing")" != "true" ]]; then
+              echo "::error::A published release already exists for $RELEASE_TAG."
+              exit 1
+            fi
+            release_id="$(jq -r '.id' <<<"$existing")"
+          else
+            release_id="$(
+              gh api --method POST "repos/$GITHUB_REPOSITORY/releases" \
+                -f tag_name="$RELEASE_TAG" \
+                -f target_commitish="$RELEASE_SHA" \
+                -f name="Jungle Bell Platform $RELEASE_VERSION" \
+                -F draft=true \
+                -F prerelease="$PRERELEASE" \
+                -F generate_release_notes=true \
+                --jq '.id'
+            )"
+          fi
+
+          echo "release_id=$release_id" >>"$GITHUB_OUTPUT"
+
+  desktop:
+    name: Desktop ${{ matrix.name }}
+    needs:
+      - prepare
+      - draft-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS Apple Silicon
+            runner: macos-15
+            target: aarch64-apple-darwin
+            bundles: app,dmg
+          - name: macOS Intel
+            runner: macos-15
+            target: x86_64-apple-darwin
+            bundles: app,dmg
+          - name: Windows x64 NSIS
+            runner: windows-2025
+            target: x86_64-pc-windows-msvc
+            bundles: nsis
+          - name: Linux x64
+            runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            bundles: appimage,deb
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out immutable revision
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          ref: ${{ needs.prepare.outputs.sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: platform/package-lock.json
+
+      - name: Set up Rust target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust build outputs
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: platform/apps/desktop/src-tauri -> target
+          key: ${{ matrix.target }}
+          cache-on-failure: false
+
+      - name: Install locked dependencies
+        working-directory: platform
+        run: npm ci
+
+      - name: Install Linux Tauri system dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            build-essential \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            patchelf
+
+      - name: Require Tauri updater signing key
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [[ -z "$TAURI_SIGNING_PRIVATE_KEY" ]]; then
+            echo "::error::TAURI_SIGNING_PRIVATE_KEY is required."
+            exit 1
+          fi
+
+      - name: Import and select Apple Developer ID certificate
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          for name in \
+            APPLE_CERTIFICATE \
+            APPLE_CERTIFICATE_PASSWORD \
+            APPLE_ID \
+            APPLE_PASSWORD \
+            APPLE_TEAM_ID; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::$name is required for a notarized macOS release."
+              exit 1
+            fi
+          done
+
+          certificate="$RUNNER_TEMP/jungle-bell-developer-id.p12"
+          keychain="$RUNNER_TEMP/jungle-bell-signing.keychain-db"
+          keychain_password="$(openssl rand -base64 32)"
+          printf '%s' "$APPLE_CERTIFICATE" | base64 --decode >"$certificate"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$certificate" \
+            -k "$keychain" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security
+          security list-keychains -d user -s "$keychain"
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s \
+            -k "$keychain_password" \
+            "$keychain"
+
+          signing_identity="$(
+            security find-identity -v -p codesigning "$keychain" |
+              awk -F'"' '/Developer ID Application/ { print $2; exit }'
+          )"
+          if [[ -z "$signing_identity" ]]; then
+            echo "::error::The certificate does not contain a Developer ID Application identity."
+            exit 1
+          fi
+          echo "APPLE_SIGNING_IDENTITY=$signing_identity" >>"$GITHUB_ENV"
+
+      - name: Import Windows code-signing certificate
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          WINDOWS_TIMESTAMP_URL: ${{ vars.WINDOWS_TIMESTAMP_URL }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          foreach ($name in @(
+            "WINDOWS_CERTIFICATE",
+            "WINDOWS_CERTIFICATE_PASSWORD",
+            "WINDOWS_TIMESTAMP_URL"
+          )) {
+            if ([string]::IsNullOrWhiteSpace((Get-Item "Env:$name").Value)) {
+              throw "$name is required for an Authenticode-signed Windows release."
+            }
+          }
+
+          $certificatePath = Join-Path $env:RUNNER_TEMP "jungle-bell-signing.pfx"
+          [IO.File]::WriteAllBytes(
+            $certificatePath,
+            [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE)
+          )
+          $password = ConvertTo-SecureString `
+            -String $env:WINDOWS_CERTIFICATE_PASSWORD `
+            -AsPlainText `
+            -Force
+          $certificate = Import-PfxCertificate `
+            -FilePath $certificatePath `
+            -CertStoreLocation Cert:\CurrentUser\My `
+            -Password $password
+          if ($null -eq $certificate -or [string]::IsNullOrWhiteSpace($certificate.Thumbprint)) {
+            throw "The Windows signing certificate could not be imported."
+          }
+
+          $config = @{
+            bundle = @{
+              createUpdaterArtifacts = $true
+              windows = @{
+                certificateThumbprint = $certificate.Thumbprint
+                digestAlgorithm = "sha256"
+                timestampUrl = $env:WINDOWS_TIMESTAMP_URL
+              }
+            }
+          } | ConvertTo-Json -Depth 5
+          Set-Content `
+            -Path "platform/apps/desktop/tauri.release.conf.json" `
+            -Value $config `
+            -Encoding utf8
+
+      - name: Configure signed macOS and Linux updater artifacts
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          node -e '
+            require("node:fs").writeFileSync(
+              "platform/apps/desktop/tauri.release.conf.json",
+              JSON.stringify({ bundle: { createUpdaterArtifacts: true } }),
+            );
+          '
+
+      - name: Build, sign, and upload Tauri bundles
+        uses: tauri-apps/tauri-action@v1
+        env:
+          APPLE_ID: ${{ runner.os == 'macOS' && secrets.APPLE_ID || '' }}
+          APPLE_PASSWORD: ${{ runner.os == 'macOS' && secrets.APPLE_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ runner.os == 'macOS' && vars.APPLE_TEAM_ID || '' }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          JB_API_ORIGIN: ${{ needs.prepare.outputs.api_origin }}
+          JB_APP_ORIGIN: ${{ needs.prepare.outputs.app_origin }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          args: >-
+            --target ${{ matrix.target }}
+            --bundles ${{ matrix.bundles }}
+            --config tauri.release.conf.json
+            --ci
+          projectPath: platform/apps/desktop
+          releaseId: ${{ needs.draft-release.outputs.release_id }}
+          retryAttempts: 2
+          tagName: ${{ needs.prepare.outputs.tag }}
+          tauriScript: npm exec -- tauri
+          updaterJsonPreferNsis: true
+          uploadUpdaterJson: false
+          uploadUpdaterSignatures: true
+
+      - name: Verify macOS code signature and notarization ticket
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          app="$(
+            find "platform/apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/macos" \
+              -maxdepth 1 \
+              -name '*.app' \
+              -print \
+              -quit
+          )"
+          if [[ -z "$app" ]]; then
+            echo "::error::The macOS application bundle was not found."
+            exit 1
+          fi
+          codesign --verify --deep --strict --verbose=2 "$app"
+          xcrun stapler validate "$app"
+          find "${app}.tar.gz.sig" -type f -size +0 -print -quit | grep -q .
+
+      - name: Verify Windows Authenticode and updater signatures
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $bundle = "platform/apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/nsis"
+          $installer = Get-ChildItem -Path $bundle -Filter "*-setup.exe" | Select-Object -First 1
+          if ($null -eq $installer) {
+            throw "The NSIS installer was not found."
+          }
+          $signature = Get-AuthenticodeSignature -FilePath $installer.FullName
+          if ($signature.Status -ne "Valid") {
+            throw "The NSIS Authenticode signature is not valid: $($signature.Status)"
+          }
+          $updaterSignature = Get-ChildItem -Path $bundle -Filter "*.sig" | Select-Object -First 1
+          if ($null -eq $updaterSignature -or $updaterSignature.Length -eq 0) {
+            throw "The NSIS updater signature was not generated."
+          }
+
+      - name: Verify Linux bundles and updater signatures
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle_root="platform/apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle"
+          find "$bundle_root/appimage" -maxdepth 1 -name '*.AppImage' -type f -size +0 -print -quit |
+            grep -q .
+          find "$bundle_root/deb" -maxdepth 1 -name '*.deb' -type f -size +0 -print -quit |
+            grep -q .
+          find "$bundle_root" -name '*.sig' -type f -size +0 -print -quit |
+            grep -q .
+
+  server-image:
+    name: Publish multi-architecture server image
+    needs:
+      - prepare
+      - quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+      packages: write
+
+    steps:
+      - name: Check out immutable revision
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          ref: ${{ needs.prepare.outputs.sha }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate OCI metadata
+        id: metadata
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ needs.prepare.outputs.image }}
+          labels: |
+            org.opencontainers.image.revision=${{ needs.prepare.outputs.sha }}
+            org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
+          tags: |
+            type=raw,value=${{ needs.prepare.outputs.version }}
+            type=raw,value=sha-${{ needs.prepare.outputs.sha }}
+
+      - name: Build and push immutable image
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          cache-from: type=gha,scope=platform-release
+          cache-to: type=gha,mode=max,scope=platform-release
+          context: platform
+          file: platform/Dockerfile
+          labels: ${{ steps.metadata.outputs.labels }}
+          platforms: linux/amd64,linux/arm64
+          provenance: mode=max
+          push: true
+          sbom: true
+          tags: ${{ steps.metadata.outputs.tags }}
+
+      - name: Attest server image provenance
+        uses: actions/attest@v4
+        with:
+          subject-digest: ${{ steps.push.outputs.digest }}
+          subject-name: ${{ needs.prepare.outputs.image }}
+          push-to-registry: true
+
+  publish:
+    name: Publish completed release
+    needs:
+      - prepare
+      - draft-release
+      - desktop
+      - server-image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Publish draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+          RELEASE_ID: ${{ needs.draft-release.outputs.release_id }}
+        run: |
+          set -euo pipefail
+          gh api --method PATCH \
+            "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+            -F draft=false \
+            -F prerelease="$PRERELEASE" \
+            >/dev/null
