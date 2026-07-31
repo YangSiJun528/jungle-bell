@@ -1,0 +1,16 @@
+# Host에 설치한 Caddy용이다. Compose 컨테이너 안에서는 127.0.0.1이
+# platform 컨테이너를 가리키지 않으므로 이 설정을 그대로 사용하지 않는다.
+{$JB_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		Permissions-Policy "camera=(), geolocation=(), microphone=()"
+	}
+
+	# HTML과 API에 서로 다른 CSP가 필요하므로 애플리케이션이 CSP의
+	# 단일 소유자다. 여기서 Content-Security-Policy를 덮어쓰지 않는다.
+	reverse_proxy 127.0.0.1:8787
+}

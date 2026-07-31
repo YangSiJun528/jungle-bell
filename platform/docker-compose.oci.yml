@@ -1,0 +1,71 @@
+services:
+  platform:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: jungle-bell-platform:local
+    init: true
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8787:8787"
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8787"
+      NODE_ENV: "production"
+      JB_DB_PATH: "/app/data/jungle-bell.sqlite"
+      JB_BACKUP_DIRECTORY: "/app/data/backups"
+      JB_PUBLIC_ORIGIN: "${JB_PUBLIC_ORIGIN:?set JB_PUBLIC_ORIGIN}"
+      JB_SESSION_ENCRYPTION_KEY_FILE: "/run/secrets/session_encryption_key"
+      JB_IDENTITY_HMAC_KEY_FILE: "/run/secrets/identity_hmac_key"
+      JB_CAMPUS_DATA_API_URL: "${JB_CAMPUS_DATA_API_URL:-https://jungle-bell-api.yangsijun5528.workers.dev}"
+      JB_MIN_FREE_DISK_BYTES: "${JB_MIN_FREE_DISK_BYTES:-134217728}"
+      JB_TRUST_PROXY_HOPS: "1"
+      JB_VAPID_SUBJECT: "${JB_VAPID_SUBJECT:?set JB_VAPID_SUBJECT}"
+      JB_VAPID_PUBLIC_KEY: "${JB_VAPID_PUBLIC_KEY:?set JB_VAPID_PUBLIC_KEY}"
+      JB_VAPID_PRIVATE_KEY_FILE: "/run/secrets/vapid_private_key"
+    secrets:
+      - session_encryption_key
+      - identity_hmac_key
+      - vapid_private_key
+    volumes:
+      - "${JB_DATA_DIRECTORY:-/srv/jungle-bell/data}:/app/data"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8787/api/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    stop_grace_period: 120s
+    mem_limit: "${JB_CONTAINER_MEMORY:-2g}"
+    cpus: "${JB_CONTAINER_CPUS:-4}"
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+secrets:
+  session_encryption_key:
+    file: "${JB_SESSION_ENCRYPTION_KEY_PATH:?set JB_SESSION_ENCRYPTION_KEY_PATH}"
+  identity_hmac_key:
+    file: "${JB_IDENTITY_HMAC_KEY_PATH:?set JB_IDENTITY_HMAC_KEY_PATH}"
+  vapid_private_key:
+    file: "${JB_VAPID_PRIVATE_KEY_PATH:?set JB_VAPID_PRIVATE_KEY_PATH}"
