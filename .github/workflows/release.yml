@@ -1,0 +1,176 @@
+name: Release
+run-name: Release ${{ github.event.release.tag_name || inputs.tag }}
+
+on:
+  release:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag name (e.g. v0.2.2-beta.1)'
+        required: true
+        type: string
+
+jobs:
+  get-release-info:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.info.outputs.tag }}
+      release_id: ${{ steps.info.outputs.release_id }}
+      is_prerelease: ${{ steps.info.outputs.is_prerelease }}
+    steps:
+      - name: Get release info
+        id: info
+        run: |
+          TAG="${{ github.event.release.tag_name || inputs.tag }}"
+          RELEASE_INFO=$(gh api repos/${{ github.repository }}/releases --jq ".[] | select(.tag_name == \"$TAG\")")
+          RELEASE_ID=$(echo "$RELEASE_INFO" | jq -r '.id')
+          IS_PRERELEASE=$(echo "$RELEASE_INFO" | jq -r '.prerelease')
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "release_id=$RELEASE_ID" >> $GITHUB_OUTPUT
+          echo "is_prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-tauri:
+    needs: [get-release-info]
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: --target aarch64-apple-darwin
+          - platform: macos-latest
+            args: --target x86_64-apple-darwin
+          - platform: windows-latest
+            args: '--bundles nsis'
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.get-release-info.outputs.tag }}
+
+      - name: setup node
+        uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          prefix-key: "v${{ vars.CACHE_VERSION }}"
+          cache-on-failure: false
+
+      - name: Build and upload to release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          JUNGLE_BELL_DATA_API_URL: ${{ vars.JUNGLE_BELL_DATA_API_URL }}
+        with:
+          releaseId: ${{ needs.get-release-info.outputs.release_id }}
+          tagName: ${{ needs.get-release-info.outputs.tag }}
+          args: ${{ matrix.args }}
+          projectPath: .
+          updaterJsonPreferNsis: true
+
+      - name: Archive .app as tar.gz (macOS only)
+        if: matrix.platform == 'macos-latest'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.get-release-info.outputs.tag }}
+        run: |
+          set -euo pipefail
+          VER="${TAG#v}"
+          if [[ "${{ matrix.args }}" == *aarch64* ]]; then
+            TRIPLE="aarch64-apple-darwin"
+            ARCH="aarch64"
+          else
+            TRIPLE="x86_64-apple-darwin"
+            ARCH="x64"
+          fi
+          APP_DIR="src-tauri/target/${TRIPLE}/release/bundle/macos"
+          ASSET="Jungle.Bell_${VER}_${ARCH}.tar.gz"
+          tar -czf "$ASSET" -C "$APP_DIR" "Jungle Bell.app"
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber "$ASSET"
+
+  publish-installer-scripts:
+    needs: [publish-tauri, get-release-info]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.get-release-info.outputs.tag }}
+
+      - name: Render and upload installer scripts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.get-release-info.outputs.tag }}
+        run: |
+          set -euo pipefail
+          VER="${TAG#v}"
+          mkdir -p out
+          sed "s/__VERSION__/${VER}/g" install/jungle-bell.sh.tmpl  > out/jungle-bell.sh
+          sed "s/__VERSION__/${VER}/g" install/jungle-bell.ps1.tmpl > out/jungle-bell.ps1
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+            out/jungle-bell.sh out/jungle-bell.ps1
+
+  publish-release:
+    needs: [publish-tauri, publish-installer-scripts, get-release-info]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.get-release-info.outputs.tag }}
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          TAG="${{ needs.get-release-info.outputs.tag }}"
+          IS_PRERELEASE="${{ needs.get-release-info.outputs.is_prerelease }}"
+          REPO="${{ github.repository }}"
+
+          if [ "$IS_PRERELEASE" = "true" ]; then
+            gh release edit "$TAG" --repo "$REPO" --draft=false
+          else
+            BODY_FILE="$(mktemp)"
+            CLEAN_BODY_FILE="$(mktemp)"
+            NOTES_FILE="$(mktemp)"
+
+            gh release view "$TAG" --repo "$REPO" --json body --jq '.body // ""' > "$BODY_FILE"
+            sed '/<!-- jungle-bell-install-help:start -->/,/<!-- jungle-bell-install-help:end -->/d' "$BODY_FILE" > "$CLEAN_BODY_FILE"
+
+            {
+              cat "$CLEAN_BODY_FILE"
+              if [ -s "$CLEAN_BODY_FILE" ]; then
+                printf '\n\n'
+              fi
+              cat install/release-install-help.md
+            } > "$NOTES_FILE"
+
+            gh release edit "$TAG" --repo "$REPO" --notes-file "$NOTES_FILE" --draft=false --latest
+          fi

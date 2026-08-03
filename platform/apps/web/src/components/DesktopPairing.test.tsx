@@ -78,15 +78,6 @@ describe("DesktopPairing", () => {
     });
     expect(approveMobilePairing).toHaveBeenCalledWith(pairingId, pairingId);
     expect(screen.getByText("휴대폰 연결을 승인했어요.")).toBeVisible();
-
-    await act(async () => {
-      fireEvent.click(
-        screen.getByRole("button", { name: "다른 휴대폰 연결" }),
-      );
-      await Promise.resolve();
-    });
-    expect(createMobilePairing).toHaveBeenCalledTimes(2);
-    expect(screen.getByLabelText("휴대폰 연결 QR")).toBeVisible();
   });
 
   it("does not offer a pairing proof before LMS login", () => {

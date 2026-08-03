@@ -5,18 +5,15 @@ Jungle Bell은 공개 급식·세탁 조회, 개인 출석 확인, 생활 알림
 사용하고, Tauri 데스크톱 앱은 LMS 로그인·출석 수집·운영체제 알림을
 담당합니다.
 
-이 디렉터리는 0.5.0부터 기존 출시 데스크톱 앱을 대체하는 전면 개편
-구현입니다. macOS·Windows의 앱 이름과 bundle identifier, 업데이트
-서명 키를 그대로 사용하므로 0.4.4에서 제자리 업데이트됩니다. 단,
-platform 서버의 SQLite schema는 기존 로컬 앱 데이터와 호환하지 않으므로
-새 서버 DB로 배포하고 각 PC에서 LMS 계정을 다시 검증해야 합니다.
+이 디렉터리는 기존 Jungle Bell과 데이터·구조 호환성을 유지하지 않는
+전면 개편 구현입니다.
 
 ## 제공 화면
 
 | 환경 | 제공 기능 |
 | --- | --- |
-| 공개 웹 | 실제 급식과 남성·여성별 세탁부터 건조까지 가능한 예상 횟수, 마지막 확인 시각 조회 |
-| Tauri 데스크톱(macOS·Windows) | LMS 계정 검증, 출석 동기화, 모바일 연결·해제, 개인 설정, 네이티브 알림 |
+| 공개 웹 | 실제 급식·세탁 상태와 마지막 확인 시각 조회 |
+| Tauri 데스크톱 | LMS 계정 검증, 출석 동기화, 모바일 연결·해제, 개인 설정, 네이티브 알림 |
 | 설치된 모바일 PWA | PC에서 연결한 계정의 출석 조회, 급식·세탁 설정, 자율 대기열, Web Push |
 
 서비스는 온라인 전용입니다. Service Worker는 Web Push만 처리하며 앱
@@ -30,10 +27,8 @@ platform 서버의 SQLite schema는 기존 로컬 앱 데이터와 호환하지 
   WebView입니다.
 - PC 등록 때 Tauri가 `access_token` 하나만 서버에 보내면, 서버는
   `/api/v2/me`로 계정을 확인하고 Tauri가 본 계정과의 installation 결합
-  증명을 대조합니다. 이 cookie는 이 검증에 한 번만 사용하고 저장하지
-  않습니다. refresh cookie는 PC를 떠나지 않습니다.
-- 서버는 immutable LMS ID의 정확한 `SHA-256(LMS ID)`로 같은 사용자를
-  판별하고, 사용자 기본키에는 별도로 생성한 RFC 4122 v4 UUID를 씁니다.
+  증명을 대조합니다. 이후 immutable LMS ID의 HMAC만 저장하고 cookie를
+  버립니다. refresh cookie는 PC를 떠나지 않습니다.
 - 이후 출석은 Tauri가 로컬에서 읽어 정규화된 snapshot과 heartbeat만
   서버에 보냅니다.
 - 동일 LMS 계정을 각 PC에서 독립적으로 다시 검증하면 같은 서버 사용자로
@@ -41,12 +36,6 @@ platform 서버의 SQLite schema는 기존 로컬 앱 데이터와 호환하지 
 - 모바일은 검증된 PC가 만든 QR 또는 10자리 연결 코드로 연결합니다.
 - 모바일 연결은 365일 절대 만료 session이며, PC에서 최근 사용·만료·Push
   연결 상태를 확인하고 언제든 해제할 수 있습니다.
-- 서버는 출석 알림을 KST 마감 10분 전과 마감 시각에 계획합니다. PC가
-  꺼졌거나 snapshot이 없거나 오래됐을 때도 상태 미확인 fallback 알림을
-  만들며, LMS를 대신 조회하거나 자동으로 출석을 처리하지 않습니다.
-- 공개 세탁 화면은 현재 빈 세탁기와 60분 안에 확보될 건조기에서 진행 중인
-  세탁물의 건조 수요를 뺀 값을 남성·여성별 예상 횟수로 표시합니다. 데이터가
-  오래됐거나 불완전하면 숫자 대신 `산출 불가`를 표시합니다.
 
 자세한 이유와 데이터 흐름은
 [아키텍처 설명](docs/explanation-architecture.md)을 참고하십시오.
@@ -108,21 +97,6 @@ process 한 개, VM 로컬 영속 디스크의 SQLite 한 개입니다. SQLite�
 여러 process나 container replica, NFS·공유 volume은 지원하지 않습니다.
 이 전제가 바뀌면 PostgreSQL과 분산 worker·rate limit으로 함께
 전환해야 합니다.
-
-데스크톱 안정판은 `platform-vMAJOR.MINOR.PATCH` tag로
-`.github/workflows/platform-release.yml`을 실행해 배포합니다. 이 workflow가
-서명된 `latest.json`을 포함한 macOS·Windows artifact를 만들고 GitHub의
-최신 안정판으로 지정합니다. 공개 전에 manifest의 버전·플랫폼·release
-asset 결합을 검사하고 모든 artifact를 기존 앱에 내장된 Minisign 공개 키로
-다시 검증합니다. publish 직전에도 같은 asset ID·이름·크기와 manifest
-원문을 재확인합니다. release action도 전체 commit SHA로 고정합니다. 기존 0.4.4와
-개편 앱은 같은 updater endpoint와 공개 키를 사용하므로 별도 앱으로 중복
-설치하지 않습니다. 이전 root release workflow는 최신 updater feed를
-되돌릴 수 있어 제거했습니다.
-GitHub 저장소의 `Enable release immutability` 설정도 배포 전에 켜야 하며,
-`Administration: read`만 부여한 fine-grained token을
-`RELEASE_SETTINGS_READ_TOKEN` Actions secret으로 등록해야 합니다. 설정이
-꺼져 있거나 token이 없으면 workflow가 공개를 거부합니다.
 
 ## 문서
 

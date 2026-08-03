@@ -59,14 +59,6 @@ export interface NotificationIntent {
 
 export type MealPeriod = "breakfast" | "lunch" | "dinner";
 
-export type AttendanceReminderSlot = "before-10" | "deadline";
-export type AttendanceReminderStatus = "unchecked" | "unverified";
-export type AttendanceReminderFallbackReason =
-  | "desktop-offline"
-  | "login-required"
-  | "snapshot-stale"
-  | "snapshot-missing";
-
 export type LaundryState =
   | "AVAILABLE"
   | "BUSY"
@@ -103,10 +95,7 @@ export type NotificationSourceEvent =
       readonly userId: string;
       readonly attendanceDate: string;
       readonly phase: "morning" | "evening";
-      readonly slot: AttendanceReminderSlot;
-      readonly minutesRemaining: 10 | 0;
-      readonly status: AttendanceReminderStatus;
-      readonly reason: AttendanceReminderFallbackReason | null;
+      readonly minutesRemaining: number | null;
       readonly occurredAtEpochMs: number;
     }
   | {

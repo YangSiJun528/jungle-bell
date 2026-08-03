@@ -103,55 +103,6 @@ describe("SQLite platform schema", () => {
     );
   });
 
-  it("renames an empty pre-SHA identity index during the v5 upgrade", async () => {
-    const path = await temporaryDatabasePath();
-    const current = openSqliteDatabase(path);
-    current.exec(`
-      ALTER TABLE external_identities
-        RENAME COLUMN subject_sha256 TO subject_hmac;
-      ALTER TABLE external_identities
-        RENAME COLUMN hash_version TO hmac_key_version;
-      PRAGMA user_version = 4;
-    `);
-    current.close();
-
-    const upgraded = openSqliteDatabase(path);
-    const columns = upgraded
-      .prepare<[], { name: string }>(
-        "PRAGMA table_info(external_identities)",
-      )
-      .all()
-      .map(({ name }) => name);
-    expect(columns).toContain("subject_sha256");
-    expect(columns).toContain("hash_version");
-    expect(columns).not.toContain("subject_hmac");
-    expect(upgraded.pragma("user_version", { simple: true })).toBe(5);
-    upgraded.close();
-  });
-
-  it("refuses to relabel populated keyed identities as bare SHA-256", async () => {
-    const path = await temporaryDatabasePath();
-    const current = openSqliteDatabase(path);
-    await new SqliteDesktopIdentityStore(current).registerVerifiedIdentity({
-      candidateUserId: "legacy-user",
-      desktopDeviceId: "legacy-desktop",
-      subjectSha256: "a".repeat(64),
-      verifiedAtEpochMs: 1_000,
-    });
-    current.exec(`
-      ALTER TABLE external_identities
-        RENAME COLUMN subject_sha256 TO subject_hmac;
-      ALTER TABLE external_identities
-        RENAME COLUMN hash_version TO hmac_key_version;
-      PRAGMA user_version = 4;
-    `);
-    current.close();
-
-    expect(() => openSqliteDatabase(path)).toThrow(
-      "keyed LMS identities cannot be converted",
-    );
-  });
-
   it("upgrades a v1 pairing schema, preserves server data, and cancels orphan Push delivery", async () => {
     const path = await temporaryDatabasePath();
     const database = openSqliteDatabase(path);
@@ -159,7 +110,7 @@ describe("SQLite platform schema", () => {
     const identity = await identities.registerVerifiedIdentity({
       candidateUserId: "user-v1",
       desktopDeviceId: "desktop-v1",
-      subjectSha256: "b".repeat(64),
+      subjectHmac: "b".repeat(64),
       verifiedAtEpochMs: 1_000,
     });
     await new SqliteAttendanceSnapshotStore(database).putNewest({
@@ -391,16 +342,16 @@ describe("SQLite platform schema", () => {
     upgraded.close();
   });
 
-  it("finds one internal user for one LMS ID SHA-256 across independent PCs and restarts", async () => {
+  it("finds one internal UUID-equivalent user for one HMAC across independent PCs and restarts", async () => {
     const path = await temporaryDatabasePath();
-    const subjectSha256 = "a".repeat(64);
+    const subjectHmac = "a".repeat(64);
     const firstDatabase = openSqliteDatabase(path);
     const firstStore = new SqliteDesktopIdentityStore(firstDatabase);
 
     const first = await firstStore.registerVerifiedIdentity({
       candidateUserId: `jbu_${"1".repeat(64)}`,
       desktopDeviceId: "desktop-installation-a",
-      subjectSha256,
+      subjectHmac,
       verifiedAtEpochMs: 1_000,
     });
     expect(first).toMatchObject({
@@ -414,7 +365,7 @@ describe("SQLite platform schema", () => {
     const second = await secondStore.registerVerifiedIdentity({
       candidateUserId: `jbu_${"2".repeat(64)}`,
       desktopDeviceId: "desktop-installation-b",
-      subjectSha256,
+      subjectHmac,
       verifiedAtEpochMs: 2_000,
     });
     expect(second).toEqual({
@@ -426,14 +377,13 @@ describe("SQLite platform schema", () => {
 
     const identityRow = secondDatabase
       .prepare(
-        `SELECT provider, subject_sha256, hash_version, user_id
+        `SELECT provider, subject_hmac, user_id
          FROM external_identities`,
       )
       .get();
     expect(identityRow).toEqual({
       provider: "jungle_lms",
-      subject_sha256: subjectSha256,
-      hash_version: 1,
+      subject_hmac: subjectHmac,
       user_id: first.userId,
     });
     secondDatabase.close();
@@ -446,7 +396,7 @@ describe("SQLite platform schema", () => {
     const identity = await identities.registerVerifiedIdentity({
       candidateUserId: `jbu_${"7".repeat(64)}`,
       desktopDeviceId: "desktop-installation-a",
-      subjectSha256: "d".repeat(64),
+      subjectHmac: "d".repeat(64),
       verifiedAtEpochMs: 1_000,
     });
     const intent = {
@@ -538,13 +488,13 @@ describe("SQLite platform schema", () => {
     const firstDevice = await identities.registerVerifiedIdentity({
       candidateUserId: `jbu_${"4".repeat(64)}`,
       desktopDeviceId: "desktop-installation-a",
-      subjectSha256: "c".repeat(64),
+      subjectHmac: "c".repeat(64),
       verifiedAtEpochMs: 1_000,
     });
     const secondDevice = await identities.registerVerifiedIdentity({
       candidateUserId: `jbu_${"5".repeat(64)}`,
       desktopDeviceId: "desktop-installation-b",
-      subjectSha256: "c".repeat(64),
+      subjectHmac: "c".repeat(64),
       verifiedAtEpochMs: 1_000,
     });
     const firstSession = {
@@ -637,7 +587,7 @@ describe("SQLite platform schema", () => {
     const identity = await identities.registerVerifiedIdentity({
       candidateUserId: `jbu_${"3".repeat(64)}`,
       desktopDeviceId: "desktop-installation-a",
-      subjectSha256: "b".repeat(64),
+      subjectHmac: "b".repeat(64),
       verifiedAtEpochMs: 1_000,
     });
 

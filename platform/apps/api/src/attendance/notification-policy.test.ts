@@ -4,11 +4,13 @@ import { attendanceNotificationEvent } from "../app.js";
 import type { AttendanceSnapshotRecord } from "../infra/sqlite/index.js";
 
 describe("attendance notification policy", () => {
-  it("emits only T-10 and deadline morning notifications per attendance date", () => {
+  it("emits at most four morning notifications per attendance date", () => {
     const eventIds = [
       "2026-07-31T09:00:00+09:00",
-      "2026-07-31T09:49:59+09:00",
-      "2026-07-31T09:50:00+09:00",
+      "2026-07-31T09:44:00+09:00",
+      "2026-07-31T09:45:00+09:00",
+      "2026-07-31T09:54:00+09:00",
+      "2026-07-31T09:55:00+09:00",
       "2026-07-31T09:59:59+09:00",
       "2026-07-31T10:00:00+09:00",
       "2026-07-31T10:09:59+09:00",
@@ -28,8 +30,10 @@ describe("attendance notification policy", () => {
 
     expect(new Set(eventIds)).toEqual(
       new Set([
-        "attendance:2026-07-31:morning:before-10",
-        "attendance:2026-07-31:morning:deadline",
+        "attendance:2026-07-31:morning:before-60",
+        "attendance:2026-07-31:morning:before-15",
+        "attendance:2026-07-31:morning:before-5",
+        "attendance:2026-07-31:morning:after",
       ]),
     );
   });
@@ -54,12 +58,13 @@ describe("attendance notification policy", () => {
     }
   });
 
-  it("keeps the previous attendance date through the evening deadline slot", () => {
+  it("keeps the previous attendance date through the evening post-deadline slot", () => {
     const cases = [
-      ["2026-08-01T03:50:00+09:00", "before-10", 10],
-      ["2026-08-01T03:59:59+09:00", "before-10", 10],
-      ["2026-08-01T04:00:00+09:00", "deadline", 0],
-      ["2026-08-01T04:09:59+09:00", "deadline", 0],
+      ["2026-08-01T03:00:00+09:00", "before-60", 60],
+      ["2026-08-01T03:45:00+09:00", "before-15", 15],
+      ["2026-08-01T03:55:00+09:00", "before-5", 5],
+      ["2026-08-01T04:00:00+09:00", "after", null],
+      ["2026-08-01T04:09:59+09:00", "after", null],
     ] as const;
 
     const ids = new Set<string>();
@@ -79,18 +84,10 @@ describe("attendance notification policy", () => {
         attendanceDate: "2026-07-31",
         phase: "evening",
         minutesRemaining,
-        slot,
-        status: "unchecked",
-        reason: null,
-        occurredAtEpochMs: Date.parse(
-          slot === "before-10"
-            ? "2026-08-01T03:50:00+09:00"
-            : "2026-08-01T04:00:00+09:00",
-        ),
       });
       if (event !== null) ids.add(event.sourceEventId);
     }
-    expect(ids.size).toBe(2);
+    expect(ids.size).toBe(4);
   });
 
   it("rejects stale, mismatched, inactive, and already checked snapshots", () => {

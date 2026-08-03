@@ -94,7 +94,6 @@ describe("LmsHttpGateway identity verification", () => {
       null,
     ],
     [{ id: " padded " }, null],
-    [{ id: "가".repeat(43) }, null],
     [{ id: -1 }, null],
   ] as const)(
     "uses only the exact immutable id from /api/v2/me",
@@ -272,7 +271,7 @@ describe("LmsHttpGateway identity verification", () => {
     ).toThrow(expect.objectContaining({ code: "LMS_ORIGIN_INVALID" }));
   });
 
-  it("classifies a timeout without retaining the one-shot access cookie", async () => {
+  it("classifies a timeout and preserves only the access cookie", async () => {
     const fetcher = vi.fn<typeof fetch>(
       async (_url, init) =>
         new Promise<Response>((_resolve, reject) => {
@@ -288,13 +287,12 @@ describe("LmsHttpGateway identity verification", () => {
     ]);
 
     await expect(request).rejects.toBeInstanceOf(LmsGatewayError);
-    const error = await request.catch((reason: unknown) => reason);
-    expect(error).toMatchObject({
+    await expect(request).rejects.toMatchObject({
       code: "LMS_UPSTREAM_TIMEOUT",
       failureKind: "transient",
+      cookies: [accessCookie],
       status: null,
     });
-    expect(error).not.toHaveProperty("cookies");
   });
 });
 

@@ -34,18 +34,19 @@ npm run dev
 | API liveness | `http://127.0.0.1:8787/api/health` |
 | API readiness | `http://127.0.0.1:8787/api/ready` |
 
-Vite는 `/api`를 API로 proxy합니다. 개발 API는 별도 key가 없으면 process
-수명에 한정된 임시 pairing transport key를 사용합니다. 서버를 재시작해도
-진행 중인 2분 pairing handoff를 복호화해야 할 때는 32바이트 key를
-고정합니다. LMS 동일 사용자 판별은 정확한 `SHA-256(LMS ID)`를 사용하므로
-별도 identity secret이 없습니다.
+Vite는 `/api`를 API로 proxy합니다. 개발 API는 별도 key가 없으면
+process 수명에 한정된 임시 pairing·identity key를 사용합니다. 서버를
+재시작하면서 app session과 사용자 연결을 유지해야 할 때는 서로 다른
+32바이트 key를 고정합니다.
 
 ```bash
+openssl rand -base64 32
 openssl rand -base64 32
 ```
 
 출력값을 저장소에 쓰지 말고 현재 개발 shell의
-`JB_SESSION_ENCRYPTION_KEY`로 설정한 뒤 API를 실행하십시오.
+`JB_SESSION_ENCRYPTION_KEY`, `JB_IDENTITY_HMAC_KEY`로 각각 설정한 뒤
+API를 실행하십시오. 두 값을 같은 값으로 쓰면 안 됩니다.
 
 기본 개발 server는 `JB_ALLOW_DEV_BOOTSTRAP=true`로 테스트용 desktop
 session route를 엽니다. `NODE_ENV=production`에서는 이 route가
@@ -91,15 +92,10 @@ npm run tauri:build
 ## 4. 기본 화면을 확인합니다
 
 1. 공개 웹에서 급식과 세탁 카드가 표시되는지 확인합니다.
-2. 세탁 카드가 남성·여성별로 세탁부터 건조까지 가능한 예상 횟수를
-   표시하는지 확인합니다. 공용 6·7번은 두 값에 모두 포함되므로 합산하지
-   않습니다.
-3. `마지막 확인`과 stale 상태가 화면에 표시되는지 확인하고, stale·일부
-   기기 누락·새로고침 실패 때 세탁 예상치가 `산출 불가`로 바뀌는지
+2. `마지막 확인`과 stale 상태가 화면에 표시되는지 확인합니다.
+3. Tauri main 화면에서 LMS 연결 카드와 알림 카드가 표시되는지
    확인합니다.
-4. Tauri main 화면에서 LMS 연결 카드와 알림 카드가 표시되는지
-   확인합니다.
-5. 네트워크를 끊었을 때 과거 화면을 정상 상태처럼 제공하지 않고 오류
+4. 네트워크를 끊었을 때 과거 화면을 정상 상태처럼 제공하지 않고 오류
    또는 stale로 표시하는지 확인합니다.
 
 로컬 개발에서 campus source를 설정하지 않으면 API는 공개 collector를
@@ -119,11 +115,9 @@ JB_CAMPUS_DATA_API_URL=https://jungle-bell-api.yangsijun5528.workers.dev
 3. 설치된 PWA 흐름은 `/app`에서 PC의 10자리 코드를 입력해 claim합니다.
 4. PC에 표시된 기기명을 확인하고 승인합니다.
 5. 모바일이 `/app`의 출석·설정 화면으로 전환되는지 확인합니다.
-6. PC의 모바일 기기 목록에서 365일 절대 만료 시각·최근 사용·Push 연결
-   상태가 표시되는지 확인합니다.
-7. PC에서 session을 해제하고 모바일이 다시 연결
+6. PC의 모바일 기기 목록에서 session을 해제하고 모바일이 다시 연결
    화면으로 돌아가는지 확인합니다.
-8. 다시 연결한 뒤 모바일의 `이 휴대폰 연결 해제`도 확인합니다.
+7. 다시 연결한 뒤 모바일의 `이 휴대폰 연결 해제`도 확인합니다.
 
 실제 휴대폰은 PC의 `127.0.0.1`에 접근할 수 없습니다. 같은-origin HTTPS
 개발 배포가 있어야 실제 PWA 설치와 Web Push를 검증할 수 있습니다.

@@ -70,7 +70,7 @@ try {
     const identity = await identities.registerVerifiedIdentity({
       candidateUserId: expectedUserId,
       desktopDeviceId,
-      subjectSha256: await hasher.hash(`load-lms-subject-${index}`),
+      subjectHmac: await hasher.hash(`load-lms-subject-${index}`),
       verifiedAtEpochMs: nowEpochMs,
     });
     if (

@@ -14,8 +14,6 @@
 - Tauri가 서버에 보내는 LMS cookie는 유효한 `access_token` 하나뿐임
 - refresh cookie는 Tauri WebView를 떠나지 않음
 - 서버가 LMS ID 원문과 LMS cookie를 영속 저장하지 않음
-- 서버가 검증한 LMS ID의 정확한 SHA-256으로 동일 사용자를 판별함
-- 서버 사용자 기본키는 별도 RFC 4122 v4 UUID임
 - 동일 LMS 계정은 PC가 달라도 같은 내부 사용자 UUID에 연결됨
 - 각 PC는 기존 PC 승인 없이 독립적으로 LMS를 다시 검증함
 - 앱 재시작 뒤 현재 LMS subject가 로컬 binding과 일치해야 개인 기능이
@@ -87,14 +85,11 @@ sqlite3 -readonly .data/jungle-bell.sqlite \
      (SELECT COUNT(*) FROM external_identities) AS identities,
      (SELECT COUNT(*) FROM desktop_devices) AS desktops,
      (SELECT COUNT(*) FROM desktop_sessions) AS desktop_sessions,
-     (SELECT MIN(length(subject_sha256)) FROM external_identities) AS sha256_length,
-     (SELECT MIN(hash_version) FROM external_identities) AS hash_version;"
+     (SELECT MIN(length(subject_hmac)) FROM external_identities) AS hmac_length;"
 ```
 
-첫 등록이면 각 count는 최소 1이고 SHA-256 길이는 64, hash version은
-1이어야 합니다. `users.id`가 RFC 4122 v4 UUID인지도 민감 값을 출력하지
-않는 검증 script나 자동 테스트로 확인합니다. LMS credential table이
-없는지도 확인합니다.
+첫 등록이면 각 count는 최소 1이고 HMAC 길이는 64여야 합니다. LMS
+credential table이 없는지도 확인합니다.
 
 ```bash
 sqlite3 -readonly .data/jungle-bell.sqlite \
@@ -109,8 +104,7 @@ sqlite3 -readonly .data/jungle-bell.sqlite \
 API logger에서는 `Cookie`, `Authorization`, `Set-Cookie`가
 redaction됩니다. onboarding 요청이 정확히 access cookie 하나가 아니면
 서버가 거부하므로 refresh cookie를 전달하는 우회 경로를 만들지
-마십시오. 이 access cookie는 서버가 `/api/v2/me`를 한 번 호출하는 동안만
-사용하며 DB, 오류 객체, 응답에 보존되지 않아야 합니다.
+마십시오.
 
 ## 5. 앱 재시작을 확인합니다
 
@@ -192,10 +186,7 @@ app data나 WebView profile을 복사하지 않습니다.
 | 인증 후 창이 닫히지 않음 | LMS `/api/v2/me` 상태와 agent callback generation |
 | 창은 닫혔지만 main이 401 | access-only onboarding 응답과 app cookie 설치 |
 | 재시작 뒤 계속 확인 중 | 현재 subject와 로컬 digest 불일치 또는 LMS session 만료 |
-| 같은 계정이 사용자 둘로 분리됨 | 다른 LMS `id`, ID 앞뒤 공백·제어문자 등 입력 불일치 |
+| 같은 계정이 사용자 둘로 분리됨 | identity HMAC key 변경 또는 다른 LMS `id` |
 
-schema v5 이전 DB에 `subject_hmac` identity row가 있으면 현재 서버는
-원본 LMS ID 없이 이를 SHA-256으로 변환하지 않고
-`SQLITE_SCHEMA_RESET_REQUIRED`로 시작을 거부합니다. DB를 보존한 뒤 새
-DB에서 실계정을 다시 검증하십시오. 기존 HMAC 값을 SHA-256 column으로
-이름만 바꾸면 동일 사용자 판별이 깨지므로 허용하지 않습니다.
+Identity HMAC key를 변경한 상태로 기존 DB에 새 PC를 등록하지 마십시오.
+key 유실은 자동 복구할 수 없는 사용자 매핑 장애입니다.

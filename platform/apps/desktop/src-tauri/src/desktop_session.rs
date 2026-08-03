@@ -1,11 +1,11 @@
 use std::{
-    collections::{HashMap, HashSet, VecDeque},
+    collections::{HashSet, VecDeque},
     path::PathBuf,
     sync::{
         atomic::{AtomicBool, AtomicU8, Ordering},
         Mutex, OnceLock,
     },
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use reqwest::{
@@ -31,9 +31,7 @@ use crate::{
         delete_subject_binding, load_or_create_installation_id, load_subject_binding,
         store_subject_binding, subject_binding_digest,
     },
-    native_notification::{
-        show_native_notification, NativeNotificationAuthorization, NativeNotificationState,
-    },
+    native_notification::show_native_notification,
 };
 
 const APP_ORIGIN_ENV: &str = "JB_APP_ORIGIN";
@@ -55,9 +53,6 @@ const COLLECTION_INTERVAL: Duration = Duration::from_secs(5 * 60);
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(30);
 const NOTIFICATION_INTERVAL: Duration = Duration::from_secs(15);
 const DISPLAYED_NOTIFICATION_CACHE_CAPACITY: usize = 256;
-const MAX_LMS_AGENT_REPORT_BYTES: usize = 16 * 1024;
-const LMS_AGENT_EVENT_BURST_CAPACITY: u32 = 24;
-const LMS_AGENT_EVENT_REFILL_INTERVAL: Duration = Duration::from_secs(1);
 const LMS_COLLECTOR_SCRIPT: &str = include_str!("lms_collector.js");
 const TRIGGER_LMS_COLLECTION_SCRIPT: &str = r#"
 (() => {
@@ -293,53 +288,6 @@ struct DisplayedNotificationCache {
     order: VecDeque<String>,
 }
 
-#[derive(Debug)]
-struct LmsAgentEventRateBucket {
-    available: u32,
-    last_refill: Instant,
-}
-
-impl LmsAgentEventRateBucket {
-    fn new(now: Instant) -> Self {
-        Self {
-            available: LMS_AGENT_EVENT_BURST_CAPACITY,
-            last_refill: now,
-        }
-    }
-
-    fn check_at(&mut self, now: Instant) -> Result<(), String> {
-        let elapsed = now.saturating_duration_since(self.last_refill);
-        let refill_interval_ms = LMS_AGENT_EVENT_REFILL_INTERVAL.as_millis();
-        let refill = u32::try_from(elapsed.as_millis() / refill_interval_ms).unwrap_or(u32::MAX);
-        if refill > 0 {
-            self.available = self
-                .available
-                .saturating_add(refill)
-                .min(LMS_AGENT_EVENT_BURST_CAPACITY);
-            self.last_refill += LMS_AGENT_EVENT_REFILL_INTERVAL.saturating_mul(refill);
-        }
-        if self.available == 0 {
-            return Err("LMS_AGENT_REPORT_RATE_LIMITED".to_owned());
-        }
-        self.available -= 1;
-        Ok(())
-    }
-}
-
-#[derive(Debug, Default)]
-struct LmsAgentEventRateLimiter {
-    windows: HashMap<String, LmsAgentEventRateBucket>,
-}
-
-impl LmsAgentEventRateLimiter {
-    fn check_at(&mut self, window_label: &str, now: Instant) -> Result<(), String> {
-        self.windows
-            .entry(window_label.to_owned())
-            .or_insert_with(|| LmsAgentEventRateBucket::new(now))
-            .check_at(now)
-    }
-}
-
 impl DisplayedNotificationCache {
     fn contains(&self, delivery_id: &str) -> bool {
         self.ids.contains(delivery_id)
@@ -447,7 +395,6 @@ pub(crate) struct DesktopSessionState {
     lms_session_state: Mutex<LmsSessionState>,
     pending_registration: Mutex<Option<PendingRegistration>>,
     displayed_notifications: Mutex<DisplayedNotificationCache>,
-    lms_agent_event_rate_limiter: Mutex<LmsAgentEventRateLimiter>,
 }
 
 impl DesktopSessionState {
@@ -490,7 +437,6 @@ impl DesktopSessionState {
             lms_session_state: Mutex::new(LmsSessionState::Unknown),
             pending_registration: Mutex::new(None),
             displayed_notifications: Mutex::new(DisplayedNotificationCache::default()),
-            lms_agent_event_rate_limiter: Mutex::new(LmsAgentEventRateLimiter::default()),
         })
     }
 
@@ -744,18 +690,6 @@ impl DesktopSessionState {
         self.app_session()
     }
 
-    fn notification_request_for_native_authorization(
-        &self,
-        authorization: NativeNotificationAuthorization,
-    ) -> Result<Option<HeaderValue>, String> {
-        match authorization {
-            NativeNotificationAuthorization::Authorized => self.notification_request(),
-            NativeNotificationAuthorization::Pending
-            | NativeNotificationAuthorization::Denied
-            | NativeNotificationAuthorization::Failed => Ok(None),
-        }
-    }
-
     fn complete_notification_poll(&self, subject_verified: bool) {
         if !subject_verified {
             self.unverified_inbox_poll_available
@@ -819,13 +753,6 @@ impl DesktopSessionState {
         if let Ok(mut cache) = self.displayed_notifications.lock() {
             cache.remember(delivery_id);
         }
-    }
-
-    fn check_lms_agent_event_rate(&self, window_label: &str) -> Result<(), String> {
-        self.lms_agent_event_rate_limiter
-            .lock()
-            .map_err(|_| "LMS_AGENT_REPORT_RATE_LIMITED".to_owned())?
-            .check_at(window_label, Instant::now())
     }
 }
 
@@ -1152,9 +1079,7 @@ async fn poll_notifications(app: &tauri::AppHandle) {
     let state = app.state::<DesktopSessionState>();
     let _onboarding = state.onboarding.lock().await;
     let subject_verified = state.verified_session_features_allowed();
-    let authorization = app.state::<NativeNotificationState>().status();
-    let Ok(Some(cookie)) = state.notification_request_for_native_authorization(authorization)
-    else {
+    let Ok(Some(cookie)) = state.notification_request() else {
         return;
     };
     let page = match state.api.notifications(cookie.clone()).await {
@@ -1378,8 +1303,6 @@ pub(crate) async fn report_lms_agent_event(
     report: String,
 ) -> Result<(), String> {
     ensure_allowed_login_report_window(&window, &state)?;
-    validate_agent_report_payload_size(&report)?;
-    state.check_lms_agent_event_rate(window.label())?;
     let report = parse_agent_report(&report).inspect_err(|_| {
         eprintln!("lms-collector stage=Report reason=ProtocolRejected");
     })?;
@@ -1436,14 +1359,6 @@ pub(crate) async fn report_lms_agent_event(
             }
             result
         }
-    }
-}
-
-fn validate_agent_report_payload_size(report: &str) -> Result<(), String> {
-    if report.len() <= MAX_LMS_AGENT_REPORT_BYTES {
-        Ok(())
-    } else {
-        Err("LMS_AGENT_REPORT_TOO_LARGE".to_owned())
     }
 }
 
@@ -1642,16 +1557,17 @@ fn ensure_allowed_login_report_window(
 }
 
 fn collect_lms_cookies(cookies: &[Cookie<'static>]) -> Result<Vec<LmsCookie>, String> {
-    let result = cookies
+    let mut result = cookies
         .iter()
         .filter(|cookie| cookie.name() == "access_token")
         .filter_map(normalize_lms_cookie)
         .collect::<Vec<_>>();
-    match result.len() {
-        0 => Err("LMS_ACCESS_COOKIE_MISSING".into()),
-        1 => Ok(result),
-        _ => Err("LMS_ACCESS_COOKIE_AMBIGUOUS".into()),
+    result.sort_by(|left, right| left.name.cmp(&right.name));
+    result.dedup_by(|left, right| left.name == right.name);
+    if result.len() != 1 {
+        return Err("LMS_ACCESS_COOKIE_MISSING".into());
     }
+    Ok(result)
 }
 
 fn normalize_lms_cookie(cookie: &Cookie<'static>) -> Option<LmsCookie> {
@@ -2016,20 +1932,16 @@ mod tests {
         heartbeat_state_for_server, installed_cookie_domain_matches,
         is_allowed_login_report_window, is_allowed_main_window, is_exact_remote_origin,
         mark_snapshot_retry_if_allowed, native_notification_disposition, normalize_origin,
-        select_origin_value, validate_agent_report_payload_size, validate_onboarding_response,
-        validate_origin_pair, DesktopSessionState, DisplayedNotificationCache,
-        LmsAgentEventRateLimiter, LmsIdentityUpload, MainDocument, MainPrivacySurface,
-        NativeNotificationDisposition, LMS_AGENT_EVENT_BURST_CAPACITY, LMS_COLLECTOR_SCRIPT,
-        MAX_LMS_AGENT_REPORT_BYTES, TRIGGER_LMS_COLLECTION_SCRIPT,
+        select_origin_value, validate_onboarding_response, validate_origin_pair,
+        DesktopSessionState, DisplayedNotificationCache, LmsIdentityUpload, MainDocument,
+        MainPrivacySurface, NativeNotificationDisposition, LMS_COLLECTOR_SCRIPT,
+        TRIGGER_LMS_COLLECTION_SCRIPT,
     };
     use reqwest::{
         header::{HeaderMap, HeaderValue, CACHE_CONTROL, SET_COOKIE},
         StatusCode,
     };
-    use std::{
-        sync::atomic::Ordering,
-        time::{Duration, Instant},
-    };
+    use std::sync::atomic::Ordering;
     use tauri::{
         webview::{Cookie, PageLoadEvent},
         Url,
@@ -2038,7 +1950,6 @@ mod tests {
     use crate::{
         agent_protocol::{LmsSessionState, NotificationKind},
         installation::subject_binding_digest,
-        native_notification::NativeNotificationAuthorization,
     };
 
     fn auth_cookie(name: &'static str, value: &'static str) -> Cookie<'static> {
@@ -2098,45 +2009,6 @@ mod tests {
             assert!(!LMS_COLLECTOR_SCRIPT.contains(forbidden), "{forbidden}");
         }
         assert!(TRIGGER_LMS_COLLECTION_SCRIPT.contains("agent.collect"));
-    }
-
-    #[test]
-    fn bounds_the_raw_agent_report_before_json_deserialization() {
-        assert!(validate_agent_report_payload_size(r#"{"state":"login-required"}"#).is_ok());
-        let oversized = "x".repeat(MAX_LMS_AGENT_REPORT_BYTES + 1);
-        assert_eq!(
-            validate_agent_report_payload_size(&oversized),
-            Err("LMS_AGENT_REPORT_TOO_LARGE".to_owned())
-        );
-    }
-
-    #[test]
-    fn agent_event_rate_limit_allows_collection_retry_bursts_and_is_per_window() {
-        let started = Instant::now();
-        let mut limiter = LmsAgentEventRateLimiter::default();
-        let retry_schedule_ms = [0, 600, 1_500, 3_000, 5_000, 8_000];
-
-        for cycle in 0..3 {
-            for delay_ms in retry_schedule_ms {
-                assert!(limiter
-                    .check_at(
-                        "lms-login",
-                        started + Duration::from_millis(delay_ms + cycle * 20),
-                    )
-                    .is_ok());
-            }
-        }
-
-        for _ in 0..LMS_AGENT_EVENT_BURST_CAPACITY {
-            assert!(limiter.check_at("secondary-login", started).is_ok());
-        }
-        assert_eq!(
-            limiter.check_at("secondary-login", started),
-            Err("LMS_AGENT_REPORT_RATE_LIMITED".to_owned())
-        );
-        assert!(limiter
-            .check_at("secondary-login", started + Duration::from_secs(1))
-            .is_ok());
     }
 
     #[test]
@@ -2424,61 +2296,6 @@ mod tests {
     }
 
     #[test]
-    fn native_notification_authorization_gates_inbox_claims_without_consuming_privacy_poll() {
-        let directory = tempfile::tempdir().expect("temporary app data");
-        let state = DesktopSessionState::configured().expect("configured desktop state");
-        state
-            .initialize_installation(
-                "550e8400-e29b-41d4-a716-446655440004".to_owned(),
-                directory.path().to_path_buf(),
-                Some("bound-subject".to_owned()),
-            )
-            .expect("initialized installation");
-        let mut restored_cookie = HeaderValue::from_static("__Secure-jb_app=restart-session");
-        restored_cookie.set_sensitive(true);
-        state
-            .replace_app_session(Some(restored_cookie))
-            .expect("restored app cookie");
-
-        for _ in 0..16 {
-            assert!(
-                state
-                    .notification_request_for_native_authorization(
-                        NativeNotificationAuthorization::Pending,
-                    )
-                    .expect("pending notification authorization guard")
-                    .is_none(),
-                "a pending authorization poll must not expose a cookie that can claim the inbox"
-            );
-        }
-        for authorization in [
-            NativeNotificationAuthorization::Denied,
-            NativeNotificationAuthorization::Failed,
-        ] {
-            assert!(state
-                .notification_request_for_native_authorization(authorization)
-                .expect("notification authorization guard")
-                .is_none());
-        }
-
-        assert!(state
-            .notification_request_for_native_authorization(
-                NativeNotificationAuthorization::Authorized,
-            )
-            .expect("authorized notification request")
-            .is_some(),
-            "pending/denied/failed checks must not consume or claim the one privacy-safe restart poll"
-        );
-        state.complete_notification_poll(false);
-        assert!(state
-            .notification_request_for_native_authorization(
-                NativeNotificationAuthorization::Authorized,
-            )
-            .expect("completed unverified poll guard")
-            .is_none());
-    }
-
-    #[test]
     fn notification_poll_requires_an_app_session_and_local_subject_binding() {
         let directory = tempfile::tempdir().expect("temporary app data");
         let state = DesktopSessionState::configured().expect("configured desktop state");
@@ -2719,18 +2536,6 @@ mod tests {
             auth_cookie("refresh_token", "refresh.value"),
         ])
         .is_err());
-    }
-
-    #[test]
-    fn refuses_ambiguous_duplicate_exact_access_cookies() {
-        assert_eq!(
-            collect_lms_cookies(&[
-                auth_cookie("access_token", "first.value"),
-                auth_cookie("access_token", "second.value"),
-            ])
-            .expect_err("duplicate exact access cookies must be rejected"),
-            "LMS_ACCESS_COOKIE_AMBIGUOUS"
-        );
     }
 
     #[test]
