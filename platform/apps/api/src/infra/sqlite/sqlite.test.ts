@@ -15,6 +15,7 @@ import {
 } from "./index.js";
 import { SqliteCampusUserRepository } from "../../campus/repository.js";
 import { SqliteNotificationRepository } from "../../notifications/repository.js";
+import { DEFAULT_DEVICE_SESSION_TTL_MS } from "../../domain/pairing.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -54,6 +55,16 @@ describe("SQLite platform schema", () => {
     expect(tables).toContain("attendance_snapshots");
     expect(tables).not.toContain("lms_sessions");
     expect(tables).not.toContain("attendance_collector_runs");
+    const deviceSessionColumns = database
+      .prepare<[], { name: string }>("PRAGMA table_info(device_sessions)")
+      .all()
+      .map(({ name }) => name);
+    expect(deviceSessionColumns).toEqual(
+      expect.arrayContaining([
+        "expires_at_epoch_ms",
+        "last_seen_at_epoch_ms",
+      ]),
+    );
 
     const credentialLikeColumns = database
       .prepare<[], { table_name: string; column_name: string }>(`
@@ -250,6 +261,16 @@ describe("SQLite platform schema", () => {
       last_error_code: "PAIRING_SCHEMA_UPGRADE",
     });
     const pairingStore = new SqlitePairingStore(upgraded);
+    const upgradedSessionColumns = upgraded
+      .prepare<[], { name: string }>("PRAGMA table_info(device_sessions)")
+      .all()
+      .map(({ name }) => name);
+    expect(upgradedSessionColumns).toEqual(
+      expect.arrayContaining([
+        "expires_at_epoch_ms",
+        "last_seen_at_epoch_ms",
+      ]),
+    );
     expect(
       await pairingStore.insertChallenge({
         challengeId: "new-challenge",
@@ -266,6 +287,58 @@ describe("SQLite platform schema", () => {
         version: 0,
       }),
     ).toBe(true);
+    upgraded.close();
+  });
+
+  it("upgrades v3 sessions to durable one-year expiry and activity columns", async () => {
+    const path = await temporaryDatabasePath();
+    const current = openSqliteDatabase(path);
+    current.exec(`
+      INSERT INTO users VALUES ('user-v3', 'active', 1000);
+      INSERT INTO desktop_devices VALUES (
+        'user-v3', 'desktop-v3', 1000, 1000, 1000, 'connected', NULL
+      );
+      INSERT INTO pairing_challenges VALUES (
+        'challenge-v3', 'user-v3', 'desktop-v3',
+        'pairing-hash-v3', 'manual-hash-v3', 'approved',
+        'V3 phone', 'jbmi_33333333333333333333333333333333',
+        1000, 3000, 2000, 2
+      );
+      INSERT INTO device_sessions VALUES (
+        'session-v3', 'challenge-v3', 'user-v3', 'device-v3',
+        'V3 phone', 'jbmi_33333333333333333333333333333333',
+        'token-hash-v3', '["attendance:read"]',
+        2000, ${2_000 + DEFAULT_DEVICE_SESSION_TTL_MS}, 2000, NULL, 0
+      );
+    `);
+    current.close();
+
+    const legacy = new Database(path);
+    legacy.exec(`
+      ALTER TABLE device_sessions DROP COLUMN last_seen_at_epoch_ms;
+      ALTER TABLE device_sessions DROP COLUMN expires_at_epoch_ms;
+      PRAGMA user_version = 3;
+    `);
+    legacy.close();
+
+    const upgraded = openSqliteDatabase(path);
+    expect(
+      upgraded
+        .prepare(`
+          SELECT
+            created_at_epoch_ms,
+            expires_at_epoch_ms,
+            last_seen_at_epoch_ms
+          FROM device_sessions
+          WHERE session_id = 'session-v3'
+        `)
+        .get(),
+    ).toEqual({
+      created_at_epoch_ms: 2_000,
+      expires_at_epoch_ms: 2_000 + DEFAULT_DEVICE_SESSION_TTL_MS,
+      last_seen_at_epoch_ms: 2_000,
+    });
+    expect(upgraded.pragma("foreign_key_check")).toEqual([]);
     upgraded.close();
   });
 

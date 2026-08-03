@@ -283,6 +283,11 @@ interface AppSessionCookieConfig {
   readonly secure: boolean;
 }
 
+interface DeviceSessionCookieConfig {
+  readonly name: "__Host-jb_device" | "jb_device";
+  readonly secure: boolean;
+}
+
 export async function buildApp(
   options: BuildAppOptions = {},
 ): Promise<FastifyInstance> {
@@ -297,6 +302,10 @@ export async function buildApp(
   const appSessionCookie: AppSessionCookieConfig = {
     domain: cookieDomain(publicUrl),
     name: loopbackHttp ? "jb_app" : "__Secure-jb_app",
+    secure: !loopbackHttp,
+  };
+  const deviceSessionCookie: DeviceSessionCookieConfig = {
+    name: loopbackHttp ? "jb_device" : "__Host-jb_device",
     secure: !loopbackHttp,
   };
   const app = Fastify({
@@ -425,7 +434,7 @@ export async function buildApp(
   ): Promise<string> => {
     try {
       const mobile = await pairingService.authenticateDeviceSession(
-        request.cookies.jb_device ?? "",
+        request.cookies[deviceSessionCookie.name] ?? "",
       );
       return `mobile:${mobile.sessionId}`;
     } catch (error) {
@@ -934,7 +943,8 @@ export async function buildApp(
       >[0],
       pairingId,
     );
-    const previousDeviceToken = request.cookies.jb_device;
+    const previousDeviceToken =
+      request.cookies[deviceSessionCookie.name];
     if (
       previousDeviceToken !== undefined &&
       previousDeviceToken !== token
@@ -959,13 +969,14 @@ export async function buildApp(
         );
       }
     }
-    reply.setCookie("jb_device", token, {
-      httpOnly: true,
-      secure: secureCookies,
-      sameSite: "strict",
-      path: "/",
-      maxAge: 60 * 60 * 24 * 30,
-    });
+    const principal = await pairingService.authenticateDeviceSession(token);
+    setDeviceSessionCookie(
+      reply,
+      deviceSessionCookie,
+      token,
+      principal.expiresAtEpochMs,
+      clock.now(),
+    );
     return reply.code(204).send();
   });
 
@@ -983,6 +994,11 @@ export async function buildApp(
       const sessions = await pairingService.listDeviceSessions(
         desktop.userId,
       );
+      const pushEnabledDeviceIds = new Set(
+        (
+          await pushSubscriptions.listActiveByUserId(desktop.userId)
+        ).map((subscription) => subscription.deviceId),
+      );
       return {
         sessions: [...sessions]
           .sort(
@@ -991,7 +1007,11 @@ export async function buildApp(
               left.sessionId.localeCompare(right.sessionId),
           )
           .map((session) =>
-            toApiMobileSession(session, nowEpochMs),
+            toApiMobileSession(
+              session,
+              nowEpochMs,
+              pushEnabledDeviceIds.has(session.deviceId),
+            ),
           ),
       };
     },
@@ -1038,6 +1058,7 @@ export async function buildApp(
         request,
         pairingService,
         "attendance:read",
+        deviceSessionCookie.name,
       );
       const revoked = await pairingService.revokeDeviceSession({
         userId: mobile.userId,
@@ -1056,7 +1077,7 @@ export async function buildApp(
         clock.now(),
         "DEVICE_REVOKED",
       );
-      clearDeviceSessionCookie(reply, secureCookies);
+      clearDeviceSessionCookie(reply, deviceSessionCookie);
       return reply.code(204).send();
     },
   );
@@ -1066,6 +1087,7 @@ export async function buildApp(
       request,
       pairingService,
       "attendance:read",
+      deviceSessionCookie.name,
     );
     return {
       device: {
@@ -1458,6 +1480,7 @@ export async function buildApp(
       clock.now(),
       pairingService,
       "preferences:read",
+      deviceSessionCookie.name,
     );
     const repository = options.campusUserRepository;
     if (repository === undefined) {
@@ -1497,6 +1520,7 @@ export async function buildApp(
         clock.now(),
         pairingService,
         "preferences:write",
+        deviceSessionCookie.name,
       );
       const repository = options.campusUserRepository;
       if (repository === undefined) {
@@ -1524,6 +1548,7 @@ export async function buildApp(
       clock.now(),
       pairingService,
       "preferences:read",
+      deviceSessionCookie.name,
     );
     const repository = options.campusUserRepository;
     if (repository === undefined) {
@@ -1562,6 +1587,7 @@ export async function buildApp(
         clock.now(),
         pairingService,
         "preferences:write",
+        deviceSessionCookie.name,
       );
       const repository = options.campusUserRepository;
       if (repository === undefined) {
@@ -1589,6 +1615,7 @@ export async function buildApp(
       clock.now(),
       pairingService,
       "preferences:read",
+      deviceSessionCookie.name,
     );
     const repository = options.campusUserRepository;
     if (repository === undefined) {
@@ -1623,6 +1650,7 @@ export async function buildApp(
         clock.now(),
         pairingService,
         "preferences:write",
+        deviceSessionCookie.name,
       );
       const repository = options.campusUserRepository;
       if (repository === undefined) {
@@ -1680,6 +1708,7 @@ export async function buildApp(
         clock.now(),
         pairingService,
         "preferences:write",
+        deviceSessionCookie.name,
       );
       const repository = options.campusUserRepository;
       if (repository === undefined) {
@@ -1713,6 +1742,7 @@ export async function buildApp(
       clock.now(),
       pairingService,
       "preferences:read",
+      deviceSessionCookie.name,
     );
     const repository = options.campusUserRepository;
     if (repository === undefined) {
@@ -1747,6 +1777,7 @@ export async function buildApp(
         clock.now(),
         pairingService,
         "preferences:write",
+        deviceSessionCookie.name,
       );
       const repository = options.campusUserRepository;
       if (repository === undefined) {
@@ -1809,6 +1840,7 @@ export async function buildApp(
         clock.now(),
         pairingService,
         "preferences:write",
+        deviceSessionCookie.name,
       );
       const repository = options.campusUserRepository;
       if (repository === undefined) {
@@ -1838,6 +1870,7 @@ export async function buildApp(
       request,
       pairingService,
       "notifications:receive",
+      deviceSessionCookie.name,
     );
     if (!options.vapidPublicKey) {
       return reply.code(503).send({ error: "WEB_PUSH_NOT_CONFIGURED" });
@@ -1861,6 +1894,7 @@ export async function buildApp(
         request,
         pairingService,
         "notifications:receive",
+        deviceSessionCookie.name,
       );
       const subscription = parsePushSubscription(request.body);
       const now = clock.now();
@@ -1914,6 +1948,7 @@ export async function buildApp(
         request,
         pairingService,
         "notifications:receive",
+        deviceSessionCookie.name,
       );
       const { subscriptionId } = pushSubscriptionParamsSchema.parse(
         request.params,
@@ -1950,6 +1985,7 @@ export async function buildApp(
         request,
         pairingService,
         "notifications:receive",
+        deviceSessionCookie.name,
       );
       if (!options.pushDeliveryCoordinator) {
         return reply.code(503).send({ error: "WEB_PUSH_NOT_CONFIGURED" });
@@ -2123,8 +2159,9 @@ async function authenticateMobile(
   request: FastifyRequest,
   pairingService: PairingService,
   requiredScope: string,
+  cookieName: DeviceSessionCookieConfig["name"],
 ): Promise<DeviceSessionPrincipal> {
-  const token = request.cookies.jb_device ?? "";
+  const token = request.cookies[cookieName] ?? "";
   return pairingService.authenticateDeviceSession(token, requiredScope);
 }
 
@@ -2136,6 +2173,7 @@ async function authenticatePrivateUser(
   now: number,
   pairingService: PairingService,
   requiredMobileScope: string,
+  deviceCookieName: DeviceSessionCookieConfig["name"],
 ): Promise<{ readonly userId: string; readonly deviceId: string }> {
   const desktop = await findValidAppSession(
     request,
@@ -2154,6 +2192,7 @@ async function authenticatePrivateUser(
     request,
     pairingService,
     requiredMobileScope,
+    deviceCookieName,
   );
   return { userId: mobile.userId, deviceId: mobile.deviceId };
 }
@@ -2213,15 +2252,38 @@ function clearAppSessionCookie(
   });
 }
 
+function setDeviceSessionCookie(
+  reply: FastifyReply,
+  config: DeviceSessionCookieConfig,
+  token: string,
+  expiresAtEpochMs: number,
+  nowEpochMs: number,
+): void {
+  const ttlMs = expiresAtEpochMs - nowEpochMs;
+  if (!Number.isSafeInteger(ttlMs) || ttlMs <= 0) {
+    throw new PairingDomainError(
+      "DEVICE_SESSION_EXPIRED",
+      "Device session has expired.",
+    );
+  }
+  reply.setCookie(config.name, token, {
+    httpOnly: true,
+    maxAge: Math.max(1, Math.floor(ttlMs / 1_000)),
+    path: "/",
+    sameSite: "strict",
+    secure: config.secure,
+  });
+}
+
 function clearDeviceSessionCookie(
   reply: FastifyReply,
-  secure: boolean,
+  config: DeviceSessionCookieConfig,
 ): void {
-  reply.clearCookie("jb_device", {
+  reply.clearCookie(config.name, {
     httpOnly: true,
     path: "/",
     sameSite: "strict",
-    secure,
+    secure: config.secure,
   });
 }
 
@@ -2274,6 +2336,7 @@ async function revokePushSubscriptionsForDevice(
 function toApiMobileSession(
   session: DeviceSessionSummary,
   nowEpochMs: number,
+  pushEnabled: boolean,
 ) {
   return {
     sessionId: session.sessionId,
@@ -2282,6 +2345,8 @@ function toApiMobileSession(
     scopes: [...session.scopes],
     createdAt: new Date(session.createdAtEpochMs).toISOString(),
     expiresAt: new Date(session.expiresAtEpochMs).toISOString(),
+    lastSeenAt: new Date(session.lastSeenAtEpochMs).toISOString(),
+    pushEnabled,
     revokedAt:
       session.revokedAtEpochMs === null
         ? null

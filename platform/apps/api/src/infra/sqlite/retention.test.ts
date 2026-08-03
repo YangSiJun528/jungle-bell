@@ -347,11 +347,12 @@ function seedPairingRows(
       INSERT INTO device_sessions (
         session_id, pairing_challenge_id, user_id, device_id,
         device_label, installation_id, token_hash, scopes_json,
-        created_at_epoch_ms, revoked_at_epoch_ms, version
+        created_at_epoch_ms, expires_at_epoch_ms,
+        last_seen_at_epoch_ms, revoked_at_epoch_ms, version
       ) VALUES (
         'session-old', 'challenge-old-approved', 'user-1',
         'device-old', 'Old phone', @installation,
-        'mobile-old-token', '[]', 1, 2, 0
+        'mobile-old-token', '[]', 1, 3, 1, 2, 0
       )
     `)
     .run({ installation: `jbmi_${"1".repeat(32)}` });
@@ -360,16 +361,19 @@ function seedPairingRows(
       INSERT INTO device_sessions (
         session_id, pairing_challenge_id, user_id, device_id,
         device_label, installation_id, token_hash, scopes_json,
-        created_at_epoch_ms, revoked_at_epoch_ms, version
+        created_at_epoch_ms, expires_at_epoch_ms,
+        last_seen_at_epoch_ms, revoked_at_epoch_ms, version
       ) VALUES (
         'session-recent', 'challenge-recent', 'user-1',
         'device-recent', 'Recent phone', @installation,
-        'mobile-recent-token', '[]', @created, NULL, 0
+        'mobile-recent-token', '[]', @created, @expires,
+        @created, NULL, 0
       )
     `)
     .run({
       installation: `jbmi_${"2".repeat(32)}`,
       created: now - 500,
+      expires: now + DAY_MS,
     });
   database
     .prepare(`

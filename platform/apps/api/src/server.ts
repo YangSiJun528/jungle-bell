@@ -11,7 +11,6 @@ import {
   SqliteCampusUserRepository,
   campusDataSourceFromEnvironment,
 } from "./campus/index.js";
-import { DEFAULT_DEVICE_SESSION_TTL_MS } from "./domain/index.js";
 import {
   deriveEncryptionKey,
   readMasterEncryptionKey,
@@ -114,9 +113,7 @@ const pushDeliveryCoordinator = vapid
           (session) =>
             session.deviceId === subscription.deviceId &&
             session.revokedAtEpochMs === null &&
-            session.createdAtEpochMs +
-              DEFAULT_DEVICE_SESSION_TTL_MS >
-              nowEpochMs &&
+            session.expiresAtEpochMs > nowEpochMs &&
             session.scopes.includes("notifications:receive"),
         ),
     })

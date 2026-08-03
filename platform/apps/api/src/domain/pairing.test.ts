@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { Clock, Hasher, RandomSource } from "./ports";
 import {
+  DEFAULT_DEVICE_SESSION_TTL_MS,
+  DEVICE_SESSION_LAST_SEEN_WRITE_INTERVAL_MS,
   InMemoryPairingStore,
   PairingService,
   decodePairingQrPayload,
@@ -41,7 +43,9 @@ class TestHasher implements Hasher {
   }
 }
 
-function createSubject() {
+function createSubject(
+  deviceSessionTtlMs = DEFAULT_DEVICE_SESSION_TTL_MS,
+) {
   const clock = new TestClock(Date.parse("2026-07-30T00:00:00.000Z"));
   const random = new SequenceRandom();
   const hasher = new TestHasher();
@@ -52,9 +56,9 @@ function createSubject() {
     hasher,
     store,
     challengeTtlMs: 60_000,
-    deviceSessionTtlMs: 30 * 24 * 60 * 60 * 1_000,
+    deviceSessionTtlMs,
   });
-  return { clock, hasher, service, store };
+  return { clock, hasher, random, service, store };
 }
 
 async function claimAndApprove(
@@ -201,6 +205,10 @@ describe("PairingService", () => {
       userId: "user-1",
       deviceId: approved.deviceId,
       deviceLabel: "Sijun's phone",
+      expiresAtEpochMs:
+        Date.parse("2026-07-30T00:00:00.000Z") +
+        DEFAULT_DEVICE_SESSION_TTL_MS,
+      lastSeenAtEpochMs: Date.parse("2026-07-30T00:00:00.000Z"),
       revokedAtEpochMs: null,
     });
 
@@ -284,11 +292,48 @@ describe("PairingService", () => {
     ).rejects.toMatchObject({ code: "DEVICE_SESSION_SCOPE_DENIED" });
   });
 
-  it("expires an extracted device token after the configured lifetime", async () => {
+  it("persists the issued expiry instead of recalculating it from later configuration", async () => {
+    const { clock, hasher, random, service, store } = createSubject(1_000);
+    const session = await claimAndApprove(service, "Expiring phone");
+    clock.advance(1_000);
+
+    const reconfigured = new PairingService({
+      clock,
+      random,
+      hasher,
+      store,
+      challengeTtlMs: 60_000,
+      deviceSessionTtlMs: DEFAULT_DEVICE_SESSION_TTL_MS,
+    });
+
+    await expect(
+      reconfigured.authenticateDeviceSession(session.sessionToken),
+    ).rejects.toMatchObject({ code: "DEVICE_SESSION_EXPIRED" });
+  });
+
+  it("writes mobile activity at most once per tracking interval", async () => {
+    const { clock, service, store } = createSubject();
+    const session = await claimAndApprove(service, "Tracked phone");
+    const initial = await store.getDeviceSession(session.sessionId);
+
+    clock.advance(DEVICE_SESSION_LAST_SEEN_WRITE_INTERVAL_MS - 1);
+    await service.authenticateDeviceSession(session.sessionToken);
+    expect(await store.getDeviceSession(session.sessionId)).toMatchObject({
+      lastSeenAtEpochMs: initial?.lastSeenAtEpochMs,
+    });
+
+    clock.advance(1);
+    await service.authenticateDeviceSession(session.sessionToken);
+    expect(await store.getDeviceSession(session.sessionId)).toMatchObject({
+      lastSeenAtEpochMs: clock.now(),
+    });
+  });
+
+  it("uses a one-year default device lifetime", async () => {
     const { clock, service } = createSubject();
     const session = await claimAndApprove(service, "Expiring phone");
 
-    clock.advance(30 * 24 * 60 * 60 * 1_000);
+    clock.advance(DEFAULT_DEVICE_SESSION_TTL_MS);
 
     await expect(
       service.authenticateDeviceSession(session.sessionToken),

@@ -15,8 +15,8 @@ describe("StoreBackedNotificationTargetDirectory", () => {
       subscription("other-user", "phone-c", "push-c", null),
     ]);
     const listDeviceSessions = vi.fn(async () => [
-      mobileSession("user-1", "phone-a", null, 1),
-      mobileSession("user-1", "phone-b", 123, 1),
+      mobileSession("user-1", "phone-a", null, 1, 2_000),
+      mobileSession("user-1", "phone-b", 123, 1, 2_000),
     ]);
     const directory = new StoreBackedNotificationTargetDirectory({
       desktopIdentities: { listDesktopDevices },
@@ -103,9 +103,9 @@ describe("StoreBackedNotificationTargetDirectory", () => {
       },
       deviceSessions: {
         listDeviceSessions: async () => [
-          mobileSession("user-1", "active", null, 9_000),
-          mobileSession("user-1", "revoked", 9_500, 9_000),
-          mobileSession("user-1", "expired", null, 1),
+          mobileSession("user-1", "active", null, 9_000, 14_000),
+          mobileSession("user-1", "revoked", 9_500, 9_000, 14_000),
+          mobileSession("user-1", "expired", null, 1, 9_999),
         ],
       },
       pushSubscriptions: {
@@ -118,7 +118,6 @@ describe("StoreBackedNotificationTargetDirectory", () => {
       },
       webPushEnabled: true,
       now: () => 10_000,
-      mobileSessionTtlMs: 5_000,
     });
 
     await expect(directory.listTargets("user-1")).resolves.toEqual([
@@ -171,6 +170,7 @@ function mobileSession(
   deviceId: string,
   revokedAtEpochMs: number | null,
   createdAtEpochMs: number,
+  expiresAtEpochMs: number,
 ) {
   return {
     sessionId: `session-${deviceId}`,
@@ -183,6 +183,8 @@ function mobileSession(
     tokenHash: `hash-${deviceId}`,
     scopes: ["notifications:receive"] as const,
     createdAtEpochMs,
+    expiresAtEpochMs,
+    lastSeenAtEpochMs: createdAtEpochMs,
     revokedAtEpochMs,
     version: revokedAtEpochMs === null ? 0 : 1,
   };

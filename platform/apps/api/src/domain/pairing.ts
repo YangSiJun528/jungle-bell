@@ -6,7 +6,9 @@ const SECRET_BYTE_LENGTH = 32;
 const IDENTIFIER_BYTE_LENGTH = 16;
 const MANUAL_CODE_LENGTH = 10;
 const CROCKFORD_BASE32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-export const DEFAULT_DEVICE_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1_000;
+export const DEFAULT_DEVICE_SESSION_TTL_MS = 365 * 24 * 60 * 60 * 1_000;
+export const DEVICE_SESSION_LAST_SEEN_WRITE_INTERVAL_MS =
+  6 * 60 * 60 * 1_000;
 
 export const DEVICE_SESSION_SCOPES = [
   "attendance:read",
@@ -43,6 +45,8 @@ export interface DeviceSessionRecord {
   readonly tokenHash: string;
   readonly scopes: readonly DeviceSessionScope[];
   readonly createdAtEpochMs: number;
+  readonly expiresAtEpochMs: number;
+  readonly lastSeenAtEpochMs: number;
   readonly revokedAtEpochMs: number | null;
   readonly version: number;
 }
@@ -70,6 +74,11 @@ export interface PairingStore {
     tokenHash: string,
   ): Promise<DeviceSessionRecord | null>;
   listDeviceSessions(userId: string): Promise<readonly DeviceSessionRecord[]>;
+  touchDeviceSession(input: {
+    readonly sessionId: string;
+    readonly seenAtEpochMs: number;
+    readonly notSeenSinceEpochMs: number;
+  }): Promise<void>;
   updateDeviceSession(
     session: DeviceSessionRecord,
     expectedVersion: number,
@@ -116,6 +125,8 @@ export interface DeviceSessionPrincipal {
   readonly deviceLabel: string;
   readonly installationId: string;
   readonly scopes: readonly DeviceSessionScope[];
+  readonly expiresAtEpochMs: number;
+  readonly lastSeenAtEpochMs: number;
 }
 
 export interface DeviceSessionSummary {
@@ -127,6 +138,7 @@ export interface DeviceSessionSummary {
   readonly scopes: readonly DeviceSessionScope[];
   readonly createdAtEpochMs: number;
   readonly expiresAtEpochMs: number;
+  readonly lastSeenAtEpochMs: number;
   readonly revokedAtEpochMs: number | null;
 }
 
@@ -264,6 +276,27 @@ export class InMemoryPairingStore implements PairingStore {
     return [...this.sessions.values()]
       .filter((session) => session.userId === userId)
       .map(cloneSession);
+  }
+
+  async touchDeviceSession(input: {
+    readonly sessionId: string;
+    readonly seenAtEpochMs: number;
+    readonly notSeenSinceEpochMs: number;
+  }): Promise<void> {
+    const current = this.sessions.get(input.sessionId);
+    if (
+      current === undefined ||
+      current.revokedAtEpochMs !== null ||
+      current.expiresAtEpochMs <= input.seenAtEpochMs ||
+      current.lastSeenAtEpochMs > input.notSeenSinceEpochMs ||
+      current.lastSeenAtEpochMs > input.seenAtEpochMs
+    ) {
+      return;
+    }
+    this.sessions.set(input.sessionId, {
+      ...current,
+      lastSeenAtEpochMs: input.seenAtEpochMs,
+    });
   }
 
   async updateDeviceSession(
@@ -523,6 +556,13 @@ export class PairingService {
       SECRET_BYTE_LENGTH,
     )}`;
     const tokenHash = await this.hasher.hash(sessionToken);
+    const expiresAtEpochMs = now + this.deviceSessionTtlMs;
+    if (!Number.isSafeInteger(expiresAtEpochMs)) {
+      throw new PairingDomainError(
+        "INVALID_PAIRING_CONFIGURATION",
+        "Device session expiry is outside the safe integer range.",
+      );
+    }
     const session: DeviceSessionRecord = {
       sessionId,
       userId: challenge.userId,
@@ -532,6 +572,8 @@ export class PairingService {
       tokenHash,
       scopes,
       createdAtEpochMs: now,
+      expiresAtEpochMs,
+      lastSeenAtEpochMs: now,
       revokedAtEpochMs: null,
       version: 0,
     };
@@ -590,10 +632,8 @@ export class PairingService {
         "Device session has been revoked.",
       );
     }
-    if (
-      session.createdAtEpochMs + this.deviceSessionTtlMs <=
-      this.clock.now()
-    ) {
+    const now = this.clock.now();
+    if (session.expiresAtEpochMs <= now) {
       throw new PairingDomainError(
         "DEVICE_SESSION_EXPIRED",
         "Device session has expired.",
@@ -606,6 +646,19 @@ export class PairingService {
       );
     }
 
+    if (
+      session.lastSeenAtEpochMs +
+        DEVICE_SESSION_LAST_SEEN_WRITE_INTERVAL_MS <=
+      now
+    ) {
+      await this.store.touchDeviceSession({
+        sessionId: session.sessionId,
+        seenAtEpochMs: now,
+        notSeenSinceEpochMs:
+          now - DEVICE_SESSION_LAST_SEEN_WRITE_INTERVAL_MS,
+      });
+    }
+
     return {
       sessionId: session.sessionId,
       userId: session.userId,
@@ -613,6 +666,8 @@ export class PairingService {
       deviceLabel: session.deviceLabel,
       installationId: session.installationId,
       scopes: [...session.scopes],
+      expiresAtEpochMs: session.expiresAtEpochMs,
+      lastSeenAtEpochMs: Math.max(session.lastSeenAtEpochMs, now),
     };
   }
 
@@ -693,8 +748,8 @@ export class PairingService {
       installationId: session.installationId,
       scopes: [...session.scopes],
       createdAtEpochMs: session.createdAtEpochMs,
-      expiresAtEpochMs:
-        session.createdAtEpochMs + this.deviceSessionTtlMs,
+      expiresAtEpochMs: session.expiresAtEpochMs,
+      lastSeenAtEpochMs: session.lastSeenAtEpochMs,
       revokedAtEpochMs: session.revokedAtEpochMs,
     };
   }

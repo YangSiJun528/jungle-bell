@@ -45,7 +45,7 @@ function seedMobile(database: SqliteDatabase): void {
       'session-1', 'pairing-1', 'user-1', 'device-1', 'Phone',
       'jbmi_11111111111111111111111111111111',
       'token-hash-1', '["attendance:read"]',
-      1, NULL, 0
+      1, 10000, 1, NULL, 0
     );
   `);
 }

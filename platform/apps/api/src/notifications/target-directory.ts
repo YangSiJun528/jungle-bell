@@ -2,10 +2,7 @@ import type {
   DesktopIdentityStore,
   DesktopSessionStore,
 } from "../infra/sqlite/index.js";
-import {
-  DEFAULT_DEVICE_SESSION_TTL_MS,
-  type PairingStore,
-} from "../domain/pairing.js";
+import type { PairingStore } from "../domain/pairing.js";
 import type { PushSubscriptionStore } from "../push/index.js";
 import type {
   NotificationTarget,
@@ -35,7 +32,6 @@ export class StoreBackedNotificationTargetDirectory
       >;
       readonly webPushEnabled: boolean;
       readonly now?: () => number;
-      readonly mobileSessionTtlMs?: number;
     },
   ) {}
 
@@ -43,9 +39,6 @@ export class StoreBackedNotificationTargetDirectory
     userId: string,
   ): Promise<readonly NotificationTarget[]> {
     const nowEpochMs = this.dependencies.now?.() ?? Date.now();
-    const mobileSessionTtlMs =
-      this.dependencies.mobileSessionTtlMs ??
-      DEFAULT_DEVICE_SESSION_TTL_MS;
     const desktopDevices =
       await this.dependencies.desktopIdentities.listDesktopDevices(userId);
     const pushSubscriptions = this.dependencies.webPushEnabled
@@ -64,8 +57,7 @@ export class StoreBackedNotificationTargetDirectory
               (session) =>
                 session.userId === userId &&
                 session.revokedAtEpochMs === null &&
-                session.createdAtEpochMs + mobileSessionTtlMs >
-                  nowEpochMs,
+                session.expiresAtEpochMs > nowEpochMs,
             )
             .map((session) => session.deviceId),
         )

@@ -73,6 +73,7 @@ export function MobileSessionManager({
                       ...session,
                       status: "revoked",
                       revokedAt: new Date().toISOString(),
+                      pushEnabled: false,
                     }
                   : session,
               ),
@@ -164,6 +165,12 @@ export function MobileSessionManager({
                   <time dateTime={session.createdAt}>
                     {formatDate(session.createdAt)}
                   </time>
+                  {" · 최근 사용 "}
+                  <time dateTime={session.lastSeenAt}>
+                    {formatDate(session.lastSeenAt)}
+                  </time>
+                  {" · "}
+                  {session.pushEnabled ? "알림 켜짐" : "알림 꺼짐"}
                   {session.status === "active" ? (
                     <>
                       {" · 만료 "}

@@ -36,7 +36,9 @@ const session = {
     "preferences:write",
   ] as const,
   createdAt: "2026-07-01T00:00:00.000Z",
-  expiresAt: "2026-07-31T00:00:00.000Z",
+  expiresAt: "2027-07-01T00:00:00.000Z",
+  lastSeenAt: "2026-07-30T06:00:00.000Z",
+  pushEnabled: true,
   revokedAt: null,
   status: "active" as const,
 };
@@ -59,6 +61,8 @@ describe("MobileSessionManager", () => {
     render(<MobileSessionManager mode="desktop" />);
 
     expect(await screen.findByText(session.deviceLabel)).toBeVisible();
+    expect(screen.getByText(/최근 사용/)).toBeVisible();
+    expect(screen.getByText(/알림 켜짐/)).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "연결 해제" }));
     await waitFor(() =>
       expect(revokeMobileDeviceSession).toHaveBeenCalledWith(

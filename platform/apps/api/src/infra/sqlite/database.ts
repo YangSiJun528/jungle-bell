@@ -5,13 +5,14 @@ import {
   LAUNDRY_LIFECYCLE_SQL_SCHEMA,
 } from "../../campus/repository.js";
 import { NOTIFICATION_SQL_SCHEMA } from "../../notifications/repository.js";
+import { DEFAULT_DEVICE_SESSION_TTL_MS } from "../../domain/pairing.js";
 
 /**
  * The platform rewrite intentionally starts with a new schema. There is no
  * production user data to migrate, and LMS credentials must not survive in
  * any database created by this version.
  */
-export const LATEST_SQLITE_SCHEMA_VERSION = 3;
+export const LATEST_SQLITE_SCHEMA_VERSION = 4;
 export const SQLITE_BUSY_TIMEOUT_MS = 5_000;
 export const SQLITE_WAL_AUTOCHECKPOINT_PAGES = 1_000;
 
@@ -88,6 +89,9 @@ export function migrateSqliteDatabase(database: SqliteDatabase): void {
       if (currentVersion <= 2) {
         migrateLaundryLifecycleSchemaToVersion3(database);
       }
+      if (currentVersion <= 3) {
+        migrateDeviceSessionSchemaToVersion4(database);
+      }
       database.pragma(`user_version = ${LATEST_SQLITE_SCHEMA_VERSION}`);
     }
     assertCurrentSchema(database);
@@ -134,6 +138,8 @@ function assertCurrentSchema(database: SqliteDatabase): void {
     !challengeColumns.has("manual_code_hash") ||
     challengeColumns.has("claimed_public_key") ||
     sessionColumns.has("public_key") ||
+    !sessionColumns.has("expires_at_epoch_ms") ||
+    !sessionColumns.has("last_seen_at_epoch_ms") ||
     !tableColumns(database, "notification_events").has(
       "expires_at_epoch_ms",
     )
@@ -142,6 +148,33 @@ function assertCurrentSchema(database: SqliteDatabase): void {
       "SQLITE_SCHEMA_RESET_REQUIRED: pairing schema columns are not current.",
     );
   }
+}
+
+function migrateDeviceSessionSchemaToVersion4(
+  database: SqliteDatabase,
+): void {
+  const columns = tableColumns(database, "device_sessions");
+  const hasExpiry = columns.has("expires_at_epoch_ms");
+  const hasLastSeen = columns.has("last_seen_at_epoch_ms");
+  if (hasExpiry && hasLastSeen) {
+    return;
+  }
+  if (hasExpiry || hasLastSeen) {
+    throw new Error(
+      "SQLITE_SCHEMA_RESET_REQUIRED: device session activity columns are incomplete.",
+    );
+  }
+  database.exec(`
+    ALTER TABLE device_sessions
+      ADD COLUMN expires_at_epoch_ms INTEGER;
+    ALTER TABLE device_sessions
+      ADD COLUMN last_seen_at_epoch_ms INTEGER;
+    UPDATE device_sessions
+    SET
+      expires_at_epoch_ms =
+        created_at_epoch_ms + ${DEFAULT_DEVICE_SESSION_TTL_MS},
+      last_seen_at_epoch_ms = created_at_epoch_ms;
+  `);
 }
 
 function migrateLaundryLifecycleSchemaToVersion3(
@@ -366,6 +399,13 @@ const SCHEMA_VERSION_1 = `
     scopes_json TEXT NOT NULL
       CHECK (json_valid(scopes_json) AND json_type(scopes_json) = 'array'),
     created_at_epoch_ms INTEGER NOT NULL CHECK (created_at_epoch_ms >= 0),
+    expires_at_epoch_ms INTEGER NOT NULL
+      CHECK (expires_at_epoch_ms > created_at_epoch_ms),
+    last_seen_at_epoch_ms INTEGER NOT NULL
+      CHECK (
+        last_seen_at_epoch_ms >= created_at_epoch_ms
+        AND last_seen_at_epoch_ms < expires_at_epoch_ms
+      ),
     revoked_at_epoch_ms INTEGER CHECK (revoked_at_epoch_ms >= created_at_epoch_ms),
     version INTEGER NOT NULL CHECK (version >= 0),
     UNIQUE (user_id, device_id)
@@ -604,6 +644,13 @@ const PAIRING_SCHEMA_VERSION_2 = `
     scopes_json TEXT NOT NULL
       CHECK (json_valid(scopes_json) AND json_type(scopes_json) = 'array'),
     created_at_epoch_ms INTEGER NOT NULL CHECK (created_at_epoch_ms >= 0),
+    expires_at_epoch_ms INTEGER NOT NULL
+      CHECK (expires_at_epoch_ms > created_at_epoch_ms),
+    last_seen_at_epoch_ms INTEGER NOT NULL
+      CHECK (
+        last_seen_at_epoch_ms >= created_at_epoch_ms
+        AND last_seen_at_epoch_ms < expires_at_epoch_ms
+      ),
     revoked_at_epoch_ms INTEGER CHECK (revoked_at_epoch_ms >= created_at_epoch_ms),
     version INTEGER NOT NULL CHECK (version >= 0),
     UNIQUE (user_id, device_id)
