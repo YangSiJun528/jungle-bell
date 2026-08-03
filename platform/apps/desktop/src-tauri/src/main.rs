@@ -389,6 +389,22 @@ mod tests {
     }
 
     #[test]
+    fn lms_login_window_is_an_owned_popup_of_the_main_window() {
+        let source = include_str!("desktop_session.rs");
+        for required in [
+            "get_webview_window(MAIN_WINDOW_LABEL)",
+            ".parent(&main)",
+            ".maximizable(false)",
+            ".minimizable(false)",
+        ] {
+            assert!(
+                source.contains(required),
+                "the LMS login window must keep the popup contract: {required}"
+            );
+        }
+    }
+
+    #[test]
     fn runtime_main_capability_is_remote_and_minimal() {
         let origin = Url::parse("https://bell.example.com").expect("app origin");
         assert_eq!(MAIN_CAPABILITY_ID, "main-remote-runtime");
