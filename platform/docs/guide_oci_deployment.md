@@ -51,34 +51,26 @@ sudo install -d -o root -g root -m 0700 /etc/jungle-bell
 `/srv/jungle-bell/data`에는 SQLite DB, WAL sidecar, online backup이
 생성됩니다. secret은 이 directory에 넣지 않습니다.
 
-## 3. 서버 secret을 만듭니다
+## 3. pairing transport secret을 만듭니다
 
-Pairing transport와 LMS identity HMAC에 서로 다른 32바이트 random key를
-사용합니다.
+2분짜리 pairing handoff 암호화에 32바이트 random key를 사용합니다. LMS
+동일 사용자 판별은 정확한 `SHA-256(LMS ID)`이므로 identity secret은
+없습니다.
 
 ```bash
 openssl rand -base64 32 | sudo tee \
   /srv/jungle-bell/secrets/session-encryption-key >/dev/null
-openssl rand -base64 32 | sudo tee \
-  /srv/jungle-bell/secrets/identity-hmac-key >/dev/null
 sudo chown root:1000 \
-  /srv/jungle-bell/secrets/session-encryption-key \
-  /srv/jungle-bell/secrets/identity-hmac-key
+  /srv/jungle-bell/secrets/session-encryption-key
 sudo chmod 0440 \
-  /srv/jungle-bell/secrets/session-encryption-key \
-  /srv/jungle-bell/secrets/identity-hmac-key
+  /srv/jungle-bell/secrets/session-encryption-key
 ```
 
 `session-encryption-key`는 2분짜리 승인된 모바일 session handoff를
 암호화합니다. LMS cookie를 암호화해 보관하는 key가 아닙니다.
 
-`identity-hmac-key`는 immutable LMS ID를 기존 내부 사용자와 연결하는
-핵심 복구 자산입니다. 이 key를 잃거나 다른 값으로 바꾸면 이후 같은 LMS
-계정을 기존 사용자로 식별할 수 없습니다.
-
-두 key 모두 DB와 다른 접근 통제 영역에 off-host backup하십시오. secret
-값을 repository, Compose environment, shell history, 지원 로그에 넣지
-마십시오.
+이 key는 DB와 다른 접근 통제 영역에 off-host backup하십시오. secret 값을
+repository, Compose environment, shell history, 지원 로그에 넣지 마십시오.
 
 ## 4. VAPID key pair를 만듭니다
 
@@ -121,7 +113,6 @@ JB_DOMAIN=bell.example.com
 JB_PUBLIC_ORIGIN=https://bell.example.com
 JB_DATA_DIRECTORY=/srv/jungle-bell/data
 JB_SESSION_ENCRYPTION_KEY_PATH=/srv/jungle-bell/secrets/session-encryption-key
-JB_IDENTITY_HMAC_KEY_PATH=/srv/jungle-bell/secrets/identity-hmac-key
 JB_CAMPUS_DATA_API_URL=https://jungle-bell-api.yangsijun5528.workers.dev
 JB_VAPID_SUBJECT=mailto:operator@example.com
 JB_VAPID_PUBLIC_KEY=PASTE_PUBLIC_VAPID_KEY
@@ -193,7 +184,7 @@ sudo docker compose \
   --env-file /etc/jungle-bell/platform.env \
   -f docker-compose.oci.yml \
   exec platform \
-  sh -c 'id && test -r /run/secrets/session_encryption_key && test -r /run/secrets/identity_hmac_key && test -r /run/secrets/vapid_private_key'
+  sh -c 'id && test -r /run/secrets/session_encryption_key && test -r /run/secrets/vapid_private_key'
 sudo docker compose \
   --env-file /etc/jungle-bell/platform.env \
   -f docker-compose.oci.yml \
@@ -264,6 +255,22 @@ npm run tauri:build
 
 release build는 runtime 환경 변수로 origin을 바꾸지 않습니다. 배포
 domain을 변경하면 데스크톱 artifact도 다시 build·배포해야 합니다.
+
+운영 사용자에게 배포할 artifact는 로컬 build가 아니라
+`.github/workflows/platform-release.yml`의 서명·notarization 결과를
+사용합니다. `platform-v0.5.0` 같은 불변 tag를 push하거나 workflow를
+수동 실행하면 macOS·Windows installer, updater signature와 `latest.json`을
+하나의 draft release에 모읍니다. 모든 품질 gate와 artifact 검사가 끝난
+뒤 manifest의 version·platform·release asset 결합과 detached signature를
+대조하고, 기존 0.4.4에 내장된 공개 키로 모든 updater artifact의 서명을
+실제 검증합니다. publish 직전에도 asset ID·이름·크기와 manifest 원문이
+검증 때와 같은지 재조회합니다.
+이 검증을 통과한 안정판만 GitHub latest로 게시되며 기존 0.4.4 앱이 같은
+updater endpoint를 통해 이를 설치합니다. prerelease는 latest로 지정되지
+않습니다. GitHub 저장소에서 `Enable release immutability`를 먼저 켜야 하며,
+`Administration: read`만 부여한 fine-grained token을
+`RELEASE_SETTINGS_READ_TOKEN` Actions secret으로 등록해야 합니다. workflow는
+token이 없거나 설정이 꺼진 저장소의 release를 공개하지 않습니다.
 
 ## 9. SQLite online backup을 만듭니다
 
@@ -356,7 +363,7 @@ credential file 또는 secret manager에서 restic process에 전달합니다.
 아래 예시는 운영자가 별도로 만든 root 전용 repository·password file을
 참조하며, 외부 provider 계정이나 credential을 만들지 않습니다.
 
-로컬 backup service가 성공한 뒤 다음 순서로 DB snapshot과 세 server
+로컬 backup service가 성공한 뒤 다음 순서로 DB snapshot과 두 server
 secret을 전송합니다.
 
 ```bash
@@ -437,13 +444,13 @@ sudo docker run --rm \
 ```
 
 그다음 격리된 VM 또는 outbound network가 차단된 복구 환경에서 같은
-snapshot과 세 secret을 복원하고 현재 Compose revision을 시작하십시오.
+snapshot과 두 secret을 복원하고 현재 Compose revision을 시작하십시오.
 다음을 확인해야 restore drill이 완료됩니다.
 
 - container가 현재 schema로 시작하고 health 200을 반환함
 - 사용자·desktop·mobile session·출석·규칙의 비민감 count가 예상 범위임
-- identity HMAC key와 pairing transport·VAPID key 파일이 같은 권한으로
-  복구되고 container에서 읽을 수 있음
+- pairing transport·VAPID key 파일이 같은 권한으로 복구되고 container에서
+  읽을 수 있음
 - 실제 사용자 Push endpoint로 outbound 요청이 나가지 않음
 
 같은 LMS 계정이 기존 사용자에 다시 연결되는지는 복구본을 운영으로
@@ -478,6 +485,12 @@ SQLite migration은 시작 시 앞으로만 적용됩니다. 이 개편은 과�
 schema를 읽지 못하는 이전 image로 단순 rollback하지 말고, upgrade 전
 snapshot과 해당 revision을 함께 복구하십시오.
 
+schema v5 이전 DB에 LMS identity row가 있으면 현재 image는 기존 keyed
+HMAC을 정확한 `SHA-256(LMS ID)`로 변환하지 않고
+`SQLITE_SCHEMA_RESET_REQUIRED`로 시작을 거부합니다. 원본 DB를 보존한 뒤
+새 DB에서 사용자가 LMS를 다시 검증하고 모바일을 다시 연결해야 합니다.
+기존 HMAC 값을 `subject_sha256`으로 이름만 바꾸거나 복사하지 마십시오.
+
 ## 14. 운영 수동 smoke를 완료합니다
 
 배포 뒤 실제 계정 한 개와 실제 휴대폰 한 개로 확인합니다.
@@ -489,7 +502,10 @@ snapshot과 해당 revision을 함께 복구하십시오.
 4. PC에서 mobile session 목록 확인·해제, 모바일 self logout
 5. 실제 모바일 Web Push test와 알림 클릭의 same-origin `/app` 이동
 6. 실제 desktop 네이티브 알림과 ack
-7. 공개 급식·세탁의 last-updated·stale 표시
+7. 공개 급식과 남성·여성별 세탁부터 건조까지 가능한 예상 횟수,
+   last-updated·stale 및 `산출 불가` 표시
+8. 출석 T-10·마감 알림과 PC offline·snapshot stale fallback Web Push;
+   서버가 LMS 조회나 자동 출석을 수행하지 않는지 확인
 
 Google SSO·2단계 인증과 실제 Apple·Google Push는 자동 검증 결과가
 아니므로 실행 시각·기기·OS·통과 여부를 별도 기록합니다.
@@ -505,6 +521,7 @@ Google SSO·2단계 인증과 실제 Apple·Google Push는 자동 검증 결과�
 - campus collector와 notification outbox worker가 단일 process에서
   실행됨
 - online backup이 off-host로 전송되고 최근 restore drill이 통과함
-- identity, pairing transport, VAPID secret이 DB·environment file과
-  분리됨
+- pairing transport와 VAPID secret이 DB·environment file과 분리됨
+- 출석 알림 lifecycle이 snapshot upload와 독립적으로 실행되고 PC offline
+  fallback을 durable dedupe함
 - 실계정 LMS와 실제 Web Push 수동 smoke가 기록됨

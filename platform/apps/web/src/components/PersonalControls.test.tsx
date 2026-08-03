@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import {
   afterEach,
@@ -164,6 +165,33 @@ describe("PersonalControls", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it("groups each notification domain into its own settings section", async () => {
+    render(<PersonalControls />);
+
+    const attendance = await screen.findByRole("group", {
+      name: "출석 알림",
+    });
+    const meal = screen.getByRole("group", { name: "급식 알림" });
+    const laundry = screen.getByRole("group", { name: "세탁 알림" });
+    const queue = screen.getByRole("group", { name: "자율 대기열" });
+
+    expect(within(attendance).getByLabelText("출석 알림 전체")).toBeVisible();
+    expect(within(meal).getByLabelText("급식 알림 전체")).toBeVisible();
+    expect(
+      within(laundry).getByRole("button", {
+        name: "세탁·대기열 새로고침",
+      }),
+    ).toBeVisible();
+    expect(
+      within(attendance).queryByRole("button", {
+        name: "세탁·대기열 새로고침",
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(queue).getByRole("button", { name: "세탁기 대기열 참여" }),
+    ).toBeVisible();
   });
 
   it("tracks dirty meal settings and creates a session-aware watch", async () => {

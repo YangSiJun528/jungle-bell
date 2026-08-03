@@ -38,5 +38,11 @@ describe("ephemeral session utilities", () => {
     expect(() =>
       normalizeLmsCookies([{ ...cookie, value: "secret\r\nX-Evil: yes" }]),
     ).toThrow("LMS_COOKIE_INVALID");
+    expect(() =>
+      normalizeLmsCookies([
+        cookie,
+        { ...cookie, value: "second.header.payload" },
+      ]),
+    ).toThrow("LMS_COOKIE_AMBIGUOUS");
   });
 });

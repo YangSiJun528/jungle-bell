@@ -1,4 +1,3 @@
-import { createHmac } from "node:crypto";
 import { mkdir, readFile, statfs } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -31,6 +30,7 @@ import { AesGcmSessionSealer } from "./lms/session-vault.js";
 import {
   NotificationOutboxWorker,
   NotificationService,
+  ServerAttendanceNotificationLifecycle,
   ServerNotificationPlanner,
   SqliteLaundryNotificationLifecycle,
   SqliteNotificationRepository,
@@ -56,10 +56,6 @@ const production = nodeEnvironment === "production";
 const sessionEncryptionKey = await readSecret(
   "JB_SESSION_ENCRYPTION_KEY",
   "JB_SESSION_ENCRYPTION_KEY_FILE",
-);
-const identityHmacKey = await readSecret(
-  "JB_IDENTITY_HMAC_KEY",
-  "JB_IDENTITY_HMAC_KEY_FILE",
 );
 const vapidPrivateKey = await readSecret(
   "JB_VAPID_PRIVATE_KEY",
@@ -143,6 +139,13 @@ const disabledWebPush: NotificationDeliveryAdapter = {
 const notificationPlanner = new ServerNotificationPlanner(
   campusUserRepository,
 );
+const attendanceLifecycle =
+  new ServerAttendanceNotificationLifecycle({
+    rules: campusUserRepository,
+    snapshots: attendanceSnapshotStore,
+    desktopIdentities: desktopIdentityStore,
+    desktopSessions: desktopSessionStore,
+  });
 const laundryLifecycle = new SqliteLaundryNotificationLifecycle({
   database,
   campus: campusRepository,
@@ -155,6 +158,7 @@ const notificationService = new NotificationService({
   planner: notificationPlanner,
   repository: notificationRepository,
   targets: notificationTargets,
+  attendanceLifecycle,
   laundryLifecycle,
   webPush:
     pushDeliveryCoordinator === undefined
@@ -179,14 +183,6 @@ const masterKey = readMasterEncryptionKey(
   sessionEncryptionKey,
   production,
 );
-const identityKey =
-  identityHmacKey === undefined && !production
-    ? masterKey
-    : readMasterEncryptionKey(
-        identityHmacKey,
-        production,
-        "JB_IDENTITY_HMAC_KEY",
-      );
 const lmsGateway = new LmsHttpGateway();
 const app = await buildApp({
   logger: production,
@@ -236,14 +232,6 @@ const app = await buildApp({
     deriveEncryptionKey(masterKey, "pairing-transport-v1"),
   ),
   lmsGateway,
-  lmsSubjectToIdentityHash: (subject) =>
-    createHmac(
-      "sha256",
-      deriveEncryptionKey(identityKey, "lms-identity-v1"),
-    )
-      .update("jungle-lms\0user-id\0", "utf8")
-      .update(subject, "utf8")
-      .digest("hex"),
   ...(publicOrigin ? { publicOrigin } : {}),
   webRoot,
 });

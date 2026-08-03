@@ -66,7 +66,6 @@ try {
       JB_PUBLIC_ORIGIN: origin,
       JB_CAMPUS_DATA_API_URL: campusDataOrigin,
       JB_SESSION_ENCRYPTION_KEY: randomBytes(32).toString("base64"),
-      JB_IDENTITY_HMAC_KEY: randomBytes(32).toString("base64"),
     },
     stdio: ["ignore", "pipe", "pipe"],
   });

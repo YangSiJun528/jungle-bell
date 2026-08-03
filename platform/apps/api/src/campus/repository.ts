@@ -526,6 +526,21 @@ export class SqliteCampusUserRepository {
     );
   }
 
+  listAttendanceSubscriberUserIds(
+    phase: "morning" | "evening",
+  ): string[] {
+    const column = phase;
+    return this.database
+      .prepare(`
+        SELECT user_id
+        FROM user_attendance_rules
+        WHERE enabled = 1 AND ${column} = 1
+        ORDER BY user_id
+      `)
+      .all()
+      .map((row) => readText(asRow(row), "user_id"));
+  }
+
   createWatch(watch: LaundryWatch): void {
     validateWatch(watch);
     const create = this.database.transaction(() => {

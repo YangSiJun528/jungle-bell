@@ -12,7 +12,7 @@ import { DEFAULT_DEVICE_SESSION_TTL_MS } from "../../domain/pairing.js";
  * production user data to migrate, and LMS credentials must not survive in
  * any database created by this version.
  */
-export const LATEST_SQLITE_SCHEMA_VERSION = 4;
+export const LATEST_SQLITE_SCHEMA_VERSION = 5;
 export const SQLITE_BUSY_TIMEOUT_MS = 5_000;
 export const SQLITE_WAL_AUTOCHECKPOINT_PAGES = 1_000;
 
@@ -92,6 +92,9 @@ export function migrateSqliteDatabase(database: SqliteDatabase): void {
       if (currentVersion <= 3) {
         migrateDeviceSessionSchemaToVersion4(database);
       }
+      if (currentVersion <= 4) {
+        migrateIdentityHashSchemaToVersion5(database);
+      }
       database.pragma(`user_version = ${LATEST_SQLITE_SCHEMA_VERSION}`);
     }
     assertCurrentSchema(database);
@@ -134,12 +137,20 @@ function assertCurrentSchema(database: SqliteDatabase): void {
     "pairing_challenges",
   );
   const sessionColumns = tableColumns(database, "device_sessions");
+  const identityColumns = tableColumns(
+    database,
+    "external_identities",
+  );
   if (
     !challengeColumns.has("manual_code_hash") ||
     challengeColumns.has("claimed_public_key") ||
     sessionColumns.has("public_key") ||
     !sessionColumns.has("expires_at_epoch_ms") ||
     !sessionColumns.has("last_seen_at_epoch_ms") ||
+    !identityColumns.has("subject_sha256") ||
+    !identityColumns.has("hash_version") ||
+    identityColumns.has("subject_hmac") ||
+    identityColumns.has("hmac_key_version") ||
     !tableColumns(database, "notification_events").has(
       "expires_at_epoch_ms",
     )
@@ -148,6 +159,39 @@ function assertCurrentSchema(database: SqliteDatabase): void {
       "SQLITE_SCHEMA_RESET_REQUIRED: pairing schema columns are not current.",
     );
   }
+}
+
+function migrateIdentityHashSchemaToVersion5(
+  database: SqliteDatabase,
+): void {
+  const columns = tableColumns(database, "external_identities");
+  if (columns.has("subject_sha256") && columns.has("hash_version")) {
+    return;
+  }
+  if (
+    !columns.has("subject_hmac") ||
+    !columns.has("hmac_key_version")
+  ) {
+    throw new Error(
+      "SQLITE_SCHEMA_RESET_REQUIRED: external identity columns are not current.",
+    );
+  }
+  const identityCount = database
+    .prepare<[], { count: number }>(
+      "SELECT count(*) AS count FROM external_identities",
+    )
+    .get()?.count;
+  if (identityCount !== 0) {
+    throw new Error(
+      "SQLITE_SCHEMA_RESET_REQUIRED: keyed LMS identities cannot be converted to LMS ID SHA-256 without the original LMS ID.",
+    );
+  }
+  database.exec(`
+    ALTER TABLE external_identities
+      RENAME COLUMN subject_hmac TO subject_sha256;
+    ALTER TABLE external_identities
+      RENAME COLUMN hmac_key_version TO hash_version;
+  `);
 }
 
 function migrateDeviceSessionSchemaToVersion4(
@@ -298,18 +342,18 @@ const SCHEMA_VERSION_1 = `
 
   CREATE TABLE external_identities (
     provider TEXT NOT NULL CHECK (provider = 'jungle_lms'),
-    subject_hmac TEXT NOT NULL
+    subject_sha256 TEXT NOT NULL
       CHECK (
-        length(subject_hmac) = 64
-        AND subject_hmac NOT GLOB '*[^0-9a-f]*'
+        length(subject_sha256) = 64
+        AND subject_sha256 NOT GLOB '*[^0-9a-f]*'
       ),
-    hmac_key_version INTEGER NOT NULL CHECK (hmac_key_version = 1),
+    hash_version INTEGER NOT NULL CHECK (hash_version = 1),
     user_id TEXT NOT NULL
       REFERENCES users(id) ON UPDATE RESTRICT ON DELETE RESTRICT,
     linked_at_epoch_ms INTEGER NOT NULL CHECK (linked_at_epoch_ms >= 0),
     last_verified_at_epoch_ms INTEGER NOT NULL
       CHECK (last_verified_at_epoch_ms >= linked_at_epoch_ms),
-    PRIMARY KEY (provider, subject_hmac),
+    PRIMARY KEY (provider, subject_sha256),
     UNIQUE (provider, user_id)
   ) STRICT, WITHOUT ROWID;
 

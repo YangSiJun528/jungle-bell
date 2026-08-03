@@ -106,6 +106,12 @@ describe("campus SQLite repositories", () => {
     expect(
       users.isAttendancePhaseEnabled("user-1", "evening"),
     ).toBe(false);
+    expect(users.listAttendanceSubscriberUserIds("morning")).toEqual([
+      "user-1",
+    ]);
+    expect(users.listAttendanceSubscriberUserIds("evening")).toEqual(
+      [],
+    );
 
     users.createWatch({
       id: "watch-1",

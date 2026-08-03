@@ -1,6 +1,5 @@
 import type { LaundryAppliance } from "./campus-client";
 
-const AVAILABLE_STATES = new Set(["AVAILABLE", "IDLE", "READY"]);
 const ACTIVE_OPERATIONAL_STATES = new Set([
   "RUNNING",
   "SCHEDULED",
@@ -28,8 +27,9 @@ export function isLaundryApplianceAvailable(
     return false;
   }
   return (
-    AVAILABLE_STATES.has(appliance.operationalStatus) ||
-    AVAILABLE_STATES.has(appliance.projection.status)
+    appliance.projection.status === "CONFIRMED_COMPLETED" ||
+    (appliance.projection.status === "IDLE" &&
+      appliance.operationalStatus !== "SCHEDULED")
   );
 }
 

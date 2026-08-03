@@ -6,6 +6,7 @@ snapshot·heartbeat만 서버에 동기화하는 경로를 실제 계정으로
 
 Google 계정 입력과 2단계 인증은 자동화하지 않습니다. 출석
 체크인·체크아웃을 생성하거나 변경하지 않고 조회 API만 사용합니다.
+Jungle Bell은 자동 출석 기능을 제공하지 않습니다.
 
 ## 준비 사항
 
@@ -111,12 +112,25 @@ Jungle LMS에 별도 refresh endpoint가 없으므로 access cookie를 임의로
 실제 알림을 받으려면 개인 설정에서 출석 알림 전체와 오전 또는 오후를
 명시적으로 켭니다. 기본값은 꺼짐입니다.
 
-- 활성 cohort와 15분 이내 snapshot만 판단에 사용
-- KST 기준 마감 전 60분·15분·5분 구간과 마감 직후 구간별 dedupe
-- 이미 완료된 phase에는 알림 없음
-- 오래된 snapshot에는 알림 없음
+- server lifecycle이 snapshot upload와 독립적으로 due 사용자를 매분 확인
+- 오전은 KST 09:50·10:00, 오후는 다음 날 03:50·04:00 두 slot만 사용
+- 사용자·출석 날짜·phase·slot별 durable dedupe
+- 활성 cohort의 15분 이내 미완료 snapshot에는 확인된 미완료 알림
+- 같은 날짜에서 이미 완료된 phase에는 snapshot freshness와 관계없이 알림
+  없음
+- 오래된 `upcoming`·`ended` snapshot도 cohort 날짜가 해당 출석일을 범위
+  밖으로 증명하면 알림 없음
+- PC offline, LMS 로그인 필요, 오늘 snapshot 없음, stale 미완료 snapshot에는
+  미완료를 단정하지 않는 `상태 미확인` fallback 알림
 - 유효한 모바일 Web Push session과 유효한 app session의 desktop만
   전달 대상이며, 오프라인 desktop delivery는 event 만료까지만 유지
+
+fallback을 확인하려면 출석 알림을 켠 테스트 사용자에서 reminder window
+전에 Tauri를 종료하거나 snapshot을 15분 넘게 갱신하지 않습니다. 해당
+slot에 모바일 Web Push가 `PC 오프라인` 또는 snapshot 상태 미확인 원인을
+표시하고, 서버가 LMS 요청이나 출석 변경 요청을 만들지 않는지 확인합니다.
+신선한 완료 snapshot을 올린 같은 사용자에게는 해당 phase 알림이 없어야
+합니다.
 
 자동 테스트는 planner·outbox 계약을 검증하지만 실제 운영체제
 notification과 Apple·Google Push 전달은 수동으로 확인합니다.

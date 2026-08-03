@@ -46,7 +46,7 @@ describe("SQLite target-size dummy load", () => {
           const identity = await identityStore.registerVerifiedIdentity({
             candidateUserId: `sqlite-dummy-user-${index}`,
             desktopDeviceId: `sqlite-dummy-desktop-${index}`,
-            subjectHmac: index.toString(16).padStart(64, "0"),
+            subjectSha256: index.toString(16).padStart(64, "0"),
             verifiedAtEpochMs: clock.now(),
           });
           const challenge = await pairingService.createChallenge({

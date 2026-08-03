@@ -8,7 +8,10 @@ import {
   vi,
 } from "vitest";
 
-import { sendLocalTestNotification } from "./notifications";
+import {
+  registerPwaServiceWorker,
+  sendLocalTestNotification,
+} from "./notifications";
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
@@ -71,6 +74,34 @@ describe("local notification delivery", () => {
       "Jungle Bell 테스트",
       expect.objectContaining({ tag: "jungle-bell-test" }),
     );
+  });
+
+  it("asks the active service worker to retry durable Push work when the app opens", async () => {
+    const postMessage = vi.fn();
+    const registration = {
+      active: { postMessage },
+    } as unknown as ServiceWorkerRegistration;
+    const register = vi.fn(async () => registration);
+    Object.defineProperty(navigator, "serviceWorker", {
+      configurable: true,
+      value: {
+        controller: null,
+        ready: Promise.resolve(registration),
+        register,
+      },
+    });
+
+    registerPwaServiceWorker(false);
+    window.dispatchEvent(new Event("load"));
+
+    await vi.waitFor(() => {
+      expect(postMessage).toHaveBeenCalledWith({
+        type: "jungle-bell-app-open",
+      });
+    });
+    expect(register).toHaveBeenCalledExactlyOnceWith("/sw.js", {
+      scope: "/",
+    });
   });
 });
 
