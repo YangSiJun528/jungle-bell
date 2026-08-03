@@ -19,13 +19,14 @@ describe("server encryption keys", () => {
     );
   });
 
-  it("derives a stable key for encrypted pairing transport", () => {
+  it("derives independent keys for LMS identity HMAC and pairing transport", () => {
     const master = Buffer.alloc(32, 9);
+    const lms = deriveEncryptionKey(master, "lms-identity-v1");
     const pairing = deriveEncryptionKey(master, "pairing-transport-v1");
 
+    expect(lms).toHaveLength(32);
     expect(pairing).toHaveLength(32);
-    expect(deriveEncryptionKey(master, "pairing-transport-v1")).toEqual(
-      pairing,
-    );
+    expect(lms).not.toEqual(pairing);
+    expect(deriveEncryptionKey(master, "lms-identity-v1")).toEqual(lms);
   });
 });

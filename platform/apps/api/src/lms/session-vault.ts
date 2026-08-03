@@ -98,21 +98,25 @@ export function normalizeLmsCookies(input: unknown): readonly LmsCookie[] {
     throw new LmsSessionError("LMS_COOKIE_INVALID");
   }
   const seen = new Set<string>();
-  const normalized = parsed.data.map((cookie) => {
-    const domain = cookie.domain.replace(/^\./u, "").toLowerCase();
-    if (domain !== LMS_HOST) {
-      throw new LmsSessionError("LMS_COOKIE_SCOPE_INVALID");
-    }
-    const key = `${cookie.name}\u0000${cookie.path}`;
-    if (seen.has(key)) {
-      throw new LmsSessionError("LMS_COOKIE_AMBIGUOUS");
-    }
-    seen.add(key);
-    return { ...cookie, domain };
-  });
-  return normalized.sort((left, right) =>
+  return parsed.data
+    .map((cookie) => {
+      const domain = cookie.domain.replace(/^\./u, "").toLowerCase();
+      if (domain !== LMS_HOST) {
+        throw new LmsSessionError("LMS_COOKIE_SCOPE_INVALID");
+      }
+      return { ...cookie, domain };
+    })
+    .filter((cookie) => {
+      const key = `${cookie.name}\u0000${cookie.path}`;
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    })
+    .sort((left, right) =>
       `${left.name}\u0000${left.path}`.localeCompare(
         `${right.name}\u0000${right.path}`,
       ),
-  );
+    );
 }

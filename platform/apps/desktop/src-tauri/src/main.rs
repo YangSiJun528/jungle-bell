@@ -4,16 +4,13 @@ mod agent_protocol;
 mod desktop_session;
 mod installation;
 mod native_notification;
-mod updater;
 
 use desktop_session::{
     clear_local_desktop_session, initialize_local_agent, is_exact_remote_origin,
     main_privacy_gate_url, open_lms_login, record_main_page_load, report_lms_agent_event,
     request_hide_main, request_show_main, start_lms_login, DesktopSessionState,
 };
-use native_notification::{
-    initialize_native_notifications, send_native_test_notification, NativeNotificationState,
-};
+use native_notification::send_native_test_notification;
 use tauri::{
     ipc::CapabilityBuilder,
     menu::{Menu, MenuItem},
@@ -173,10 +170,6 @@ fn hide_main_window(app: &tauri::AppHandle) {
     request_hide_main(app);
 }
 
-fn handle_second_instance(app: &tauri::AppHandle) {
-    request_show_main(app);
-}
-
 fn main() {
     let desktop_session =
         DesktopSessionState::configured().expect("failed to initialize desktop session state");
@@ -184,12 +177,7 @@ fn main() {
     let setup_origin = app_origin.clone();
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            handle_second_instance(app);
-        }))
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(desktop_session)
-        .manage(NativeNotificationState::default())
         .plugin(navigation_guard(app_origin))
         .invoke_handler(tauri::generate_handler![
             start_lms_login,
@@ -239,9 +227,7 @@ fn main() {
                 tray = tray.icon(icon.clone());
             }
             tray.build(app)?;
-            initialize_native_notifications(app.handle());
             initialize_local_agent(app).map_err(std::io::Error::other)?;
-            updater::spawn_startup_update_check(app.handle().clone());
             show_main_window(app.handle());
             Ok(())
         })
@@ -455,85 +441,17 @@ mod tests {
     }
 
     #[test]
-    fn platform_desktop_is_an_in_place_renewal_of_the_legacy_installation() {
-        let platform_config: serde_json::Value =
+    fn platform_bundle_identifier_is_isolated_from_the_legacy_app_profile() {
+        const LEGACY_IDENTIFIER: &str = "dev.sijun-yang.jungle-bell";
+        const PLATFORM_IDENTIFIER: &str = "dev.sijun-yang.jungle-bell.platform";
+        let config: serde_json::Value =
             serde_json::from_str(include_str!("../tauri.conf.json")).expect("valid Tauri config");
-        let legacy_config: serde_json::Value =
-            serde_json::from_str(include_str!("../../../../../src-tauri/tauri.conf.json"))
-                .expect("valid legacy Tauri config");
+        let identifier = config["identifier"]
+            .as_str()
+            .expect("Tauri identifier must be a string");
 
-        assert_eq!(platform_config["identifier"], legacy_config["identifier"]);
-        assert_eq!(platform_config["productName"], legacy_config["productName"]);
-        assert_eq!(legacy_config["version"], serde_json::json!("0.4.4"));
-        assert_eq!(platform_config["version"], serde_json::json!("0.5.0"));
-        assert_eq!(env!("CARGO_PKG_VERSION"), "0.5.0");
-
-        let stable_version = |value: &serde_json::Value| {
-            value
-                .as_str()
-                .expect("stable version string")
-                .split('.')
-                .map(|part| part.parse::<u64>().expect("numeric version component"))
-                .collect::<Vec<_>>()
-        };
-        assert!(
-            stable_version(&platform_config["version"]) > stable_version(&legacy_config["version"])
-        );
-    }
-
-    #[test]
-    fn workspace_versions_are_locked_to_the_desktop_release_version() {
-        for package in [
-            include_str!("../../../../package.json"),
-            include_str!("../../../api/package.json"),
-            include_str!("../../package.json"),
-            include_str!("../../../web/package.json"),
-        ] {
-            let package: serde_json::Value =
-                serde_json::from_str(package).expect("valid workspace package");
-            assert_eq!(package["version"], serde_json::json!("0.5.0"));
-        }
-
-        let lock: serde_json::Value =
-            serde_json::from_str(include_str!("../../../../package-lock.json"))
-                .expect("valid workspace lockfile");
-        assert_eq!(lock["version"], serde_json::json!("0.5.0"));
-        for workspace in ["", "apps/api", "apps/desktop", "apps/web"] {
-            assert_eq!(
-                lock["packages"][workspace]["version"],
-                serde_json::json!("0.5.0"),
-                "{workspace}"
-            );
-        }
-    }
-
-    #[test]
-    fn updater_keeps_the_legacy_trust_root_and_runs_only_from_rust() {
-        let platform_config: serde_json::Value =
-            serde_json::from_str(include_str!("../tauri.conf.json")).expect("valid Tauri config");
-        let legacy_config: serde_json::Value =
-            serde_json::from_str(include_str!("../../../../../src-tauri/tauri.conf.json"))
-                .expect("valid legacy Tauri config");
-        assert_eq!(
-            platform_config["plugins"]["updater"], legacy_config["plugins"]["updater"],
-            "an installed 0.4.4 client and the renewed app must trust the same signed feed"
-        );
-        assert_eq!(
-            platform_config["bundle"]["createUpdaterArtifacts"],
-            serde_json::json!(true)
-        );
-
-        let cargo = include_str!("../Cargo.toml");
-        assert!(cargo.contains("tauri-plugin-updater = \"=2.10.1\""));
-        let source = include_str!("main.rs");
-        assert!(source.contains(".plugin(tauri_plugin_updater::Builder::new().build())"));
-        assert!(source.contains("updater::spawn_startup_update_check(app.handle().clone())"));
-        assert!(
-            MAIN_PERMISSIONS
-                .iter()
-                .all(|permission| !permission.contains("updater")),
-            "the remote dashboard must not receive updater IPC authority"
-        );
+        assert_ne!(identifier, LEGACY_IDENTIFIER);
+        assert_eq!(identifier, PLATFORM_IDENTIFIER);
     }
 
     #[test]
@@ -569,23 +487,5 @@ mod tests {
         ] {
             assert!(!build.contains(removed));
         }
-    }
-
-    #[test]
-    fn single_instance_plugin_prevents_duplicate_collectors_and_reveals_main() {
-        let source = include_str!("main.rs");
-        let registration = source
-            .find(".plugin(tauri_plugin_single_instance::init")
-            .expect("single-instance plugin registration");
-        let managed_state = source
-            .find(".manage(desktop_session)")
-            .expect("desktop session registration");
-        assert!(registration < managed_state);
-        assert!(source.contains(
-            "fn handle_second_instance(app: &tauri::AppHandle) {\n    request_show_main(app);\n}"
-        ));
-
-        let cargo = include_str!("../Cargo.toml");
-        assert!(cargo.contains("tauri-plugin-single-instance"));
     }
 }

@@ -24,8 +24,8 @@
 
 | surface | 경로·인증 | 기능 |
 | --- | --- | --- |
-| 공개 웹 | `/`, 인증 없음 | 실제 급식, 남성·여성별 세탁부터 건조까지 가능한 예상 횟수와 freshness 조회 |
-| Tauri(macOS·Windows) | server React 앱 + desktop app session | LMS 연결, 출석, 생활 설정, 모바일 관리, 네이티브 알림 |
+| 공개 웹 | `/`, 인증 없음 | 실제 급식·세탁과 freshness 조회 |
+| Tauri | server React 앱 + desktop app session | LMS 연결, 출석, 생활 설정, 모바일 관리, 네이티브 알림 |
 | 모바일 연결 | `/pair` 또는 `/app`의 수동 코드 | 2분 QR proof 또는 10자리 코드 claim |
 | 모바일 PWA | `/app`, mobile session | 출석, 생활 설정, 자율 대기열, Web Push, self logout |
 
@@ -38,8 +38,7 @@ desktop 또는 mobile session을 서버에서 검사합니다.
 | --- | --- | --- |
 | LMS `access_token` | Tauri LMS WebView | onboarding `/api/v2/me` 호출 중 메모리만 |
 | LMS `refresh_token` | Tauri LMS WebView | 없음; 서버 전송 금지 |
-| LMS immutable ID | LMS `/api/v2/me` 응답 | UTF-8 원문의 정확한 SHA-256, `hash_version=1` |
-| 내부 사용자 ID | 없음 | 등록 때 별도 생성한 RFC 4122 v4 UUID |
+| LMS immutable ID | LMS `/api/v2/me` 응답 | domain-separated HMAC-SHA-256 |
 | onboarding subject binding | Tauri와 서버가 각각 계산 | installation ID와 LMS ID의 domain-separated SHA-256; 원문 ID 전송 없음 |
 | 로컬 account binding | Tauri app data | 없음; installation별 SHA-256 digest |
 | desktop app session | main WebView HttpOnly cookie | SHA-256 token hash |
@@ -51,11 +50,9 @@ Production desktop cookie 이름은 `__Secure-jb_app`이고 public host의
 Domain, `Secure`, `HttpOnly`, `SameSite=Strict`, path `/`를 사용합니다.
 loopback 개발에서는 `jb_app`입니다. 수명은 90일입니다.
 
-Production mobile cookie 이름은 `__Host-jb_device`이고 host-only,
-`HttpOnly`, `Secure`, `SameSite=Strict`, path `/`입니다. loopback HTTP
-개발에서만 `jb_device`를 사용합니다. session 수명은 365일 절대 만료이며
-활동에 따라 연장되지 않습니다. DB에는 두 session token의 원문이 저장되지
-않습니다.
+Mobile cookie 이름은 `jb_device`이고 host-only, `HttpOnly`,
+`SameSite=Strict`, production `Secure`, path `/`입니다. session 수명은
+30일입니다. DB에는 두 session token의 원문이 저장되지 않습니다.
 
 서버 onboarding은 다음 모두를 만족하는 `access_token` 하나만
 허용합니다.
@@ -65,19 +62,15 @@ Production mobile cookie 이름은 `__Host-jb_device`이고 host-only,
 - 정확한 cookie path·Secure·HttpOnly 조건
 - 유효한 cookie 문자와 크기
 
-서버는 이 cookie로 `/api/v2/me`를 정확히 한 번 호출해 `id`를 확인하고
-즉시 폐기합니다. cookie를 DB, 오류 객체, 응답에 보존하지 않습니다. email
-fallback, 서버 refresh, LMS credential table은 없습니다.
-
-LMS ID SHA-256은 동일 사용자 판별용 결정적 식별자이며 비밀이나 익명화
-수단이 아닙니다. LMS ID 후보를 아는 공격자는 대조할 수 있으므로 DB와
-backup에 일반 개인정보 수준의 접근 통제가 필요합니다.
+서버는 이 cookie로 `/api/v2/me`만 호출해 `id`를 확인하고 즉시
+폐기합니다. email fallback, 서버 refresh, LMS credential table은
+없습니다.
 
 ## 다중 PC 규칙
 
 - PC마다 installation UUID, desktop device, desktop app session이
   독립적입니다.
-- 같은 LMS `id`를 검증하면 SHA-256이 같으므로 같은 내부 사용자
+- 같은 LMS `id`를 검증하면 identity HMAC이 같으므로 같은 내부 사용자
   UUID에 연결됩니다.
 - 추가 PC 등록에 기존 PC 승인이나 모바일 pairing을 사용하지 않습니다.
 - Tauri app data에는 LMS ID 원문 대신 installation UUID와 subject의
@@ -105,9 +98,6 @@ backup에 일반 개인정보 수준의 접근 통제가 필요합니다.
 | 웹 API request timeout | 15초 |
 | desktop online 판정 | 마지막 heartbeat 또는 inbox poll 5분 이내 |
 | 출석 fresh 판정 | 수집 15분 이내 |
-| 출석 reminder scan | due window 안에서 최대 매분 한 번 |
-| 오전 reminder | KST 09:50(T-10), 10:00(마감) |
-| 오후 reminder | 다음 날 KST 03:50(T-10), 04:00(마감); 출석 날짜는 전날 |
 | desktop app session | 90일 |
 | mobile session | 365일 절대 만료; 최근 사용 DB 기록은 최대 6시간에 한 번 갱신 |
 | QR·수동 코드·claim transport | 2분 |
@@ -131,40 +121,19 @@ notification due·lease·retry는 SQLite에 저장됩니다.
 출석 알림 기본값은 꺼짐입니다. 사용자가 전체 알림과 오전·오후 phase를
 켜야 합니다.
 
-- snapshot upload와 독립된 server lifecycle이 오전·오후 T-10과 마감
-  window를 확인
-- 사용자·출석 날짜·phase·slot(`before-10`, `deadline`)별 durable dedupe
-- active cohort의 15분 이내 미완료 phase는 `unchecked`로 생성
-- 같은 날짜의 완료 phase는 완료 상태가 단조롭게 유지되므로 snapshot이
-  stale이어도 생성하지 않음
-- stale `upcoming`·`ended`도 cohort 시작·종료일이 해당 출석일을 범위
-  밖으로 증명하면 생성하지 않음
-- PC offline, LMS 로그인 필요, 해당 날짜 snapshot 없음, stale snapshot은
-  위 완료·날짜 증명이 없는 경우 미완료를 단정하지 않고 `unverified`
-  fallback으로 생성
-- fresh snapshot이 `upcoming`, `ended`, `none` cohort이면 생성하지 않음
+- cohort가 `active`이고 snapshot이 15분 이내일 때만 판단
+- 오전 미완료 또는 오전 완료·오후 미완료 상태만 대상
+- KST 마감 전 60분·15분·5분 구간과 마감 직후 구간별 source event
+- 사용자·날짜·phase·구간별 dedupe
+- 이미 완료된 phase, 다른 날짜, stale snapshot에는 생성하지 않음
 
-fallback reason은 `desktop-offline`, `login-required`,
-`snapshot-missing`, `snapshot-stale`입니다. 서버는 PC 연결과 무관하게 due
-규칙을 계획하지만 LMS를 대신 조회하거나 자동 출석을 수행하지 않습니다.
+PC가 꺼져 있으면 서버가 LMS를 대신 조회하지 않습니다. 마지막 snapshot
+이 오래되면 알림을 추측해 만들지 않습니다.
 
 ## 급식·세탁 규칙
 
 급식은 전체 enable과 조식·중식·석식 선택을 저장합니다. 새 게시물의
 service date, meal, `contentSha`를 기준으로 사용자별 dedupe합니다.
-
-공개 세탁 예상치는 남성은 1~5번과 공용 6~7번, 여성은 공용 6~7번과
-8~9번 워시타워를 대상으로 다음 수를 표시합니다.
-
-```text
-min(사용 가능한 세탁기 수,
-    max(0, 현재 또는 60분 안에 사용 가능한 건조기 수
-           - 60분 안에 건조가 필요해질 진행 중 세탁 수))
-```
-
-공용 6~7번은 두 성별 값에 모두 포함되어 합산할 수 없습니다. snapshot이
-2분보다 오래됐거나 stale, refresh 실패, collection 실패, 해당 성별의
-필수 세탁기·건조기 누락이면 숫자 대신 `산출 불가`를 표시합니다.
 
 세탁 watch 입력은 machine, washer·dryer, 선택적 session, 종료 전 분,
 사용 가능 알림 여부입니다. 한 사용자에게 active watch를 최대 64개
@@ -269,7 +238,7 @@ Origin이 없는 요청은 명시된 Tauri native onboarding·heartbeat·snapsho
 
 ## SQLite schema
 
-현재 schema version은 5이며 새 플랫폼 전용입니다. 주요 데이터는 다음
+현재 schema version은 3이며 새 플랫폼 전용입니다. 주요 데이터는 다음
 그룹입니다.
 
 - `users`, `external_identities`
@@ -286,13 +255,7 @@ Origin이 없는 요청은 명시된 Tauri native onboarding·heartbeat·snapsho
 
 `lms_sessions`와 `attendance_collector_runs`가 있는 과거 credential DB는
 자동 migration하지 않고 `SQLITE_SCHEMA_RESET_REQUIRED`로 거부합니다.
-schema v4 이하에서 `external_identities`가 비어 있으면 v5가
-`subject_hmac`·`hmac_key_version` column을
-`subject_sha256`·`hash_version`으로 바꿉니다. identity row가 하나라도
-있으면 원본 LMS ID 없이 기존 HMAC을 정확한 SHA-256으로 변환할 수 없으므로
-`SQLITE_SCHEMA_RESET_REQUIRED`로 거부합니다. 이 경우 DB를 별도 보존하고
-새 DB에서 LMS를 다시 검증해야 하며, 기존 HMAC 값을 이름만 바꿔 복사하면
-안 됩니다.
+현재 개편에는 이전 운영 사용자 데이터가 없다는 전제입니다.
 
 ## 서버 환경 변수
 
@@ -307,6 +270,7 @@ schema v4 이하에서 `external_identities`가 비어 있으면 v5가
 | `JB_PUBLIC_ORIGIN` | production에서 path 없는 정확한 HTTPS origin |
 | `JB_CAMPUS_DATA_API_URL` | production campus source base URL |
 | `JB_SESSION_ENCRYPTION_KEY` 또는 `_FILE` | canonical base64 32바이트; production 필수, 둘 중 하나 |
+| `JB_IDENTITY_HMAC_KEY` 또는 `_FILE` | 위 key와 다른 canonical base64 32바이트; production 필수 |
 | `JB_VAPID_SUBJECT` | `mailto:` URI |
 | `JB_VAPID_PUBLIC_KEY` | VAPID public key |
 | `JB_VAPID_PRIVATE_KEY` 또는 `_FILE` | VAPID private key; 둘 중 하나 |
@@ -324,28 +288,6 @@ JB_APP_ORIGIN=https://bell.example.com \
 JB_API_ORIGIN=https://bell.example.com \
 npm run tauri:build
 ```
-
-정식 데스크톱 배포 계약은 다음과 같습니다.
-
-- 현재 개편판 버전은 `0.5.0`이며 기존 출시판 `0.4.4`보다 커야 합니다.
-- product name과 identifier는 기존 앱의 `Jungle Bell`,
-  `dev.sijun-yang.jungle-bell`을 유지합니다.
-- `platform-v0.5.0` 형식 tag가 platform release workflow를 실행합니다.
-- macOS·Windows updater artifact와 `latest.json`은 기존과 같은 개인 키로
-  서명하고, 앱은 기존 공개 키로 검증합니다.
-- publish gate는 manifest version, 필수 macOS·Windows platform key,
-  release asset ID 또는 repository·tag download URL과 detached signature
-  일치를 검사한 뒤 각 artifact의 Minisign 서명을 기존 내장 공개 키로
-  검증합니다. 공개 직전 asset ID·이름·크기와 manifest 원문도 재확인합니다.
-- signing secret을 받는 release action을 포함해 workflow의 모든 action은
-  이동 가능한 tag가 아니라 검토한 전체 commit SHA로 고정합니다.
-- 안정판만 GitHub latest로 지정합니다. prerelease는 기존 사용자의
-  `/releases/latest/download/latest.json`을 바꾸지 않습니다.
-- 저장소의 GitHub immutable releases 설정을 필수로 검사해 공개 뒤 tag와
-  artifact가 바뀌지 않게 합니다. 조회에는 `Administration: read` 전용
-  fine-grained token을 `RELEASE_SETTINGS_READ_TOKEN`으로 사용합니다.
-- root의 legacy release workflow는 canonical updater feed를 되돌릴 수
-  있어 제거했으며, 개편판은 platform release workflow만 사용합니다.
 
 ## 검증 명령
 
@@ -372,7 +314,7 @@ npm run tauri:build
 - 서로 다른 실제 PC의 동일 LMS 사용자 매핑
 - 설치된 iOS·Android PWA의 수동 코드 연결
 - 실제 Apple·Google Web Push 전달과 notification click
-- Windows·macOS 네이티브 알림
+- Windows·macOS·Linux 네이티브 알림
 - OCI Caddy TLS·header, 장시간 worker 실행
 - off-host backup 복원
 
@@ -387,7 +329,7 @@ npm run tauri:build
   session별로 계산해 공용 NAT의 사용자끼리 한도를 공유하지 않습니다.
   LMS onboarding은 200명×2대 PC를 수용하도록 공용 IP당 시간당 600회로
   제한합니다.
-- pairing transport·VAPID key의 자동 rotation migration은 없습니다.
+- 자동 key rotation migration은 없습니다.
 - backup timer 예시는 로컬 retention을 포함하지만 restic off-host 전송과
   실패 경보는 운영 환경에서 별도로 연결해야 합니다.
 - SQLite schema는 이전 server LMS collector DB와 호환되지 않습니다.

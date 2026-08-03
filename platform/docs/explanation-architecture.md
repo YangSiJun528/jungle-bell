@@ -30,33 +30,10 @@ Tauri main ─ HTTPS ────┘          │             │
 권한 경계는 Fastify의 session·scope 검사입니다. URL이나 화면에서 메뉴를
 숨기는 것은 권한 검사가 아닙니다.
 
-## 기존 데스크톱 앱에서 전환
-
-개편판 0.5.0은 별도 제품이 아니라 기존 0.4.4의 제자리 업데이트입니다.
-macOS bundle identifier와 Windows NSIS 제품 identity를
-`dev.sijun-yang.jungle-bell`로 유지하고, 기존 updater 공개 키와 GitHub
-`latest.json` endpoint도 승계합니다. 안정판 release workflow만
-`latest.json`을 공식 최신 릴리스로 게시하며 prerelease는 최신판으로
-지정하지 않습니다.
-
-동일한 WebView profile을 사용하므로 남아 있는 LMS cookie jar를 다시
-사용할 수 있습니다. 다만 개편판은 기존 로컬 설정을 사용자 식별 증거로
-신뢰하지 않습니다. 처음 실행하면 새 installation UUID와 subject binding을
-만들고, 현재 LMS access cookie를 서버에 일회성으로 보내 계정을 다시
-검증한 뒤에만 개인 화면과 snapshot 업로드를 엽니다. 기존 설정 파일은
-마이그레이션 과정에서 삭제하거나 해석하지 않습니다.
-
-서버 DB는 별도 경계입니다. 개편 platform SQLite schema는 기존 데스크톱
-로컬 데이터나 keyed identity hash를 가져오지 않습니다. 정확한
-`SHA-256(LMS ID)` 도입 전 identity row가 있는 platform 시험 DB도 자동
-변환하지 않고 새 DB 또는 명시적 운영 migration을 요구합니다.
-
 ## 사용자 식별과 PC 등록
 
-서버 사용자 기본키는 계정 등록 때 별도로 생성하는 RFC 4122 v4 UUID입니다.
-LMS ID나 email을 직접 기본키로 쓰지 않습니다. 같은 LMS 계정인지 판별하는
-외부 identity key는 immutable LMS ID UTF-8 바이트의 정확한
-`SHA-256(LMS ID)`입니다.
+서버 사용자 기본키는 임의 UUID입니다. LMS ID나 email을 직접 기본키로
+쓰지 않습니다.
 
 1. 사용자가 Tauri의 전용 LMS WebView에서 Google SSO와 2단계 인증을
    완료합니다.
@@ -67,26 +44,24 @@ LMS ID나 email을 직접 기본키로 쓰지 않습니다. 같은 LMS 계정인
    `SHA-256(protocol-domain || installation UUID || LMS ID)` 결합 증명을
    onboarding endpoint로 보냅니다. LMS ID 원문은 보내지 않습니다.
 4. 서버는 받은 access cookie로 `/api/v2/me`를 정확히 한 번 호출합니다.
-   cookie는 요청 처리 메모리에서만 사용하며 오류 정보에도 복사하지
-   않습니다.
 5. 서버는 `/me`에서 확인한 ID로 같은 결합 증명을 계산해 Tauri가 본
-   계정과 서버가 검증한 계정이 같은지 상수 시간 비교합니다. 확인한 LMS
-   ID의 `SHA-256`으로 기존 사용자를 찾고, 처음 보는 값이면 별도 내부
-   UUID를 생성합니다.
+   계정과 서버가 검증한 계정이 같은지 상수 시간 비교한 뒤, 별도 identity
+   secret으로 domain-separated
+   `HMAC-SHA-256(LMS ID)`를 계산하고 내부 사용자 UUID를 찾거나
+   생성합니다.
 6. 서버는 Tauri용 HttpOnly app session을 발급하고 LMS ID 원문과 access
    cookie를 저장하지 않습니다.
 
 `refresh_token`은 onboarding 요청에 포함되지 않으며 서버로 이동하지
 않습니다. 서버 DB에는 LMS session·cookie table이 없습니다.
 
-같은 LMS 계정을 다른 PC에서 다시 검증하면 동일 SHA-256이 계산되므로 기존
+같은 LMS 계정을 다른 PC에서 다시 검증하면 동일 HMAC이 계산되므로 기존
 서버 사용자에 새 desktop device가 추가됩니다. 기존 PC 승인이나 session
 복사는 필요하지 않습니다. LMS 계정 자체가 바뀐 예외 상황의 사용자
 병합은 자동화하지 않고 운영자가 별도로 처리합니다.
 
-이 SHA-256은 동일 사용자 판별을 위한 결정적 식별자이지 비밀이나 익명화
-수단이 아닙니다. LMS ID 후보를 아는 공격자는 hash를 대조할 수 있으므로
-DB 접근 통제와 backup 보호가 여전히 필요합니다.
+Identity HMAC key를 잃거나 다른 값으로 바꾸면 새 PC 검증을 기존 사용자와
+연결할 수 없습니다. DB와 이 key를 함께 복구해야 합니다.
 
 ## Tauri가 소유하는 LMS session
 
@@ -154,23 +129,6 @@ https://jungle-bell-api.yangsijun5528.workers.dev
 공개 급식 카드는 제목과 게시 시각을 KST service date로 정규화해 오늘
 게시물만 표시하고, 이전 날짜 게시물은 최근 식단으로 분리합니다.
 
-공개 세탁 카드는 단순한 `넉넉함` 상태나 빈 기기 합계를 표시하지 않습니다.
-남성은 1~5번과 공용 6~7번, 여성은 공용 6~7번과 8~9번 워시타워를
-대상으로, 지금 세탁을 시작해 건조까지 이어갈 수 있는 예상 횟수를 다음처럼
-계산합니다.
-
-```text
-min(
-  현재 사용 가능한 세탁기 수,
-  max(0, 현재 또는 60분 안에 사용 가능한 건조기 수
-         - 60분 안에 건조가 필요해질 진행 중 세탁 수)
-)
-```
-
-공용 6~7번은 두 성별 값에 모두 포함되므로 두 수를 합산하면 안 됩니다.
-source가 stale이거나 새로고침에 실패했거나 해당 성별의 필수 세탁기·건조기
-입력이 빠졌으면 숫자를 추측하지 않고 `산출 불가`를 표시합니다.
-
 세탁 watch는 한 동작의 종료 전·완료·오류 또는 사용 가능 전환을 대상으로
 하는 일회성 규칙입니다. 조건이 끝나면 자동으로 완료됩니다.
 
@@ -195,21 +153,10 @@ claim·만료 결과를 함께 확인할 수 있습니다.
 합니다. due 시각, lease, 재시도 횟수, backoff, acknowledgement는
 SQLite가 기준이므로 process 재시작 뒤에도 유지됩니다.
 
-출석 알림은 사용자가 명시적으로 켠 오전·오후 규칙에만 생성됩니다. 서버는
-snapshot upload 요청과 독립된 lifecycle을 매분 확인하고, 오전은 KST
-09:50·10:00, 오후는 다음 날 03:50·04:00에 사용자·날짜·phase·slot별
-event를 계획합니다. 15분 이내의 활성 cohort snapshot에서 해당 phase가
-미완료면 확인된 미완료 알림을 만듭니다. 같은 출석 날짜에 이미 완료된
-phase는 완료가 되돌아가지 않는 상태이므로 snapshot이 오래돼도 알림을
-만들지 않습니다. `upcoming`·`ended` 상태도 cohort 시작·종료일이 해당
-출석 날짜가 범위 밖임을 증명하면 오래된 snapshot으로 억제할 수 있습니다.
-
-PC가 꺼졌거나 LMS 재로그인이 필요하거나 오늘 snapshot이 없거나, 미완료인
-snapshot이 오래됐을 때도 중요한 시각을 놓치지 않도록 `상태 미확인`
-fallback 알림을 만듭니다.
-이 알림은 미출석을 단정하지 않으며 원인을 함께 전달합니다. 서버는 LMS를
-대신 조회하지 않고 출석을 생성·변경하지도 않습니다. process가 재시작돼도
-같은 사용자·날짜·phase·slot은 SQLite에서 dedupe됩니다.
+출석 알림은 사용자가 명시적으로 켠 오전·오후 규칙에만 생성됩니다.
+활성 cohort의 15분 이내 최신 snapshot만 사용하며, 마감 전 60분·15분·
+5분 구간과 마감 직후 구간별로 dedupe합니다. PC가 꺼져 있거나 snapshot이
+오래됐으면 서버는 출석 상태를 추측하지 않습니다.
 
 급식 알림은 선택한 식사 종류의 새 게시물에 생성됩니다. 세탁 watch는
 조건을 한 번 처리한 뒤 완료되고, 대기열 알림도 해당 상태 전환에
@@ -307,8 +254,7 @@ PostgreSQL, 공유 rate limit, 분산 outbox lease, worker ownership을 함께
 | 값 | 저장 위치 | 서버 영속 저장 |
 | --- | --- | --- |
 | LMS access·refresh cookie | Tauri LMS WebView profile | 없음 |
-| LMS immutable ID | 검증 중 메모리 | 정확한 SHA-256만 저장 |
-| 내부 사용자 ID | 서버가 등록 때 생성 | 별도 RFC 4122 v4 UUID |
+| LMS immutable ID | 검증 중 메모리 | HMAC만 저장 |
 | 로컬 LMS account binding | Tauri app data | installation별 SHA-256 digest |
 | Tauri app session | main WebView HttpOnly cookie | token SHA-256 hash |
 | 모바일 session | PWA HttpOnly cookie | token SHA-256 hash |
@@ -328,7 +274,6 @@ mobile mutation은 서버가 먼저 검증한 app/device session을 key로
 ## 의도적으로 지원하지 않는 것
 
 - 서버의 LMS refresh cookie 저장·주기적 LMS 로그인 자동화
-- LMS 출석의 자동 체크인·체크아웃 또는 상태 변경
 - Neko나 원격 브라우저 화면 제공
 - 외부 Chrome 설치 경로 탐색
 - OAuth가 없는 상태에서 Google 계정 credential 자동 입력

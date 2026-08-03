@@ -5,6 +5,13 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import {
+  Tab,
+  TabGroup,
+  TabList,
+  TabPanel,
+  TabPanels,
+} from "@headlessui/react";
 
 import {
   getCompanionAttendanceDashboard,
@@ -49,88 +56,6 @@ import logoUrl from "./assets/logo.png";
 interface AppProps {
   initialPath?: string;
   tauri?: boolean;
-}
-
-type WorkspaceRouteId =
-  | "attendance"
-  | "laundry"
-  | "meals"
-  | "notifications"
-  | "settings";
-
-interface WorkspaceRoute {
-  readonly id: WorkspaceRouteId;
-  readonly hash: `#${string}`;
-  readonly label: string;
-  readonly intro: {
-    readonly eyebrow: string;
-    readonly title: string;
-    readonly description: string;
-  };
-}
-
-const WORKSPACE_ROUTES = [
-  {
-    id: "attendance",
-    hash: "#attendance",
-    label: "홈",
-    intro: {
-      eyebrow: "내 정글벨",
-      title: "오늘의 정글 생활",
-      description: "출석 상태와 LMS 연결 상태를 한곳에서 확인해요.",
-    },
-  },
-  {
-    id: "laundry",
-    hash: "#laundry",
-    label: "세탁",
-    intro: {
-      eyebrow: "생활 정보",
-      title: "세탁",
-      description: "건조까지 바로 이어서 사용할 수 있는 워시타워를 확인해요.",
-    },
-  },
-  {
-    id: "meals",
-    hash: "#meals",
-    label: "급식",
-    intro: {
-      eyebrow: "생활 정보",
-      title: "급식",
-      description: "오늘 제공되는 식단을 시간대별로 확인해요.",
-    },
-  },
-  {
-    id: "notifications",
-    hash: "#notifications",
-    label: "알림",
-    intro: {
-      eyebrow: "내 정글벨",
-      title: "알림 관리",
-      description: "출석과 생활 알림을 받을 시간과 기기를 관리해요.",
-    },
-  },
-  {
-    id: "settings",
-    hash: "#settings",
-    label: "설정",
-    intro: {
-      eyebrow: "내 정글벨",
-      title: "설정",
-      description: "휴대폰 연결과 로그인된 기기를 관리해요.",
-    },
-  },
-] as const satisfies readonly WorkspaceRoute[];
-
-function workspaceRouteFromHash(hash: string): WorkspaceRouteId {
-  const normalizedHash = hash.toLowerCase();
-  if (normalizedHash === "#devices") {
-    return "settings";
-  }
-  return (
-    WORKSPACE_ROUTES.find(({ hash: routeHash }) => routeHash === normalizedHash)
-      ?.id ?? "attendance"
-  );
 }
 
 type AttendanceViewState =
@@ -283,11 +208,10 @@ function AttendanceContent({
   const attendanceDateLabel = formatAttendanceFullDate(
     snapshot.attendanceDate,
   );
-  const primaryState = attendancePrimaryState(snapshot);
   return (
     <>
-      <AttendanceState modifier={primaryState.modifier}>
-        {primaryState.label}
+      <AttendanceState modifier={snapshot.cohortStatus}>
+        {cohortStatusLabel(snapshot.cohortStatus)}
       </AttendanceState>
       <p className="metadata">
         출석 기준일 ·{" "}
@@ -296,39 +220,30 @@ function AttendanceContent({
         </time>
         {attendanceDateRelation === "today" ? " (오늘)" : ""}
       </p>
-      {snapshot.cohortStatus === "active" ? (
-        <div
-          className="attendance-checks"
-          aria-label={
-            attendanceDateRelation === "today"
-              ? "오늘 출석 상태"
-              : `${attendanceDateLabel} 출석 상태`
-          }
+      <div
+        className="attendance-checks"
+        aria-label={
+          attendanceDateRelation === "today"
+            ? "오늘 출석 상태"
+            : `${attendanceDateLabel} 출석 상태`
+        }
+      >
+        <span
+          className={`attendance-check ${
+            snapshot.morningChecked ? "checked" : "unchecked"
+          }`}
         >
-          <span
-            className={`attendance-check ${
-              snapshot.morningChecked ? "checked" : "unchecked"
-            }`}
-          >
-            오전 출석 {snapshot.morningChecked ? "완료" : "미완료"}
-          </span>
-          <span
-            className={`attendance-check ${
-              snapshot.eveningChecked ? "checked" : "unchecked"
-            }`}
-          >
-            오후 출석 {snapshot.eveningChecked ? "완료" : "미완료"}
-          </span>
-        </div>
-      ) : null}
-      <p className="attendance-cohort">
-        {snapshot.cohortStatus === "active" ? (
-          <span className="ui-badge">
-            {cohortStatusLabel(snapshot.cohortStatus)}
-          </span>
-        ) : null}
-        <span>{cohortDescription(snapshot)}</span>
-      </p>
+          오전 출석 {snapshot.morningChecked ? "완료" : "미완료"}
+        </span>
+        <span
+          className={`attendance-check ${
+            snapshot.eveningChecked ? "checked" : "unchecked"
+          }`}
+        >
+          오후 출석 {snapshot.eveningChecked ? "완료" : "미완료"}
+        </span>
+      </div>
+      <p className="attendance-cohort">{cohortDescription(snapshot)}</p>
       <p className="metadata">
         마지막 동기화 ·{" "}
         <time dateTime={attendance.lastSyncedAt}>
@@ -354,30 +269,6 @@ function AttendanceContent({
       />
     </>
   );
-}
-
-function attendancePrimaryState(snapshot: AttendanceSnapshotDto): {
-  readonly label: string;
-  readonly modifier: string;
-} {
-  if (snapshot.cohortStatus !== "active") {
-    return {
-      label: cohortStatusLabel(snapshot.cohortStatus),
-      modifier: snapshot.cohortStatus,
-    };
-  }
-  if (snapshot.morningChecked && snapshot.eveningChecked) {
-    return { label: "오늘 출석 완료", modifier: "active" };
-  }
-  if (!snapshot.morningChecked && !snapshot.eveningChecked) {
-    return { label: "오늘 출석 확인 필요", modifier: "warning" };
-  }
-  return {
-    label: snapshot.morningChecked
-      ? "오후 출석 확인 필요"
-      : "오전 출석 확인 필요",
-    modifier: "warning",
-  };
 }
 
 function AttendanceState({
@@ -818,14 +709,11 @@ function NotificationSettings({
   };
 
   return (
-    <section
-      className="settings-section settings-card device-notification-settings"
-      aria-labelledby="device-notification-title"
-    >
-      <header className="device-notification-settings__header">
+    <section className="card settings-card">
+      <div className="section-heading">
         <div>
           <div className="eyebrow">이 기기</div>
-          <h2 id="device-notification-title">알림 받기</h2>
+          <h2>알림 받기</h2>
         </div>
         <button
           className="secondary-button"
@@ -835,16 +723,9 @@ function NotificationSettings({
         >
           {testButtonLabel}
         </button>
-      </header>
+      </div>
       {channel === "web-push" ? (
-        <div className="settings-row">
-          <div className="settings-row__copy">
-            <strong>브라우저 알림</strong>
-            <span>
-              iPhone·iPad에서는 홈 화면에 추가한 Jungle Bell에서 알림을
-              연결해 주세요.
-            </span>
-          </div>
+        <div className="status-row">
           <button
             className="secondary-button"
             disabled={busy}
@@ -855,17 +736,15 @@ function NotificationSettings({
           >
             {pushSubscriptionId ? "브라우저 알림 해제" : "브라우저 알림 연결"}
           </button>
+          <span className="muted">
+            iPhone·iPad에서는 홈 화면에 추가한 Jungle Bell에서 알림을
+            연결해 주세요.
+          </span>
         </div>
       ) : (
-        <div className="settings-row">
-          <div className="settings-row__copy">
-            <strong>PC 네이티브 알림</strong>
-            <span>
-              PC 앱을 실행해 두면 필요한 알림을 운영체제에 표시해요.
-            </span>
-          </div>
-          <span className="ui-badge ui-badge--success">사용 가능</span>
-        </div>
+        <p className="muted">
+          PC 앱을 실행해 두면 필요한 알림을 운영체제에 표시해요.
+        </p>
       )}
       {testResult ? <p className="notice" role="status">{testResult}</p> : null}
     </section>
@@ -911,18 +790,6 @@ export function App({
   const [attendanceRefreshKey, setAttendanceRefreshKey] = useState(0);
   const [companionAuthState, setCompanionAuthState] =
     useState<AttendanceAuthState>("loading");
-  const [selectedWorkspaceRoute, setSelectedWorkspaceRoute] = useState(
-    () => workspaceRouteFromHash(window.location.hash),
-  );
-  useEffect(() => {
-    const followWorkspaceLink = () => {
-      setSelectedWorkspaceRoute(workspaceRouteFromHash(window.location.hash));
-    };
-    window.addEventListener("hashchange", followWorkspaceLink);
-    return () => {
-      window.removeEventListener("hashchange", followWorkspaceLink);
-    };
-  }, []);
   const pairingEnabled =
     desktopAuthState === "connected" && desktopHealth === "online";
   const personalControlsEnabled =
@@ -941,9 +808,6 @@ export function App({
     setDesktopHealth(status.health);
     setAttendanceRefreshKey((current) => current + 1);
   };
-  const selectedRoute =
-    WORKSPACE_ROUTES.find(({ id }) => id === selectedWorkspaceRoute) ??
-    WORKSPACE_ROUTES[0];
 
   if (initialPath.startsWith("/pair")) {
     return (
@@ -965,71 +829,46 @@ export function App({
     <div className="app-shell">
       <AppHeader badge={badge.label} tone={badge.tone} />
 
-      <main
-        className={`app-main${
-          surface.kind === "public" ? "" : " app-main--workspace"
-        }`}
-      >
-        {surface.kind === "public" ? (
-          <>
-            <PageIntro
-              eyebrow="Jungle Bell"
-              title="생활 정보"
-              description="정글의 급식과 워시타워 현황을 확인하세요."
-            />
-            <PublicInformation />
-          </>
-        ) : (
-          <div className="workspace-frame">
-            <nav className="workspace-navigation" aria-label="정글벨 메뉴">
-              <p className="workspace-navigation-title">메뉴</p>
-              <ul className="workspace-navigation-list">
-                {WORKSPACE_ROUTES.map((route) => {
-                  const disabled =
-                    route.id === "notifications"
-                      ? !personalControlsEnabled
-                      : route.id === "settings" &&
-                        surface.kind === "companion" &&
-                        !personalControlsEnabled;
-                  const current = selectedWorkspaceRoute === route.id;
-                  return (
-                    <li key={route.id}>
-                      <a
-                        className="workspace-navigation-link"
-                        data-route={route.id}
-                        href={route.hash}
-                        aria-current={current ? "page" : undefined}
-                        aria-disabled={disabled || undefined}
-                        tabIndex={disabled ? -1 : undefined}
-                        onClick={(event) => {
-                          event.preventDefault();
-                          if (disabled) {
-                            return;
-                          }
-                          setSelectedWorkspaceRoute(route.id);
-                          if (window.location.hash !== route.hash) {
-                            window.location.hash = route.hash;
-                          }
-                        }}
-                      >
-                        <WorkspaceRouteIcon route={route.id} />
-                        <span className="workspace-navigation-label">
-                          {route.label}
-                        </span>
-                      </a>
-                    </li>
-                  );
-                })}
-              </ul>
-            </nav>
+      <main className="app-main">
+        <PageIntro
+          eyebrow={
+            surface.kind === "public" ? "Jungle Bell" : "내 정글벨"
+          }
+          title={
+            surface.kind === "public" ? "생활 정보" : "오늘의 정글 생활"
+          }
+          description={
+            surface.kind === "public"
+              ? "정글의 급식과 워시타워 현황을 확인하세요."
+              : "출석 상태와 필요한 생활 알림을 한곳에서 확인해요."
+          }
+        />
 
-            <div className="workspace-content">
-              <section
-                className="workspace-page"
-                data-workspace-page="attendance"
-                hidden={selectedWorkspaceRoute !== "attendance"}
+        {surface.kind === "public" ? (
+          <PublicInformation />
+        ) : (
+          <TabGroup className="workspace">
+            <TabList className="ui-tabs workspace-tabs" aria-label="정글벨 메뉴">
+              <Tab className="ui-tab">홈</Tab>
+              <Tab className="ui-tab">생활</Tab>
+              <Tab
+                className="ui-tab"
+                disabled={!personalControlsEnabled}
               >
-                <PageIntro {...WORKSPACE_ROUTES[0].intro} />
+                알림
+              </Tab>
+              <Tab
+                className="ui-tab"
+                disabled={
+                  surface.kind === "companion" &&
+                  !personalControlsEnabled
+                }
+              >
+                기기
+              </Tab>
+            </TabList>
+            <TabPanels>
+              <TabPanel className="ui-tab-panel" unmount={false}>
                 {surface.kind === "companion" &&
                 companionAuthState === "auth-required" ? (
                   <MobilePairing fragment="" manualMode />
@@ -1054,48 +893,35 @@ export function App({
                     ) : null}
                   </section>
                 ) : null}
-              </section>
-
-              {selectedWorkspaceRoute !== "attendance" ? (
-                <section
-                  className="workspace-page"
-                  data-workspace-page={selectedWorkspaceRoute}
-                >
-                  <PageIntro {...selectedRoute.intro} />
-                  {selectedWorkspaceRoute === "laundry" ? (
-                    <PublicInformation view="laundry" />
-                  ) : null}
-                  {selectedWorkspaceRoute === "meals" ? (
-                    <PublicInformation view="meals" />
-                  ) : null}
-                  {selectedWorkspaceRoute === "notifications" &&
-                  surface.canReceivePersonalNotifications &&
-                  personalControlsEnabled ? (
-                    <>
-                      <PersonalControls />
-                      <NotificationSettings channel={channel} />
-                    </>
-                  ) : null}
-                  {selectedWorkspaceRoute === "settings" ? (
-                    <>
-                      {surface.canPair ? (
-                        <DesktopPairing enabled={pairingEnabled} />
-                      ) : null}
-                      {surface.kind === "desktop" &&
-                      desktopAuthState !== "loading" &&
-                      desktopAuthState !== "disconnected" ? (
-                        <MobileSessionManager mode="desktop" />
-                      ) : null}
-                      {surface.kind === "companion" &&
-                      personalControlsEnabled ? (
-                        <MobileSessionManager mode="companion" />
-                      ) : null}
-                    </>
-                  ) : null}
-                </section>
-              ) : null}
-            </div>
-          </div>
+              </TabPanel>
+              <TabPanel className="ui-tab-panel" unmount={false}>
+                <PublicInformation />
+              </TabPanel>
+              <TabPanel className="ui-tab-panel" unmount={false}>
+                {surface.canReceivePersonalNotifications &&
+                personalControlsEnabled ? (
+                  <>
+                    <PersonalControls />
+                    <NotificationSettings channel={channel} />
+                  </>
+                ) : null}
+              </TabPanel>
+              <TabPanel className="ui-tab-panel" unmount={false}>
+                {surface.canPair ? (
+                  <DesktopPairing enabled={pairingEnabled} />
+                ) : null}
+                {surface.kind === "desktop" &&
+                desktopAuthState !== "loading" &&
+                desktopAuthState !== "disconnected" ? (
+                  <MobileSessionManager mode="desktop" />
+                ) : null}
+                {surface.kind === "companion" &&
+                personalControlsEnabled ? (
+                  <MobileSessionManager mode="companion" />
+                ) : null}
+              </TabPanel>
+            </TabPanels>
+          </TabGroup>
         )}
       </main>
 
@@ -1125,71 +951,6 @@ function AppHeader({
       </a>
       <span className={`ui-badge ui-badge--${tone}`}>{badge}</span>
     </header>
-  );
-}
-
-function WorkspaceRouteIcon({
-  route,
-}: {
-  readonly route: WorkspaceRouteId;
-}) {
-  const icon = (() => {
-    switch (route) {
-      case "attendance":
-        return (
-          <>
-            <path d="m3 10.5 9-7.5 9 7.5" />
-            <path d="M5 9.5V21h14V9.5M9 21v-7h6v7" />
-          </>
-        );
-      case "laundry":
-        return (
-          <>
-            <rect x="4" y="2.5" width="16" height="19" rx="2.5" />
-            <path d="M4 8h16" />
-            <circle cx="12" cy="14.5" r="4.5" />
-            <path d="M7.5 5.25h.01M10.5 5.25h.01" />
-          </>
-        );
-      case "meals":
-        return (
-          <>
-            <path d="M4 3v5.5a2.5 2.5 0 0 0 5 0V3M6.5 3v18" />
-            <path d="M15 3v18M15 3c3 2 4.5 5 4.5 8H15" />
-          </>
-        );
-      case "notifications":
-        return (
-          <>
-            <path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
-            <path d="M10 21h4" />
-          </>
-        );
-      case "settings":
-        return (
-          <>
-            <path d="M4 7h7M15 7h5M4 17h3M11 17h9" />
-            <circle cx="13" cy="7" r="2" />
-            <circle cx="9" cy="17" r="2" />
-          </>
-        );
-    }
-  })();
-
-  return (
-    <svg
-      className="workspace-navigation-icon"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      focusable="false"
-    >
-      {icon}
-    </svg>
   );
 }
 

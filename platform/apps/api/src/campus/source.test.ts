@@ -5,17 +5,12 @@ import {
   CampusSourceError,
   HttpCampusDataSource,
 } from "./source.js";
-import { laundryResponseSchema } from "./contracts.js";
 import { laundryFixture } from "./test-fixtures.js";
 
 describe("HttpCampusDataSource", () => {
   it("uses the production v1 paths, ETag and validated JSON", async () => {
-    const fixture = {
-      ...laundryFixture(),
-      events: [productionDecimalEtaEvent(-0.9)],
-    };
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
-      Response.json(fixture, {
+      Response.json(laundryFixture(), {
         headers: { ETag: '"laundry-v1"' },
       }),
     );
@@ -33,9 +28,6 @@ describe("HttpCampusDataSource", () => {
       status: "modified",
       etag: '"laundry-v1"',
       checkedAtEpochMs: 1_000,
-      data: {
-        events: [{ etaDeltaMinutes: -0.9 }],
-      },
     });
     const [url, init] = fetchMock.mock.calls[0] ?? [];
     expect(String(url)).toBe(
@@ -45,22 +37,6 @@ describe("HttpCampusDataSource", () => {
       Accept: "application/json",
       "If-None-Match": '"old"',
     });
-  });
-
-  it.each([
-    ["NaN", Number.NaN],
-    ["positive infinity", Number.POSITIVE_INFINITY],
-    ["negative infinity", Number.NEGATIVE_INFINITY],
-    ["non-number", "-0.9"],
-    ["above the safe numeric boundary", Number.MAX_SAFE_INTEGER + 1],
-    ["below the safe numeric boundary", Number.MIN_SAFE_INTEGER - 1],
-  ])("rejects an invalid etaDeltaMinutes value: %s", (_label, value) => {
-    expect(
-      laundryResponseSchema.safeParse({
-        ...laundryFixture(),
-        events: [productionDecimalEtaEvent(value)],
-      }).success,
-    ).toBe(false);
   });
 
   it("returns a conditional not-modified result without parsing a body", async () => {
@@ -178,23 +154,3 @@ describe("HttpCampusDataSource", () => {
     ).not.toThrow();
   });
 });
-
-function productionDecimalEtaEvent(etaDeltaMinutes: unknown) {
-  return {
-    id: "tower-1:dryer:session-1:2026-08-03T08:54:08.136Z:COUNTDOWN_NORMAL",
-    machineId: "tower-1",
-    appliance: "dryer",
-    sessionId: "session-1",
-    type: "COUNTDOWN_NORMAL",
-    previousObservedAt: "2026-08-03T08:49:01.351Z",
-    observedAt: "2026-08-03T08:54:08.136Z",
-    etaDeltaMinutes,
-    previousState: "RUNNING",
-    currentState: "RUNNING",
-    detail: {
-      elapsedMinutes: 5.113083333333333,
-      previousRemainingMinutes: 55,
-      currentRemainingMinutes: 49,
-    },
-  };
-}

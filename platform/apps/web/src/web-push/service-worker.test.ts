@@ -13,37 +13,6 @@ interface HarnessOptions {
     url: string;
   }>;
   fetchResponse?: Response;
-  fetchResponses?: Response[];
-  pushSubscription?: TestPushSubscription | null;
-  subscribeResult?: TestPushSubscription;
-}
-
-interface TestPushSubscription {
-  options?: { applicationServerKey: ArrayBuffer | null };
-  toJSON: () => {
-    endpoint: string;
-    expirationTime: number | null;
-    keys: { auth: string; p256dh: string };
-  };
-}
-
-const retryCacheName = "jungle-bell-push-reconcile-v1";
-const retryMarkerUrl =
-  "https://app.example.test/.jungle-bell/push-reconcile-pending";
-
-function pushSubscription(
-  endpoint = "https://push.example.test/rotated",
-): TestPushSubscription {
-  return {
-    toJSON: () => ({
-      endpoint,
-      expirationTime: null,
-      keys: {
-        auth: "a".repeat(24),
-        p256dh: "b".repeat(88),
-      },
-    }),
-  };
 }
 
 function createHarness(options: HarnessOptions = {}) {
@@ -54,24 +23,9 @@ function createHarness(options: HarnessOptions = {}) {
   const claimClients = vi.fn(async () => undefined);
   const skipWaiting = vi.fn(async () => undefined);
   const clients = options.clients ?? [];
-  const queuedFetchResponses = [...(options.fetchResponses ?? [])];
   const fetchMock = vi.fn(async () =>
-    queuedFetchResponses.shift() ??
-    options.fetchResponse ??
-    new Response(null, { status: 503 }),
+    options.fetchResponse ?? new Response(null, { status: 503 }),
   );
-  let currentPushSubscription = options.pushSubscription ?? null;
-  const subscribe = vi.fn(async () => {
-    const subscription =
-      options.subscribeResult ?? pushSubscription();
-    currentPushSubscription = subscription;
-    return subscription;
-  });
-  const pushManager = {
-    getSubscription: vi.fn(async () => currentPushSubscription),
-    subscribe,
-  };
-  const registerSync = vi.fn(async () => undefined);
   const serviceWorkerGlobal = {
     addEventListener(type: string, handler: EventHandler) {
       handlers.set(type, handler);
@@ -82,21 +36,12 @@ function createHarness(options: HarnessOptions = {}) {
       openWindow,
     },
     location: { origin },
-    registration: {
-      pushManager,
-      showNotification,
-      sync: { register: registerSync },
-    },
+    registration: { showNotification },
     skipWaiting,
   };
-  const cachedResponses = new Map<string, Response>();
   const cache = {
     addAll: vi.fn(async () => undefined),
-    delete: vi.fn(async (key: string) => cachedResponses.delete(key)),
-    match: vi.fn(async (key: string) => cachedResponses.get(key)),
-    put: vi.fn(async (key: string, value: Response) => {
-      cachedResponses.set(key, value);
-    }),
+    put: vi.fn(async () => undefined),
   };
   const cacheStorage = {
     delete: vi.fn(async () => true),
@@ -145,10 +90,7 @@ function createHarness(options: HarnessOptions = {}) {
     fetchMock,
     openWindow,
     origin,
-    pushManager,
     push,
-    registerSync,
-    retryCache: cache,
     showNotification,
     skipWaiting,
   };
@@ -168,10 +110,7 @@ describe("push service worker", () => {
     expect(harness.cacheStorage.delete).toHaveBeenCalledExactlyOnceWith(
       "jungle-bell-shell-v1",
     );
-    expect(harness.cacheStorage.open).toHaveBeenCalledExactlyOnceWith(
-      retryCacheName,
-    );
-    expect(harness.retryCache.put).not.toHaveBeenCalled();
+    expect(harness.cacheStorage.open).not.toHaveBeenCalled();
     expect(harness.handlers.has("fetch")).toBe(false);
   });
 
@@ -339,7 +278,7 @@ describe("push service worker", () => {
     });
   });
 
-  it("keeps a retry pending when a missing subscription cannot be recreated yet", async () => {
+  it("tells the app when a browser Push subscription disappears", async () => {
     const postMessage = vi.fn();
     const harness = createHarness({
       clients: [
@@ -356,270 +295,9 @@ describe("push service worker", () => {
       newSubscription: null,
     });
 
-    expect(harness.fetchMock).toHaveBeenCalledWith(
-      "/api/push/vapid-public-key",
-      expect.objectContaining({
-        credentials: "include",
-        method: "GET",
-      }),
-    );
+    expect(harness.fetchMock).not.toHaveBeenCalled();
     expect(postMessage).toHaveBeenCalledWith({
-      type: "push-subscription-reconcile-failed",
+      type: "push-subscription-invalidated",
     });
-    await expect(
-      harness.retryCache.match(retryMarkerUrl),
-    ).resolves.toBeInstanceOf(Response);
   });
-
-  it("recreates and registers a missing subscription without an open app window", async () => {
-    const applicationServerKey = new Uint8Array(65);
-    applicationServerKey[0] = 4;
-    const replacement = pushSubscription(
-      "https://push.example.test/recreated",
-    );
-    const subscriptionId = `jbps_${"c".repeat(64)}`;
-    const harness = createHarness({
-      clients: [],
-      subscribeResult: replacement,
-      fetchResponse: new Response(JSON.stringify({ subscriptionId }), {
-        status: 201,
-        headers: { "content-type": "application/json" },
-      }),
-    });
-
-    await harness.dispatch("pushsubscriptionchange", {
-      newSubscription: null,
-      oldSubscription: {
-        ...pushSubscription("https://push.example.test/expired"),
-        options: { applicationServerKey: applicationServerKey.buffer },
-      },
-    });
-
-    expect(harness.pushManager.subscribe).toHaveBeenCalledWith({
-      applicationServerKey,
-      userVisibleOnly: true,
-    });
-    expect(harness.fetchMock).toHaveBeenCalledExactlyOnceWith(
-      "/api/push/subscriptions",
-      expect.objectContaining({
-        credentials: "include",
-        method: "PUT",
-      }),
-    );
-    await expect(
-      harness.retryCache.match(retryMarkerUrl),
-    ).resolves.toBeUndefined();
-  });
-
-  it("fetches the authenticated VAPID key when the old subscription has no usable key", async () => {
-    const applicationServerKey = new Uint8Array(65);
-    applicationServerKey[0] = 4;
-    const publicKey = btoa(
-      String.fromCharCode(...applicationServerKey),
-    )
-      .replace(/\+/gu, "-")
-      .replace(/\//gu, "_")
-      .replace(/=+$/u, "");
-    const subscriptionId = `jbps_${"e".repeat(64)}`;
-    const harness = createHarness({
-      subscribeResult: pushSubscription(
-        "https://push.example.test/fetched-key",
-      ),
-      fetchResponses: [
-        new Response(JSON.stringify({ publicKey }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
-        new Response(JSON.stringify({ subscriptionId }), {
-          status: 201,
-          headers: { "content-type": "application/json" },
-        }),
-      ],
-    });
-
-    await harness.dispatch("pushsubscriptionchange", {
-      newSubscription: null,
-      oldSubscription: null,
-    });
-
-    expect(harness.fetchMock).toHaveBeenNthCalledWith(
-      1,
-      "/api/push/vapid-public-key",
-      expect.objectContaining({
-        cache: "no-store",
-        credentials: "include",
-        method: "GET",
-      }),
-    );
-    expect(harness.pushManager.subscribe).toHaveBeenCalledWith({
-      applicationServerKey,
-      userVisibleOnly: true,
-    });
-    expect(harness.fetchMock).toHaveBeenNthCalledWith(
-      2,
-      "/api/push/subscriptions",
-      expect.objectContaining({
-        credentials: "include",
-        method: "PUT",
-      }),
-    );
-  });
-
-  it("persists a failed reconciliation and retries it when the app opens", async () => {
-    const replacement = pushSubscription(
-      "https://push.example.test/retry",
-    );
-    const subscriptionId = `jbps_${"d".repeat(64)}`;
-    const harness = createHarness({
-      pushSubscription: replacement,
-      fetchResponses: [
-        new Response(null, { status: 503 }),
-        new Response(JSON.stringify({ subscriptionId }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
-      ],
-    });
-
-    await harness.dispatch("pushsubscriptionchange", {
-      newSubscription: replacement,
-      oldSubscription: null,
-    });
-
-    await expect(
-      harness.retryCache.match(retryMarkerUrl),
-    ).resolves.toBeInstanceOf(Response);
-    expect(harness.registerSync).toHaveBeenCalledWith(
-      "jungle-bell-push-reconcile",
-    );
-
-    await harness.dispatch("message", {
-      data: { type: "jungle-bell-app-open" },
-    });
-
-    expect(harness.fetchMock).toHaveBeenCalledTimes(2);
-    await expect(
-      harness.retryCache.match(retryMarkerUrl),
-    ).resolves.toBeUndefined();
-  });
-
-  it.each([
-    "DEVICE_SESSION_INVALID",
-    "DEVICE_SESSION_REVOKED",
-    "DEVICE_SESSION_EXPIRED",
-    "DEVICE_SESSION_SCOPE_DENIED",
-  ])("clears retry state after terminal mobile auth error %s", async (error) => {
-    const replacement = pushSubscription(
-      "https://push.example.test/session-ended",
-    );
-    const harness = createHarness({
-      clients: [],
-      pushSubscription: replacement,
-      fetchResponse: new Response(JSON.stringify({ error }), {
-        status: 401,
-        headers: { "content-type": "application/json" },
-      }),
-    });
-
-    await harness.dispatch("pushsubscriptionchange", {
-      newSubscription: replacement,
-      oldSubscription: null,
-    });
-    await harness.dispatch("message", {
-      data: { type: "jungle-bell-app-open" },
-    });
-
-    expect(harness.fetchMock).toHaveBeenCalledOnce();
-    await expect(
-      harness.retryCache.match(retryMarkerUrl),
-    ).resolves.toBeUndefined();
-    expect(harness.registerSync).not.toHaveBeenCalled();
-  });
-
-  it("clears retry state for an endpoint owned by another active device", async () => {
-    const replacement = pushSubscription(
-      "https://push.example.test/owned",
-    );
-    const harness = createHarness({
-      clients: [],
-      pushSubscription: replacement,
-      fetchResponse: new Response(
-        JSON.stringify({ error: "PUSH_ENDPOINT_OWNED" }),
-        {
-          status: 409,
-          headers: { "content-type": "application/json" },
-        },
-      ),
-    });
-
-    await harness.dispatch("pushsubscriptionchange", {
-      newSubscription: replacement,
-      oldSubscription: null,
-    });
-
-    await expect(
-      harness.retryCache.match(retryMarkerUrl),
-    ).resolves.toBeUndefined();
-    expect(harness.registerSync).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    [
-      "registration conflict",
-      409,
-      JSON.stringify({ error: "PUSH_SUBSCRIPTION_CONFLICT" }),
-    ],
-    ["not found", 404, JSON.stringify({ error: "NOT_FOUND" })],
-    [
-      "server unavailable",
-      503,
-      JSON.stringify({ error: "WEB_PUSH_NOT_CONFIGURED" }),
-    ],
-    ["invalid error response", 401, "not-json"],
-    [
-      "non-strict auth response",
-      401,
-      JSON.stringify({
-        error: "DEVICE_SESSION_EXPIRED",
-        detail: "must not influence retry classification",
-      }),
-    ],
-    [
-      "oversized error response",
-      401,
-      JSON.stringify({ error: "X".repeat(2_048) }),
-    ],
-    [
-      "invalid success response",
-      200,
-      JSON.stringify({ unexpected: true }),
-    ],
-  ])(
-    "keeps a durable closed-PWA retry marker for %s",
-    async (_label, status, body) => {
-      const replacement = pushSubscription(
-        `https://push.example.test/retry-${status}`,
-      );
-      const harness = createHarness({
-        clients: [],
-        pushSubscription: replacement,
-        fetchResponse: new Response(body, {
-          status,
-          headers: { "content-type": "application/json" },
-        }),
-      });
-
-      await harness.dispatch("pushsubscriptionchange", {
-        newSubscription: replacement,
-        oldSubscription: null,
-      });
-
-      await expect(
-        harness.retryCache.match(retryMarkerUrl),
-      ).resolves.toBeInstanceOf(Response);
-      expect(harness.registerSync).toHaveBeenCalledWith(
-        "jungle-bell-push-reconcile",
-      );
-    },
-  );
 });

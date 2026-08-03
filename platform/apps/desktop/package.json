@@ -1,6 +1,6 @@
 {
   "name": "@jungle-bell/desktop",
-  "version": "0.5.0",
+  "version": "0.1.0",
   "private": true,
   "scripts": {
     "build": "tauri build --config src-tauri/tauri.conf.json",

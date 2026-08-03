@@ -1,4 +1,4 @@
-import { CookieJar } from "tough-cookie";
+import { CookieJar, type Cookie } from "tough-cookie";
 
 import {
   normalizeLmsCookies,
@@ -7,6 +7,7 @@ import {
 
 export const DEFAULT_LMS_ORIGIN = "https://jungle-lms.krafton.com";
 
+const LMS_HOST = new URL(DEFAULT_LMS_ORIGIN).hostname;
 const ME_PATH = "/api/v2/me";
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 const MAX_JSON_RESPONSE_BYTES = 512 * 1024;
@@ -39,11 +40,13 @@ export interface LmsHttpGatewayOptions {
 }
 
 interface LmsGatewayErrorOptions {
+  readonly cookies?: readonly LmsCookie[];
   readonly failureKind?: LmsGatewayFailureKind;
   readonly status?: number | null;
 }
 
 export class LmsGatewayError extends Error {
+  readonly cookies: readonly LmsCookie[];
   readonly failureKind: LmsGatewayFailureKind;
   readonly status: number | null;
 
@@ -53,6 +56,7 @@ export class LmsGatewayError extends Error {
   ) {
     super(code);
     this.name = "LmsGatewayError";
+    this.cookies = options.cookies ? [...options.cookies] : [];
     this.failureKind = options.failureKind ?? "invalid-input";
     this.status = options.status ?? null;
   }
@@ -60,6 +64,7 @@ export class LmsGatewayError extends Error {
 
 interface AuthenticatedTransportResult {
   readonly response: Response;
+  readonly cookies: readonly LmsCookie[];
 }
 
 function readSingleAccessCookie(
@@ -159,7 +164,10 @@ export class LmsHttpGateway {
   ): Promise<AuthenticatedTransportResult> {
     const cookies = await LmsRequestCookieJar.create(input);
     const response = await this.request(path, cookies);
-    return { response };
+    return {
+      response,
+      cookies: await cookies.export(),
+    };
   }
 
   private async request(
@@ -184,6 +192,7 @@ export class LmsHttpGateway {
           ? "LMS_UPSTREAM_TIMEOUT"
           : "LMS_UPSTREAM_REQUEST_FAILED",
         {
+          cookies: await cookies.export(),
           failureKind: "transient",
           status: null,
         },
@@ -289,6 +298,7 @@ function contextualError(
   context: AuthenticatedTransportResult,
 ): LmsGatewayError {
   return new LmsGatewayError(code, {
+    cookies: context.cookies,
     failureKind,
     status: context.response.status,
   });
@@ -315,7 +325,7 @@ function readLmsSubject(body: unknown): string | null {
   if (
     typeof value === "string" &&
     value.length >= 1 &&
-    Buffer.byteLength(value, "utf8") <= 128 &&
+    value.length <= 128 &&
     value.trim() === value &&
     !/[\u0000-\u001f\u007f]/u.test(value)
   ) {
@@ -385,10 +395,56 @@ class LmsRequestCookieJar {
     });
   }
 
+  async export(): Promise<LmsCookie[]> {
+    const stored = await this.jar.getCookies(logicalLmsUrl("/").href, {
+      allPaths: true,
+      expire: true,
+      http: true,
+      sameSiteContext: "strict",
+      sort: true,
+    });
+    const cookies = stored
+      .filter(
+        (cookie) =>
+          cookie.domain?.toLowerCase() === LMS_HOST &&
+          cookie.secure &&
+          cookie.value !== "" &&
+          cookie.path !== null,
+      )
+      .map((cookie): LmsCookie => ({
+        name: cookie.key,
+        value: cookie.value,
+        domain: LMS_HOST,
+        path: cookie.path ?? "/",
+        expires: lmsExpiry(cookie),
+        httpOnly: cookie.httpOnly,
+        secure: true,
+        sameSite: lmsSameSite(cookie),
+      }));
+    return cookies.length === 0 ? [] : [...normalizeLmsCookies(cookies)];
+  }
 }
 
 function logicalLmsUrl(path: string): URL {
   return new URL(path, DEFAULT_LMS_ORIGIN);
+}
+
+function lmsExpiry(cookie: Cookie): number {
+  const expiresAt = cookie.expiryTime();
+  return expiresAt === undefined || !Number.isFinite(expiresAt)
+    ? -1
+    : Math.floor(expiresAt / 1_000);
+}
+
+function lmsSameSite(cookie: Cookie): LmsCookie["sameSite"] {
+  switch (cookie.sameSite?.toLowerCase()) {
+    case "strict":
+      return "Strict";
+    case "none":
+      return "None";
+    default:
+      return "Lax";
+  }
 }
 
 function normalizeLmsTransportOrigin(

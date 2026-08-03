@@ -97,10 +97,7 @@ describe("ServerNotificationPlanner", () => {
         userId: "user-1",
         attendanceDate: "2026-07-31",
         phase: "evening",
-        slot: "before-10",
         minutesRemaining: 10,
-        status: "unchecked",
-        reason: null,
         occurredAtEpochMs: 4_000,
       }),
     ).toMatchObject([
@@ -169,10 +166,7 @@ describe("ServerNotificationPlanner", () => {
       userId: "user-1",
       attendanceDate: "2026-07-31",
       phase: "morning",
-      slot: "before-10",
-      minutesRemaining: 10,
-      status: "unchecked",
-      reason: null,
+      minutesRemaining: 30,
       occurredAtEpochMs: 4_000,
     } as const;
     expect(
@@ -185,53 +179,6 @@ describe("ServerNotificationPlanner", () => {
         rules({ attendanceEnabled: true }),
       ).plan(event),
     ).toHaveLength(1);
-  });
-
-  it("marks unverified attendance fallback without claiming a checked state", () => {
-    const planner = new ServerNotificationPlanner(rules({}));
-    const [planned] = planner.plan({
-      kind: "attendance-action-required",
-      sourceEventId:
-        "attendance:2026-07-31:morning:before-10",
-      userId: "user-1",
-      attendanceDate: "2026-07-31",
-      phase: "morning",
-      slot: "before-10",
-      minutesRemaining: 10,
-      status: "unverified",
-      reason: "desktop-offline",
-      occurredAtEpochMs: 4_000,
-    });
-
-    expect(planned).toMatchObject({
-      content: {
-        title: "오전 출석 직접 확인 필요 · 마감 10분 전",
-        body: expect.stringContaining("PC가 연결되지 않아"),
-      },
-      metadata: {
-        attendanceDate: "2026-07-31",
-        phase: "morning",
-        slot: "before-10",
-        status: "unverified",
-        reason: "desktop-offline",
-      },
-    });
-    expect(planned?.content.body).not.toContain("미출석");
-
-    const [fresh] = planner.plan({
-      kind: "attendance-action-required",
-      sourceEventId:
-        "attendance:2026-07-31:morning:before-10",
-      userId: "user-1",
-      attendanceDate: "2026-07-31",
-      phase: "morning",
-      slot: "before-10",
-      minutesRemaining: 10,
-      status: "unchecked",
-      reason: null,
-      occurredAtEpochMs: 4_000,
-    });
-    expect(fresh?.dedupeKey).toBe(planned?.dedupeKey);
   });
 });
 

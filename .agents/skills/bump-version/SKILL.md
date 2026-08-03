@@ -1,51 +1,34 @@
 ---
 name: bump-version
-description: Bump the canonical Jungle Bell platform version consistently. Use when the user asks to bump or update the version, or says "버전 올려줘", "bump version", or "/bump-version". Updates every platform npm workspace, package-lock, Tauri config, Cargo package, and Cargo.lock while leaving the retired legacy root app unchanged.
+description: Bump the app version across all config files for the jungle-bell project. Use when the user asks to bump/update the version, or says "버전 올려줘", "bump version", "/bump-version". Updates package.json, package-lock.json, src-tauri/Cargo.toml, src-tauri/tauri.conf.json, and Cargo.lock.
 ---
 
 # Bump version
 
-Update the renewed app under `platform/`; do not change the retired root Tauri
-app. If the user did not provide a target, read the current platform version and
-ask one concise question for the target version.
+Bump the version of this project.
 
-Require canonical SemVer, including an optional valid prerelease component.
-Reject a target lower than or equal to the current version unless the user
-explicitly requested an idempotent repair of inconsistent version files.
+If the user provided a specific version as an argument, use that version. Otherwise, read the current versions from `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json` first, then ask the user what version they want to bump to.
 
-## Files
+The following files need to be updated:
 
-Keep the target version identical in:
+1. `package.json` — top-level `"version"` field
+2. `package-lock.json` — updated with `npm version <version> --no-git-tag-version --allow-same-version`
+3. `src-tauri/Cargo.toml` — `version` field in `[package]`
+4. `src-tauri/tauri.conf.json` — top-level `"version"` field
+5. `src-tauri/Cargo.lock` — updated with `cargo generate-lockfile`
 
-1. `platform/package.json`
-2. root and workspace entries in `platform/package-lock.json`
-3. `platform/apps/api/package.json`
-4. `platform/apps/desktop/package.json`
-5. `platform/apps/web/package.json`
-6. `platform/apps/desktop/src-tauri/Cargo.toml`
-7. `platform/apps/desktop/src-tauri/tauri.conf.json`
-8. the local package entry in `platform/apps/desktop/src-tauri/Cargo.lock`
+## Interaction compatibility
 
-## Procedure
+If a required target version is missing, ask one concise question and wait for the user's answer. Use the structured user-input tool available in the current runtime:
 
-1. Read all current values and stop on unexplained divergence.
-2. From `platform/`, update npm root and workspaces without creating a tag:
+- In runtimes that provide `AskUserQuestion`, use `AskUserQuestion`.
+- In Codex, use Codex's available user-input mechanism when available and appropriate; otherwise ask in normal chat.
 
-   ```bash
-   npm version {version} --no-git-tag-version --allow-same-version \
-     --workspaces --include-workspace-root
-   ```
+## Steps
 
-3. Edit Cargo and Tauri versions with `apply_patch`.
-4. Run an unlocked Cargo check once to refresh only the local lock entry, then
-   verify the lock:
-
-   ```bash
-   cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml
-   cargo check --locked --manifest-path apps/desktop/src-tauri/Cargo.toml
-   ```
-
-5. Run `npm run test:ops` and confirm every file and lock entry equals the
-   target.
-6. Report the old and new versions. Do not commit or tag unless separately
-   requested.
+1. Read `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json` to confirm their current versions
+2. If no target version was specified, ask the user which version to bump to (show the current version for reference)
+3. Run `npm version <version> --no-git-tag-version --allow-same-version` at the repository root to update `package.json` and `package-lock.json`
+4. Update the version string in `src-tauri/Cargo.toml` and `src-tauri/tauri.conf.json`
+5. Run `cargo generate-lockfile` in `src-tauri/` to update `Cargo.lock`
+6. Confirm all five files contain the target version and report the old and new versions to the user

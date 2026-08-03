@@ -19,6 +19,7 @@ import {
   SqliteNotificationRepository,
   StoreBackedNotificationTargetDirectory,
 } from "./notifications/index.js";
+import { Sha256Hasher } from "./infra/crypto.js";
 import { computeLmsSubjectBinding } from "./lms/subject-binding.js";
 
 const LOOPBACK_ORIGIN = "http://127.0.0.1:5173";
@@ -791,6 +792,7 @@ describe("platform API integrated services", () => {
   }, 30_000);
 
   it("revokes the previous account when the same PWA installation pairs again without its cookie", async () => {
+    const identityHasher = new Sha256Hasher();
     const fixture = await createFixture({
       lmsGateway: {
         async verifyIdentity(cookies) {
@@ -800,6 +802,8 @@ describe("platform API integrated services", () => {
           };
         },
       },
+      lmsSubjectToIdentityHash: (subject) =>
+        identityHasher.hash(`integration:${subject}`),
     });
     const desktopA = await onboardDesktop(
       fixture.app,

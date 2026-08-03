@@ -19,10 +19,17 @@ const directory = await mkdtemp(
 );
 const keyPath = join(directory, "session-encryption-key");
 const key = randomBytes(32).toString("base64");
+const identityKeyPath = join(directory, "identity-hmac-key");
+const identityKey = randomBytes(32).toString("base64");
 const vapidPrivateKeyPath = join(directory, "vapid-private-key");
 const vapid = webPush.generateVAPIDKeys();
 
 await writeFile(keyPath, `${key}\n`, {
+  encoding: "utf8",
+  flag: "wx",
+  mode: 0o600,
+});
+await writeFile(identityKeyPath, `${identityKey}\n`, {
   encoding: "utf8",
   flag: "wx",
   mode: 0o600,
@@ -136,6 +143,10 @@ async function startContainer(name, environment) {
   ];
   if (environment === "production") {
     args.push(
+      "--mount",
+      `type=bind,src=${identityKeyPath},dst=/run/secrets/identity_hmac_key,readonly`,
+      "--env",
+      "JB_IDENTITY_HMAC_KEY_FILE=/run/secrets/identity_hmac_key",
       "--mount",
       `type=bind,src=${vapidPrivateKeyPath},dst=/run/secrets/vapid_private_key,readonly`,
       "--env",

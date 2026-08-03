@@ -81,12 +81,7 @@ export const laundryEventSchema = z
     ]),
     previousObservedAt: z.iso.datetime({ offset: true }).nullable(),
     observedAt: z.iso.datetime({ offset: true }),
-    etaDeltaMinutes: z
-      .number()
-      .finite()
-      .min(Number.MIN_SAFE_INTEGER)
-      .max(Number.MAX_SAFE_INTEGER)
-      .nullable(),
+    etaDeltaMinutes: z.number().int().nullable(),
     previousState: z.string().max(256).nullable(),
     currentState: z.string().max(256),
     detail: z.record(z.string(), z.unknown()),

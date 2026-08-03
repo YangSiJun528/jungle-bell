@@ -288,75 +288,41 @@ function attendanceIntent(
   >,
 ): NotificationIntent {
   const label = event.phase === "morning" ? "오전" : "오후";
-  const content = attendanceContent(event, label);
+  const suffix =
+    event.minutesRemaining === null
+      ? "출석 상태를 확인해 주세요."
+      : `${event.minutesRemaining}분 남았습니다.`;
   return {
     userId: event.userId,
     kind: "attendance-action-required",
     sourceEventId: event.sourceEventId,
     dedupeKey: dedupe([
-      "v2",
+      "v1",
       event.userId,
       "attendance",
       event.attendanceDate,
       event.phase,
-      event.slot,
+      event.sourceEventId,
     ]),
-    content,
+    content: {
+      title: `${label} 출석 확인`,
+      body: suffix,
+      path: "/app#attendance",
+    },
     metadata: {
       attendanceDate: event.attendanceDate,
       phase: event.phase,
-      slot: event.slot,
       minutesRemaining: event.minutesRemaining,
-      status: event.status,
-      reason: event.reason,
     },
     targetDeviceId: null,
     occurredAtEpochMs: event.occurredAtEpochMs,
     expiresAtEpochMs:
       event.occurredAtEpochMs +
-      (event.slot === "before-10" ? 10 : 15) * 60 * 1_000,
+      Math.max(
+        5 * 60 * 1_000,
+        Math.min(event.minutesRemaining ?? 60, 60) * 60 * 1_000,
+      ),
   };
-}
-
-function attendanceContent(
-  event: Extract<
-    NotificationSourceEvent,
-    { readonly kind: "attendance-action-required" }
-  >,
-  label: "오전" | "오후",
-): NotificationIntent["content"] {
-  if (event.status === "unverified") {
-    const action =
-      event.slot === "deadline"
-        ? "지금 LMS에서 직접 확인해 주세요."
-        : "LMS에서 직접 확인해 주세요.";
-    const body = {
-      "desktop-offline": `PC가 연결되지 않아 ${label} 출석 상태를 확인하지 못했습니다. ${action}`,
-      "login-required": `PC의 LMS 로그인이 필요해 ${label} 출석 상태를 확인하지 못했습니다. ${action}`,
-      "snapshot-stale": `최신 출석 정보가 없어 ${label} 출석 상태를 확인하지 못했습니다. ${action}`,
-      "snapshot-missing": `${label} 출석 정보를 받지 못했습니다. ${action}`,
-    }[event.reason ?? "snapshot-missing"];
-    return {
-      title:
-        event.slot === "before-10"
-          ? `${label} 출석 직접 확인 필요 · 마감 10분 전`
-          : `${label} 출석 직접 확인 필요 · 마감 시각`,
-      body,
-      path: "/app#attendance",
-    };
-  }
-
-  return event.slot === "before-10"
-    ? {
-        title: `${label} 출석 마감 10분 전`,
-        body: `최신 확인 기준 ${label} 출석이 완료되지 않았습니다. LMS에서 직접 확인해 주세요.`,
-        path: "/app#attendance",
-      }
-    : {
-        title: `${label} 출석 마감 시각`,
-        body: `최신 확인 기준 ${label} 출석이 완료되지 않았습니다. 지금 LMS에서 직접 확인해 주세요.`,
-        path: "/app#attendance",
-      };
 }
 
 function loginRequiredIntent(

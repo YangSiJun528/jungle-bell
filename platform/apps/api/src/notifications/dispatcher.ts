@@ -8,9 +8,6 @@ import type {
   NotificationTargetDirectory,
 } from "./contracts.js";
 import type {
-  AttendanceNotificationLifecycle,
-} from "./attendance-lifecycle.js";
-import type {
   LaundryNotificationLifecycle,
 } from "./laundry-lifecycle.js";
 import type { ServerNotificationPlanner } from "./planner.js";
@@ -130,7 +127,6 @@ export class NotificationService {
       readonly repository: NotificationRepository;
       readonly targets: NotificationTargetDirectory;
       readonly webPush: NotificationDeliveryAdapter;
-      readonly attendanceLifecycle?: AttendanceNotificationLifecycle;
       readonly laundryLifecycle?: LaundryNotificationLifecycle;
       readonly now?: () => number;
       readonly logger?: { warn(message: string): void };
@@ -171,15 +167,6 @@ export class NotificationService {
     readonly failed: number;
   }> {
     const nowEpochMs = this.now();
-    if (this.dependencies.attendanceLifecycle !== undefined) {
-      const attendanceEvents =
-        await this.dependencies.attendanceLifecycle.collectDue(
-          nowEpochMs,
-        );
-      for (const event of attendanceEvents) {
-        this.record(event);
-      }
-    }
     this.dependencies.laundryLifecycle?.runDue(nowEpochMs);
     let fannedOut = 0;
     let delivered = 0;
