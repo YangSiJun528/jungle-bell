@@ -998,10 +998,25 @@ fn spawn_app_session_bootstrap(app: tauri::AppHandle) {
 
 fn build_persistent_lms_window(app: &tauri::App) -> Result<WebviewWindow, String> {
     let target = Url::parse(LMS_ENTRY_URL).map_err(|_| "LMS_LOGIN_URL_INVALID".to_owned())?;
-    tauri::WebviewWindowBuilder::new(app, LOGIN_WINDOW_LABEL, tauri::WebviewUrl::External(target))
+    let main = app
+        .get_webview_window(MAIN_WINDOW_LABEL)
+        .ok_or_else(|| "MAIN_WINDOW_UNAVAILABLE".to_owned())?;
+    let builder = tauri::WebviewWindowBuilder::new(
+        app,
+        LOGIN_WINDOW_LABEL,
+        tauri::WebviewUrl::External(target),
+    )
+    .parent(&main)
+    .map_err(|_| "LMS_LOGIN_WINDOW_FAILED".to_owned())?;
+    builder
         .title("Jungle Bell LMS 로그인")
-        .inner_size(980.0, 760.0)
+        .inner_size(880.0, 700.0)
+        .min_inner_size(720.0, 560.0)
         .center()
+        .resizable(true)
+        .maximizable(false)
+        .minimizable(false)
+        .fullscreen(false)
         .visible(false)
         .focused(false)
         .skip_taskbar(true)
@@ -1381,6 +1396,7 @@ pub(crate) async fn open_lms_login(app: &AppHandle) -> Result<(), String> {
     login
         .navigate(target)
         .map_err(|_| "LMS_LOGIN_WINDOW_FAILED".to_owned())?;
+    request_show_main(app);
     let _ = login.set_skip_taskbar(false);
     let _ = login.unminimize();
     let _ = login.show();
