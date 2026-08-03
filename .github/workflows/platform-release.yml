@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Immutable release tag (for example platform-v0.1.0)"
+        description: "Immutable release tag (for example platform-v0.5.0)"
         required: true
         type: string
       ref:
@@ -55,10 +55,33 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Require immutable GitHub releases
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_SETTINGS_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$GH_TOKEN" ]]; then
+            echo "::error::RELEASE_SETTINGS_READ_TOKEN is required."
+            exit 1
+          fi
+          if ! immutable_releases="$(
+            gh api \
+              -H "X-GitHub-Api-Version: 2026-03-10" \
+              "repos/$GITHUB_REPOSITORY/immutable-releases" \
+              --jq '.enabled'
+          )"; then
+            echo "::error::Enable immutable releases for this repository before publishing."
+            exit 1
+          fi
+          if [[ "$immutable_releases" != "true" ]]; then
+            echo "::error::Immutable releases must be enabled before publishing."
+            exit 1
+          fi
 
       - name: Resolve and validate release metadata
         id: release
@@ -180,7 +203,7 @@ jobs:
 
     steps:
       - name: Check out immutable revision
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
           ref: ${{ needs.prepare.outputs.sha }}
@@ -197,19 +220,19 @@ jobs:
             patchelf
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: platform/package-lock.json
 
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
         with:
           components: clippy,rustfmt
 
       - name: Cache Rust build outputs
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           workspaces: platform/apps/desktop/src-tauri -> target
           cache-on-failure: false
@@ -297,6 +320,9 @@ jobs:
       - draft-release
     strategy:
       fail-fast: false
+      # tauri-action merges latest.json by replacing one release asset, so
+      # updater-producing jobs must not race each other.
+      max-parallel: 1
       matrix:
         include:
           - name: macOS Apple Silicon
@@ -322,25 +348,25 @@ jobs:
 
     steps:
       - name: Check out immutable revision
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
           ref: ${{ needs.prepare.outputs.sha }}
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: platform/package-lock.json
 
       - name: Set up Rust target
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
         with:
           targets: ${{ matrix.target }}
 
       - name: Cache Rust build outputs
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           workspaces: platform/apps/desktop/src-tauri -> target
           key: ${{ matrix.target }}
@@ -488,7 +514,7 @@ jobs:
           '
 
       - name: Build, sign, and upload Tauri bundles
-        uses: tauri-apps/tauri-action@v1
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1
         env:
           APPLE_ID: ${{ runner.os == 'macOS' && secrets.APPLE_ID || '' }}
           APPLE_PASSWORD: ${{ runner.os == 'macOS' && secrets.APPLE_PASSWORD || '' }}
@@ -510,7 +536,7 @@ jobs:
           tagName: ${{ needs.prepare.outputs.tag }}
           tauriScript: npm exec -- tauri
           updaterJsonPreferNsis: true
-          uploadUpdaterJson: false
+          uploadUpdaterJson: true
           uploadUpdaterSignatures: true
 
       - name: Verify macOS code signature and notarization ticket
@@ -580,19 +606,19 @@ jobs:
 
     steps:
       - name: Check out immutable revision
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
           ref: ${{ needs.prepare.outputs.sha }}
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -600,7 +626,7 @@ jobs:
 
       - name: Generate OCI metadata
         id: metadata
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: ${{ needs.prepare.outputs.image }}
           labels: |
@@ -612,7 +638,7 @@ jobs:
 
       - name: Build and push immutable image
         id: push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           cache-from: type=gha,scope=platform-release
           cache-to: type=gha,mode=max,scope=platform-release
@@ -626,7 +652,7 @@ jobs:
           tags: ${{ steps.metadata.outputs.tags }}
 
       - name: Attest server image provenance
-        uses: actions/attest@v4
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4
         with:
           subject-digest: ${{ steps.push.outputs.digest }}
           subject-name: ${{ needs.prepare.outputs.image }}
@@ -640,20 +666,290 @@ jobs:
       - desktop
       - server-image
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 30
     permissions:
       contents: write
 
     steps:
+      - name: Check out immutable revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          ref: ${{ needs.prepare.outputs.sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+
+      - name: Install updater verifier system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            build-essential \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            patchelf
+
+      - name: Prepare updater trust-root verification
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_ID: ${{ needs.draft-release.outputs.release_id }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          verification_root="$RUNNER_TEMP/jungle-bell-updater-verification"
+          assets_path="$verification_root/release-assets.json"
+          manifest_path="$verification_root/latest.json"
+          plan_path="$verification_root/verification-plan.json"
+          mkdir -p "$verification_root"
+
+          gh api \
+            "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?per_page=100" \
+            >"$assets_path"
+          asset_count="$(jq 'length' "$assets_path")"
+          if [[ "$asset_count" -ge 100 ]]; then
+            echo "::error::Release asset pagination is not allowed."
+            exit 1
+          fi
+          manifest_count="$(
+            jq '[.[] | select(
+              .name == "latest.json" and
+              .state == "uploaded" and
+              .size > 0
+            )] | length' "$assets_path"
+          )"
+          if [[ "$manifest_count" -ne 1 ]]; then
+            echo "::error::Exactly one non-empty latest.json release asset is required."
+            exit 1
+          fi
+          manifest_asset_id="$(
+            jq -r '.[] | select(
+              .name == "latest.json" and
+              .state == "uploaded" and
+              .size > 0
+            ) | .id' \
+              "$assets_path"
+          )"
+          gh api \
+            -H "Accept: application/octet-stream" \
+            "repos/$GITHUB_REPOSITORY/releases/assets/$manifest_asset_id" \
+            >"$manifest_path"
+
+          node platform/scripts/verify-updater-manifest.mjs \
+            --manifest "$manifest_path" \
+            --assets "$assets_path" \
+            --tauri-config platform/apps/desktop/src-tauri/tauri.conf.json \
+            --version "$RELEASE_VERSION" \
+            --repository "$GITHUB_REPOSITORY" \
+            --tag "$RELEASE_TAG" \
+            --output "$plan_path"
+          {
+            echo "UPDATER_MANIFEST_ASSET_ID=$manifest_asset_id"
+            echo "UPDATER_MANIFEST_PATH=$manifest_path"
+            echo "UPDATER_VERIFICATION_PLAN=$plan_path"
+          } >>"$GITHUB_ENV"
+
+      - name: Verify every updater artifact against the embedded public key
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          public_key_path="$(
+            jq -r '.publicKeyPath' "$UPDATER_VERIFICATION_PLAN"
+          )"
+          verified_platforms=0
+          while IFS=$'\t' read -r \
+            platform_name \
+            artifact_asset_id \
+            artifact_path \
+            artifact_digest \
+            signature_asset_id \
+            release_signature_path \
+            release_signature_digest \
+            manifest_signature_path \
+            decoded_signature_path; do
+            gh api \
+              -H "Accept: application/octet-stream" \
+              "repos/$GITHUB_REPOSITORY/releases/assets/$artifact_asset_id" \
+              >"$artifact_path"
+            gh api \
+              -H "Accept: application/octet-stream" \
+              "repos/$GITHUB_REPOSITORY/releases/assets/$signature_asset_id" \
+              >"$release_signature_path"
+            read -r artifact_sha256 _ < <(sha256sum "$artifact_path")
+            if [[ "sha256:$artifact_sha256" != "$artifact_digest" ]]; then
+              echo "::error::Downloaded artifact digest differs for $platform_name."
+              exit 1
+            fi
+            read -r release_signature_sha256 _ < <(
+              sha256sum "$release_signature_path"
+            )
+            if [[ "sha256:$release_signature_sha256" != "$release_signature_digest" ]]; then
+              echo "::error::Downloaded signature digest differs for $platform_name."
+              exit 1
+            fi
+            if ! cmp --silent \
+              "$manifest_signature_path" \
+              "$release_signature_path"; then
+              echo "::error::Manifest and detached signature differ for $platform_name."
+              exit 1
+            fi
+            cargo run \
+              --quiet \
+              --locked \
+              --manifest-path platform/apps/desktop/src-tauri/Cargo.toml \
+              --example verify_updater_signature \
+              -- \
+              "$public_key_path" \
+              "$artifact_path" \
+              "$decoded_signature_path"
+            verified_platforms=$((verified_platforms + 1))
+          done < <(
+            jq -r '.platforms[] | [
+              .platform,
+              .artifact.assetId,
+              .artifact.outputPath,
+              .artifact.digest,
+              .releaseSignature.assetId,
+              .releaseSignature.outputPath,
+              .releaseSignature.digest,
+              .manifestSignaturePath,
+              .decodedSignaturePath
+            ] | @tsv' "$UPDATER_VERIFICATION_PLAN"
+          )
+          if [[ "$verified_platforms" -ne 3 ]]; then
+            echo "::error::Exactly three required updater platforms must verify."
+            exit 1
+          fi
+
       - name: Publish draft
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+          RELEASE_SETTINGS_READ_TOKEN: ${{ secrets.RELEASE_SETTINGS_READ_TOKEN }}
           RELEASE_ID: ${{ needs.draft-release.outputs.release_id }}
         run: |
           set -euo pipefail
+
+          fresh_assets_path="$RUNNER_TEMP/jungle-bell-updater-assets-before-publish.json"
+          fresh_manifest_path="$RUNNER_TEMP/jungle-bell-latest-before-publish.json"
+          gh api \
+            "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?per_page=100" \
+            >"$fresh_assets_path"
+          fresh_asset_count="$(jq 'length' "$fresh_assets_path")"
+          if [[ "$fresh_asset_count" -ge 100 ]]; then
+            echo "::error::Release asset pagination is not allowed."
+            exit 1
+          fi
+          manifest_match_count="$(
+            jq --argjson id "$UPDATER_MANIFEST_ASSET_ID" \
+              '[.[] | select(
+                .id == $id and
+                .name == "latest.json" and
+                .state == "uploaded" and
+                .size > 0
+              )] | length' \
+              "$fresh_assets_path"
+          )"
+          manifest_name_count="$(
+            jq '[.[] | select(.name == "latest.json")] | length' \
+              "$fresh_assets_path"
+          )"
+          if [[ "$manifest_match_count" -ne 1 || "$manifest_name_count" -ne 1 ]]; then
+            echo "::error::The verified latest.json asset changed before publish."
+            exit 1
+          fi
+          gh api \
+            -H "Accept: application/octet-stream" \
+            "repos/$GITHUB_REPOSITORY/releases/assets/$UPDATER_MANIFEST_ASSET_ID" \
+            >"$fresh_manifest_path"
+          if ! cmp --silent "$UPDATER_MANIFEST_PATH" "$fresh_manifest_path"; then
+            echo "::error::The verified latest.json bytes changed before publish."
+            exit 1
+          fi
+
+          checked_assets=0
+          while IFS=$'\t' read -r asset_id asset_name asset_size asset_digest; do
+            asset_match_count="$(
+              jq \
+                --argjson id "$asset_id" \
+                --arg name "$asset_name" \
+                --argjson size "$asset_size" \
+                --arg digest "$asset_digest" \
+                '[.[] | select(
+                  .id == $id and
+                  .name == $name and
+                  .size == $size and
+                  .digest == $digest and
+                  .state == "uploaded"
+                )] | length' \
+                "$fresh_assets_path"
+            )"
+            asset_name_count="$(
+              jq --arg name "$asset_name" \
+                '[.[] | select(.name == $name)] | length' \
+                "$fresh_assets_path"
+            )"
+            if [[ "$asset_match_count" -ne 1 || "$asset_name_count" -ne 1 ]]; then
+              echo "::error::A verified updater asset changed before publish."
+              exit 1
+            fi
+            checked_assets=$((checked_assets + 1))
+          done < <(
+            jq -r '.platforms[] | [
+              [
+                .artifact.assetId,
+                .artifact.name,
+                .artifact.size,
+                .artifact.digest
+              ],
+              [
+                .releaseSignature.assetId,
+                .releaseSignature.name,
+                .releaseSignature.size,
+                .releaseSignature.digest
+              ]
+            ][] | @tsv' "$UPDATER_VERIFICATION_PLAN"
+          )
+          if [[ "$checked_assets" -ne 6 ]]; then
+            echo "::error::Exactly six updater assets must remain verified."
+            exit 1
+          fi
+
+          if [[ -z "$RELEASE_SETTINGS_READ_TOKEN" ]]; then
+            echo "::error::RELEASE_SETTINGS_READ_TOKEN is required."
+            exit 1
+          fi
+          if ! immutable_releases="$(
+            GH_TOKEN="$RELEASE_SETTINGS_READ_TOKEN" gh api \
+              -H "X-GitHub-Api-Version: 2026-03-10" \
+              "repos/$GITHUB_REPOSITORY/immutable-releases" \
+              --jq '.enabled'
+          )"; then
+            echo "::error::Immutable releases must still be enabled before publish."
+            exit 1
+          fi
+          if [[ "$immutable_releases" != "true" ]]; then
+            echo "::error::Immutable releases were disabled before publish."
+            exit 1
+          fi
+
+          make_latest="false"
+          if [[ "$PRERELEASE" != "true" ]]; then
+            make_latest="true"
+          fi
           gh api --method PATCH \
             "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
             -F draft=false \
             -F prerelease="$PRERELEASE" \
+            -f make_latest="$make_latest" \
             >/dev/null

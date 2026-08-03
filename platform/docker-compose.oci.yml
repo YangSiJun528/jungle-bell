@@ -16,7 +16,6 @@ services:
       JB_BACKUP_DIRECTORY: "/app/data/backups"
       JB_PUBLIC_ORIGIN: "${JB_PUBLIC_ORIGIN:?set JB_PUBLIC_ORIGIN}"
       JB_SESSION_ENCRYPTION_KEY_FILE: "/run/secrets/session_encryption_key"
-      JB_IDENTITY_HMAC_KEY_FILE: "/run/secrets/identity_hmac_key"
       JB_CAMPUS_DATA_API_URL: "${JB_CAMPUS_DATA_API_URL:-https://jungle-bell-api.yangsijun5528.workers.dev}"
       JB_MIN_FREE_DISK_BYTES: "${JB_MIN_FREE_DISK_BYTES:-134217728}"
       JB_TRUST_PROXY_HOPS: "1"
@@ -25,7 +24,6 @@ services:
       JB_VAPID_PRIVATE_KEY_FILE: "/run/secrets/vapid_private_key"
     secrets:
       - session_encryption_key
-      - identity_hmac_key
       - vapid_private_key
     volumes:
       - "${JB_DATA_DIRECTORY:-/srv/jungle-bell/data}:/app/data"
@@ -65,7 +63,5 @@ services:
 secrets:
   session_encryption_key:
     file: "${JB_SESSION_ENCRYPTION_KEY_PATH:?set JB_SESSION_ENCRYPTION_KEY_PATH}"
-  identity_hmac_key:
-    file: "${JB_IDENTITY_HMAC_KEY_PATH:?set JB_IDENTITY_HMAC_KEY_PATH}"
   vapid_private_key:
     file: "${JB_VAPID_PRIVATE_KEY_PATH:?set JB_VAPID_PRIVATE_KEY_PATH}"

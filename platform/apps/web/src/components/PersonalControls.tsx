@@ -392,65 +392,27 @@ export function PersonalControls() {
   const queueDisabled = busy.queue || busy.refresh;
 
   return (
-    <section className="card settings-card">
-      <div className="section-heading">
-        <div>
-          <div className="eyebrow">연결된 기기에서 함께 사용</div>
-          <h2>알림 설정</h2>
-        </div>
-        <SettingSwitch
-          ariaLabel="급식 알림 전체"
-          checked={view.mealRule.enabled}
-          compact
-          disabled={busy.meal}
-          label="급식 알림"
-          onChange={(checked) =>
-            setView((current) =>
-              updateLoaded(current, (loaded) => ({
-                ...loaded,
-                mealRule: {
-                  ...loaded.mealRule,
-                  enabled: checked,
-                },
-                mealDirty: true,
-              })),
-            )
-          }
-        />
-      </div>
+    <section
+      className="settings-page"
+      aria-labelledby="notification-settings-title"
+    >
+      <header className="settings-page__header">
+        <div className="eyebrow">연결된 기기에서 함께 사용</div>
+        <h2 id="notification-settings-title">알림 설정</h2>
+      </header>
 
-      <div className="button-row">
-        <p className="metadata">
-          세탁·대기열 최근 갱신{" "}
-          <time dateTime={new Date(view.laundryUpdatedAtEpochMs).toISOString()}>
-            {formatUpdatedTime(view.laundryUpdatedAtEpochMs)}
-          </time>
-        </p>
-        <button
-          className="compact-button"
-          type="button"
-          disabled={
-            busy.refresh || busy.laundry || busy.queue
-          }
-          onClick={() => void refreshLaundryState(true)}
-        >
-          {busy.refresh ? "새로고침 중" : "세탁·대기열 새로고침"}
-        </button>
-      </div>
-
-      <div className="personal-controls-grid">
-        <fieldset className="settings-group" aria-busy={busy.attendance}>
+      <div className="settings-stack">
+        <fieldset className="settings-section" aria-busy={busy.attendance}>
           <legend>출석 알림</legend>
-          <p>
-            PC가 동기화한 최신 출석 상태를 기준으로 마감 전 지정 시점과
-            마감 후 한 번 알려드려요. 처음에는 꺼져 있어요.
-          </p>
-          <SettingSwitch
+          <SettingsSwitchRow
             ariaLabel="출석 알림 전체"
             checked={view.attendanceRule.enabled}
-            compact
+            description={
+              "PC가 동기화한 최신 출석 상태를 기준으로 마감 전 지정 시점과 " +
+              "마감 후 한 번 알려드려요. 처음에는 꺼져 있어요."
+            }
             disabled={busy.attendance}
-            label="출석 알림 사용"
+            title="출석 알림 사용"
             onChange={(checked) =>
               setView((current) =>
                 updateLoaded(current, (loaded) => ({
@@ -464,176 +426,234 @@ export function PersonalControls() {
               )
             }
           />
-          <div className="toggle-grid">
-            <SettingSwitch
-              ariaLabel="오전 출석 알림"
-              checked={view.attendanceRule.morning}
-              compact
-              disabled={
-                busy.attendance || !view.attendanceRule.enabled
-              }
-              label="오전"
-              onChange={(checked) =>
-                setView((current) =>
-                  updateLoaded(current, (loaded) => ({
-                    ...loaded,
-                    attendanceRule: {
-                      ...loaded.attendanceRule,
-                      morning: checked,
-                    },
-                    attendanceDirty: true,
-                  })),
-                )
-              }
-            />
-            <SettingSwitch
-              ariaLabel="오후 출석 알림"
-              checked={view.attendanceRule.evening}
-              compact
-              disabled={
-                busy.attendance || !view.attendanceRule.enabled
-              }
-              label="오후"
-              onChange={(checked) =>
-                setView((current) =>
-                  updateLoaded(current, (loaded) => ({
-                    ...loaded,
-                    attendanceRule: {
-                      ...loaded.attendanceRule,
-                      evening: checked,
-                    },
-                    attendanceDirty: true,
-                  })),
-                )
-              }
-            />
+          <SettingsSwitchRow
+            ariaLabel="오전 출석 알림"
+            checked={view.attendanceRule.morning}
+            disabled={busy.attendance || !view.attendanceRule.enabled}
+            title="오전"
+            onChange={(checked) =>
+              setView((current) =>
+                updateLoaded(current, (loaded) => ({
+                  ...loaded,
+                  attendanceRule: {
+                    ...loaded.attendanceRule,
+                    morning: checked,
+                  },
+                  attendanceDirty: true,
+                })),
+              )
+            }
+          />
+          <SettingsSwitchRow
+            ariaLabel="오후 출석 알림"
+            checked={view.attendanceRule.evening}
+            disabled={busy.attendance || !view.attendanceRule.enabled}
+            title="오후"
+            onChange={(checked) =>
+              setView((current) =>
+                updateLoaded(current, (loaded) => ({
+                  ...loaded,
+                  attendanceRule: {
+                    ...loaded.attendanceRule,
+                    evening: checked,
+                  },
+                  attendanceDirty: true,
+                })),
+              )
+            }
+          />
+          <div className="settings-row settings-row--action">
+            <div className="settings-row__copy">
+              <strong>출석 알림 설정</strong>
+              {view.attendanceDirty ? (
+                <span>아직 저장하지 않은 변경이 있어요.</span>
+              ) : null}
+            </div>
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={busy.attendance || !view.attendanceDirty}
+              onClick={() => void saveAttendanceRule()}
+            >
+              {busy.attendance ? "저장 중" : "출석 알림 저장"}
+            </button>
           </div>
-          <button
-            className="secondary-button settings-action"
-            type="button"
-            disabled={busy.attendance || !view.attendanceDirty}
-            onClick={() => void saveAttendanceRule()}
-          >
-            {busy.attendance ? "저장 중" : "출석 알림 저장"}
-          </button>
-          {view.attendanceDirty ? (
-            <p className="metadata">아직 저장하지 않은 변경이 있어요.</p>
-          ) : null}
         </fieldset>
 
-        <fieldset className="settings-group" aria-busy={busy.meal}>
+        <fieldset className="settings-section" aria-busy={busy.meal}>
           <legend>급식 알림</legend>
-          <p>선택한 식단이 올라오면 연결된 모든 기기로 알려드려요.</p>
-          <div className="toggle-grid">
-            {(
-              Object.keys(mealLabels) as Array<
-                keyof typeof mealLabels
-              >
-            ).map((meal) => (
-              <SettingSwitch
-                ariaLabel={`${mealLabels[meal]} 알림`}
-                checked={view.mealRule[meal]}
-                compact
-                disabled={busy.meal || !view.mealRule.enabled}
-                key={meal}
-                label={mealLabels[meal]}
-                onChange={() => updateMeal(meal)}
-              />
-            ))}
-          </div>
-          <button
-            className="secondary-button settings-action"
-            type="button"
-            disabled={busy.meal || !view.mealDirty}
-            onClick={() => void saveMealRule()}
-          >
-            {busy.meal ? "저장 중" : "급식 알림 저장"}
-          </button>
-          {view.mealDirty ? (
-            <p className="metadata">아직 저장하지 않은 변경이 있어요.</p>
-          ) : null}
-        </fieldset>
-
-        <fieldset className="settings-group" aria-busy={laundryDisabled}>
-          <legend>세탁 알림</legend>
-          <p>
-            사용 중인 기기는 현재 동작 기준으로, 비어 있는 기기는 다음 사용
-            가능 전환을 기준으로 알려드려요.
-          </p>
-          <div className="inline-control">
-            <SelectControl
-              ariaLabel="세탁 알림 기기"
-              disabled={laundryDisabled || view.targets.length === 0}
-              emptyLabel="기기 정보 없음"
-              options={view.targets.map((target) => ({
-                value: target.key,
-                label: target.label,
-              }))}
-              value={selectedTargetKey}
-              onChange={setSelectedTargetKey}
+          <SettingsSwitchRow
+            ariaLabel="급식 알림 전체"
+            checked={view.mealRule.enabled}
+            description="선택한 식단이 올라오면 연결된 모든 기기로 알려드려요."
+            disabled={busy.meal}
+            title="급식 알림"
+            onChange={(checked) =>
+              setView((current) =>
+                updateLoaded(current, (loaded) => ({
+                  ...loaded,
+                  mealRule: {
+                    ...loaded.mealRule,
+                    enabled: checked,
+                  },
+                  mealDirty: true,
+                })),
+              )
+            }
+          />
+          {(
+            Object.keys(mealLabels) as Array<keyof typeof mealLabels>
+          ).map((meal) => (
+            <SettingsSwitchRow
+              ariaLabel={`${mealLabels[meal]} 알림`}
+              checked={view.mealRule[meal]}
+              disabled={busy.meal || !view.mealRule.enabled}
+              key={meal}
+              title={mealLabels[meal]}
+              onChange={() => updateMeal(meal)}
             />
+          ))}
+          <div className="settings-row settings-row--action">
+            <div className="settings-row__copy">
+              <strong>급식 알림 설정</strong>
+              {view.mealDirty ? (
+                <span>아직 저장하지 않은 변경이 있어요.</span>
+              ) : null}
+            </div>
             <button
               className="secondary-button"
               type="button"
-              disabled={
-                laundryDisabled ||
-                view.targets.length === 0 ||
-                duplicateSelectedWatch
-              }
-              onClick={() => void addWatch()}
+              disabled={busy.meal || !view.mealDirty}
+              onClick={() => void saveMealRule()}
             >
-              {duplicateSelectedWatch
-                ? "이미 등록됨"
-                : busy.laundry
-                  ? "처리 중"
-                  : "세탁 알림 추가"}
+              {busy.meal ? "저장 중" : "급식 알림 저장"}
             </button>
           </div>
-          {duplicateSelectedWatch ? (
-            <p className="metadata">
-              이 기기에 같은 조건의 알림이 이미 있어요.
-            </p>
-          ) : null}
-          <WatchList
-            watches={view.watches}
-            busy={laundryDisabled}
-            onCancel={(id) => void cancelWatch(id)}
-          />
         </fieldset>
 
-        <fieldset className="settings-group" aria-busy={queueDisabled}>
-          <legend>자율 대기열</legend>
-          <p>
-            이 대기열은 자율적인 순서 공유일 뿐이며 실제 기기 예약·사용 권한을
-            만들거나 보장하지 않아요.
-          </p>
-          <div className="button-row">
+        <fieldset className="settings-section" aria-busy={laundryDisabled}>
+          <legend>세탁 알림</legend>
+          <div className="settings-section__header">
+            <div className="settings-row__copy">
+              <p>
+                사용 중인 기기는 현재 동작 기준으로, 비어 있는 기기는 다음 사용
+                가능 전환을 기준으로 알려드려요.
+              </p>
+              <span className="metadata">
+                세탁·대기열 최근 갱신{" "}
+                <time
+                  dateTime={new Date(
+                    view.laundryUpdatedAtEpochMs,
+                  ).toISOString()}
+                >
+                  {formatUpdatedTime(view.laundryUpdatedAtEpochMs)}
+                </time>
+              </span>
+            </div>
             <button
-              className="secondary-button"
+              className="compact-button"
               type="button"
-              disabled={
-                queueDisabled || hasWaitingQueue(view.queue, "washer")
-              }
-              onClick={() => void joinQueue("washer")}
+              disabled={busy.refresh || busy.laundry || busy.queue}
+              onClick={() => void refreshLaundryState(true)}
             >
-              세탁기 대기열 참여
-            </button>
-            <button
-              className="secondary-button"
-              type="button"
-              disabled={
-                queueDisabled || hasWaitingQueue(view.queue, "dryer")
-              }
-              onClick={() => void joinQueue("dryer")}
-            >
-              건조기 대기열 참여
+              {busy.refresh ? "새로고침 중" : "세탁·대기열 새로고침"}
             </button>
           </div>
-          <QueueList
-            entries={view.queue}
-            busy={queueDisabled}
-            onLeave={(id) => void leaveQueue(id)}
-          />
+          <div className="settings-row settings-row--stacked">
+            <div className="settings-row__copy">
+              <strong>알림 받을 기기</strong>
+              <span>동작 상태에 맞는 알림 조건이 함께 표시돼요.</span>
+            </div>
+            <div className="settings-row__control inline-control">
+              <SelectControl
+                ariaLabel="세탁 알림 기기"
+                disabled={laundryDisabled || view.targets.length === 0}
+                emptyLabel="기기 정보 없음"
+                options={view.targets.map((target) => ({
+                  value: target.key,
+                  label: target.label,
+                }))}
+                value={selectedTargetKey}
+                onChange={setSelectedTargetKey}
+              />
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={
+                  laundryDisabled ||
+                  view.targets.length === 0 ||
+                  duplicateSelectedWatch
+                }
+                onClick={() => void addWatch()}
+              >
+                {duplicateSelectedWatch
+                  ? "이미 등록됨"
+                  : busy.laundry
+                    ? "처리 중"
+                    : "세탁 알림 추가"}
+              </button>
+            </div>
+            {duplicateSelectedWatch ? (
+              <p className="metadata">
+                이 기기에 같은 조건의 알림이 이미 있어요.
+              </p>
+            ) : null}
+          </div>
+          <div className="settings-row settings-row--stacked">
+            <div className="settings-row__copy">
+              <strong>등록된 알림</strong>
+            </div>
+            <WatchList
+              watches={view.watches}
+              busy={laundryDisabled}
+              onCancel={(id) => void cancelWatch(id)}
+            />
+          </div>
+        </fieldset>
+
+        <fieldset className="settings-section" aria-busy={queueDisabled}>
+          <legend>자율 대기열</legend>
+          <div className="settings-row settings-row--stacked">
+            <div className="settings-row__copy">
+              <strong>대기열 참여</strong>
+              <span>
+                이 대기열은 자율적인 순서 공유일 뿐이며 실제 기기 예약·사용
+                권한을 만들거나 보장하지 않아요.
+              </span>
+            </div>
+            <div className="settings-row__control button-row">
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={
+                  queueDisabled || hasWaitingQueue(view.queue, "washer")
+                }
+                onClick={() => void joinQueue("washer")}
+              >
+                세탁기 대기열 참여
+              </button>
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={
+                  queueDisabled || hasWaitingQueue(view.queue, "dryer")
+                }
+                onClick={() => void joinQueue("dryer")}
+              >
+                건조기 대기열 참여
+              </button>
+            </div>
+          </div>
+          <div className="settings-row settings-row--stacked">
+            <div className="settings-row__copy">
+              <strong>참여 중인 대기열</strong>
+            </div>
+            <QueueList
+              entries={view.queue}
+              busy={queueDisabled}
+              onLeave={(id) => void leaveQueue(id)}
+            />
+          </div>
         </fieldset>
       </div>
 
@@ -643,6 +663,39 @@ export function PersonalControls() {
         </p>
       ) : null}
     </section>
+  );
+}
+
+function SettingsSwitchRow({
+  ariaLabel,
+  checked,
+  description,
+  disabled = false,
+  title,
+  onChange,
+}: {
+  readonly ariaLabel: string;
+  readonly checked: boolean;
+  readonly description?: string;
+  readonly disabled?: boolean;
+  readonly title: string;
+  readonly onChange: (checked: boolean) => void;
+}) {
+  return (
+    <div className="settings-row">
+      <div className="settings-row__copy">
+        <strong>{title}</strong>
+        {description ? <span>{description}</span> : null}
+      </div>
+      <SettingSwitch
+        ariaLabel={ariaLabel}
+        checked={checked}
+        compact
+        disabled={disabled}
+        label={<span className="sr-only">{title}</span>}
+        onChange={onChange}
+      />
+    </div>
   );
 }
 

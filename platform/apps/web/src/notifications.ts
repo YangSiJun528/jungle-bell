@@ -58,6 +58,22 @@ export function registerPwaServiceWorker(runningInTauri: boolean): void {
   }
 
   window.addEventListener("load", () => {
-    void navigator.serviceWorker.register("/sw.js", { scope: "/" });
+    void (async () => {
+      try {
+        const registered = await navigator.serviceWorker.register(
+          "/sw.js",
+          { scope: "/" },
+        );
+        const readyRegistration = registered.active
+          ? registered
+          : await navigator.serviceWorker.ready;
+        const activeWorker =
+          navigator.serviceWorker.controller ??
+          readyRegistration.active;
+        activeWorker?.postMessage({ type: "jungle-bell-app-open" });
+      } catch {
+        // Installation and reconciliation are retried on a later app open.
+      }
+    })();
   });
 }

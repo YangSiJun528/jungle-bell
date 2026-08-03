@@ -1,114 +1,81 @@
 ---
 name: release
-description: Create a GitHub release with a tag from the current version in src-tauri/Cargo.toml. Use when the user asks to create a release, says "릴리즈 만들어줘", "release", "/release", or otherwise wants to publish a new version. Handles branch/state checks, changelog drafting (Korean), tag push, draft release creation, and CI workflow trigger.
+description: Create the canonical Jungle Bell platform GitHub release from the version in platform/apps/desktop/src-tauri/Cargo.toml. Use when the user asks to create or publish a release, says "릴리즈 만들어줘", "release", or "/release". Validates the renewed workspace, uses immutable platform-v tags, and dispatches the signed platform release workflow.
 ---
 
 # Release
 
-Create a GitHub release. Follow the steps below in order.
+Publish only through `.github/workflows/platform-release.yml`. Do not recreate
+the removed legacy root release workflow or build the legacy root Tauri app.
 
 ## Interaction compatibility
 
-When a release decision needs user approval, ask one concise Korean question and wait for the answer. Use the structured user-input tool available in the current runtime:
+When approval is required, ask one concise Korean question with the runtime's
+available user-input mechanism and wait for the answer.
 
-- In runtimes that provide `AskUserQuestion`, use `AskUserQuestion`.
-- In Codex, use Codex's available user-input mechanism when available and appropriate; otherwise ask in normal chat.
+## 1. Validate local state
 
-## Step 1: Check local state
+1. Require branch `main`.
+2. Refuse if staged, unstaged, or untracked changes exist.
+3. Fetch `origin` and require local `main` to equal `origin/main`. Ask before
+   pushing local commits; abort if the user declines.
+4. Require repository variables `JB_APP_ORIGIN` and `JB_API_ORIGIN` to exist and
+   contain the same HTTPS origin.
+5. Require the repository's GitHub immutable releases setting to be enabled.
+   Require an Actions secret named `RELEASE_SETTINGS_READ_TOKEN` containing a
+   fine-grained token with only `Administration: read`, and check
+   `GET /repos/{owner}/{repo}/immutable-releases`. Do not enable or change the
+   repository setting without a separate explicit user request.
 
-1. Verify the current branch is `main`.
-2. Check for uncommitted changes (both unstaged and staged).
-3. Check for unpushed commits.
+## 2. Validate the version
 
-If the branch is not `main` or there are uncommitted changes, **refuse the operation** and explain why.
+Read the version from
+`platform/apps/desktop/src-tauri/Cargo.toml`. Require canonical SemVer and the
+same value in:
 
-If there are unpushed commits, ask whether to push them to the remote before proceeding. If the user agrees, run `git push origin main` and continue. If not, abort.
+- `platform/package.json` and its root/workspace entries in `package-lock.json`
+- `platform/apps/api/package.json`
+- `platform/apps/desktop/package.json`
+- `platform/apps/web/package.json`
+- `platform/apps/desktop/src-tauri/tauri.conf.json`
+- the `jungle-bell-desktop` entry in `Cargo.lock`
 
-## Step 2: Check version and existing tags/releases
+Use tag `platform-v{version}`. Refuse if that remote tag or GitHub release
+already exists. Published releases and immutable tags are never force-replaced;
+use `$bump-version` and retry.
 
-1. Read the current version from `src-tauri/Cargo.toml`.
-2. The tag name follows the format `v{version}` (e.g., `v0.0.4-beta.2`).
-3. Check if the tag already exists on the remote (`git ls-remote --tags origin`).
-4. Check if a GitHub release already exists (`gh release view`).
+Run from `platform/`:
 
-If a tag or release already exists, ask the user to choose one of these options:
-
-1. **Abort** — the user resolves it manually and tries again
-2. **Force deploy** — delete the existing release and tag, then recreate them
-3. **Bump version and retry** — use the `bump-version` skill to increment to the next version, commit/push the changes, then restart from Step 1
-
-## Step 3 (stable releases only): Review changelog and get user approval
-
-Only run this step if the version has **no** prerelease identifiers (`-alpha`, `-beta`, `-rc`, etc.).
-
-1. Find the previous stable release tag (exclude prerelease/beta tags):
-   ```
-   git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -2
-   ```
-   If the current version tag already exists, the second result is the previous version; otherwise the first result is.
-
-2. Get the commit list from the previous stable tag to HEAD:
-   ```
-   git log {prev_tag}..HEAD --oneline --no-merges
-   ```
-
-3. Write a human-readable changelog **in Korean**, describing the **net difference** a user upgrading from the previous stable version will experience. The commit log between the two stable tags is just source material — do **not** narrate the development history.
-
-   **Frame the changelog from the previous-stable user's perspective.** Ignore intermediate beta churn:
-   - If a feature was introduced in beta-1 and iterated/refactored across later betas, describe only the **final shape** that ships in this release.
-   - If a change was introduced in beta and later reverted before this release, omit it entirely.
-   - A bug fix that only affected a beta build (the bug never reached the previous stable version) is **not** user-facing — exclude it.
-   - A migration/compatibility fix added during beta to handle upgrades from the previous stable is part of the upgrade experience and may be omitted (silent migrations) or briefly noted if user-visible.
-   - Default-value changes apply to new installs only; mention this nuance if relevant.
-   - Pure internal refactors, doc-only commits, and CI/release-tooling changes generally do **not** belong in user-facing notes unless they produce a visible behavior change.
-
-   Group the surviving items as:
-   - **새 기능** — user-visible feature additions (final shape only)
-   - **버그 수정** — fixes for issues that existed in the previous stable version
-   - **기타** — remaining user-relevant changes (e.g., default value changes, deprecations)
-
-   Each item is one concise Korean line. Bold a short label at the start when it helps scanning.
-
-4. Present the drafted changelog **in Korean** and ask (in Korean) whether to proceed. If the user wants edits, apply them. If they decline, abort.
-
-5. Use the user-approved changelog with `--notes` in Step 5 (instead of `--generate-notes`).
-
-## Step 4: Create and push tag
-
-```
-git tag v{version}
-git push origin v{version}
+```bash
+npm run test:ops
+cargo check --locked --manifest-path apps/desktop/src-tauri/Cargo.toml
 ```
 
-## Step 5: Create GitHub release (draft)
+## 3. Review the release delta
 
-The release is created as a **draft**. The CI workflow will automatically publish it after all builds complete.
+For a stable version, find the previous stable `platform-vMAJOR.MINOR.PATCH`
+tag and summarize the net user-visible delta to `HEAD` in concise Korean under
+`새 기능`, `버그 수정`, and `기타`. Exclude intermediate prerelease churn,
+internal refactors, documentation, and release tooling. For a prerelease,
+summarize the delta without requiring stable-release notes.
 
-- **Prerelease/beta** (version contains `-alpha`, `-beta`, `-rc`, etc.): use `--generate-notes`. Ask in Korean whether to add the `--prerelease` flag.
-  ```
-  gh release create v{version} --title "v{version}" --generate-notes --draft [--prerelease]
-  ```
+Show the summary and exact version/tag, then ask whether to dispatch. Abort if
+the user declines. The workflow creates the draft release and generated notes;
+do not create or push the tag separately because tag pushes also trigger the
+same workflow.
 
-- **Stable release**: use the user-approved changelog from Step 3 via `--notes` (do not use `--generate-notes`):
-  ```
-  gh release create v{version} --title "v{version}" --notes "{changelog}" --draft
-  ```
+## 4. Dispatch and follow
 
-## Step 6: Trigger CI workflow
+Record `git rev-parse HEAD`, then run:
 
-Trigger the release workflow manually via `workflow_dispatch`:
-
-```
-gh workflow run release.yml -f tag=v{version}
-```
-
-Wait 3 seconds, then get the workflow run URL:
-
-```
-sleep 3
-gh run list --workflow=release.yml --limit=1 --json url --jq '.[0].url'
+```bash
+gh workflow run platform-release.yml \
+  -f tag=platform-v{version} \
+  -f ref={full_commit_sha} \
+  -f prerelease={true_or_false}
 ```
 
-## Step 7: Confirm
-
-Inform the user that the release was created as a draft and the CI workflow has been triggered. Provide a link to the GitHub Actions workflow run. The release will be automatically published once all builds complete.
+Find the matching `workflow_dispatch` run and report its URL. The workflow owns
+quality gates, immutable tag/draft creation, updater-signature verification,
+desktop/server artifacts, publication, and stable `latest` selection. Do not
+claim the release is published until that run succeeds.

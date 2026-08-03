@@ -247,6 +247,29 @@ mod tests {
     }
 
     #[test]
+    fn renewal_preserves_unrelated_files_from_the_legacy_app_profile() {
+        let directory = tempfile::tempdir().expect("temporary app data");
+        let legacy_state = directory.path().join("legacy-profile-sentinel.json");
+        let legacy_contents = br#"{"owner":"legacy-0.4.4","preserve":true}"#;
+        std::fs::write(&legacy_state, legacy_contents).expect("legacy profile sentinel");
+
+        let installation_id =
+            load_or_create_installation_id(directory.path()).expect("renewed installation ID");
+
+        assert!(parse_installation_id(&installation_id).is_ok());
+        assert_eq!(
+            std::fs::read(&legacy_state).expect("preserved legacy profile sentinel"),
+            legacy_contents
+        );
+        assert_eq!(
+            std::fs::read_dir(directory.path())
+                .expect("shared app data directory")
+                .count(),
+            2
+        );
+    }
+
+    #[test]
     fn rejects_non_uuid_or_non_canonical_installation_ids() {
         for value in [
             "",

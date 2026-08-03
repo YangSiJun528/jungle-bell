@@ -29,9 +29,7 @@ export function readMasterEncryptionKey(
 
 export function deriveEncryptionKey(
   master: Uint8Array,
-  purpose:
-    | "lms-identity-v1"
-    | "pairing-transport-v1",
+  purpose: "pairing-transport-v1",
 ): Buffer {
   if (master.byteLength !== KEY_BYTES) {
     throw new Error("JB_SESSION_ENCRYPTION_KEY_INVALID");

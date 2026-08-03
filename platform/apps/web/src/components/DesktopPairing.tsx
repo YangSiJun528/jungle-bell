@@ -200,11 +200,23 @@ export function DesktopPairing({ enabled }: { enabled: boolean }) {
               이 기기 승인
             </button>
           </>
+        ) : status?.status === "approved" ||
+          status?.status === "completed" ? (
+          <>
+            <p className="muted">승인 완료</p>
+            <button
+              className="primary-button"
+              type="button"
+              disabled={busy || !enabled}
+              onClick={start}
+            >
+              다른 휴대폰 연결
+            </button>
+          </>
         ) : (
           <p className="muted">
-            {status?.status === "approved" || status?.status === "completed"
-              ? "승인 완료"
-              : "휴대폰의 Jungle Bell에서 10자리 연결 코드를 입력해 주세요. QR로도 연결할 수 있어요."}
+            휴대폰의 Jungle Bell에서 10자리 연결 코드를 입력해 주세요. QR로도
+            연결할 수 있어요.
           </p>
         )}
         {message ? (

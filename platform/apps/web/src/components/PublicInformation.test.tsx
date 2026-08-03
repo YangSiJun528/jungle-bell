@@ -42,33 +42,44 @@ const laundry: CampusEnvelope<LaundrySnapshot> = {
       sourceFreshness: "WITHIN_REFRESH_WINDOW",
       lastCheckedAt: "2026-07-31T04:33:00.752Z",
     },
-    machines: [
-      {
-        id: "워시타워_1",
-        washer: {
-          appliance: "washer",
-          operationalStatus: "IDLE",
+    machines: Array.from({ length: 9 }, (_, index) => ({
+      id: `워시타워_${index + 1}`,
+      washer: {
+        appliance: "washer" as const,
+        operationalStatus: "IDLE",
+        remainingMinutes: 0,
+        sessionId: null,
+        projection: {
           remainingMinutes: 0,
-          sessionId: "washer-1",
-          projection: {
-            remainingMinutes: 0,
-            status: "IDLE",
-            estimated: false,
-          },
-        },
-        dryer: {
-          appliance: "dryer",
-          operationalStatus: "RUNNING",
-          remainingMinutes: 18,
-          sessionId: "dryer-1",
-          projection: {
-            remainingMinutes: 15,
-            status: "ESTIMATED_RUNNING",
-            estimated: true,
-          },
+          status: "IDLE",
+          estimated: false,
         },
       },
-    ],
+      dryer:
+        index === 0
+          ? {
+              appliance: "dryer" as const,
+              operationalStatus: "RUNNING",
+              remainingMinutes: 18,
+              sessionId: "dryer-1",
+              projection: {
+                remainingMinutes: 15,
+                status: "ESTIMATED_RUNNING",
+                estimated: true,
+              },
+            }
+          : {
+              appliance: "dryer" as const,
+              operationalStatus: "IDLE",
+              remainingMinutes: 0,
+              sessionId: null,
+              projection: {
+                remainingMinutes: 0,
+                status: "IDLE",
+                estimated: false,
+              },
+            },
+    })),
   },
 };
 
@@ -101,12 +112,17 @@ const meals: CampusEnvelope<MealsSnapshot> = {
 
 describe("public campus information", () => {
   beforeEach(() => {
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${window.location.search}`,
+    );
     vi.mocked(getPublicLaundry).mockReset();
     vi.mocked(getPublicMeals).mockReset();
     vi.mocked(getPublicLaundry).mockResolvedValue(laundry);
     vi.mocked(getPublicMeals).mockResolvedValue(meals);
     vi.spyOn(Date, "now").mockReturnValue(
-      Date.parse("2026-07-31T05:00:00.000Z"),
+      Date.parse("2026-07-31T04:34:30.000Z"),
     );
   });
 
@@ -118,10 +134,25 @@ describe("public campus information", () => {
   it("renders live meal text and projected laundry availability", async () => {
     render(<PublicInformation />);
 
-    expect(await screen.findByText("1")).toBeVisible();
-    expect(screen.getByText("대 사용 가능")).toBeVisible();
+    expect(await screen.findByText("예상 7회")).toBeVisible();
+    expect(screen.getByText("예상 4회")).toBeVisible();
+    expect(
+      screen.getByRole("table", {
+        name: "워시타워 번호별 건조기와 세탁기 상태",
+      }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("list", { name: "세탁실 구역 색상" }),
+    ).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", { name: /산출 기준 보기/ }),
+    );
+    expect(screen.getByText(/실제 상황과 다를 수 있어요/)).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", { name: "기기별 상세 상태" }),
+    );
     expect(screen.getByText("워시타워 1")).toBeVisible();
-    expect(screen.getByText("사용 가능")).toBeVisible();
+    expect(screen.getAllByText("사용 가능").length).toBeGreaterThan(0);
     expect(screen.getByText("15분 남음")).toBeVisible();
     expect(
       screen.getByRole("region", { name: "생활 정보" }),
@@ -135,6 +166,48 @@ describe("public campus information", () => {
     expect(screen.getByText(/마지막 확인 ·/)).toBeVisible();
   });
 
+  it("selects meals on initial render when the hash is #meals", async () => {
+    window.history.replaceState(null, "", "#meals");
+
+    render(<PublicInformation />);
+
+    expect(
+      screen.getByRole("tab", { name: "급식" }),
+    ).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByText(/살얼음오징어물회/)).toBeVisible();
+  });
+
+  it("reacts to hash changes and defaults unknown hashes to laundry", async () => {
+    window.history.replaceState(null, "", "#unknown");
+    render(<PublicInformation />);
+
+    expect(
+      screen.getByRole("tab", { name: "세탁" }),
+    ).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByText("예상 7회")).toBeVisible();
+
+    act(() => {
+      window.history.replaceState(null, "", "#meals");
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+    });
+
+    expect(
+      screen.getByRole("tab", { name: "급식" }),
+    ).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByText(/살얼음오징어물회/)).toBeVisible();
+  });
+
+  it("updates the hash when a 생활 정보 tab is selected", async () => {
+    render(<PublicInformation />);
+    await screen.findByText("예상 7회");
+
+    fireEvent.click(screen.getByRole("tab", { name: "급식" }));
+    expect(window.location.hash).toBe("#meals");
+
+    fireEvent.click(screen.getByRole("tab", { name: "세탁" }));
+    expect(window.location.hash).toBe("#laundry");
+  });
+
   it("marks last-good data as stale without hiding it", async () => {
     vi.mocked(getPublicLaundry).mockResolvedValue({
       ...laundry,
@@ -145,7 +218,7 @@ describe("public campus information", () => {
     render(<PublicInformation />);
 
     expect(await screen.findByText("업데이트 지연")).toBeVisible();
-    expect(screen.getByText("대 사용 가능")).toBeVisible();
+    expect(screen.getAllByText("산출 불가")).toHaveLength(2);
   });
 
   it("isolates an unavailable meal source from working laundry data", async () => {
@@ -201,6 +274,33 @@ describe("public campus information", () => {
     expect(screen.getByText(/살얼음오징어물회/)).toBeVisible();
   });
 
+  it("keeps machine details but withdraws estimates when laundry refresh fails", async () => {
+    vi.useFakeTimers();
+    render(<PublicInformation />);
+    await settlePromises();
+    expect(screen.getByText("예상 7회")).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", { name: "기기별 상세 상태" }),
+    );
+
+    vi.mocked(getPublicLaundry).mockRejectedValueOnce(
+      new Error("HTTP_503"),
+    );
+    await act(async () => {
+      vi.advanceTimersByTime(30_000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.getAllByText("산출 불가")).toHaveLength(2);
+    expect(screen.getByText("워시타워 1")).toBeVisible();
+    expect(
+      screen.getByText(
+        "새 정보를 확인하지 못해 마지막으로 저장한 내용을 보여드려요.",
+      ),
+    ).toBeVisible();
+  });
+
   it("shows an unknown state instead of zero capacity for no reported appliances", async () => {
     vi.mocked(getPublicLaundry).mockResolvedValue({
       ...laundry,
@@ -217,10 +317,29 @@ describe("public campus information", () => {
         "확인된 기기가 없어 사용 가능 수를 알 수 없어요.",
       ),
     ).toBeVisible();
+    expect(screen.getAllByText("산출 불가")).toHaveLength(2);
     expect(
       screen.getByLabelText("사용 가능 수 미확인"),
     ).toBeVisible();
     expect(screen.queryByText("0개")).not.toBeInTheDocument();
+  });
+
+  it("marks only the affected access group unavailable for partial machine data", async () => {
+    vi.mocked(getPublicLaundry).mockResolvedValue({
+      ...laundry,
+      data: {
+        ...laundry.data!,
+        machines: laundry.data!.machines.map((machine, index) =>
+          index === 7 ? { ...machine, dryer: null } : machine,
+        ),
+      },
+    });
+
+    render(<PublicInformation />);
+
+    expect(await screen.findByText("예상 7회")).toBeVisible();
+    expect(screen.getByText("산출 불가")).toBeVisible();
+    expect(screen.queryByText("예상 3회")).not.toBeInTheDocument();
   });
 
   it("announces only changing refresh status, not the whole data grid", async () => {
@@ -232,6 +351,29 @@ describe("public campus information", () => {
       screen.getByRole("region", { name: "생활 정보" }),
     ).not.toHaveAttribute("aria-live");
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("refreshes laundry every 30 seconds and meals every 5 minutes", async () => {
+    vi.useFakeTimers();
+    render(<PublicInformation />);
+    await settlePromises();
+
+    expect(getPublicLaundry).toHaveBeenCalledTimes(1);
+    expect(getPublicMeals).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      vi.advanceTimersByTime(30_000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(getPublicLaundry).toHaveBeenCalledTimes(2);
+    expect(getPublicMeals).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4 * 60_000 + 30_000);
+    });
+    expect(getPublicLaundry).toHaveBeenCalledTimes(11);
+    expect(getPublicMeals).toHaveBeenCalledTimes(2);
   });
 
   it("keeps previous dates out of the other-today menu list", async () => {

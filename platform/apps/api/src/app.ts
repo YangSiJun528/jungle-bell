@@ -1,5 +1,4 @@
 import {
-  createHmac,
   randomBytes,
   randomUUID,
   timingSafeEqual,
@@ -16,6 +15,9 @@ import Fastify, {
 } from "fastify";
 import { z } from "zod";
 
+import {
+  attendanceNotificationEvent as createAttendanceNotificationEvent,
+} from "./attendance/reminder-policy.js";
 import {
   attendanceRuleSchema,
   laundryQueueInputSchema,
@@ -71,6 +73,7 @@ import {
   LmsGatewayError,
   LmsHttpGateway,
 } from "./lms/gateway.js";
+import { computeLmsIdentitySha256 } from "./lms/identity-hash.js";
 import { computeLmsSubjectBinding } from "./lms/subject-binding.js";
 import {
   AesGcmSessionSealer,
@@ -114,9 +117,6 @@ export interface BuildAppOptions {
   desktopIdentityStore?: DesktopIdentityStore;
   desktopSessionStore?: DesktopSessionStore;
   lmsGateway?: Pick<LmsHttpGateway, "verifyIdentity">;
-  lmsSubjectToIdentityHash?: (
-    subject: string,
-  ) => Promise<string> | string;
   logger?: boolean;
   notificationEventSink?: {
     record(event: NotificationSourceEvent): unknown;
@@ -271,7 +271,6 @@ const ATTENDANCE_FRESH_WINDOW_MS = 15 * 60 * 1000;
 const MAX_CLIENT_CLOCK_SKEW_MS = 5 * 60 * 1000;
 const DESKTOP_NOTIFICATION_ACK_LEASE_MS = 2 * 60 * 1000;
 const DESKTOP_NOTIFICATION_RETRY_MS = 5_000;
-const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 const API_CONTENT_SECURITY_POLICY =
   "default-src 'none'; base-uri 'none'; frame-ancestors 'none'";
 const WEB_CONTENT_SECURITY_POLICY =
@@ -381,14 +380,6 @@ export async function buildApp(
   const clock = new SystemClock();
   const random = new CryptoRandomSource();
   const hasher = new Sha256Hasher();
-  const ephemeralIdentityKey = randomBytes(32);
-  const lmsSubjectToIdentityHash =
-    options.lmsSubjectToIdentityHash ??
-    ((subject: string) =>
-      createHmac("sha256", ephemeralIdentityKey)
-        .update("jungle-lms\0user-id\0", "utf8")
-        .update(subject, "utf8")
-        .digest("hex"));
   const pairingStore = options.pairingStore ?? new InMemoryPairingStore();
   const pairingService = new PairingService({
     clock,
@@ -586,9 +577,9 @@ export async function buildApp(
 
       const now = clock.now();
       const identity = await desktopIdentities.registerVerifiedIdentity({
-        candidateUserId: `jbu_${randomUUID()}`,
+        candidateUserId: randomUUID(),
         desktopDeviceId: body.desktopDeviceId,
-        subjectHmac: await lmsSubjectToIdentityHash(verified.subject),
+        subjectSha256: computeLmsIdentitySha256(verified.subject),
         verifiedAtEpochMs: now,
       });
       const appSessionToken = await issueAppSession({
@@ -638,7 +629,9 @@ export async function buildApp(
       const identity = await desktopIdentities.registerVerifiedIdentity({
         candidateUserId: "demo-user",
         desktopDeviceId: "demo-desktop",
-        subjectHmac: await hasher.hash("development-demo-user"),
+        subjectSha256: computeLmsIdentitySha256(
+          "development-demo-user",
+        ),
         verifiedAtEpochMs: now,
       });
       const appSessionToken = await issueAppSession({
@@ -2504,101 +2497,7 @@ export function attendanceNotificationEvent(
   snapshot: AttendanceSnapshotRecord,
   nowEpochMs: number,
 ): NotificationSourceEvent | null {
-  if (
-    snapshot.cohortStatus !== "active" ||
-    nowEpochMs - snapshot.collectedAtEpochMs >
-      ATTENDANCE_FRESH_WINDOW_MS ||
-    snapshot.collectedAtEpochMs >
-      nowEpochMs + MAX_CLIENT_CLOCK_SKEW_MS
-  ) {
-    return null;
-  }
-
-  const kstNow = new Date(nowEpochMs + KST_OFFSET_MS);
-  const hour = kstNow.getUTCHours();
-  const minute = kstNow.getUTCMinutes();
-  const localMinutes = hour * 60 + minute;
-
-  let phase: "morning" | "evening";
-  let minutesRemaining: number | null;
-  let slot: "before-60" | "before-15" | "before-5" | "after";
-  let attendanceDate: string;
-  if (
-    !snapshot.morningChecked &&
-    localMinutes >= 9 * 60 &&
-    localMinutes < 10 * 60 + 10
-  ) {
-    phase = "morning";
-    attendanceDate = kstCalendarDate(kstNow);
-    if (localMinutes < 10 * 60) {
-      minutesRemaining = 10 * 60 - localMinutes;
-      slot =
-        localMinutes < 9 * 60 + 45
-          ? "before-60"
-          : localMinutes < 9 * 60 + 55
-            ? "before-15"
-            : "before-5";
-    } else {
-      minutesRemaining = null;
-      slot = "after";
-    }
-  } else if (
-    snapshot.morningChecked &&
-    !snapshot.eveningChecked &&
-    localMinutes >= 3 * 60 &&
-    localMinutes < 4 * 60 + 10
-  ) {
-    phase = "evening";
-    attendanceDate = previousKstCalendarDate(kstNow);
-    if (localMinutes < 4 * 60) {
-      minutesRemaining = 4 * 60 - localMinutes;
-      slot =
-        localMinutes < 3 * 60 + 45
-          ? "before-60"
-          : localMinutes < 3 * 60 + 55
-            ? "before-15"
-            : "before-5";
-    } else {
-      minutesRemaining = null;
-      slot = "after";
-    }
-  } else {
-    return null;
-  }
-
-  if (snapshot.attendanceDate !== attendanceDate) {
-    return null;
-  }
-
-  return {
-    kind: "attendance-action-required",
-    sourceEventId: `attendance:${attendanceDate}:${phase}:${slot}`,
-    userId: snapshot.userId,
-    attendanceDate,
-    phase,
-    minutesRemaining,
-    occurredAtEpochMs: nowEpochMs,
-  };
-}
-
-function kstCalendarDate(kstNow: Date): string {
-  const calendarDay = Date.UTC(
-    kstNow.getUTCFullYear(),
-    kstNow.getUTCMonth(),
-    kstNow.getUTCDate(),
-  );
-  return new Date(calendarDay).toISOString().slice(0, 10);
-}
-
-function previousKstCalendarDate(kstNow: Date): string {
-  const calendarDay = Date.UTC(
-    kstNow.getUTCFullYear(),
-    kstNow.getUTCMonth(),
-    kstNow.getUTCDate(),
-  );
-  return new Date(calendarDay - 24 * 60 * 60 * 1000)
-    .toISOString()
-    .slice(0, 10);
+  return createAttendanceNotificationEvent(snapshot, nowEpochMs);
 }
 
 function isSafeMethod(method: string): boolean {

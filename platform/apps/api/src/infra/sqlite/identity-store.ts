@@ -21,7 +21,7 @@ export type DesktopLmsSessionState =
 export interface VerifiedDesktopIdentityInput {
   readonly candidateUserId: string;
   readonly desktopDeviceId: string;
-  readonly subjectHmac: string;
+  readonly subjectSha256: string;
   readonly verifiedAtEpochMs: number;
 }
 
@@ -94,7 +94,7 @@ export class SqliteDesktopIdentityStore implements DesktopIdentityStore {
   ): Promise<VerifiedDesktopIdentity> {
     assertIdentifier(input.candidateUserId, "candidate user ID");
     assertIdentifier(input.desktopDeviceId, "desktop device ID");
-    assertSubjectHmac(input.subjectHmac);
+    assertSubjectSha256(input.subjectSha256);
     assertEpoch(input.verifiedAtEpochMs, "verification time");
 
     const register = this.database.transaction(() => {
@@ -102,9 +102,9 @@ export class SqliteDesktopIdentityStore implements DesktopIdentityStore {
         .prepare(
           `SELECT user_id
            FROM external_identities
-           WHERE provider = ? AND subject_hmac = ?`,
+           WHERE provider = ? AND subject_sha256 = ?`,
         )
-        .get(LMS_IDENTITY_PROVIDER, input.subjectHmac);
+        .get(LMS_IDENTITY_PROVIDER, input.subjectSha256);
 
       let userId: string;
       let createdUser = false;
@@ -128,8 +128,8 @@ export class SqliteDesktopIdentityStore implements DesktopIdentityStore {
           .prepare(`
             INSERT INTO external_identities (
               provider,
-              subject_hmac,
-              hmac_key_version,
+              subject_sha256,
+              hash_version,
               user_id,
               linked_at_epoch_ms,
               last_verified_at_epoch_ms
@@ -137,7 +137,7 @@ export class SqliteDesktopIdentityStore implements DesktopIdentityStore {
           `)
           .run(
             LMS_IDENTITY_PROVIDER,
-            input.subjectHmac,
+            input.subjectSha256,
             userId,
             input.verifiedAtEpochMs,
             input.verifiedAtEpochMs,
@@ -156,11 +156,11 @@ export class SqliteDesktopIdentityStore implements DesktopIdentityStore {
               @verifiedAtEpochMs
             )
             WHERE provider = @provider
-              AND subject_hmac = @subjectHmac
+              AND subject_sha256 = @subjectSha256
           `)
           .run({
             provider: LMS_IDENTITY_PROVIDER,
-            subjectHmac: input.subjectHmac,
+            subjectSha256: input.subjectSha256,
             verifiedAtEpochMs: input.verifiedAtEpochMs,
           });
       }
@@ -329,12 +329,12 @@ export class InMemoryDesktopIdentityStore implements DesktopIdentityStore {
   ): Promise<VerifiedDesktopIdentity> {
     assertIdentifier(input.candidateUserId, "candidate user ID");
     assertIdentifier(input.desktopDeviceId, "desktop device ID");
-    assertSubjectHmac(input.subjectHmac);
+    assertSubjectSha256(input.subjectSha256);
     assertEpoch(input.verifiedAtEpochMs, "verification time");
-    const existingUserId = this.subjectUsers.get(input.subjectHmac);
+    const existingUserId = this.subjectUsers.get(input.subjectSha256);
     const userId = existingUserId ?? input.candidateUserId;
     if (existingUserId === undefined) {
-      this.subjectUsers.set(input.subjectHmac, userId);
+      this.subjectUsers.set(input.subjectSha256, userId);
     }
     const key = deviceKey(userId, input.desktopDeviceId);
     const existing = this.devices.get(key);
@@ -467,10 +467,10 @@ function assertIdentifier(value: string, label: string): void {
   }
 }
 
-function assertSubjectHmac(value: string): void {
+function assertSubjectSha256(value: string): void {
   if (!/^[0-9a-f]{64}$/u.test(value)) {
     throw new SqliteDataIntegrityError(
-      "External identity HMAC is invalid.",
+      "External identity SHA-256 is invalid.",
     );
   }
 }

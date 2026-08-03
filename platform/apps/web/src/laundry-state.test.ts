@@ -67,6 +67,36 @@ describe("laundry appliance state", () => {
     expect(hasActiveLaundrySession(error)).toBe(true);
   });
 
+  it("does not let operational idle override an active projection", () => {
+    const stillRunning = appliance({
+      operationalStatus: "IDLE",
+      projection: {
+        remainingMinutes: 8,
+        status: "ESTIMATED_RUNNING",
+        estimated: true,
+      },
+    });
+
+    expect(isLaundryApplianceAvailable(stillRunning)).toBe(false);
+    expect(hasActiveLaundrySession(stillRunning)).toBe(true);
+  });
+
+  it.each(["ERROR", "PAUSED"])(
+    "does not let operational idle override a %s projection",
+    (status) => {
+      const unavailable = appliance({
+        operationalStatus: "IDLE",
+        projection: {
+          remainingMinutes: null,
+          status,
+          estimated: false,
+        },
+      });
+
+      expect(isLaundryApplianceAvailable(unavailable)).toBe(false);
+    },
+  );
+
   it("does not attach a completed cycle id to a new watch", () => {
     const completed = appliance({
       operationalStatus: "COMPLETED",

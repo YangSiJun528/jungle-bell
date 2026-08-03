@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 
 import { buildApp } from "./app.js";
 import { computeLmsSubjectBinding } from "./lms/subject-binding.js";
-import { Sha256Hasher } from "./infra/crypto.js";
 import {
   InMemoryAttendanceSnapshotStore,
   InMemoryDesktopIdentityStore,
@@ -34,10 +33,6 @@ function mutationHeaders(cookie?: string, origin = LOOPBACK_ORIGIN) {
     origin,
     ...(cookie === undefined ? {} : { cookie }),
   };
-}
-
-async function identityHash(subject: string): Promise<string> {
-  return new Sha256Hasher().hash(`test-identity:${subject}`);
 }
 
 async function onboard(
@@ -301,7 +296,6 @@ describe("platform API boundaries", () => {
     const identities = new InMemoryDesktopIdentityStore();
     const app = await buildApp({
       lmsGateway: gateway,
-      lmsSubjectToIdentityHash: identityHash,
       desktopIdentityStore: identities,
       publicOrigin: "https://bell.example.com",
     });
@@ -322,6 +316,9 @@ describe("platform API boundaries", () => {
       headers: { cookie: second.cookie! },
     });
     expect(firstStatus.json().user.id).toBe(secondStatus.json().user.id);
+    expect(firstStatus.json().user.id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u,
+    );
     expect(firstStatus.json().desktop.id).toBe("desktop-installation-a");
     expect(secondStatus.json().desktop.id).toBe("desktop-installation-b");
     expect(await identities.listDesktopDevices(firstStatus.json().user.id))
@@ -356,7 +353,6 @@ describe("platform API boundaries", () => {
     let subject = "lms-user-0";
     const app = await buildApp({
       lmsGateway: verifiedGateway(() => subject),
-      lmsSubjectToIdentityHash: identityHash,
     });
     const statuses: number[] = [];
     for (let user = 0; user < 200; user += 1) {
@@ -384,7 +380,6 @@ describe("platform API boundaries", () => {
     );
     const app = await buildApp({
       lmsGateway: verifiedGateway(() => "immutable-lms-id-42"),
-      lmsSubjectToIdentityHash: identityHash,
       desktopIdentityStore: identities,
     });
     const desktopDeviceId = "desktop-installation-a";
@@ -413,7 +408,6 @@ describe("platform API boundaries", () => {
   it("rotates the app session when the same PC verifies the same LMS account again", async () => {
     const app = await buildApp({
       lmsGateway: verifiedGateway(() => "immutable-lms-id-42"),
-      lmsSubjectToIdentityHash: identityHash,
     });
     const first = await onboard(app, "desktop-installation-a");
     const second = await onboard(app, "desktop-installation-a");
@@ -461,7 +455,6 @@ describe("platform API boundaries", () => {
   it("rejects LMS responses without the immutable id and never issues a cookie", async () => {
     const app = await buildApp({
       lmsGateway: verifiedGateway(() => null),
-      lmsSubjectToIdentityHash: identityHash,
     });
     const result = await onboard(app, "desktop-installation-a");
     expect(result.response.statusCode).toBe(502);
@@ -580,7 +573,6 @@ describe("platform API boundaries", () => {
     const attendance = new InMemoryAttendanceSnapshotStore();
     const app = await buildApp({
       lmsGateway: verifiedGateway(() => "immutable-lms-id-42"),
-      lmsSubjectToIdentityHash: identityHash,
       desktopIdentityStore: identities,
       attendanceSnapshotStore: attendance,
     });
@@ -666,7 +658,6 @@ describe("platform API boundaries", () => {
     });
     const app = await buildApp({
       lmsGateway: verifiedGateway(() => "immutable-lms-id-42"),
-      lmsSubjectToIdentityHash: identityHash,
       desktopIdentityStore: identities,
       notificationEventSink: { record },
     });
@@ -728,7 +719,7 @@ describe("platform API boundaries", () => {
     await app.close();
   });
 
-  it("emits the previous attendance day's post-deadline event before rollover replaces it", async () => {
+  it("emits the previous attendance day's deadline event before rollover replaces it", async () => {
     const now = vi
       .spyOn(Date, "now")
       .mockReturnValue(Date.parse("2026-08-01T03:59:00+09:00"));
@@ -774,10 +765,13 @@ describe("platform API boundaries", () => {
       expect(record).toHaveBeenCalledWith(
         expect.objectContaining({
           sourceEventId:
-            "attendance:2026-07-31:evening:after",
+            "attendance:2026-07-31:evening:deadline",
           attendanceDate: "2026-07-31",
           phase: "evening",
-          minutesRemaining: null,
+          slot: "deadline",
+          minutesRemaining: 0,
+          status: "unchecked",
+          reason: null,
         }),
       );
       await app.close();

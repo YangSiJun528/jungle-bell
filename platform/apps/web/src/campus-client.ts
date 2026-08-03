@@ -13,6 +13,7 @@ export interface CampusEnvelope<T> {
 }
 
 export interface LaundryProjection {
+  readonly asOf?: string;
   readonly remainingMinutes: number | null;
   readonly status: string;
   readonly estimated: boolean;
@@ -20,8 +21,12 @@ export interface LaundryProjection {
 
 export interface LaundryAppliance {
   readonly appliance: "washer" | "dryer";
+  readonly observedAt?: string;
   readonly operationalStatus: string;
   readonly remainingMinutes: number | null;
+  readonly totalMinutes?: number;
+  readonly startedAt?: string;
+  readonly estimatedFinishAt?: string | null;
   readonly sessionId: string | null;
   readonly projection: LaundryProjection;
 }
@@ -191,15 +196,27 @@ function parseLaundryAppliance(
     throw invalidResponse();
   }
   const projection = requiredRecord(record.projection);
+  const observedAt = optionalIsoTimestamp(record.observedAt);
+  const totalMinutes = optionalNonNegativeSafeInteger(record.totalMinutes);
+  const startedAt = optionalIsoTimestamp(record.startedAt);
+  const estimatedFinishAt = optionalNullableIsoTimestamp(
+    record.estimatedFinishAt,
+  );
+  const projectionAsOf = optionalIsoTimestamp(projection.asOf);
   return {
     appliance: expectedAppliance,
+    ...(observedAt === undefined ? {} : { observedAt }),
     operationalStatus: uppercaseCode(record.operationalStatus),
     remainingMinutes: nullableNonNegativeInteger(record.remainingMinutes),
+    ...(totalMinutes === undefined ? {} : { totalMinutes }),
+    ...(startedAt === undefined ? {} : { startedAt }),
+    ...(estimatedFinishAt === undefined ? {} : { estimatedFinishAt }),
     sessionId:
       record.sessionId === null
         ? null
         : boundedString(record.sessionId, 256),
     projection: {
+      ...(projectionAsOf === undefined ? {} : { asOf: projectionAsOf }),
       remainingMinutes: nullableNonNegativeInteger(
         projection.remainingMinutes,
       ),
@@ -342,6 +359,85 @@ function nullableNonNegativeInteger(value: unknown): number | null {
     throw invalidResponse();
   }
   return value;
+}
+
+function optionalNonNegativeSafeInteger(
+  value: unknown,
+): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (
+    typeof value !== "number" ||
+    !Number.isSafeInteger(value) ||
+    value < 0
+  ) {
+    throw invalidResponse();
+  }
+  return value;
+}
+
+function optionalIsoTimestamp(value: unknown): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  return isoTimestampWithOffset(value);
+}
+
+function optionalNullableIsoTimestamp(
+  value: unknown,
+): string | null | undefined {
+  if (value === undefined || value === null) {
+    return value;
+  }
+  return isoTimestampWithOffset(value);
+}
+
+function isoTimestampWithOffset(value: unknown): string {
+  const timestamp = boundedString(value, 64);
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|([+-])(\d{2}):(\d{2}))$/u.exec(
+    timestamp,
+  );
+  if (match === null || !Number.isFinite(Date.parse(timestamp))) {
+    throw invalidResponse();
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6]);
+  const offsetHour = match[8] === undefined ? 0 : Number(match[8]);
+  const offsetMinute = match[9] === undefined ? 0 : Number(match[9]);
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const daysInMonth = [
+    31,
+    leapYear ? 29 : 28,
+    31,
+    30,
+    31,
+    30,
+    31,
+    31,
+    30,
+    31,
+    30,
+    31,
+  ][month - 1];
+  if (
+    daysInMonth === undefined ||
+    day < 1 ||
+    day > daysInMonth ||
+    hour > 23 ||
+    minute > 59 ||
+    second > 59 ||
+    offsetHour > 23 ||
+    offsetMinute > 59
+  ) {
+    throw invalidResponse();
+  }
+  return timestamp;
 }
 
 function isoTimestamp(value: unknown): string {

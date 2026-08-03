@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Jungle Bell",
-  "version": "0.1.0",
-  "identifier": "dev.sijun-yang.jungle-bell.platform",
+  "version": "0.5.0",
+  "identifier": "dev.sijun-yang.jungle-bell",
   "build": {},
   "app": {
     "withGlobalTauri": true,
@@ -13,8 +13,17 @@
       "freezePrototype": true
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEU0MjNFRDgwMjEwQzQ5OTkKUldTWlNRd2hnTzBqNUdLNkJvS3BrcmlranlzekJNd2dOOXl3Ty94Ykkrc0JBS0NkaTU2Wk5vRkwK",
+      "endpoints": [
+        "https://github.com/YangSiJun528/jungle-bell/releases/latest/download/latest.json"
+      ]
+    }
+  },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": "all",
     "icon": [
       "icons/icon.png",

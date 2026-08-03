@@ -139,6 +139,64 @@ describe("NotificationService", () => {
     database.close();
   });
 
+  it("collects server-scheduled attendance reminders before outbox fanout", async () => {
+    const now = Date.parse("2026-07-31T09:50:00+09:00");
+    const database = testDatabase();
+    const repository = new SqliteNotificationRepository(database);
+    const collectDue = vi.fn(async () => [
+      {
+        kind: "attendance-action-required" as const,
+        sourceEventId:
+          "attendance:2026-07-31:morning:before-10",
+        userId: "user-1",
+        attendanceDate: "2026-07-31",
+        phase: "morning" as const,
+        slot: "before-10" as const,
+        minutesRemaining: 10 as const,
+        status: "unverified" as const,
+        reason: "desktop-offline" as const,
+        occurredAtEpochMs: now,
+      },
+    ]);
+    const webPush = {
+      deliver: vi.fn().mockResolvedValue({ status: "delivered" }),
+    } satisfies NotificationDeliveryAdapter;
+    const service = new NotificationService({
+      planner: new ServerNotificationPlanner({
+        ...mealRules([]),
+        isAttendancePhaseEnabled: () => true,
+      }),
+      repository,
+      targets: targets(),
+      webPush,
+      attendanceLifecycle: { collectDue },
+      now: () => now,
+    });
+
+    await expect(service.runDue()).resolves.toEqual({
+      fannedOut: 2,
+      delivered: 1,
+      retried: 0,
+      failed: 0,
+    });
+    expect(collectDue).toHaveBeenCalledWith(now);
+    expect(
+      repository.claimDesktopInbox(
+        "user-1",
+        "desktop-1",
+        now,
+        20,
+        30_000,
+      ),
+    ).toMatchObject([
+      {
+        kind: "attendance-action-required",
+        title: "오전 출석 직접 확인 필요 · 마감 10분 전",
+      },
+    ]);
+    database.close();
+  });
+
   it("uses one stable Web Push dedupe key across crash-recovered attempts", async () => {
     const deliver = vi
       .fn()

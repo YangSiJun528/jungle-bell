@@ -60,7 +60,7 @@ LMS 상태가 `connected`로 갱신됐습니다.
    뒤 재수집을 확인합니다. 현재 실계정 cohort는 시작 전입니다.
 2. 운영 HTTPS 도메인에서 실제 iOS·Android 설치형 PWA의 Push 권한,
    수신, 클릭, 구독 만료 복구를 확인합니다.
-3. Windows·Linux 빌드에서 네이티브 알림과 tray를 확인합니다.
+3. Windows 빌드에서 네이티브 알림과 tray를 확인합니다.
 4. OCI에 Caddy와 단일 app process를 배포하고 장시간 worker soak,
    process 재시작 영속성, off-host backup 복원 drill을 수행합니다.
 5. Apple 공증·Windows 서명 credential을 CI secret으로 등록하고 실제

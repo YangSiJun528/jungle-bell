@@ -158,6 +158,7 @@ const connectedDevices = [
 
 describe("surface boundaries", () => {
   beforeEach(() => {
+    window.history.replaceState(null, "", "/");
     vi.clearAllMocks();
     vi.mocked(getDesktopAttendanceDashboard).mockReset();
     vi.mocked(getCompanionAttendanceDashboard).mockReset();
@@ -192,7 +193,7 @@ describe("surface boundaries", () => {
     fireEvent.click(screen.getByRole("tab", { name: "급식" }));
     expect(screen.getByRole("heading", { name: "오늘의 식단" })).toBeVisible();
     expect(screen.queryByText("출석 상태")).not.toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: "알림" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "알림" })).not.toBeInTheDocument();
     expect(screen.queryByText("로그인 상태")).not.toBeInTheDocument();
     expect(getDesktopAttendanceDashboard).not.toHaveBeenCalled();
     expect(getCompanionAttendanceDashboard).not.toHaveBeenCalled();
@@ -215,11 +216,11 @@ describe("surface boundaries", () => {
     expect(await screen.findByText("PC 연결이 필요해요")).toBeVisible();
     expect(document.querySelector("#attendance")).toBeVisible();
 
-    await openWorkspaceTab("기기");
+    await openWorkspacePage("설정");
     expect(screen.getByRole("heading", { name: "휴대폰 연결" })).toBeVisible();
     expect(screen.getByText("모바일 기기 관리")).toBeVisible();
 
-    await openWorkspaceTab("알림");
+    await openWorkspacePage("알림");
     expect(screen.getByRole("heading", { name: "알림 설정" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "알림 받기" })).toBeVisible();
     expect(screen.queryByText(/helper/i)).not.toBeInTheDocument();
@@ -251,7 +252,11 @@ describe("surface boundaries", () => {
     expect(
       screen.queryByRole("heading", { name: "알림 설정" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "알림" })).toBeDisabled();
+    const notificationLink = screen.getByRole("link", { name: "알림" });
+    expect(notificationLink).toHaveAttribute("aria-disabled", "true");
+    fireEvent.click(notificationLink);
+    expect(window.location.hash).toBe("");
+    expect(notificationLink).not.toHaveAttribute("aria-current");
     expect(getMealRule).not.toHaveBeenCalled();
     expect(sendLocalTestNotification).not.toHaveBeenCalled();
   });
@@ -265,10 +270,81 @@ describe("surface boundaries", () => {
 
     render(<App initialPath="/app" tauri={false} />);
 
-    await openWorkspaceTab("알림");
+    await openWorkspacePage("알림");
     expect(screen.getByRole("heading", { name: "알림 설정" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "알림 받기" })).toBeVisible();
     expect(screen.queryByTestId("mobile-pairing")).not.toBeInTheDocument();
+  });
+
+  it("opens distinct campus information deep links and follows later hash changes", async () => {
+    vi.mocked(getCompanionAttendanceDashboard).mockResolvedValue({
+      state: "loaded",
+      attendance: unavailableAttendance,
+      devices: connectedDevices,
+    });
+    window.history.replaceState(null, "", "/app#laundry");
+
+    render(<App initialPath="/app" tauri={false} />);
+
+    expect(await screen.findByRole("link", { name: "세탁" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByRole("heading", { name: "세탁" })).toBeVisible();
+
+    await act(async () => {
+      window.location.hash = "#meals";
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+    });
+    expect(screen.getByRole("link", { name: "급식" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByRole("heading", { name: "급식" })).toBeVisible();
+
+    await act(async () => {
+      window.location.hash = "#attendance";
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+    });
+    expect(screen.getByRole("link", { name: "홈" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  });
+
+  it("provides five page links and treats the legacy devices hash as settings", async () => {
+    vi.mocked(getDesktopAuthStatus).mockResolvedValue({
+      state: "connected",
+      desktopId: "desktop-1",
+      lastVerifiedAt: "2026-07-30T00:00:00.000Z",
+      lastSeenAt: "2026-07-30T01:02:03.000Z",
+      health: "online",
+    });
+    window.history.replaceState(null, "", "/desktop#devices");
+
+    render(<App initialPath="/desktop" tauri />);
+
+    const navigation = screen.getByRole("navigation", { name: "정글벨 메뉴" });
+    const links = Array.from(navigation.querySelectorAll("a"));
+    expect(links.map((link) => link.textContent?.trim())).toEqual([
+      "홈",
+      "세탁",
+      "급식",
+      "알림",
+      "설정",
+    ]);
+    expect(links.map((link) => link.getAttribute("href"))).toEqual([
+      "#attendance",
+      "#laundry",
+      "#meals",
+      "#notifications",
+      "#settings",
+    ]);
+    expect(screen.getByRole("link", { name: "설정" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByRole("heading", { name: "설정" })).toBeVisible();
   });
 
   it("shows loading and then active cohort, morning, evening, and sync states", async () => {
@@ -292,11 +368,34 @@ describe("surface boundaries", () => {
       });
     });
 
+    expect(screen.getByText("오후 출석 확인 필요")).toBeVisible();
     expect(screen.getByText("학습 기간")).toBeVisible();
     expect(screen.getByText("오전 출석 완료")).toBeVisible();
     expect(screen.getByText("오후 출석 미완료")).toBeVisible();
     expect(screen.getByText("7월 1일–8월 1일")).toBeVisible();
     expect(screen.getByText(/마지막 동기화/)).toBeVisible();
+  });
+
+  it("does not label an inactive cohort as missed attendance", async () => {
+    vi.mocked(getCompanionAttendanceDashboard).mockResolvedValue({
+      state: "loaded",
+      attendance: {
+        ...activeAttendance,
+        snapshot: {
+          ...activeAttendance.snapshot,
+          cohortStatus: "upcoming",
+          morningChecked: false,
+          eveningChecked: false,
+        },
+      },
+      devices: connectedDevices,
+    });
+
+    render(<App initialPath="/app" tauri={false} />);
+
+    expect(await screen.findByText("학습 시작 전")).toBeVisible();
+    expect(screen.queryByText("오전 출석 미완료")).not.toBeInTheDocument();
+    expect(screen.queryByText("오후 출석 미완료")).not.toBeInTheDocument();
   });
 
   it("labels an old attendance snapshot with its date instead of calling it today", async () => {
@@ -389,7 +488,7 @@ describe("surface boundaries", () => {
 
     render(<App initialPath="/app" tauri={false} />);
 
-    await openWorkspaceTab("알림");
+    await openWorkspacePage("알림");
     const localTest = await screen.findByRole("button", {
       name: "기기 알림 테스트",
     });
@@ -414,7 +513,7 @@ describe("surface boundaries", () => {
 
     render(<App initialPath="/app" tauri={false} />);
 
-    await openWorkspaceTab("알림");
+    await openWorkspacePage("알림");
     const localTest = await screen.findByRole("button", {
       name: "기기 알림 테스트",
     });
@@ -459,7 +558,7 @@ describe("surface boundaries", () => {
 
     render(<App initialPath="/app" tauri={false} />);
 
-    await openWorkspaceTab("알림");
+    await openWorkspacePage("알림");
     expect(
       await screen.findByRole("button", { name: "알림 보내보기" }),
     ).toBeVisible();
@@ -632,7 +731,7 @@ describe("surface boundaries", () => {
 
     render(<App initialPath="/app" tauri={false} />);
 
-    await openWorkspaceTab("알림");
+    await openWorkspacePage("알림");
     expect(
       await screen.findByText(
         "만료된 브라우저 알림을 다시 연결했어요.",
@@ -647,8 +746,12 @@ describe("surface boundaries", () => {
   });
 });
 
-async function openWorkspaceTab(name: "홈" | "생활" | "알림" | "기기") {
-  const tab = await screen.findByRole("tab", { name });
-  await waitFor(() => expect(tab).toBeEnabled());
-  fireEvent.click(tab);
+async function openWorkspacePage(
+  name: "홈" | "세탁" | "급식" | "알림" | "설정",
+) {
+  const link = await screen.findByRole("link", { name });
+  await waitFor(() =>
+    expect(link).not.toHaveAttribute("aria-disabled", "true"),
+  );
+  fireEvent.click(link);
 }
