@@ -289,7 +289,9 @@ describe("same-origin API client", () => {
             "preferences:write",
           ],
           createdAt: "2026-07-30T00:00:00.000Z",
-          expiresAt: "2026-08-29T00:00:00.000Z",
+          expiresAt: "2027-07-30T00:00:00.000Z",
+          lastSeenAt: "2026-07-30T06:00:00.000Z",
+          pushEnabled: true,
           revokedAt: null,
           status: "active",
         },
@@ -299,7 +301,7 @@ describe("same-origin API client", () => {
     respondNoContent();
 
     await expect(getMobileDeviceSessions()).resolves.toMatchObject({
-      sessions: [{ sessionId, status: "active" }],
+      sessions: [{ sessionId, status: "active", pushEnabled: true }],
     });
     await expect(revokeMobileDeviceSession(sessionId)).resolves.toBeUndefined();
     await expect(disconnectMobileDeviceSession()).resolves.toBeUndefined();

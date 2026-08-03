@@ -173,10 +173,10 @@ active outbox·delivery와 active session은 기간과 무관하게 삭제하지
 데스크톱은 서버 inbox를 polling해 운영체제 알림을 표시하고 결과를
 ack합니다. 유효한 app session이 있는 PC에는 일시적으로 오프라인이어도
 delivery를 만들며, event 만료 전 PC가 돌아오면 inbox에서 받습니다.
-모바일은 30일 session과 연결된 유효한 subscription에만 Web Push를
-보냅니다. worker는 최대 10건을 병렬 전송하고 Push TTL을 event의 남은
-수명 이하로 제한합니다. session 해제·만료 때 해당 subscription과
-pending delivery도 더 이상 사용하지 않습니다.
+모바일은 만료되지 않은 365일 session과 연결된 유효한 subscription에만
+Web Push를 보냅니다. worker는 최대 10건을 병렬 전송하고 Push TTL을
+event의 남은 수명 이하로 제한합니다. session 해제·만료 때 해당
+subscription과 pending delivery도 더 이상 사용하지 않습니다.
 
 ## 모바일 PWA 연결
 
@@ -188,7 +188,7 @@ pending delivery도 더 이상 사용하지 않습니다.
 2. 휴대폰이 QR fragment 또는 설치된 PWA 안의 수동 코드로 claim합니다.
 3. 휴대폰과 PC에 installation ID 원문 대신 표시되는 마지막 4자리
    확인 코드가 같은지 확인한 뒤 PC에서 승인합니다.
-4. 휴대폰이 승인 결과를 받아 30일 HttpOnly mobile session을
+4. 휴대폰이 승인 결과를 받아 365일 절대 만료 HttpOnly mobile session을
    발급받습니다.
 
 QR secret은 URL fragment에 있으므로 일반 HTTP request, access log,
@@ -200,10 +200,33 @@ Safari에서 QR을 연 뒤 설치된 PWA로 session이 자동 이전된다고 �
 않습니다. 설치된 PWA 화면에서 PC의 10자리 코드를 입력하는 경로가
 기본 복구 수단입니다.
 
-PC에서는 연결된 모바일 session의 상태·만료 시각을 확인하고 개별
-해제할 수 있습니다. 모바일에서도 자기 session을 해제할 수 있습니다.
+운영 HTTPS에서는 session token을 `Secure`, `SameSite=Strict`,
+`Path=/`인 `__Host-jb_device` HttpOnly cookie로만 전달합니다. 서버에는
+token의 SHA-256 hash, scope, 생성·절대 만료·최근 사용 시각을 저장합니다.
+만료는 활동에 따라 연장되지 않으며 cookie의 `Max-Age`도 DB에 저장된 남은
+수명과 맞춥니다. 최근 사용 시각은 인증 요청마다 쓰지 않고 최대 6시간에
+한 번만 갱신해 SQLite 쓰기를 제한합니다.
+
+PC에서는 연결된 모바일 session의 상태, 생성·최근 사용·만료 시각과 서버의
+활성 Web Push subscription 유무를 확인하고 개별 해제할 수 있습니다.
+모바일에서도 자기 session을 해제할 수 있습니다.
 다른 계정으로 다시 연결하면 이전 mobile session과 Web Push 연결을
 정리한 뒤 새 session을 사용합니다.
+
+### 인증 구현 선택
+
+이 흐름에는 범용 로그인 프레임워크를 추가하지 않습니다. Auth.js나
+Better Auth가 해결하는 OAuth·email·passkey 로그인과 달리, 현재 신뢰의
+시작점은 이미 LMS 검증을 마친 Tauri PC입니다. 2분짜리 일회용 claim,
+양쪽 확인 코드, installation 결합, 제한된 scope, PC 강제 해제와 Push
+정리는 서비스 고유 규칙이므로 범용 인증 session을 병행하면 identity와
+session 체계만 두 개가 됩니다.
+
+대신 cookie parsing은 `@fastify/cookie`, 요청 제한은
+`@fastify/rate-limit`, 입력 경계는 Zod, 원자적 승인·해제는
+`better-sqlite3` transaction, token 생성·hash·암호화는 Node.js
+`crypto`를 사용합니다. PC 없이 PWA에서 직접 가입하는 요구가 생길 때만
+별도 passkey 로그인 계층과 계정 연결 정책을 추가합니다.
 
 ## SQLite와 단일 서버
 

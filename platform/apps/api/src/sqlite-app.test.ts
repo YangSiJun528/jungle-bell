@@ -15,6 +15,7 @@ import {
   type SqliteDatabase,
 } from "./infra/sqlite/index.js";
 import { AesGcmSessionSealer } from "./lms/session-vault.js";
+import { DEFAULT_DEVICE_SESSION_TTL_MS } from "./domain/pairing.js";
 
 const LOOPBACK_ORIGIN = "http://127.0.0.1:5173";
 const temporaryDirectories: string[] = [];
@@ -151,6 +152,24 @@ describe("SQLite-backed API restart", () => {
     });
     expect(completion.statusCode).toBe(204);
     expect(completion.body).toBe("");
+    const completionCookie = Array.isArray(completion.headers["set-cookie"])
+      ? completion.headers["set-cookie"][0]
+      : completion.headers["set-cookie"];
+    const maxAge = Number(/Max-Age=(\d+)/u.exec(completionCookie ?? "")?.[1]);
+    expect(maxAge).toBeGreaterThanOrEqual(
+      Math.floor(DEFAULT_DEVICE_SESSION_TTL_MS / 1_000) - 5,
+    );
+    expect(maxAge).toBeLessThanOrEqual(
+      Math.floor(DEFAULT_DEVICE_SESSION_TTL_MS / 1_000),
+    );
+    expect(
+      restartedDatabase
+        .prepare(`
+          SELECT expires_at_epoch_ms - created_at_epoch_ms AS lifetime_ms
+          FROM device_sessions
+        `)
+        .get(),
+    ).toEqual({ lifetime_ms: DEFAULT_DEVICE_SESSION_TTL_MS });
     const mobileCookie = cookiePair(completion.headers["set-cookie"]);
     const dashboard = await restartedApp.inject({
       method: "GET",

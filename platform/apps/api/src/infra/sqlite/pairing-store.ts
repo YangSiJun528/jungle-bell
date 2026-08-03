@@ -74,6 +74,8 @@ const SESSION_COLUMNS = `
   token_hash,
   scopes_json,
   created_at_epoch_ms,
+  expires_at_epoch_ms,
+  last_seen_at_epoch_ms,
   revoked_at_epoch_ms,
   version
 `;
@@ -87,6 +89,8 @@ const SESSION_KEYS = [
   "token_hash",
   "scopes_json",
   "created_at_epoch_ms",
+  "expires_at_epoch_ms",
+  "last_seen_at_epoch_ms",
   "revoked_at_epoch_ms",
   "version",
 ] as const;
@@ -262,7 +266,9 @@ export class SqlitePairingStore implements PairingStore {
       session.userId !== challenge.userId ||
       session.deviceLabel !== challenge.claimedDeviceLabel ||
       session.installationId !== challenge.claimedInstallationId ||
-      session.createdAtEpochMs !== challenge.approvedAtEpochMs
+      session.createdAtEpochMs !== challenge.approvedAtEpochMs ||
+      session.expiresAtEpochMs <= session.createdAtEpochMs ||
+      session.lastSeenAtEpochMs !== session.createdAtEpochMs
     ) {
       throw new SqliteDataIntegrityError(
         "Approved session must match the claimed phone and user.",
@@ -358,6 +364,8 @@ export class SqlitePairingStore implements PairingStore {
             token_hash,
             scopes_json,
             created_at_epoch_ms,
+            expires_at_epoch_ms,
+            last_seen_at_epoch_ms,
             revoked_at_epoch_ms,
             version
           ) VALUES (
@@ -370,6 +378,8 @@ export class SqlitePairingStore implements PairingStore {
             @tokenHash,
             @scopesJson,
             @createdAtEpochMs,
+            @expiresAtEpochMs,
+            @lastSeenAtEpochMs,
             @revokedAtEpochMs,
             @version
           )
@@ -451,6 +461,34 @@ export class SqlitePairingStore implements PairingStore {
       .map(mapSession);
   }
 
+  async touchDeviceSession(input: {
+    readonly sessionId: string;
+    readonly seenAtEpochMs: number;
+    readonly notSeenSinceEpochMs: number;
+  }): Promise<void> {
+    if (
+      !Number.isSafeInteger(input.seenAtEpochMs) ||
+      !Number.isSafeInteger(input.notSeenSinceEpochMs) ||
+      input.seenAtEpochMs < 0 ||
+      input.notSeenSinceEpochMs < 0 ||
+      input.notSeenSinceEpochMs > input.seenAtEpochMs
+    ) {
+      throw new SqliteDataIntegrityError(
+        "Device-session activity timestamp is invalid.",
+      );
+    }
+    this.database
+      .prepare(`
+        UPDATE device_sessions
+        SET last_seen_at_epoch_ms = @seenAtEpochMs
+        WHERE session_id = @sessionId
+          AND revoked_at_epoch_ms IS NULL
+          AND expires_at_epoch_ms > @seenAtEpochMs
+          AND last_seen_at_epoch_ms <= @notSeenSinceEpochMs
+      `)
+      .run(input);
+  }
+
   async updateDeviceSession(
     session: DeviceSessionRecord,
     expectedVersion: number,
@@ -474,9 +512,10 @@ export class SqlitePairingStore implements PairingStore {
             AND device_id = @deviceId
           AND device_label = @deviceLabel
           AND installation_id = @installationId
-          AND token_hash = @tokenHash
+            AND token_hash = @tokenHash
             AND scopes_json = @scopesJson
             AND created_at_epoch_ms = @createdAtEpochMs
+            AND expires_at_epoch_ms = @expiresAtEpochMs
         `)
         .run({ ...session, scopesJson, expectedVersion });
       if (result.changes !== 1) {
@@ -584,12 +623,17 @@ function mapSession(value: unknown): DeviceSessionRecord {
     tokenHash: readText(row, "token_hash"),
     scopes,
     createdAtEpochMs: readInteger(row, "created_at_epoch_ms"),
+    expiresAtEpochMs: readInteger(row, "expires_at_epoch_ms"),
+    lastSeenAtEpochMs: readInteger(row, "last_seen_at_epoch_ms"),
     revokedAtEpochMs: readNullableInteger(row, "revoked_at_epoch_ms"),
     version: readInteger(row, "version"),
   };
   if (
-    session.revokedAtEpochMs !== null &&
-    session.revokedAtEpochMs < session.createdAtEpochMs
+    session.expiresAtEpochMs <= session.createdAtEpochMs ||
+    session.lastSeenAtEpochMs < session.createdAtEpochMs ||
+    session.lastSeenAtEpochMs >= session.expiresAtEpochMs ||
+    (session.revokedAtEpochMs !== null &&
+      session.revokedAtEpochMs < session.createdAtEpochMs)
   ) {
     throw new SqliteDataIntegrityError(
       "Device session revocation predates its creation.",

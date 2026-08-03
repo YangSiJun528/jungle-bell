@@ -58,6 +58,8 @@ export interface MobileDeviceSessionDto {
   )[];
   readonly createdAt: string;
   readonly expiresAt: string;
+  readonly lastSeenAt: string;
+  readonly pushEnabled: boolean;
   readonly revokedAt: string | null;
   readonly status: "active" | "revoked" | "expired";
 }
@@ -697,6 +699,8 @@ function parseMobileDeviceSession(value: unknown): MobileDeviceSessionDto {
     "scopes",
     "createdAt",
     "expiresAt",
+    "lastSeenAt",
+    "pushEnabled",
     "revokedAt",
     "status",
   ]);
@@ -722,9 +726,13 @@ function parseMobileDeviceSession(value: unknown): MobileDeviceSessionDto {
   }
   const createdAt = isoTimestamp(record.createdAt);
   const expiresAt = isoTimestamp(record.expiresAt);
+  const lastSeenAt = isoTimestamp(record.lastSeenAt);
   const revokedAt = nullableIsoTimestamp(record.revokedAt);
   if (
     expiresAt <= createdAt ||
+    lastSeenAt < createdAt ||
+    lastSeenAt >= expiresAt ||
+    typeof record.pushEnabled !== "boolean" ||
     (status === "active" && revokedAt !== null) ||
     (status === "revoked" && revokedAt === null) ||
     (revokedAt !== null && revokedAt < createdAt)
@@ -738,6 +746,8 @@ function parseMobileDeviceSession(value: unknown): MobileDeviceSessionDto {
     scopes,
     createdAt,
     expiresAt,
+    lastSeenAt,
+    pushEnabled: record.pushEnabled,
     revokedAt,
     status,
   };

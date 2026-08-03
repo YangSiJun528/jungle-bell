@@ -99,7 +99,7 @@ Mobile cookie 이름은 `jb_device`이고 host-only, `HttpOnly`,
 | desktop online 판정 | 마지막 heartbeat 또는 inbox poll 5분 이내 |
 | 출석 fresh 판정 | 수집 15분 이내 |
 | desktop app session | 90일 |
-| mobile session | 30일 |
+| mobile session | 365일 절대 만료; 최근 사용 DB 기록은 최대 6시간에 한 번 갱신 |
 | QR·수동 코드·claim transport | 2분 |
 | manual code | Crockford Base32 10자리, 일회용, 코드별 제한 |
 | 세탁 대기열 claim | 5분; 사용 가능 유지 시 다음 선두로 이동 |
@@ -164,10 +164,11 @@ LMS 로그인 필요입니다.
 
 유효한 app session의 desktop은 일시적으로 오프라인이어도 event 만료
 전까지 inbox delivery를 받고 `displayed`, `dismissed`, `failed`로
-ack합니다. 유효한 30일 mobile session과 연결된 active subscription만
-Web Push 대상입니다. 최대 10건씩 병렬 전송하며 provider TTL은 event의
-남은 수명보다 길어질 수 없습니다. device 해제·session 만료·다른 계정
-재연결 때 해당 Push와 pending delivery를 취소하거나 제외합니다.
+ack합니다. 만료되지 않은 365일 mobile session과 연결된 active
+subscription만 Web Push 대상입니다. 최대 10건씩 병렬 전송하며 provider
+TTL은 event의 남은 수명보다 길어질 수 없습니다. device 해제·session
+만료·다른 계정 재연결 때 해당 Push와 pending delivery를 취소하거나
+제외합니다.
 
 알림 path는 `/app#attendance`, `/app#meals`, `/app#laundry` 같은
 same-origin app 경로만 사용합니다.
@@ -185,10 +186,17 @@ SQLite transaction으로 처리합니다.
 휴대폰이 완료 응답을 잃어도 같은 claim receipt로 2분 transport 안에서
 재시도할 수 있습니다.
 
-PC는 mobile session의 active·revoked·expired 상태와 생성·만료 시각을
-조회하고 개별 revoke할 수 있습니다. 모바일은 자기 session을
-로그아웃할 수 있습니다. revoke와 self logout은 해당 device의 Push
-subscription도 해제합니다.
+승인된 mobile session은 365일 뒤 절대 만료되며 활동으로 연장되지
+않습니다. 운영 cookie는 `__Host-jb_device`이고 HttpOnly, Secure,
+SameSite Strict, Path `/`를 사용합니다. 개발용 loopback HTTP에서만
+`jb_device`와 비보안 cookie를 사용합니다. cookie `Max-Age`와 Push 대상
+판정은 모두 SQLite에 저장된 session 만료 시각을 기준으로 합니다.
+
+PC는 mobile session의 active·revoked·expired 상태, 생성·최근 사용·만료
+시각, 서버의 active Push subscription 유무를 조회하고 개별 revoke할 수
+있습니다. 최근 사용은 인증 때 확인하되 DB 쓰기는 최대 6시간에 한 번으로
+제한합니다. 모바일은 자기 session을 로그아웃할 수 있습니다. revoke와
+self logout은 해당 device의 Push subscription도 해제합니다.
 
 ## 공개 campus source
 

@@ -84,11 +84,12 @@ async function bootstrapDesktop(
 async function pairMobile(
   app: Awaited<ReturnType<typeof buildApp>>,
   desktopCookie: string,
+  origin = LOOPBACK_ORIGIN,
 ): Promise<string> {
   const pairingResponse = await app.inject({
     method: "POST",
     url: "/api/pairings",
-    headers: mutationHeaders(desktopCookie),
+    headers: mutationHeaders(desktopCookie, origin),
   });
   expect(pairingResponse.statusCode).toBe(201);
   const pairing = pairingResponse.json<{
@@ -101,7 +102,7 @@ async function pairMobile(
   const claimResponse = await app.inject({
     method: "POST",
     url: `/api/pairings/${pairing.pairingId}/claims`,
-    headers: mutationHeaders(),
+    headers: mutationHeaders(undefined, origin),
     payload: {
       challenge,
       deviceLabel: "Test phone",
@@ -132,7 +133,7 @@ async function pairMobile(
       await app.inject({
         method: "POST",
         url: `/api/pairings/${pairing.pairingId}/approve`,
-        headers: mutationHeaders(desktopCookie),
+        headers: mutationHeaders(desktopCookie, origin),
         payload: { claimId: claim.claimId },
       })
     ).statusCode,
@@ -140,7 +141,7 @@ async function pairMobile(
   const complete = await app.inject({
     method: "POST",
     url: `/api/pairings/${pairing.pairingId}/complete`,
-    headers: mutationHeaders(),
+    headers: mutationHeaders(undefined, origin),
     payload: {
       claimId: claim.claimId,
       claimReceipt: claim.claimReceipt,
@@ -160,6 +161,32 @@ function verifiedGateway(subject: () => string | null) {
 }
 
 describe("platform API boundaries", () => {
+  it("uses a host-only production cookie for a paired PWA", async () => {
+    const publicOrigin = "https://bell.example.com";
+    const app = await buildApp({
+      allowDevBootstrap: true,
+      publicOrigin,
+    });
+    const desktopCookie = await bootstrapDesktop(app);
+    const mobileCookie = await pairMobile(
+      app,
+      desktopCookie,
+      publicOrigin,
+    );
+
+    expect(mobileCookie).toMatch(/^__Host-jb_device=/u);
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: "/api/private/dashboard",
+          headers: { cookie: mobileCookie },
+        })
+      ).statusCode,
+    ).toBe(200);
+    await app.close();
+  });
+
   it("separates process liveness from dependency readiness", async () => {
     const ready = await buildApp({ readinessCheck: async () => true });
     expect(

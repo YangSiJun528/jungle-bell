@@ -663,8 +663,14 @@ describe("platform API integrated services", () => {
     const [session] = listed.json().sessions as Array<{
       sessionId: string;
       status: string;
+      lastSeenAt: string;
+      pushEnabled: boolean;
     }>;
-    expect(session).toMatchObject({ status: "active" });
+    expect(session).toMatchObject({
+      status: "active",
+      lastSeenAt: expect.any(String),
+      pushEnabled: true,
+    });
 
     const revoked = await fixture.app.inject({
       method: "DELETE",
@@ -702,7 +708,13 @@ describe("platform API integrated services", () => {
       headers: { cookie: desktopCookie },
     });
     expect(after.json()).toMatchObject({
-      sessions: [{ sessionId: session!.sessionId, status: "revoked" }],
+      sessions: [
+        {
+          sessionId: session!.sessionId,
+          status: "revoked",
+          pushEnabled: false,
+        },
+      ],
     });
 
     await fixture.close();

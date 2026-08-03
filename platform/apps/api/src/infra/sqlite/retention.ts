@@ -1,6 +1,3 @@
-import {
-  DEFAULT_DEVICE_SESSION_TTL_MS,
-} from "../../domain/index.js";
 import type { SqliteDatabase } from "./database.js";
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
@@ -109,15 +106,9 @@ export class SqliteRetentionPruner {
             revoked_at_epoch_ms IS NOT NULL
             AND revoked_at_epoch_ms <= @sessionCutoff
           )
-          OR (
-            created_at_epoch_ms + @deviceSessionTtlMs
-              <= @sessionCutoff
-          )
+          OR expires_at_epoch_ms <= @sessionCutoff
         `)
-        .run({
-          sessionCutoff,
-          deviceSessionTtlMs: DEFAULT_DEVICE_SESSION_TTL_MS,
-        }).changes;
+        .run({ sessionCutoff }).changes;
       const pairingChallenges = this.database
         .prepare(`
           DELETE FROM pairing_challenges
