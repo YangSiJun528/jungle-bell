@@ -79,6 +79,11 @@ test('알림함 snapshot은 잘못된 ID, 시각, 액션과 미읽음 개수 불
 
     assert.equal(normalizeNotificationInboxSnapshot({...base, revision: -1}), null);
     assert.equal(normalizeNotificationInboxSnapshot({...base, unreadCount: 0}), null);
+    assert.equal(normalizeNotificationInboxSnapshot({...base, legacyUnread: 1}), null);
+    assert.equal(normalizeNotificationInboxSnapshot({
+        ...base,
+        items: [{...base.items[0], legacyAction: 'openLaundry'}],
+    }), null);
     assert.equal(normalizeNotificationInboxSnapshot({
         ...base,
         items: [{...base.items[0], id: 'notification-1'}],

@@ -1,20 +1,22 @@
 import {
   deriveMobileSessionToken,
+  hashAppSessionToken,
   hmacSha256Hex,
   normalizeManualPairingCode,
   randomManualPairingCode,
   randomOpaqueToken,
   sha256Hex,
 } from "./crypto";
-import type { LmsAccessCookie, LmsIdentityGateway } from "./lms-gateway";
 import type {
   AppSessionRecord,
   PairingRecord,
   RenewalStore,
 } from "../workers/account-storage";
+import { DESKTOP_SESSION_TTL_MS, MOBILE_SESSION_TTL_MS, RenewalError, type Principal } from "../domain/session";
+import { MANUAL_PAIRING_CLAIM_POLICY } from "../domain/enrollment-policy";
 
-export const DESKTOP_SESSION_TTL_MS = 90 * 24 * 60 * 60_000;
-export const MOBILE_SESSION_TTL_MS = 365 * 24 * 60 * 60_000;
+export { DESKTOP_SESSION_TTL_MS, MOBILE_SESSION_TTL_MS, RenewalError, type Principal } from "../domain/session";
+
 export const PAIRING_TTL_MS = 2 * 60_000;
 
 export type PairingStatus = "pending" | "claimed" | "approved" | "completed" | "expired";
@@ -30,48 +32,9 @@ export function pairingStatusAt(pairing: PairingRecord, nowEpochMs: number): Pai
   return pairing.expiresAtEpochMs > nowEpochMs ? pairing.status : "expired";
 }
 
-export class RenewalError extends Error {
-  constructor(readonly code: string, readonly status: 400 | 401 | 403 | 404 | 409 | 410 | 502 | 503 = 400) {
-    super(code);
-    this.name = "RenewalError";
-  }
-}
-
-export interface Principal {
-  sessionId: string;
-  userId: string;
-  installationId: string;
-  kind: "desktop" | "mobile";
-}
-
-export async function verifyLmsAndIssueDesktopSession(input: {
-  installationId: string;
-  cookies: readonly LmsAccessCookie[];
-  gateway: LmsIdentityGateway;
-  store: RenewalStore;
-  nowEpochMs: number;
-}): Promise<{ accessToken: string; expiresAt: string }> {
-  const verified = await input.gateway.verifyIdentity(input.cookies);
-  if (!verified.authenticated) throw new RenewalError("LMS_SESSION_REJECTED", 401);
-  if (verified.subject === null) throw new RenewalError("LMS_IDENTITY_UNAVAILABLE", 502);
-  const subjectSha256 = await sha256Hex(verified.subject);
-  const accessToken = randomOpaqueToken("jba_");
-  const expiresAtEpochMs = input.nowEpochMs + DESKTOP_SESSION_TTL_MS;
-  await input.store.issueVerifiedDesktopSession({
-    candidateUserId: crypto.randomUUID(),
-    subjectSha256,
-    installationId: input.installationId,
-    sessionId: `jbas_${crypto.randomUUID()}`,
-    tokenSha256: await sha256Hex(accessToken),
-    nowEpochMs: input.nowEpochMs,
-    expiresAtEpochMs,
-  });
-  return { accessToken, expiresAt: new Date(expiresAtEpochMs).toISOString() };
-}
-
 export async function authenticateSession(store: RenewalStore, token: string, nowEpochMs: number, kind?: "desktop" | "mobile"): Promise<Principal> {
-  if (!/^jb[as]_[0-9a-f]{64}$/u.test(token)) throw new RenewalError("AUTHENTICATION_REQUIRED", 401);
-  const session = await store.findSessionByTokenHash(await sha256Hex(token));
+  if (!/^jb[ds]_[0-9a-f]{64}$/u.test(token)) throw new RenewalError("AUTHENTICATION_REQUIRED", 401);
+  const session = await store.findSessionByTokenHash(await hashAppSessionToken(token));
   if (!session || session.revokedAtEpochMs !== null) throw new RenewalError("AUTHENTICATION_REQUIRED", 401);
   if (session.expiresAtEpochMs <= nowEpochMs) throw new RenewalError("SESSION_EXPIRED", 401);
   if (kind && session.kind !== kind) throw new RenewalError("SESSION_KIND_DENIED", 403);
@@ -110,7 +73,7 @@ export async function createPairing(input: {
     expiresAtEpochMs,
     approvedAtEpochMs: null,
   };
-  if (!(await input.store.createPairing(record))) throw new RenewalError("PAIRING_COLLISION", 503);
+  if (!(await input.store.createPairing(record))) throw new RenewalError("PAIRING_ALREADY_ACTIVE", 409);
   const fragment = new URLSearchParams({ pairing: id, challenge: qrSecret });
   return {
     pairingId: id,
@@ -126,10 +89,11 @@ export async function claimPairing(input: {
   pairingId?: string;
   challenge?: string;
   manualCode?: string;
+  manualRateKeys?: readonly string[];
   installationId: string;
   deviceLabel: string;
   nowEpochMs: number;
-}): Promise<{ claimId: string; claimReceipt: string; status: "awaiting-desktop-approval" }> {
+}): Promise<{ claimId: string; claimReceipt: string; status: "awaiting-desktop-approval"; expiresAtEpochMs: number }> {
   const qrClaim = input.challenge !== undefined;
   const manualClaim = input.manualCode !== undefined;
   if (qrClaim === manualClaim) throw new RenewalError("INVALID_PAIRING_CLAIM");
@@ -139,6 +103,18 @@ export async function claimPairing(input: {
     record = await input.store.findPairingByProof("qr", await sha256Hex(input.challenge));
     if (!record || record.id !== input.pairingId) throw new RenewalError("PAIRING_NOT_FOUND", 404);
   } else {
+    if (!input.manualRateKeys || input.manualRateKeys.length !== 2) throw new RenewalError("PAIRING_RATE_LIMITED", 429);
+    for (const [index, rateKey] of input.manualRateKeys.entries()) {
+      const attemptLimit = index === 0
+        ? MANUAL_PAIRING_CLAIM_POLICY.ipAttemptLimit
+        : MANUAL_PAIRING_CLAIM_POLICY.installationAttemptLimit;
+      if (!(await input.store.consumeManualPairingAttempt(
+        rateKey,
+        input.nowEpochMs,
+        MANUAL_PAIRING_CLAIM_POLICY.windowMs,
+        attemptLimit,
+      ))) throw new RenewalError("PAIRING_RATE_LIMITED", 429);
+    }
     const manualCode = normalizeManualPairingCode(input.manualCode!);
     if (!manualCode) throw new RenewalError("PAIRING_NOT_FOUND", 404);
     record = await input.store.findPairingByProof("manual", await hmacSha256Hex(input.pairingSecret, manualCode));
@@ -155,7 +131,10 @@ export async function claimPairing(input: {
     nowEpochMs: input.nowEpochMs,
   });
   if (!claimed) throw new RenewalError("PAIRING_ALREADY_USED", 409);
-  return { claimId: record.id, claimReceipt, status: "awaiting-desktop-approval" };
+  return {
+    claimId: record.id, claimReceipt, status: "awaiting-desktop-approval",
+    expiresAtEpochMs: record.expiresAtEpochMs,
+  };
 }
 
 export async function approvePairing(input: {
@@ -182,7 +161,7 @@ export async function approvePairing(input: {
     installationId: pairing.mobileInstallationId,
     kind: "mobile",
     label: pairing.mobileLabel,
-    tokenSha256: await sha256Hex(token),
+    tokenSha256: await hashAppSessionToken(token),
     createdAtEpochMs: input.nowEpochMs,
     expiresAtEpochMs,
     lastSeenAtEpochMs: input.nowEpochMs,
@@ -205,6 +184,7 @@ export async function completePairing(input: {
   const receiptHash = await sha256Hex(input.claimReceipt);
   const pairing = await input.store.getPairing(input.pairingId);
   if (!pairing || pairing.claimReceiptSha256 !== receiptHash) throw new RenewalError("PAIRING_RECEIPT_INVALID", 401);
+  if (pairing.expiresAtEpochMs <= input.nowEpochMs) throw new RenewalError("PAIRING_EXPIRED", 410);
   if (pairing.approvedAtEpochMs === null || (pairing.status !== "approved" && pairing.status !== "consumed")) {
     throw new RenewalError("PAIRING_NOT_APPROVED", 409);
   }

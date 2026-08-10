@@ -1,20 +1,11 @@
-const CACHE_VERSION = 'jungle-bell-dashboard-v1';
+const CACHE_PREFIX = 'jungle-bell-dashboard-';
+const CACHE_VERSION = 'jungle-bell-dashboard-0.5.0';
 const APP_SHELL = [
   './dashboard.html',
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png',
 ];
-const PERSONAL_API_PATHS = [
-  '/v1/attendance/',
-  '/v1/devices',
-  '/v1/mobile/',
-  '/v1/notifications/',
-  '/v1/pairing-claims',
-  '/v1/pairings/',
-  '/v1/push/',
-];
-
 function sameOriginUrl(request) {
   const url = new URL(request.url);
   return url.origin === self.location.origin ? url : null;
@@ -22,7 +13,11 @@ function sameOriginUrl(request) {
 
 function isPersonalRequest(request, url) {
   return request.headers.has('authorization')
-    || PERSONAL_API_PATHS.some((path) => url.pathname.startsWith(path));
+    || (url.pathname.startsWith('/api/') && !url.pathname.startsWith('/api/public/'));
+}
+
+function isBlogRequest(url) {
+  return url.pathname === '/blog' || url.pathname.startsWith('/blog/');
 }
 
 function responseCanBeCached(response) {
@@ -40,12 +35,12 @@ async function navigationResponse(request, url) {
   try {
     const response = await fetch(request);
     if (response.ok) return response;
-    if (url.pathname.endsWith('/pair') || url.pathname.endsWith('/app')) {
-      return (await cachedDashboard()) || response;
-    }
     return response;
   } catch {
-    return (await cachedDashboard()) || Response.error();
+    const dashboardPath = new URL('./dashboard.html', self.registration.scope).pathname;
+    return url.pathname === dashboardPath
+      ? (await cachedDashboard()) || Response.error()
+      : Response.error();
   }
 }
 
@@ -81,7 +76,9 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE_VERSION).map((key) => caches.delete(key))))
+      .then((keys) => Promise.all(keys
+        .filter((key) => key.startsWith(CACHE_PREFIX) && key !== CACHE_VERSION)
+        .map((key) => caches.delete(key))))
       .then(() => self.clients.claim()),
   );
 });
@@ -91,6 +88,7 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
   const url = sameOriginUrl(request);
   if (!url) return;
+  if (isBlogRequest(url)) return;
   if (isPersonalRequest(request, url)) {
     event.respondWith(fetch(request, {cache: 'no-store'}));
     return;
@@ -99,7 +97,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(navigationResponse(request, url));
     return;
   }
-  if (url.pathname.startsWith('/v1/laundry/') || url.pathname === '/v1/meals') {
+  if (url.pathname === '/api/public/laundry' || url.pathname === '/api/public/meals') {
     event.respondWith(publicApiResponse(request));
     return;
   }
@@ -123,12 +121,17 @@ self.addEventListener('push', (event) => {
     && /^\/dashboard\.html#(?:attendance|laundry|meals|notifications|connections)$/u.test(payload.path)
     ? payload.path
     : '/dashboard.html#notifications';
+  const notificationTag = typeof payload.tag === 'string'
+    ? payload.tag.slice(0, 120)
+    : typeof payload.notificationId === 'string'
+      ? payload.notificationId.slice(0, 120)
+      : undefined;
   event.waitUntil(self.registration.showNotification(title, {
     body,
     icon: './icons/icon-192.png',
     badge: './icons/icon-192.png',
     data: {path},
-    tag: typeof payload.tag === 'string' ? payload.tag.slice(0, 120) : undefined,
+    tag: notificationTag,
   }));
 });
 

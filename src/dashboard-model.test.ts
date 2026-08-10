@@ -18,7 +18,7 @@ test('해시 경로는 대시보드 메뉴로 해석하고 알 수 없는 값은
     assert.equal(dashboardRouteFromHash('#meals'), 'meals');
     assert.equal(dashboardRouteFromHash('#notifications'), 'notifications');
     assert.equal(dashboardRouteFromHash('#connections'), 'connections');
-    assert.equal(dashboardRouteFromHash('#devices'), 'connections');
+    assert.equal(dashboardRouteFromHash('#devices'), 'home');
     assert.equal(dashboardRouteFromHash('#unknown'), 'home');
 });
 

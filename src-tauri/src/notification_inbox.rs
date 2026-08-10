@@ -7,14 +7,14 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, Manager};
 
-use crate::tray::{self, TrayPanelAction};
+use crate::tray::{self, DashboardRoute};
 
 pub const NOTIFICATION_INBOX_UPDATED_EVENT: &str = "notification-inbox-updated";
 pub const MAX_NOTIFICATION_ITEMS: usize = 100;
 
 const NOTIFICATION_INBOX_VERSION: u32 = 1;
 #[cfg(target_os = "windows")]
-const WINDOWS_BADGE_WINDOW_LABELS: [&str; 5] = ["attendance", "settings", "onboarding", "campus", "image-viewer"];
+const WINDOWS_BADGE_WINDOW_LABELS: [&str; 3] = ["dashboard", "checker", "image-viewer"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum NotificationAction {
@@ -27,11 +27,11 @@ pub enum NotificationAction {
 }
 
 impl NotificationAction {
-    pub(crate) fn tray_action(self) -> TrayPanelAction {
+    pub(crate) fn dashboard_route(self) -> DashboardRoute {
         match self {
-            Self::Attendance => TrayPanelAction::OpenAttendance,
-            Self::Laundry => TrayPanelAction::OpenLaundry,
-            Self::Meals => TrayPanelAction::OpenMeals,
+            Self::Attendance => DashboardRoute::Attendance,
+            Self::Laundry => DashboardRoute::Laundry,
+            Self::Meals => DashboardRoute::Meals,
         }
     }
 }
@@ -139,15 +139,6 @@ impl NotificationInboxStore {
             self.revision = self.revision.saturating_add(1);
         }
         Ok(item.item.action)
-    }
-
-    fn clear(&mut self) -> bool {
-        if self.items.is_empty() {
-            return false;
-        }
-        self.items.clear();
-        self.revision = self.revision.saturating_add(1);
-        true
     }
 
     fn load_from(path: &Path) -> Result<Self, String> {
@@ -301,27 +292,8 @@ impl NotificationInboxService {
     pub fn activate(&self, app: &tauri::AppHandle, id: &str) -> Result<NotificationInboxSnapshot, String> {
         let (snapshot, action) = self.mark_read(app, id)?;
         if let Some(action) = action {
-            tray::run_tray_panel_action(app, action.tray_action())?;
+            tray::open_dashboard_route(app, action.dashboard_route())?;
         }
-        Ok(snapshot)
-    }
-
-    pub fn clear(&self, app: &tauri::AppHandle) -> Result<NotificationInboxSnapshot, String> {
-        let path = self.path.as_deref().ok_or_else(writes_disabled_error)?;
-        let mut store = self
-            .store
-            .lock()
-            .map_err(|_| "알림함 잠금이 손상되었습니다.".to_string())?;
-        let mut next = store.clone();
-        if !next.clear() {
-            return Ok(store.snapshot());
-        }
-        next.save_to(path)?;
-        let snapshot = next.snapshot();
-        *store = next;
-        drop(store);
-
-        self.publish_if_current(app, &snapshot);
         Ok(snapshot)
     }
 
@@ -344,13 +316,6 @@ impl NotificationInboxService {
             publish_snapshot(app, snapshot);
         }
     }
-}
-
-pub fn ensure_tray_panel_window(window: &tauri::WebviewWindow) -> Result<(), String> {
-    if window.label() != "tray-panel" && window.label() != "dashboard" {
-        return Err("허용되지 않은 창입니다.".into());
-    }
-    Ok(())
 }
 
 pub fn sync_badge_for_window(window: &tauri::WebviewWindow) {
@@ -390,7 +355,7 @@ fn writes_disabled_error() -> String {
 }
 
 fn publish_snapshot(app: &tauri::AppHandle, snapshot: &NotificationInboxSnapshot) {
-    if let Err(error) = app.emit_to("tray-panel", NOTIFICATION_INBOX_UPDATED_EVENT, snapshot) {
+    if let Err(error) = app.emit_to("dashboard", NOTIFICATION_INBOX_UPDATED_EVENT, snapshot) {
         log::debug!("[notification-inbox] snapshot emit skipped: {error}");
     }
     apply_unread_badge(app);
@@ -412,10 +377,15 @@ fn apply_unread_badge(app: &tauri::AppHandle) {
         };
 
         #[cfg(target_os = "macos")]
-        if let Some(window) = app.get_webview_window("tray-panel") {
+        {
             let label = (unread_count > 0).then(|| "•".to_string());
-            if let Err(error) = window.set_badge_label(label) {
-                log::debug!("[notification-inbox] macOS Dock 배지 적용 생략: {error}");
+            if let Some(window) = ["checker", "dashboard"]
+                .into_iter()
+                .find_map(|label| app.get_webview_window(label))
+            {
+                if let Err(error) = window.set_badge_label(label) {
+                    log::debug!("[notification-inbox] macOS Dock 배지 적용 생략: {error}");
+                }
             }
         }
 
@@ -674,48 +644,6 @@ mod tests {
             snapshot.items.iter().find(|item| item.id == first_id).unwrap().read_at,
             Some(3_000)
         );
-    }
-
-    #[test]
-    fn 전체_삭제는_알림을_비우고_id를_재사용하지_않는다() {
-        let mut store = NotificationInboxStore::default();
-        push(&mut store, "attendance", "출석", None, None, 1_000);
-        push(&mut store, "meals", "식단", None, None, 2_000);
-        let revision = store.revision;
-
-        assert!(store.clear());
-        let cleared = store.snapshot();
-        assert_eq!(cleared.revision, revision + 1);
-        assert_eq!(cleared.unread_count, 0);
-        assert!(cleared.items.is_empty());
-
-        assert!(!store.clear());
-        assert_eq!(store.revision, revision + 1);
-
-        let (next_id, _, inserted) = push(&mut store, "laundry", "세탁", None, None, 3_000);
-        assert!(inserted);
-        assert_eq!(next_id, "3");
-    }
-
-    #[test]
-    fn 전체_삭제_결과는_재시작후에도_유지된다() {
-        let temp_dir =
-            std::env::temp_dir().join(format!("jungle-bell-notification-inbox-clear-{}", std::process::id()));
-        let path = temp_dir.join("notifications.json");
-        let _ = std::fs::remove_dir_all(&temp_dir);
-
-        let mut store = NotificationInboxStore::default();
-        push(&mut store, "attendance", "출석", None, None, 1_000);
-        assert!(store.clear());
-        store.save_to(&path).unwrap();
-
-        let mut restored = NotificationInboxStore::load_from(&path).unwrap();
-        assert!(restored.snapshot().items.is_empty());
-        let (next_id, _, inserted) = push(&mut restored, "meals", "식단", None, None, 2_000);
-        assert!(inserted);
-        assert_eq!(next_id, "2");
-
-        let _ = std::fs::remove_dir_all(temp_dir);
     }
 
     #[test]

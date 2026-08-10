@@ -46,7 +46,8 @@ function isNotificationAction(value: unknown): value is NotificationAction {
 export function normalizeNotificationInboxSnapshot(value: unknown): NotificationInboxSnapshot | null {
     if (!value || typeof value !== 'object') return null;
     const candidate = value as Partial<NotificationInboxSnapshot>;
-    if (!Number.isSafeInteger(candidate.revision)
+    if (!hasExactKeys(candidate, ['revision', 'unreadCount', 'items'])
+        || !Number.isSafeInteger(candidate.revision)
         || (candidate.revision ?? -1) < 0
         || !Number.isSafeInteger(candidate.unreadCount)
         || (candidate.unreadCount ?? -1) < 0
@@ -60,7 +61,8 @@ export function normalizeNotificationInboxSnapshot(value: unknown): Notification
     for (const value of candidate.items) {
         if (!value || typeof value !== 'object') return null;
         const item = value as Partial<NotificationInboxItem>;
-        if (!isNonEmptyText(item.id, 32)
+        if (!hasExactKeys(item, ['id', 'title', 'body', 'createdAt', 'readAt', 'action'])
+            || !isNonEmptyText(item.id, 32)
             || !/^\d+$/.test(item.id)
             || ids.has(item.id)
             || !isNonEmptyText(item.title, 200)
@@ -90,6 +92,12 @@ export function normalizeNotificationInboxSnapshot(value: unknown): Notification
         unreadCount,
         items,
     };
+}
+
+function hasExactKeys(value: object, keys: readonly string[]): boolean {
+    const actual = Object.keys(value);
+    return actual.length === keys.length
+        && keys.every((key) => Object.prototype.hasOwnProperty.call(value, key));
 }
 
 export function notificationActionLabel(action: NotificationAction | null): string {

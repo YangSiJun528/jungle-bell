@@ -2,11 +2,7 @@
 @import "tailwindcss/theme.css" layer(theme);
 @import "./styles.css" layer(base);
 @import "tailwindcss/utilities.css" layer(utilities);
-@source "./index.html";
-@source "./onboarding.html";
-@source "./campus.html";
 @source "./image-viewer.html";
-@source "./tray-panel.html";
 @source "./dashboard.html";
 
 @theme inline {
@@ -108,12 +104,6 @@
 
     html[data-page-layout="bleed"] body {
         padding-inline: var(--page-gutter);
-    }
-
-    body[data-ui-page="tray-panel"] {
-        padding: var(--space-2);
-        font-size: var(--font-size-label);
-        line-height: var(--line-height-label);
     }
 
     body[data-ui-page="image-viewer"] {
@@ -345,36 +335,6 @@
         color: var(--color-text-muted);
         font-size: var(--font-size-body);
         line-height: var(--line-height-body);
-    }
-
-    .ui-settings-section:not([style*="display: none"]) + .ui-settings-section {
-        margin-top: var(--space-6);
-    }
-
-    .ui-settings-row {
-        display: flex;
-        min-height: var(--space-12);
-        width: 100%;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--space-3);
-        margin-top: var(--space-2);
-    }
-
-    .ui-settings-label {
-        display: block;
-        font-size: var(--font-size-body);
-        line-height: var(--line-height-body);
-        font-weight: var(--font-weight-emphasis);
-    }
-
-    .ui-settings-description {
-        display: block;
-        margin-top: var(--space-1);
-        color: var(--color-text-muted);
-        font-size: var(--font-size-label);
-        line-height: var(--line-height-label);
-        font-weight: var(--font-weight-regular);
     }
 
     .ui-button {

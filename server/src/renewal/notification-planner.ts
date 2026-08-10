@@ -24,9 +24,6 @@ export async function planAttendanceNotifications(store: RenewalStore, nowEpochM
     const candidate = await notificationForUser(store, userId, window, nowEpochMs);
     if (!candidate || !(await store.insertNotification(candidate))) continue;
     created += 1;
-    for (const subscription of await store.listActivePushSubscriptions(userId, nowEpochMs)) {
-      await store.queuePushDelivery(candidate.id, subscription.id, nowEpochMs);
-    }
   }
   return created;
 }

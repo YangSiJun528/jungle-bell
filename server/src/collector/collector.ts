@@ -1,6 +1,7 @@
 import { getLogger } from "@logtape/logtape";
 import { canonicalJsonSha256, sha256Bytes } from "./hash";
 import { fetchBinary, fetchJson } from "./http";
+import { allowedMealMediaHosts, MAX_MEAL_IMAGE_BYTES, rasterImageContentType } from "./media";
 import { normalizeLaundry, type LaundryVersion } from "./laundry";
 import {
   mealImageExtension,
@@ -44,9 +45,12 @@ function occurrenceId(observedAt: string): string {
   return observedAt.replaceAll(/[-:.]/g, "");
 }
 
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+function diagnosticCodeOf(error: unknown): string {
+  if (error instanceof Error && /^[A-Za-z][A-Za-z0-9]*$/u.test(error.name)) return error.name;
+  return "UnknownError";
 }
+
+const PUBLIC_COLLECTION_FAILURE = "COLLECTION_FAILED";
 
 function emptyState(source: SourceName): SourceState {
   return {
@@ -108,12 +112,13 @@ async function archiveMealImage(
     timeoutMs: options.requestTimeoutMs,
     retries: options.requestRetries,
     headers: { "User-Agent": options.userAgent },
+    allowedHosts: allowedMealMediaHosts(),
+    maxBytes: MAX_MEAL_IMAGE_BYTES,
   });
-  const contentType = response.contentType === "application/octet-stream"
-    ? candidate.declaredContentType ?? response.contentType
-    : response.contentType;
-  if (!contentType.startsWith("image/")) {
-    throw new Error(`Media ${candidate.mediaId} returned ${contentType}, not an image`);
+  const contentType = rasterImageContentType(response.body);
+  if (!contentType) throw new Error(`Media ${candidate.mediaId} did not contain a supported raster image`);
+  if (response.contentType !== "application/octet-stream" && response.contentType !== contentType) {
+    throw new Error(`Media ${candidate.mediaId} content type did not match its file signature`);
   }
   const sha = await sha256Bytes(response.body);
   const extension = mealImageExtension(contentType, candidate.filename);
@@ -262,14 +267,14 @@ async function collectSource(
     logger.info("Stored new source version", { source, sha, rawKey, normalizedKey: artifacts.normalizedKey });
     return { source, status: "SUCCESS", changed: true, sha, error: null };
   } catch (error) {
-    const errorMessage = messageOf(error);
+    const diagnosticCode = diagnosticCodeOf(error);
     const failedAt = new Date().toISOString();
     const state: SourceState = {
       ...previousState,
       source,
       lastAttemptAt: attemptedAt,
       consecutiveFailures: previousState.consecutiveFailures + 1,
-      lastError: errorMessage,
+      lastError: PUBLIC_COLLECTION_FAILURE,
     };
     const observation: MinuteObservation = {
       source,
@@ -284,11 +289,13 @@ async function collectSource(
       changed: false,
       durationMs: Math.max(0, Date.parse(failedAt) - Date.parse(attemptedAt)),
       httpStatus: null,
-      error: errorMessage,
+      error: PUBLIC_COLLECTION_FAILURE,
     };
     await storage.commit({ state, observation });
-    logger.error("Source collection failed", { source, error: errorMessage, scheduledAt: scheduledAt.toISOString() });
-    return { source, status: "FAILED", changed: false, sha: null, error: errorMessage };
+    logger.error("Source collection failed", {
+      source, error: diagnosticCode, scheduledAt: scheduledAt.toISOString(),
+    });
+    return { source, status: "FAILED", changed: false, sha: null, error: PUBLIC_COLLECTION_FAILURE };
   }
 }
 

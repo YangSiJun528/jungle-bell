@@ -89,7 +89,6 @@ const PUBLIC_SURFACE: DashboardSurface = {
 
 export function dashboardRouteFromHash(hash: string): DashboardRoute {
     const value = hash.trim().toLowerCase().replace(/^#/, '');
-    if (value === 'devices') return 'connections';
     return DASHBOARD_ROUTES.includes(value as DashboardRoute)
         ? value as DashboardRoute
         : 'home';

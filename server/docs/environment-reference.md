@@ -1,82 +1,98 @@
-# 환경 변수와 Cloudflare 바인딩 레퍼런스
+# 서버 환경과 바인딩 레퍼런스
 
-API Worker와 OCI Collector는 실행 환경이 다릅니다. 기존 `server/.env`는
-Collector 설정을 담고 있지만, Wrangler 로컬 개발은 같은 디렉터리의 `.env`도
-Worker `env` 객체로 로드합니다. 다만 renewal Worker는 그 Collector 변수 이름을
-사용하지 않으므로 동작에는 영향을 주지 않습니다. Worker에는 기존 Cloudflare
-바인딩을 우선 사용하고, 기능상 필요한 값만 별도로 설정합니다.
+Jungle Bell 서버 패키지는 HTTP 전용 App Worker와 주기 작업 전용 OCI Jobs로 실행됩니다. 두 런타임은 같은 환경의 D1/R2 상태를 사용하며 하나의 환경별 gateway secret만 공유합니다.
 
-## 기존 설정 재사용
+## App Worker
 
-| 이름 | 실행 환경 | 분류 | 용도 |
-| --- | --- | --- | --- |
-| `DB` | Worker | 기존 D1 바인딩 | 수집 데이터와 계정·세션·출석 snapshot 저장 |
-| `DATA_BUCKET` | Worker | 기존 R2 바인딩 | 수집 원본과 급식 이미지 조회 |
-| `CLOUDFLARE_ACCOUNT_ID` | Collector | 기존 환경 변수 | D1 REST API 계정 식별 |
-| `CLOUDFLARE_D1_DATABASE_ID` | Collector | 기존 환경 변수 | Worker의 `DB`와 같은 D1 데이터베이스 식별 |
-| `R2_BUCKET` | Collector | 기존 환경 변수 | Worker의 `DATA_BUCKET`과 같은 R2 버킷 식별 |
+| 이름 | 종류 | 용도 |
+| --- | --- | --- |
+| `DB` | D1 binding | 공개 조회 모델, session, pairing, 출석, 개인 설정, 알림 delivery와 OCI gateway의 고정 대상 |
+| `DATA_BUCKET` | R2 binding | 정규화 자료와 급식 이미지 조회 |
+| `PAIRING_SECRET` | Worker secret | QR·10자리 코드 연결. 32바이트 이상 난수 |
+| `VAPID_PUBLIC_KEY` | Worker secret | PWA 구독 생성에 공개할 VAPID public key |
+| `JOBS_D1_GATEWAY_SECRET` | Worker secret | `/internal/jobs/d1`, `/internal/jobs/r2`의 OCI Jobs bearer. 32자 이상 |
 
-웹 자산과 `/v1` API는 같은 Worker에서 제공됩니다. 페어링 QR, credential CORS,
-모바일 쿠키의 기준 origin은 요청 URL에서 결정하므로 `PUBLIC_ORIGIN` 환경 변수는
-사용하지 않습니다. 기존 배포에 이 변수가 남아 있어도 동작에는 영향을 주지
-않습니다.
+App Worker는 fetch handler와 Static Assets만 제공합니다. Cron Trigger, Service Binding, VAPID private key를 설정하지 않습니다. 웹 자산과 `/api`, `/internal/jobs/*`는 같은 Worker origin에서 제공됩니다.
 
-## 신규 설정
+`PAIRING_SECRET`이 없으면 새 pairing은 `503 PAIRING_SERVICE_UNAVAILABLE`로 거부됩니다. `VAPID_PUBLIC_KEY`가 없으면 Push 공개키 조회와 구독 등록은 `503 WEB_PUSH_NOT_CONFIGURED`로 거부됩니다. `JOBS_D1_GATEWAY_SECRET`이 없으면 gateway만 `503 D1_GATEWAY_NOT_CONFIGURED`를 반환합니다.
 
-| 이름 | 분류 | 필수 범위 | 관리 방법 |
-| --- | --- | --- | --- |
-| `PAIRING_SECRET` | Worker secret | QR·10자리 코드 연결 | 32바이트 이상의 난수. `wrangler secret put`으로 설정 |
-| `VAPID_PUBLIC_KEY` | Worker 일반 변수 | 모바일 Web Push | Push relay의 VAPID 키 쌍에 대응하는 공개키 |
-| `WEB_PUSH_RELAY` | Worker Service Binding | 모바일 Web Push 권장 구성 | Web Push relay Worker에 연결. URL·인증 토큰 불필요 |
-| `WEB_PUSH_RELAY_URL` | Worker 일반 변수 | HTTP relay 대체 구성 | HTTPS relay endpoint |
-| `WEB_PUSH_RELAY_TOKEN` | Worker secret | HTTP relay 대체 구성 | relay bearer token. `wrangler secret put`으로 설정 |
+`/internal/jobs/d1`과 `/internal/jobs/r2`는 요청자가 D1 또는 R2 대상을 선택할 수 없는 고정 `DB`, `DATA_BUCKET` binding gateway입니다. OCI Jobs와 App Worker에는 같은 환경의 gateway secret을 설정하되 production과 v2-test 사이에는 재사용하지 않습니다.
 
-`PAIRING_SECRET`이 없으면 공개 급식·세탁 API는 계속 동작하지만 새 모바일 연결은
-`503 PAIRING_SERVICE_UNAVAILABLE`로 차단됩니다. Web Push는
-`VAPID_PUBLIC_KEY`와 relay가 모두 있을 때만 등록할 수 있습니다. Push 구성이
-불완전하면 `503 WEB_PUSH_NOT_CONFIGURED`로 차단되며 구독 정보를 저장하지
-않습니다.
+### 빌드 시 공개 origin
 
-## Push relay 선택 순서
+`JUNGLE_BELL_PUBLIC_ORIGIN`은 Worker runtime 변수가 아니라 대시보드·Markdown 사이트 빌드 변수입니다. canonical URL과 RSS origin에 사용됩니다.
 
-Worker는 다음 순서로 sender를 선택합니다.
+| 배포 | 값 |
+| --- | --- |
+| production | `https://jungle-bell-api.yangsijun5528.workers.dev` |
+| v2-test | `https://jungle-bell-api-test.yangsijun5528.workers.dev` |
 
-1. `WEB_PUSH_RELAY` Service Binding
-2. `WEB_PUSH_RELAY_URL`과 `WEB_PUSH_RELAY_TOKEN` 조합
-3. 미설정 상태
+`deploy:api`와 `deploy:api:test`의 predeploy 단계는 각 origin으로 루트 웹 빌드를 실행해야 합니다.
 
-Service Binding을 사용할 때 `wrangler.api.jsonc`에 다음 바인딩을 추가합니다.
-서비스 이름은 실제 relay Worker 이름으로 바꿉니다.
+## OCI Jobs
 
-```jsonc
-{
-  "services": [
-    {
-      "binding": "WEB_PUSH_RELAY",
-      "service": "jungle-bell-web-push-relay"
-    }
-  ]
-}
-```
+### 실행 환경과 Worker gateway
 
-Service Binding은 Cloudflare 런타임이 대상 Worker를 인증하므로 relay URL과 bearer
-token을 중복 관리하지 않습니다. 외부 HTTPS relay를 사용해야 할 때만 URL과 token
-방식을 사용합니다.
+| 이름 | 필수 | 용도 |
+| --- | --- | --- |
+| `JUNGLE_BELL_ENVIRONMENT` | 예 | `production` 또는 `v2-test`. Compose가 고정 |
+| `JOBS_D1_GATEWAY_URL` | 예 | 환경별 고정 HTTPS `/internal/jobs/d1` endpoint |
+| `JOBS_D1_GATEWAY_SECRET_FILE` | 예 | App Worker와 같은 32자 이상 shared secret 파일 |
+| `D1_GATEWAY_TIMEOUT_MS` | 아니요 | D1/R2 gateway 요청 제한 시간. 기본 `30000` |
+| `D1_GATEWAY_RETRIES` | 아니요 | D1/R2 gateway의 network, `429`, `5xx` 재시도 횟수. 기본 `3` |
 
-## 로컬 개발
+OCI Jobs에는 D1 관리 자격 증명이나 database 식별자를 배포하지 않습니다. 모든 D1 query와 batch는 `JOBS_D1_GATEWAY_URL`의 App Worker를 거쳐 해당 Worker의 고정 `DB` binding에서 실행됩니다. R2 gateway URL은 같은 origin의 `/internal/jobs/r2`로 파생합니다.
 
-Wrangler는 `.dev.vars`와 `.env` 중 하나만 사용합니다. `.dev.vars`가 있으면
-`.env` 값은 Worker `env` 객체에 포함하지 않습니다. 자세한 로딩 규칙은
-[Cloudflare Workers 환경 변수와 secret 문서](https://developers.cloudflare.com/workers/local-development/environment-variables/)를
-참고합니다.
+### R2
 
-renewal Worker 로컬 개발에는 `server/.dev.vars.example`을 `.dev.vars`로 복사하고
-신규 설정만 입력합니다. 이렇게 하면 Collector용 `server/.env`가 Worker에
-들어오지 않지만 renewal Worker에는 필요하지 않으므로 기능 차이가 없습니다.
-Collector는 기존 설정 방식을 그대로 사용합니다.
+OCI Jobs는 수집 원본·정규화본·이미지와 `logs/jobs-runs/` 실행 로그를 인증된 App
+Worker gateway에 raw body로 전송합니다. Worker가 환경별 고정 `DATA_BUCKET` binding을
+사용하므로 OCI에는 R2 endpoint, bucket 이름, access key 또는 secret key를 설정하지
+않습니다. Gateway는 Jobs가 생성하는 key prefix와 콘텐츠 유형만 허용하고 객체당
+16 MiB를 상한으로 둡니다.
 
-`.dev.vars`는 로컬 개발 전용이며 저장소에 커밋하지 않습니다. Production은
-`wrangler.api.jsonc`의 일반 변수·D1·R2·Service Binding과
-`wrangler secret put`으로 설정합니다.
-`.dev.vars`, `.env`, `wrangler secret`의 실제 값은 로그와 저장소에 기록하지
-않습니다.
+### Web Push
+
+| 이름 | 필수 | 용도 |
+| --- | --- | --- |
+| `VAPID_PUBLIC_KEY_FILE` | 예 | App Worker의 `VAPID_PUBLIC_KEY`와 같은 public key 파일 |
+| `VAPID_PRIVATE_KEY_FILE` | 예 | OCI Jobs에만 두는 private key 파일 |
+| `VAPID_SUBJECT` | 예 | `mailto:` 또는 HTTPS contact URI |
+
+Private key는 OCI secret 파일에만 저장하며 Worker secret, D1, R2, 저장소 파일에 넣지 않습니다. OCI Jobs는 pending delivery를 최대 100개씩 전송합니다. Push provider의 `404` 또는 `410` 응답이면 구독과 남은 delivery를 폐기하고, 그 밖의 실패는 backoff 계약에 따라 재시도합니다.
+
+### 수집
+
+| 이름 | 기본값 또는 용도 |
+| --- | --- |
+| `MEALS_EVERY_MINUTES` | `5`. 세탁은 매분 수집 |
+| `LAUNDRY_URL` | 필수 HTTPS 세탁 상태 원본 URL. 임시 tunnel 기본값 없음 |
+| `MEALS_INCLUDE_PINNED_URL` | pinned 포함 카카오 API |
+| `MEALS_DEFAULT_URL` | 기본 카카오 API |
+| `MEALS_PAGE_URL` | 게시물 permalink 기준 URL |
+| `REQUEST_TIMEOUT_MS` | 원본 요청 제한 시간. 기본 `30000` |
+| `REQUEST_RETRIES` | 원본 요청 재시도 횟수. 기본 `2` |
+| `LG_RUN_STATES` | 선택적 LG running state 목록 |
+
+## 고정 배포 대상
+
+| 환경 | D1 gateway | App Worker `DB` | R2 | OCI identity |
+| --- | --- | --- | --- | --- |
+| production | `https://jungle-bell-api.yangsijun5528.workers.dev/internal/jobs/d1` | `jungle-bell-v2` | `jungle-bell-v2` | `jungle-bell-jobs` |
+| v2-test | `https://jungle-bell-api-test.yangsijun5528.workers.dev/internal/jobs/d1` | `jungle-bell-v2-test` | `jungle-bell-v2-test` | `jungle-bell-jobs-v2-test` |
+
+`loadJobsConfiguration`은 environment와 gateway URL 조합이 이 표와 다르면 시작을 거부합니다. v2-test는 별도 image, container, 환경 파일, secret 디렉터리를 사용합니다. `PAIRING_SECRET`, gateway secret과 VAPID key pair도 production/test 사이에 재사용하지 않습니다.
+
+## Secret 파일과 로컬 개발
+
+운영 Compose는 다음 세 파일만 read-only로 mount합니다.
+
+- `jobs-d1-gateway-secret`
+- `vapid-public-key`
+- `vapid-private-key`
+
+Secret 디렉터리는 `0700`, 각 파일은 `0600`으로 관리합니다. `.env.oci`와 `.env.oci-v2-test`에는 secret 원문을 넣지 않습니다.
+
+Wrangler 로컬 개발은 `server/.dev.vars.example`을 `.dev.vars`로 복사해 `PAIRING_SECRET`, `VAPID_PUBLIC_KEY`, `JOBS_D1_GATEWAY_SECRET`을 설정합니다. `.dev.vars`는 Git, OCI rsync, Docker build context에서 제외합니다. 실제 secret 값은 명령 인자, 테스트 fixture, 로그에 기록하지 않습니다.
+
+API Worker는 LMS ID, access token, refresh token, cookie를 입력으로 받거나 저장하지 않습니다.

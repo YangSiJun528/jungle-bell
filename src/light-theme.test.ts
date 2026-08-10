@@ -4,11 +4,8 @@ import {test} from 'vitest';
 
 const source = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const localPages = [
-    './index.html',
-    './onboarding.html',
-    './campus.html',
+    './dashboard.html',
     './image-viewer.html',
-    './tray-panel.html',
 ];
 const localStyles = [source('./styles.css'), source('./ui.css')].join('\n');
 const checkerSource = source('../src-tauri/src/checker.rs');

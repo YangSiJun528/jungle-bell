@@ -4,4 +4,5 @@ dist
 coverage
 .env
 .env.*
+.dev.vars
 !.env.oci.example

@@ -1,1 +1,1 @@
-* * * * * flock --nonblock /tmp/jungle-bell-collector.lock node /app/dist/collector/collector.js collect
+* * * * * flock --nonblock --conflict-exit-code 75 /tmp/jungle-bell-jobs.lock node /app/dist/jobs/jobs.js run || test "$?" -eq 75

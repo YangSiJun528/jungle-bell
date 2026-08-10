@@ -1,9 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  BindingPushRelaySender,
-  HttpPushRelaySender,
   deliverDuePushes,
   isAllowedBrowserPushEndpoint,
+  PUSH_DELIVERY_LEASE_TTL_MS,
   type PushSender,
 } from "../src/renewal/push-sender";
 import type {
@@ -64,57 +63,22 @@ describe("Web Push delivery", () => {
     expect(isAllowedBrowserPushEndpoint(endpoint)).toBe(false);
   });
 
-  it("uses the HTTPS relay and revokes a gone subscription on 410", async () => {
-    const store = new MemoryRenewalStore();
-    store.sessions.set("mobile", mobileSession());
-    await store.insertNotification(notification());
-    await store.upsertPushSubscription(subscription(1));
-    await store.queuePushDelivery("notification", "sub-1", 0);
-    let relayBody: unknown;
-    const fetcher = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
-      relayBody = JSON.parse(String(init?.body));
-      return new Response(null, { status: 410 });
-    });
-    const sender = new HttpPushRelaySender("https://relay.test/send", "secret", fetcher as typeof fetch);
-
-    expect(await deliverDuePushes(store, sender, 0)).toBe(1);
-    expect(fetcher).toHaveBeenCalledOnce();
-    expect(relayBody).toMatchObject({ ttl: 600, urgency: "high" });
-    expect(store.subscriptions.get("sub-1")?.revokedAtEpochMs).toBe(0);
-    expect(store.deliveries.get("notification:sub-1")?.status).toBe("gone");
-  });
-
-  it("uses a Cloudflare service binding without duplicating a relay URL or bearer token", async () => {
-    const binding = {
-      fetch: vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-        expect(String(input)).toBe("https://web-push-relay.internal/send");
-        expect(new Headers(init?.headers).has("authorization")).toBe(false);
-        return new Response(null, { status: 201 });
-      }),
-    };
-    const sender = new BindingPushRelaySender(binding);
-
-    await expect(sender.send({
-      notificationId: "notification",
-      subscription: subscription(1),
-      payloadJson: JSON.stringify({ title: "출석 확인" }),
-      expiresAtEpochMs: 10 * 60_000,
-      attempts: 0,
-    }, 0)).resolves.toEqual({ status: "delivered", error: null });
-    expect(binding.fetch).toHaveBeenCalledOnce();
-  });
-
   it("bounds parallel sends at ten and terminates the eighth failed attempt", async () => {
     let active = 0;
     let maximum = 0;
     const deliveries: PushDeliveryRecord[] = Array.from({ length: 25 }, (_, index) => ({
       notificationId: `n-${index}`, subscription: subscription(index), payloadJson: "{}",
-      expiresAtEpochMs: 10 * 60_000, attempts: index === 0 ? 7 : 0,
+      expiresAtEpochMs: 10 * 60_000, attempts: index === 0 ? 7 : 0, leaseToken: "unclaimed",
     }));
     const results: Array<{ notificationId: string; status: string }> = [];
+    let resultBatchCalls = 0;
     const store = {
-      listDuePushDeliveries: async () => deliveries,
-      recordPushDeliveryResult: async (input: { notificationId: string; status: string }) => { results.push(input); },
+      claimDuePushDeliveries: async (input: { leaseToken: string }) =>
+        deliveries.map((delivery) => ({ ...delivery, leaseToken: input.leaseToken })),
+      recordPushDeliveryResults: async (inputs: Array<{ notificationId: string; status: string }>) => {
+        resultBatchCalls += 1;
+        results.push(...inputs);
+      },
     } as unknown as RenewalStore;
     const sender: PushSender = {
       send: async () => {
@@ -130,28 +94,27 @@ describe("Web Push delivery", () => {
     expect(maximum).toBeLessThanOrEqual(10);
     expect(maximum).toBeGreaterThan(1);
     expect(results.find((result) => result.notificationId === "n-0")?.status).toBe("failed");
+    expect(resultBatchCalls).toBe(1);
   });
 
   it("expires an attendance notification instead of delivering it after its ten-minute window", async () => {
     const store = new MemoryRenewalStore();
     store.sessions.set("mobile", mobileSession());
-    await store.insertNotification(notification());
     await store.upsertPushSubscription(subscription(1));
-    await store.queuePushDelivery("notification", "sub-1", 0);
+    await store.insertNotification(notification());
     const sender: PushSender = { send: vi.fn(async () => ({ status: "delivered" as const, error: null })) };
 
     expect(await deliverDuePushes(store, sender, 10 * 60_000)).toBe(0);
     expect(sender.send).not.toHaveBeenCalled();
     expect(store.deliveries.get("notification:sub-1")).toMatchObject({ status: "failed", error: "NOTIFICATION_EXPIRED" });
-    expect(await store.listDesktopInbox("user", 10 * 60_000, 20)).toEqual([]);
+    expect(await store.listDesktopInbox("user", "desktop", 10 * 60_000, 20)).toEqual([]);
   });
 
   it("does not select or deliver Web Push after the owning mobile session expires", async () => {
     const store = new MemoryRenewalStore();
     store.sessions.set("mobile", mobileSession(1_000));
-    await store.insertNotification(notification());
     await store.upsertPushSubscription(subscription(1));
-    await store.queuePushDelivery("notification", "sub-1", 0);
+    await store.insertNotification(notification());
     const sender: PushSender = { send: vi.fn(async () => ({ status: "delivered" as const, error: null })) };
 
     expect(await store.listActivePushSubscriptions("user", 999)).toHaveLength(1);
@@ -163,9 +126,8 @@ describe("Web Push delivery", () => {
   it("fails observably instead of dropping a due push when no sender is configured", async () => {
     const store = new MemoryRenewalStore();
     store.sessions.set("mobile", mobileSession());
-    await store.insertNotification(notification());
     await store.upsertPushSubscription(subscription(1));
-    await store.queuePushDelivery("notification", "sub-1", 0);
+    await store.insertNotification(notification());
 
     await expect(deliverDuePushes(store, null, 0)).rejects.toThrow("WEB_PUSH_SENDER_NOT_CONFIGURED");
     expect(store.deliveries.get("notification:sub-1")?.status).toBe("pending");
@@ -174,9 +136,8 @@ describe("Web Push delivery", () => {
   it("never delivers a previous user's payload after a push endpoint is reassigned", async () => {
     const store = new MemoryRenewalStore();
     store.sessions.set("mobile", mobileSession());
-    await store.insertNotification(notification());
     await store.upsertPushSubscription(subscription(1));
-    await store.queuePushDelivery("notification", "sub-1", 0);
+    await store.insertNotification(notification());
 
     store.sessions.set("mobile-b", {
       ...mobileSession(),
@@ -199,6 +160,47 @@ describe("Web Push delivery", () => {
     const delivery = store.deliveries.get("notification:sub-1")!;
     delivery.status = "pending";
     delivery.nextAttempt = 0;
-    expect(await store.listDuePushDeliveries(0, 100)).toEqual([]);
+    expect(await store.claimDuePushDeliveries({
+      nowEpochMs: 0, limit: 100, leaseToken: "lease-after-reassignment",
+      leaseExpiresAtEpochMs: PUSH_DELIVERY_LEASE_TTL_MS,
+    })).toEqual([]);
+  });
+
+  it("leases each due delivery atomically and ignores a stale worker result after lease expiry", async () => {
+    const store = new MemoryRenewalStore();
+    store.sessions.set("mobile", mobileSession());
+    await store.upsertPushSubscription(subscription(1));
+    await store.insertNotification(notification());
+
+    const first = await store.claimDuePushDeliveries({
+      nowEpochMs: 0, limit: 100, leaseToken: "lease-first",
+      leaseExpiresAtEpochMs: PUSH_DELIVERY_LEASE_TTL_MS,
+    });
+    expect(first).toHaveLength(1);
+    await expect(store.claimDuePushDeliveries({
+      nowEpochMs: 1, limit: 100, leaseToken: "lease-overlap",
+      leaseExpiresAtEpochMs: 1 + PUSH_DELIVERY_LEASE_TTL_MS,
+    })).resolves.toEqual([]);
+
+    const second = await store.claimDuePushDeliveries({
+      nowEpochMs: PUSH_DELIVERY_LEASE_TTL_MS, limit: 100, leaseToken: "lease-second",
+      leaseExpiresAtEpochMs: 2 * PUSH_DELIVERY_LEASE_TTL_MS,
+    });
+    expect(second).toHaveLength(1);
+    await store.recordPushDeliveryResults([{
+      notificationId: "notification", subscriptionId: "sub-1", leaseToken: "lease-first",
+      status: "delivered", nowEpochMs: PUSH_DELIVERY_LEASE_TTL_MS,
+      nextAttemptAtEpochMs: null, error: null,
+    }]);
+    expect(store.deliveries.get("notification:sub-1")?.status).toBe("pending");
+
+    await store.recordPushDeliveryResults([{
+      notificationId: "notification", subscriptionId: "sub-1", leaseToken: "lease-second",
+      status: "delivered", nowEpochMs: PUSH_DELIVERY_LEASE_TTL_MS,
+      nextAttemptAtEpochMs: null, error: null,
+    }]);
+    expect(store.deliveries.get("notification:sub-1")).toMatchObject({
+      status: "delivered", leaseToken: null,
+    });
   });
 });

@@ -2,7 +2,6 @@ import type { CollectorOptions } from "../collector/types";
 import { z } from "zod";
 
 export const DEFAULT_COLLECTOR_URLS = {
-  laundry: "https://miracle-beautifully-onto-ser.trycloudflare.com/api/status",
   mealsIncludePinned: "https://pf.kakao.com/rocket-web/web/profiles/_xhzNjn/posts?includePinnedPost=true",
   mealsDefault: "https://pf.kakao.com/rocket-web/web/profiles/_xhzNjn/posts",
   mealsPage: "https://pf.kakao.com/_xhzNjn/posts",
@@ -19,11 +18,16 @@ export interface CollectorEnvironment {
   LG_RUN_STATES?: string;
 }
 
+const httpsUrl = z.url().refine((value) => {
+  const url = new URL(value);
+  return url.protocol === "https:" && !url.username && !url.password && (!url.port || url.port === "443");
+}, "collector URL must use HTTPS without credentials or a custom port");
+
 const environmentSchema = z.object({
-  LAUNDRY_URL: z.url().default(DEFAULT_COLLECTOR_URLS.laundry),
-  MEALS_INCLUDE_PINNED_URL: z.url().default(DEFAULT_COLLECTOR_URLS.mealsIncludePinned),
-  MEALS_DEFAULT_URL: z.url().default(DEFAULT_COLLECTOR_URLS.mealsDefault),
-  MEALS_PAGE_URL: z.url().default(DEFAULT_COLLECTOR_URLS.mealsPage),
+  LAUNDRY_URL: httpsUrl,
+  MEALS_INCLUDE_PINNED_URL: httpsUrl.default(DEFAULT_COLLECTOR_URLS.mealsIncludePinned),
+  MEALS_DEFAULT_URL: httpsUrl.default(DEFAULT_COLLECTOR_URLS.mealsDefault),
+  MEALS_PAGE_URL: httpsUrl.default(DEFAULT_COLLECTOR_URLS.mealsPage),
   REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
   REQUEST_RETRIES: z.coerce.number().int().nonnegative().default(2),
   USER_AGENT: z.string().trim().min(1).default("JungleBellDataCollector/1.0 (+https://github.com/si-jun-yang/jungle-bell)"),

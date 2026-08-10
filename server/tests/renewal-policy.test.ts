@@ -1,28 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { normalizeManualPairingCode, randomManualPairingCode, sha256Hex } from "../src/renewal/crypto";
+import { hashAppSessionToken, normalizeManualPairingCode, randomManualPairingCode, sha256Hex } from "../src/renewal/crypto";
 import { attendanceReminderWindowAt } from "../src/renewal/attendance-policy";
-import { HttpLmsIdentityGateway } from "../src/renewal/lms-gateway";
 
 describe("renewal security primitives", () => {
-  it("uses the LMS immutable ID SHA-256 as the cross-installation identity", async () => {
-    expect(await sha256Hex("12345")).toBe("5994471abb01112afcc18159f6cc74b4f511b99806da59b3caf5a9c173cacfc5");
-  });
-
-  it("verifies the LMS subject with one cookie on the canonical /api/v2/me endpoint", async () => {
-    const fetcher = vi.fn(async () => new Response('{"id":42}', {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    }));
-    const gateway = new HttpLmsIdentityGateway(fetcher as typeof fetch);
-    await expect(gateway.verifyIdentity([{
-      name: "access_token", value: "one-shot", domain: "jungle-lms.krafton.com", path: "/",
-      expires: -1, httpOnly: true, secure: true, sameSite: "Strict",
-    }])).resolves.toEqual({ authenticated: true, subject: "42" });
-    expect(fetcher).toHaveBeenCalledWith("https://jungle-lms.krafton.com/api/v2/me", expect.objectContaining({
-      redirect: "manual",
-      headers: expect.objectContaining({ cookie: "access_token=one-shot" }),
-    }));
-    expect(fetcher.mock.contexts[0]).toBeUndefined();
+  it("domain-separates desktop and mobile credential hashes", async () => {
+    const suffix = "a".repeat(64);
+    expect(await hashAppSessionToken(`jbd_${suffix}`)).not.toBe(await sha256Hex(`jbd_${suffix}`));
+    expect(await hashAppSessionToken(`jbd_${suffix}`)).not.toBe(await hashAppSessionToken(`jbs_${suffix}`));
   });
 
   it("creates and normalizes an exact ten-character Crockford code", () => {

@@ -1,0 +1,16 @@
+{
+  "name": "@jungle-bell/site",
+  "version": "0.5.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "cross-env ASTRO_TELEMETRY_DISABLED=1 astro build",
+    "check": "cross-env ASTRO_TELEMETRY_DISABLED=1 astro sync && node node_modules/typescript/bin/tsc --noEmit -p tsconfig.json",
+    "test": "node --test tests/build-output.test.mjs"
+  },
+  "devDependencies": {
+    "astro": "^7.1.5",
+    "cross-env": "^10.1.0",
+    "typescript": "^5.9.3"
+  }
+}
