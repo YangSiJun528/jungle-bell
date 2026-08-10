@@ -84,7 +84,7 @@ failure:
 | --- | --- | --- | --- |
 | VS Code | Electron, Webview, extension host | Webview iframe이 [`webview-ready`](https://github.com/microsoft/vscode/blob/main/src/vs/workbench/contrib/webview/browser/pre/index.html#L325-L328)를 보낸 뒤 host가 ready로 전환한다. Extension host는 [`ready` 메시지 60초 timeout](https://github.com/microsoft/vscode/blob/main/src/vs/workbench/services/extensions/electron-browser/localProcessExtensionHost.ts#L465-L474)을 둔다. Crash는 [제한적으로 자동 재시작하고 3회/5분 이후 사용자 액션](https://github.com/microsoft/vscode/blob/main/src/vs/workbench/services/extensions/electron-browser/nativeExtensionService.ts#L183-L225)으로 넘긴다. | 가장 강한 기준점이다. `page loaded`와 `checker.js/report ready`를 분리해야 한다. |
 | Mattermost Desktop | Electron, WebContentsView | preload API가 [`REACT_APP_INITIALIZED`](https://github.com/mattermost/desktop/blob/master/src/app/preload/externalAPI.ts#L75-L78)를 보낸다. WebContents는 [`render-process-gone`](https://github.com/mattermost/desktop/blob/master/src/app/views/webContentEvents.ts#L333-L339)을 감지한다. metrics 요청은 [5초 timeout](https://github.com/mattermost/desktop/blob/master/src/main/performanceMonitor.ts#L123-L150)을 둬서 응답 없는 view가 전체 흐름을 막지 않게 한다. | hidden checker가 응답하지 않으면 단순 trigger 반복이 아니라 timeout 기반 복구가 필요하다. |
-| Element Desktop | Electron | preload가 [`initialise`](https://github.com/element-hq/element-desktop/blob/develop/src/preload.cts#L54-L70)를 발생시키고 main이 [`ipcMain.once("initialise")`](https://github.com/element-hq/element-desktop/blob/develop/src/ipc.ts#L222-L227)로 한 번만 ready를 받는다. | 최소형 ready handshake다. Jungle Bell의 `report_checker_ready`와 같은 범주다. |
+| Element Desktop | Electron | preload가 [`initialise`](https://github.com/element-hq/element-desktop/blob/develop/src/preload.cts#L54-L70)를 발생시키고 main이 [`ipcMain.once("initialise")`](https://github.com/element-hq/element-desktop/blob/develop/src/ipc.ts#L222-L227)로 한 번만 ready를 받는다. | 최소형 ready handshake다. Jungle Bell의 `report_checker_event` 중 `ready` event와 같은 범주다. |
 | Rocket.Chat Desktop | Electron, 서버별 WebView | preload가 서버 URL과 renderer store를 준비한 뒤 [`server-view/ready`](https://github.com/RocketChat/Rocket.Chat.Electron/blob/master/src/preload.ts#L37-L68)를 호출한다. 서버 WebView는 [`did-attach`와 `dom-ready`를 모두 받은 뒤 WEBVIEW_READY](https://github.com/RocketChat/Rocket.Chat.Electron/blob/master/src/ui/components/ServersView/ServerPane.tsx#L70-L102) 처리한다. deep link는 [webContents polling + timeout](https://github.com/RocketChat/Rocket.Chat.Electron/blob/master/src/deepLinks/main.ts#L134-L164)을 둔다. video-call WebView는 [`renderer-ready`, `webview-ready`, `webview-failed`](https://github.com/RocketChat/Rocket.Chat.Electron/blob/master/src/ipc/channels.ts#L44-L56)를 분리한다. | Jungle Bell과 매우 가깝다. 다만 `dom-ready`만으로 injected checker 실행을 보장하지는 못하므로 Jungle Bell은 추가 ack가 필요하다. |
 | Zulip Desktop | Electron WebView wrapper | `dom-ready`에서 loading을 내리고, [`did-fail-load`의 connectivity error](https://github.com/zulip/zulip-desktop/blob/main/app/renderer/js/components/webview.ts#L175-L190)를 감지한다. reconnect는 [Fibonacci backoff 후 online이면 reload](https://github.com/zulip/zulip-desktop/blob/main/app/renderer/js/utils/reconnect-util.ts#L21-L68)한다. | 네트워크 복구에는 충분하지만, injected script report 누락 문제에는 약하다. |
 | lencx/ChatGPT | Tauri, remote WebView wrapper | ChatGPT remote WebView에 [`initialization_script`](https://github.com/lencx/ChatGPT/blob/v2-dev/src-tauri/src/core/setup.rs#L56-L94)를 주입하고 URL change를 titlebar에 emit한다([INIT_SCRIPT](https://github.com/lencx/ChatGPT/blob/v2-dev/src-tauri/src/core/constant.rs#L6-L13)). | 실제 Tauri remote WebView 사례지만 ready ack나 watchdog은 보이지 않는다. Jungle Bell 같은 hidden checker에는 부족하다. |
@@ -106,9 +106,9 @@ Jungle Bell 기준으로는 다음이 다르다.
 
 - `checker page loaded`: 약한 신호
 - `checker.js loaded`: injected script 실행 신호
-- `report_attendance_status`: 실제 상태 신호
+- `report_checker_event`의 `attendanceSnapshot`: 실제 상태 신호
 
-따라서 Rust 쪽 상태 전환은 `page loaded`가 아니라 `report_attendance_status` 기준이어야 한다.
+따라서 Rust 쪽 상태 전환은 `page loaded`가 아니라 `attendanceSnapshot` event 기준이어야 한다.
 
 ### 2. timeout과 failure state
 

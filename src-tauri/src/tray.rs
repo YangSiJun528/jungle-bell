@@ -2,7 +2,7 @@
 //!
 //! 트레이 아이콘은 현재 상태에 따라 색상이 변경됨:
 //!   - 회색 (오프라인/확인 중): checker 미보고, 복구 중, 확인 불가
-//!   - 검정/흰색 컷아웃 (조작 불필요): Idle, Studying, Complete
+//!   - 검정/흰색 선 (조작 불필요): Idle, Studying, Complete
 //!   - 오렌지 (경고): 로그인 필요
 //!   - 빨간색 (긴급): NeedStart, StartOverdue, NeedEnd
 
@@ -811,17 +811,12 @@ mod tests {
             .any(|pixel| pixel[3] > 0 && pixel[3] < u8::MAX)
     }
 
-    fn transparent_cutout_bounds(image: &Image<'_>) -> (u32, u32, u32, u32) {
-        let center_x = (image.width() - 1) as f64 / 2.0;
-        let center_y = (image.height() - 1) as f64 / 2.0;
-        let max_radius = image.width().min(image.height()) as f64 * 0.38;
+    fn visible_bounds(image: &Image<'_>) -> (u32, u32, u32, u32) {
         let mut bounds: Option<(u32, u32, u32, u32)> = None;
 
         for y in 0..image.height() {
             for x in 0..image.width() {
-                let dx = x as f64 - center_x;
-                let dy = y as f64 - center_y;
-                if dx * dx + dy * dy > max_radius * max_radius || rgba_at(image, x, y)[3] >= 128 {
+                if rgba_at(image, x, y)[3] < 128 {
                     continue;
                 }
 
@@ -832,22 +827,19 @@ mod tests {
             }
         }
 
-        bounds.expect("transparent compass cutout is missing")
+        bounds.expect("visible tray icon artwork is missing")
     }
 
-    fn transparent_cutout_y_at_center(image: &Image<'_>) -> u32 {
-        let center = image.width() / 2;
-        let plate_top = opaque_plate_y_at_center(image);
-        (plate_top + 1..image.height() / 2)
-            .find(|&y| rgba_at(image, center, y)[3] == 0)
-            .expect("transparent compass ring is missing")
+    fn visible_pixel_ratio(image: &Image<'_>) -> f64 {
+        let visible = image.rgba().chunks_exact(4).filter(|pixel| pixel[3] >= 128).count();
+        visible as f64 / (image.width() * image.height()) as f64
     }
 
-    fn opaque_plate_y_at_center(image: &Image<'_>) -> u32 {
-        let center = image.width() / 2;
-        (0..image.height() / 2)
-            .find(|&y| rgba_at(image, center, y)[3] == 255)
-            .expect("opaque tray icon plate is missing")
+    fn contains_opaque_color(image: &Image<'_>, expected: [u8; 3]) -> bool {
+        image
+            .rgba()
+            .chunks_exact(4)
+            .any(|pixel| pixel[0..3] == expected && pixel[3] == u8::MAX)
     }
 
     #[test]
@@ -899,13 +891,9 @@ mod tests {
     }
 
     #[test]
-    fn 컨셉6_주의상태_아이콘은_작업영역을_채우고_절제된_중앙_심볼을_사용한다() {
+    fn 트레이_아이콘은_투명한_배경에_얇은_외곽선만_사용한다() {
         let light = icon_for_kind(TrayIconKind::Alert, TrayIconTheme::Light);
         let dark = icon_for_kind(TrayIconKind::Alert, TrayIconTheme::Dark);
-        let quiet = icon_for_kind(TrayIconKind::Normal, TrayIconTheme::Light);
-        let center = EXPECTED_TRAY_ICON_SIZE / 2;
-        let plate_top = opaque_plate_y_at_center(&light);
-        let glyph_top = transparent_cutout_y_at_center(&quiet);
 
         assert_eq!(
             (light.width(), light.height()),
@@ -915,62 +903,48 @@ mod tests {
             (dark.width(), dark.height()),
             (EXPECTED_TRAY_ICON_SIZE, EXPECTED_TRAY_ICON_SIZE)
         );
-        assert!(rgba_at(&light, center, 0)[3] < 128);
-        assert!(rgba_at(&dark, center, 0)[3] < 128);
-        assert_eq!(rgba_at(&light, center, plate_top), [180, 35, 44, 255]);
-        assert_eq!(rgba_at(&dark, center, plate_top), [240, 93, 101, 255]);
-        assert_eq!(rgba_at(&light, center, glyph_top), [255, 255, 255, 255]);
-        assert_eq!(rgba_at(&dark, center, glyph_top), [38, 11, 14, 255]);
-    }
+        for image in [&light, &dark] {
+            assert!(rgba_at(image, 0, 0)[3] < 16);
+            assert!(rgba_at(image, image.width() - 1, 0)[3] < 16);
+            assert!(rgba_at(image, 0, image.height() - 1)[3] < 16);
+            assert!(rgba_at(image, image.width() - 1, image.height() - 1)[3] < 16);
+            assert!(visible_pixel_ratio(image) < 0.35);
+            assert!(has_antialiased_edge(image));
 
-    #[test]
-    fn 컨셉6_나침반은_픽셀중앙과_얇은_링을_사용한다() {
-        let normal_svg = include_str!("../../design/tray-icon-lab/icons/light/tile/normal.svg");
-        let alert_svg = include_str!("../../design/tray-icon-lab/icons/light/tile/alert.svg");
-        let complete_svg = include_str!("../../design/tray-icon-lab/icons/light/tile/complete.svg");
-
-        for svg in [normal_svg, alert_svg, complete_svg] {
-            assert!(svg.contains("translate(22 22) scale(1.5)"));
-            assert!(svg.contains("translate(22 22) scale(0.78) translate(-22 -22)"));
-            assert!(svg.contains("stroke-width=\"1.62\""));
-            assert!(svg.contains("<rect x=\"2\" y=\"2\" width=\"40\" height=\"40\" rx=\"12.5\""));
-        }
-
-        let macos = Image::from_bytes(include_bytes!("../icons/tray-normal-light.png")).unwrap();
-        let windows = Image::from_bytes(include_bytes!("../icons/tray-normal-light-windows.png")).unwrap();
-
-        assert!(rgba_at(&macos, 4, 4)[3] < 128);
-        assert!(rgba_at(&windows, 5, 5)[3] < 128);
-
-        for image in [&macos, &windows] {
-            let (min_x, min_y, max_x, max_y) = transparent_cutout_bounds(image);
-            let center = image.width() / 2;
-            let gap_offset = image.width() / 6;
-
+            let (min_x, min_y, max_x, max_y) = visible_bounds(image);
             assert_eq!(min_x + max_x, image.width() - 1);
             assert_eq!(min_y + max_y, image.height() - 1);
-            assert!(min_x <= image.width() / 6);
-            assert!(max_x - min_x + 1 >= image.width() * 7 / 10);
-            assert!(rgba_at(image, center + gap_offset, center - gap_offset)[3] >= 250);
         }
+
+        assert!(contains_opaque_color(&light, [180, 35, 44]));
+        assert!(contains_opaque_color(&dark, [240, 93, 101]));
     }
 
     #[test]
-    fn 출석완료_아이콘은_테마별_무채색_배경과_투명한_중앙을_사용한다() {
+    fn 트레이_svg는_원본_나침반과_얇은_테두리를_보존한다() {
+        let svg = include_str!("../icons/tray-source.svg");
+
+        assert!(svg.contains("viewBox=\"0 0 44 44\""));
+        assert!(svg.contains("<rect x=\"3\" y=\"3\" width=\"38\" height=\"38\" rx=\"10\" fill=\"none\""));
+        assert!(svg.contains("stroke=\"currentColor\" stroke-width=\"1.6\""));
+        assert!(svg.contains("M512 896a384 384 0 1 0 0-768"));
+        assert!(svg.contains("M725.888 315.008C676.48 428.672"));
+        assert!(!svg.contains("<rect x=\"3\" y=\"3\" width=\"38\" height=\"38\" rx=\"10\" fill=\"currentColor\""));
+    }
+
+    #[test]
+    fn 출석완료_아이콘은_테마별_무채색_선으로_표시한다() {
         let light = icon_for_kind(TrayIconKind::Complete, TrayIconTheme::Light);
         let dark = icon_for_kind(TrayIconKind::Complete, TrayIconTheme::Dark);
-        let center = EXPECTED_TRAY_ICON_SIZE / 2;
-        let plate_top = opaque_plate_y_at_center(&light);
-        let glyph_top = transparent_cutout_y_at_center(&light);
+        let normal_light = icon_for_kind(TrayIconKind::Normal, TrayIconTheme::Light);
+        let normal_dark = icon_for_kind(TrayIconKind::Normal, TrayIconTheme::Dark);
 
-        assert!(rgba_at(&light, center, 0)[3] < 128);
-        assert!(rgba_at(&dark, center, 0)[3] < 128);
-        assert_eq!(rgba_at(&light, center, plate_top), [255, 255, 255, 255]);
-        assert_eq!(rgba_at(&dark, center, plate_top), [0, 0, 0, 255]);
-        assert_eq!(rgba_at(&light, center, glyph_top)[3], 0);
-        assert_eq!(rgba_at(&dark, center, glyph_top)[3], 0);
-        assert_eq!(rgba_at(&light, center, center)[3], 0);
-        assert_eq!(rgba_at(&dark, center, center)[3], 0);
+        assert_eq!(light.rgba(), normal_light.rgba());
+        assert_eq!(dark.rgba(), normal_dark.rgba());
+        assert!(contains_opaque_color(&light, [36, 49, 59]));
+        assert!(contains_opaque_color(&dark, [238, 242, 243]));
+        assert!(visible_pixel_ratio(&light) < 0.35);
+        assert!(visible_pixel_ratio(&dark) < 0.35);
     }
 
     #[test]
@@ -980,20 +954,16 @@ mod tests {
         let complete_light = Image::from_bytes(include_bytes!("../icons/tray-complete-light-windows.png")).unwrap();
         let normal_dark = Image::from_bytes(include_bytes!("../icons/tray-normal-dark-windows.png")).unwrap();
         let complete_dark = Image::from_bytes(include_bytes!("../icons/tray-complete-dark-windows.png")).unwrap();
-        let plate_top = opaque_plate_y_at_center(&alert);
-        let glyph_top = transparent_cutout_y_at_center(&normal_light);
 
         assert_eq!((alert.width(), alert.height()), (48, 48));
         assert_eq!((complete_dark.width(), complete_dark.height()), (48, 48));
-        assert!(rgba_at(&alert, 24, 0)[3] < 128);
-        assert_eq!(rgba_at(&alert, 24, plate_top), [180, 35, 44, 255]);
-        assert_eq!(rgba_at(&alert, 24, glyph_top), [255, 255, 255, 255]);
+        assert!(rgba_at(&alert, 0, 0)[3] < 16);
+        assert!(contains_opaque_color(&alert, [180, 35, 44]));
+        assert!(visible_pixel_ratio(&alert) < 0.35);
         assert_eq!(normal_light.rgba(), complete_light.rgba());
         assert_eq!(normal_dark.rgba(), complete_dark.rgba());
-        assert_eq!(rgba_at(&complete_light, 24, plate_top), [255, 255, 255, 255]);
-        assert_eq!(rgba_at(&complete_dark, 24, plate_top), [0, 0, 0, 255]);
-        assert_eq!(rgba_at(&complete_dark, 24, glyph_top)[3], 0);
-        assert_eq!(rgba_at(&complete_dark, 24, 24)[3], 0);
+        assert!(contains_opaque_color(&complete_light, [36, 49, 59]));
+        assert!(contains_opaque_color(&complete_dark, [238, 242, 243]));
     }
 
     #[test]
@@ -1110,11 +1080,10 @@ mod tests {
     }
 
     #[test]
-    fn 확인이나_조작이_필요하지_않은_상태는_무채색_컷아웃_아이콘을_표시한다() {
+    fn 확인이나_조작이_필요하지_않은_상태는_무채색_선_아이콘을_표시한다() {
         let idle = build_tray_view_model(&healthy_snapshot(DailyPhase::Idle, None, false), Utc::now());
         let studying = build_tray_view_model(&healthy_snapshot(DailyPhase::Studying, Some(14_580), false), Utc::now());
         let complete = build_tray_view_model(&healthy_snapshot(DailyPhase::Complete, None, false), Utc::now());
-        let center = EXPECTED_TRAY_ICON_SIZE / 2;
 
         assert_eq!(idle.icon, TrayIconKind::Normal);
         assert_eq!(studying.icon, TrayIconKind::Normal);
@@ -1124,11 +1093,10 @@ mod tests {
         for theme in [TrayIconTheme::Light, TrayIconTheme::Dark] {
             let normal = icon_for_kind(TrayIconKind::Normal, theme);
             let complete = icon_for_kind(TrayIconKind::Complete, theme);
-            let glyph_top = transparent_cutout_y_at_center(&normal);
 
             assert_eq!(normal.rgba(), complete.rgba());
-            assert_eq!(rgba_at(&normal, center, glyph_top)[3], 0);
-            assert_eq!(rgba_at(&normal, center, center)[3], 0);
+            assert!(rgba_at(&normal, 0, 0)[3] < 16);
+            assert!(visible_pixel_ratio(&normal) < 0.35);
         }
     }
 

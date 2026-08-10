@@ -30,7 +30,7 @@ description: jungle-bell hidden checker WebView를 사용자 수동 로그인/�
 1. 상태 확인:
    - `git status --short`로 기존 변경사항을 기록한다.
    - `references/session-repro-guide.md`를 읽고, 필요할 때만 관련 reference를 추가로 읽는다.
-   - 현재 코드에서 checker/tray 관련 파일을 찾는다: `src-tauri/src/checker.rs`, `commands.rs`, `lib.rs`, `tray.rs`, `state.rs`, `src/checker.js`.
+   - 현재 코드에서 checker/tray 관련 파일을 찾는다: `src-tauri/src/checker.rs`, `commands.rs`, `lib.rs`, `tray.rs`, `state.rs`, `src/injected/checker.ts`.
 
 2. 재현 root 생성:
    - 예: `/private/tmp/jungle-bell-session-repro-YYYYMMDD-HHMMSS`

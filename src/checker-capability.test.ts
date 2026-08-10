@@ -3,6 +3,9 @@ import {existsSync, readdirSync, readFileSync} from 'node:fs';
 import {test} from 'vitest';
 
 const checkerSource = readFileSync(new URL('./injected/checker.ts', import.meta.url), 'utf8');
+const rootPackage = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {
+    scripts?: Record<string, string>;
+};
 const buildSource = readFileSync(new URL('../src-tauri/build.rs', import.meta.url), 'utf8');
 const appSource = readFileSync(new URL('../src-tauri/src/lib.rs', import.meta.url), 'utf8');
 const checkerRuntimeSource = readFileSync(new URL('../src-tauri/src/checker.rs', import.meta.url), 'utf8');
@@ -105,6 +108,10 @@ test('원격 checker는 필요한 명령과 event listen 권한만 가진다', (
         /['"](?:report_checker_ready|log_from_js|resolve_cohort_selection|report_attendance_status)['"]/,
     );
     assert.match(checkerSource, /Number\.isSafeInteger\(generation\)/);
+});
+
+test('desktop 검증은 Rust 컴파일 전에 checker injection을 생성한다', () => {
+    assert.match(rootPackage.scripts?.['verify:desktop'] ?? '', /^npm run build:app && cargo fmt /);
 });
 
 test('LMS WebView는 외부 페이지 실행을 깨뜨리는 전역 옵션을 사용하지 않는다', () => {

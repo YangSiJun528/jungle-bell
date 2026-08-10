@@ -36,7 +36,7 @@ padding-inline: calc(var(--page-gutter) - var(--scrollbar-size));
 | --- | --- | --- |
 | 앱 셸 헤더 | `ui-app-header` | 셸 상단의 공통 정렬과 최소 높이 |
 | 앱 셸 푸터 | `ui-app-footer` | 셸 하단의 공통 정렬과 최소 높이 |
-| 페이지 헤더 | `ui-page-header` | 설정·온보딩·생활 정보처럼 페이지 내부 제목 영역 |
+| 페이지 헤더 | `ui-page-header` | 대시보드 세부 화면처럼 페이지 내부 제목 영역 |
 
 대시보드의 `attendance`, `laundry`, `meals`, `notifications`, `connections`는 각각 헤더와 푸터를 만들지 않는다. [`dashboard.html`](../src/dashboard.html)은 다섯 경로 바깥에 `ui-app-header`와 `ui-app-footer`를 각각 한 번만 선언하고 모든 경로가 같은 셸을 사용한다. 경로별 제목은 본문 안의 `dashboard-page-intro`가 담당한다.
 

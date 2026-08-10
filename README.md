@@ -1,5 +1,5 @@
 <p></p>
-<img src="assets/readme/logo.png" height="100" alt="Jungle Bell" align="left"/>
+<img src="docs/assets/readme/logo.png" height="100" alt="Jungle Bell" align="left"/>
 
 <div>
 <h3>Jungle Bell</h3>
@@ -72,36 +72,36 @@ PC 앱이 종료되거나 컴퓨터가 잠자기 상태면 출석 정보가 갱�
 
 ## 출석 상태 보기
 
-출석 상태는 메뉴 바(macOS) 또는 작업 표시줄(Windows)에 있는 Jungle Bell 아이콘으로 표시돼요. 확인이나 조작이 필요할 때만 상태색을 사용하고, 그 외에는 운영체제 테마에 맞는 무채색 컷아웃으로 표시됩니다.
+출석 상태는 메뉴 바(macOS) 또는 작업 표시줄(Windows)에 있는 Jungle Bell 아이콘으로 표시돼요. 원본 나침반과 얇은 테두리를 유지하면서, 확인이나 조작이 필요할 때만 상태색을 사용합니다.
 
 <table>
   <tr>
     <td align="center" width="58">
-      <img src="assets/readme/readme-status-offline.svg" width="52" alt="회색 상태 아이콘">
+      <img src="docs/assets/readme/readme-status-offline.svg" width="52" alt="회색 상태 아이콘">
     </td>
     <td><strong>상태 확인 중 / 확인 불가</strong><br>로그인 세션이나 네트워크 상태를 다시 확인하고 있어요.</td>
   </tr>
   <tr>
     <td align="center" width="58">
-      <img src="assets/readme/readme-status-alert.svg" width="52" alt="빨간 상태 아이콘">
+      <img src="docs/assets/readme/readme-status-alert.svg" width="52" alt="빨간 상태 아이콘">
     </td>
     <td><strong>출석 시작/종료 가능</strong><br>출석 페이지를 열어 체크인/체크아웃해 주세요.</td>
   </tr>
   <tr>
     <td align="center" width="58">
-      <img src="assets/readme/readme-status-normal.svg" width="52" alt="흰색 또는 검은색 학습 중 상태 아이콘">
+      <img src="docs/assets/readme/readme-status-normal.svg" width="52" alt="흰색 또는 검은색 학습 중 상태 아이콘">
     </td>
     <td><strong>학습 중 / 별도 조작 없음</strong><br>현재 출석이 정상적으로 진행 중이며 지금 처리할 작업은 없어요.</td>
   </tr>
   <tr>
     <td align="center" width="58">
-      <img src="assets/readme/readme-status-complete.svg" width="52" alt="흰색 또는 검은색 출석 완료 상태 아이콘">
+      <img src="docs/assets/readme/readme-status-complete.svg" width="52" alt="흰색 또는 검은색 출석 완료 상태 아이콘">
     </td>
-    <td><strong>출석 완료</strong><br>나침반은 투명하게 뚫리고, 밝은 배경에서는 흰색, 어두운 배경에서는 검정으로 낮게 표시돼요.</td>
+    <td><strong>출석 완료</strong><br>밝은 배경에서는 짙은 선, 어두운 배경에서는 밝은 선으로 낮게 표시돼요.</td>
   </tr>
   <tr>
     <td align="center" width="58">
-      <img src="assets/readme/readme-status-warning.svg" width="52" alt="주황 상태 아이콘">
+      <img src="docs/assets/readme/readme-status-warning.svg" width="52" alt="주황 상태 아이콘">
     </td>
     <td><strong>로그인 필요</strong><br>Jungle Campus에 로그인해 주세요.</td>
   </tr>

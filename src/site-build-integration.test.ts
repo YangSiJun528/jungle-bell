@@ -5,7 +5,7 @@ import {test} from 'vitest';
 const rootPackage = JSON.parse(
     readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
 ) as {workspaces?: string[]; scripts?: Record<string, string>};
-const assembler = readFileSync(new URL('../scripts/assemble-site.mjs', import.meta.url), 'utf8');
+const assembler = readFileSync(new URL('../site/scripts/assemble.mjs', import.meta.url), 'utf8');
 const appBlog404 = new URL('../dist/blog/404.html', import.meta.url);
 
 test('Markdown 사이트는 루트 workspace의 App asset build에 포함된다', () => {
