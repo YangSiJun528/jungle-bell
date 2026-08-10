@@ -17,6 +17,7 @@ OCI Collector는 세탁실을 매분, 카카오 API 두 개를 5분마다 한 �
 ## 내부 운영
 
 - [배포와 장애 대응 런북](OPERATIONS.md)
+- [환경 변수와 Cloudflare 바인딩 레퍼런스](docs/environment-reference.md)
 - [HTTP API 레퍼런스](docs/api-reference.md)
 
 ## D1 초기화

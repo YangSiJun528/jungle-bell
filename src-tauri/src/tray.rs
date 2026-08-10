@@ -35,8 +35,6 @@ const CONTENT_WINDOW_WIDTH: f64 = 720.0;
 const STANDARD_WINDOW_HEIGHT: f64 = 720.0;
 const UTILITY_WINDOW_MIN_WIDTH: f64 = 520.0;
 const UTILITY_WINDOW_MIN_HEIGHT: f64 = 600.0;
-const CAMPUS_WINDOW_MIN_WIDTH: f64 = 640.0;
-const CAMPUS_WINDOW_MIN_HEIGHT: f64 = 600.0;
 const ATTENDANCE_MIN_SIZE: f64 = 640.0;
 const IMAGE_VIEWER_WIDTH: f64 = 1120.0;
 const IMAGE_VIEWER_HEIGHT: f64 = 840.0;
@@ -46,6 +44,10 @@ const TRAY_PANEL_WIDTH: f64 = 390.0;
 const TRAY_PANEL_HEIGHT: f64 = 640.0;
 const TRAY_PANEL_GAP: f64 = 8.0;
 const TRAY_PANEL_HIDE_DELAY_MS: u64 = 120;
+const DASHBOARD_WINDOW_WIDTH: f64 = 1180.0;
+const DASHBOARD_WINDOW_HEIGHT: f64 = 780.0;
+const DASHBOARD_WINDOW_MIN_WIDTH: f64 = 760.0;
+const DASHBOARD_WINDOW_MIN_HEIGHT: f64 = 560.0;
 
 /// 출석 페이지 닫힌 후 로그인 재시도 윈도우 (초). 3분간 빠르게 재확인.
 const LOGIN_RETRY_WINDOW_SECS: u64 = 180;
@@ -95,7 +97,14 @@ const ICON_COMPLETE_DARK: &[u8] = include_bytes!("../icons/tray-complete-dark.pn
 #[cfg(not(target_os = "macos"))]
 const ICON_COMPLETE_DARK: &[u8] = include_bytes!("../icons/tray-complete-dark-windows.png");
 
-const FOREGROUND_WINDOW_LABELS: [&str; 5] = ["attendance", "settings", "onboarding", "campus", "image-viewer"];
+const FOREGROUND_WINDOW_LABELS: [&str; 6] = [
+    "dashboard",
+    "attendance",
+    "settings",
+    "onboarding",
+    "campus",
+    "image-viewer",
+];
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -902,57 +911,6 @@ pub fn open_image_viewer(app: &tauri::AppHandle, image_url: String) -> Result<()
     Ok(())
 }
 
-fn select_campus_tab(window: &WebviewWindow<tauri::Wry>, tab: CampusTab) {
-    let script = format!("window.setCampusTab && window.setCampusTab('{}')", tab.as_str());
-    if let Err(error) = window.eval(&script) {
-        log::warn!("[tray] campus tab selection failed: {}", error);
-    }
-}
-
-fn build_campus_window(app: &tauri::AppHandle, tab: CampusTab) {
-    show_foreground_app(app);
-    if let Ok(window) = tauri::WebviewWindowBuilder::new(
-        app,
-        "campus",
-        tauri::WebviewUrl::App(format!("campus.html?tab={}", tab.as_str()).into()),
-    )
-    .title("생활 정보")
-    .theme(Some(tauri::Theme::Light))
-    .inner_size(CONTENT_WINDOW_WIDTH, STANDARD_WINDOW_HEIGHT)
-    .min_inner_size(CAMPUS_WINDOW_MIN_WIDTH, CAMPUS_WINDOW_MIN_HEIGHT)
-    .resizable(true)
-    .minimizable(true)
-    .maximizable(true)
-    .skip_taskbar(foreground_window_skip_taskbar(app))
-    .focused(true)
-    .build()
-    {
-        focus_window(&window);
-        let app_handle = app.clone();
-        window.on_window_event(move |event| {
-            if let tauri::WindowEvent::Destroyed = event {
-                sync_foreground_app_visibility_soon(app_handle.clone());
-            }
-        });
-    }
-}
-
-fn open_campus_window(app: &tauri::AppHandle, tab: CampusTab) {
-    log::info!("[tray] campus window opened: {}", tab.as_str());
-    match tab {
-        CampusTab::Laundry => analytics::track(Event::LaundryStatusOpened),
-        CampusTab::Meals => analytics::track(Event::MealPlanOpened),
-    }
-
-    if let Some(window) = app.get_webview_window("campus") {
-        show_foreground_app(app);
-        select_campus_tab(&window, tab);
-        focus_window(&window);
-    } else {
-        build_campus_window(app, tab);
-    }
-}
-
 fn build_settings_window(app: &tauri::AppHandle) {
     show_foreground_app(app);
     if let Ok(window) = tauri::WebviewWindowBuilder::new(app, "settings", tauri::WebviewUrl::App("index.html".into()))
@@ -974,6 +932,81 @@ fn build_settings_window(app: &tauri::AppHandle) {
                 sync_foreground_app_visibility_soon(app_handle.clone());
             }
         });
+    }
+}
+
+fn dashboard_app_url(route: Option<CampusTab>) -> String {
+    match route {
+        Some(route) => format!("dashboard.html#{}", route.as_str()),
+        None => "dashboard.html".into(),
+    }
+}
+
+fn select_dashboard_route(window: &WebviewWindow<tauri::Wry>, route: CampusTab) {
+    // route는 닫힌 Rust enum이므로 JS 문자열에 외부 입력이 들어가지 않는다.
+    let script = match route {
+        CampusTab::Laundry => "window.location.hash = '#laundry'",
+        CampusTab::Meals => "window.location.hash = '#meals'",
+    };
+    if let Err(error) = window.eval(script) {
+        log::warn!("[dashboard] route selection failed: {error}");
+    }
+}
+
+fn build_dashboard_window(app: &tauri::AppHandle, route: Option<CampusTab>) {
+    show_foreground_app(app);
+    match tauri::WebviewWindowBuilder::new(
+        app,
+        "dashboard",
+        tauri::WebviewUrl::App(dashboard_app_url(route).into()),
+    )
+    .title("Jungle Bell")
+    .theme(Some(tauri::Theme::Light))
+    .inner_size(DASHBOARD_WINDOW_WIDTH, DASHBOARD_WINDOW_HEIGHT)
+    .min_inner_size(DASHBOARD_WINDOW_MIN_WIDTH, DASHBOARD_WINDOW_MIN_HEIGHT)
+    .resizable(true)
+    .minimizable(true)
+    .maximizable(true)
+    .skip_taskbar(foreground_window_skip_taskbar(app))
+    .focused(true)
+    .build()
+    {
+        Ok(window) => {
+            focus_window(&window);
+            let app_handle = app.clone();
+            window.on_window_event(move |event| {
+                if let tauri::WindowEvent::Destroyed = event {
+                    sync_foreground_app_visibility_soon(app_handle.clone());
+                }
+            });
+        }
+        Err(error) => log::error!("[dashboard] window creation failed: {error}"),
+    }
+}
+
+pub fn open_dashboard_window(app: &tauri::AppHandle) {
+    log::info!("[dashboard] window opened");
+    if let Some(window) = app.get_webview_window("dashboard") {
+        show_foreground_app(app);
+        focus_window(&window);
+    } else {
+        build_dashboard_window(app, None);
+    }
+}
+
+fn open_dashboard_campus_route(app: &tauri::AppHandle, route: CampusTab) {
+    log::info!("[dashboard] campus route opened: {}", route.as_str());
+    match route {
+        CampusTab::Laundry => analytics::track(Event::LaundryStatusOpened),
+        CampusTab::Meals => analytics::track(Event::MealPlanOpened),
+    }
+
+    if let Some(window) = app.get_webview_window("dashboard") {
+        show_foreground_app(app);
+        select_dashboard_route(&window, route);
+        focus_window(&window);
+    } else {
+        build_dashboard_window(app, Some(route));
     }
 }
 
@@ -1215,8 +1248,10 @@ pub fn run_tray_panel_action(app: &tauri::AppHandle, action: TrayPanelAction) ->
 
     match action {
         TrayPanelAction::OpenAttendance => run_window_task(app, |app| open_attendance_window(&app)),
-        TrayPanelAction::OpenLaundry => run_window_task(app, |app| open_campus_window(&app, CampusTab::Laundry)),
-        TrayPanelAction::OpenMeals => run_window_task(app, |app| open_campus_window(&app, CampusTab::Meals)),
+        TrayPanelAction::OpenLaundry => {
+            run_window_task(app, |app| open_dashboard_campus_route(&app, CampusTab::Laundry))
+        }
+        TrayPanelAction::OpenMeals => run_window_task(app, |app| open_dashboard_campus_route(&app, CampusTab::Meals)),
         TrayPanelAction::OpenFeedback => {
             analytics::track(Event::FeedbackOpened);
             tauri_plugin_opener::open_url(FEEDBACK_URL, None::<&str>).map_err(|error| error.to_string())?;
@@ -1939,6 +1974,13 @@ mod tests {
         let quit: TrayPanelAction = serde_json::from_str("\"quit\"").unwrap();
         assert_eq!(quit, TrayPanelAction::Quit);
         assert!(serde_json::from_str::<TrayPanelAction>("\"open_shell\"").is_err());
+    }
+
+    #[test]
+    fn 대시보드_생활정보는_hash_route_계약을_사용한다() {
+        assert_eq!(dashboard_app_url(None), "dashboard.html");
+        assert_eq!(dashboard_app_url(Some(CampusTab::Laundry)), "dashboard.html#laundry");
+        assert_eq!(dashboard_app_url(Some(CampusTab::Meals)), "dashboard.html#meals");
     }
 
     #[test]

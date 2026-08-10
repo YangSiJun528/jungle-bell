@@ -1,0 +1,24 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "dashboard",
+  "description": "Minimal capability for the local dashboard and connected mobile management",
+  "windows": ["dashboard"],
+  "permissions": [
+    "core:event:default",
+    "allow-get-connected-service-status",
+    "allow-open-lms-login",
+    "allow-create-mobile-pairing",
+    "allow-get-mobile-pairing-status",
+    "allow-approve-mobile-pairing",
+    "allow-list-mobile-sessions",
+    "allow-revoke-mobile-session",
+    "allow-get-remote-attendance-snapshot",
+    "allow-refresh-platform-sync",
+    "allow-report-campus-ready",
+    "allow-refresh-campus-data",
+    "allow-get-dashboard-campus-data",
+    "allow-get-notification-inbox-snapshot",
+    "allow-activate-notification",
+    "allow-send-test-notification"
+  ]
+}

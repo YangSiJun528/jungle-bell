@@ -33,21 +33,21 @@ test('설정과 온보딩 창은 초기 크기를 유지하며 작은 화면에�
     }
 });
 
-test('생활 정보 창은 기존 720 정사각형에서 시작하고 더 넓게 조절하거나 최대화할 수 있다', () => {
-    const campus = sourceBetween(tray, 'fn build_campus_window', 'fn open_campus_window');
+test('대시보드 창은 사이드바와 내용을 표시할 크기에서 시작하고 최대화할 수 있다', () => {
+    const dashboard = sourceBetween(tray, 'fn build_dashboard_window', 'pub fn open_dashboard_window');
 
-    assert.match(tray, /const CONTENT_WINDOW_WIDTH: f64 = 720\.0;/);
-    assert.match(tray, /const STANDARD_WINDOW_HEIGHT: f64 = 720\.0;/);
-    assert.match(tray, /const CAMPUS_WINDOW_MIN_WIDTH: f64 = 640\.0;/);
-    assert.match(tray, /const CAMPUS_WINDOW_MIN_HEIGHT: f64 = 600\.0;/);
-    assert.match(campus, /\.inner_size\(CONTENT_WINDOW_WIDTH, STANDARD_WINDOW_HEIGHT\)/);
+    assert.match(tray, /const DASHBOARD_WINDOW_WIDTH: f64 = 1180\.0;/);
+    assert.match(tray, /const DASHBOARD_WINDOW_HEIGHT: f64 = 780\.0;/);
+    assert.match(tray, /const DASHBOARD_WINDOW_MIN_WIDTH: f64 = 760\.0;/);
+    assert.match(tray, /const DASHBOARD_WINDOW_MIN_HEIGHT: f64 = 560\.0;/);
+    assert.match(dashboard, /\.inner_size\(DASHBOARD_WINDOW_WIDTH, DASHBOARD_WINDOW_HEIGHT\)/);
     assert.match(
-        campus,
-        /\.min_inner_size\(CAMPUS_WINDOW_MIN_WIDTH, CAMPUS_WINDOW_MIN_HEIGHT\)/,
+        dashboard,
+        /\.min_inner_size\(DASHBOARD_WINDOW_MIN_WIDTH, DASHBOARD_WINDOW_MIN_HEIGHT\)/,
     );
-    assert.match(campus, /\.resizable\(true\)/);
-    assert.match(campus, /\.minimizable\(true\)/);
-    assert.match(campus, /\.maximizable\(true\)/);
+    assert.match(dashboard, /\.resizable\(true\)/);
+    assert.match(dashboard, /\.minimizable\(true\)/);
+    assert.match(dashboard, /\.maximizable\(true\)/);
 });
 
 test('트레이 패널은 시스템 보조 창으로 고정 크기를 유지한다', () => {

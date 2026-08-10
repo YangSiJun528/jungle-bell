@@ -1,0 +1,39 @@
+{
+  "id": "./dashboard.html",
+  "name": "Jungle Bell",
+  "short_name": "Jungle Bell",
+  "description": "출석 상태와 정글 생활 정보를 확인하세요.",
+  "lang": "ko-KR",
+  "start_url": "./dashboard.html#home",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#eef4ef",
+  "theme_color": "#eef4ef",
+  "categories": ["education", "utilities"],
+  "icons": [
+    {
+      "src": "./icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {"name": "출석 상태", "url": "./dashboard.html#attendance"},
+    {"name": "세탁", "url": "./dashboard.html#laundry"},
+    {"name": "급식", "url": "./dashboard.html#meals"}
+  ]
+}

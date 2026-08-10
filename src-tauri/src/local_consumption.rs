@@ -17,7 +17,7 @@ use crate::campus::{CampusDataKind, CampusSnapshot};
 use crate::config::{Config, LaundryApplianceKind, LaundryTerminalActivity, LaundryTerminalStatus, LaundryWatch};
 use crate::notification_service::{NotificationAction, NotificationRequest, NotificationService};
 use crate::settings_state::SettingsService;
-use crate::state::{AppState, DailyPhase};
+use crate::state::{AppState, AttendanceNotificationAuthority, DailyPhase};
 
 const MEAL_LUNCH_CURSOR_KEY: &str = "meals.daily.lunch";
 const MEAL_DINNER_CURSOR_KEY: &str = "meals.daily.dinner";
@@ -275,13 +275,14 @@ impl LocalConsumptionService {
         phase: DailyPhase,
         remaining: Option<i64>,
     ) {
-        let (config, needs_login, attendance_date) = {
+        let (config, needs_login, attendance_date, notification_authority) = {
             let state = self.state.lock().await;
             let kst_now = now.with_timezone(&crate::state::kst());
             (
                 state.config.clone(),
                 state.needs_login,
                 attendance_day::effective_attendance_date(&state.config, kst_now),
+                state.attendance_notification_authority,
             )
         };
         let attendance = AttendanceLocalState {
@@ -289,6 +290,7 @@ impl LocalConsumptionService {
             remaining,
             needs_login,
             attendance_date,
+            notification_authority,
         };
         let mut runtime = self.runtime.lock().await;
         let evaluation = evaluate_attendance(&config, &attendance, now, &runtime.cursors);
@@ -697,6 +699,7 @@ struct AttendanceLocalState {
     remaining: Option<i64>,
     needs_login: bool,
     attendance_date: String,
+    notification_authority: AttendanceNotificationAuthority,
 }
 
 fn parse_laundry_timestamp(value: Option<&Value>) -> Option<DateTime<Utc>> {
@@ -1239,12 +1242,33 @@ fn meal_post_is_today(post: &Value, kst_now: DateTime<chrono::FixedOffset>) -> b
         .is_some_and(|published| published.with_timezone(&crate::state::kst()).date_naive() == kst_now.date_naive())
 }
 
+fn local_attendance_delivery_allowed(
+    authority: AttendanceNotificationAuthority,
+    phase: DailyPhase,
+    remaining: Option<i64>,
+) -> bool {
+    match authority {
+        AttendanceNotificationAuthority::LegacyLocal => true,
+        AttendanceNotificationAuthority::Server => false,
+        AttendanceNotificationAuthority::LocalFallback => matches!(
+            (phase, remaining),
+            (
+                DailyPhase::NeedStart | DailyPhase::StartOverdue | DailyPhase::NeedEnd,
+                Some(0..=600)
+            )
+        ),
+    }
+}
+
 fn evaluate_attendance(
     config: &Config,
     state: &AttendanceLocalState,
     now: DateTime<Utc>,
     cursors: &EventCursorStore,
 ) -> LocalEvaluation {
+    if !local_attendance_delivery_allowed(state.notification_authority, state.phase, state.remaining) {
+        return LocalEvaluation::default();
+    }
     let decision = crate::attendance::notification_decision(
         config,
         state.phase,
@@ -2136,6 +2160,35 @@ mod tests {
     }
 
     #[test]
+    fn 서버_계획이_건강하면_로컬_출석을_억제하고_단절_중요구간에만_fallback한다() {
+        assert!(local_attendance_delivery_allowed(
+            AttendanceNotificationAuthority::LegacyLocal,
+            DailyPhase::NeedStart,
+            Some(3_600),
+        ));
+        assert!(!local_attendance_delivery_allowed(
+            AttendanceNotificationAuthority::Server,
+            DailyPhase::NeedEnd,
+            Some(60),
+        ));
+        assert!(local_attendance_delivery_allowed(
+            AttendanceNotificationAuthority::LocalFallback,
+            DailyPhase::NeedEnd,
+            Some(600),
+        ));
+        assert!(!local_attendance_delivery_allowed(
+            AttendanceNotificationAuthority::LocalFallback,
+            DailyPhase::NeedEnd,
+            Some(601),
+        ));
+        assert!(!local_attendance_delivery_allowed(
+            AttendanceNotificationAuthority::LocalFallback,
+            DailyPhase::Studying,
+            Some(60),
+        ));
+    }
+
+    #[test]
     fn 출석_마감_5분전에는_일반_알림을_긴급_알림으로_합친다() {
         let kst = FixedOffset::east_opt(9 * 3600)
             .unwrap()
@@ -2147,6 +2200,7 @@ mod tests {
             remaining: Some(300),
             needs_login: false,
             attendance_date: "2026-07-27".into(),
+            notification_authority: AttendanceNotificationAuthority::LegacyLocal,
         };
         let mut cursors = EventCursorStore::default();
 
@@ -2261,6 +2315,7 @@ mod tests {
             remaining: Some(360),
             needs_login: false,
             attendance_date: "2026-07-27".into(),
+            notification_authority: AttendanceNotificationAuthority::LegacyLocal,
         };
         let mut cursors = EventCursorStore::default();
         let regular = evaluate_attendance(&config, &regular_state, regular_at, &cursors);
@@ -2293,6 +2348,7 @@ mod tests {
             remaining: Some(3600),
             needs_login: false,
             attendance_date: "2026-07-28".into(),
+            notification_authority: AttendanceNotificationAuthority::LegacyLocal,
         };
         let mut cursors = EventCursorStore::default();
         let config = Config {
@@ -2329,6 +2385,7 @@ mod tests {
             remaining: Some(5 * 60 * 60),
             needs_login: false,
             attendance_date: "2026-07-28".into(),
+            notification_authority: AttendanceNotificationAuthority::LegacyLocal,
         };
         let mut cursors = EventCursorStore::default();
         let config = Config {

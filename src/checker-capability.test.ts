@@ -6,14 +6,20 @@ const checkerSource = readFileSync(new URL('./injected/checker.ts', import.meta.
 const attendanceSource = readFileSync(new URL('./injected/attendance.ts', import.meta.url), 'utf8');
 const buildSource = readFileSync(new URL('../src-tauri/build.rs', import.meta.url), 'utf8');
 const appSource = readFileSync(new URL('../src-tauri/src/lib.rs', import.meta.url), 'utf8');
+const checkerRuntimeSource = readFileSync(new URL('../src-tauri/src/checker.rs', import.meta.url), 'utf8');
+const traySource = readFileSync(new URL('../src-tauri/src/tray.rs', import.meta.url), 'utf8');
+const tauriConfig = JSON.parse(
+    readFileSync(new URL('../src-tauri/tauri.conf.json', import.meta.url), 'utf8'),
+) as {
+    app: {security: {freezePrototype?: boolean}};
+};
 const capabilityDirectory = new URL('../src-tauri/capabilities/', import.meta.url);
-const localCapabilities = readdirSync(capabilityDirectory)
+const capabilities = readdirSync(capabilityDirectory)
     .filter((path) => path.endsWith('.json'))
     .map((path) => JSON.parse(readFileSync(new URL(path, capabilityDirectory), 'utf8')) as {
         local?: boolean;
         permissions: string[];
-    })
-    .filter((capability) => capability.local !== false);
+    });
 const checkerCapability = JSON.parse(
     readFileSync(new URL('../src-tauri/capabilities/checker.json', import.meta.url), 'utf8'),
 ) as {
@@ -73,19 +79,19 @@ function attendanceInvokeCommands(): string[] {
     );
 }
 
-test('모든 앱 명령은 manifest와 하나 이상의 로컬 capability에 명시된다', () => {
+test('모든 앱 명령은 manifest와 하나 이상의 capability에 명시된다', () => {
     const registered = sorted(new Set(invokeHandlerCommands()));
     const manifested = sorted(new Set(appManifestCommands()));
-    const locallyAllowed = sorted(
+    const allowed = sorted(
         new Set(
-            localCapabilities.flatMap((capability) =>
+            capabilities.flatMap((capability) =>
                 capability.permissions.filter((permission) => permission.startsWith('allow-')),
             ),
         ),
     );
 
     assert.deepEqual(manifested, registered);
-    assert.deepEqual(locallyAllowed, registered.map(allowPermission));
+    assert.deepEqual(allowed, registered.map(allowPermission));
 });
 
 test('원격 checker는 필요한 명령과 event listen 권한만 가진다', () => {
@@ -99,6 +105,36 @@ test('원격 checker는 필요한 명령과 event listen 권한만 가진다', (
     assert.equal(checkerCapability.local, false);
     assert.deepEqual(checkerCapability.remote.urls, ['https://jungle-lms.krafton.com/*']);
     assert.deepEqual(sorted(checkerCapability.permissions), expectedPermissions);
+});
+
+test('LMS WebView는 기존 네이티브 호환성을 변경하지 않는다', () => {
+    // Tauri의 freezePrototype는 모든 WebView의 초기화 스크립트에서
+    // Object.prototype을 freeze한다. 외부 LMS의 Next.js 런타임도 같은
+    // WebView에서 실행되므로 글로벌 옵션을 사용하지 않는다.
+    assert.notEqual(tauriConfig.app.security.freezePrototype, true);
+
+    const checkerBuilder = checkerRuntimeSource.match(
+        /WebviewWindowBuilder::new\([\s\S]*?"checker"[\s\S]*?\)\s*\.title\("Jungle Bell"\)([\s\S]*?)\.build\(\)\?;/,
+    )?.[0];
+    assert.ok(checkerBuilder, 'checker WebView builder를 찾을 수 없습니다.');
+    assert.match(checkerBuilder, /WebviewUrl::External\(ATTENDANCE_URL\.parse\(\)\.unwrap\(\)\)/);
+    assert.match(checkerBuilder, /\.visible\(false\)/);
+    assert.match(checkerBuilder, /\.focused\(false\)/);
+    assert.match(checkerBuilder, /\.skip_taskbar\(true\)/);
+    assert.match(checkerBuilder, /\.initialization_script\(checker_script\)/);
+    assert.doesNotMatch(checkerBuilder, /\.user_agent\(/);
+
+    const attendanceBuilder = traySource.match(
+        /WebviewWindowBuilder::new\([\s\S]*?"attendance"[\s\S]*?\.initialization_script\(attendance_script\)[\s\S]*?\.build\(\)/,
+    )?.[0];
+    assert.ok(attendanceBuilder, '출석 WebView builder를 찾을 수 없습니다.');
+    assert.match(attendanceBuilder, /WebviewUrl::External\(ATTENDANCE_URL\.parse\(\)\.unwrap\(\)\)/);
+    assert.doesNotMatch(attendanceBuilder, /\.user_agent\(/);
+
+    // 기존 체커는 출석 URL에 머물러 있으면 reload, 로그인 등
+    // 다른 URL에 있으면 같은 WebView를 navigate하여 세션 store를 유지한다.
+    assert.match(checkerRuntimeSource, /CheckerRefreshAction::Reload\s*=>[\s\S]*?checker\.reload\(\)/);
+    assert.match(checkerRuntimeSource, /CheckerRefreshAction::Navigate\s*=>[\s\S]*?checker\.navigate\(target\)/);
 });
 
 test('원격 출석 창은 클릭 보고와 기수 동기화 명령만 허용한다', () => {

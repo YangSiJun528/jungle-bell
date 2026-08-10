@@ -49,6 +49,9 @@ pub struct AppState {
     pub login_retry_until: Option<DateTime<Utc>>,
     /// 발견된 업데이트 버전 (None이면 최신 버전 또는 미확인)
     pub pending_update: Option<String>,
+    /// 출석 알림의 현재 권위. 연결 전에는 기존 로컬 계획을 유지하고,
+    /// 서버 연결이 건강하면 서버 inbox가 담당하며, 장시간 단절 시 로컬 fallback으로 전환한다.
+    pub attendance_notification_authority: AttendanceNotificationAuthority,
     /// 상태 변경 시 스케줄러의 다음 deadline 대기를 깨운다.
     pub scheduler_wakeup: Arc<Notify>,
 }
@@ -74,6 +77,7 @@ impl AppState {
             attendance_auto_refresh: AttendanceAutoRefreshRuntime::default(),
             login_retry_until: None,
             pending_update: None,
+            attendance_notification_authority: AttendanceNotificationAuthority::LegacyLocal,
             scheduler_wakeup: Arc::new(Notify::new()),
         }
     }
@@ -93,6 +97,13 @@ impl AppState {
             checker_status: self.checker.status,
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AttendanceNotificationAuthority {
+    LegacyLocal,
+    Server,
+    LocalFallback,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

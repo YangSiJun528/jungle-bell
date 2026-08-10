@@ -347,7 +347,7 @@ impl NotificationInboxService {
 }
 
 pub fn ensure_tray_panel_window(window: &tauri::WebviewWindow) -> Result<(), String> {
-    if window.label() != "tray-panel" {
+    if window.label() != "tray-panel" && window.label() != "dashboard" {
         return Err("허용되지 않은 창입니다.".into());
     }
     Ok(())

@@ -22,9 +22,87 @@ use crate::config;
 use crate::local_consumption::{LocalConsumptionService, LocalDashboardSnapshot};
 use crate::news::{self, NewsFeed, NewsService};
 use crate::notification_inbox::{self, NotificationInboxService, NotificationInboxSnapshot};
+use crate::notification_service::{NotificationRequest, NotificationService};
+use crate::remote_sync::{self, RemoteSyncService};
 use crate::settings_state::{SettingsService, SettingsSnapshot};
 use crate::state::{self, AppState};
 use crate::tray;
+
+// ── 연결 서비스 대시보드 경계 ───────────────────────────
+
+#[tauri::command]
+pub(crate) async fn get_connected_service_status(
+    window: tauri::WebviewWindow,
+    service: tauri::State<'_, Arc<RemoteSyncService>>,
+) -> Result<remote_sync::ConnectedServiceStatus, String> {
+    remote_sync::get_connected_service_status(window, service).await
+}
+
+#[tauri::command]
+pub(crate) fn open_lms_login(window: tauri::WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
+    remote_sync::open_lms_login(window, app)
+}
+
+#[tauri::command]
+pub(crate) async fn create_mobile_pairing(
+    window: tauri::WebviewWindow,
+    service: tauri::State<'_, Arc<RemoteSyncService>>,
+) -> Result<remote_sync::MobilePairing, String> {
+    remote_sync::create_mobile_pairing(window, service).await
+}
+
+#[tauri::command]
+pub(crate) async fn get_mobile_pairing_status(
+    window: tauri::WebviewWindow,
+    service: tauri::State<'_, Arc<RemoteSyncService>>,
+    pairing_id: String,
+) -> Result<remote_sync::MobilePairingStatus, String> {
+    remote_sync::get_mobile_pairing_status(window, service, pairing_id).await
+}
+
+#[tauri::command]
+pub(crate) async fn approve_mobile_pairing(
+    window: tauri::WebviewWindow,
+    service: tauri::State<'_, Arc<RemoteSyncService>>,
+    pairing_id: String,
+    claim_id: String,
+) -> Result<(), String> {
+    remote_sync::approve_mobile_pairing(window, service, pairing_id, claim_id).await
+}
+
+#[tauri::command]
+pub(crate) async fn list_mobile_sessions(
+    window: tauri::WebviewWindow,
+    service: tauri::State<'_, Arc<RemoteSyncService>>,
+) -> Result<Vec<remote_sync::MobileDevice>, String> {
+    remote_sync::list_mobile_sessions(window, service).await
+}
+
+#[tauri::command]
+pub(crate) async fn revoke_mobile_session(
+    window: tauri::WebviewWindow,
+    service: tauri::State<'_, Arc<RemoteSyncService>>,
+    device_id: String,
+) -> Result<(), String> {
+    remote_sync::revoke_mobile_session(window, service, device_id).await
+}
+
+#[tauri::command]
+pub(crate) async fn get_remote_attendance_snapshot(
+    window: tauri::WebviewWindow,
+    service: tauri::State<'_, Arc<RemoteSyncService>>,
+) -> Result<remote_sync::RemoteAttendanceEnvelope, String> {
+    remote_sync::get_remote_attendance_snapshot(window, service).await
+}
+
+#[tauri::command]
+pub(crate) async fn refresh_platform_sync(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    service: tauri::State<'_, Arc<RemoteSyncService>>,
+) -> Result<(), String> {
+    remote_sync::refresh_platform_sync(app, window, service).await
+}
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -49,10 +127,15 @@ impl LoginStatus {
 #[tauri::command]
 pub async fn report_attendance_status(
     app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    remote_sync_service: tauri::State<'_, Arc<RemoteSyncService>>,
     status: attendance::AttendanceReport,
 ) -> Result<(), String> {
     let mut s = state.lock().await;
+    if !remote_sync::checker_context_is_allowed(window.label(), s.checker.last_loaded_url.as_deref()) {
+        return Err("COMMAND_CONTEXT_DENIED".into());
+    }
     let now = chrono::Utc::now();
     let checker_actions = checker::record_checker_report(&mut s, status.generation, status.api_error);
     if checker_actions
@@ -103,6 +186,10 @@ pub async fn report_attendance_status(
     let curr_needs_login = s.needs_login;
     let curr_data_loaded = s.data_loaded;
     let login_status = LoginStatus::from_state(&s);
+    let remote_snapshot = remote_sync::attendance_snapshot_from_checker(&s, &status, now);
+    let verification_url = (!status.needs_login)
+        .then(|| s.checker.last_loaded_url.clone())
+        .flatten();
     drop(s);
 
     if let Some(snapshot) = tray_snapshot {
@@ -138,16 +225,39 @@ pub async fn report_attendance_status(
         attendance_auto_refresh::reload_attendance_window(&app);
     }
 
+    // 서버 인증은 analytics 설정과 무관하다. 출석 checker가 LMS 세션을 확인한
+    // 이벤트마다 Rust가 native cookie store를 점검한다. 첫 보고에서는 bearer
+    // 발급을 마친 뒤 같은 작업 안에서 snapshot을 올려 초기 상태를 유실하지 않는다.
+    if let Some(last_loaded_url) = verification_url {
+        remote_sync::sync_checker_report(
+            window,
+            last_loaded_url,
+            remote_sync_service.inner().clone(),
+            remote_snapshot,
+        );
+    } else if let Some(snapshot) = remote_snapshot {
+        let remote_sync_service = remote_sync_service.inner().clone();
+        tauri::async_runtime::spawn(async move {
+            if let Err(error) = remote_sync_service.upload_attendance(&snapshot).await {
+                log::debug!("[connected-service] attendance snapshot deferred: {error}");
+            }
+        });
+    }
+
     Ok(())
 }
 
 /// Tauri 커맨드: checker.js initialization script가 로드됐음을 수신.
 #[tauri::command]
 pub async fn report_checker_ready(
+    window: tauri::WebviewWindow,
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
     generation: Option<u64>,
 ) -> Result<(), String> {
     let mut s = state.lock().await;
+    if !remote_sync::checker_context_is_allowed(window.label(), s.checker.last_loaded_url.as_deref()) {
+        return Err("COMMAND_CONTEXT_DENIED".into());
+    }
     let generation = generation.unwrap_or(s.checker.page_load_generation);
     let actions = checker::record_checker_ready(&mut s, generation);
     if actions
@@ -169,8 +279,26 @@ pub async fn report_checker_ready(
 /// Tauri 커맨드: CMS 사용자 식별자 수신. JS에서 /api/v2/me 호출 후 id를 전달.
 /// SHA-256 해시하여 PostHog distinct_id로 사용.
 #[tauri::command]
-pub fn report_cms_identity(cms_user_id: String) {
+pub async fn report_cms_identity(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    cms_user_id: String,
+) -> Result<(), String> {
+    if cms_user_id.is_empty()
+        || cms_user_id.len() > 128
+        || cms_user_id.trim() != cms_user_id
+        || cms_user_id.chars().any(char::is_control)
+    {
+        return Err("CMS_IDENTITY_INVALID".into());
+    }
+    {
+        let state = state.lock().await;
+        if !remote_sync::checker_context_is_allowed(window.label(), state.checker.last_loaded_url.as_deref()) {
+            return Err("COMMAND_CONTEXT_DENIED".into());
+        }
+    }
     analytics::set_identity(&cms_user_id);
+    Ok(())
 }
 
 /// Tauri 커맨드: JS에서 Rust 로그 시스템으로 메시지 전달.
@@ -489,6 +617,19 @@ pub async fn refresh_campus_data(
     service.refresh(&app, kind).await
 }
 
+/// 로컬 대시보드 전용 공개 생활정보 경계.
+/// WebView가 API origin에 직접 연결하거나 인증 헤더를 다루지 않게 한다.
+#[tauri::command]
+pub async fn get_dashboard_campus_data(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    service: tauri::State<'_, Arc<CampusService>>,
+    kind: CampusDataKind,
+) -> Result<serde_json::Value, String> {
+    remote_sync::ensure_dashboard_window(&window)?;
+    service.dashboard_data(&app, kind).await
+}
+
 /// 오래된 급식 게시물 한 페이지를 불러와 생활정보 창에 전달한다.
 #[tauri::command]
 pub async fn load_meal_history(
@@ -717,6 +858,7 @@ pub async fn complete_onboarding(
     } else {
         log::info!("[onboarding] completed command ignored; already completed");
     }
+    tray::open_dashboard_window(&app);
     Ok(())
 }
 
@@ -855,6 +997,49 @@ pub fn activate_notification(
 ) -> Result<NotificationInboxSnapshot, String> {
     notification_inbox::ensure_tray_panel_window(&window)?;
     inbox.activate(&app, &id)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TestNotificationResult {
+    snapshot: NotificationInboxSnapshot,
+    system_delivered: bool,
+    mobile_queued: Option<usize>,
+}
+
+/// 대시보드에서 운영체제 알림과 앱 알림함을 함께 검증하는 사용자 요청 테스트 알림이다.
+#[tauri::command]
+pub async fn send_test_notification(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    notifications: tauri::State<'_, Arc<NotificationService>>,
+    inbox: tauri::State<'_, Arc<NotificationInboxService>>,
+    remote_sync: tauri::State<'_, Arc<RemoteSyncService>>,
+) -> Result<TestNotificationResult, String> {
+    notification_inbox::ensure_tray_panel_window(&window)?;
+    let key = format!("manual-test:{}", chrono::Utc::now().timestamp_millis());
+    let report = notifications.deliver(
+        &app,
+        NotificationRequest {
+            key: &key,
+            title: "Jungle Bell 테스트 알림",
+            body: "알림이 정상적으로 연결되었습니다.",
+            action: None,
+            repeat_after_ms: None,
+        },
+    );
+    let mobile_queued = match remote_sync.broadcast_test_notification(report.inbox_recorded).await {
+        Ok(queued) => Some(queued),
+        Err(error) => {
+            log::warn!("[test-notification] mobile broadcast failed: {error}");
+            None
+        }
+    };
+    Ok(TestNotificationResult {
+        snapshot: inbox.snapshot()?,
+        system_delivered: report.system_delivered,
+        mobile_queued,
+    })
 }
 
 /// 트레이 패널의 영속 앱 알림을 모두 삭제한다.

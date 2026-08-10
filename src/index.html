@@ -105,7 +105,7 @@
                         </div>
                     </div>
                 </div>
-                <small class="ui-settings-description" data-ui="settings-description" x-show="startNotification" x-cloak>10:00까지 체크인하지 않으면 이후에도 계속 알려드려요.</small>
+                <small class="ui-settings-description" data-ui="settings-description" x-show="startNotification" x-cloak>서버는 마감 10분 전과 정시에 핵심 알림을 계획해요. 이 시간대·간격은 서버 연결이 끊겼을 때 PC 보조 알림에 사용합니다.</small>
             </section>
 
             <section class="mt-2 border-t border-app-divider pt-2" aria-labelledby="end-notification-title">
@@ -129,7 +129,7 @@
                         </div>
                     </div>
                 </div>
-                <small class="ui-settings-description" data-ui="settings-description" x-show="endNotification" x-cloak>종료 출석을 하지 않으면 마감 5분 전에 긴급 알림을 한 번 더 보내요.</small>
+                <small class="ui-settings-description" data-ui="settings-description" x-show="endNotification" x-cloak>서버는 마감 10분 전과 정시에 핵심 알림을 계획해요. 종료 출석을 하지 않으면 마감 5분 전에 긴급 알림을 한 번 더 보내요. 이 시간대·간격은 서버 연결이 끊겼을 때 PC 보조 알림에 사용합니다.</small>
             </section>
             <div class="ui-settings-row border-t border-app-divider"><span class="min-w-0 flex-1"><strong class="ui-settings-label">일요일 출석 알림</strong><small class="ui-settings-description" data-ui="settings-description">일요일에도 출석 상태가 필요할 때 알려드려요.</small></span><label class="ui-toggle" data-ui="settings-toggle"><input class="peer sr-only" type="checkbox" aria-label="일요일 출석 알림" :checked="sundayNotificationEnabled" @change="setSundayNotification($event.currentTarget.checked)"/><span class="ui-toggle__track" aria-hidden="true"></span><span class="ui-toggle__thumb" aria-hidden="true"></span></label></div>
         </fieldset>

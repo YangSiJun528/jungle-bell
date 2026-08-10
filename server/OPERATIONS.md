@@ -117,6 +117,9 @@ curl --fail --silent --show-error \
 
 Cloudflare 리소스 생성과 D1 초기화는 새 환경에서만 실행합니다.
 
+Worker의 기존 바인딩과 신규 인증·Push 설정 구분은
+[환경 변수와 Cloudflare 바인딩 레퍼런스](docs/environment-reference.md)를 따릅니다.
+
 ```bash
 npx wrangler d1 create jungle-bell-data
 npx wrangler r2 bucket create jungle-bell-data

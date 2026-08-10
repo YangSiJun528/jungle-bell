@@ -10,6 +10,7 @@ const APP_COMMANDS: &[&str] = &[
     "report_campus_ready",
     "report_campus_interaction",
     "refresh_campus_data",
+    "get_dashboard_campus_data",
     "load_meal_history",
     "open_image_viewer",
     "check_and_notify_update",
@@ -47,7 +48,17 @@ const APP_COMMANDS: &[&str] = &[
     "refresh_login_status",
     "get_notification_inbox_snapshot",
     "activate_notification",
+    "send_test_notification",
     "clear_notification_inbox",
+    "get_connected_service_status",
+    "open_lms_login",
+    "create_mobile_pairing",
+    "get_mobile_pairing_status",
+    "approve_mobile_pairing",
+    "list_mobile_sessions",
+    "revoke_mobile_session",
+    "get_remote_attendance_snapshot",
+    "refresh_platform_sync",
 ];
 
 fn main() {

@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+    <meta name="color-scheme" content="light"/>
+    <meta name="theme-color" content="#eef4ef"/>
+    <meta name="description" content="Jungle Bell 출석 상태와 정글 생활 정보를 확인하세요."/>
+    <meta name="apple-mobile-web-app-capable" content="yes"/>
+    <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+    <meta name="apple-mobile-web-app-title" content="Jungle Bell"/>
+    <link rel="manifest" href="./manifest.webmanifest"/>
+    <link rel="apple-touch-icon" href="./icons/icon-192.png"/>
+    <link rel="stylesheet" href="ui.css"/>
+    <link rel="stylesheet" href="dashboard.css"/>
+    <link rel="license" href="assets/fonts/Pretendard-LICENSE.txt"/>
+    <title>Jungle Bell</title>
+</head>
+<body data-ui-page="dashboard" x-data="dashboard" @online.window="recoverOnline()">
+<a class="dashboard-skip-link" href="#dashboard-content">본문으로 건너뛰기</a>
+
+<div class="dashboard-shell" :aria-busy="initializing" :data-surface="surface.kind">
+    <header class="ui-app-header dashboard-topbar">
+        <a class="dashboard-brand" href="#home" @click="selectRoute('home')" aria-label="Jungle Bell 홈">
+            <img src="assets/logo.png" width="44" height="44" alt=""/>
+            <span><strong>Jungle Bell</strong><small>정글 생활 대시보드</small></span>
+        </a>
+        <div class="dashboard-topbar-actions">
+            <button class="ui-button ui-button--secondary ui-button--compact" type="button"
+                    x-show="surface.kind === 'public' && installPromptAvailable" x-cloak @click="installPwa()">앱 설치</button>
+            <span class="dashboard-surface-badge" :data-tone="surfaceTone()" x-text="surfaceLabel()"></span>
+        </div>
+    </header>
+
+    <div class="dashboard-frame">
+        <aside class="dashboard-sidebar">
+            <p class="dashboard-sidebar-title">메뉴</p>
+            <nav aria-label="정글벨 메뉴">
+                <ul class="dashboard-navigation">
+                    <li>
+                        <a href="#home" :aria-current="activeRoute === 'home' ? 'page' : undefined" @click="selectRoute('home')">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 10.5 12 4l7 6.5V20H5Z"/><path d="M9 20v-6h6v6"/></svg><span>홈</span>
+                        </a>
+                    </li>
+                    <li x-show="surface.kind !== 'public'" x-cloak>
+                        <a href="#attendance" :aria-current="activeRoute === 'attendance' ? 'page' : undefined" @click="selectRoute('attendance')">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4m8-4v4M4 10h16m-11 5 2 2 4-4"/></svg><span>출석</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#laundry" :aria-current="activeRoute === 'laundry' ? 'page' : undefined" @click="selectRoute('laundry')">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><circle cx="12" cy="13" r="5"/><path d="M7 6h2m2 0h1"/></svg><span>세탁</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#meals" :aria-current="activeRoute === 'meals' ? 'page' : undefined" @click="selectRoute('meals')">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3v6a3 3 0 0 0 3 3V3M6.5 3v18M16 3v18M16 3c2.7 2.3 4 5 4 8h-4"/></svg><span>급식</span>
+                        </a>
+                    </li>
+                    <li x-show="surface.kind !== 'public'" x-cloak>
+                        <a href="#notifications" :aria-current="activeRoute === 'notifications' ? 'page' : undefined" @click="selectRoute('notifications')">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 6-3 7-3 9h18c0-2-3-3-3-9"/><path d="M10 21h4"/></svg><span>알림</span>
+                        </a>
+                    </li>
+                    <li data-nav-secondary x-show="surface.kind !== 'public'" x-cloak>
+                        <a href="#connections" :aria-current="activeRoute === 'connections' ? 'page' : undefined" @click="selectRoute('connections')">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="13" height="10" rx="2"/><path d="M7 19h5m-2-5v5"/><rect x="16" y="9" width="5" height="11" rx="1.5"/></svg><span>PC 연결</span>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+            <p class="dashboard-sidebar-note" x-show="surface.kind === 'public'">급식과 세탁은 누구나 볼 수 있어요. 출석과 알림은 PWA 또는 PC 앱에서 사용합니다.</p>
+        </aside>
+
+        <main id="dashboard-content" class="dashboard-content" tabindex="-1">
+            <section class="dashboard-page dashboard-home" data-dashboard-page="home" x-show="activeRoute === 'home'" x-cloak>
+                <header class="dashboard-home-intro">
+                    <div><p x-text="todayLabel()"></p><h1>오늘 필요한 정보</h1><span>출석부터 생활 정보까지 한눈에 확인하세요.</span></div>
+                    <button class="ui-button ui-button--secondary ui-button--compact" type="button" x-show="surface.kind === 'public'" @click="openInstallNudge()">알림 기능 안내</button>
+                </header>
+
+                <div class="dashboard-overview-grid">
+                    <article class="ui-card dashboard-overview-card dashboard-overview-card--attendance">
+                        <header><span class="dashboard-overview-icon" aria-hidden="true">✓</span><div><small>오늘 출석</small><h2>출석 상태</h2></div><span class="dashboard-status-dot" :data-tone="homeAttendanceTone()" x-text="homeAttendanceLabel()"></span></header>
+                        <div class="dashboard-overview-attendance" x-show="surface.kind !== 'public' && attendanceState === 'loaded' && attendanceSnapshot" x-cloak>
+                            <span :data-checked="attendanceSnapshot?.morningChecked"><i>✓</i>오전 <strong x-text="attendanceSnapshot?.morningChecked ? '완료' : '미완료'"></strong></span>
+                            <span :data-checked="attendanceSnapshot?.eveningChecked"><i>✓</i>오후 <strong x-text="attendanceSnapshot?.eveningChecked ? '완료' : '미완료'"></strong></span>
+                        </div>
+                        <p x-show="surface.kind === 'public'">웹에서는 출석 상태를 표시하지 않습니다. 설치한 모바일 앱이나 PC 앱에서 확인할 수 있습니다.</p>
+                        <p x-show="surface.kind !== 'public' && attendanceState !== 'loaded'">PC 앱이 수집한 오늘의 최신 출석 상태를 보여줍니다.</p>
+                        <footer>
+                            <a href="#attendance" x-show="surface.kind !== 'public'" @click="selectRoute('attendance')">자세히 보기</a>
+                            <button type="button" x-show="surface.kind === 'public'" @click="openInstallNudge()">앱에서 확인</button>
+                            <button type="button" x-show="surface.kind === 'desktop'" @click="openLmsLogin()">공식 정글캠퍼스 열기 ↗</button>
+                            <a href="https://jungle-lms.krafton.com/check-in" target="_blank" rel="noopener noreferrer" x-show="surface.kind !== 'desktop'">공식 정글캠퍼스 바로가기 ↗</a>
+                        </footer>
+                    </article>
+
+                    <article class="ui-card dashboard-overview-card">
+                        <header><span class="dashboard-overview-icon" data-kind="laundry" aria-hidden="true">○</span><div><small>세탁실</small><h2>지금 세탁</h2></div><span class="dashboard-status-dot" :data-tone="homeLaundryTone()" x-text="homeLaundryLabel()"></span></header>
+                        <p>세탁을 시작하고 60분 안에 건조까지 이어갈 수 있는 예상 횟수입니다.</p>
+                        <footer><a href="#laundry" @click="selectRoute('laundry')">기기별 현황 보기</a></footer>
+                    </article>
+
+                    <article class="ui-card dashboard-overview-card dashboard-overview-card--meals">
+                        <header><span class="dashboard-overview-icon" data-kind="meals" aria-hidden="true">⌁</span><div><small>오늘 급식</small><h2>식단</h2></div><span class="dashboard-status-dot" :data-tone="mealsState === 'error' ? 'danger' : 'neutral'" x-text="mealsSourceLabel()"></span></header>
+                        <div class="dashboard-overview-meals" x-show="mealsState === 'loaded' && todayMeals().length > 0" x-cloak>
+                            <template x-for="meal in todayMeals().slice(0, 2)" :key="meal.id"><p><strong x-text="mealPeriod(meal)"></strong><span x-text="meal.text || meal.title || '메뉴 준비 중'"></span></p></template>
+                        </div>
+                        <p x-show="mealsState === 'loading'">오늘 식단을 불러오고 있습니다.</p>
+                        <p x-show="mealsState === 'error'">현재 식단을 불러올 수 없습니다.</p>
+                        <p x-show="mealsState === 'loaded' && todayMeals().length === 0">오늘 식단이 아직 게시되지 않았습니다.</p>
+                        <footer><a href="#meals" @click="selectRoute('meals')">전체 식단 보기</a></footer>
+                    </article>
+
+                    <article class="ui-card dashboard-overview-card">
+                        <header><span class="dashboard-overview-icon" data-kind="notifications" aria-hidden="true">!</span><div><small>알림</small><h2>안 본 알림</h2></div><span class="dashboard-status-dot" :data-tone="homeNotificationTone()" x-text="homeNotificationLabel()"></span></header>
+                        <p x-show="surface.kind === 'public'">웹에서는 출석 체크 알림과 세탁 알림을 제공하지 않습니다.</p>
+                        <p x-show="surface.kind !== 'public'">놓친 출석 알림과 Jungle Bell의 최근 알림을 확인합니다.</p>
+                        <footer>
+                            <a href="#notifications" x-show="surface.kind !== 'public'" @click="selectRoute('notifications')">알림함 보기</a>
+                            <button type="button" x-show="surface.kind === 'public'" @click="openInstallNudge()">알림 받는 방법</button>
+                        </footer>
+                    </article>
+                </div>
+            </section>
+
+            <section class="dashboard-page" data-dashboard-page="attendance" x-show="surface.kind !== 'public' && activeRoute === 'attendance'" x-cloak>
+                <header class="dashboard-page-intro">
+                    <p>내 정글벨</p>
+                    <h1>출석</h1>
+                    <span>PC가 수집해 서버에 올린 오늘의 최신 출석 상태를 확인합니다.</span>
+                </header>
+
+                <div class="dashboard-grid dashboard-grid--attendance">
+                    <article class="ui-card dashboard-card dashboard-attendance-card" aria-live="polite" :aria-busy="attendanceState === 'loading'">
+                        <header class="dashboard-card-heading"><span><small>오늘 출석</small><h2>출석 상태</h2></span><button class="dashboard-icon-button" type="button" aria-label="출석 상태 새로고침" :disabled="attendanceBusy" @click="refreshAttendance()">↻</button></header>
+
+                        <div class="dashboard-empty" x-show="attendanceState === 'loading'">출석 정보를 확인하고 있어요.</div>
+                        <div class="dashboard-empty dashboard-empty--danger" x-show="attendanceState === 'error'" role="alert">출석 정보를 불러오지 못했어요.<button type="button" class="ui-button ui-button--secondary ui-button--compact" @click="refreshAttendance()">다시 시도</button></div>
+                        <div class="dashboard-empty" x-show="attendanceState === 'auth-required'">
+                            <strong>PC 연결이 필요해요</strong><span>PC 앱과 연결한 뒤 이 화면에서 최신 상태를 볼 수 있어요.</span><a class="ui-button ui-button--primary" href="#connections" @click="selectRoute('connections')">PC 연결</a>
+                        </div>
+                        <div class="dashboard-empty" x-show="attendanceState === 'unavailable'">
+                            <strong>출석 확인 대기 중</strong><span>아직 PC에서 동기화한 출석 정보가 없어요.</span>
+                        </div>
+
+                        <div x-show="attendanceState === 'loaded' && attendanceSnapshot" x-cloak>
+                            <p class="dashboard-attendance-state" :data-tone="attendanceView().tone"><i aria-hidden="true"></i><strong x-text="attendanceView().label"></strong></p>
+                            <p class="dashboard-metadata">출석 기준일 · <time :datetime="attendanceSnapshot?.attendanceDate" x-text="formatDate(attendanceSnapshot?.attendanceDate)"></time></p>
+                            <div class="dashboard-attendance-checks" aria-label="오늘 출석 상태">
+                                <span :data-checked="attendanceSnapshot?.morningChecked"><i aria-hidden="true">✓</i>오전 출석 <strong x-text="attendanceSnapshot?.morningChecked ? '완료' : '미완료'"></strong></span>
+                                <span :data-checked="attendanceSnapshot?.eveningChecked"><i aria-hidden="true">✓</i>오후 출석 <strong x-text="attendanceSnapshot?.eveningChecked ? '완료' : '미완료'"></strong></span>
+                            </div>
+                            <p class="dashboard-metadata">마지막 동기화 · <time :datetime="attendanceLastSyncedAt" x-text="formatDateTime(attendanceLastSyncedAt)"></time></p>
+                            <p class="dashboard-inline-warning" x-show="attendanceFreshness === 'stale'">마지막 확인 이후 시간이 지났어요. PC 앱을 실행해 다시 동기화해 주세요.</p>
+                        </div>
+                    </article>
+
+                    <article class="ui-card dashboard-card" x-show="surface.kind === 'desktop'">
+                        <header class="dashboard-card-heading"><span><small>공식 서비스</small><h2>정글캠퍼스</h2></span><span class="dashboard-status-dot" :data-tone="desktopConnectionTone()" x-text="desktopConnectionLabel()"></span></header>
+                        <p class="dashboard-card-description">공식 정글캠퍼스를 앱 안에서 열어 로그인하거나 출석 페이지로 이동합니다. LMS 세션은 이 PC의 숨김 WebView에만 저장됩니다.</p>
+                        <p class="dashboard-metadata" x-show="desktopConnection?.lastVerifiedAt">마지막 서버 확인 · <time :datetime="desktopConnection?.lastVerifiedAt" x-text="formatDateTime(desktopConnection?.lastVerifiedAt)"></time></p>
+                        <div class="dashboard-card-actions"><button class="ui-button ui-button--primary" type="button" @click="openLmsLogin()">정글캠퍼스 열기</button><button class="ui-button ui-button--secondary" type="button" :disabled="syncBusy" @click="syncNow()" x-text="syncBusy ? '동기화 중' : '지금 동기화'"></button></div>
+                    </article>
+
+                    <article class="ui-card dashboard-card" x-show="surface.kind === 'companion'">
+                        <header class="dashboard-card-heading"><span><small>공식 서비스</small><h2>정글캠퍼스</h2></span><span class="ui-badge">바로가기</span></header>
+                        <p class="dashboard-card-description">출석 처리가 필요하면 공식 정글캠퍼스에서 직접 확인해 주세요.</p>
+                        <div class="dashboard-card-actions"><a class="ui-button ui-button--primary" href="https://jungle-lms.krafton.com/check-in" target="_blank" rel="noopener noreferrer">정글캠퍼스 열기</a></div>
+                    </article>
+
+                    <article class="ui-card dashboard-card dashboard-devices-card" x-show="attendanceDevices.length > 0">
+                        <header class="dashboard-card-heading"><span><small>수집 기기</small><h2>출석 확인 PC</h2></span><span class="ui-badge" x-text="`${attendanceDevices.length}대`"></span></header>
+                        <ul class="dashboard-device-list">
+                            <template x-for="device in attendanceDevices" :key="device.id"><li><span><strong x-text="device.deviceLabel || '내 PC'"></strong><small x-text="deviceStatusLabel(device)"></small></span><time :datetime="device.lastSeenAt" x-text="relativeTime(device.lastSeenAt)"></time></li></template>
+                        </ul>
+                    </article>
+                </div>
+            </section>
+
+            <section class="dashboard-page" data-dashboard-page="laundry" x-show="activeRoute === 'laundry'" x-cloak>
+                <header class="dashboard-page-intro"><p>생활 정보</p><h1>세탁</h1><span>지금 시작해 건조까지 바로 이어갈 수 있는 수를 확인합니다.</span></header>
+                <article class="ui-card dashboard-card dashboard-information-card" :aria-busy="laundryState === 'loading'">
+                    <header class="dashboard-card-heading"><span><small>워시타워</small><h2>건조까지 바로 가능한 수</h2></span><span class="dashboard-status-dot" :data-tone="laundrySourceTone()" x-text="laundrySourceLabel()"></span></header>
+                    <div class="dashboard-empty" x-show="laundryState === 'loading'">세탁실 현황을 불러오고 있어요.</div>
+                    <div class="dashboard-empty dashboard-empty--danger" x-show="laundryState === 'error'" role="alert">현재 세탁실 현황을 불러올 수 없어요.<button type="button" class="ui-button ui-button--secondary ui-button--compact" @click="loadLaundry(true)">다시 시도</button></div>
+                    <div x-show="laundryState === 'loaded'" x-cloak>
+                        <section class="dashboard-capacity" aria-label="남녀별 건조까지 바로 가능한 수">
+                            <p data-zone="men"><span><i aria-hidden="true"></i>남성</span><strong x-text="capacityText(laundryCapacityView.men)"></strong></p>
+                            <p data-zone="women"><span><i aria-hidden="true"></i>여성</span><strong x-text="capacityText(laundryCapacityView.women)"></strong></p>
+                        </section>
+                        <details class="dashboard-method"><summary>산출 기준 보기</summary><p>빈 세탁기와 60분 안에 비는 건조기에서, 곧 건조가 필요한 진행 중 세탁물 수를 뺀 예상 횟수입니다. 공용 6·7번은 양쪽에 포함되며 실제 상황과 다를 수 있습니다.</p></details>
+                        <div class="dashboard-laundry-table-wrap" x-show="laundryMachines.length > 0">
+                            <table class="dashboard-laundry-table"><caption class="sr-only">워시타워 번호별 세탁기와 건조기 상태</caption><thead><tr><th scope="col">기기</th><template x-for="machine in laundryMachines" :key="machine.id"><th scope="col" :data-zone="machine.zone" x-text="machineNumber(machine.id)"></th></template></tr></thead><tbody><template x-for="row in [{kind:'dryer',label:'건조기'},{kind:'washer',label:'세탁기'}]" :key="row.kind"><tr><th scope="row" x-text="row.label"></th><template x-for="machine in laundryMachines" :key="`${row.kind}-${machine.id}`"><td><span class="dashboard-laundry-cell" :data-zone="machine.zone" :data-state="laundryCellState(machine[row.kind])" :title="laundryCellLabel(machine, row.kind)" x-text="laundryCellText(machine[row.kind])"></span></td></template></tr></template></tbody></table>
+                        </div>
+                        <p class="dashboard-metadata dashboard-data-time" x-show="laundryUpdatedAt">마지막 확인 · <time :datetime="laundryUpdatedAt" x-text="formatDateTime(laundryUpdatedAt)"></time></p>
+                    </div>
+                </article>
+            </section>
+
+            <section class="dashboard-page" data-dashboard-page="meals" x-show="activeRoute === 'meals'" x-cloak>
+                <header class="dashboard-page-intro"><p>생활 정보</p><h1>급식</h1><span>오늘 게시된 식단을 시간대별로 확인합니다.</span></header>
+                <article class="ui-card dashboard-card dashboard-information-card" :aria-busy="mealsState === 'loading'">
+                    <header class="dashboard-card-heading"><span><small>오늘</small><h2>오늘의 식단</h2></span><span class="dashboard-status-dot" :data-tone="mealsState === 'error' ? 'danger' : 'success'" x-text="mealsSourceLabel()"></span></header>
+                    <div class="dashboard-empty" x-show="mealsState === 'loading'">식단을 불러오고 있어요.</div>
+                    <div class="dashboard-empty dashboard-empty--danger" x-show="mealsState === 'error'" role="alert">현재 식단을 불러올 수 없어요.<button type="button" class="ui-button ui-button--secondary ui-button--compact" @click="loadMeals(true)">다시 시도</button></div>
+                    <div x-show="mealsState === 'loaded'" x-cloak>
+                        <p class="dashboard-empty" x-show="todayMeals().length === 0">오늘 식단이 아직 게시되지 않았어요.</p>
+                        <div class="dashboard-meal-grid"><template x-for="meal in todayMeals()" :key="meal.id"><article><span class="ui-badge" x-text="mealPeriod(meal)"></span><h3 x-text="meal.title || '오늘 메뉴'"></h3><p x-text="meal.text || '메뉴 내용이 아직 없어요.'"></p><a x-show="meal.permalink" :href="meal.permalink" target="_blank" rel="noopener noreferrer">원문 보기</a></article></template></div>
+                        <details class="dashboard-recent-meals" x-show="recentMeals().length > 0"><summary>최근 식단 보기</summary><div><template x-for="meal in recentMeals()" :key="meal.id"><article><strong x-text="meal.title || '식단'"></strong><span x-text="meal.text"></span></article></template></div></details>
+                        <p class="dashboard-metadata dashboard-data-time" x-show="mealsUpdatedAt">마지막 확인 · <time :datetime="mealsUpdatedAt" x-text="formatDateTime(mealsUpdatedAt)"></time></p>
+                    </div>
+                </article>
+            </section>
+
+            <section class="dashboard-page" data-dashboard-page="notifications" x-show="surface.kind !== 'public' && activeRoute === 'notifications'" x-cloak>
+                <header class="dashboard-page-intro"><p>내 정글벨</p><h1>알림</h1><span>서버가 알림 시점을 계획하고 연결된 기기에 전달합니다.</span></header>
+                <div class="dashboard-grid">
+                    <article class="ui-card dashboard-card dashboard-notification-policy">
+                        <header class="dashboard-card-heading"><span><small>출석 알림</small><h2>중요 시점</h2></span><span class="ui-badge">서버 계획</span></header>
+                        <ol><li><span><strong>출석 10분 전</strong><small>미리 준비할 수 있도록 안내</small></span><i>예정</i></li><li><span><strong>출석 시간</strong><small>출석 확인이 필요한 시점 안내</small></span><i>예정</i></li></ol>
+                        <aside><strong>연결 fallback</strong><p>중요한 시점에 PC가 연결되어 있지 않으면 연결된 모바일 Web Push로 보완 알림을 보냅니다.</p></aside>
+                    </article>
+                    <article class="ui-card dashboard-card">
+                        <header class="dashboard-card-heading"><span><small>이 기기</small><h2>알림 받기</h2></span><span class="dashboard-status-dot" :data-tone="pushTone()" x-text="pushLabel()"></span></header>
+                        <p class="dashboard-card-description" x-text="surface.kind === 'desktop' ? 'PC에서는 운영체제의 Jungle Bell 알림 권한을 사용합니다.' : '모바일에서는 홈 화면에 설치한 뒤 Web Push 권한을 허용해 주세요.'"></p>
+                        <div class="dashboard-card-actions">
+                            <button class="ui-button ui-button--primary" type="button" x-show="surface.kind === 'companion'" :disabled="pushBusy || notificationTestBusy" @click="enablePush()" x-text="pushBusy ? '연결 중' : '모바일 푸시 연결'"></button>
+                            <button class="ui-button ui-button--secondary" type="button" :disabled="pushBusy || notificationTestBusy" @click="sendTestNotification()" x-text="notificationTestBusy ? '보내는 중' : '테스트 알림 보내기'"></button>
+                        </div>
+                        <p class="dashboard-metadata">테스트 알림도 실제 알림함과 운영체제 알림 경로를 사용합니다. 모바일은 서버 Web Push를 거쳐 이 기기로 전송됩니다.</p>
+                    </article>
+                    <article class="ui-card dashboard-card dashboard-inbox-card" x-show="surface.kind === 'companion'" x-cloak>
+                        <header class="dashboard-card-heading"><span><small>최근 20건</small><h2>모바일 알림 내역</h2></span><span class="dashboard-status-dot" :data-tone="notificationStateTone()" x-text="notificationStateLabel()"></span></header>
+                        <p class="dashboard-empty" x-show="notificationState === 'loading'">알림 내역을 불러오고 있어요.</p>
+                        <div class="dashboard-empty" x-show="notificationState === 'auth-required'"><span>PC와 연결하면 이 기기에서 알림 내역을 확인할 수 있어요.</span><button type="button" class="ui-button ui-button--secondary ui-button--compact" @click="selectRoute('connections')">PC 연결</button></div>
+                        <div class="dashboard-empty dashboard-empty--danger" x-show="notificationState === 'error'" role="alert"><span>알림 내역을 불러오지 못했어요.</span><button type="button" class="ui-button ui-button--secondary ui-button--compact" @click="loadNotifications()">다시 시도</button></div>
+                        <p class="dashboard-empty" x-show="notificationState === 'loaded' && notifications.length === 0">아직 전달된 알림이 없어요.</p>
+                        <ul class="dashboard-inbox" x-show="notificationState === 'loaded' && notifications.length > 0">
+                            <template x-for="notification in notifications" :key="notification.id"><li :data-importance="notificationImportance(notification)"><button type="button" @click="openNotification(notification)"><span><strong x-text="notification.title"></strong><p x-text="notification.body"></p></span><time :datetime="epochIso(notification.createdAtEpochMs)" x-text="formatEpochDateTime(notification.createdAtEpochMs)"></time></button></li></template>
+                        </ul>
+                    </article>
+                    <article class="ui-card dashboard-card dashboard-inbox-card" x-show="surface.kind === 'desktop'" x-cloak>
+                        <header class="dashboard-card-heading"><span><small>이 PC</small><h2>PC 알림 내역</h2></span><span class="dashboard-status-dot" :data-tone="notificationStateTone()" x-text="notificationStateLabel()"></span></header>
+                        <p class="dashboard-empty" x-show="notificationState === 'loading'">알림 내역을 불러오고 있어요.</p>
+                        <div class="dashboard-empty dashboard-empty--danger" x-show="notificationState === 'error'" role="alert"><span>PC 알림 내역을 불러오지 못했어요.</span><button type="button" class="ui-button ui-button--secondary ui-button--compact" @click="loadDesktopNotificationInbox()">다시 시도</button></div>
+                        <p class="dashboard-empty" x-show="notificationState === 'loaded' && desktopNotificationInbox.items.length === 0">아직 전달된 알림이 없어요.</p>
+                        <ul class="dashboard-inbox" x-show="notificationState === 'loaded' && desktopNotificationInbox.items.length > 0">
+                            <template x-for="notification in desktopNotificationInbox.items" :key="notification.id"><li :data-unread="notification.readAt === null"><button type="button" @click="openDesktopNotification(notification)"><span><strong x-text="notification.title"></strong><p x-text="notification.body"></p></span><time :datetime="new Date(notification.createdAt).toISOString()" x-text="desktopNotificationTime(notification.createdAt)"></time></button></li></template>
+                        </ul>
+                    </article>
+                </div>
+            </section>
+
+            <section class="dashboard-page" data-dashboard-page="connections" x-show="surface.kind !== 'public' && activeRoute === 'connections'" x-cloak>
+                <header class="dashboard-page-intro"><p>내 정글벨</p><h1>PC 연결</h1><span>PC에서 휴대폰을 연결하고 언제든 연결된 기기를 관리합니다.</span></header>
+
+                <div class="dashboard-grid" x-show="surface.kind === 'desktop'">
+                    <article class="ui-card dashboard-card dashboard-pairing-card">
+                        <header class="dashboard-card-heading"><span><small>일회용 · 2분 유효</small><h2>휴대폰 연결</h2></span><span class="dashboard-status-dot" :data-tone="pairingTone()" x-text="pairingLabel()"></span></header>
+                        <p class="dashboard-card-description">QR 또는 10자리 코드는 LMS 로그인 정보를 포함하지 않으며 한 번만 사용할 수 있습니다.</p>
+                        <button type="button" class="ui-button ui-button--primary" x-show="!desktopPairing" :disabled="pairingBusy || desktopConnection?.state !== 'connected'" @click="startDesktopPairing()">연결 코드 만들기</button>
+                        <div class="dashboard-pairing-proof" x-show="desktopPairing" x-cloak>
+                            <img data-ui="pairing-qr" :src="pairingQrUrl" width="208" height="208" alt="휴대폰 연결 QR 코드"/>
+                            <div><small>10자리 연결 코드</small><code x-text="formattedDesktopPairingCode()"></code><span x-show="desktopPairingStatus?.status !== 'completed' && desktopPairingStatus?.status !== 'expired'" x-text="`${pairingRemainingSeconds}초 남음`"></span><button type="button" class="ui-button ui-button--secondary ui-button--compact" @click="startDesktopPairing()">새 코드</button></div>
+                        </div>
+                        <div class="dashboard-claim" x-show="desktopPairingStatus?.status === 'claimed' && desktopPairingStatus?.claim" x-cloak>
+                            <p><strong x-text="desktopPairingStatus?.claim?.deviceLabel"></strong>에서 연결을 요청했습니다.</p><p>양쪽 확인 코드 <code x-text="desktopPairingStatus?.claim?.confirmationCode"></code>가 같은지 확인하세요.</p><button class="ui-button ui-button--primary" type="button" :disabled="pairingBusy" @click="approveDesktopClaim()">이 기기 승인</button>
+                        </div>
+                        <p class="dashboard-inline-warning" role="status" x-show="pairingMessage" x-text="pairingMessage"></p>
+                    </article>
+
+                    <article class="ui-card dashboard-card dashboard-session-card">
+                        <header class="dashboard-card-heading"><span><small>최대 365일</small><h2>연결된 모바일</h2></span><span class="ui-badge" x-text="`${mobileSessions.length}대`"></span></header>
+                        <p class="dashboard-card-description">연결 세션은 최대 365일 유지되며 이 PC에서 언제든 해제할 수 있습니다.</p>
+                        <p class="dashboard-empty" x-show="sessionsState === 'loading'">연결된 기기를 불러오고 있어요.</p><p class="dashboard-empty" x-show="sessionsState === 'loaded' && mobileSessions.length === 0">연결된 모바일이 없어요.</p>
+                        <ul class="dashboard-device-list"><template x-for="session in mobileSessions" :key="session.deviceId"><li><span><strong x-text="session.deviceLabel"></strong><small x-text="session.pushEnabled ? '모바일 푸시 연결됨' : '모바일 푸시 꺼짐'"></small><small>만료 · <time :datetime="session.expiresAt" x-text="formatDate(session.expiresAt)"></time></small></span><button class="ui-button ui-button--secondary ui-button--compact" type="button" :disabled="sessionBusyId === session.deviceId" @click="revokeSession(session.deviceId)">연결 해제</button></li></template></ul>
+                    </article>
+                </div>
+
+                <div class="dashboard-grid" x-show="surface.kind === 'companion'">
+                    <article class="ui-card dashboard-card dashboard-mobile-pairing">
+                        <header class="dashboard-card-heading"><span><small>일회용 · 2분 유효</small><h2>이 휴대폰 연결</h2></span><span class="dashboard-status-dot" :data-tone="mobilePairingTone()" x-text="mobilePairingLabel()"></span></header>
+                        <p class="dashboard-card-description">PC 앱에 표시된 10자리 연결 코드를 입력하세요. 연결되면 이 기기에서 365일 동안 출석 상태와 알림을 사용할 수 있습니다.</p>
+                        <form x-show="mobilePairingState === 'manual' || mobilePairingState === 'error' || mobilePairingState === 'expired'" @submit.prevent="claimManualCode()">
+                            <label for="manual-pairing-code">PC 연결 코드</label><input id="manual-pairing-code" type="text" inputmode="text" maxlength="11" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" placeholder="ABCDE-12345" :value="manualPairingCode" @input="updateManualCode($event.currentTarget.value)" required/><button class="ui-button ui-button--primary" type="submit" :disabled="pairingBusy">이 휴대폰 연결 요청</button>
+                        </form>
+                        <div class="dashboard-mobile-waiting" x-show="mobilePairingState === 'waiting'" x-cloak><p>PC에서 이 휴대폰을 승인해 주세요.</p><p>양쪽 확인 코드 · <code x-text="mobileConfirmationCode"></code></p><span role="status">승인 상태를 자동으로 확인하고 있어요.</span></div>
+                        <div class="dashboard-mobile-waiting" x-show="mobilePairingState === 'completed'" x-cloak><strong>연결됐어요</strong><p>이제 최신 출석 상태와 알림을 확인할 수 있습니다.</p></div>
+                        <p class="dashboard-inline-warning" role="alert" x-show="mobilePairingMessage" x-text="mobilePairingMessage"></p>
+                    </article>
+                    <article class="ui-card dashboard-card" x-show="surface.kind === 'companion' && attendanceState !== 'auth-required'">
+                        <header class="dashboard-card-heading"><span><small>현재 기기</small><h2>연결 관리</h2></span><span class="dashboard-status-dot" data-tone="success">연결됨</span></header><p class="dashboard-card-description">이 기기의 세션만 해제합니다. PC에서는 모든 연결 기기를 별도로 관리할 수 있습니다.</p><button type="button" class="ui-button ui-button--secondary" @click="disconnectThisMobile()">이 기기 연결 해제</button>
+                    </article>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <footer class="ui-app-footer dashboard-footer"><span>Jungle Bell</span><span x-text="surface.kind === 'public' ? '오늘의 공개 생활 정보' : '오늘의 출석 · 생활 정보 · 알림'"></span></footer>
+</div>
+
+<div class="dashboard-install-overlay" x-show="surface.kind === 'public' && installNudgeOpen" x-cloak x-transition.opacity @keydown.escape.window="dismissInstallNudge()">
+    <section class="dashboard-install-dialog" role="dialog" aria-modal="true" aria-labelledby="dashboard-install-title">
+        <button class="dashboard-install-close" type="button" aria-label="안내 닫기" @click="dismissInstallNudge()">×</button>
+        <img src="assets/logo.png" width="64" height="64" alt=""/>
+        <span class="ui-badge">웹사이트 기능 안내</span>
+        <h2 id="dashboard-install-title">출석 확인과 알림이 필요하다면 앱을 설치해 주세요</h2>
+        <p>일반 웹사이트에서는 PC와 모바일 모두 출석 상태 확인, 출석 체크 알림, 세탁 알림을 제공하지 않습니다.</p>
+        <div class="dashboard-install-options">
+            <article><strong>모바일 앱(PWA)</strong><span>홈 화면에서 출석 상태를 확인하고 출석 푸시 알림을 받습니다.</span></article>
+            <article><strong>PC 앱</strong><span>출석 상태를 자동 동기화하고 출석·세탁 추적 알림을 받습니다.</span></article>
+        </div>
+        <div class="dashboard-install-actions">
+            <button class="ui-button ui-button--primary" type="button" x-show="installPromptAvailable" @click="installPwa()">모바일 앱 설치</button>
+            <a class="ui-button ui-button--secondary" href="https://github.com/YangSiJun528/jungle-bell/releases/latest" target="_blank" rel="noopener noreferrer">PC 앱 받기</a>
+        </div>
+        <p class="dashboard-install-help" x-show="!installPromptAvailable">휴대폰 브라우저 메뉴에서 <strong>앱 설치</strong> 또는 <strong>홈 화면에 추가</strong>를 선택하세요.</p>
+        <button class="dashboard-install-continue" type="button" @click="dismissInstallNudge()">설치하지 않고 웹 계속 보기</button>
+    </section>
+</div>
+<div class="dashboard-toast" role="status" aria-live="polite" x-show="toastMessage" x-transition x-text="toastMessage"></div>
+<script type="module" src="/dashboard.ts"></script>
+</body>
+</html>
