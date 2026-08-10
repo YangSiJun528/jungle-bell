@@ -174,6 +174,17 @@ test('상태 배지·카드·빈 상태는 반복 가능한 공통 컴포넌트�
     assert.match(dashboard, /\bdashboard-empty\b/);
 });
 
+test('README 트레이 아이콘은 런타임과 같은 얇은 선 스타일을 사용한다', () => {
+    for (const status of ['normal', 'offline', 'warning', 'alert', 'complete']) {
+        const icon = readSource(`../docs/assets/readme/readme-status-${status}.svg`);
+
+        assert.match(icon, /<rect x="3" y="3" width="38" height="38" rx="10" fill="none"/);
+        assert.match(icon, /stroke="currentColor" stroke-width="1\.6"/);
+        assert.match(icon, /M512 896a384 384 0 1 0 0-768/);
+        assert.doesNotMatch(icon, /width="38" height="38"[^>]*fill="currentColor"/);
+    }
+});
+
 test('기본 표면은 테두리 없이 배경과 여백으로 구분한다', () => {
     const cardRule = uiStyles.match(/\.ui-card\s*\{([^}]*)\}/)?.[1] ?? '';
     const emptyStateRule = uiStyles.match(/\.ui-empty-state\s*\{([^}]*)\}/)?.[1] ?? '';

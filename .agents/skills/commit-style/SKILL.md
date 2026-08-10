@@ -39,7 +39,7 @@ Scopes actually used in the project (check if an existing one fits before invent
 - `analytics` — PostHog events, collection logic
 - `tray` — system tray menu/icon
 - `updater` — auto updater
-- `analyzer`, `webcrack`, `extractor` — related to `jungle-campus-analyzer/`
+- `analyzer`, `webcrack`, `extractor` — related to `tools/campus-observer/`
 - `checker` — attendance check logic
 - `rust`, `backend` — Rust/Tauri backend in general
 - `notification` — OS notifications
