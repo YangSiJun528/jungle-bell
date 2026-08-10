@@ -1,0 +1,15 @@
+# Copy this file to .dev.vars for `wrangler dev`. Wrangler loads either
+# .dev.vars or .env, never both. Once .dev.vars exists, the Collector-only
+# variables in server/.env are not exposed to the Worker and are not needed by
+# the renewal API.
+#
+# Keep real local values only in ignored .dev.vars. Configure production secrets
+# with `wrangler secret put`; do not commit them here or to server/.env.
+PAIRING_SECRET=replace-with-at-least-32-random-bytes
+
+# Optional Web Push HTTP-relay fallback for local development. Production
+# should prefer the WEB_PUSH_RELAY Cloudflare Service Binding documented in
+# docs/environment-reference.md, which needs neither URL nor bearer token.
+VAPID_PUBLIC_KEY=replace-with-public-vapid-key
+WEB_PUSH_RELAY_URL=https://push-relay.example.com/send
+WEB_PUSH_RELAY_TOKEN=replace-with-relay-bearer-token

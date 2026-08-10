@@ -3,11 +3,19 @@ import {readFileSync} from 'node:fs';
 import {test} from 'vitest';
 
 const uiStyles = readFileSync(new URL('./ui.css', import.meta.url), 'utf8');
-const templates = ['index.html', 'onboarding.html', 'campus.html', 'image-viewer.html', 'tray-panel.html']
+const templates = [
+    'index.html',
+    'onboarding.html',
+    'campus.html',
+    'image-viewer.html',
+    'tray-panel.html',
+    'dashboard.html',
+    'pair/index.html',
+]
     .map((path) => readFileSync(new URL(path, import.meta.url), 'utf8'));
 
 test('공통 스크롤바 gutter는 양쪽 여백을 대칭으로 유지한다', () => {
-    assert.match(uiStyles, /--scrollbar-size:\s*6px/);
+    assert.match(uiStyles, /--scrollbar-size:\s*var\(--space-2\)/);
     assert.match(uiStyles, /overflow-y:\s*scroll/);
     assert.match(uiStyles, /scrollbar-gutter:\s*stable both-edges/);
     assert.match(uiStyles, /\*::\-webkit-scrollbar-track\s*{\s*background:\s*var\(--color-bg\)/);
@@ -34,7 +42,7 @@ test('공통 스크롤바 gutter는 양쪽 여백을 대칭으로 유지한다',
 });
 
 test('모든 페이지는 재정의 가능한 전역 gutter를 사용한다', () => {
-    assert.match(uiStyles, /--page-gutter:\s*var\(--space-3\)/);
+    assert.match(uiStyles, /--page-gutter:\s*var\(--space-4\)/);
     assert.match(
         uiStyles,
         /body\s*\{[^}]*padding-block:\s*var\(--page-gutter\);[^}]*padding-inline:\s*calc\(var\(--page-gutter\) - var\(--scrollbar-size\)\);/s,

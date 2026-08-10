@@ -111,7 +111,7 @@ impl NotificationService {
             }
         };
 
-        match show_system(
+        match show_system_for_delivery(
             app,
             request.title,
             request.body,
@@ -174,6 +174,43 @@ fn response_timeout(action: Option<NotificationAction>) -> notify_rust::Timeout 
 
 fn system_notification_tray_action(action: Option<NotificationAction>) -> Option<TrayPanelAction> {
     action.map(NotificationAction::tray_action)
+}
+
+fn should_dispatch_system_notification_to_main_thread(target_is_macos: bool, current_is_main_thread: bool) -> bool {
+    target_is_macos && !current_is_main_thread
+}
+
+fn show_system_for_delivery(
+    app: &tauri::AppHandle,
+    title: &str,
+    body: &str,
+    action: Option<NotificationAction>,
+    notification_id: String,
+    inbox: Arc<NotificationInboxService>,
+) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_foundation::MainThreadMarker;
+
+        if should_dispatch_system_notification_to_main_thread(true, MainThreadMarker::new().is_some()) {
+            let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+            let app_for_task = app.clone();
+            let title = title.to_owned();
+            let body = body.to_owned();
+            app.run_on_main_thread(move || {
+                let result = show_system(&app_for_task, &title, &body, action, notification_id, inbox);
+                if sender.send(result).is_err() {
+                    log::warn!("[notification] main-thread delivery result receiver closed");
+                }
+            })
+            .map_err(|error| format!("운영체제 알림 메인 스레드 예약 실패: {error}"))?;
+            return receiver
+                .recv_timeout(std::time::Duration::from_secs(10))
+                .map_err(|_| "운영체제 알림 메인 스레드 응답 시간 초과".to_owned())?;
+        }
+    }
+
+    show_system(app, title, body, action, notification_id, inbox)
 }
 
 pub fn show_system(
@@ -259,6 +296,13 @@ fn configure_windows_identity(app: &tauri::AppHandle, notification: &mut Notific
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn macos_백그라운드_알림은_메인_스레드로_전달한다() {
+        assert!(should_dispatch_system_notification_to_main_thread(true, false));
+        assert!(!should_dispatch_system_notification_to_main_thread(true, true));
+        assert!(!should_dispatch_system_notification_to_main_thread(false, false));
+    }
 
     #[test]
     fn 기본_클릭과_열기_버튼만_요청된_액션을_실행한다() {

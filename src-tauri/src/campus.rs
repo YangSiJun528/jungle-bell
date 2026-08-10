@@ -241,6 +241,29 @@ impl CampusService {
         self.refresh_inner(app, kind, false).await.map(|_| ())
     }
 
+    /// 대시보드 WebView에는 외부 API origin을 열지 않고 검증된 공개 데이터만 넘긴다.
+    /// 네트워크 갱신에 실패해도 프로세스 내 검증 캐시가 있으면 마지막 snapshot을
+    /// 반환해 일시적인 연결 장애에서 공개 화면이 비지 않게 한다.
+    pub async fn dashboard_data(&self, app: &tauri::AppHandle, kind: CampusDataKind) -> Result<Value, String> {
+        let cached = self.cache.lock().await.entry(kind).map(|entry| entry.snapshot.clone());
+        match self.refresh_inner(app, kind, false).await {
+            Ok(Some(snapshot)) => Ok(snapshot.data),
+            Ok(None) => cached
+                .map(|snapshot| snapshot.data)
+                .ok_or_else(|| format!("{} data is not available", kind.name())),
+            Err(error) => match cached {
+                Some(snapshot) => {
+                    log::warn!(
+                        "[campus] {} refresh failed; serving validated cache: {error}",
+                        kind.name()
+                    );
+                    Ok(snapshot.data)
+                }
+                None => Err(error),
+            },
+        }
+    }
+
     pub async fn refresh_scheduled(&self, app: &tauri::AppHandle, kind: CampusDataKind) -> Result<bool, String> {
         self.refresh_inner(app, kind, true)
             .await

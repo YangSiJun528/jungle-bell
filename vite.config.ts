@@ -76,7 +76,7 @@ export default defineConfig({
     root: 'src',
     base: './',
     clearScreen: false,
-    publicDir: false,
+    publicDir: 'public',
     server: {
         host: host ?? '127.0.0.1',
         port: 5173,
@@ -96,6 +96,8 @@ export default defineConfig({
                 campus: resolve(import.meta.dirname, 'src/campus.html'),
                 imageViewer: resolve(import.meta.dirname, 'src/image-viewer.html'),
                 trayPanel: resolve(import.meta.dirname, 'src/tray-panel.html'),
+                dashboard: resolve(import.meta.dirname, 'src/dashboard.html'),
+                pair: resolve(import.meta.dirname, 'src/pair/index.html'),
             },
         },
     },

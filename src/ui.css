@@ -7,6 +7,7 @@
 @source "./campus.html";
 @source "./image-viewer.html";
 @source "./tray-panel.html";
+@source "./dashboard.html";
 
 @theme inline {
     --font-sans: var(--font-family);
@@ -84,8 +85,8 @@
 
 @layer base {
     :root {
-        --page-gutter: var(--space-3);
-        --scrollbar-size: 6px;
+        --page-gutter: var(--space-4);
+        --scrollbar-size: var(--space-2);
         --scrollbar-thumb: oklch(20% 0.01 145 / 28%);
         --scrollbar-thumb-active: oklch(20% 0.01 145 / 48%);
     }
@@ -151,6 +152,20 @@
 }
 
 @layer components {
+    .ui-app-header,
+    .ui-app-footer {
+        display: flex;
+        align-items: center;
+    }
+
+    .ui-app-header {
+        min-height: var(--space-16);
+    }
+
+    .ui-app-footer {
+        min-height: var(--space-12);
+    }
+
     .ui-page-header {
         display: flex;
         min-height: var(--space-16);

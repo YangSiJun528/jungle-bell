@@ -1,7 +1,7 @@
 {
   "name": "jungle-bell-desktop",
   "private": true,
-  "version": "0.4.4",
+  "version": "0.5.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -17,7 +17,8 @@
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-dialog": "^2.7.1",
     "@tauri-apps/plugin-opener": "^2.5.4",
-    "alpinejs": "^3.15.12"
+    "alpinejs": "^3.15.12",
+    "qrcode-generator": "^2.0.4"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

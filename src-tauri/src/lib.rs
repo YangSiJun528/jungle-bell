@@ -15,14 +15,17 @@ mod news;
 mod notification_inbox;
 #[cfg(desktop)]
 mod notification_service;
+mod remote_sync;
 mod runtime;
 mod scheduler;
+mod secure_credential;
 mod settings_state;
 mod state;
 mod tray;
 mod updater;
 
 use std::sync::Arc;
+use tauri::Manager;
 use tokio::sync::Mutex;
 
 use config::Config;
@@ -34,6 +37,11 @@ use state::AppState;
 
 /// 로그 파일 최대 크기 (5 MB). 초과 시 이전 파일 삭제 후 새 파일 시작.
 const MAX_LOG_FILE_SIZE: u128 = 5_000_000;
+const AUTOSTART_ARGUMENT: &str = "--autostart";
+
+fn should_open_dashboard_on_start(onboarding_completed: bool, launched_from_autostart: bool) -> bool {
+    onboarding_completed && !launched_from_autostart
+}
 
 #[cfg(desktop)]
 fn window_size_should_persist(label: &str) -> bool {
@@ -134,6 +142,7 @@ fn spawn_periodic_update_check(app: tauri::AppHandle, shared_state: Arc<Mutex<Ap
 /// 시스템 트레이 아이콘 + 숨겨진 WebView로 출석 상태를 모니터링한다.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let launched_from_autostart = std::env::args().any(|argument| argument == AUTOSTART_ARGUMENT);
     let config = Config::load();
     let log_level = if config.debug_mode {
         log::LevelFilter::Debug
@@ -157,8 +166,9 @@ pub fn run() {
     tauri::Builder::default()
         // single-instance 플러그인: 공식 문서 권장대로 가장 먼저 등록한다.
         // 이미 실행 중인 인스턴스가 있으면 두 번째 실행을 차단한다.
-        .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             log::info!("[app] 다른 인스턴스 실행이 감지되어 차단되었습니다");
+            tray::open_dashboard_window(app);
         }))
         // 로그 플러그인: stdout(터미널) + 파일(플랫폼 로그 디렉터리) 동시 출력.
         // KeepOne 전략으로 500KB 초과 시 이전 파일 삭제 → 최대 ~1MB 유지.
@@ -186,7 +196,7 @@ pub fn run() {
         // autostart 플러그인: 시스템 시작 시 앱 자동 실행 (macOS: LaunchAgent)
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-            None,
+            Some(vec![AUTOSTART_ARGUMENT]),
         ))
         // opener 플러그인: 시스템 브라우저로 URL 열기 (설정 페이지에서 사용)
         .plugin(tauri_plugin_opener::init())
@@ -215,6 +225,7 @@ pub fn run() {
             commands::report_campus_ready,
             commands::report_campus_interaction,
             commands::refresh_campus_data,
+            commands::get_dashboard_campus_data,
             commands::load_meal_history,
             commands::open_image_viewer,
             commands::check_and_notify_update,
@@ -252,7 +263,17 @@ pub fn run() {
             commands::refresh_login_status,
             commands::get_notification_inbox_snapshot,
             commands::activate_notification,
+            commands::send_test_notification,
             commands::clear_notification_inbox,
+            commands::get_connected_service_status,
+            commands::open_lms_login,
+            commands::create_mobile_pairing,
+            commands::get_mobile_pairing_status,
+            commands::approve_mobile_pairing,
+            commands::list_mobile_sessions,
+            commands::revoke_mobile_session,
+            commands::get_remote_attendance_snapshot,
+            commands::refresh_platform_sync,
         ])
         // setup(): 앱 초기화 후 이벤트 루프 시작 전에 한 번 실행.
         .setup(move |app| {
@@ -281,6 +302,8 @@ pub fn run() {
             // 자동 시작: Config 값을 기준으로 OS 상태를 동기화.
             // 기본값이 true이므로 첫 설치 시 자동으로 등록됨.
             sync_auto_start_setting(app.handle(), &shared_state);
+            let remote_sync_service = Arc::new(remote_sync::RemoteSyncService::configured(app.handle())?);
+            app.manage(remote_sync_service.clone());
             tray::setup_tray(app)?;
             notification_inbox_service.initialize(app.handle());
             if let Err(error) = notification_service.initialize_system_backend() {
@@ -296,12 +319,25 @@ pub fn run() {
                 Err(error) => log::warn!("[app] system theme detection failed: {error}"),
             }
             notify_startup_status(app.handle(), &shared_state, &notification_service);
+            let onboarding_completed = shared_state
+                .try_lock()
+                .map(|state| state.config.onboarding_completed)
+                .unwrap_or(false);
+            if should_open_dashboard_on_start(onboarding_completed, launched_from_autostart) {
+                tray::open_dashboard_window(app.handle());
+            }
             spawn_startup_update_check(app.handle().clone(), shared_state.clone());
             spawn_periodic_update_check(app.handle().clone(), shared_state.clone());
 
             // 백그라운드 루프: 상태 계산, 트레이 갱신, 체커 주기적 리로드.
             let app_handle = app.handle().clone();
             scheduler::start_scheduler(app_handle, shared_state.clone());
+            remote_sync::start_background_loop(
+                app.handle().clone(),
+                remote_sync_service,
+                shared_state.clone(),
+                notification_service.clone(),
+            );
 
             Ok(())
         })
@@ -321,6 +357,13 @@ mod tests {
         assert!(!window_size_should_persist("campus"));
         assert!(!window_size_should_persist("settings"));
         assert!(!window_size_should_persist("tray-panel"));
+    }
+
+    #[test]
+    fn 자동시작은_대시보드를_열지_않고_수동실행은_연다() {
+        assert!(should_open_dashboard_on_start(true, false));
+        assert!(!should_open_dashboard_on_start(true, true));
+        assert!(!should_open_dashboard_on_start(false, false));
     }
 
     #[test]
