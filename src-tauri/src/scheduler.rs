@@ -18,7 +18,6 @@ use crate::attendance;
 use crate::attendance_day;
 use crate::campus::CampusDataKind;
 use crate::interval_tasks::{self, JobAction, JobEvaluation, JobFailureDecision, JobId, JobSpec};
-use crate::local_consumption::LocalConsumptionService;
 use crate::runtime::{self, JobOutcome, RuntimeAction, ScheduledAction};
 use crate::state::{kst, AppState, DailyPhase, TraySnapshot};
 
@@ -30,15 +29,12 @@ const TICK_INTERVAL_ACTIVE: u64 = 60;
 /// 대기 시 틱 간격 (초). 5분 간격으로 상태 확인.
 const TICK_INTERVAL_IDLE: u64 = 300;
 
-/// 체커 WebView 리로드 간격 (초). 세션/토큰 갱신 목적.
-/// 액세스 토큰이 1시간 만료이므로 15분 간격으로 리로드하여 갱신.
-const RELOAD_INTERVAL_NORMAL: u64 = 15 * 60; // 15분
-const ATTENDANCE_STATUS_CHECK_ID: JobId = JobId::new("attendance_status_check");
+/// 체커 WebView 세션 상태를 5분 간격으로 새로 확인한다.
+const RELOAD_INTERVAL_NORMAL: u64 = 5 * 60;
 const CHECKER_SESSION_REFRESH_ID: JobId = JobId::new("checker_session_refresh");
 const LAUNDRY_REFRESH_ID: JobId = JobId::new("laundry_refresh");
 const MEALS_REFRESH_ID: JobId = JobId::new("meals_refresh");
 
-const ATTENDANCE_STATUS_CHECK_JOB: JobSpec = JobSpec::on_tick(ATTENDANCE_STATUS_CHECK_ID);
 const CHECKER_SESSION_REFRESH_JOB: JobSpec = JobSpec::new(CHECKER_SESSION_REFRESH_ID, RELOAD_INTERVAL_NORMAL)
     .initial_delay_secs(RELOAD_INTERVAL_NORMAL)
     .backoff_secs(30, 5 * 60)
@@ -67,10 +63,6 @@ struct RegisteredJob {
     priority: u8,
 }
 
-fn fixed_attendance_status_spec(_state: &AppState) -> JobSpec {
-    ATTENDANCE_STATUS_CHECK_JOB
-}
-
 fn fixed_checker_refresh_spec(_state: &AppState) -> JobSpec {
     CHECKER_SESSION_REFRESH_JOB
 }
@@ -87,10 +79,6 @@ fn always_eligible(_state: &AppState, _context: &SchedulerContext) -> bool {
     true
 }
 
-fn attendance_status_action(_state: &AppState, _context: &SchedulerContext) -> RuntimeAction {
-    RuntimeAction::AttendanceStatusCheck
-}
-
 fn checker_refresh_action(_state: &AppState, _context: &SchedulerContext) -> RuntimeAction {
     RuntimeAction::CheckerSessionRefresh
 }
@@ -103,15 +91,7 @@ fn meals_action(_state: &AppState, _context: &SchedulerContext) -> RuntimeAction
     RuntimeAction::CampusRefresh(CampusDataKind::Meals)
 }
 
-const SCHEDULED_JOBS: [RegisteredJob; 4] = [
-    RegisteredJob {
-        id: ATTENDANCE_STATUS_CHECK_ID,
-        spec: fixed_attendance_status_spec,
-        condition: always_eligible,
-        action: attendance_status_action,
-        conflict_key: Some("checker-session"),
-        priority: 10,
-    },
+const SCHEDULED_JOBS: [RegisteredJob; 3] = [
     RegisteredJob {
         id: CHECKER_SESSION_REFRESH_ID,
         spec: fixed_checker_refresh_spec,
@@ -157,7 +137,7 @@ fn record_job_result(state: &mut AppState, action: JobAction, outcome: JobOutcom
         return;
     };
     let kst_now = now.with_timezone(&kst());
-    let attendance_date = attendance_day::effective_attendance_date(&state.config, kst_now);
+    let attendance_date = attendance_day::effective_attendance_date(kst_now);
     let evaluation = JobEvaluation::new(now, kst_now, &attendance_date, true);
     let spec = (job.spec)(state);
 
@@ -181,12 +161,12 @@ fn record_job_result(state: &mut AppState, action: JobAction, outcome: JobOutcom
     }
 }
 
-fn scheduler_context(state: &AppState, now: DateTime<Utc>) -> SchedulerContext {
+fn scheduler_context(now: DateTime<Utc>) -> SchedulerContext {
     let kst_now = now.with_timezone(&kst());
     SchedulerContext {
         now,
         kst_now,
-        attendance_date: attendance_day::effective_attendance_date(&state.config, kst_now),
+        attendance_date: attendance_day::effective_attendance_date(kst_now),
     }
 }
 
@@ -275,12 +255,6 @@ fn compute_phase_update(state: &mut AppState, now: DateTime<Utc>) -> Option<(Dai
     attendance::compute_phase_update(state, now).map(|update| (update.phase, update.remaining))
 }
 
-fn expire_login_retry_window(state: &mut AppState, now: DateTime<Utc>) {
-    if matches!(state.login_retry_until, Some(until) if now >= until) {
-        state.login_retry_until = None;
-    }
-}
-
 #[cfg(test)]
 fn tick_delayed(previous_tick: DateTime<Utc>, expected_interval_secs: u64, now: DateTime<Utc>) -> Option<i64> {
     interval_tasks::delayed_tick_action(
@@ -351,7 +325,7 @@ pub(crate) fn check_daily_reset(state: &mut AppState, kst_now: DateTime<FixedOff
     let current_hour = kst_now.hour();
 
     if let Some(last_day) = state.last_reset_day {
-        if current_day != last_day && current_hour >= state.config.morning_start.hour {
+        if current_day != last_day && current_hour >= crate::config::MORNING_START_HOUR {
             state.morning_checked = false;
             state.evening_checked = false;
             state.last_reset_day = Some(current_day);
@@ -363,32 +337,21 @@ pub(crate) fn check_daily_reset(state: &mut AppState, kst_now: DateTime<FixedOff
     false
 }
 
-#[cfg(test)]
-pub(crate) fn should_notify(
-    config: &crate::config::Config,
-    phase: DailyPhase,
-    remaining: Option<i64>,
-    needs_login: bool,
-    kst_now: DateTime<FixedOffset>,
-) -> attendance::NotificationDecision {
-    attendance::notification_decision(config, phase, remaining, needs_login, kst_now)
-}
-
 /// 적응형 틱 간격 계산 (순수 함수).
 pub(crate) fn compute_tick_interval(
     data_loaded: bool,
     needs_login: bool,
-    attendance_open: bool,
-    login_retry_active: bool,
+    checker_visible: bool,
     phase: DailyPhase,
     remaining: Option<i64>,
 ) -> u64 {
     let base_interval = if !data_loaded {
         5
     } else if needs_login {
-        match (attendance_open, login_retry_active) {
-            (true, _) | (_, true) => 10,
-            _ => 600,
+        if checker_visible {
+            10
+        } else {
+            600
         }
     } else {
         if is_phase_actionable(phase) {
@@ -417,16 +380,11 @@ fn compute_next_wake_interval(tick_interval: u64, now: DateTime<Utc>, next_job_d
     tick_interval.min(job_interval)
 }
 
-#[cfg(test)]
-pub(crate) fn notification_message(phase: DailyPhase, remaining: Option<i64>) -> (&'static str, String) {
-    attendance::notification_message(phase, remaining)
-}
-
 /// 스케줄러 틱 한 번의 순수 계산.
 ///
 /// 상태를 갱신하고, 부수효과 지시를 `TickResult`로 반환.
 /// 실제 부수효과(tray 갱신, 알림 발송, WebView 리로드)는 호출자가 수행.
-pub(crate) fn compute_tick(state: &mut AppState, now: DateTime<Utc>, attendance_open: bool) -> TickResult {
+pub(crate) fn compute_tick(state: &mut AppState, now: DateTime<Utc>, checker_visible: bool) -> TickResult {
     let kst_now = now.with_timezone(&kst());
 
     // --- 일일 리셋 ---
@@ -441,19 +399,14 @@ pub(crate) fn compute_tick(state: &mut AppState, now: DateTime<Utc>, attendance_
 
     // --- 주기 job ---
     // 공통 데이터 조회와 checker 갱신 작업만 선언형 job 엔진에서 평가한다.
-    let context = scheduler_context(state, now);
+    let context = scheduler_context(now);
     let job_actions = compute_job_actions(state, &context);
 
-    // --- 로그인 재시도 윈도우 만료 확인 ---
-    expire_login_retry_window(state, now);
-
     // --- 적응형 틱 간격 ---
-    let login_retry_active = state.login_retry_until.is_some();
     let tick_interval = compute_tick_interval(
         state.data_loaded,
         state.needs_login,
-        attendance_open,
-        login_retry_active,
+        checker_visible,
         state.phase,
         remaining,
     );
@@ -470,20 +423,17 @@ pub(crate) fn compute_tick(state: &mut AppState, now: DateTime<Utc>, attendance_
 /// 백그라운드 스케줄러 루프 시작.
 pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<AppState>>) {
     tauri::async_runtime::spawn(async move {
-        {
-            let s = shared_state.lock().await;
-            log::info!(
-                "[scheduler] config: day_start={:02}:{:02} start_deadline={:02}:{:02} end_open={:02}:{:02} day_end={:02}:{:02}",
-                s.config.morning_start.hour,
-                s.config.morning_start.minute,
-                s.config.morning_end.hour,
-                s.config.morning_end.minute,
-                s.config.evening_start.hour,
-                s.config.evening_start.minute,
-                s.config.evening_end.hour,
-                s.config.evening_end.minute,
-            );
-        }
+        log::info!(
+            "[scheduler] fixed attendance schedule: day_start={:02}:{:02} start_deadline={:02}:{:02} end_open={:02}:{:02} day_end={:02}:{:02}",
+            crate::config::MORNING_START_HOUR,
+            crate::config::MORNING_START_MINUTE,
+            crate::config::MORNING_END_HOUR,
+            crate::config::MORNING_END_MINUTE,
+            crate::config::EVENING_START_HOUR,
+            crate::config::EVENING_START_MINUTE,
+            crate::config::EVENING_END_HOUR,
+            crate::config::EVENING_END_MINUTE,
+        );
 
         let scheduler_wakeup = shared_state.lock().await.scheduler_wakeup.clone();
         let mut previous_tick: Option<DateTime<Utc>> = None;
@@ -523,24 +473,18 @@ pub fn start_scheduler(app_handle: tauri::AppHandle, shared_state: Arc<Mutex<App
 
             let (tick_result, phase) = {
                 let mut s = shared_state.lock().await;
-                let attendance_open = app_handle.get_webview_window("attendance").is_some();
+                let checker_visible = app_handle
+                    .get_webview_window("checker")
+                    .and_then(|window| window.is_visible().ok())
+                    .unwrap_or(false);
 
-                let result = compute_tick(&mut s, now, attendance_open);
+                let result = compute_tick(&mut s, now, checker_visible);
                 let phase = s.phase;
 
                 log_tick_state(now, &s, &result);
                 (result, phase)
             };
 
-            let local_consumption: tauri::State<'_, Arc<LocalConsumptionService>> = app_handle.state();
-            local_consumption
-                .on_scheduler_tick(
-                    &app_handle,
-                    now,
-                    phase,
-                    tick_result.tray_update.as_ref().and_then(|snapshot| snapshot.remaining),
-                )
-                .await;
             let job_results = runtime::apply_tick_side_effects(
                 &app_handle,
                 phase,
@@ -685,163 +629,30 @@ mod tests {
         assert!(state.morning_checked);
     }
 
-    // --- should_notify ---
-
-    #[test]
-    fn 시작_알림_비활성화시_시작_알림을_보내지_않는다() {
-        // given
-        let config = Config {
-            start_notification_enabled: false,
-            ..Default::default()
-        };
-
-        // when
-        let d = should_notify(&config, DailyPhase::NeedStart, Some(3600), false, kst_dt(9, 30, 0));
-
-        // then
-        assert!(!d.send);
-    }
-
-    #[test]
-    fn 종료_알림_비활성화시_종료_알림을_보내지_않는다() {
-        // given
-        let config = Config {
-            end_notification_enabled: false,
-            ..Default::default()
-        };
-
-        // when: KST 23:30 — 저녁 윈도우 내
-        let d = should_notify(&config, DailyPhase::NeedEnd, Some(3600), false, kst_dt(23, 30, 0));
-
-        // then
-        assert!(!d.send);
-    }
-
-    #[test]
-    fn 시작_알림_비활성화시에도_종료_알림은_발송된다() {
-        // given
-        let config = Config {
-            start_notification_enabled: false,
-            ..Default::default()
-        };
-
-        // when: KST 23:30 — 저녁 윈도우 내
-        let d = should_notify(&config, DailyPhase::NeedEnd, Some(3600), false, kst_dt(23, 30, 0));
-
-        // then
-        assert!(d.send);
-    }
-
-    #[test]
-    fn 로그인_필요시_알림을_보내지_않는다() {
-        // given
-        let config = Config::default();
-
-        // when
-        let d = should_notify(&config, DailyPhase::NeedStart, Some(3600), true, kst_dt(9, 30, 0));
-
-        // then
-        assert!(!d.send);
-    }
-
-    #[test]
-    fn 액션_불필요_페이즈에서는_알림을_보내지_않는다() {
-        // given
-        let config = Config::default();
-
-        // when
-        let d = should_notify(&config, DailyPhase::Studying, Some(3600), false, kst_dt(12, 0, 0));
-
-        // then
-        assert!(!d.send);
-    }
-
-    #[test]
-    fn 알림_윈도우_이전에는_알림을_보내지_않는다() {
-        let config = Config::default();
-
-        // when: KST 08:00 — 아침 알림 윈도우 전
-        let d = should_notify(&config, DailyPhase::NeedStart, Some(7200), false, kst_dt(8, 0, 0));
-
-        // then
-        assert!(!d.send);
-    }
-
-    #[test]
-    fn 알림_윈도우_내_첫_알림은_발송된다() {
-        let config = Config::default();
-
-        // when
-        let d = should_notify(&config, DailyPhase::NeedStart, Some(3600), false, kst_dt(9, 30, 0));
-
-        // then
-        assert!(d.send);
-        assert!(d.message.is_some());
-    }
-
-    #[test]
-    fn 자정을_넘긴_저녁_윈도우_내에서_알림이_발송된다() {
-        let config = Config::default();
-
-        // when: KST 00:30 — 자정 넘긴 저녁 윈도우 내
-        let kst_0030 = FixedOffset::east_opt(9 * 3600)
-            .unwrap()
-            .with_ymd_and_hms(2026, 3, 18, 0, 30, 0)
-            .unwrap();
-        let d = should_notify(&config, DailyPhase::NeedEnd, Some(12600), false, kst_0030);
-
-        // then
-        assert!(d.send);
-    }
-
-    #[test]
-    fn 저녁_윈도우_종료_후에는_알림을_보내지_않는다() {
-        let config = Config::default();
-
-        // when: KST 04:30 — 윈도우 밖
-        let kst_0430 = FixedOffset::east_opt(9 * 3600)
-            .unwrap()
-            .with_ymd_and_hms(2026, 3, 18, 4, 30, 0)
-            .unwrap();
-        let d = should_notify(&config, DailyPhase::NeedEnd, Some(9000), false, kst_0430);
-
-        // then
-        assert!(!d.send);
-    }
-
     // --- compute_tick_interval ---
 
     #[test]
     fn 데이터_미로드시_틱_간격은_5초이다() {
         // given & when
-        let result = compute_tick_interval(false, false, false, false, DailyPhase::Idle, None);
+        let result = compute_tick_interval(false, false, false, DailyPhase::Idle, None);
 
         // then
         assert_eq!(result, 5);
     }
 
     #[test]
-    fn 로그인_필요하고_출석_열려있으면_틱_간격은_10초이다() {
+    fn 로그인_필요하고_checker가_보이면_틱_간격은_10초이다() {
         // given & when
-        let result = compute_tick_interval(true, true, true, false, DailyPhase::Idle, None);
+        let result = compute_tick_interval(true, true, true, DailyPhase::Idle, None);
 
         // then
         assert_eq!(result, 10);
     }
 
     #[test]
-    fn 로그인_필요하고_재시도_활성화시_틱_간격은_10초이다() {
+    fn 로그인_필요하고_checker가_숨겨져있으면_틱_간격은_600초이다() {
         // given & when
-        let result = compute_tick_interval(true, true, false, true, DailyPhase::Idle, None);
-
-        // then
-        assert_eq!(result, 10);
-    }
-
-    #[test]
-    fn 로그인_필요하고_재시도_없으면_틱_간격은_600초이다() {
-        // given & when
-        let result = compute_tick_interval(true, true, false, false, DailyPhase::Idle, None);
+        let result = compute_tick_interval(true, true, false, DailyPhase::Idle, None);
 
         // then
         assert_eq!(result, 600);
@@ -850,7 +661,7 @@ mod tests {
     #[test]
     fn 액티브_페이즈에서_틱_간격은_활성_간격이다() {
         // given & when
-        let result = compute_tick_interval(true, false, false, false, DailyPhase::NeedStart, Some(3600));
+        let result = compute_tick_interval(true, false, false, DailyPhase::NeedStart, Some(3600));
 
         // then
         assert_eq!(result, TICK_INTERVAL_ACTIVE);
@@ -859,7 +670,7 @@ mod tests {
     #[test]
     fn 유휴_페이즈에서_틱_간격은_유휴_간격이다() {
         // given & when
-        let result = compute_tick_interval(true, false, false, false, DailyPhase::Studying, Some(1800));
+        let result = compute_tick_interval(true, false, false, DailyPhase::Studying, Some(1800));
 
         // then
         assert_eq!(result, TICK_INTERVAL_IDLE);
@@ -868,7 +679,7 @@ mod tests {
     #[test]
     fn 잔여시간이_기본_간격보다_짧으면_잔여시간_플러스_1이다() {
         // given & when: remaining=30 < base=60 → 31
-        let result = compute_tick_interval(true, false, false, false, DailyPhase::NeedStart, Some(30));
+        let result = compute_tick_interval(true, false, false, DailyPhase::NeedStart, Some(30));
 
         // then
         assert_eq!(result, 31);
@@ -877,7 +688,7 @@ mod tests {
     #[test]
     fn 잔여시간이_0이면_기본_간격을_사용한다() {
         // given & when
-        let result = compute_tick_interval(true, false, false, false, DailyPhase::NeedStart, Some(0));
+        let result = compute_tick_interval(true, false, false, DailyPhase::NeedStart, Some(0));
 
         // then
         assert_eq!(result, TICK_INTERVAL_ACTIVE);
@@ -903,111 +714,6 @@ mod tests {
         );
     }
 
-    // --- notification_message ---
-
-    #[test]
-    fn 출석체크_필요시_시간_분_메시지를_생성한다() {
-        let (title, body) = notification_message(DailyPhase::NeedStart, Some(5400));
-        assert_eq!(title, "출석 체크 시간입니다");
-        assert_eq!(body, "마감까지 1시간 30분 남았습니다.");
-    }
-
-    #[test]
-    fn 출석체크_필요시_분만_있으면_시간을_표시하지_않는다() {
-        let (title, body) = notification_message(DailyPhase::NeedStart, Some(1800));
-        assert_eq!(title, "출석 체크 시간입니다");
-        assert_eq!(body, "마감까지 30분 남았습니다.");
-    }
-
-    #[test]
-    fn 출석체크_필요시_잔여시간_없으면_기본_메시지를_생성한다() {
-        let (title, body) = notification_message(DailyPhase::NeedStart, None);
-        assert_eq!(title, "출석 체크 시간입니다");
-        assert_eq!(body, "출석 체크를 해주세요.");
-    }
-
-    #[test]
-    fn 지각시_지각_메시지를_생성한다() {
-        let (title, body) = notification_message(DailyPhase::StartOverdue, None);
-        assert_eq!(title, "출석 체크 지각!");
-        assert_eq!(body, "빨리 체크인하세요.");
-    }
-
-    #[test]
-    fn 지각_임박시_임박_메시지를_생성한다() {
-        let (title, body) = notification_message(DailyPhase::StartOverdue, Some(300));
-        assert_eq!(title, "출석 체크 지각 임박!");
-        assert_eq!(body, "마감까지 5분 남았습니다.");
-    }
-
-    #[test]
-    fn 지각_잔여시간_0이면_지각_메시지를_생성한다() {
-        let (title, body) = notification_message(DailyPhase::StartOverdue, Some(0));
-        assert_eq!(title, "출석 체크 지각!");
-        assert_eq!(body, "빨리 체크인하세요.");
-    }
-
-    #[test]
-    fn 종료체크_필요시_종료_메시지를_생성한다() {
-        let (title, body) = notification_message(DailyPhase::NeedEnd, Some(3600));
-        assert_eq!(title, "학습 종료 체크가 필요합니다");
-        assert_eq!(body, "마감까지 1시간 0분 남았습니다.");
-    }
-
-    #[test]
-    fn 종료체크_시간_분_메시지를_생성한다() {
-        let (title, body) = notification_message(DailyPhase::NeedEnd, Some(5400));
-        assert_eq!(title, "학습 종료 체크가 필요합니다");
-        assert_eq!(body, "마감까지 1시간 30분 남았습니다.");
-    }
-
-    #[test]
-    fn 종료체크_분만_메시지를_생성한다() {
-        let (title, body) = notification_message(DailyPhase::NeedEnd, Some(1800));
-        assert_eq!(title, "학습 종료 체크가 필요합니다");
-        assert_eq!(body, "마감까지 30분 남았습니다.");
-    }
-
-    #[test]
-    fn 종료체크_잔여시간_없으면_기본_메시지를_생성한다() {
-        let (title, body) = notification_message(DailyPhase::NeedEnd, None);
-        assert_eq!(title, "학습 종료 체크가 필요합니다");
-        assert_eq!(body, "학습 종료 체크를 해주세요.");
-    }
-
-    #[test]
-    fn 기타_페이즈에서는_기본_메시지를_생성한다() {
-        let (title, body) = notification_message(DailyPhase::Idle, None);
-        assert_eq!(title, "Jungle Bell");
-        assert_eq!(body, "출석 상태를 확인하세요.");
-    }
-
-    #[test]
-    fn 학습중_페이즈에서는_기본_메시지를_생성한다() {
-        let (title, body) = notification_message(DailyPhase::Studying, Some(3600));
-        assert_eq!(title, "Jungle Bell");
-        assert_eq!(body, "출석 상태를 확인하세요.");
-    }
-
-    #[test]
-    fn 완료_페이즈에서는_기본_메시지를_생성한다() {
-        let (title, body) = notification_message(DailyPhase::Complete, None);
-        assert_eq!(title, "Jungle Bell");
-        assert_eq!(body, "출석 상태를 확인하세요.");
-    }
-
-    #[test]
-    fn 잔여시간_59초면_1분으로_올림_표시한다() {
-        let (_, body) = notification_message(DailyPhase::NeedStart, Some(59));
-        assert_eq!(body, "마감까지 1분 남았습니다.");
-    }
-
-    #[test]
-    fn 잔여시간_10시간이면_시간_분_형식으로_표시한다() {
-        let (_, body) = notification_message(DailyPhase::NeedStart, Some(36000));
-        assert_eq!(body, "마감까지 10시간 0분 남았습니다.");
-    }
-
     // --- compute_tick (통합) ---
 
     #[test]
@@ -1021,16 +727,22 @@ mod tests {
         // then
         assert_eq!(result.tick_interval, 5);
         assert!(result.tray_update.is_none());
-        assert!(result.has_job_action(JobId::new("attendance_status_check")));
         assert!(!result.has_job_action(JobId::new("checker_session_refresh")));
         assert!(result.has_job_action(JobId::new("laundry_refresh")));
         assert!(result.has_job_action(JobId::new("meals_refresh")));
     }
 
     #[test]
-    fn 스케줄러에는_알림_job을_등록하지_않는다() {
-        assert_eq!(SCHEDULED_JOBS.len(), 4);
+    fn 출석은_별도_on_tick_job없이_5분_checker_refresh로_수집한다() {
+        assert_eq!(SCHEDULED_JOBS.len(), 3);
+        assert!(SCHEDULED_JOBS
+            .iter()
+            .all(|job| job.id.name() != "attendance_status_check"));
         assert!(SCHEDULED_JOBS.iter().all(|job| !job.id.name().contains("notification")));
+        assert_eq!(
+            CHECKER_SESSION_REFRESH_JOB.trigger,
+            interval_tasks::Trigger::Every { interval_secs: 5 * 60 }
+        );
     }
 
     #[test]
@@ -1098,19 +810,23 @@ mod tests {
             None
         );
 
-        // when: 14분 후
-        let t1 = kst_utc(9, 14, 0);
-        let result_14min = compute_tick(&mut state, t1, false);
+        // when: 4분 후
+        let t1 = kst_utc(9, 4, 0);
+        let result_4min = compute_tick(&mut state, t1, false);
 
         // then: 아직 리로드 안 함
-        assert!(!result_14min.has_job_action(JobId::new("checker_session_refresh")));
+        assert!(!result_4min.has_job_action(JobId::new("checker_session_refresh")));
 
-        // when: 16분 후
-        let t2 = kst_utc(9, 16, 0);
-        let result_16min = compute_tick(&mut state, t2, false);
+        // when: 6분 후
+        let t2 = kst_utc(9, 6, 0);
+        let result_6min = compute_tick(&mut state, t2, false);
 
         // then: 리로드 발생
-        assert!(result_16min.has_job_action(JobId::new("checker_session_refresh")));
+        assert!(result_6min.has_job_action(JobId::new("checker_session_refresh")));
+        assert_eq!(
+            CHECKER_SESSION_REFRESH_JOB.trigger,
+            interval_tasks::Trigger::Every { interval_secs: 5 * 60 }
+        );
         assert_eq!(
             state
                 .interval_jobs
@@ -1128,9 +844,9 @@ mod tests {
         state.interval_jobs.mark_success(&CHECKER_SESSION_REFRESH_JOB, t0);
 
         // when
-        let t1 = kst_utc(9, 16, 0);
+        let t1 = kst_utc(9, 6, 0);
         let first = compute_tick(&mut state, t1, false);
-        let t2 = kst_utc(9, 17, 0);
+        let t2 = kst_utc(9, 7, 0);
         let second = compute_tick(&mut state, t2, false);
 
         // then
@@ -1168,31 +884,6 @@ mod tests {
 
         // then
         assert_eq!(delayed, Some(121));
-    }
-
-    #[test]
-    fn 로그인_재시도_만료시_틱_간격이_늘어난다() {
-        // given
-        let mut state = default_state();
-        state.data_loaded = true;
-        state.needs_login = true;
-        let now = kst_utc(9, 0, 0);
-        state.login_retry_until = Some(now + chrono::Duration::seconds(180));
-
-        // when: 재시도 윈도우 내
-        let result = compute_tick(&mut state, now, false);
-
-        // then
-        assert!(state.login_retry_until.is_some());
-        assert_eq!(result.tick_interval, 10);
-
-        // when: 4분 후 만료
-        let later = kst_utc(9, 4, 0);
-        let result = compute_tick(&mut state, later, false);
-
-        // then
-        assert!(state.login_retry_until.is_none());
-        assert_eq!(result.tick_interval, 600);
     }
 
     #[test]
@@ -1240,11 +931,10 @@ mod tests {
     #[test]
     fn 지각_임박_10시5분에는_remaining이_300이다() {
         // given: 10:05 KST, morning_end=10:00 → grace_remaining = 10:10 - 10:05 = 300초
-        let config = Config::default();
         let now = kst_utc(10, 5, 0);
 
         // when
-        let (phase, remaining) = state::compute_daily_phase(&config, now, false, false);
+        let (phase, remaining) = state::compute_daily_phase(now, false, false);
 
         // then
         assert_eq!(phase, DailyPhase::StartOverdue);
@@ -1254,163 +944,23 @@ mod tests {
     #[test]
     fn 지각_10시15분에는_remaining이_none이다() {
         // given: 10:15 KST, morning_end=10:00 → grace_remaining = 10:10 - 10:15 = -300 → None
-        let config = Config::default();
         let now = kst_utc(10, 15, 0);
 
         // when
-        let (phase, remaining) = state::compute_daily_phase(&config, now, false, false);
+        let (phase, remaining) = state::compute_daily_phase(now, false, false);
 
         // then
         assert_eq!(phase, DailyPhase::StartOverdue);
         assert_eq!(remaining, None);
     }
 
-    // --- skip_attendance ---
-
-    #[test]
-    fn 이번_출석_알림_끄기_활성화시_알림을_보내지_않는다() {
-        // given
-        let config = Config {
-            skip_attendance: Some("2026-03-17".into()), // kst_dt의 날짜와 동일
-            ..Default::default()
-        };
-
-        // when
-        let d = should_notify(&config, DailyPhase::NeedStart, Some(3600), false, kst_dt(9, 30, 0));
-
-        // then
-        assert!(!d.send);
-    }
-
-    #[test]
-    fn 이번_출석_알림_끄기_날짜가_다르면_알림이_발송된다() {
-        // given: morning_start 이후에는 전날 skip이 무효
-        let config = Config {
-            skip_attendance: Some("2026-03-16".into()), // 어제 날짜
-            ..Default::default()
-        };
-
-        // when: 09:30 (morning_start=04:00 이후)
-        let d = should_notify(&config, DailyPhase::NeedStart, Some(3600), false, kst_dt(9, 30, 0));
-
-        // then
-        assert!(d.send);
-    }
-
-    #[test]
-    fn 이번_출석_알림_끄기_자정_이후_morning_start_이전에는_전날_skip이_유효하다() {
-        // given: 전날(03-17) skip 설정, 현재 03-18 02:00 (morning_start=04:00 이전)
-        let config = Config {
-            skip_attendance: Some("2026-03-17".into()),
-            ..Default::default()
-        };
-        let kst = FixedOffset::east_opt(9 * 3600)
-            .unwrap()
-            .with_ymd_and_hms(2026, 3, 18, 2, 0, 0)
-            .unwrap();
-
-        // when
-        let d = should_notify(&config, DailyPhase::NeedEnd, Some(3600), false, kst);
-
-        // then: morning_start 이전이므로 전날 skip이 아직 유효
-        assert!(!d.send);
-    }
-
-    #[test]
-    fn 이번_출석_알림_끄기_morning_start_이후에는_전날_skip이_해제된다() {
-        // given: 전날(03-17) skip 설정, 현재 03-18 09:30 (morning_start=04:00 이후, 알림윈도우 내)
-        let config = Config {
-            skip_attendance: Some("2026-03-17".into()),
-            ..Default::default()
-        };
-        let kst = FixedOffset::east_opt(9 * 3600)
-            .unwrap()
-            .with_ymd_and_hms(2026, 3, 18, 9, 30, 0)
-            .unwrap();
-
-        // when
-        let d = should_notify(&config, DailyPhase::NeedStart, Some(3600), false, kst);
-
-        // then: morning_start 이후이므로 전날 skip은 무효
-        assert!(d.send);
-    }
-
-    // --- skip_sunday ---
-
-    #[test]
-    fn 일요일_알림_끄기_활성화시_일요일에_알림을_보내지_않는다() {
-        // given: 2026-03-22는 일요일
-        let config = Config {
-            skip_sunday: true,
-            ..Default::default()
-        };
-        let sunday = FixedOffset::east_opt(9 * 3600)
-            .unwrap()
-            .with_ymd_and_hms(2026, 3, 22, 9, 30, 0)
-            .unwrap();
-
-        // when
-        let d = should_notify(&config, DailyPhase::NeedStart, Some(3600), false, sunday);
-
-        // then
-        assert!(!d.send);
-    }
-
-    #[test]
-    fn 일요일_알림_끄기_활성화시_월요일에는_알림이_발송된다() {
-        // given: 2026-03-23는 월요일
-        let config = Config {
-            skip_sunday: true,
-            ..Default::default()
-        };
-        let monday = FixedOffset::east_opt(9 * 3600)
-            .unwrap()
-            .with_ymd_and_hms(2026, 3, 23, 9, 30, 0)
-            .unwrap();
-
-        // when
-        let d = should_notify(&config, DailyPhase::NeedStart, Some(3600), false, monday);
-
-        // then
-        assert!(d.send);
-    }
-
-    #[test]
-    fn 일요일_알림_끄기_비활성화시_일요일에도_알림이_발송된다() {
-        // given
-        let config = Config::default(); // skip_sunday = false
-        let sunday = FixedOffset::east_opt(9 * 3600)
-            .unwrap()
-            .with_ymd_and_hms(2026, 3, 22, 9, 30, 0)
-            .unwrap();
-
-        // when
-        let d = should_notify(&config, DailyPhase::NeedStart, Some(3600), false, sunday);
-
-        // then
-        assert!(d.send);
-    }
-
-    #[test]
-    fn 이번_출석_알림_끄기_미설정시_알림이_발송된다() {
-        // given
-        let config = Config::default(); // skip_attendance = None
-
-        // when
-        let d = should_notify(&config, DailyPhase::NeedStart, Some(3600), false, kst_dt(9, 30, 0));
-
-        // then
-        assert!(d.send);
-    }
-
     #[test]
     fn 지각_정확히_10시10분에는_remaining이_none이다() {
         // given: 10:10:00 → grace_remaining = 0 → None
-        let config = Config::default();
         let now = kst_utc(10, 10, 0);
 
         // when
-        let (phase, remaining) = state::compute_daily_phase(&config, now, false, false);
+        let (phase, remaining) = state::compute_daily_phase(now, false, false);
 
         // then
         assert_eq!(phase, DailyPhase::StartOverdue);

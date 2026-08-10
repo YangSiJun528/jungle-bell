@@ -53,6 +53,23 @@ interface CohortSelection {
     api_error?: boolean;
 }
 
+type CheckerEvent =
+    | {type: 'ready'; generation: number}
+    | {type: 'log'; level: LogLevel; message: string}
+    | {type: 'resolveCohort'; cohortOptions: CohortOption[]}
+    | {type: 'attendanceSnapshot'; status: AttendanceSnapshot};
+
+interface AttendanceSnapshot {
+    generation: number;
+    needs_login: boolean;
+    morning_done: boolean;
+    evening_done: boolean;
+    api_error: boolean;
+    cohort_status: CohortStatus;
+    cohort_start_date: string | null;
+    cohort_end_date: string | null;
+}
+
 interface AttendanceValue {
     morning_done: boolean;
     evening_done: boolean;
@@ -76,26 +93,47 @@ interface TriggerCheckPayload {
 
 let cachedCohortOptions: CohortOption[] | null = null;
 let cachedCohortDate: string | null = null;
-let identityReported = false;
 let checkInFlight = false;
+let queuedCheckGeneration: number | null = null;
 let currentGeneration = 0;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null;
 }
 
+function hasExactKeys(value: Record<string, unknown>, keys: string[]): boolean {
+    const actual = Object.keys(value).sort();
+    const expected = [...keys].sort();
+    return actual.length === expected.length && actual.every((key, index) => key === expected[index]);
+}
+
 function errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
 }
 
+function reportCheckerEvent(event: CheckerEvent): Promise<unknown> {
+    return window.__TAURI__.core.invoke('report_checker_event', {event});
+}
+
+function expectAcknowledged(value: unknown): void {
+    if (!isRecord(value) || !hasExactKeys(value, ['type']) || value.type !== 'acknowledged') {
+        throw new Error('INVALID_CHECKER_ACKNOWLEDGEMENT');
+    }
+}
+
 function jsLog(level: LogLevel, message: string): void {
-    void window.__TAURI__.core.invoke('log_from_js', {level, message});
+    const normalized = message.replace(/[\u0000-\u001f\u007f]/gu, ' ').trim().slice(0, 512) || 'checker log';
+    void reportCheckerEvent({type: 'log', level, message: normalized})
+        .then(expectAcknowledged)
+        .catch(() => undefined);
 }
 
 function reportCheckerReady(): void {
-    void window.__TAURI__.core.invoke('report_checker_ready', {generation: currentGeneration}).catch((error: unknown) => {
-        jsLog('warn', `report_checker_ready failed: ${errorMessage(error)}`);
-    });
+    void reportCheckerEvent({type: 'ready', generation: currentGeneration})
+        .then(expectAcknowledged)
+        .catch((error: unknown) => {
+            jsLog('warn', `report checker ready failed: ${errorMessage(error)}`);
+        });
 }
 
 function kstDateStringFromTimestamp(timestamp: number): string {
@@ -157,11 +195,43 @@ function normalizeCohortOptions(cohorts: RawCohort[]): CohortOption[] {
 }
 
 async function resolveCohortOptions(cohortOptions: CohortOption[], today: string): Promise<CohortSelection> {
-    const selection = await window.__TAURI__.core.invoke<CohortSelection>('resolve_cohort_selection', {
-        cohortOptions,
-    });
-    selection.fetched_date = today;
-    return selection;
+    const response = await reportCheckerEvent({type: 'resolveCohort', cohortOptions});
+    if (!isRecord(response)
+        || !hasExactKeys(response, ['type', 'selection'])
+        || response.type !== 'cohortSelection'
+        || !isRecord(response.selection)) {
+        throw new Error('INVALID_COHORT_SELECTION_RESPONSE');
+    }
+    const selection = response.selection;
+    if (!hasExactKeys(selection, [
+        'cohort_id',
+        'cohort_status',
+        'cohort_start_date',
+        'cohort_end_date',
+    ])) {
+        throw new Error('INVALID_COHORT_SELECTION_RESPONSE');
+    }
+    const cohortId = selection.cohort_id;
+    const cohortStatus = selection.cohort_status;
+    const startDate = selection.cohort_start_date;
+    const endDate = selection.cohort_end_date;
+    const validDate = (value: unknown): value is string | null => value === null
+        || (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/u.test(value));
+    if ((cohortId !== null && (typeof cohortId !== 'string'
+        || !cohortId || cohortId.length > 128 || cohortId.trim() !== cohortId))
+        || typeof cohortStatus !== 'string'
+        || !['active', 'upcoming', 'unknown', 'ended', 'none'].includes(cohortStatus)
+        || !validDate(startDate)
+        || !validDate(endDate)) {
+        throw new Error('INVALID_COHORT_SELECTION_RESPONSE');
+    }
+    return {
+        cohort_id: cohortId,
+        cohort_status: cohortStatus as CohortStatus,
+        cohort_start_date: startDate,
+        cohort_end_date: endDate,
+        fetched_date: today,
+    };
 }
 
 function parseAttendanceToday(data: unknown): AttendanceValue {
@@ -169,31 +239,6 @@ function parseAttendanceToday(data: unknown): AttendanceValue {
         morning_done: Boolean(isRecord(data) && data.checkedAt),
         evening_done: Boolean(isRecord(data) && data.checkedOutAt),
     };
-}
-
-async function reportIdentityOnce(): Promise<void> {
-    if (identityReported) return;
-
-    try {
-        const enabled = await window.__TAURI__.core.invoke<boolean>('get_usage_analytics_enabled');
-        if (!enabled || identityReported) return;
-        identityReported = true;
-
-        const response = await fetch('https://jungle-lms.krafton.com/api/v2/me', {
-            credentials: 'include',
-            headers: {accept: 'application/json'},
-        });
-        if (!response.ok) return;
-
-        const data: unknown = await response.json();
-        if (isRecord(data) && typeof data.id === 'string') {
-            jsLog('debug', 'reportIdentity: id reported');
-            await window.__TAURI__.core.invoke('report_cms_identity', {cmsUserId: data.id});
-        }
-    } catch (error: unknown) {
-        jsLog('debug', `reportIdentity failed: ${errorMessage(error)}`);
-        identityReported = false;
-    }
 }
 
 async function fetchCohortSelection(): Promise<CohortSelection> {
@@ -347,7 +392,6 @@ async function checkAttendance(): Promise<AttendanceResult> {
         };
     }
 
-    void reportIdentityOnce();
     const attendance = await fetchAttendance(selection.cohort_id);
     if (!attendance) {
         jsLog('debug', 'checkAttendance: fetchAttendance returned null -> api_error');
@@ -386,35 +430,59 @@ async function checkAttendance(): Promise<AttendanceResult> {
     };
 }
 
-function reportResult(result: AttendanceResult): void {
-    const status = {...result, generation: currentGeneration};
+function reportResult(result: AttendanceResult, generation: number): void {
+    const status: AttendanceSnapshot = {
+        generation,
+        needs_login: result.needs_login,
+        morning_done: result.morning_done,
+        evening_done: result.evening_done,
+        api_error: result.api_error ?? false,
+        cohort_status: result.cohort_status ?? 'unknown',
+        cohort_start_date: result.cohort_start_date ?? null,
+        cohort_end_date: result.cohort_end_date ?? null,
+    };
     jsLog(
         'debug',
         `result: needs_login=${status.needs_login} generation=${status.generation} morning=${status.morning_done} evening=${status.evening_done} cohort_status=${status.cohort_status} cohort_start_date=${status.cohort_start_date} cohort_end_date=${status.cohort_end_date}${status.api_error ? ' api_error=true' : ''}`,
     );
-    void window.__TAURI__.core.invoke('report_attendance_status', {status});
+    void reportCheckerEvent({type: 'attendanceSnapshot', status})
+        .then(expectAcknowledged)
+        .catch((error: unknown) => {
+            jsLog('warn', `report attendance snapshot failed: ${errorMessage(error)}`);
+        });
 }
 
 function runCheck(reason: string): void {
+    const generation = currentGeneration;
     if (checkInFlight) {
-        jsLog('debug', `check skipped, already running: ${reason}`);
+        queuedCheckGeneration = generation;
+        jsLog('debug', `check queued, already running: ${reason}`);
         return;
     }
 
     checkInFlight = true;
     jsLog('debug', `check started: ${reason}`);
-    void checkAttendance().then(reportResult).finally(() => {
+    void checkAttendance().then((result) => reportResult(result, generation)).finally(() => {
         checkInFlight = false;
+        if (queuedCheckGeneration !== null) {
+            const queuedGeneration = queuedCheckGeneration;
+            queuedCheckGeneration = null;
+            if (queuedGeneration === currentGeneration) runCheck('queued-trigger');
+        }
     });
 }
 
 void window.__TAURI__.event.listen<TriggerCheckPayload>('trigger-check', (event) => {
-    if (typeof event.payload?.generation === 'number') currentGeneration = event.payload.generation;
+    const generation = event.payload?.generation;
+    if (!Number.isSafeInteger(generation) || typeof generation !== 'number' || generation <= 0) {
+        jsLog('warn', 'invalid trigger-check generation');
+        return;
+    }
+    currentGeneration = generation;
+    reportCheckerReady();
     runCheck('rust-trigger');
 }).catch((error: unknown) => {
     jsLog('error', `trigger-check listener failed: ${errorMessage(error)}`);
 });
 
-reportCheckerReady();
-jsLog('info', 'checker loaded, running initial check');
-runCheck('initial-load');
+jsLog('info', 'checker loaded, waiting for trigger');

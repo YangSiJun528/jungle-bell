@@ -4,13 +4,8 @@ import {test} from 'vitest';
 
 const uiStyles = readFileSync(new URL('./ui.css', import.meta.url), 'utf8');
 const templates = [
-    'index.html',
-    'onboarding.html',
-    'campus.html',
-    'image-viewer.html',
-    'tray-panel.html',
     'dashboard.html',
-    'pair/index.html',
+    'image-viewer.html',
 ]
     .map((path) => readFileSync(new URL(path, import.meta.url), 'utf8'));
 
@@ -57,12 +52,10 @@ test('모든 페이지는 재정의 가능한 전역 gutter를 사용한다', ()
         assert.doesNotMatch(template, /<body class="[^"]*\bp-4\b/);
     }
 
-    const imageViewer = templates[3] ?? '';
+    const imageViewer = readFileSync(new URL('./image-viewer.html', import.meta.url), 'utf8');
     assert.match(imageViewer, /<html\b[^>]*\bdata-page-layout=["']bleed["']/);
     assert.match(imageViewer, /<main\b[^>]*\bfixed\b[^>]*\binset-0\b/);
 
-    const settings = templates[0] ?? '';
-    const campus = templates[2] ?? '';
-    assert.doesNotMatch(settings, /<html\b[^>]*\bdata-page-layout=["']bleed["']/);
-    assert.doesNotMatch(campus, /<html\b[^>]*\bdata-page-layout=["']bleed["']/);
+    const dashboard = readFileSync(new URL('./dashboard.html', import.meta.url), 'utf8');
+    assert.doesNotMatch(dashboard, /<html\b[^>]*\bdata-page-layout=["']bleed["']/);
 });

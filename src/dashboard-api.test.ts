@@ -10,7 +10,43 @@ function jsonResponse(value: unknown, status = 200): Response {
     });
 }
 
-test('공개 생활 정보는 인증 없이 v1 읽기 API만 호출한다', async () => {
+test('PC 홈 overview는 로컬 D-Day와 LMS를 보존하는 exact DTO다', async () => {
+    const overview = {
+        attendance: {
+            status: 'active',
+            statusText: '학습 종료 가능 (3시간 49분 남음)',
+            ddayText: '수료까지 D-21',
+            ddayPeriod: {startDate: '2026-08-01', endDate: '2026-08-31'},
+            currentVersion: '0.5.0',
+        },
+        lmsSessionState: 'connected',
+        unreadCount: 2,
+        laundry: null,
+        meals: null,
+    };
+    const api = createDashboardApi({
+        fetcher: async () => jsonResponse({}),
+        invokeCommand: async (command) => command === 'get_dashboard_home_overview' ? overview : null,
+    });
+
+    assert.deepEqual(await api.getDashboardHomeOverview(), overview);
+
+    for (const invalid of [
+        {...overview, extra: true},
+        {...overview, unreadCount: -1},
+        {...overview, lmsSessionState: 'authenticated'},
+        {...overview, attendance: {...overview.attendance, pendingUpdate: null}},
+        {...overview, attendance: {...overview.attendance, ddayPeriod: {startDate: '2026-08-31', endDate: '2026-08-01'}}},
+    ]) {
+        const invalidApi = createDashboardApi({
+            fetcher: async () => jsonResponse({}),
+            invokeCommand: async () => invalid,
+        });
+        await assert.rejects(invalidApi.getDashboardHomeOverview(), /API_RESPONSE_INVALID/);
+    }
+});
+
+test('공개 생활 정보는 인증 없이 공개 API만 호출한다', async () => {
     const calls: Array<{url: string; init?: RequestInit}> = [];
     const api = createDashboardApi({
         campusApiBaseUrl: 'https://campus.example.com/',
@@ -36,7 +72,7 @@ test('공개 생활 정보는 인증 없이 v1 읽기 API만 호출한다', asyn
 
     assert.equal(result.schemaVersion, 1);
     assert.equal(result.capacity, null);
-    assert.equal(calls[0]?.url, 'https://campus.example.com/v1/laundry/latest');
+    assert.equal(calls[0]?.url, 'https://campus.example.com/api/public/laundry');
     assert.equal(calls[0]?.init?.method, 'GET');
     assert.equal(calls[0]?.init?.credentials, 'omit');
     assert.equal(new Headers(calls[0]?.init?.headers).has('authorization'), false);
@@ -174,7 +210,7 @@ test('모바일 알림 내역은 서버의 epoch 응답 필드를 그대로 검�
 
     const notifications = await api.getNotifications();
 
-    assert.equal(calls[0]?.url, 'https://platform.example.com/v1/notifications/inbox?limit=20');
+    assert.equal(calls[0]?.url, 'https://platform.example.com/api/mobile/notifications?limit=20');
     assert.deepEqual(notifications, [{
         id: '13fdbe73-d8d0-46a4-9fb5-85026f7162fe',
         kind: 'attendance-action-required',
@@ -212,24 +248,23 @@ test('모바일 알림의 위조된 경로나 ISO 문자열 시간은 거부한�
     }
 });
 
-test('개인 API는 쿠키·no-store를 강제하고 bearer는 메모리 provider가 있을 때만 붙인다', async () => {
+test('개인 API는 HttpOnly 쿠키·no-store를 강제하고 Authorization을 만들지 않는다', async () => {
     const calls: Array<{url: string; init?: RequestInit}> = [];
     const api = createDashboardApi({
         platformApiBaseUrl: 'https://platform.example.com/',
         fetcher: async (input, init) => {
             calls.push({url: String(input), init});
-            return jsonResponse({attendance: null, freshness: 'missing'});
+            return jsonResponse({attendance: null, freshness: 'missing', devices: []});
         },
         invokeCommand: async () => undefined,
-        authorizationProvider: () => 'Bearer in-memory-token',
     });
 
     await api.getAttendance('companion');
 
-    assert.equal(calls[0]?.url, 'https://platform.example.com/v1/attendance/snapshots');
+    assert.equal(calls[0]?.url, 'https://platform.example.com/api/mobile/attendance');
     assert.equal(calls[0]?.init?.credentials, 'include');
     assert.equal(calls[0]?.init?.cache, 'no-store');
-    assert.equal(new Headers(calls[0]?.init?.headers).get('authorization'), 'Bearer in-memory-token');
+    assert.equal(new Headers(calls[0]?.init?.headers).has('authorization'), false);
 });
 
 test('출석 envelope의 stale freshness를 snapshot과 함께 보존한다', async () => {
@@ -244,7 +279,10 @@ test('출석 envelope의 stale freshness를 snapshot과 함께 보존한다', as
         collectedAt: '2026-08-03T09:00:00.000Z',
     };
     const api = createDashboardApi({
-        fetcher: async () => jsonResponse({attendance: snapshot, freshness: 'stale'}),
+        fetcher: async () => jsonResponse({attendance: snapshot, freshness: 'stale', devices: [{
+            id: 'desktop-1', deviceLabel: 'PC 앱', lastSeenAt: '2026-08-03T09:01:00.000Z',
+            lmsSessionState: 'connected', health: 'online', appVersion: '0.5.0',
+        }]}),
         invokeCommand: async () => undefined,
     });
 
@@ -257,9 +295,8 @@ test('출석 envelope의 stale freshness를 snapshot과 함께 보존한다', as
     assert.equal(result.attendance.lastSyncedAt, snapshot.collectedAt);
     assert.deepEqual(result.attendance.snapshot, {
         ...snapshot,
-        sourceDeviceId: 'unknown',
-        version: 0,
     });
+    assert.equal(result.devices[0]?.lmsSessionState, 'connected');
 });
 
 test('출석 snapshot에 freshness가 없거나 invalid이면 fresh로 추측하지 않는다', async () => {
@@ -274,9 +311,9 @@ test('출석 snapshot에 freshness가 없거나 invalid이면 fresh로 추측하
         collectedAt: '2026-08-03T09:00:00.000Z',
     };
     for (const envelope of [
-        {attendance},
-        {attendance, freshness: 'missing'},
-        {attendance, freshness: 'recent'},
+        {attendance, devices: []},
+        {attendance, freshness: 'missing', devices: []},
+        {attendance, freshness: 'recent', devices: []},
     ]) {
         const api = createDashboardApi({
             fetcher: async () => jsonResponse(envelope),
@@ -284,6 +321,20 @@ test('출석 snapshot에 freshness가 없거나 invalid이면 fresh로 추측하
         });
         await assert.rejects(api.getAttendance('companion'), /API_RESPONSE_INVALID/);
     }
+});
+
+test('개인 출석 envelope는 current-only 필드 외의 호환 필드를 거부한다', async () => {
+    const api = createDashboardApi({
+        fetcher: async () => jsonResponse({
+            attendance: null,
+            freshness: 'missing',
+            devices: [],
+            snapshots: [],
+        }),
+        invokeCommand: async () => undefined,
+    });
+
+    await assert.rejects(api.getAttendance('companion'), /API_RESPONSE_INVALID/);
 });
 
 test('데스크톱 개인 기능은 웹 요청 대신 제한된 Tauri command adapter를 쓴다', async () => {
@@ -295,9 +346,17 @@ test('데스크톱 개인 기능은 웹 요청 대신 제한된 Tauri command ad
         invokeCommand: async (command, args) => {
             calls.push({command, args});
             if (command === 'get_remote_attendance_snapshot') {
-                return {state: 'auth-required'};
+                return {attendance: null, freshness: 'missing'};
             }
-            return {state: 'disconnected'};
+            return {
+                authenticated: true,
+                installationId: '550e8400-e29b-41d4-a716-446655440000',
+                credentialPersistent: true,
+                identityResetRequired: false,
+                lmsSessionState: 'connected',
+                lastServerContact: '2026-08-03T09:00:00.000Z',
+                lastError: null,
+            };
         },
     });
 
@@ -312,6 +371,28 @@ test('데스크톱 개인 기능은 웹 요청 대신 제한된 Tauri command ad
     ]);
 });
 
+test('데스크톱 credential 복구는 명시적 확인이 포함된 새 identity command만 사용한다', async () => {
+    const calls: Array<{command: string; args?: Record<string, unknown>}> = [];
+    const api = createDashboardApi({
+        fetcher: async () => { throw new Error('unexpected fetch'); },
+        invokeCommand: async (command, args) => {
+            calls.push({command, args});
+            return {
+                authenticated: true,
+                installationId: '550e8400-e29b-41d4-a716-446655440000',
+                credentialPersistent: true,
+                identityResetRequired: false,
+                lmsSessionState: 'unknown',
+                lastServerContact: '2026-08-03T09:00:00.000Z',
+                lastError: null,
+            };
+        },
+    });
+
+    assert.equal((await api.resetDesktopIdentity()).state, 'connected');
+    assert.deepEqual(calls, [{command: 'reset_desktop_identity', args: {confirmed: true}}]);
+});
+
 test('모바일 수동 연결 요청에는 정규화한 10자리 코드만 전송한다', async () => {
     const bodies: unknown[] = [];
     const api = createDashboardApi({
@@ -320,7 +401,6 @@ test('모바일 수동 연결 요청에는 정규화한 10자리 코드만 전�
             bodies.push(JSON.parse(String(init?.body)));
             return jsonResponse({
                 claimId: 'jbp_01234567-89ab-4def-8123-456789abcdef',
-                claimReceipt: `jbcr_${'a'.repeat(64)}`,
                 status: 'awaiting-desktop-approval',
             });
         },
@@ -388,6 +468,35 @@ test('데스크톱 페어링 상태는 서버의 expired 종료 상태를 허용
         await api.getMobilePairingStatus('jbp_01234567-89ab-4def-8123-456789abcdef'),
         {status: 'expired', claim: null},
     );
+});
+
+test('데스크톱 모바일 session 목록은 current 배열 DTO만 허용한다', async () => {
+    const device = {
+        deviceId: 'jbsi_01234567-89ab-4def-8123-456789abcdef',
+        deviceLabel: 'Jungle Bell 모바일',
+        installationId: 'jbmi_0123456789abcdef0123456789abcdef',
+        createdAt: '2026-08-03T09:00:00.000Z',
+        expiresAt: '2027-08-03T09:00:00.000Z',
+        lastSeenAt: '2026-08-03T09:01:00.000Z',
+        pushEnabled: true,
+        status: 'active',
+    };
+    const validApi = createDashboardApi({
+        fetcher: async () => { throw new Error('unexpected fetch'); },
+        invokeCommand: async () => [device],
+    });
+    assert.deepEqual(await validApi.listMobileSessions(), [device]);
+
+    for (const response of [
+        {sessions: [device]},
+        [{...device, sessionId: device.deviceId}],
+    ]) {
+        const api = createDashboardApi({
+            fetcher: async () => { throw new Error('unexpected fetch'); },
+            invokeCommand: async () => response,
+        });
+        await assert.rejects(api.listMobileSessions(), /API_RESPONSE_INVALID/);
+    }
 });
 
 test('페어링 claim은 claimed 상태에서만 허용한다', async () => {
@@ -484,7 +593,7 @@ test('테스트 알림은 PC에서는 OS 알림 IPC, 모바일에서는 인증�
         platformApiBaseUrl: 'https://platform.example.com',
         fetcher: async (input, init) => {
             fetches.push({url: String(input), init});
-            return jsonResponse({notificationId: 'test-id', queued: 1}, 202);
+            return jsonResponse({notificationId: '13fdbe73-d8d0-46a4-9fb5-85026f7162fe', queued: 1}, 202);
         },
         invokeCommand: async (command, args) => {
             invokes.push({command, args});
@@ -495,7 +604,264 @@ test('테스트 알림은 PC에서는 OS 알림 IPC, 모바일에서는 인증�
     assert.deepEqual(await api.sendDesktopTestNotification(), {snapshot, systemDelivered: true, mobileQueued: 2});
     await api.sendMobileTestNotification();
     assert.deepEqual(invokes, [{command: 'send_test_notification', args: undefined}]);
-    assert.equal(fetches[0]?.url, 'https://platform.example.com/v1/notifications/test');
+    assert.equal(fetches[0]?.url, 'https://platform.example.com/api/mobile/notifications/test');
     assert.equal(fetches[0]?.init?.method, 'POST');
     assert.equal(fetches[0]?.init?.credentials, 'include');
+});
+
+const mealPreferences = {
+    enabled: true,
+    breakfast: false,
+    lunch: true,
+    dinner: true,
+    updatedAtEpochMs: 1_785_727_000_000,
+};
+
+const attendancePreferences = {
+    morning: true,
+    evening: true,
+    skipSunday: false,
+    skipAttendanceDate: null,
+};
+
+const laundryWatch = {
+    id: `jbw_${'a'.repeat(64)}`,
+    machineId: '워시타워_1',
+    appliance: 'washer' as const,
+    sessionId: 'session-1',
+    notifyBeforeMinutes: 10,
+    notifyWhenAvailable: true,
+    status: 'active' as const,
+    createdAtEpochMs: 1_785_727_000_000,
+    updatedAtEpochMs: 1_785_727_000_001,
+};
+
+const laundryQueueEntry = {
+    id: `jbq_${'b'.repeat(64)}`,
+    machineId: null,
+    appliance: 'dryer' as const,
+    status: 'waiting' as const,
+    joinedAtEpochMs: 1_785_727_000_000,
+    leftAtEpochMs: null,
+    position: 2,
+};
+
+test('데스크톱 최소 설정은 canonical current-only commands와 exact DTO를 사용한다', async () => {
+    const calls: Array<{command: string; args?: Record<string, unknown>}> = [];
+    const api = createDashboardApi({
+        fetcher: async () => { throw new Error('unexpected fetch'); },
+        invokeCommand: async (command, args) => {
+            calls.push({command, args});
+            return {autoStart: command === 'update_desktop_settings'};
+        },
+    });
+
+    assert.deepEqual(await api.getDesktopSettings(), {autoStart: false});
+    assert.deepEqual(await api.updateDesktopSettings({autoStart: true}), {autoStart: true});
+    assert.deepEqual(calls, [
+        {command: 'get_desktop_settings', args: undefined},
+        {command: 'update_desktop_settings', args: {input: {autoStart: true}}},
+    ]);
+});
+
+test('데스크톱 최소 설정은 unknown field와 non-boolean을 거부한다', async () => {
+    for (const response of [
+        {autoStart: false, analytics: true},
+        {autoStart: 'true'},
+    ]) {
+        const api = createDashboardApi({
+            fetcher: async () => { throw new Error('unexpected fetch'); },
+            invokeCommand: async () => response,
+        });
+        await assert.rejects(api.getDesktopSettings(), /API_RESPONSE_INVALID/);
+    }
+});
+
+test('데스크톱 개인 생활 설정은 canonical Tauri commands와 strict DTO만 사용한다', async () => {
+    const calls: Array<{command: string; args?: Record<string, unknown>}> = [];
+    const api = createDashboardApi({
+        fetcher: async () => { throw new Error('unexpected fetch'); },
+        invokeCommand: async (command, args) => {
+            calls.push({command, args});
+            if (command === 'get_meal_preferences' || command === 'update_meal_preferences') {
+                return mealPreferences;
+            }
+            if (command === 'get_attendance_preferences' || command === 'update_attendance_preferences') {
+                return attendancePreferences;
+            }
+            if (command === 'list_laundry_watches') return {watches: [laundryWatch]};
+            if (command === 'create_laundry_watch') return laundryWatch;
+            if (command === 'list_laundry_queue') return {entries: [laundryQueueEntry]};
+            if (command === 'join_laundry_queue') return laundryQueueEntry;
+            return undefined;
+        },
+    });
+
+    assert.deepEqual(await api.getAttendancePreferences('desktop'), attendancePreferences);
+    assert.deepEqual(await api.updateAttendancePreferences('desktop', {
+        morning: false, evening: true, skipSunday: true, skipAttendanceDate: '2026-08-10',
+    }), attendancePreferences);
+    assert.deepEqual(await api.getMealPreferences('desktop'), mealPreferences);
+    assert.deepEqual(await api.updateMealPreferences('desktop', {
+        enabled: true, breakfast: false, lunch: true, dinner: true,
+    }), mealPreferences);
+    assert.deepEqual(await api.listLaundryWatches('desktop'), [laundryWatch]);
+    assert.deepEqual(await api.createLaundryWatch('desktop', {
+        machineId: '워시타워_1', appliance: 'washer', sessionId: 'session-1',
+        notifyBeforeMinutes: 10, notifyWhenAvailable: true,
+    }), laundryWatch);
+    await api.deleteLaundryWatch('desktop', laundryWatch.id);
+    assert.deepEqual(await api.listLaundryQueue('desktop'), [laundryQueueEntry]);
+    assert.deepEqual(await api.joinLaundryQueue('desktop', {
+        machineId: null, appliance: 'dryer',
+    }), laundryQueueEntry);
+    await api.leaveLaundryQueue('desktop', laundryQueueEntry.id);
+
+    assert.deepEqual(calls, [
+        {command: 'get_attendance_preferences', args: undefined},
+        {command: 'update_attendance_preferences', args: {input: {
+            morning: false, evening: true, skipSunday: true, skipAttendanceDate: '2026-08-10',
+        }}},
+        {command: 'get_meal_preferences', args: undefined},
+        {command: 'update_meal_preferences', args: {input: {
+            enabled: true, breakfast: false, lunch: true, dinner: true,
+        }}},
+        {command: 'list_laundry_watches', args: undefined},
+        {command: 'create_laundry_watch', args: {input: {
+            machineId: '워시타워_1', appliance: 'washer', sessionId: 'session-1',
+            notifyBeforeMinutes: 10, notifyWhenAvailable: true,
+        }}},
+        {command: 'delete_laundry_watch', args: {watchId: laundryWatch.id}},
+        {command: 'list_laundry_queue', args: undefined},
+        {command: 'join_laundry_queue', args: {input: {machineId: null, appliance: 'dryer'}}},
+        {command: 'leave_laundry_queue', args: {entryId: laundryQueueEntry.id}},
+    ]);
+});
+
+test('PWA 개인 생활 설정은 mobile canonical API와 HttpOnly cookie만 사용한다', async () => {
+    const calls: Array<{url: string; init?: RequestInit}> = [];
+    const api = createDashboardApi({
+        platformApiBaseUrl: 'https://platform.example.com',
+        fetcher: async (input, init) => {
+            const url = String(input);
+            calls.push({url, init});
+            if (url.endsWith('/attendance/preferences')) return jsonResponse(attendancePreferences);
+            if (url.endsWith('/meal-preferences')) return jsonResponse(mealPreferences);
+            if (url.endsWith('/laundry-watches') && init?.method === 'GET') {
+                return jsonResponse({watches: [laundryWatch]});
+            }
+            if (url.endsWith('/laundry-watches')) return jsonResponse(laundryWatch, 201);
+            if (url.endsWith(`/laundry-watches/${laundryWatch.id}`)) return new Response(null, {status: 204});
+            if (url.endsWith('/laundry-queue') && init?.method === 'GET') {
+                return jsonResponse({entries: [laundryQueueEntry]});
+            }
+            if (url.endsWith('/laundry-queue')) return jsonResponse(laundryQueueEntry, 201);
+            if (url.endsWith(`/laundry-queue/${laundryQueueEntry.id}`)) return new Response(null, {status: 204});
+            throw new Error(`unexpected URL: ${url}`);
+        },
+        invokeCommand: async () => { throw new Error('unexpected invoke'); },
+    });
+
+    await api.getAttendancePreferences('companion');
+    await api.updateAttendancePreferences('companion', {
+        morning: true, evening: false, skipSunday: true, skipAttendanceDate: null,
+    });
+    await api.getMealPreferences('companion');
+    await api.updateMealPreferences('companion', {
+        enabled: false, breakfast: false, lunch: true, dinner: false,
+    });
+    await api.listLaundryWatches('companion');
+    await api.createLaundryWatch('companion', {
+        machineId: '워시타워_1', appliance: 'washer', sessionId: null,
+        notifyBeforeMinutes: 0, notifyWhenAvailable: true,
+    });
+    await api.deleteLaundryWatch('companion', laundryWatch.id);
+    await api.listLaundryQueue('companion');
+    await api.joinLaundryQueue('companion', {machineId: null, appliance: 'dryer'});
+    await api.leaveLaundryQueue('companion', laundryQueueEntry.id);
+
+    assert.deepEqual(calls.map(({url, init}) => ({
+        path: new URL(url).pathname,
+        method: init?.method,
+        credentials: init?.credentials,
+        authorization: new Headers(init?.headers).has('authorization'),
+    })), [
+        {path: '/api/mobile/attendance/preferences', method: 'GET', credentials: 'include', authorization: false},
+        {path: '/api/mobile/attendance/preferences', method: 'PUT', credentials: 'include', authorization: false},
+        {path: '/api/mobile/meal-preferences', method: 'GET', credentials: 'include', authorization: false},
+        {path: '/api/mobile/meal-preferences', method: 'PUT', credentials: 'include', authorization: false},
+        {path: '/api/mobile/laundry-watches', method: 'GET', credentials: 'include', authorization: false},
+        {path: '/api/mobile/laundry-watches', method: 'POST', credentials: 'include', authorization: false},
+        {path: `/api/mobile/laundry-watches/${laundryWatch.id}`, method: 'DELETE', credentials: 'include', authorization: false},
+        {path: '/api/mobile/laundry-queue', method: 'GET', credentials: 'include', authorization: false},
+        {path: '/api/mobile/laundry-queue', method: 'POST', credentials: 'include', authorization: false},
+        {path: `/api/mobile/laundry-queue/${laundryQueueEntry.id}`, method: 'DELETE', credentials: 'include', authorization: false},
+    ]);
+    assert.deepEqual(JSON.parse(String(calls[1]?.init?.body)), {
+        morning: true, evening: false, skipSunday: true, skipAttendanceDate: null,
+    });
+    assert.deepEqual(JSON.parse(String(calls[3]?.init?.body)), {
+        enabled: false, breakfast: false, lunch: true, dinner: false,
+    });
+});
+
+test('개인 생활 설정 DTO는 unknown field와 깨진 상태 불변식을 거부한다', async () => {
+    const invalidResponses = [
+        {...attendancePreferences, skipAttendanceDate: '2026-02-30'},
+        {...mealPreferences, legacyAlias: true},
+        {watches: [{...laundryWatch, id: 'watch-1'}]},
+        {watches: [{...laundryWatch, updatedAtEpochMs: laundryWatch.createdAtEpochMs - 1}]},
+        {entries: [{...laundryQueueEntry, position: null}]},
+        {entries: [{...laundryQueueEntry, status: 'claimed', leftAtEpochMs: null, position: null}]},
+    ];
+    const operations = ['attendance', 'meal', 'watches', 'watches', 'queue', 'queue'] as const;
+    for (let index = 0; index < invalidResponses.length; index += 1) {
+        const api = createDashboardApi({
+            fetcher: async () => jsonResponse(invalidResponses[index]),
+            invokeCommand: async () => undefined,
+        });
+        const operation = operations[index];
+        await assert.rejects(
+            operation === 'attendance'
+                ? api.getAttendancePreferences('companion')
+                : operation === 'meal'
+                ? api.getMealPreferences('companion')
+                : operation === 'watches'
+                    ? api.listLaundryWatches('companion')
+                    : api.listLaundryQueue('companion'),
+            /API_RESPONSE_INVALID/,
+        );
+    }
+});
+
+test('pairing complete는 receipt를 JSON에 노출하지 않고 HttpOnly pending cookie만 사용한다', async () => {
+    const calls: Array<{url: string; init?: RequestInit}> = [];
+    const api = createDashboardApi({
+        platformApiBaseUrl: 'https://platform.example.com',
+        fetcher: async (input, init) => {
+            calls.push({url: String(input), init});
+            return new Response(null, {status: 204});
+        },
+        invokeCommand: async () => undefined,
+    });
+
+    assert.equal(
+        await api.completePairing('jbp_01234567-89ab-4def-8123-456789abcdef'),
+        'completed',
+    );
+    assert.equal(calls[0]?.url, 'https://platform.example.com/api/pairings/jbp_01234567-89ab-4def-8123-456789abcdef/complete');
+    assert.equal(calls[0]?.init?.credentials, 'include');
+    assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), {});
+    assert.doesNotMatch(String(calls[0]?.init?.body), /receipt|token|bearer/i);
+});
+
+test('pairing complete는 canonical 204 응답만 성공으로 처리한다', async () => {
+    const api = createDashboardApi({
+        fetcher: async () => jsonResponse({}, 200),
+        invokeCommand: async () => undefined,
+    });
+    await assert.rejects(
+        api.completePairing('jbp_01234567-89ab-4def-8123-456789abcdef'),
+        /API_RESPONSE_INVALID/,
+    );
 });

@@ -1,12 +1,18 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MealsVersion } from "../src/collector/meals";
-import { app } from "../src/workers/api";
+import apiWorker, { app } from "../src/workers/api";
 
 const env = {
   DB: {
-    prepare: () => ({
-      all: async () => ({ results: [] }),
-    }),
+    prepare: () => {
+      const statement = {
+        bind: (..._values: unknown[]) => statement,
+        first: async () => null,
+        all: async () => ({ results: [] }),
+        run: async () => ({ success: true, results: [{ ok: 1 }], meta: { changes: 0 } }),
+      };
+      return statement;
+    },
   } as unknown as D1Database,
   DATA_BUCKET: {} as R2Bucket,
 };
@@ -64,24 +70,59 @@ function mealsEnv(title: string) {
 }
 
 describe("API middleware", () => {
+  it("exports an HTTP-only Worker without a scheduled handler", () => {
+    expect(apiWorker.fetch).toBeTypeOf("function");
+    expect(apiWorker).not.toHaveProperty("scheduled");
+  });
+
+  it("routes the internal D1 gateway without public CORS or caching", async () => {
+    const response = await app.request("https://api.test/internal/jobs/d1", {
+      method: "POST",
+      headers: { authorization: `Bearer ${"s".repeat(64)}`, "content-type": "application/json" },
+      body: JSON.stringify({ sql: "SELECT 1 AS ok", params: [] }),
+    }, { ...env, JOBS_D1_GATEWAY_SECRET: "s".repeat(64) });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("access-control-allow-origin")).toBeNull();
+    expect(response.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("redirects clean blog entry URLs to the exact static asset path", async () => {
+    for (const path of ["/blog", "/blog/"]) {
+      const response = await app.request(`https://api.test${path}`, {}, env);
+      expect(response.status).toBe(308);
+      expect(response.headers.get("Location")).toBe("/blog/index.html");
+    }
+  });
+
   it("validates RFC3339 query parameters with Zod", async () => {
     const valid = await app.request(
-      "https://api.test/v1/laundry/at?time=2026-07-18T12%3A34%3A56%2B09%3A00",
+      "https://api.test/api/public/laundry/at?time=2026-07-18T12%3A34%3A56%2B09%3A00",
       {},
       env,
     );
     expect(valid.status).toBe(308);
-    expect(valid.headers.get("Location")).toBe("/v1/laundry/minutes/20260718T0334Z");
+    expect(valid.headers.get("Location")).toBe("/api/public/laundry/minutes/20260718T0334Z");
     expect(valid.headers.get("Cache-Control")).toContain("immutable");
 
-    const invalid = await app.request("https://api.test/v1/laundry/at?time=2026-07-18", {}, env);
+    const invalid = await app.request("https://api.test/api/public/laundry/at?time=2026-07-18", {}, env);
     expect(invalid.status).toBe(400);
     expect(invalid.headers.get("Cache-Control")).toBe("no-store");
     await expect(invalid.json()).resolves.toMatchObject({ error: "INVALID_REQUEST" });
   });
 
+  it("does not expose the removed v1 compatibility routes", async () => {
+    const response = await app.request("https://api.test/v1/status", {}, env);
+    expect(response.status).toBe(404);
+  });
+
+  it("uses the canonical public laundry root without a latest alias", async () => {
+    expect((await app.request("https://api.test/api/public/laundry", {}, env)).status).toBe(503);
+    expect((await app.request("https://api.test/api/public/laundry/latest", {}, env)).status).toBe(404);
+  });
+
   it("uses Hono ETag handling for dynamic JSON responses", async () => {
-    const first = await app.request("https://api.test/v1/status", {}, env);
+    const first = await app.request("https://api.test/api/public/status", {}, env);
     expect(first.status).toBe(200);
     expect(first.headers.get("Content-Type")).toContain("application/json");
     expect(first.headers.get("Cache-Control")).toContain("s-maxage=30");
@@ -89,7 +130,7 @@ describe("API middleware", () => {
     expect(responseEtag).toMatch(/^"[a-f0-9]+"$/);
 
     const conditional = await app.request(
-      "https://api.test/v1/status",
+      "https://api.test/api/public/status",
       { headers: { "If-None-Match": responseEtag ?? "" } },
       env,
     );
@@ -102,7 +143,7 @@ describe("API middleware", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-19T03:00:00.000Z"));
 
-    const response = await app.request("https://api.test/v1/meals", {}, mealsEnv("7월 2주차 식단표"));
+    const response = await app.request("https://api.test/api/public/meals", {}, mealsEnv("7월 2주차 식단표"));
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
@@ -116,5 +157,28 @@ describe("API middleware", () => {
         },
       },
     });
+  });
+
+  it("serves only allowlisted raster assets with defensive headers", async () => {
+    const sha = "a".repeat(64);
+    const bucket = {
+      get: async (key: string) => key.endsWith(`${sha}.jpg`) ? {
+        body: new Uint8Array([0xff, 0xd8, 0xff]),
+        writeHttpMetadata: (headers: Headers) => headers.set("Content-Type", "image/svg+xml"),
+      } : null,
+    } as unknown as R2Bucket;
+    const raster = await app.request(`https://api.test/api/public/assets/${sha}.jpg`, {}, {
+      ...env, DATA_BUCKET: bucket,
+    });
+    expect(raster.status).toBe(200);
+    expect(raster.headers.get("content-type")).toBe("image/jpeg");
+    expect(raster.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(raster.headers.get("content-security-policy")).toContain("sandbox");
+    expect(raster.headers.get("cross-origin-resource-policy")).toBe("cross-origin");
+
+    const svg = await app.request(`https://api.test/api/public/assets/${sha}.svg`, {}, {
+      ...env, DATA_BUCKET: bucket,
+    });
+    expect(svg.status).toBe(404);
   });
 });

@@ -3,7 +3,7 @@ import {test} from 'vitest';
 import {pairingQrDataUrl} from './dashboard-qr';
 
 test('서버 QR payload는 DOM HTML 삽입 없이 SVG data URI로 변환한다', () => {
-    const payload = 'https://example.com/pair#pairing=jbc_0123456789abcdef0123456789abcdef&challenge=jbp_test';
+    const payload = 'https://example.com/dashboard.html#pairing=jbc_0123456789abcdef0123456789abcdef&challenge=jbp_test';
     const url = pairingQrDataUrl(payload);
 
     assert.match(url, /^data:image\/svg\+xml;charset=utf-8,/);

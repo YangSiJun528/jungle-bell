@@ -1,38 +1,66 @@
 # Jungle Bell server
 
-세탁기 상태와 카카오 채널 식단 데이터를 수집하고 Cloudflare API로 제공하는 서버입니다.
+Jungle Bell의 HTTP 서버와 주기 작업을 한 패키지에서 관리합니다. 배포 런타임은
+요청 처리와 장기 작업을 분리합니다.
 
-- `src/collector/`: 수집, 정규화, 투영 로직입니다.
-- `src/node/`: OCI에서 실행되는 Collector와 D1 REST/R2 S3 저장기입니다.
-- `src/storage/`: 수집 commit을 D1 조회 모델로 변환하는 공용 query builder입니다.
-- `src/workers/api.ts`: D1/R2를 읽어 캐시 가능한 HTTP API를 제공하는 Cloudflare Worker입니다.
-- `src/workers/`: API Worker의 D1/R2 조회 어댑터와 로깅을 관리합니다.
+- App Worker: `/api`, 고정 D1/R2 gateway, 대시보드·PWA, 댓글 없는 Markdown 블로그 정적 자산
+- OCI Jobs: 세탁·급식 수집, 출석·급식·세탁 알림 계획, housekeeping, Web Push
+- D1: 공개 조회 모델, session, pairing, 출석, 개인 설정, 알림 delivery
+- R2: 수집 원본·정규화본·이미지·실행 로그
 
-OCI Collector는 세탁실을 매분, 카카오 API 두 개를 5분마다 한 프로세스 안에서 순차 요청합니다. 원본 JSON, 정규화본, 이미지, 수집 commit은 R2 S3 API로 저장하고 상태, 분 단위 관측, 세탁 이벤트, 식단 인덱스는 D1 REST API batch로 직접 저장합니다. Cloudflare Collector Worker와 Ingest Worker는 사용하지 않습니다.
+App Worker는 HTTP 요청만 처리합니다. Cron Trigger, Push relay, VAPID private key를
+사용하지 않습니다. OCI Jobs의 D1 접근은 App Worker의 인증된
+`POST /internal/jobs/d1`과 `/internal/jobs/r2`를 거치므로 OCI에 D1 관리 자격 증명,
+database 식별자 또는 R2 S3 자격 증명을 배포하지 않습니다. Worker는 환경별 고정
+binding에만 접근합니다.
 
-원본 전체 JSON은 RFC 8785 방식으로 정규화한 뒤 SHA-256을 계산합니다. 직전 SHA와 같으면 원본, 정규화본, 이미지는 다시 저장하지 않고 해당 분의 관측 결과와 실행 로그만 남깁니다. 카카오의 pinned 포함 API와 기본 API는 응답이 같아도 별도 소스로 기록합니다.
+OCI Jobs는 Supercronic이 매분 실행하며 `flock`으로 이전 실행과 겹치지 않게 합니다.
+세탁은 매분, 카카오 급식은 기본 5분마다 수집하고 각 lifecycle 단계는 실패를 격리해
+이후 housekeeping과 Push도 계속 시도합니다.
 
-식단 게시물의 본문은 API 조회 모델인 D1 `meal_post`, 이미지 메타데이터는 `meal_image`에 누적합니다. 카카오 최신 목록에서 게시물이 사라져도 이 레코드는 삭제하지 않습니다. 원본 JSON 버전, 수집 commit, 실제 이미지 파일은 복구용으로 R2에 계속 보관합니다.
+## 소스 구조
 
-## 내부 운영
+- `src/http/`: 공개·desktop·mobile·pairing·알림·Push HTTP 경계
+- `src/application/`, `src/domain/`: 저장소와 전송 방식에 독립적인 규칙
+- `src/repositories/`: 기능별 D1 repository
+- `src/workers/api.ts`: HTTP-only App Worker 조립 진입점
+- `src/workers/d1-gateway.ts`: OCI 전용 고정 `DB` binding gateway
+- `src/workers/r2-gateway.ts`: OCI 전용 고정 `DATA_BUCKET` binding gateway
+- `src/node/jobs.ts`: OCI Jobs 조립 진입점
+- `src/node/d1-gateway-database.ts`: gateway를 D1 repository에 연결하는 Node adapter
+- `src/collector/`, `src/storage/`: 수집·정규화·D1/R2 투영
 
-- [배포와 장애 대응 런북](OPERATIONS.md)
-- [환경 변수와 Cloudflare 바인딩 레퍼런스](docs/environment-reference.md)
-- [HTTP API 레퍼런스](docs/api-reference.md)
-
-## D1 초기화
-
-현재 `schema.sql`만 지원하며 마이그레이션과 구버전 호환은 제공하지 않습니다. 실행하면 D1의 기존 테이블과 데이터가 모두 삭제된 뒤 현재 스키마로 다시 생성됩니다. R2와 로컬에 보관한 원본 JSON 및 이미지는 삭제되지 않습니다.
-
-```bash
-npm run db:reset:remote
-```
-
-작은 필드 추가가 필요하면 별도 마이그레이션 체계를 만들지 않고 Wrangler로 SQL을 수동 실행한 뒤 `schema.sql`의 현재 구조도 함께 수정합니다. 과거 D1 구조를 코드에서 읽는 호환 분기는 추가하지 않습니다.
-
-## 검증
+## 로컬 검증
 
 ```bash
 npm ci
 npm run check
+npm run build
 ```
+
+`npm run build`는 OCI Jobs Node 번들을 만듭니다. App Worker 배포 스크립트는 환경별
+공개 origin으로 루트 웹 빌드를 먼저 실행해 대시보드와 블로그 자산을 같은 Worker
+deployment에 포함합니다. 저장소 루트의 `npm run verify:server`는 server check와
+Jobs 번들 build를 모두 실행합니다.
+
+## D1 bootstrap
+
+`schema.sql`은 과거 schema migration이 아니라 비어 있는 신규 D1 전용 current-schema
+bootstrap입니다. 실행하면 기존 테이블과 데이터가 삭제됩니다. 기존
+`jungle-bell-data`나 사용 중인 D1에는 실행하지 않습니다.
+
+```bash
+npx wrangler d1 create jungle-bell-v2
+# wrangler.api.jsonc의 영(0) UUID를 신규 D1 ID로 교체한 뒤 새 D1에만 실행
+npx wrangler d1 execute DB --remote --file=schema.sql --config wrangler.api.jsonc
+```
+
+작은 변경은 검토한 비파괴 SQL과 갱신된 `schema.sql`을 함께 준비합니다. 파괴적
+변경은 새 D1/R2를 만든 뒤 blue/green으로 전환합니다. 구 schema를 읽는 호환 분기는
+추가하지 않습니다.
+
+## 운영 문서
+
+- [배포와 장애 대응](OPERATIONS.md)
+- [환경과 바인딩](docs/environment-reference.md)
+- [HTTP API](docs/api-reference.md)

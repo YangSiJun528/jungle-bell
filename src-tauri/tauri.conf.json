@@ -11,7 +11,6 @@
   },
   "app": {
     "withGlobalTauri": true,
-    "macOSPrivateApi": true,
     "windows": [],
     "security": {
       "csp": "default-src 'self'; base-uri 'none'; object-src 'none'; frame-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self' ipc: http://ipc.localhost; media-src 'none'; worker-src 'self'; manifest-src 'self'"

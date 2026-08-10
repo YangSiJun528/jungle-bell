@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npm run verify:web
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-assets
+          path: dist
+          retention-days: 1
+
+  server:
+    needs: web
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - uses: actions/download-artifact@v4
+        with:
+          name: app-assets
+          path: dist
+      - run: npm ci --prefix server
+      - run: npm run verify:server
+      - name: Bundle test App Worker
+        working-directory: server
+        run: npx wrangler deploy --dry-run --config wrangler.api-test.jsonc --outdir /tmp/jungle-bell-app-worker
+      - name: Validate production OCI Compose
+        working-directory: server
+        run: docker compose --env-file .env.oci.example -f docker-compose.oci.yml config --quiet
+      - name: Validate v2-test OCI Compose
+        working-directory: server
+        run: docker compose --env-file .env.oci-v2-test.example -f docker-compose.oci-v2-test.yml config --quiet
+      - name: Build OCI Jobs image
+        run: docker build --file server/docker/Dockerfile server
+
+  desktop:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            build-essential \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            patchelf
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy,rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          cache-on-failure: false
+      - run: npm ci
+      - run: npm run verify:desktop

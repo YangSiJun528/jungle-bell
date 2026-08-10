@@ -193,4 +193,19 @@ describe("collectAll", () => {
     expect(order).toEqual([options.urls.mealsIncludePinned, options.urls.mealsDefault]);
     expect(result.results.map(({ source }) => source)).toEqual(["meals-include-pinned", "meals-default"]);
   });
+
+  it("persists only a stable public code when an upstream error body contains sensitive text", async () => {
+    const storage = new MemoryStorage();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("token=must-not-be-persisted", {
+      status: 500,
+    }));
+
+    const result = await collectSources(storage, options, ["laundry"], new Date("2026-07-17T00:05:00.000Z"));
+    const commit = storage.commits()[0];
+
+    expect(result.results).toEqual([expect.objectContaining({ error: "COLLECTION_FAILED" })]);
+    expect(commit?.state.lastError).toBe("COLLECTION_FAILED");
+    expect(commit?.observation.error).toBe("COLLECTION_FAILED");
+    expect(JSON.stringify(commit)).not.toContain("must-not-be-persisted");
+  });
 });

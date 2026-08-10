@@ -1,20 +1,36 @@
 -- This project supports only the current schema. Applying this file deletes all D1 data.
-DROP TABLE IF EXISTS push_delivery;
+DROP TABLE IF EXISTS notification_delivery;
 DROP TABLE IF EXISTS push_subscription;
 DROP TABLE IF EXISTS notification;
+DROP TABLE IF EXISTS laundry_queue_claim;
+DROP TABLE IF EXISTS laundry_queue_entry;
+DROP TABLE IF EXISTS laundry_watch;
+DROP TABLE IF EXISTS meal_preference;
 DROP TABLE IF EXISTS attendance_preference;
 DROP TABLE IF EXISTS attendance_snapshot;
 DROP TABLE IF EXISTS pairing_challenge;
+DROP TABLE IF EXISTS pairing_creation_attempt;
+DROP TABLE IF EXISTS pairing_claim_attempt;
 DROP TABLE IF EXISTS app_session;
 DROP TABLE IF EXISTS desktop_device;
+DROP TABLE IF EXISTS desktop_enrollment_attempt;
 DROP TABLE IF EXISTS app_user;
 DROP TABLE IF EXISTS meal_image;
 DROP TABLE IF EXISTS meal_weekly_menu;
+DROP TABLE IF EXISTS meal_post_processing;
 DROP TABLE IF EXISTS meal_post;
+DROP TABLE IF EXISTS laundry_lifecycle_processing;
 DROP TABLE IF EXISTS laundry_event;
 DROP TABLE IF EXISTS minute_observation;
 DROP TABLE IF EXISTS source_version;
 DROP TABLE IF EXISTS source_state;
+DROP TABLE IF EXISTS maintenance_state;
+
+CREATE TABLE maintenance_state (
+  name TEXT PRIMARY KEY,
+  last_run_at_epoch_ms INTEGER NOT NULL,
+  run_token TEXT NOT NULL
+);
 
 CREATE TABLE source_state (
   source TEXT PRIMARY KEY CHECK (source IN ('laundry', 'meals-include-pinned', 'meals-default')),
@@ -68,6 +84,12 @@ CREATE INDEX laundry_event_observed_at
 CREATE INDEX laundry_event_machine_session
   ON laundry_event (machine_id, appliance, session_id, observed_at);
 
+CREATE TABLE laundry_lifecycle_processing (
+  source_id TEXT PRIMARY KEY,
+  processing_token TEXT NOT NULL UNIQUE,
+  processed_at_epoch_ms INTEGER NOT NULL
+);
+
 CREATE TABLE meal_post (
   id TEXT PRIMARY KEY,
   kind TEXT NOT NULL CHECK (kind IN ('PINNED_MENU', 'DAILY_MENU', 'OTHER')),
@@ -88,6 +110,17 @@ CREATE INDEX meal_post_published_at
 
 CREATE INDEX meal_post_kind_published_at
   ON meal_post (kind, published_at DESC);
+
+CREATE TABLE meal_post_processing (
+  post_id TEXT NOT NULL,
+  content_sha TEXT NOT NULL,
+  processed_at_epoch_ms INTEGER NOT NULL,
+  PRIMARY KEY (post_id, content_sha),
+  FOREIGN KEY (post_id) REFERENCES meal_post(id) ON DELETE CASCADE
+);
+
+CREATE INDEX meal_post_processing_time
+  ON meal_post_processing (processed_at_epoch_ms);
 
 CREATE TABLE meal_weekly_menu (
   week_key TEXT PRIMARY KEY,
@@ -121,19 +154,23 @@ CREATE TABLE meal_image (
 CREATE INDEX meal_image_post_position
   ON meal_image (post_id, position);
 
--- Renewal identity data. Raw LMS IDs and LMS credentials are intentionally absent.
+-- App identity is installation-scoped. LMS IDs, cookies and tokens never reach this server.
 CREATE TABLE app_user (
   id TEXT PRIMARY KEY,
-  lms_subject_sha256 TEXT NOT NULL UNIQUE CHECK (length(lms_subject_sha256) = 64),
-  created_at_epoch_ms INTEGER NOT NULL,
-  last_verified_at_epoch_ms INTEGER NOT NULL
+  created_at_epoch_ms INTEGER NOT NULL
+);
+
+CREATE TABLE desktop_enrollment_attempt (
+  rate_key TEXT PRIMARY KEY,
+  window_started_at_epoch_ms INTEGER NOT NULL,
+  attempt_count INTEGER NOT NULL CHECK (attempt_count > 0)
 );
 
 CREATE TABLE desktop_device (
   installation_id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
   created_at_epoch_ms INTEGER NOT NULL,
-  last_verified_at_epoch_ms INTEGER NOT NULL,
+  activated_at_epoch_ms INTEGER CHECK (activated_at_epoch_ms IS NULL OR activated_at_epoch_ms >= created_at_epoch_ms),
   last_seen_at_epoch_ms INTEGER,
   lms_session_state TEXT NOT NULL CHECK (lms_session_state IN ('connected', 'login-required', 'unknown')),
   app_version TEXT,
@@ -183,6 +220,18 @@ CREATE TABLE pairing_challenge (
 
 CREATE INDEX pairing_challenge_expiry ON pairing_challenge (expires_at_epoch_ms);
 
+CREATE TABLE pairing_claim_attempt (
+  rate_key TEXT PRIMARY KEY,
+  window_started_at_epoch_ms INTEGER NOT NULL,
+  attempt_count INTEGER NOT NULL CHECK (attempt_count > 0)
+);
+
+CREATE TABLE pairing_creation_attempt (
+  rate_key TEXT PRIMARY KEY,
+  window_started_at_epoch_ms INTEGER NOT NULL,
+  attempt_count INTEGER NOT NULL CHECK (attempt_count > 0)
+);
+
 -- One latest snapshot per user. Newer collected_at wins even if requests arrive out of order.
 CREATE TABLE attendance_snapshot (
   user_id TEXT PRIMARY KEY,
@@ -209,6 +258,67 @@ CREATE TABLE attendance_preference (
   FOREIGN KEY (user_id) REFERENCES app_user(id) ON DELETE CASCADE
 );
 
+CREATE TABLE meal_preference (
+  user_id TEXT PRIMARY KEY,
+  enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+  breakfast INTEGER NOT NULL CHECK (breakfast IN (0, 1)),
+  lunch INTEGER NOT NULL CHECK (lunch IN (0, 1)),
+  dinner INTEGER NOT NULL CHECK (dinner IN (0, 1)),
+  updated_at_epoch_ms INTEGER NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES app_user(id) ON DELETE CASCADE
+);
+
+CREATE TABLE laundry_watch (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  machine_id TEXT NOT NULL CHECK (length(machine_id) BETWEEN 1 AND 128),
+  appliance TEXT NOT NULL CHECK (appliance IN ('washer', 'dryer')),
+  session_id TEXT CHECK (session_id IS NULL OR length(session_id) BETWEEN 1 AND 256),
+  notify_before_minutes INTEGER NOT NULL CHECK (notify_before_minutes BETWEEN 0 AND 180),
+  notify_when_available INTEGER NOT NULL CHECK (notify_when_available IN (0, 1)),
+  status TEXT NOT NULL CHECK (status IN ('active', 'completed', 'cancelled')),
+  created_at_epoch_ms INTEGER NOT NULL,
+  updated_at_epoch_ms INTEGER NOT NULL CHECK (updated_at_epoch_ms >= created_at_epoch_ms),
+  FOREIGN KEY (user_id) REFERENCES app_user(id) ON DELETE CASCADE
+);
+
+CREATE INDEX laundry_watch_user_history ON laundry_watch (user_id, created_at_epoch_ms DESC, id);
+CREATE INDEX laundry_watch_active_target ON laundry_watch (machine_id, appliance, session_id, user_id)
+  WHERE status = 'active';
+CREATE UNIQUE INDEX laundry_watch_active_dedupe ON laundry_watch
+  (user_id, machine_id, appliance, ifnull(session_id, ''), notify_when_available)
+  WHERE status = 'active';
+
+CREATE TABLE laundry_queue_entry (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  machine_id TEXT CHECK (machine_id IS NULL OR length(machine_id) BETWEEN 1 AND 128),
+  appliance TEXT NOT NULL CHECK (appliance IN ('washer', 'dryer')),
+  status TEXT NOT NULL CHECK (status IN ('waiting', 'claimed', 'cancelled', 'expired')),
+  joined_at_epoch_ms INTEGER NOT NULL,
+  left_at_epoch_ms INTEGER,
+  CHECK ((status = 'waiting' AND left_at_epoch_ms IS NULL) OR (status <> 'waiting' AND left_at_epoch_ms IS NOT NULL)),
+  FOREIGN KEY (user_id) REFERENCES app_user(id) ON DELETE CASCADE
+);
+
+CREATE INDEX laundry_queue_order ON laundry_queue_entry
+  (appliance, machine_id, status, joined_at_epoch_ms, id);
+CREATE UNIQUE INDEX laundry_queue_one_waiting_per_user ON laundry_queue_entry
+  (user_id, appliance, ifnull(machine_id, '')) WHERE status = 'waiting';
+
+CREATE TABLE laundry_queue_claim (
+  queue_entry_id TEXT PRIMARY KEY,
+  machine_id TEXT NOT NULL CHECK (length(machine_id) BETWEEN 1 AND 128),
+  appliance TEXT NOT NULL CHECK (appliance IN ('washer', 'dryer')),
+  claim_token TEXT NOT NULL UNIQUE,
+  claimed_at_epoch_ms INTEGER NOT NULL,
+  expires_at_epoch_ms INTEGER NOT NULL CHECK (expires_at_epoch_ms > claimed_at_epoch_ms),
+  FOREIGN KEY (queue_entry_id) REFERENCES laundry_queue_entry(id) ON DELETE CASCADE
+);
+
+CREATE INDEX laundry_queue_claim_active ON laundry_queue_claim
+  (machine_id, appliance, expires_at_epoch_ms, queue_entry_id);
+
 CREATE TABLE notification (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
@@ -221,14 +331,11 @@ CREATE TABLE notification (
   created_at_epoch_ms INTEGER NOT NULL,
   due_at_epoch_ms INTEGER NOT NULL,
   expires_at_epoch_ms INTEGER NOT NULL,
-  desktop_attempt INTEGER NOT NULL DEFAULT 0,
-  desktop_next_attempt_at_epoch_ms INTEGER NOT NULL,
-  desktop_displayed_at_epoch_ms INTEGER,
   UNIQUE (user_id, source_event_id),
   FOREIGN KEY (user_id) REFERENCES app_user(id) ON DELETE CASCADE
 );
 
-CREATE INDEX notification_desktop_inbox ON notification (user_id, desktop_displayed_at_epoch_ms, desktop_next_attempt_at_epoch_ms, expires_at_epoch_ms);
+CREATE INDEX notification_user_history ON notification (user_id, created_at_epoch_ms DESC);
 
 CREATE TABLE push_subscription (
   id TEXT PRIMARY KEY,
@@ -245,17 +352,46 @@ CREATE TABLE push_subscription (
 
 CREATE INDEX push_subscription_user ON push_subscription (user_id, revoked_at_epoch_ms);
 
-CREATE TABLE push_delivery (
+CREATE TABLE notification_delivery (
   notification_id TEXT NOT NULL,
-  subscription_id TEXT NOT NULL,
+  target_kind TEXT NOT NULL CHECK (target_kind IN ('desktop', 'push')),
+  target_id TEXT NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('pending', 'retry', 'delivered', 'gone', 'failed')),
   attempts INTEGER NOT NULL DEFAULT 0,
   next_attempt_at_epoch_ms INTEGER,
   last_error TEXT,
   delivered_at_epoch_ms INTEGER,
-  PRIMARY KEY (notification_id, subscription_id),
-  FOREIGN KEY (notification_id) REFERENCES notification(id) ON DELETE CASCADE,
-  FOREIGN KEY (subscription_id) REFERENCES push_subscription(id) ON DELETE CASCADE
+  lease_token TEXT,
+  lease_expires_at_epoch_ms INTEGER,
+  CHECK ((lease_token IS NULL AND lease_expires_at_epoch_ms IS NULL)
+    OR (lease_token IS NOT NULL AND lease_expires_at_epoch_ms IS NOT NULL)),
+  PRIMARY KEY (notification_id, target_kind, target_id),
+  FOREIGN KEY (notification_id) REFERENCES notification(id) ON DELETE CASCADE
 );
 
-CREATE INDEX push_delivery_due ON push_delivery (status, next_attempt_at_epoch_ms);
+CREATE INDEX notification_delivery_due ON notification_delivery
+  (target_kind, status, next_attempt_at_epoch_ms, lease_expires_at_epoch_ms);
+
+CREATE TRIGGER notification_delivery_fanout
+AFTER INSERT ON notification
+BEGIN
+  INSERT OR IGNORE INTO notification_delivery
+    (notification_id, target_kind, target_id, status, attempts, next_attempt_at_epoch_ms,
+      last_error, delivered_at_epoch_ms, lease_token, lease_expires_at_epoch_ms)
+  SELECT NEW.id, 'desktop', desktop.installation_id, 'pending', 0, NEW.due_at_epoch_ms,
+    NULL, NULL, NULL, NULL
+  FROM desktop_device desktop JOIN app_session session
+    ON session.user_id = desktop.user_id AND session.installation_id = desktop.installation_id
+  WHERE desktop.user_id = NEW.user_id AND session.kind = 'desktop'
+    AND session.revoked_at_epoch_ms IS NULL AND session.expires_at_epoch_ms > NEW.created_at_epoch_ms;
+
+  INSERT OR IGNORE INTO notification_delivery
+    (notification_id, target_kind, target_id, status, attempts, next_attempt_at_epoch_ms,
+      last_error, delivered_at_epoch_ms, lease_token, lease_expires_at_epoch_ms)
+  SELECT NEW.id, 'push', subscription.id, 'pending', 0, NEW.due_at_epoch_ms,
+    NULL, NULL, NULL, NULL
+  FROM push_subscription subscription JOIN app_session session ON session.id = subscription.session_id
+  WHERE subscription.user_id = NEW.user_id AND subscription.revoked_at_epoch_ms IS NULL
+    AND session.kind = 'mobile' AND session.user_id = subscription.user_id
+    AND session.revoked_at_epoch_ms IS NULL AND session.expires_at_epoch_ms > NEW.created_at_epoch_ms;
+END;

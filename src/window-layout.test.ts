@@ -12,25 +12,12 @@ function sourceBetween(source: string, start: string, end: string): string {
     return source.slice(startIndex, endIndex);
 }
 
-test('설정과 온보딩 창은 초기 크기를 유지하며 작은 화면에서도 리사이즈할 수 있다', () => {
-    const settings = sourceBetween(tray, 'fn build_settings_window', 'fn build_onboarding_window');
-    const onboarding = sourceBetween(tray, 'fn build_onboarding_window', 'pub fn open_onboarding_window');
-
-    assert.match(tray, /const UTILITY_WINDOW_WIDTH: f64 = 560\.0;/);
-    assert.match(tray, /const STANDARD_WINDOW_HEIGHT: f64 = 720\.0;/);
-    assert.match(tray, /const UTILITY_WINDOW_MIN_WIDTH: f64 = 520\.0;/);
-    assert.match(tray, /const UTILITY_WINDOW_MIN_HEIGHT: f64 = 600\.0;/);
-
-    for (const windowBuilder of [settings, onboarding]) {
-        assert.match(windowBuilder, /\.inner_size\(UTILITY_WINDOW_WIDTH, STANDARD_WINDOW_HEIGHT\)/);
-        assert.match(
-            windowBuilder,
-            /\.min_inner_size\(UTILITY_WINDOW_MIN_WIDTH, UTILITY_WINDOW_MIN_HEIGHT\)/,
-        );
-        assert.match(windowBuilder, /\.resizable\(true\)/);
-        assert.match(windowBuilder, /\.minimizable\(true\)/);
-        assert.match(windowBuilder, /\.maximizable\(false\)/);
-    }
+test('구형 설정·온보딩·캠퍼스·출석 전용 창은 만들지 않는다', () => {
+    assert.doesNotMatch(tray, /WebviewUrl::App\("(?:index|onboarding|campus)\.html"/);
+    assert.doesNotMatch(
+        tray,
+        /WebviewWindowBuilder::new\([^\n]+,\s*"(?:onboarding|campus|attendance)"/,
+    );
 });
 
 test('대시보드 창은 사이드바와 내용을 표시할 크기에서 시작하고 최대화할 수 있다', () => {
@@ -50,12 +37,10 @@ test('대시보드 창은 사이드바와 내용을 표시할 크기에서 시�
     assert.match(dashboard, /\.maximizable\(true\)/);
 });
 
-test('트레이 패널은 시스템 보조 창으로 고정 크기를 유지한다', () => {
-    const trayPanel = sourceBetween(tray, 'fn build_tray_panel_window', 'fn toggle_tray_panel');
+test('트레이 클릭은 별도 목록 창 없이 대시보드 홈을 연다', () => {
+    const setup = sourceBetween(tray, 'pub fn setup_tray', 'pub fn sync_icon_theme');
 
-    assert.match(trayPanel, /\.inner_size\(TRAY_PANEL_WIDTH, TRAY_PANEL_HEIGHT\)/);
-    assert.match(trayPanel, /\.resizable\(false\)/);
-    assert.match(trayPanel, /\.minimizable\(false\)/);
-    assert.match(trayPanel, /\.maximizable\(false\)/);
-    assert.doesNotMatch(trayPanel, /\.min_inner_size\(/);
+    assert.match(setup, /on_tray_icon_event[\s\S]*open_dashboard_window\(tray\.app_handle\(\)\)/);
+    assert.match(tray, /pub fn open_dashboard_window[\s\S]*DashboardRoute::Home/);
+    assert.doesNotMatch(tray, /TRAY_PANEL_(?:WIDTH|HEIGHT)|build_tray_panel_window|toggle_tray_panel/);
 });

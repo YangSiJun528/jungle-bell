@@ -11,18 +11,16 @@ use std::time::Duration;
 use tokio::sync::Mutex as TokioMutex;
 
 use chrono::{DateTime, NaiveDate, Utc};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
+use serde_json::Value;
 
-use crate::analytics::{self, Event};
 use crate::state::{AppState, CheckerRuntimeStatus, CohortPeriod, DailyPhase, DdayStatus, TraySnapshot};
 use tauri::{
     image::Image,
+    menu::MenuBuilder,
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Emitter, Manager, PhysicalPosition, WebviewWindow,
+    Emitter, Manager, WebviewWindow,
 };
-
-const ATTENDANCE_URL: &str = "https://jungle-lms.krafton.com/check-in";
-const FEEDBACK_URL: &str = "https://github.com/YangSiJun528/jungle-bell/issues/new/choose";
 
 const STATUS_COURSE_UPCOMING: &str = "코스 시작 전";
 const STATUS_COURSE_COMPLETE: &str = "코스 완료";
@@ -30,27 +28,14 @@ const STATUS_NO_COHORT: &str = "진행 중인 코스 없음";
 const STATUS_NO_ATTENDANCE: &str = "현재 출석 없음";
 const STATUS_COURSE_CHECKING: &str = "코스 확인 중";
 
-const UTILITY_WINDOW_WIDTH: f64 = 560.0;
-const CONTENT_WINDOW_WIDTH: f64 = 720.0;
-const STANDARD_WINDOW_HEIGHT: f64 = 720.0;
-const UTILITY_WINDOW_MIN_WIDTH: f64 = 520.0;
-const UTILITY_WINDOW_MIN_HEIGHT: f64 = 600.0;
-const ATTENDANCE_MIN_SIZE: f64 = 640.0;
 const IMAGE_VIEWER_WIDTH: f64 = 1120.0;
 const IMAGE_VIEWER_HEIGHT: f64 = 840.0;
 const IMAGE_VIEWER_MIN_WIDTH: f64 = 420.0;
 const IMAGE_VIEWER_MIN_HEIGHT: f64 = 320.0;
-const TRAY_PANEL_WIDTH: f64 = 390.0;
-const TRAY_PANEL_HEIGHT: f64 = 640.0;
-const TRAY_PANEL_GAP: f64 = 8.0;
-const TRAY_PANEL_HIDE_DELAY_MS: u64 = 120;
 const DASHBOARD_WINDOW_WIDTH: f64 = 1180.0;
 const DASHBOARD_WINDOW_HEIGHT: f64 = 780.0;
 const DASHBOARD_WINDOW_MIN_WIDTH: f64 = 760.0;
 const DASHBOARD_WINDOW_MIN_HEIGHT: f64 = 560.0;
-
-/// 출석 페이지 닫힌 후 로그인 재시도 윈도우 (초). 3분간 빠르게 재확인.
-const LOGIN_RETRY_WINDOW_SECS: u64 = 180;
 
 // 트레이 아이콘 — 컴파일 시 include_bytes!로 바이너리에 포함.
 // macOS는 tray-icon이 강제하는 18pt의 정확한 @2x인 36px, 그 외 플랫폼은
@@ -97,42 +82,56 @@ const ICON_COMPLETE_DARK: &[u8] = include_bytes!("../icons/tray-complete-dark.pn
 #[cfg(not(target_os = "macos"))]
 const ICON_COMPLETE_DARK: &[u8] = include_bytes!("../icons/tray-complete-dark-windows.png");
 
-const FOREGROUND_WINDOW_LABELS: [&str; 6] = [
-    "dashboard",
-    "attendance",
-    "settings",
-    "onboarding",
-    "campus",
-    "image-viewer",
-];
-
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ImageViewerPayload {
     image_url: String,
 }
 
-#[derive(Debug, Clone, Copy)]
-enum CampusTab {
+const TRAY_MENU_OPEN_ID: &str = "open-dashboard";
+const TRAY_MENU_QUIT_ID: &str = "quit";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DashboardRoute {
+    Home,
+    Attendance,
     Laundry,
     Meals,
 }
 
-impl CampusTab {
+impl DashboardRoute {
     fn as_str(self) -> &'static str {
         match self {
+            Self::Home => "home",
+            Self::Attendance => "attendance",
             Self::Laundry => "laundry",
             Self::Meals => "meals",
         }
     }
 }
 
-/// 커스텀 트레이 패널에 전달할 마지막 상태를 보관한다.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TrayMenuAction {
+    OpenDashboard,
+    Quit,
+}
+
+fn tray_menu_action(id: &str) -> Option<TrayMenuAction> {
+    match id {
+        TRAY_MENU_OPEN_ID => Some(TrayMenuAction::OpenDashboard),
+        TRAY_MENU_QUIT_ID => Some(TrayMenuAction::Quit),
+        _ => None,
+    }
+}
+
+fn tray_click_opens_dashboard(button: MouseButton, state: MouseButtonState) -> bool {
+    button == MouseButton::Left && state == MouseButtonState::Up
+}
+
+/// 트레이 아이콘과 대시보드 홈의 로컬 출석 projection을 보관한다.
 pub struct TrayState {
     view: TrayViewModel,
     icon_theme: TrayIconTheme,
-    dday_visible: bool,
-    pending_update: Option<String>,
 }
 
 /// 짧은 메모리 projection 갱신을 유실 없이 직렬화한다.
@@ -193,132 +192,22 @@ struct TrayViewModel {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct TrayPanelState {
+pub struct DashboardAttendanceSummary {
     status: TrayStatusKind,
     status_text: String,
     dday_text: Option<String>,
     dday_period: Option<CohortPeriod>,
     current_version: String,
-    pending_update: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum TrayPanelAction {
-    OpenAttendance,
-    OpenLaundry,
-    OpenMeals,
-    OpenFeedback,
-    OpenSettings,
-    CheckUpdate,
-    Quit,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct PanelRect {
-    x: i32,
-    y: i32,
-    width: u32,
-    height: u32,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct PanelSize {
-    width: u32,
-    height: u32,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct PanelPosition {
-    x: i32,
-    y: i32,
-}
-
-#[derive(Debug, Clone, Copy)]
-struct MonitorGeometry {
-    bounds: PanelRect,
-}
-
-fn rect_contains_point(rect: PanelRect, point: PanelPosition) -> bool {
-    let left = i64::from(rect.x);
-    let top = i64::from(rect.y);
-    let right = left + i64::from(rect.width);
-    let bottom = top + i64::from(rect.height);
-    let x = i64::from(point.x);
-    let y = i64::from(point.y);
-
-    x >= left && x < right && y >= top && y < bottom
-}
-
-fn select_tray_monitor_index(
-    monitors: &[MonitorGeometry],
-    click_position: PanelPosition,
-    tray_rect: PanelRect,
-) -> Option<usize> {
-    if let Some(index) = monitors
-        .iter()
-        .position(|monitor| rect_contains_point(monitor.bounds, click_position))
-    {
-        return Some(index);
-    }
-
-    // 메뉴바 최상단 경계 클릭은 커서가 화면 영역에서 1px 벗어날 수 있다.
-    // 이 경우 트레이 아이콘 중앙을 두 번째 기준점으로 사용한다.
-    let tray_center = PanelPosition {
-        x: (i64::from(tray_rect.x) + i64::from(tray_rect.width) / 2).clamp(i64::from(i32::MIN), i64::from(i32::MAX))
-            as i32,
-        y: (i64::from(tray_rect.y) + i64::from(tray_rect.height) / 2).clamp(i64::from(i32::MIN), i64::from(i32::MAX))
-            as i32,
-    };
-
-    monitors
-        .iter()
-        .position(|monitor| rect_contains_point(monitor.bounds, tray_center))
-}
-
-fn panel_size_for_scale(scale_factor: f64) -> PanelSize {
-    let scale_factor = if scale_factor.is_finite() && scale_factor > 0.0 {
-        scale_factor
-    } else {
-        1.0
-    };
-
-    PanelSize {
-        width: (TRAY_PANEL_WIDTH * scale_factor).round() as u32,
-        height: (TRAY_PANEL_HEIGHT * scale_factor).round() as u32,
-    }
-}
-
-fn calculate_panel_position(anchor: PanelRect, panel: PanelSize, work_area: PanelRect, gap: i32) -> PanelPosition {
-    let anchor_x = i64::from(anchor.x);
-    let anchor_y = i64::from(anchor.y);
-    let anchor_width = i64::from(anchor.width);
-    let anchor_height = i64::from(anchor.height);
-    let panel_width = i64::from(panel.width);
-    let panel_height = i64::from(panel.height);
-    let work_x = i64::from(work_area.x);
-    let work_y = i64::from(work_area.y);
-    let work_width = i64::from(work_area.width);
-    let work_height = i64::from(work_area.height);
-    let margin = i64::from(gap.max(0));
-
-    let min_x = work_x + margin;
-    let max_x = (work_x + work_width - panel_width - margin).max(min_x);
-    let preferred_x = anchor_x + anchor_width / 2 - panel_width / 2;
-
-    let min_y = work_y + margin;
-    let max_y = (work_y + work_height - panel_height - margin).max(min_y);
-    let tray_is_above_work_area_center = anchor_y + anchor_height / 2 <= work_y + work_height / 2;
-    let preferred_y = if tray_is_above_work_area_center {
-        anchor_y + anchor_height + margin
-    } else {
-        anchor_y - panel_height - margin
-    };
-
-    PanelPosition {
-        x: preferred_x.clamp(min_x, max_x) as i32,
-        y: preferred_y.clamp(min_y, max_y) as i32,
-    }
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DashboardHomeOverview {
+    pub(crate) attendance: DashboardAttendanceSummary,
+    pub(crate) lms_session_state: crate::remote_sync::LmsSessionState,
+    pub(crate) unread_count: usize,
+    pub(crate) laundry: Option<Value>,
+    pub(crate) meals: Option<Value>,
 }
 
 fn icon_bytes_for_kind(kind: TrayIconKind, theme: TrayIconTheme) -> &'static [u8] {
@@ -441,7 +330,7 @@ fn build_attendance_status_text(phase: DailyPhase, remaining: Option<i64>, needs
     }
 }
 
-/// 트레이 아이콘 툴팁과 커스텀 패널에 표시할 상태 텍스트 생성.
+/// 트레이 툴팁과 대시보드 홈의 로컬 출석 상태 텍스트 생성.
 fn build_status_text(snapshot: &TraySnapshot) -> String {
     if snapshot.checker_status.is_recovering_or_offline() {
         return checker_status_text(snapshot.checker_status).to_string();
@@ -511,14 +400,13 @@ fn build_tray_view_model(snapshot: &TraySnapshot, now: DateTime<Utc>) -> TrayVie
 }
 
 impl TrayState {
-    fn panel_state(&self, current_version: String) -> TrayPanelState {
-        TrayPanelState {
+    fn dashboard_attendance_summary(&self, current_version: String) -> DashboardAttendanceSummary {
+        DashboardAttendanceSummary {
             status: self.view.status,
             status_text: self.view.status_text.clone(),
-            dday_text: self.dday_visible.then(|| self.view.dday_text.clone()),
-            dday_period: self.dday_visible.then_some(self.view.dday_period).flatten(),
+            dday_text: Some(self.view.dday_text.clone()),
+            dday_period: self.view.dday_period,
             current_version,
-            pending_update: self.pending_update.clone(),
         }
     }
 }
@@ -534,36 +422,17 @@ impl TrayStateStore {
     fn lock(&self) -> Result<StdMutexGuard<'_, TrayState>, String> {
         self.state
             .lock()
-            .map_err(|_| "트레이 패널 상태 잠금이 손상되었습니다.".to_string())
+            .map_err(|_| "트레이 상태 잠금이 손상되었습니다.".to_string())
     }
 
-    fn panel_state(&self, current_version: String) -> Result<TrayPanelState, String> {
-        Ok(self.lock()?.panel_state(current_version))
+    fn dashboard_attendance_summary(&self, current_version: String) -> Result<DashboardAttendanceSummary, String> {
+        Ok(self.lock()?.dashboard_attendance_summary(current_version))
     }
 
-    fn set_dday_visible(&self, visible: bool, current_version: String) -> Result<Option<TrayPanelState>, String> {
-        let mut state = self.lock()?;
-        if state.dday_visible == visible {
-            return Ok(None);
-        }
-        state.dday_visible = visible;
-        Ok(Some(state.panel_state(current_version)))
-    }
-
-    fn set_pending_update(
-        &self,
-        pending_update: Option<String>,
-        current_version: String,
-    ) -> Result<TrayPanelState, String> {
-        let mut state = self.lock()?;
-        state.pending_update = pending_update;
-        Ok(state.panel_state(current_version))
-    }
-
-    fn set_view(&self, view: TrayViewModel, current_version: String) -> Result<TrayPanelState, String> {
+    fn set_view(&self, view: TrayViewModel) -> Result<(), String> {
         let mut state = self.lock()?;
         state.view = view;
-        Ok(state.panel_state(current_version))
+        Ok(())
     }
 
     fn set_icon_theme(&self, icon_theme: TrayIconTheme) -> Result<bool, String> {
@@ -590,22 +459,9 @@ impl TrayStateStore {
     }
 }
 
-fn emit_tray_panel_state(app: &tauri::AppHandle, state: TrayPanelState) {
-    if let Err(error) = app.emit_to("tray-panel", "tray-panel-state", state) {
-        log::debug!("[tray-panel] state emit skipped: {error}");
-    }
-}
-
-fn current_tray_panel_state(app: &tauri::AppHandle) -> Result<TrayPanelState, String> {
+pub(crate) fn get_dashboard_attendance_summary(app: &tauri::AppHandle) -> Result<DashboardAttendanceSummary, String> {
     let tray_state: tauri::State<TrayStateStore> = app.state();
-    tray_state.panel_state(app.package_info().version.to_string())
-}
-
-fn refresh_tray_panel(app: &tauri::AppHandle) {
-    match current_tray_panel_state(app) {
-        Ok(state) => emit_tray_panel_state(app, state),
-        Err(error) => log::error!("[tray-panel] state refresh failed: {error}"),
-    }
+    tray_state.dashboard_attendance_summary(app.package_info().version.to_string())
 }
 
 fn focus_window_checked(window: &WebviewWindow<tauri::Wry>) -> Result<(), String> {
@@ -649,74 +505,8 @@ fn focus_window(window: &WebviewWindow<tauri::Wry>) {
     }
 }
 
-#[cfg(target_os = "macos")]
-fn has_foreground_window(app: &tauri::AppHandle) -> bool {
-    FOREGROUND_WINDOW_LABELS
-        .iter()
-        .any(|label| app.get_webview_window(label).is_some())
-}
-
-fn should_show_foreground_app(show_app_icon: bool, has_foreground_window: bool) -> bool {
-    show_app_icon || has_foreground_window
-}
-
-#[cfg(any(target_os = "windows", test))]
-fn should_skip_windows_taskbar(show_app_icon: bool) -> bool {
-    !show_app_icon
-}
-
-fn foreground_window_skip_taskbar(app: &tauri::AppHandle) -> bool {
-    #[cfg(target_os = "windows")]
-    {
-        let state: tauri::State<Arc<TokioMutex<AppState>>> = app.state();
-        let show_app_icon = state.try_lock().map(|s| s.config.show_app_icon).unwrap_or(true);
-        return should_skip_windows_taskbar(show_app_icon);
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = app;
-        false
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn set_windows_taskbar_visibility(app: &tauri::AppHandle, visible: bool) -> Result<(), String> {
-    let skip_taskbar = should_skip_windows_taskbar(visible);
-    for label in FOREGROUND_WINDOW_LABELS {
-        if let Some(window) = app.get_webview_window(label) {
-            if let Err(error) = window.set_skip_taskbar(skip_taskbar) {
-                let rollback_skip_taskbar = !skip_taskbar;
-                for rollback_label in FOREGROUND_WINDOW_LABELS {
-                    if let Some(rollback_window) = app.get_webview_window(rollback_label) {
-                        let _ = rollback_window.set_skip_taskbar(rollback_skip_taskbar);
-                    }
-                }
-                return Err(format!("작업 표시줄 표시 변경 실패({label}): {error}"));
-            }
-        }
-    }
-
-    Ok(())
-}
-
-pub fn set_app_icon_visibility(app: &tauri::AppHandle, visible: bool) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    {
-        let app_for_task = app.clone();
-        app.run_on_main_thread(move || {
-            set_macos_foreground_visibility(
-                &app_for_task,
-                should_show_foreground_app(visible, has_foreground_window(&app_for_task)),
-            );
-        })
-        .map_err(|error| format!("앱 아이콘 표시 변경 예약 실패: {error}"))?;
-    }
-
-    #[cfg(target_os = "windows")]
-    set_windows_taskbar_visibility(app, visible)?;
-
-    Ok(())
+fn foreground_window_skip_taskbar(_app: &tauri::AppHandle) -> bool {
+    false
 }
 
 #[cfg(target_os = "macos")]
@@ -737,16 +527,7 @@ fn set_macos_foreground_visibility(app: &tauri::AppHandle, visible: bool) {
 
 pub fn sync_foreground_app_visibility(app: &tauri::AppHandle) {
     #[cfg(target_os = "macos")]
-    {
-        let show_app_icon = {
-            let state: tauri::State<Arc<TokioMutex<AppState>>> = app.state();
-            state.try_lock().map(|s| s.config.show_app_icon).unwrap_or(true)
-        };
-        set_macos_foreground_visibility(
-            app,
-            should_show_foreground_app(show_app_icon, has_foreground_window(app)),
-        );
-    }
+    set_macos_foreground_visibility(app, true);
 
     #[cfg(not(target_os = "macos"))]
     {
@@ -769,100 +550,6 @@ fn sync_foreground_app_visibility_soon(app: tauri::AppHandle) {
         tokio::time::sleep(Duration::from_millis(50)).await;
         sync_foreground_app_visibility(&app);
     });
-}
-
-fn activate_login_retry_window(app_handle: &tauri::AppHandle) {
-    let state: tauri::State<Arc<TokioMutex<AppState>>> = app_handle.state();
-    if let Ok(mut s) = state.try_lock() {
-        s.login_retry_until = Some(chrono::Utc::now() + chrono::Duration::seconds(LOGIN_RETRY_WINDOW_SECS as i64));
-    };
-}
-
-fn reload_checker(app_handle: &tauri::AppHandle) {
-    crate::checker::refresh_webview(app_handle, "attendance window closed");
-}
-
-pub fn refresh_login_status(app_handle: &tauri::AppHandle) {
-    activate_login_retry_window(app_handle);
-    reload_checker(app_handle);
-}
-
-fn build_attendance_window(app: &tauri::AppHandle) {
-    show_foreground_app(app);
-    let app_handle = app.clone();
-    let attendance_script = include_str!("../../dist/injected/attendance.js");
-    if let Ok(window) = tauri::WebviewWindowBuilder::new(
-        app,
-        "attendance",
-        tauri::WebviewUrl::External(ATTENDANCE_URL.parse().unwrap()),
-    )
-    .title("Jungle Compass")
-    .theme(Some(tauri::Theme::Light))
-    .inner_size(CONTENT_WINDOW_WIDTH, STANDARD_WINDOW_HEIGHT)
-    .min_inner_size(ATTENDANCE_MIN_SIZE, ATTENDANCE_MIN_SIZE)
-    .resizable(true)
-    .skip_taskbar(foreground_window_skip_taskbar(app))
-    .focused(true)
-    .initialization_script(attendance_script)
-    .build()
-    {
-        focus_window(&window);
-        window.on_window_event(move |event| {
-            if let tauri::WindowEvent::Destroyed = event {
-                log::info!("[tray] attendance page closed, reloading checker + activating login retry");
-                reload_checker(&app_handle);
-                activate_login_retry_window(&app_handle);
-                sync_foreground_app_visibility_soon(app_handle.clone());
-            }
-        });
-    }
-}
-
-fn attendance_cohort_storage_script(cohort_id: Option<&str>) -> String {
-    let cohort_id = serde_json::to_string(&cohort_id).expect("cohort id serialization must succeed");
-    format!(
-        r#"(() => {{
-            if (window.location.origin !== "https://jungle-lms.krafton.com") return;
-            const key = "selected_cohort_id";
-            const nextId = {cohort_id};
-            const next = nextId === null ? null : JSON.stringify(nextId);
-            const current = window.localStorage.getItem(key);
-            if (current === next) return;
-            if (next === null) window.localStorage.removeItem(key);
-            else window.localStorage.setItem(key, next);
-            window.location.reload();
-        }})();"#
-    )
-}
-
-pub fn sync_attendance_cohort_storage(app: &tauri::AppHandle, cohort_id: Option<&str>) {
-    let Some(window) = app.get_webview_window("attendance") else {
-        return;
-    };
-    if let Err(error) = window.eval(attendance_cohort_storage_script(cohort_id)) {
-        log::warn!("[tray] attendance cohort sync failed: {error}");
-    }
-}
-
-pub fn open_attendance_window(app: &tauri::AppHandle) {
-    log::info!("[tray] attendance window opened");
-    analytics::track(Event::AttendancePageOpened);
-
-    if let Some(window) = app.get_webview_window("attendance") {
-        let state: tauri::State<Arc<TokioMutex<AppState>>> = app.state();
-        if let Ok(state) = state.try_lock() {
-            let cohort_id = crate::commands::attendance_cohort_id(
-                state.config.selected_cohort_id.as_deref(),
-                state.effective_cohort_id.as_deref(),
-                &state.cohort_options,
-            );
-            sync_attendance_cohort_storage(app, cohort_id.as_deref());
-        }
-        show_foreground_app(app);
-        focus_window(&window);
-    } else {
-        build_attendance_window(app);
-    }
 }
 
 pub fn open_image_viewer(app: &tauri::AppHandle, image_url: String) -> Result<(), String> {
@@ -911,49 +598,24 @@ pub fn open_image_viewer(app: &tauri::AppHandle, image_url: String) -> Result<()
     Ok(())
 }
 
-fn build_settings_window(app: &tauri::AppHandle) {
-    show_foreground_app(app);
-    if let Ok(window) = tauri::WebviewWindowBuilder::new(app, "settings", tauri::WebviewUrl::App("index.html".into()))
-        .title("설정")
-        .theme(Some(tauri::Theme::Light))
-        .inner_size(UTILITY_WINDOW_WIDTH, STANDARD_WINDOW_HEIGHT)
-        .min_inner_size(UTILITY_WINDOW_MIN_WIDTH, UTILITY_WINDOW_MIN_HEIGHT)
-        .resizable(true)
-        .minimizable(true)
-        .maximizable(false)
-        .skip_taskbar(foreground_window_skip_taskbar(app))
-        .focused(true)
-        .build()
-    {
-        focus_window(&window);
-        let app_handle = app.clone();
-        window.on_window_event(move |event| {
-            if let tauri::WindowEvent::Destroyed = event {
-                sync_foreground_app_visibility_soon(app_handle.clone());
-            }
-        });
-    }
+fn dashboard_app_url(route: DashboardRoute) -> String {
+    format!("dashboard.html#{}", route.as_str())
 }
 
-fn dashboard_app_url(route: Option<CampusTab>) -> String {
-    match route {
-        Some(route) => format!("dashboard.html#{}", route.as_str()),
-        None => "dashboard.html".into(),
-    }
-}
-
-fn select_dashboard_route(window: &WebviewWindow<tauri::Wry>, route: CampusTab) {
+fn select_dashboard_route(window: &WebviewWindow<tauri::Wry>, route: DashboardRoute) {
     // route는 닫힌 Rust enum이므로 JS 문자열에 외부 입력이 들어가지 않는다.
     let script = match route {
-        CampusTab::Laundry => "window.location.hash = '#laundry'",
-        CampusTab::Meals => "window.location.hash = '#meals'",
+        DashboardRoute::Home => "window.location.hash = '#home'",
+        DashboardRoute::Attendance => "window.location.hash = '#attendance'",
+        DashboardRoute::Laundry => "window.location.hash = '#laundry'",
+        DashboardRoute::Meals => "window.location.hash = '#meals'",
     };
     if let Err(error) = window.eval(script) {
         log::warn!("[dashboard] route selection failed: {error}");
     }
 }
 
-fn build_dashboard_window(app: &tauri::AppHandle, route: Option<CampusTab>) {
+fn build_dashboard_window(app: &tauri::AppHandle, route: DashboardRoute) {
     show_foreground_app(app);
     match tauri::WebviewWindowBuilder::new(
         app,
@@ -974,10 +636,19 @@ fn build_dashboard_window(app: &tauri::AppHandle, route: Option<CampusTab>) {
         Ok(window) => {
             focus_window(&window);
             let app_handle = app.clone();
-            window.on_window_event(move |event| {
-                if let tauri::WindowEvent::Destroyed = event {
+            let window_for_event = window.clone();
+            window.on_window_event(move |event| match event {
+                tauri::WindowEvent::CloseRequested { api, .. } => {
+                    api.prevent_close();
+                    if let Err(error) = window_for_event.hide() {
+                        log::warn!("[dashboard] hide on close failed: {error}");
+                    }
                     sync_foreground_app_visibility_soon(app_handle.clone());
                 }
+                tauri::WindowEvent::Destroyed => {
+                    sync_foreground_app_visibility_soon(app_handle.clone());
+                }
+                _ => {}
             });
         }
         Err(error) => log::error!("[dashboard] window creation failed: {error}"),
@@ -985,330 +656,71 @@ fn build_dashboard_window(app: &tauri::AppHandle, route: Option<CampusTab>) {
 }
 
 pub fn open_dashboard_window(app: &tauri::AppHandle) {
-    log::info!("[dashboard] window opened");
-    if let Some(window) = app.get_webview_window("dashboard") {
-        show_foreground_app(app);
-        focus_window(&window);
-    } else {
-        build_dashboard_window(app, None);
-    }
+    open_dashboard_route_now(app, DashboardRoute::Home);
 }
 
-fn open_dashboard_campus_route(app: &tauri::AppHandle, route: CampusTab) {
-    log::info!("[dashboard] campus route opened: {}", route.as_str());
-    match route {
-        CampusTab::Laundry => analytics::track(Event::LaundryStatusOpened),
-        CampusTab::Meals => analytics::track(Event::MealPlanOpened),
-    }
-
+fn open_dashboard_route_now(app: &tauri::AppHandle, route: DashboardRoute) {
+    log::info!("[dashboard] route opened: {}", route.as_str());
     if let Some(window) = app.get_webview_window("dashboard") {
         show_foreground_app(app);
         select_dashboard_route(&window, route);
         focus_window(&window);
     } else {
-        build_dashboard_window(app, Some(route));
+        build_dashboard_window(app, route);
     }
 }
 
-fn build_onboarding_window(app: &tauri::AppHandle) {
-    show_foreground_app(app);
-    if let Ok(window) =
-        tauri::WebviewWindowBuilder::new(app, "onboarding", tauri::WebviewUrl::App("onboarding.html".into()))
-            .title("Jungle Bell 시작하기")
-            .theme(Some(tauri::Theme::Light))
-            .inner_size(UTILITY_WINDOW_WIDTH, STANDARD_WINDOW_HEIGHT)
-            .min_inner_size(UTILITY_WINDOW_MIN_WIDTH, UTILITY_WINDOW_MIN_HEIGHT)
-            .resizable(true)
-            .minimizable(true)
-            .maximizable(false)
-            .skip_taskbar(foreground_window_skip_taskbar(app))
-            .focused(true)
-            .build()
-    {
-        focus_window(&window);
-        let app_handle = app.clone();
-        window.on_window_event(move |event| {
-            if let tauri::WindowEvent::Destroyed = event {
-                sync_foreground_app_visibility_soon(app_handle.clone());
-            }
-        });
-    }
+pub(crate) fn open_dashboard_route(app: &tauri::AppHandle, route: DashboardRoute) -> Result<(), String> {
+    run_window_task(app, move |app| open_dashboard_route_now(&app, route))
 }
 
-pub fn open_onboarding_window(app: &tauri::AppHandle) {
-    log::info!("[tray] onboarding window opened");
-    if let Some(window) = app.get_webview_window("onboarding") {
-        show_foreground_app(app);
-        focus_window(&window);
-    } else {
-        build_onboarding_window(app);
-    }
-    analytics::track(Event::OnboardingStarted);
-}
-
-fn open_settings_window(app: &tauri::AppHandle) {
-    log::info!("[tray] settings window opened");
-    analytics::track(Event::SettingsOpened);
-
-    if let Some(window) = app.get_webview_window("settings") {
-        show_foreground_app(app);
-        focus_window(&window);
-    } else {
-        build_settings_window(app);
-    }
-}
-
-fn run_window_task<F>(app: &tauri::AppHandle, task: F)
+fn run_window_task<F>(app: &tauri::AppHandle, task: F) -> Result<(), String>
 where
     F: FnOnce(tauri::AppHandle) + Send + 'static,
 {
     let app_handle = app.clone();
-    if let Err(e) = app.run_on_main_thread(move || task(app_handle)) {
-        log::warn!("[tray] window task scheduling failed: {}", e);
-    }
+    app.run_on_main_thread(move || task(app_handle))
+        .map_err(|error| format!("창 작업 예약 실패: {error}"))
 }
 
-fn build_tray_panel_window(app: &tauri::AppHandle) -> tauri::Result<()> {
-    if app.get_webview_window("tray-panel").is_some() {
-        return Ok(());
-    }
-
-    let builder = tauri::WebviewWindowBuilder::new(app, "tray-panel", tauri::WebviewUrl::App("tray-panel.html".into()))
-        .title("Jungle Bell")
-        .theme(Some(tauri::Theme::Light))
-        .inner_size(TRAY_PANEL_WIDTH, TRAY_PANEL_HEIGHT)
-        .resizable(false)
-        .minimizable(false)
-        .maximizable(false)
-        .closable(false)
-        .decorations(false)
-        .always_on_top(true)
-        .skip_taskbar(true)
-        // macOS 네이티브 그림자는 투명 WebView의 사각 창 경계를 따라가므로 끈다.
-        // 패널 모서리는 tray-panel.html의 투명 여백과 border-radius로 표현한다.
-        .shadow(false)
-        .transparent(true)
-        .visible(false)
-        .focused(false);
-
-    let window = builder.build()?;
-
-    let window_for_event = window.clone();
-    window.on_window_event(move |event| match event {
-        tauri::WindowEvent::CloseRequested { api, .. } => {
-            api.prevent_close();
-            let _ = window_for_event.hide();
-        }
-        tauri::WindowEvent::Focused(false) => {
-            let window = window_for_event.clone();
-            tauri::async_runtime::spawn(async move {
-                tokio::time::sleep(Duration::from_millis(TRAY_PANEL_HIDE_DELAY_MS)).await;
-                if matches!(window.is_focused(), Ok(false)) {
-                    let _ = window.hide();
-                }
-            });
-        }
-        _ => {}
-    });
-
-    Ok(())
-}
-
-fn toggle_tray_panel(
-    app: &tauri::AppHandle,
-    click_position: tauri::PhysicalPosition<f64>,
-    tray_rect: tauri::Rect,
-) -> Result<(), String> {
-    let window = app
-        .get_webview_window("tray-panel")
-        .ok_or_else(|| "트레이 패널 창을 찾지 못했습니다.".to_string())?;
-
-    if window
-        .is_visible()
-        .map_err(|error| format!("트레이 패널 표시 상태 확인 실패: {error}"))?
-    {
-        window
-            .hide()
-            .map_err(|error| format!("트레이 패널 숨김 실패: {error}"))?;
-        return Ok(());
-    }
-
-    // 멀티 모니터 좌표 처리 참고:
-    // - SwitchHosts 구현:
-    //   https://github.com/oldj/SwitchHosts/blob/master/src-tauri/src/tray.rs
-    // - 동일 증상을 수정한 SwitchHosts 커밋:
-    //   https://github.com/oldj/SwitchHosts/commit/cf3d22ce
-    // - Tauri 관련 이슈:
-    //   https://github.com/tauri-apps/tauri/issues/7139
-    //
-    // `monitor_from_point`는 macOS에서 논리 Quartz 좌표를 기대하지만,
-    // TrayIconEvent는 Retina 배율이 적용된 물리 좌표를 전달한다.
-    // 따라서 각 모니터의 물리 영역과 직접 비교해 클릭한 모니터를 찾는다.
-    let monitors = app
-        .available_monitors()
-        .map_err(|error| format!("모니터 목록 확인 실패: {error}"))?;
-    let monitor_geometries: Vec<_> = monitors
-        .iter()
-        .map(|monitor| {
-            let position = monitor.position();
-            let size = monitor.size();
-            MonitorGeometry {
-                bounds: PanelRect {
-                    x: position.x,
-                    y: position.y,
-                    width: size.width,
-                    height: size.height,
-                },
-            }
-        })
-        .collect();
-    let raw_anchor_position = tray_rect.position.to_physical::<f64>(1.0);
-    let raw_anchor_size = tray_rect.size.to_physical::<u32>(1.0);
-    let raw_anchor = PanelRect {
-        x: raw_anchor_position.x.round() as i32,
-        y: raw_anchor_position.y.round() as i32,
-        width: raw_anchor_size.width,
-        height: raw_anchor_size.height,
-    };
-    let selected_index = select_tray_monitor_index(
-        &monitor_geometries,
-        PanelPosition {
-            x: click_position.x.round() as i32,
-            y: click_position.y.round() as i32,
-        },
-        raw_anchor,
-    );
-    let monitor = selected_index
-        .and_then(|index| monitors.get(index).cloned())
-        .or_else(|| app.primary_monitor().ok().flatten())
-        .ok_or_else(|| "트레이가 있는 모니터를 찾지 못했습니다.".to_string())?;
-    let scale_factor = monitor.scale_factor();
-    let anchor_position = tray_rect.position.to_physical::<f64>(scale_factor);
-    let anchor_size = tray_rect.size.to_physical::<u32>(scale_factor);
-    let panel_size = panel_size_for_scale(scale_factor);
-    let work_area = monitor.work_area();
-    let gap = (TRAY_PANEL_GAP * scale_factor).round() as i32;
-
-    log::debug!(
-        "[tray-panel] monitor selected: index={selected_index:?} click=({:.0},{:.0}) anchor={raw_anchor:?} \
-         bounds=({},{},{}x{}) scale={scale_factor}",
-        click_position.x,
-        click_position.y,
-        monitor.position().x,
-        monitor.position().y,
-        monitor.size().width,
-        monitor.size().height,
-    );
-
-    let position = calculate_panel_position(
-        PanelRect {
-            x: anchor_position.x.round() as i32,
-            y: anchor_position.y.round() as i32,
-            width: anchor_size.width,
-            height: anchor_size.height,
-        },
-        panel_size,
-        PanelRect {
-            x: work_area.position.x,
-            y: work_area.position.y,
-            width: work_area.size.width,
-            height: work_area.size.height,
-        },
-        gap,
-    );
-
-    window
-        .set_position(PhysicalPosition::new(position.x, position.y))
-        .map_err(|error| format!("트레이 패널 위치 설정 실패: {error}"))?;
-    refresh_tray_panel(app);
-    window
-        .show()
-        .map_err(|error| format!("트레이 패널 표시 실패: {error}"))?;
-    window
-        .set_focus()
-        .map_err(|error| format!("트레이 패널 포커스 실패: {error}"))?;
-    Ok(())
-}
-
-pub fn hide_tray_panel(app: &tauri::AppHandle) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window("tray-panel") {
-        window
-            .hide()
-            .map_err(|error| format!("트레이 패널 숨김 실패: {error}"))?;
-    }
-    Ok(())
-}
-
-pub fn get_tray_panel_state(app: &tauri::AppHandle) -> Result<TrayPanelState, String> {
-    current_tray_panel_state(app)
-}
-
-pub fn run_tray_panel_action(app: &tauri::AppHandle, action: TrayPanelAction) -> Result<(), String> {
-    hide_tray_panel(app)?;
-
-    match action {
-        TrayPanelAction::OpenAttendance => run_window_task(app, |app| open_attendance_window(&app)),
-        TrayPanelAction::OpenLaundry => {
-            run_window_task(app, |app| open_dashboard_campus_route(&app, CampusTab::Laundry))
-        }
-        TrayPanelAction::OpenMeals => run_window_task(app, |app| open_dashboard_campus_route(&app, CampusTab::Meals)),
-        TrayPanelAction::OpenFeedback => {
-            analytics::track(Event::FeedbackOpened);
-            tauri_plugin_opener::open_url(FEEDBACK_URL, None::<&str>).map_err(|error| error.to_string())?;
-        }
-        TrayPanelAction::OpenSettings => run_window_task(app, |app| open_settings_window(&app)),
-        TrayPanelAction::CheckUpdate => {
-            let app = app.clone();
-            tauri::async_runtime::spawn(async move {
-                crate::updater::prompt_and_install_update(app, false).await;
-            });
-        }
-        TrayPanelAction::Quit => app.exit(0),
-    }
-
-    Ok(())
-}
-
-/// 시스템 트레이 생성: 상태 아이콘과 커스텀 패널 토글 이벤트를 설정한다.
+/// 시스템 트레이 생성: 상태 아이콘, 대시보드 열기, 종료를 설정한다.
 pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
-    let (initial_view, show_dday, pending_update) = {
+    let initial_view = {
         let state: tauri::State<Arc<TokioMutex<AppState>>> = app.state();
         let state = state.try_lock().map_err(|_| "초기 앱 상태 잠금 실패")?;
-        (
-            build_tray_view_model(&state.tray_snapshot(None), Utc::now()),
-            state.config.show_dday,
-            state.pending_update.clone(),
-        )
+        build_tray_view_model(&state.tray_snapshot(None), Utc::now())
     };
 
     let tray_state = TrayStateStore::new(TrayState {
         view: initial_view.clone(),
         icon_theme: TrayIconTheme::Light,
-        dday_visible: show_dday,
-        pending_update,
     });
     app.manage(tray_state);
-    build_tray_panel_window(app.handle())?;
+
+    let tray_menu = MenuBuilder::new(app)
+        .text(TRAY_MENU_OPEN_ID, "대시보드 열기")
+        .separator()
+        .text(TRAY_MENU_QUIT_ID, "종료")
+        .build()?;
 
     let _tray = TrayIconBuilder::with_id("main-tray")
         .icon(icon_for_kind(initial_view.icon, TrayIconTheme::Light))
         .icon_as_template(false)
         .tooltip("Jungle Bell - 상태 확인 중...")
+        .menu(&tray_menu)
         .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match tray_menu_action(event.id().as_ref()) {
+            Some(TrayMenuAction::OpenDashboard) => open_dashboard_window(app),
+            Some(TrayMenuAction::Quit) => app.exit(0),
+            None => {}
+        })
         .on_tray_icon_event(|tray, event| {
             if let TrayIconEvent::Click {
-                position,
-                rect,
-                button,
-                button_state,
-                ..
+                button, button_state, ..
             } = event
             {
-                let supported_button = matches!(button, MouseButton::Left | MouseButton::Right);
-                if supported_button && button_state == MouseButtonState::Up {
-                    if let Err(error) = toggle_tray_panel(tray.app_handle(), position, rect) {
-                        log::warn!("[tray-panel] toggle failed: {error}");
-                    }
+                if tray_click_opens_dashboard(button, button_state) {
+                    open_dashboard_window(tray.app_handle());
                 }
             }
         })
@@ -1330,28 +742,12 @@ pub fn sync_icon_theme(app: &tauri::AppHandle, system_theme: tauri::Theme) -> Re
     Ok(())
 }
 
-pub fn sync_dday_panel_visibility(app: &tauri::AppHandle, visible: bool) -> Result<(), String> {
-    let tray_state: tauri::State<TrayStateStore> = app.state();
-    if let Some(panel_state) = tray_state.set_dday_visible(visible, app.package_info().version.to_string())? {
-        emit_tray_panel_state(app, panel_state);
-    }
-    Ok(())
-}
-
-/// 커스텀 트레이 패널의 업데이트 알림 상태를 갱신한다.
-pub fn update_tray_version(app: &tauri::AppHandle, pending_update: Option<String>) -> Result<(), String> {
-    let tray_state: tauri::State<TrayStateStore> = app.state();
-    let panel_state = tray_state.set_pending_update(pending_update, app.package_info().version.to_string())?;
-    emit_tray_panel_state(app, panel_state);
-    Ok(())
-}
-
-/// 트레이 아이콘, 툴팁, 커스텀 패널 상태를 갱신한다.
+/// 트레이 아이콘, 툴팁, 대시보드 홈의 로컬 출석 projection을 갱신한다.
 /// 스케줄러(주기적)와 체커(보고 시) 양쪽에서 호출됨.
 pub fn update_tray(app: &tauri::AppHandle, snapshot: &TraySnapshot) -> Result<(), String> {
     let view = build_tray_view_model(snapshot, Utc::now());
     let tray_state: tauri::State<TrayStateStore> = app.state();
-    let panel_state = tray_state.set_view(view.clone(), app.package_info().version.to_string())?;
+    tray_state.set_view(view.clone())?;
 
     if let Err(error) = tray_state.apply_current_icon(app) {
         log::warn!("[tray] icon update failed: {error}");
@@ -1361,8 +757,6 @@ pub fn update_tray(app: &tauri::AppHandle, snapshot: &TraySnapshot) -> Result<()
             log::warn!("[tray] tooltip update failed: {error}");
         }
     }
-
-    emit_tray_panel_state(app, panel_state);
     Ok(())
 }
 
@@ -1374,27 +768,6 @@ mod tests {
     const EXPECTED_TRAY_ICON_SIZE: u32 = 36;
     #[cfg(not(target_os = "macos"))]
     const EXPECTED_TRAY_ICON_SIZE: u32 = 48;
-
-    #[test]
-    fn 출석창_기수_동기화는_lms_origin과_로컬스토리지_key를_고정한다() {
-        let script = attendance_cohort_storage_script(Some("cohort-1"));
-
-        assert!(script.contains(r#"window.location.origin !== "https://jungle-lms.krafton.com""#));
-        assert!(script.contains(r#"const key = "selected_cohort_id""#));
-        assert!(script.contains(r#"const nextId = "cohort-1""#));
-        assert!(script.contains("JSON.stringify(nextId)"));
-        assert!(script.contains("window.localStorage.setItem(key, next)"));
-        assert!(script.contains("window.location.reload()"));
-    }
-
-    #[test]
-    fn 출석창_기수_동기화_script는_id를_json으로_escape한다() {
-        let script = attendance_cohort_storage_script(Some("cohort\";window.injected=true;//"));
-
-        assert!(script.contains(r#"const nextId = "cohort\";window.injected=true;//""#));
-        assert!(!script.contains(r#"const nextId = "cohort";window.injected=true"#));
-        assert!(attendance_cohort_storage_script(None).contains("const nextId = null"));
-    }
 
     fn snapshot(
         phase: DailyPhase,
@@ -1475,13 +848,6 @@ mod tests {
         (0..image.height() / 2)
             .find(|&y| rgba_at(image, center, y)[3] == 255)
             .expect("opaque tray icon plate is missing")
-    }
-
-    #[test]
-    fn 앱_아이콘_설정과_전면_창_상태로_macos_노출_여부를_결정한다() {
-        assert!(should_show_foreground_app(true, false));
-        assert!(should_show_foreground_app(false, true));
-        assert!(!should_show_foreground_app(false, false));
     }
 
     #[test]
@@ -1651,8 +1017,6 @@ mod tests {
         let store = TrayStateStore::new(TrayState {
             view,
             icon_theme: TrayIconTheme::Light,
-            dday_visible: true,
-            pending_update: None,
         });
 
         assert!(store.set_icon_theme(TrayIconTheme::Dark).unwrap());
@@ -1664,15 +1028,18 @@ mod tests {
     }
 
     #[test]
-    fn 앱_아이콘_설정을_windows_skip_taskbar_값으로_변환한다() {
-        assert!(!should_skip_windows_taskbar(true));
-        assert!(should_skip_windows_taskbar(false));
-    }
-
-    #[test]
     fn 이미지_창은_넓은_기본_크기로_열린다() {
         assert_eq!(IMAGE_VIEWER_WIDTH, 1120.0);
         assert_eq!(IMAGE_VIEWER_HEIGHT, 840.0);
+    }
+
+    #[test]
+    fn 대시보드는_닫을때_숨기고_기존_창을_재사용한다() {
+        let source = include_str!("tray.rs");
+        assert!(source.contains("tauri::WindowEvent::CloseRequested { api, .. }"));
+        assert!(source.contains("api.prevent_close()"));
+        assert!(source.contains("window_for_event.hide()"));
+        assert!(source.contains("if let Some(window) = app.get_webview_window(\"dashboard\")"));
     }
 
     // --- TrayViewModel ---
@@ -1966,144 +1333,83 @@ mod tests {
     }
 
     #[test]
-    fn 트레이_패널_액션은_허용된_값만_역직렬화한다() {
-        let action: TrayPanelAction = serde_json::from_str("\"open_laundry\"").unwrap();
-        assert_eq!(action, TrayPanelAction::OpenLaundry);
-        let feedback: TrayPanelAction = serde_json::from_str("\"open_feedback\"").unwrap();
-        assert_eq!(feedback, TrayPanelAction::OpenFeedback);
-        let quit: TrayPanelAction = serde_json::from_str("\"quit\"").unwrap();
-        assert_eq!(quit, TrayPanelAction::Quit);
-        assert!(serde_json::from_str::<TrayPanelAction>("\"open_shell\"").is_err());
+    fn 트레이_왼쪽_클릭_up만_대시보드_홈을_연다() {
+        assert!(tray_click_opens_dashboard(MouseButton::Left, MouseButtonState::Up));
+        assert!(!tray_click_opens_dashboard(MouseButton::Right, MouseButtonState::Up));
+        assert!(!tray_click_opens_dashboard(MouseButton::Middle, MouseButtonState::Up));
+        assert!(!tray_click_opens_dashboard(MouseButton::Left, MouseButtonState::Down));
+        assert!(!tray_click_opens_dashboard(MouseButton::Right, MouseButtonState::Down));
     }
 
     #[test]
-    fn 대시보드_생활정보는_hash_route_계약을_사용한다() {
-        assert_eq!(dashboard_app_url(None), "dashboard.html");
-        assert_eq!(dashboard_app_url(Some(CampusTab::Laundry)), "dashboard.html#laundry");
-        assert_eq!(dashboard_app_url(Some(CampusTab::Meals)), "dashboard.html#meals");
+    fn 네이티브_트레이_메뉴는_대시보드_열기와_종료만_제공한다() {
+        assert_eq!(tray_menu_action(TRAY_MENU_OPEN_ID), Some(TrayMenuAction::OpenDashboard));
+        assert_eq!(tray_menu_action(TRAY_MENU_QUIT_ID), Some(TrayMenuAction::Quit));
+        assert_eq!(tray_menu_action("unknown"), None);
     }
 
     #[test]
-    fn 상단_트레이_패널은_아이콘_아래_중앙에_배치한다() {
-        let position = calculate_panel_position(
-            PanelRect {
-                x: 900,
-                y: 0,
-                width: 24,
-                height: 24,
-            },
-            PanelSize {
-                width: 380,
-                height: 620,
-            },
-            PanelRect {
-                x: 0,
-                y: 24,
-                width: 1920,
-                height: 1056,
-            },
-            8,
-        );
-
-        assert_eq!(position, PanelPosition { x: 722, y: 32 });
-    }
-
-    #[test]
-    fn 하단_트레이_패널은_아이콘_위에_열리고_화면_우측을_넘지_않는다() {
-        let position = calculate_panel_position(
-            PanelRect {
-                x: 1840,
-                y: 1040,
-                width: 24,
-                height: 40,
-            },
-            PanelSize {
-                width: 380,
-                height: 620,
-            },
-            PanelRect {
-                x: 0,
-                y: 0,
-                width: 1920,
-                height: 1040,
-            },
-            8,
-        );
-
-        assert_eq!(position, PanelPosition { x: 1532, y: 412 });
-    }
-
-    fn mixed_scale_monitors() -> [MonitorGeometry; 2] {
-        [
-            MonitorGeometry {
-                bounds: PanelRect {
-                    x: 0,
-                    y: 0,
-                    width: 3024,
-                    height: 1964,
-                },
-            },
-            MonitorGeometry {
-                bounds: PanelRect {
-                    x: 3024,
-                    y: 0,
-                    width: 1920,
-                    height: 1080,
-                },
-            },
-        ]
-    }
-
-    #[test]
-    fn 혼합배율에서_외장모니터의_트레이를_선택한다() {
-        let monitors = mixed_scale_monitors();
-        let selected = select_tray_monitor_index(
-            &monitors,
-            PanelPosition { x: 3412, y: 12 },
-            PanelRect {
-                x: 3400,
-                y: 0,
-                width: 24,
-                height: 24,
-            },
-        );
-
-        assert_eq!(selected, Some(1));
-    }
-
-    #[test]
-    fn 혼합배율에서_내장모니터의_트레이를_선택한다() {
-        let monitors = mixed_scale_monitors();
-        let selected = select_tray_monitor_index(
-            &monitors,
-            PanelPosition { x: 2004, y: 24 },
-            PanelRect {
-                x: 1980,
-                y: 0,
-                width: 48,
-                height: 48,
-            },
-        );
-
-        assert_eq!(selected, Some(0));
-    }
-
-    #[test]
-    fn 패널_물리크기는_대상모니터_배율을_따른다() {
+    fn 대시보드_홈과_알림_이동은_고정된_hash_route를_사용한다() {
+        assert_eq!(dashboard_app_url(DashboardRoute::Home), "dashboard.html#home");
         assert_eq!(
-            panel_size_for_scale(1.0),
-            PanelSize {
-                width: 390,
-                height: 640,
-            }
+            dashboard_app_url(DashboardRoute::Attendance),
+            "dashboard.html#attendance"
         );
+        assert_eq!(dashboard_app_url(DashboardRoute::Laundry), "dashboard.html#laundry");
+        assert_eq!(dashboard_app_url(DashboardRoute::Meals), "dashboard.html#meals");
+    }
+
+    #[test]
+    fn 대시보드_홈_overview는_현재_camel_case_dto만_직렬화한다() {
+        let overview = DashboardHomeOverview {
+            attendance: DashboardAttendanceSummary {
+                status: TrayStatusKind::Active,
+                status_text: "학습 중".into(),
+                dday_text: Some("수료까지 D-14".into()),
+                dday_period: Some(CohortPeriod {
+                    start_date: NaiveDate::from_ymd_opt(2026, 8, 1).unwrap(),
+                    end_date: NaiveDate::from_ymd_opt(2026, 12, 31).unwrap(),
+                }),
+                current_version: "0.5.0".into(),
+            },
+            lms_session_state: crate::remote_sync::LmsSessionState::Connected,
+            unread_count: 2,
+            laundry: Some(serde_json::json!({ "available": 1 })),
+            meals: None,
+        };
+
         assert_eq!(
-            panel_size_for_scale(2.0),
-            PanelSize {
-                width: 780,
-                height: 1280,
-            }
+            serde_json::to_value(overview).unwrap(),
+            serde_json::json!({
+                "attendance": {
+                    "status": "active",
+                    "statusText": "학습 중",
+                    "ddayText": "수료까지 D-14",
+                    "ddayPeriod": {
+                        "startDate": "2026-08-01",
+                        "endDate": "2026-12-31"
+                    },
+                    "currentVersion": "0.5.0"
+                },
+                "lmsSessionState": "connected",
+                "unreadCount": 2,
+                "laundry": { "available": 1 },
+                "meals": null
+            })
         );
+    }
+
+    #[test]
+    fn 트레이_패널_webview는_생성하지_않는다() {
+        let source = include_str!("tray.rs");
+        let removed_label = ["tray", "panel"].join("-");
+        let removed_toggle = ["toggle", "tray", "panel"].join("_");
+        assert!(!source.contains(&format!("\"{removed_label}\"")));
+        assert!(!source.contains(&format!("{removed_label}.html")));
+        assert!(!source.contains(&removed_toggle));
+        assert!(source.contains("open_dashboard_window(tray.app_handle())"));
+        assert!(source.contains(".show_menu_on_left_click(false)"));
+        assert!(source.contains(".menu(&tray_menu)"));
     }
 
     #[test]
@@ -2115,19 +1421,16 @@ mod tests {
         let store = Arc::new(TrayStateStore::new(TrayState {
             view: initial_view,
             icon_theme: TrayIconTheme::Light,
-            dday_visible: true,
-            pending_update: None,
         }));
         let held_guard = store.state.lock().unwrap();
         let (started_tx, started_rx) = mpsc::channel();
         let (finished_tx, finished_rx) = mpsc::channel();
         let worker_store = store.clone();
+        let updated_view = build_tray_view_model(&healthy_snapshot(DailyPhase::Complete, None, false), Utc::now());
 
         let worker = std::thread::spawn(move || {
             started_tx.send(()).unwrap();
-            finished_tx
-                .send(worker_store.set_pending_update(Some("0.5.0".into()), "0.4.4".into()))
-                .unwrap();
+            finished_tx.send(worker_store.set_view(updated_view)).unwrap();
         });
 
         started_rx.recv_timeout(Duration::from_secs(1)).unwrap();
@@ -2137,12 +1440,11 @@ mod tests {
         );
         drop(held_guard);
 
-        let panel = finished_rx.recv_timeout(Duration::from_secs(1)).unwrap().unwrap();
+        finished_rx.recv_timeout(Duration::from_secs(1)).unwrap().unwrap();
         worker.join().unwrap();
-        assert_eq!(panel.pending_update.as_deref(), Some("0.5.0"));
         assert_eq!(
-            store.panel_state("0.4.4".into()).unwrap().pending_update.as_deref(),
-            Some("0.5.0")
+            store.dashboard_attendance_summary("0.5.0".into()).unwrap().status,
+            TrayStatusKind::Complete
         );
     }
 }

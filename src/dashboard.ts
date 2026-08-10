@@ -1,10 +1,11 @@
 import Alpine from 'alpinejs';
 import {invoke} from '@tauri-apps/api/core';
 import {listen, type UnlistenFn} from '@tauri-apps/api/event';
+import packageMetadata from '../package.json';
 import {
     createDashboardApi,
     parseDashboardLaundrySnapshot,
-    safeMealPermalink,
+    parseDashboardMealsSnapshot,
     type AttendanceDashboard,
     type AttendanceSnapshot,
     type DashboardLaundryAppliance,
@@ -14,11 +15,17 @@ import {
     type DashboardNotification,
     type DesktopConnectionState,
     type DesktopDevice,
+    type DashboardHomeOverview,
     type MobilePairingCreated,
     type MobilePairingStatus,
     type MobileSession,
     type PairingClaim,
 } from './dashboard-api';
+import {
+    dashboardDdayLabel,
+    dashboardDdayPeriod,
+} from './dashboard-home';
+import {buildDdayProgress, kstDateString} from './dday-progress';
 import {
     attendanceHeadline,
     companionAuthenticationRequired,
@@ -31,11 +38,28 @@ import {
     type DashboardRoute,
     type DashboardSurface,
 } from './dashboard-model';
+import {
+    dashboardNavigationRoutes,
+    dashboardRouteTitle,
+    dashboardSurfaceBadge,
+    dashboardSurfaceFooter,
+} from './dashboard-presentation';
 import {pairingQrDataUrl} from './dashboard-qr';
+import {detectDashboardRuntime} from './dashboard-runtime';
 import {
     createMobileInstallationIdProvider,
     MOBILE_INSTALLATION_KEY,
 } from './dashboard-installation';
+import {createDashboardPersonalActions} from './dashboard-personal-controller';
+import {initialDashboardPersonalState} from './dashboard-personal-state';
+import type {DesktopSettings} from './dashboard-desktop-settings';
+import {
+    clearPendingMobilePairing,
+    PENDING_MOBILE_PAIRING_TTL_MS,
+    readPendingMobilePairing,
+    storePendingMobilePairing,
+    type PendingMobilePairing,
+} from './dashboard-pending-pairing';
 import {laundrySituationDataIsReliable} from './laundry-situation';
 import {
     laundryAvailabilityState,
@@ -66,11 +90,6 @@ interface CampusError {
     message: string;
 }
 
-interface PendingMobilePairing {
-    pairingId: string;
-    claim: PairingClaim;
-}
-
 interface PairingLink {
     pairingId: string;
     challenge: string;
@@ -82,6 +101,7 @@ interface DeferredInstallPrompt extends Event {
 }
 
 const api = createDashboardApi();
+const personalActions = createDashboardPersonalActions(api);
 const PERSONAL_REFRESH_MS = 60_000;
 const LAUNDRY_REFRESH_MS = 30_000;
 const MEALS_REFRESH_MS = 5 * 60_000;
@@ -96,15 +116,6 @@ function readSeenMobileNotificationIds(): string[] {
     } catch {
         return [];
     }
-}
-
-function runningInTauri(): boolean {
-    return '__TAURI_INTERNALS__' in window;
-}
-
-function runningStandalone(): boolean {
-    const iosStandalone = (navigator as Navigator & {standalone?: boolean}).standalone === true;
-    return iosStandalone || window.matchMedia('(display-mode: standalone)').matches;
 }
 
 function pairingLinkFromLocation(): PairingLink | null {
@@ -141,37 +152,12 @@ function normalizeLaundrySnapshot(value: unknown): DashboardLaundrySnapshot | nu
     }
 }
 
-function normalizeMealPost(value: unknown): DashboardMealPost | null {
-    const post = asRecord(value);
-    if (!post || typeof post.id !== 'string' || typeof post.text !== 'string') return null;
-    return {
-        id: post.id,
-        title: typeof post.title === 'string' ? post.title : null,
-        text: post.text,
-        publishedAt: typeof post.publishedAt === 'string' ? post.publishedAt : null,
-        permalink: safeMealPermalink(post.permalink),
-    };
-}
-
 function normalizeMealsSnapshot(value: unknown): DashboardMealsSnapshot | null {
-    const source = asRecord(value);
-    const data = asRecord(source?.data);
-    if (!source || !data) return null;
-    const posts = (candidate: unknown): DashboardMealPost[] => Array.isArray(candidate)
-        ? candidate.flatMap((entry) => {
-            const post = normalizeMealPost(entry);
-            return post ? [post] : [];
-        })
-        : [];
-    return {
-        asOf: typeof source.asOf === 'string' ? source.asOf : new Date().toISOString(),
-        lastCheckedAt: typeof source.lastCheckedAt === 'string' ? source.lastCheckedAt : null,
-        data: {
-            dailyMenus: posts(data.dailyMenus),
-            pinnedMenus: posts(data.pinnedMenus),
-            recentMenus: posts(data.recentMenus ?? data.otherPosts),
-        },
-    };
+    try {
+        return parseDashboardMealsSnapshot(value);
+    } catch {
+        return null;
+    }
 }
 
 const mobileInstallationId = createMobileInstallationIdProvider({
@@ -193,14 +179,17 @@ function urlBase64ToBytes(value: string): ArrayBuffer {
 }
 
 function dashboard(): Record<string, any> {
-    const tauri = runningInTauri();
+    const runtime = detectDashboardRuntime();
+    const tauri = runtime.runningInTauri;
     const pairingLink = pairingLinkFromLocation();
     const initialSurface = resolveDashboardSurface({
         runningInTauri: tauri,
-        standalone: runningStandalone(),
+        standalone: runtime.standalone,
     });
 
     return {
+        ...initialDashboardPersonalState(),
+        ...personalActions,
         activeRoute: pairingLink && initialSurface.kind !== 'public'
             ? 'connections'
             : dashboardRouteForSurface(window.location.hash, initialSurface.kind) as DashboardRoute,
@@ -213,7 +202,15 @@ function dashboard(): Record<string, any> {
         attendanceFreshness: 'missing' as 'fresh' | 'stale' | 'missing',
         attendanceDevices: [] as DesktopDevice[],
         desktopConnection: null as DesktopConnectionState | null,
+        dashboardHomeOverview: null as DashboardHomeOverview | null,
+        dashboardHomeOverviewState: 'loading' as ResourceState,
+        appVersion: packageMetadata.version,
+        desktopSettings: null as DesktopSettings | null,
+        desktopSettingsState: 'loading' as ResourceState,
+        desktopSettingsBusy: false,
+        desktopSettingsMessage: '',
         syncBusy: false,
+        identityResetBusy: false,
         laundryState: 'loading' as ResourceState,
         laundryMachines: [] as DashboardLaundryMachine[],
         laundryCapacityView: {men: null, women: null} as {men: number | null; women: number | null},
@@ -257,6 +254,12 @@ function dashboard(): Record<string, any> {
         pairingStatusInFlight: false,
         hashHandler: null as (() => void) | null,
         installPromptHandler: null as ((event: Event) => void) | null,
+
+        get homeDdayProgress() {
+            const period = this.dashboardHomeOverview?.attendance.ddayPeriod
+                ?? (this.attendanceSnapshot ? dashboardDdayPeriod(this.attendanceSnapshot) : null);
+            return period ? buildDdayProgress(period, kstDateString()) : null;
+        },
 
         async init(this: any) {
             this.hashHandler = () => {
@@ -308,6 +311,9 @@ function dashboard(): Record<string, any> {
             if (pairingLink && this.surface.kind === 'companion') {
                 window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#connections`);
                 await this.claimQrLink(pairingLink);
+            } else if (this.surface.kind === 'companion' && this.restorePendingMobilePairing()) {
+                this.activeRoute = 'connections';
+                window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#connections`);
             } else if (pairingLink) {
                 this.activeRoute = 'home';
                 window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#home`);
@@ -341,6 +347,10 @@ function dashboard(): Record<string, any> {
             this.resetScrollPosition();
         },
 
+        navigationRouteVisible(this: any, route: DashboardRoute) {
+            return dashboardNavigationRoutes(this.surface.kind).includes(route);
+        },
+
         resetScrollPosition() {
             window.requestAnimationFrame(() => {
                 document.documentElement.scrollTop = 0;
@@ -350,14 +360,7 @@ function dashboard(): Record<string, any> {
 
         routeTitle(_this: any, route?: DashboardRoute) {
             const current = route ?? _this;
-            return ({
-                home: '오늘',
-                attendance: '출석',
-                laundry: '세탁',
-                meals: '급식',
-                notifications: '알림',
-                connections: 'PC 연결',
-            } as Record<DashboardRoute, string>)[current as DashboardRoute] ?? '홈';
+            return dashboardRouteTitle(current as DashboardRoute);
         },
 
         async initializeCampusData(this: any) {
@@ -436,6 +439,7 @@ function dashboard(): Record<string, any> {
                 });
             this.laundryCapacityView = laundryCapacity(snapshot.capacity, reliable);
             this.laundryState = 'loaded';
+            this.ensureLaundryTargetSelection();
         },
 
         async loadMeals(this: any, manual = false) {
@@ -467,10 +471,13 @@ function dashboard(): Record<string, any> {
         async initializePersonalData(this: any) {
             if (this.surface.kind === 'desktop') {
                 await Promise.allSettled([
+                    this.loadDashboardHomeOverview(),
                     this.loadDesktopConnection(),
+                    this.loadDesktopSettings(),
                     this.refreshAttendance(),
                     this.loadSessions(),
                     this.loadDesktopNotificationInbox(),
+                    this.loadPersonalControls(),
                 ]);
                 return;
             }
@@ -478,6 +485,7 @@ function dashboard(): Record<string, any> {
                 await Promise.allSettled([
                     this.refreshAttendance(),
                     this.loadNotifications(),
+                    this.loadPersonalControls(),
                 ]);
                 return;
             }
@@ -486,14 +494,81 @@ function dashboard(): Record<string, any> {
             this.sessionsState = 'loaded';
         },
 
+        async loadDashboardHomeOverview(this: any) {
+            if (this.surface.kind !== 'desktop') return;
+            if (!this.dashboardHomeOverview) this.dashboardHomeOverviewState = 'loading';
+            try {
+                this.dashboardHomeOverview = await api.getDashboardHomeOverview();
+                this.appVersion = this.dashboardHomeOverview.attendance.currentVersion;
+                this.dashboardHomeOverviewState = 'loaded';
+            } catch (error) {
+                console.error('[dashboard] home overview load failed', error);
+                if (!this.dashboardHomeOverview) this.dashboardHomeOverviewState = 'error';
+            }
+        },
+
         async loadDesktopConnection(this: any) {
             try {
                 this.desktopConnection = await api.getDesktopConnectionState();
             } catch (error) {
                 console.error('[dashboard] desktop connection load failed', error);
                 this.desktopConnection = {
-                    state: 'unknown', desktopId: null, lastVerifiedAt: null, lastSeenAt: null, health: null,
+                    state: 'unknown', desktopId: null, lastVerifiedAt: null, lastSeenAt: null,
+                    health: null, lmsSessionState: 'unknown',
                 };
+            }
+        },
+
+        async loadDesktopSettings(this: any) {
+            if (this.surface.kind !== 'desktop') return;
+            if (!this.desktopSettings) this.desktopSettingsState = 'loading';
+            try {
+                this.desktopSettings = await api.getDesktopSettings();
+                this.desktopSettingsState = 'loaded';
+            } catch (error) {
+                console.error('[dashboard] desktop settings load failed', error);
+                if (!this.desktopSettings) this.desktopSettingsState = 'error';
+            }
+        },
+
+        async updateAutoStart(this: any, checked: boolean) {
+            if (this.surface.kind !== 'desktop' || typeof checked !== 'boolean' || this.desktopSettingsBusy) return;
+            this.desktopSettingsBusy = true;
+            this.desktopSettingsMessage = '';
+            try {
+                this.desktopSettings = await api.updateDesktopSettings({autoStart: checked});
+                this.desktopSettingsState = 'loaded';
+                this.desktopSettingsMessage = checked
+                    ? 'PC 로그인 시 Jungle Bell을 자동으로 실행합니다.'
+                    : '자동 실행을 끄었습니다.';
+            } catch (error) {
+                console.error('[dashboard] desktop settings update failed', error);
+                this.desktopSettingsMessage = '자동 실행 설정을 변경하지 못했어요.';
+            } finally {
+                this.desktopSettingsBusy = false;
+            }
+        },
+
+        async resetDesktopIdentity(this: any) {
+            if (this.identityResetBusy || !window.confirm(
+                '이 PC의 Jungle Bell 연결 정보를 새로 만들까요? 기존 모바일 연결은 다시 연결해야 합니다.',
+            )) return;
+            this.identityResetBusy = true;
+            try {
+                this.desktopConnection = await api.resetDesktopIdentity();
+                this.desktopPairing = null;
+                this.desktopPairingStatus = null;
+                await Promise.allSettled([
+                    this.refreshAttendance(),
+                    this.loadSessions(),
+                    this.loadPersonalControls(),
+                ]);
+                this.showToast('새 PC 연결 정보를 만들었어요. 모바일을 다시 연결해 주세요.');
+            } catch (error) {
+                console.error('[dashboard] desktop identity reset failed', error);
+                this.showToast('PC 연결 정보를 초기화하지 못했어요.');
+            } finally {
+                this.identityResetBusy = false;
             }
         },
 
@@ -543,7 +618,11 @@ function dashboard(): Record<string, any> {
             this.syncBusy = true;
             try {
                 await api.refreshPlatformSync();
-                await Promise.allSettled([this.loadDesktopConnection(), this.refreshAttendance()]);
+                await Promise.allSettled([
+                    this.loadDashboardHomeOverview(),
+                    this.loadDesktopConnection(),
+                    this.refreshAttendance(),
+                ]);
                 this.showToast('최신 상태를 확인했어요.');
             } catch (error) {
                 console.error('[dashboard] platform sync failed', error);
@@ -837,11 +916,18 @@ function dashboard(): Record<string, any> {
                 challenge: link.challenge,
                 deviceLabel: mobileDeviceLabel(),
                 installationId: mobileInstallationId(),
-            }));
+            }), link.pairingId);
         },
 
-        async claimMobilePairing(this: any, claimRequest: () => Promise<PairingClaim>) {
+        async claimMobilePairing(
+            this: any,
+            claimRequest: () => Promise<PairingClaim>,
+            requestedPairingId?: string,
+        ) {
             if (this.pairingBusy) return;
+            if (this.mobilePairingTimer !== null) window.clearTimeout(this.mobilePairingTimer);
+            this.mobilePairingTimer = null;
+            this.clearPendingMobilePairing();
             this.pairingBusy = true;
             this.mobilePairingState = 'claiming';
             this.mobilePairingMessage = '';
@@ -849,7 +935,16 @@ function dashboard(): Record<string, any> {
                 const installationId = mobileInstallationId();
                 const claim = await claimRequest();
                 this.mobileConfirmationCode = installationId.slice(-4).toUpperCase();
-                this.pendingMobilePairing = {pairingId: claim.claimId, claim};
+                this.pendingMobilePairing = {
+                    pairingId: requestedPairingId ?? claim.claimId,
+                    claimId: claim.claimId,
+                    createdAtEpochMs: Date.now(),
+                };
+                try {
+                    storePendingMobilePairing(window.sessionStorage, this.pendingMobilePairing);
+                } catch (error) {
+                    console.warn('[dashboard] pending pairing session storage unavailable', error);
+                }
                 this.mobilePairingState = 'waiting';
                 this.scheduleMobileCompletion(0);
             } catch (error) {
@@ -870,25 +965,61 @@ function dashboard(): Record<string, any> {
             this.mobilePairingTimer = window.setTimeout(() => void this.pollMobileCompletion(), delay);
         },
 
+        restorePendingMobilePairing(this: any): boolean {
+            let pending: PendingMobilePairing | null = null;
+            try {
+                pending = readPendingMobilePairing(window.sessionStorage, Date.now());
+            } catch (error) {
+                console.warn('[dashboard] pending pairing session storage unavailable', error);
+            }
+            if (!pending) return false;
+            if (this.attendanceState !== 'auth-required') {
+                this.clearPendingMobilePairing();
+                return false;
+            }
+            this.pendingMobilePairing = pending;
+            this.mobileConfirmationCode = mobileInstallationId().slice(-4).toUpperCase();
+            this.mobilePairingState = 'waiting';
+            this.mobilePairingMessage = '';
+            this.scheduleMobileCompletion(0);
+            return true;
+        },
+
+        clearPendingMobilePairing(this: any) {
+            this.pendingMobilePairing = null;
+            try {
+                clearPendingMobilePairing(window.sessionStorage);
+            } catch (error) {
+                console.warn('[dashboard] pending pairing session storage unavailable', error);
+            }
+        },
+
         async pollMobileCompletion(this: any) {
             const pending = this.pendingMobilePairing;
             if (!pending || this.mobilePairingState !== 'waiting') return;
+            if (Date.now() - pending.createdAtEpochMs >= PENDING_MOBILE_PAIRING_TTL_MS) {
+                this.clearPendingMobilePairing();
+                this.mobilePairingState = 'expired';
+                this.mobilePairingMessage = '연결 요청이 만료됐어요. PC에서 새 코드를 만들어 주세요.';
+                return;
+            }
             try {
-                const result = await api.completePairing(pending.pairingId, pending.claim);
+                const result = await api.completePairing(pending.pairingId);
                 if (result === 'waiting') {
                     this.scheduleMobileCompletion(1_000);
                     return;
                 }
-                this.pendingMobilePairing = null;
+                this.clearPendingMobilePairing();
                 this.mobilePairingState = 'completed';
                 await Promise.allSettled([
                     this.refreshAttendance(),
                     this.loadNotifications(),
+                    this.loadPersonalControls(),
                 ]);
             } catch (error) {
                 console.error('[dashboard] mobile pairing completion failed', error);
-                if (error instanceof Error && /EXPIRED|NOT_FOUND|RECEIPT|ALREADY_USED/u.test(error.message)) {
-                    this.pendingMobilePairing = null;
+                if (error instanceof Error && /EXPIRED|NOT_FOUND|CLAIM|ALREADY_USED/u.test(error.message)) {
+                    this.clearPendingMobilePairing();
                     this.mobilePairingState = /EXPIRED/u.test(error.message) ? 'expired' : 'error';
                     this.mobilePairingMessage = '연결 요청을 완료할 수 없어요. PC에서 새 코드를 만들어 주세요.';
                     return;
@@ -903,6 +1034,11 @@ function dashboard(): Record<string, any> {
                 await api.disconnectMobileSession();
                 this.attendanceState = 'auth-required';
                 this.notificationState = 'auth-required';
+                this.personalControlsState = 'auth-required';
+                this.attendancePreferences = null;
+                this.mealPreferences = null;
+                this.laundryWatches = [];
+                this.laundryQueue = [];
                 this.notifications = [];
                 this.selectRoute('connections');
                 this.showToast('이 기기의 연결을 해제했어요.');
@@ -914,9 +1050,13 @@ function dashboard(): Record<string, any> {
 
         startRefreshTimers(this: any) {
             this.personalRefreshTimer = window.setInterval(() => {
-                if (this.surface.kind === 'desktop') void this.loadDesktopConnection();
+                if (this.surface.kind === 'desktop') {
+                    void this.loadDashboardHomeOverview();
+                    void this.loadDesktopConnection();
+                }
                 void this.refreshAttendance();
                 void this.loadNotifications();
+                void this.refreshLaundryPersonalControls(false);
             }, PERSONAL_REFRESH_MS);
             this.laundryRefreshTimer = window.setInterval(() => void this.loadLaundry(false), LAUNDRY_REFRESH_MS);
             this.mealsRefreshTimer = window.setInterval(() => void this.loadMeals(false), MEALS_REFRESH_MS);
@@ -924,11 +1064,14 @@ function dashboard(): Record<string, any> {
 
         async recoverOnline(this: any) {
             await Promise.allSettled([
-                ...(this.surface.kind === 'desktop' ? [this.loadDesktopConnection()] : []),
+                ...(this.surface.kind === 'desktop'
+                    ? [this.loadDashboardHomeOverview(), this.loadDesktopConnection()]
+                    : []),
                 this.loadLaundry(false),
                 this.loadMeals(false),
                 this.refreshAttendance(),
                 this.loadNotifications(),
+                this.loadPersonalControls(true),
             ]);
         },
 
@@ -983,6 +1126,9 @@ function dashboard(): Record<string, any> {
 
         homeAttendanceLabel(this: any) {
             if (this.surface.kind === 'public') return '앱에서 확인';
+            if (this.surface.kind === 'desktop' && this.dashboardHomeOverview) {
+                return this.dashboardHomeOverview.attendance.statusText;
+            }
             if (this.attendanceState === 'loading') return '확인 중';
             if (this.attendanceState === 'auth-required') return 'PC 연결 필요';
             if (this.attendanceState === 'unavailable') return '동기화 대기';
@@ -992,9 +1138,61 @@ function dashboard(): Record<string, any> {
 
         homeAttendanceTone(this: any) {
             if (this.surface.kind === 'public' || this.attendanceState === 'loading') return 'neutral';
+            const localStatus = this.surface.kind === 'desktop'
+                ? this.dashboardHomeOverview?.attendance.status
+                : null;
+            if (localStatus === 'complete') return 'success';
+            if (localStatus === 'active') return 'danger';
+            if (localStatus === 'needsLogin') return 'warning';
+            if (localStatus) return 'neutral';
             if (this.attendanceState === 'error') return 'danger';
             if (this.attendanceState !== 'loaded') return 'warning';
             return this.attendanceView().tone;
+        },
+
+        homeLmsLabel(this: any) {
+            const state = this.surface.kind === 'desktop'
+                ? this.dashboardHomeOverview?.lmsSessionState ?? this.desktopConnection?.lmsSessionState
+                : (this.attendanceDevices[0] as DesktopDevice | undefined)?.lmsSessionState;
+            if (state === 'connected') return '정글캠퍼스 연결됨';
+            if (state === 'login-required') return '로그인이 필요해요';
+            return '연결 상태 확인 중';
+        },
+
+        homeLmsTone(this: any) {
+            const state = this.surface.kind === 'desktop'
+                ? this.dashboardHomeOverview?.lmsSessionState ?? this.desktopConnection?.lmsSessionState
+                : (this.attendanceDevices[0] as DesktopDevice | undefined)?.lmsSessionState;
+            if (state === 'connected') return 'success';
+            if (state === 'login-required') return 'warning';
+            return 'neutral';
+        },
+
+        homeDdayLabel(this: any) {
+            const local = this.dashboardHomeOverview?.attendance.ddayText;
+            if (this.surface.kind === 'desktop' && local) return local;
+            return this.attendanceSnapshot
+                ? dashboardDdayLabel(this.attendanceSnapshot, kstDateString()) ?? '과정 일정 확인 중'
+                : '과정 일정 확인 중';
+        },
+
+        homeDdayVisible(this: any) {
+            return Boolean(this.dashboardHomeOverview?.attendance.ddayText || this.homeDdayProgress);
+        },
+
+        homeDdayRange(this: any) {
+            const period = this.dashboardHomeOverview?.attendance.ddayPeriod
+                ?? (this.attendanceSnapshot ? dashboardDdayPeriod(this.attendanceSnapshot) : null);
+            if (!period) return '';
+            const compact = (value: string) => value.split('-').map(Number).join('.');
+            return `${compact(period.startDate)} – ${compact(period.endDate)}`;
+        },
+
+        homeDdayProgressLabel(this: any) {
+            const progress = this.homeDdayProgress;
+            if (!progress) return '';
+            const current = progress.current ? ', 오늘 진행 중' : '';
+            return `코스 진행률 ${progress.percent}%, 완료 ${progress.elapsed}일${current}, 남음 ${progress.remaining}일`;
         },
 
         homeLaundryLabel(this: any) {
@@ -1014,7 +1212,11 @@ function dashboard(): Record<string, any> {
         },
 
         unreadNotificationCount(this: any) {
-            if (this.surface.kind === 'desktop') return this.desktopNotificationInbox.unreadCount;
+            if (this.surface.kind === 'desktop') {
+                return this.notificationState === 'loading' && this.dashboardHomeOverview
+                    ? this.dashboardHomeOverview.unreadCount
+                    : this.desktopNotificationInbox.unreadCount;
+            }
             if (this.surface.kind !== 'companion') return 0;
             const seen = new Set(this.seenMobileNotificationIds);
             return this.notifications.filter((notification: DashboardNotification) => !seen.has(notification.id)).length;
@@ -1040,27 +1242,52 @@ function dashboard(): Record<string, any> {
         },
 
         surfaceLabel(this: any) {
-            if (this.surface.kind === 'desktop') return this.desktopConnection?.state === 'connected' ? 'PC 연결됨' : 'PC 앱';
-            if (this.surface.kind === 'companion') return this.attendanceState === 'auth-required' ? '연결 필요' : '모바일 연결됨';
-            return '공개 웹';
+            return dashboardSurfaceBadge(this.surface.kind, {
+                desktopConnected: this.desktopConnection?.state === 'connected',
+                companionAuthenticated: this.attendanceState !== 'auth-required',
+            }).label;
         },
 
         surfaceTone(this: any) {
-            if (this.surface.kind === 'desktop') return this.desktopConnection?.state === 'connected' ? 'success' : 'warning';
-            if (this.surface.kind === 'companion') return this.attendanceState === 'auth-required' ? 'warning' : 'success';
-            return 'neutral';
+            return dashboardSurfaceBadge(this.surface.kind, {
+                desktopConnected: this.desktopConnection?.state === 'connected',
+                companionAuthenticated: this.attendanceState !== 'auth-required',
+            }).tone;
+        },
+
+        surfaceFooter(this: any) {
+            return dashboardSurfaceFooter(this.surface.kind);
         },
 
         desktopConnectionLabel(this: any) {
-            const labels: Record<string, string> = {
-                connected: '연결됨', expiring: '갱신 필요', expired: '로그인 만료', disconnected: '로그인 필요', unknown: '확인 중',
-            };
-            return labels[this.desktopConnection?.state ?? 'unknown'];
+            if (this.desktopConnection?.state === 'reset-required') return '재연결 필요';
+            if (this.desktopConnection?.state !== 'connected') return '서버 연결 확인';
+            if (this.desktopConnection.lmsSessionState === 'connected') return 'LMS 연결됨';
+            if (this.desktopConnection.lmsSessionState === 'login-required') return 'LMS 로그인 필요';
+            return 'LMS 확인 중';
         },
 
         desktopConnectionTone(this: any) {
-            if (this.desktopConnection?.state === 'connected') return 'success';
+            if (this.desktopConnection?.state === 'reset-required') return 'danger';
+            if (this.desktopConnection?.state === 'connected'
+                && this.desktopConnection.lmsSessionState === 'connected') return 'success';
             if (this.desktopConnection?.state === 'unknown') return 'neutral';
+            return 'warning';
+        },
+
+        companionCampusLabel(this: any) {
+            const device = this.attendanceDevices[0] as DesktopDevice | undefined;
+            if (!device) return 'PC 상태 없음';
+            if (device.health === 'offline') return 'PC 오프라인';
+            if (device.lmsSessionState === 'connected') return 'LMS 연결됨';
+            if (device.lmsSessionState === 'login-required') return 'LMS 로그인 필요';
+            return 'LMS 확인 중';
+        },
+
+        companionCampusTone(this: any) {
+            const device = this.attendanceDevices[0] as DesktopDevice | undefined;
+            if (device?.health === 'online' && device.lmsSessionState === 'connected') return 'success';
+            if (!device) return 'neutral';
             return 'warning';
         },
 
@@ -1177,6 +1404,7 @@ function dashboard(): Record<string, any> {
         },
 
         pushLabel(this: any) {
+            if (this.surface.kind === 'desktop') return '운영체제 알림';
             if (this.pushPermission === 'granted') return '허용됨';
             if (this.pushPermission === 'denied') return '차단됨';
             if (this.pushPermission === 'unsupported') return '지원 안 함';
@@ -1184,6 +1412,7 @@ function dashboard(): Record<string, any> {
         },
 
         pushTone(this: any) {
+            if (this.surface.kind === 'desktop') return 'neutral';
             if (this.pushPermission === 'granted') return 'success';
             if (this.pushPermission === 'denied') return 'danger';
             return 'neutral';
@@ -1208,7 +1437,9 @@ function dashboard(): Record<string, any> {
 
         notificationImportance(_this: any, notification?: DashboardNotification) {
             const value = typeof _this?.kind === 'string' ? _this as DashboardNotification : notification;
-            return value && /attendance|fallback|login-required/iu.test(value.kind) ? 'important' : 'normal';
+            return value?.kind === 'attendance-action-required' || value?.kind === 'login-required'
+                ? 'important'
+                : 'normal';
         },
 
         openNotification(this: any, notification: DashboardNotification) {

@@ -1,0 +1,152 @@
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use tokio::sync::Mutex;
+
+use crate::attendance::{self, CohortOption, CohortResolution};
+use crate::config::{self, Config};
+use crate::state::AppState;
+
+/// `autoStart` 한 항목만 소유하는 현재형 데스크톱 설정 서비스.
+pub struct DesktopSettingsService {
+    state: Arc<Mutex<AppState>>,
+    path: Option<PathBuf>,
+    writes: Mutex<()>,
+}
+
+impl DesktopSettingsService {
+    pub fn new(state: Arc<Mutex<AppState>>) -> Self {
+        Self::with_path(state, config::config_path())
+    }
+
+    fn with_path(state: Arc<Mutex<AppState>>, path: Option<PathBuf>) -> Self {
+        Self {
+            state,
+            path,
+            writes: Mutex::new(()),
+        }
+    }
+
+    pub async fn auto_start(&self) -> bool {
+        self.state.lock().await.config.auto_start
+    }
+
+    async fn persist(&self, config: Config) -> Result<(), String> {
+        let path = self
+            .path
+            .clone()
+            .ok_or_else(|| "운영체제 설정 디렉토리를 확인할 수 없습니다.".to_string())?;
+        tauri::async_runtime::spawn_blocking(move || config.save_to(&path))
+            .await
+            .map_err(|error| format!("설정 저장 작업 실행 실패: {error}"))?
+    }
+
+    /// OS 자동 시작 상태와 설정 파일을 함께 변경한다. 저장 실패 시 OS 상태를
+    /// 원래 값으로 되돌리고 메모리 상태는 변경하지 않는다.
+    pub async fn update_auto_start(&self, app: &tauri::AppHandle, enabled: bool) -> Result<bool, String> {
+        let _write_guard = self.writes.lock().await;
+        let current = self.state.lock().await.config.clone();
+        if current.auto_start == enabled {
+            return Ok(enabled);
+        }
+
+        crate::autostart::sync_auto_start(app, enabled)?;
+        let next = Config { auto_start: enabled };
+        if let Err(save_error) = self.persist(next.clone()).await {
+            return match crate::autostart::sync_auto_start(app, current.auto_start) {
+                Ok(()) => Err(save_error),
+                Err(rollback_error) => Err(format!(
+                    "{save_error}; 자동 시작 상태 복구도 실패했습니다: {rollback_error}"
+                )),
+            };
+        }
+
+        let mut state = self.state.lock().await;
+        state.config = next;
+        state.notify_scheduler();
+        Ok(enabled)
+    }
+
+    /// checker가 보고한 기수 중 현재 날짜에 맞는 기수를 자동으로 선택한다.
+    /// 수동 기수 선택은 0.5.0 로컬 설정 계약에 포함하지 않는다.
+    pub async fn resolve_cohort_options(
+        &self,
+        mut options: Vec<CohortOption>,
+        today: chrono::NaiveDate,
+    ) -> CohortResolution {
+        options.sort_by(|left, right| {
+            right
+                .start_date
+                .cmp(&left.start_date)
+                .then_with(|| right.end_date.cmp(&left.end_date))
+        });
+        let resolution = attendance::resolve_current_cohort(&options, today);
+        let mut state = self.state.lock().await;
+        state.cohort_options = options;
+        state.effective_cohort_id = resolution.cohort_id.clone();
+        state.notify_scheduler();
+        resolution
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use super::*;
+
+    fn test_path(name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "jungle-bell-desktop-settings-{name}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ))
+    }
+
+    #[test]
+    fn 설정_읽기는_auto_start만_노출한다() {
+        let state = Arc::new(Mutex::new(AppState::new(Config { auto_start: true })));
+        let service = DesktopSettingsService::with_path(state, None);
+        assert!(tauri::async_runtime::block_on(service.auto_start()));
+    }
+
+    #[test]
+    fn 저장_실패시_메모리_설정을_바꾸지_않는다() {
+        let root = test_path("failure");
+        let blocked_parent = root.join("not-a-directory");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(&blocked_parent, b"file").unwrap();
+        let state = Arc::new(Mutex::new(AppState::new(Config::default())));
+        let service = DesktopSettingsService::with_path(state.clone(), Some(blocked_parent.join("settings.json")));
+
+        let next = Config { auto_start: true };
+        assert!(tauri::async_runtime::block_on(service.persist(next)).is_err());
+        assert!(!state.try_lock().unwrap().config.auto_start);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn 기수_선택은_로컬_설정없이_현재_기수를_자동_선택한다() {
+        let state = Arc::new(Mutex::new(AppState::new(Config::default())));
+        let service = DesktopSettingsService::with_path(state.clone(), None);
+        let options = vec![CohortOption {
+            id: "cohort-1".into(),
+            label: "1기".into(),
+            start_date: chrono::NaiveDate::from_ymd_opt(2026, 8, 1).unwrap(),
+            end_date: Some(chrono::NaiveDate::from_ymd_opt(2026, 8, 31).unwrap()),
+            is_active: true,
+        }];
+
+        let resolution = tauri::async_runtime::block_on(
+            service.resolve_cohort_options(options, chrono::NaiveDate::from_ymd_opt(2026, 8, 10).unwrap()),
+        );
+        assert_eq!(resolution.cohort_id.as_deref(), Some("cohort-1"));
+        assert_eq!(
+            state.try_lock().unwrap().effective_cohort_id.as_deref(),
+            Some("cohort-1")
+        );
+    }
+}

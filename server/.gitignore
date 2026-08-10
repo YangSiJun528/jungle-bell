@@ -4,6 +4,7 @@ data/
 .env
 .env.*
 !.env.oci.example
+!.env.oci-v2-test.example
 .wrangler/
 coverage/
 .dev.vars

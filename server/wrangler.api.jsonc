@@ -8,22 +8,19 @@
     "directory": "../dist",
     "html_handling": "none",
     "not_found_handling": "404-page",
-    "run_worker_first": ["/", "/v1/*", "/healthz"]
-  },
-  "triggers": {
-    "crons": ["*/5 * * * *"]
+    "run_worker_first": ["/", "/blog", "/blog/", "/api/*", "/internal/*"]
   },
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "jungle-bell-data",
-      "database_id": "5b1d4841-3dbe-44a9-84f8-9fd032bd0d46"
+      "database_name": "jungle-bell-v2",
+      "database_id": "00000000-0000-0000-0000-000000000000"
     }
   ],
   "r2_buckets": [
     {
       "binding": "DATA_BUCKET",
-      "bucket_name": "jungle-bell-data"
+      "bucket_name": "jungle-bell-v2"
     }
   ]
 }

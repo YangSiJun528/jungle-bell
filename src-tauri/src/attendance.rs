@@ -1,23 +1,21 @@
 //! 출석 도메인 순수 로직.
 //!
 //! WebView/IPC/Tauri side effect 없이 AttendanceReport 적용, phase 계산,
-//! 알림 판단, tray snapshot 생성을 담당한다.
+//! tray snapshot 생성을 담당한다.
 
 use std::collections::BTreeSet;
 
-use chrono::{DateTime, Datelike, FixedOffset, NaiveDate, Timelike, Utc, Weekday};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::attendance_day;
-use crate::config::Config;
 use crate::state::{self, AppState, CheckerRuntimeStatus, CohortPeriod, DailyPhase, DdayStatus, TraySnapshot};
 
 /// checker.js의 API 조회 결과.
 /// JS invoke 호출의 JSON 페이로드에서 역직렬화됨.
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct AttendanceReport {
-    /// checker WebView generation. 없는 payload는 0으로 처리해 기존 JS 초기 실행을 수용한다.
-    #[serde(default)]
+    /// 현재 checker WebView page-load generation.
     pub generation: u64,
     /// 로그인이 필요한 상태 (401 또는 로그인 페이지)
     pub needs_login: bool,
@@ -71,6 +69,15 @@ pub struct CohortResolution {
     pub cohort_end_date: Option<NaiveDate>,
 }
 
+fn validate_cohort_id(value: &str) -> Result<(), String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() || trimmed != value || trimmed.chars().count() > 128 || trimmed.chars().any(char::is_control)
+    {
+        return Err("잘못된 기수 ID입니다.".into());
+    }
+    Ok(())
+}
+
 pub(crate) fn validate_cohort_options(options: &[CohortOption]) -> Result<(), String> {
     if options.len() > 32 {
         return Err("기수 목록이 허용 개수를 초과했습니다.".into());
@@ -78,7 +85,7 @@ pub(crate) fn validate_cohort_options(options: &[CohortOption]) -> Result<(), St
 
     let mut ids = BTreeSet::new();
     for option in options {
-        crate::config::validate_cohort_id(&option.id)?;
+        validate_cohort_id(&option.id)?;
         let label = option.label.trim();
         if label.is_empty()
             || label != option.label
@@ -128,15 +135,7 @@ fn cohort_resolution(option: &CohortOption, today: NaiveDate) -> CohortResolutio
     }
 }
 
-pub(crate) fn resolve_cohort_selection(
-    options: &[CohortOption],
-    selected_cohort_id: Option<&str>,
-    today: NaiveDate,
-) -> CohortResolution {
-    if let Some(selected) = selected_cohort_id.and_then(|id| options.iter().find(|option| option.id == id)) {
-        return cohort_resolution(selected, today);
-    }
-
+pub(crate) fn resolve_current_cohort(options: &[CohortOption], today: NaiveDate) -> CohortResolution {
     if let Some(active) = options
         .iter()
         .filter(|option| option.start_date <= today && option.end_date.is_some_and(|end_date| today <= end_date))
@@ -209,14 +208,6 @@ pub(crate) struct AttendanceUpdate {
     pub(crate) remaining: Option<i64>,
 }
 
-/// 알림 판단 결과.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct NotificationDecision {
-    pub(crate) send: bool,
-    pub(crate) reason: &'static str,
-    pub(crate) message: Option<(&'static str, String)>,
-}
-
 fn parse_report_date(value: &str) -> Option<NaiveDate> {
     NaiveDate::parse_from_str(value, "%Y-%m-%d").ok()
 }
@@ -264,7 +255,6 @@ pub(crate) fn apply_report_fields(state: &mut AppState, report: &AttendanceRepor
     }
 
     state.needs_login = false;
-    state.login_retry_until = None;
     state.morning_checked = report.morning_done;
     state.evening_checked = report.evening_done;
     state.dday_status = dday_status_from_report(report);
@@ -292,8 +282,7 @@ pub(crate) fn compute_phase_update(state: &mut AppState, now: DateTime<Utc>) -> 
         });
     }
 
-    let (phase, remaining) =
-        state::compute_daily_phase(&state.config, now, state.morning_checked, state.evening_checked);
+    let (phase, remaining) = state::compute_daily_phase(now, state.morning_checked, state.evening_checked);
     state.phase = phase;
 
     Some(AttendanceUpdate { phase, remaining })
@@ -322,117 +311,6 @@ pub(crate) fn apply_attendance_report(
 
 pub(crate) fn build_tray_snapshot(state: &AppState, remaining: Option<i64>) -> TraySnapshot {
     state.tray_snapshot(remaining)
-}
-
-pub(crate) fn notification_decision(
-    config: &Config,
-    phase: DailyPhase,
-    remaining: Option<i64>,
-    needs_login: bool,
-    kst_now: DateTime<FixedOffset>,
-) -> NotificationDecision {
-    if needs_login {
-        return NotificationDecision {
-            send: false,
-            reason: "needs_login",
-            message: None,
-        };
-    }
-
-    if config.skip_sunday && kst_now.weekday() == Weekday::Sun {
-        return NotificationDecision {
-            send: false,
-            reason: "skip_sunday",
-            message: None,
-        };
-    }
-
-    if attendance_day::is_skip_attendance_active(config, kst_now) {
-        return NotificationDecision {
-            send: false,
-            reason: "skip_attendance",
-            message: None,
-        };
-    }
-
-    let enabled = match phase {
-        DailyPhase::NeedStart | DailyPhase::StartOverdue => config.start_notification_enabled,
-        DailyPhase::NeedEnd => config.end_notification_enabled,
-        _ => false,
-    };
-    if !enabled {
-        return NotificationDecision {
-            send: false,
-            reason: "disabled",
-            message: None,
-        };
-    }
-
-    let kst_secs = (kst_now.hour() as i64) * 3600 + (kst_now.minute() as i64) * 60 + (kst_now.second() as i64);
-    let notif_start_secs = config.notification_start.to_secs();
-    let notif_end_secs = config.notification_end.to_secs();
-    let evening_start_secs = config.evening_start.to_secs();
-
-    let in_window = match phase {
-        DailyPhase::NeedStart | DailyPhase::StartOverdue => kst_secs >= notif_start_secs,
-        DailyPhase::NeedEnd => {
-            if notif_end_secs <= evening_start_secs {
-                kst_secs >= evening_start_secs || kst_secs < notif_end_secs
-            } else {
-                kst_secs >= evening_start_secs && kst_secs < notif_end_secs
-            }
-        }
-        _ => false,
-    };
-
-    if !in_window {
-        return NotificationDecision {
-            send: false,
-            reason: "outside_window",
-            message: None,
-        };
-    }
-
-    NotificationDecision {
-        send: true,
-        reason: "send",
-        message: Some(notification_message(phase, remaining)),
-    }
-}
-
-/// phase와 남은 시간으로 알림 제목·본문 생성.
-pub(crate) fn notification_message(phase: DailyPhase, remaining: Option<i64>) -> (&'static str, String) {
-    let format_remaining = |secs: i64| {
-        let mins = (secs + 59) / 60;
-        if mins >= 60 {
-            format!("마감까지 {}시간 {}분 남았습니다.", mins / 60, mins % 60)
-        } else {
-            format!("마감까지 {}분 남았습니다.", mins)
-        }
-    };
-
-    match phase {
-        DailyPhase::NeedStart => (
-            "출석 체크 시간입니다",
-            remaining
-                .map(&format_remaining)
-                .unwrap_or_else(|| "출석 체크를 해주세요.".into()),
-        ),
-        DailyPhase::StartOverdue => match remaining {
-            Some(r) if r > 0 => (
-                "출석 체크 지각 임박!",
-                format!("마감까지 {}분 남았습니다.", (r + 59) / 60),
-            ),
-            _ => ("출석 체크 지각!", "빨리 체크인하세요.".into()),
-        },
-        DailyPhase::NeedEnd => (
-            "학습 종료 체크가 필요합니다",
-            remaining
-                .map(&format_remaining)
-                .unwrap_or_else(|| "학습 종료 체크를 해주세요.".into()),
-        ),
-        _ => ("Jungle Bell", "출석 상태를 확인하세요.".into()),
-    }
 }
 
 #[cfg(test)]
@@ -533,23 +411,6 @@ mod tests {
         assert_eq!(state.dday_status, DdayStatus::Unavailable);
     }
 
-    #[test]
-    fn notification_decision은_로그인필요와_skip_day를_도메인에서_판단한다() {
-        let config = Config {
-            skip_attendance: Some("2026-03-17".into()),
-            ..Default::default()
-        };
-        let kst_now = kst_time(9, 30, 0).with_timezone(&crate::state::kst());
-
-        let login = notification_decision(&config, DailyPhase::NeedStart, Some(3600), true, kst_now);
-        let skipped = notification_decision(&config, DailyPhase::NeedStart, Some(3600), false, kst_now);
-
-        assert_eq!(login.reason, "needs_login");
-        assert!(!login.send);
-        assert_eq!(skipped.reason, "skip_attendance");
-        assert!(!skipped.send);
-    }
-
     fn cohort(id: &str, label: &str, start_date: (i32, u32, u32), end_date: (i32, u32, u32)) -> CohortOption {
         CohortOption {
             id: id.into(),
@@ -561,61 +422,25 @@ mod tests {
     }
 
     #[test]
-    fn 복수_기수는_사용자가_선택한_기수를_우선한다() {
+    fn 종료일이_가장_가까운_활성_기수를_자동_선택한다() {
         let options = vec![
             cohort("cohort-1", "1기", (2026, 3, 1), (2026, 8, 1)),
             cohort("cohort-2", "2기", (2026, 6, 1), (2026, 12, 31)),
         ];
         let today = chrono::NaiveDate::from_ymd_opt(2026, 7, 27).unwrap();
 
-        let resolution = resolve_cohort_selection(&options, Some("cohort-1"), today);
-
-        assert_eq!(resolution.cohort_id.as_deref(), Some("cohort-1"));
-        assert_eq!(resolution.cohort_status, CohortReportStatus::Active);
-        assert_eq!(
-            resolution.cohort_start_date,
-            Some(chrono::NaiveDate::from_ymd_opt(2026, 3, 1).unwrap())
-        );
-        assert_eq!(
-            resolution.cohort_end_date,
-            Some(chrono::NaiveDate::from_ymd_opt(2026, 8, 1).unwrap())
-        );
-    }
-
-    #[test]
-    fn 기수_선택이_없으면_종료일이_가장_가까운_활성_기수를_자동_선택한다() {
-        let options = vec![
-            cohort("cohort-1", "1기", (2026, 3, 1), (2026, 8, 1)),
-            cohort("cohort-2", "2기", (2026, 6, 1), (2026, 12, 31)),
-        ];
-        let today = chrono::NaiveDate::from_ymd_opt(2026, 7, 27).unwrap();
-
-        let resolution = resolve_cohort_selection(&options, None, today);
+        let resolution = resolve_current_cohort(&options, today);
 
         assert_eq!(resolution.cohort_id.as_deref(), Some("cohort-1"));
         assert_eq!(resolution.cohort_status, CohortReportStatus::Active);
     }
 
     #[test]
-    fn 저장한_기수가_목록에서_사라지면_자동_선택으로_fallback한다() {
-        let options = vec![
-            cohort("cohort-1", "1기", (2026, 3, 1), (2026, 8, 1)),
-            cohort("cohort-2", "2기", (2026, 6, 1), (2026, 12, 31)),
-        ];
-        let today = chrono::NaiveDate::from_ymd_opt(2026, 7, 27).unwrap();
-
-        let resolution = resolve_cohort_selection(&options, Some("removed-cohort"), today);
-
-        assert_eq!(resolution.cohort_id.as_deref(), Some("cohort-1"));
-        assert_eq!(resolution.cohort_status, CohortReportStatus::Active);
-    }
-
-    #[test]
-    fn 미래_기수를_선택하면_upcoming으로_구분하고_종료일을_유지한다() {
+    fn 활성_기수가_없으면_가장_가까운_미래_기수를_upcoming으로_선택한다() {
         let options = vec![cohort("cohort-future", "다음 기수", (2026, 8, 10), (2026, 12, 31))];
         let today = chrono::NaiveDate::from_ymd_opt(2026, 7, 27).unwrap();
 
-        let resolution = resolve_cohort_selection(&options, Some("cohort-future"), today);
+        let resolution = resolve_current_cohort(&options, today);
 
         assert_eq!(resolution.cohort_id, None);
         assert_eq!(resolution.cohort_status, CohortReportStatus::Upcoming);

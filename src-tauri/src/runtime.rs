@@ -19,7 +19,6 @@ pub(crate) enum JobOutcome {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum RuntimeAction {
-    AttendanceStatusCheck,
     CheckerSessionRefresh,
     CampusRefresh(CampusDataKind),
 }
@@ -88,7 +87,6 @@ pub(crate) async fn apply_tick_side_effects(
 
 pub(crate) async fn run_action(app_handle: &tauri::AppHandle, scheduled: &ScheduledAction) -> JobOutcome {
     match &scheduled.action {
-        RuntimeAction::AttendanceStatusCheck => outcome_from_bool(checker::trigger_current_check(app_handle)),
         RuntimeAction::CheckerSessionRefresh => {
             outcome_from_bool(checker::refresh_webview(app_handle, scheduled.job.reason().label()))
         }

@@ -5,6 +5,15 @@ export async function sha256Hex(value: string): Promise<string> {
   return bytesToHex(new Uint8Array(digest));
 }
 
+export async function hashAppSessionToken(token: string): Promise<string> {
+  const domain = token.startsWith("jbd_")
+    ? "jungle-bell:desktop-session:v2"
+    : token.startsWith("jbs_")
+      ? "jungle-bell:mobile-session:v2"
+      : "jungle-bell:invalid-session:v2";
+  return sha256Hex(`${domain}\0${token}`);
+}
+
 export async function hmacSha256Hex(secret: string, value: string): Promise<string> {
   if (textEncoder.encode(secret).byteLength < 32) throw new Error("PAIRING_SECRET_TOO_SHORT");
   const key = await crypto.subtle.importKey(
@@ -19,7 +28,7 @@ export async function hmacSha256Hex(secret: string, value: string): Promise<stri
 }
 
 export async function deriveMobileSessionToken(secret: string, claimReceipt: string): Promise<string> {
-  return `jbs_${await hmacSha256Hex(secret, `jungle-bell:mobile-session:v1\0${claimReceipt}`)}`;
+  return `jbs_${await hmacSha256Hex(secret, `jungle-bell:mobile-session:v2\0${claimReceipt}`)}`;
 }
 
 export function randomOpaqueToken(prefix: string, byteLength = 32): string {

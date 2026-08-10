@@ -4,27 +4,18 @@
 //! 모든 커맨드 함수가 이 모듈에 정의된다.
 //! 도메인 로직은 `checker`, `updater` 등 전용 모듈에 위임한다.
 
-use std::process::Command;
 use std::sync::Arc;
 
 use serde::Serialize;
-use tauri::{Emitter, Manager};
 use tokio::sync::Mutex;
 
-use crate::analytics::{self, AttendancePeriod, CampusInteraction, Event, Setting};
 use crate::attendance;
-use crate::attendance_auto_refresh::{self, StartRequestAction};
-use crate::attendance_day;
-use crate::autostart;
 use crate::campus::{CampusDataKind, CampusService};
 use crate::checker;
-use crate::config;
-use crate::local_consumption::{LocalConsumptionService, LocalDashboardSnapshot};
-use crate::news::{self, NewsFeed, NewsService};
-use crate::notification_inbox::{self, NotificationInboxService, NotificationInboxSnapshot};
+use crate::desktop_settings::DesktopSettingsService;
+use crate::notification_inbox::{NotificationInboxService, NotificationInboxSnapshot};
 use crate::notification_service::{NotificationRequest, NotificationService};
 use crate::remote_sync::{self, RemoteSyncService};
-use crate::settings_state::{SettingsService, SettingsSnapshot};
 use crate::state::{self, AppState};
 use crate::tray;
 
@@ -34,8 +25,19 @@ use crate::tray;
 pub(crate) async fn get_connected_service_status(
     window: tauri::WebviewWindow,
     service: tauri::State<'_, Arc<RemoteSyncService>>,
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<remote_sync::ConnectedServiceStatus, String> {
-    remote_sync::get_connected_service_status(window, service).await
+    remote_sync::get_connected_service_status(window, service, state).await
+}
+
+#[tauri::command]
+pub(crate) async fn reset_desktop_identity(
+    window: tauri::WebviewWindow,
+    service: tauri::State<'_, Arc<RemoteSyncService>>,
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    confirmed: bool,
+) -> Result<remote_sync::ConnectedServiceStatus, String> {
+    remote_sync::reset_desktop_identity(window, service, state, confirmed).await
 }
 
 #[tauri::command]
@@ -96,6 +98,92 @@ pub(crate) async fn get_remote_attendance_snapshot(
 }
 
 #[tauri::command]
+pub(crate) async fn get_attendance_preferences(
+    window: tauri::WebviewWindow,
+    service: tauri::State<'_, Arc<RemoteSyncService>>,
+) -> Result<remote_sync::AttendancePreferences, String> {
+    remote_sync::get_attendance_preferences(window, service).await
+}
+
+#[tauri::command]
+pub(crate) async fn update_attendance_preferences(
+    window: tauri::WebviewWindow,
+    service: tauri::State<'_, Arc<RemoteSyncService>>,
+    input: remote_sync::AttendancePreferences,
+) -> Result<remote_sync::AttendancePreferences, String> {
+    remote_sync::update_attendance_preferences(window, service, input).await
+}
+
+#[tauri::command]
+pub(crate) async fn get_meal_preferences(
+    window: tauri::WebviewWindow,
+    service: tauri::State<'_, Arc<RemoteSyncService>>,
+) -> Result<remote_sync::MealPreferences, String> {
+    remote_sync::get_meal_preferences(window, service).await
+}
+
+#[tauri::command]
+pub(crate) async fn update_meal_preferences(
+    window: tauri::WebviewWindow,
+    service: tauri::State<'_, Arc<RemoteSyncService>>,
+    input: remote_sync::MealPreferencesInput,
+) -> Result<remote_sync::MealPreferences, String> {
+    remote_sync::update_meal_preferences(window, service, input).await
+}
+
+#[tauri::command]
+pub(crate) async fn list_laundry_watches(
+    window: tauri::WebviewWindow,
+    service: tauri::State<'_, Arc<RemoteSyncService>>,
+) -> Result<remote_sync::LaundryWatchEnvelope, String> {
+    remote_sync::list_laundry_watches(window, service).await
+}
+
+#[tauri::command]
+pub(crate) async fn create_laundry_watch(
+    window: tauri::WebviewWindow,
+    service: tauri::State<'_, Arc<RemoteSyncService>>,
+    input: remote_sync::LaundryWatchInput,
+) -> Result<remote_sync::RemoteLaundryWatch, String> {
+    remote_sync::create_laundry_watch(window, service, input).await
+}
+
+#[tauri::command]
+pub(crate) async fn delete_laundry_watch(
+    window: tauri::WebviewWindow,
+    service: tauri::State<'_, Arc<RemoteSyncService>>,
+    watch_id: String,
+) -> Result<(), String> {
+    remote_sync::delete_laundry_watch(window, service, watch_id).await
+}
+
+#[tauri::command]
+pub(crate) async fn list_laundry_queue(
+    window: tauri::WebviewWindow,
+    service: tauri::State<'_, Arc<RemoteSyncService>>,
+) -> Result<remote_sync::LaundryQueueEnvelope, String> {
+    remote_sync::list_laundry_queue(window, service).await
+}
+
+#[tauri::command]
+pub(crate) async fn join_laundry_queue(
+    window: tauri::WebviewWindow,
+    service: tauri::State<'_, Arc<RemoteSyncService>>,
+    input: remote_sync::LaundryQueueInput,
+) -> Result<remote_sync::LaundryQueueEntry, String> {
+    remote_sync::join_laundry_queue(window, service, input).await
+}
+
+#[tauri::command]
+pub(crate) async fn leave_laundry_queue(
+    window: tauri::WebviewWindow,
+    service: tauri::State<'_, Arc<RemoteSyncService>>,
+    entry_id: String,
+) -> Result<(), String> {
+    remote_sync::leave_laundry_queue(window, service, entry_id).await
+}
+
+#[tauri::command]
 pub(crate) async fn refresh_platform_sync(
     app: tauri::AppHandle,
     window: tauri::WebviewWindow,
@@ -104,28 +192,41 @@ pub(crate) async fn refresh_platform_sync(
     remote_sync::refresh_platform_sync(app, window, service).await
 }
 
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LoginStatus {
-    pub data_loaded: bool,
-    pub needs_login: bool,
+#[derive(Debug, serde::Deserialize)]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum CheckerEventInput {
+    Ready {
+        generation: u64,
+    },
+    Log {
+        level: String,
+        message: String,
+    },
+    ResolveCohort {
+        cohort_options: Vec<attendance::CohortOption>,
+    },
+    AttendanceSnapshot {
+        status: attendance::AttendanceReport,
+    },
 }
 
-impl LoginStatus {
-    fn from_state(state: &AppState) -> Self {
-        Self {
-            data_loaded: state.data_loaded,
-            needs_login: state.needs_login,
-        }
-    }
+#[derive(Debug, Serialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum CheckerEventResponse {
+    Acknowledged,
+    CohortSelection { selection: attendance::CohortResolution },
 }
 
 // ── 출석 보고 ────────────────────────────────────────────
 
 /// Tauri 커맨드: API 조회 결과를 수신.
 /// `trigger_check()`가 이벤트를 보내면, JS가 이 커맨드를 invoke로 호출한다.
-#[tauri::command]
-pub async fn report_attendance_status(
+async fn handle_attendance_snapshot(
     app: tauri::AppHandle,
     window: tauri::WebviewWindow,
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
@@ -133,8 +234,8 @@ pub async fn report_attendance_status(
     status: attendance::AttendanceReport,
 ) -> Result<(), String> {
     let mut s = state.lock().await;
-    if !remote_sync::checker_context_is_allowed(window.label(), s.checker.last_loaded_url.as_deref()) {
-        return Err("COMMAND_CONTEXT_DENIED".into());
+    if status.generation == 0 || status.generation != s.checker.page_load_generation {
+        return Err("CHECKER_GENERATION_INVALID".into());
     }
     let now = chrono::Utc::now();
     let checker_actions = checker::record_checker_report(&mut s, status.generation, status.api_error);
@@ -166,16 +267,6 @@ pub async fn report_attendance_status(
     // `was_loaded`가 false인 최초 보고는 "앱 재시작 후 오늘 이미 완료된 출석"일 수 있으므로
     // 이벤트 발사 대상에서 제외해야 한다 (중복 카운트 방지).
     let was_loaded = s.data_loaded;
-    let prev_data_loaded = s.data_loaded;
-    let prev_morning = s.morning_checked;
-    let prev_evening = s.evening_checked;
-    let prev_needs_login = s.needs_login;
-    let reload_attendance = attendance_auto_refresh::confirm_start(
-        &mut s.attendance_auto_refresh,
-        status.morning_done,
-        status.needs_login,
-        status.api_error,
-    );
 
     let phase_update = attendance::apply_attendance_report(&mut s, &status, now);
     let tray_snapshot = match phase_update {
@@ -183,9 +274,6 @@ pub async fn report_attendance_status(
         None if status.api_error => Some(attendance::build_tray_snapshot(&s, None)),
         None => None,
     };
-    let curr_needs_login = s.needs_login;
-    let curr_data_loaded = s.data_loaded;
-    let login_status = LoginStatus::from_state(&s);
     let remote_snapshot = remote_sync::attendance_snapshot_from_checker(&s, &status, now);
     let verification_url = (!status.needs_login)
         .then(|| s.checker.last_loaded_url.clone())
@@ -198,11 +286,6 @@ pub async fn report_attendance_status(
         }
     }
 
-    // 로그인 상태/초기 로드 상태 전이 시 이벤트 발사 — 온보딩 슬라이드가 ✓ 표시 갱신용으로 listen.
-    if prev_needs_login != curr_needs_login || prev_data_loaded != curr_data_loaded {
-        let _ = app.emit("login-status-changed", login_status);
-    }
-
     if !was_loaded {
         let app_for_task = app.clone();
         if let Err(e) = app.run_on_main_thread(move || tray::sync_foreground_app_visibility(&app_for_task)) {
@@ -210,24 +293,8 @@ pub async fn report_attendance_status(
         }
     }
 
-    // 출석 완료 이벤트: false → true 전이 시점에만 한 번 발사한다.
-    // 스케줄러의 일일 리셋(자정) 이후 첫 완료 시에도 정상적으로 전이로 감지된다.
-    if was_loaded && !status.api_error && !status.needs_login {
-        if !prev_morning && status.morning_done {
-            analytics::track(Event::AttendanceCompleted(AttendancePeriod::Morning));
-        }
-        if !prev_evening && status.evening_done {
-            analytics::track(Event::AttendanceCompleted(AttendancePeriod::Evening));
-        }
-    }
-
-    if reload_attendance {
-        attendance_auto_refresh::reload_attendance_window(&app);
-    }
-
-    // 서버 인증은 analytics 설정과 무관하다. 출석 checker가 LMS 세션을 확인한
-    // 이벤트마다 Rust가 native cookie store를 점검한다. 첫 보고에서는 bearer
-    // 발급을 마친 뒤 같은 작업 안에서 snapshot을 올려 초기 상태를 유실하지 않는다.
+    // LMS credential은 checker WebView profile 밖으로 꺼내지 않는다. 검증된
+    // checker 보고에서 정규화한 snapshot만 데스크톱 installation 세션으로 올린다.
     if let Some(last_loaded_url) = verification_url {
         remote_sync::sync_checker_report(
             window,
@@ -248,17 +315,11 @@ pub async fn report_attendance_status(
 }
 
 /// Tauri 커맨드: checker.js initialization script가 로드됐음을 수신.
-#[tauri::command]
-pub async fn report_checker_ready(
-    window: tauri::WebviewWindow,
-    state: tauri::State<'_, Arc<Mutex<AppState>>>,
-    generation: Option<u64>,
-) -> Result<(), String> {
+async fn handle_checker_ready(state: tauri::State<'_, Arc<Mutex<AppState>>>, generation: u64) -> Result<(), String> {
     let mut s = state.lock().await;
-    if !remote_sync::checker_context_is_allowed(window.label(), s.checker.last_loaded_url.as_deref()) {
-        return Err("COMMAND_CONTEXT_DENIED".into());
+    if generation == 0 || generation != s.checker.page_load_generation {
+        return Err("CHECKER_GENERATION_INVALID".into());
     }
-    let generation = generation.unwrap_or(s.checker.page_load_generation);
     let actions = checker::record_checker_ready(&mut s, generation);
     if actions
         .iter()
@@ -276,344 +337,100 @@ pub async fn report_checker_ready(
     Ok(())
 }
 
-/// Tauri 커맨드: CMS 사용자 식별자 수신. JS에서 /api/v2/me 호출 후 id를 전달.
-/// SHA-256 해시하여 PostHog distinct_id로 사용.
+/// Tauri 커맨드: JS에서 Rust 로그 시스템으로 메시지 전달.
+fn handle_checker_log(level: String, message: String) -> Result<(), String> {
+    validate_js_log_payload(&level, &message)?;
+    match level.as_str() {
+        "error" => log::error!("[checker:js] {}", message),
+        "warn" => log::warn!("[checker:js] {}", message),
+        "debug" => log::debug!("[checker:js] {}", message),
+        "info" => log::info!("[checker:js] {}", message),
+        _ => unreachable!("log level was validated"),
+    }
+    Ok(())
+}
+
+fn validate_js_log_payload(level: &str, message: &str) -> Result<(), String> {
+    if !matches!(level, "error" | "warn" | "debug" | "info")
+        || message.is_empty()
+        || message.len() > 2_048
+        || message.chars().any(char::is_control)
+    {
+        return Err("LOG_PAYLOAD_INVALID".into());
+    }
+    Ok(())
+}
+
+// ── 설정 매크로 ──────────────────────────────────────────
+
+async fn handle_cohort_selection(
+    settings: tauri::State<'_, Arc<DesktopSettingsService>>,
+    cohort_options: Vec<attendance::CohortOption>,
+) -> Result<attendance::CohortResolution, String> {
+    attendance::validate_cohort_options(&cohort_options)?;
+    let today = chrono::Utc::now().with_timezone(&state::kst()).date_naive();
+    let resolution = settings.resolve_cohort_options(cohort_options, today).await;
+    Ok(resolution)
+}
+
+/// hidden LMS checker가 사용할 수 있는 유일한 원격 IPC 경계.
 #[tauri::command]
-pub async fn report_cms_identity(
+pub async fn report_checker_event(
+    app: tauri::AppHandle,
     window: tauri::WebviewWindow,
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
-    cms_user_id: String,
-) -> Result<(), String> {
-    if cms_user_id.is_empty()
-        || cms_user_id.len() > 128
-        || cms_user_id.trim() != cms_user_id
-        || cms_user_id.chars().any(char::is_control)
-    {
-        return Err("CMS_IDENTITY_INVALID".into());
-    }
+    settings: tauri::State<'_, Arc<DesktopSettingsService>>,
+    remote_sync_service: tauri::State<'_, Arc<RemoteSyncService>>,
+    event: CheckerEventInput,
+) -> Result<CheckerEventResponse, String> {
     {
         let state = state.lock().await;
         if !remote_sync::checker_context_is_allowed(window.label(), state.checker.last_loaded_url.as_deref()) {
             return Err("COMMAND_CONTEXT_DENIED".into());
         }
     }
-    analytics::set_identity(&cms_user_id);
-    Ok(())
-}
 
-/// Tauri 커맨드: JS에서 Rust 로그 시스템으로 메시지 전달.
-#[tauri::command]
-pub fn log_from_js(level: String, message: String) {
-    match level.as_str() {
-        "error" => log::error!("[checker:js] {}", message),
-        "warn" => log::warn!("[checker:js] {}", message),
-        "debug" => log::debug!("[checker:js] {}", message),
-        _ => log::info!("[checker:js] {}", message),
-    }
-}
-
-// ── 설정 매크로 ──────────────────────────────────────────
-
-/// bool 설정 setter 생성 매크로.
-macro_rules! setting_bool {
-    ($set:ident, $field:ident, $label:expr, $setting:ident) => {
-        #[tauri::command]
-        pub async fn $set(
-            app: tauri::AppHandle,
-            settings: tauri::State<'_, Arc<SettingsService>>,
-            enabled: bool,
-        ) -> Result<SettingsSnapshot, String> {
-            log::info!("[settings] {} 변경: {}", $label, enabled);
-            let commit = settings
-                .update_config(&app, stringify!($set), move |config| {
-                    config.$field = enabled;
-                    Ok(())
-                })
-                .await?;
-            if commit.changed {
-                analytics::track(Event::SettingChanged(Setting::$setting(enabled)));
-            }
-            Ok(commit.snapshot)
+    match event {
+        CheckerEventInput::Ready { generation } => {
+            handle_checker_ready(state, generation).await?;
+            Ok(CheckerEventResponse::Acknowledged)
         }
-    };
-}
-
-// ── 매크로 생성 설정 커맨드 ──────────────────────────────
-
-setting_bool!(set_auto_update, auto_update, "자동 업데이트 설정", AutoUpdate);
-setting_bool!(
-    set_start_notification_enabled,
-    start_notification_enabled,
-    "시작 출석 알림 설정",
-    StartNotificationEnabled
-);
-setting_bool!(
-    set_end_notification_enabled,
-    end_notification_enabled,
-    "종료 출석 알림 설정",
-    EndNotificationEnabled
-);
-
-setting_bool!(set_skip_sunday, skip_sunday, "일요일 알림 끄기", SkipSunday);
-
-// ── 커스텀 설정 커맨드 ───────────────────────────────────
-
-/// 설정 UI가 초기화/재동기화에 사용하는 단일 snapshot.
-#[tauri::command]
-pub async fn get_settings_snapshot(
-    settings: tauri::State<'_, Arc<SettingsService>>,
-) -> Result<SettingsSnapshot, String> {
-    Ok(settings.snapshot().await)
-}
-
-#[tauri::command]
-pub async fn resolve_cohort_selection(
-    app: tauri::AppHandle,
-    settings: tauri::State<'_, Arc<SettingsService>>,
-    cohort_options: Vec<attendance::CohortOption>,
-) -> Result<attendance::CohortResolution, String> {
-    attendance::validate_cohort_options(&cohort_options)?;
-    let today = chrono::Utc::now().with_timezone(&state::kst()).date_naive();
-    let resolution = settings.resolve_cohort_options(&app, cohort_options, today).await;
-    let snapshot = settings.snapshot().await;
-    let cohort_id = attendance_cohort_id(
-        snapshot.selected_cohort_id.as_deref(),
-        snapshot.effective_cohort_id.as_deref(),
-        &snapshot.cohort_options,
-    );
-    tray::sync_attendance_cohort_storage(&app, cohort_id.as_deref());
-    Ok(resolution)
-}
-
-#[tauri::command]
-pub async fn set_selected_cohort(
-    app: tauri::AppHandle,
-    settings: tauri::State<'_, Arc<SettingsService>>,
-    cohort_id: Option<String>,
-) -> Result<SettingsSnapshot, String> {
-    if let Some(cohort_id) = cohort_id.as_deref() {
-        config::validate_cohort_id(cohort_id)?;
-        let snapshot = settings.snapshot().await;
-        if !snapshot.cohort_options.iter().any(|option| option.id == cohort_id) {
-            return Err("현재 계정에서 조회되지 않은 기수입니다.".into());
+        CheckerEventInput::Log { level, message } => {
+            handle_checker_log(level, message)?;
+            Ok(CheckerEventResponse::Acknowledged)
+        }
+        CheckerEventInput::ResolveCohort { cohort_options } => {
+            let selection = handle_cohort_selection(settings, cohort_options).await?;
+            Ok(CheckerEventResponse::CohortSelection { selection })
+        }
+        CheckerEventInput::AttendanceSnapshot { status } => {
+            handle_attendance_snapshot(app, window, state, remote_sync_service, status).await?;
+            Ok(CheckerEventResponse::Acknowledged)
         }
     }
-    let commit = settings
-        .update_config(&app, "set_selected_cohort", move |config| {
-            config.selected_cohort_id = cohort_id;
-            Ok(())
-        })
-        .await?;
-    if commit.changed {
-        let today = chrono::Utc::now().with_timezone(&state::kst()).date_naive();
-        let cohort_id =
-            commit.snapshot.selected_cohort_id.clone().or_else(|| {
-                attendance::resolve_cohort_selection(&commit.snapshot.cohort_options, None, today).cohort_id
-            });
-        tray::sync_attendance_cohort_storage(&app, cohort_id.as_deref());
-        checker::trigger_current_check(&app);
-    }
-    Ok(commit.snapshot)
-}
-
-#[tauri::command]
-pub async fn set_meal_subscription_enabled(
-    app: tauri::AppHandle,
-    settings: tauri::State<'_, Arc<SettingsService>>,
-    local_consumption: tauri::State<'_, Arc<LocalConsumptionService>>,
-    enabled: bool,
-) -> Result<SettingsSnapshot, String> {
-    let commit = settings
-        .update_config(&app, "set_meal_subscription_enabled", move |config| {
-            config.meal_subscription_enabled = enabled;
-            Ok(())
-        })
-        .await?;
-    local_consumption
-        .on_settings_changed(&app, commit.changed && enabled)
-        .await;
-    Ok(commit.snapshot)
-}
-
-#[tauri::command]
-pub async fn set_laundry_watch(
-    app: tauri::AppHandle,
-    settings: tauri::State<'_, Arc<SettingsService>>,
-    local_consumption: tauri::State<'_, Arc<LocalConsumptionService>>,
-    watch: Option<config::LaundryWatch>,
-) -> Result<SettingsSnapshot, String> {
-    if let Some(watch) = &watch {
-        config::validate_laundry_watch(watch)?;
-    }
-    let commit = settings
-        .update_config(&app, "set_laundry_watch", move |config| {
-            config.laundry_watch = watch;
-            Ok(())
-        })
-        .await?;
-    local_consumption.on_settings_changed(&app, false).await;
-    Ok(commit.snapshot)
-}
-
-#[tauri::command]
-pub async fn dismiss_laundry_activity(
-    app: tauri::AppHandle,
-    settings: tauri::State<'_, Arc<SettingsService>>,
-    local_consumption: tauri::State<'_, Arc<LocalConsumptionService>>,
-    activity_id: String,
-) -> Result<LocalDashboardSnapshot, String> {
-    config::validate_laundry_terminal_activity_id(&activity_id)?;
-    let commit = settings
-        .update_config(&app, "dismiss_laundry_activity", move |config| {
-            Ok(config.dismiss_laundry_terminal_activity(&activity_id))
-        })
-        .await?;
-    if commit.changed {
-        local_consumption.on_settings_changed(&app, false).await;
-    }
-    Ok(local_consumption.dashboard_snapshot().await)
-}
-
-#[tauri::command]
-pub async fn set_start_notification_interval(
-    app: tauri::AppHandle,
-    settings: tauri::State<'_, Arc<SettingsService>>,
-    value: u32,
-) -> Result<SettingsSnapshot, String> {
-    let value = config::validate_notification_interval(value)?;
-    log::info!("[settings] 시작 출석 알림 간격 변경: {}", value);
-    let commit = settings
-        .update_config(&app, "set_start_notification_interval", move |config| {
-            config.start_notification_interval_mins = value;
-            Ok(())
-        })
-        .await?;
-    if commit.changed {
-        analytics::track(Event::SettingChanged(Setting::StartNotificationIntervalMinutes(value)));
-    }
-    Ok(commit.snapshot)
-}
-
-#[tauri::command]
-pub async fn set_end_notification_interval(
-    app: tauri::AppHandle,
-    settings: tauri::State<'_, Arc<SettingsService>>,
-    value: u32,
-) -> Result<SettingsSnapshot, String> {
-    let value = config::validate_notification_interval(value)?;
-    log::info!("[settings] 종료 출석 알림 간격 변경: {}", value);
-    let commit = settings
-        .update_config(&app, "set_end_notification_interval", move |config| {
-            config.end_notification_interval_mins = value;
-            Ok(())
-        })
-        .await?;
-    if commit.changed {
-        analytics::track(Event::SettingChanged(Setting::EndNotificationIntervalMinutes(value)));
-    }
-    Ok(commit.snapshot)
-}
-
-#[tauri::command]
-pub async fn set_notification_start(
-    app: tauri::AppHandle,
-    settings: tauri::State<'_, Arc<SettingsService>>,
-    hour: u32,
-    minute: u32,
-) -> Result<SettingsSnapshot, String> {
-    let time = config::validate_notification_start(hour, minute)?;
-    log::info!("[settings] 알림 시작 시각 변경: {:02}:{:02}", time.hour, time.minute);
-    let analytics_time = time.clone();
-    let commit = settings
-        .update_config(&app, "set_notification_start", move |config| {
-            config.notification_start = time;
-            Ok(())
-        })
-        .await?;
-    if commit.changed {
-        analytics::track(Event::SettingChanged(Setting::NotificationStart {
-            hour: analytics_time.hour,
-            minute: analytics_time.minute,
-        }));
-    }
-    Ok(commit.snapshot)
-}
-
-#[tauri::command]
-pub async fn set_notification_end(
-    app: tauri::AppHandle,
-    settings: tauri::State<'_, Arc<SettingsService>>,
-    hour: u32,
-    minute: u32,
-) -> Result<SettingsSnapshot, String> {
-    let time = config::validate_notification_end(hour, minute)?;
-    log::info!("[settings] 알림 종료 시각 변경: {:02}:{:02}", time.hour, time.minute);
-    let analytics_time = time.clone();
-    let commit = settings
-        .update_config(&app, "set_notification_end", move |config| {
-            config.notification_end = time;
-            Ok(())
-        })
-        .await?;
-    if commit.changed {
-        analytics::track(Event::SettingChanged(Setting::NotificationEnd {
-            hour: analytics_time.hour,
-            minute: analytics_time.minute,
-        }));
-    }
-    Ok(commit.snapshot)
-}
-
-/// Tauri 커맨드: 이번 출석 알림 끄기 설정 변경 및 저장.
-/// enabled=true이면 오늘 KST 날짜를 저장, false이면 None.
-#[tauri::command]
-pub async fn set_skip_attendance(
-    app: tauri::AppHandle,
-    settings: tauri::State<'_, Arc<SettingsService>>,
-    enabled: bool,
-) -> Result<SettingsSnapshot, String> {
-    let next = if enabled {
-        let kst_now = chrono::Utc::now().with_timezone(&state::kst());
-        Some(attendance_day::calendar_date_string(kst_now))
-    } else {
-        None
-    };
-    log::info!("[settings] 이번 출석 알림 끄기 변경: {next:?}");
-    let commit = settings
-        .update_config(&app, "set_skip_attendance", move |config| {
-            config.skip_attendance = next;
-            Ok(())
-        })
-        .await?;
-    if commit.changed {
-        analytics::track(Event::SettingChanged(Setting::SkipAttendance(enabled)));
-    }
-    Ok(commit.snapshot)
 }
 
 /// 생활정보 창이 이벤트 구독을 마쳤음을 보고한다.
 #[tauri::command]
 pub async fn report_campus_ready(
     app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
     service: tauri::State<'_, Arc<CampusService>>,
 ) -> Result<(), String> {
+    remote_sync::ensure_dashboard_window(&window)?;
     service.emit_cached_snapshots(&app).await;
     Ok(())
-}
-
-/// 생활정보 화면의 주요 사용자 상호작용을 분석 이벤트로 기록한다.
-#[tauri::command]
-pub fn report_campus_interaction(interaction: CampusInteraction) {
-    analytics::track(Event::CampusInteraction(interaction));
 }
 
 /// 사용자가 누른 수동 새로고침을 즉시 실행한다.
 #[tauri::command]
 pub async fn refresh_campus_data(
     app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
     service: tauri::State<'_, Arc<CampusService>>,
     kind: CampusDataKind,
 ) -> Result<(), String> {
+    remote_sync::ensure_dashboard_window(&window)?;
     service.refresh(&app, kind).await
 }
 
@@ -630,21 +447,23 @@ pub async fn get_dashboard_campus_data(
     service.dashboard_data(&app, kind).await
 }
 
-/// 오래된 급식 게시물 한 페이지를 불러와 생활정보 창에 전달한다.
-#[tauri::command]
-pub async fn load_meal_history(
-    app: tauri::AppHandle,
-    service: tauri::State<'_, Arc<CampusService>>,
-    before: Option<String>,
-) -> Result<(), String> {
-    service.load_meal_history(&app, before).await
-}
-
 fn validate_image_asset_url(value: &str) -> Result<String, String> {
     let url = reqwest::Url::parse(value).map_err(|_| "잘못된 이미지 주소입니다.".to_string())?;
-    let is_local_http = url.scheme() == "http" && matches!(url.host_str(), Some("127.0.0.1" | "localhost"));
+    let allowed_origin = reqwest::Url::parse(&crate::data_api::base_url())
+        .map_err(|_| "이미지 서버 주소를 확인할 수 없습니다.".to_string())?;
     let has_credentials = !url.username().is_empty() || url.password().is_some();
-    if has_credentials || (url.scheme() != "https" && !is_local_http) || !url.path().starts_with("/v1/assets/") {
+    let same_origin = url.scheme() == allowed_origin.scheme()
+        && url.host_str() == allowed_origin.host_str()
+        && url.port_or_known_default() == allowed_origin.port_or_known_default();
+    let asset_name = url.path().strip_prefix("/api/public/assets/");
+    let safe_asset_name = asset_name.is_some_and(|name| {
+        !name.is_empty()
+            && name.len() <= 255
+            && name
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+    });
+    if has_credentials || !same_origin || !safe_asset_name || url.query().is_some() || url.fragment().is_some() {
         return Err("허용되지 않은 이미지 주소입니다.".into());
     }
     Ok(url.to_string())
@@ -652,339 +471,96 @@ fn validate_image_asset_url(value: &str) -> Result<String, String> {
 
 /// 검증된 이미지를 별도의 크기 조절 가능 창에서 연다.
 #[tauri::command]
-pub async fn open_image_viewer(app: tauri::AppHandle, image_url: String) -> Result<(), String> {
+pub async fn open_image_viewer(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    image_url: String,
+) -> Result<(), String> {
+    remote_sync::ensure_dashboard_window(&window)?;
     let image_url = validate_image_asset_url(&image_url)?;
     tray::open_image_viewer(&app, image_url)?;
     Ok(())
 }
 
-/// Tauri 커맨드: 자동 시작 설정 변경 및 저장.
+#[derive(Debug, Clone, Copy, serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DesktopSettingsInput {
+    auto_start: bool,
+}
+
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopSettings {
+    auto_start: bool,
+}
+
 #[tauri::command]
-pub async fn set_auto_start(
-    app: tauri::AppHandle,
-    settings: tauri::State<'_, Arc<SettingsService>>,
-    enabled: bool,
-) -> Result<SettingsSnapshot, String> {
-    log::info!("[settings] 자동 시작 설정 변경: {}", enabled);
-    let apply_app = app.clone();
-    let rollback_app = app.clone();
-    let commit = settings
-        .update_config_with_effect(
-            &app,
-            "set_auto_start",
-            move |config| {
-                config.auto_start = enabled;
-                Ok(())
-            },
-            move |_, next| autostart::sync_auto_start(&apply_app, next.auto_start),
-            move |previous, _| autostart::sync_auto_start(&rollback_app, previous.auto_start),
-        )
-        .await?;
-    if commit.changed {
-        analytics::track(Event::SettingChanged(Setting::AutoStart(enabled)));
-    }
-    Ok(commit.snapshot)
-}
-
-/// Tauri 커맨드: 디버그 모드 설정 변경 및 저장.
-/// 런타임에 로그 레벨도 즉시 전환 (Info ↔ Debug).
-#[tauri::command]
-pub async fn set_debug_mode(
-    app: tauri::AppHandle,
-    settings: tauri::State<'_, Arc<SettingsService>>,
-    enabled: bool,
-) -> Result<SettingsSnapshot, String> {
-    log::info!("[settings] 디버그 모드 변경: {}", enabled);
-    let commit = settings
-        .update_config(&app, "set_debug_mode", move |config| {
-            config.debug_mode = enabled;
-            Ok(())
-        })
-        .await?;
-
-    // 런타임 로그 레벨 즉시 전환
-    let level = if enabled {
-        log::LevelFilter::Debug
-    } else {
-        log::LevelFilter::Info
-    };
-    log::set_max_level(level);
-    log::info!("[settings] 로그 레벨 전환: {}", level);
-    if commit.changed {
-        analytics::track(Event::SettingChanged(Setting::DebugMode(enabled)));
-    }
-    Ok(commit.snapshot)
-}
-
-/// Tauri 커맨드: 사용 통계 전송 설정 조회.
-#[tauri::command]
-pub async fn get_usage_analytics_enabled(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<bool, String> {
-    Ok(state.lock().await.config.usage_analytics_enabled)
-}
-
-/// Tauri 커맨드: 사용 통계 전송 설정 변경 및 저장.
-#[tauri::command]
-pub async fn set_usage_analytics_enabled(
-    app: tauri::AppHandle,
-    settings: tauri::State<'_, Arc<SettingsService>>,
-    enabled: bool,
-) -> Result<SettingsSnapshot, String> {
-    log::info!("[settings] 사용 통계 전송 변경: {}", enabled);
-    let commit = settings
-        .update_config(&app, "set_usage_analytics_enabled", move |config| {
-            let previous = config.usage_analytics_enabled;
-            config.usage_analytics_enabled = enabled;
-            Ok(previous)
-        })
-        .await?;
-    let previous = commit.value;
-
-    if previous != enabled {
-        if enabled {
-            analytics::set_user_enabled(true);
-            analytics::track(Event::UsageAnalyticsToggled(true));
-            analytics::track_startup_events();
-        } else {
-            analytics::track(Event::UsageAnalyticsToggled(false));
-            analytics::set_user_enabled(false);
-        }
-    } else {
-        analytics::set_user_enabled(enabled);
-    }
-    Ok(commit.snapshot)
-}
-
-/// Tauri 커맨드: 트레이 D-Day 표시 설정 변경 및 저장.
-#[tauri::command]
-pub async fn set_show_dday(
-    app: tauri::AppHandle,
-    settings: tauri::State<'_, Arc<SettingsService>>,
-    enabled: bool,
-) -> Result<SettingsSnapshot, String> {
-    log::info!("[settings] D-Day 표시 변경: {}", enabled);
-    let apply_app = app.clone();
-    let rollback_app = app.clone();
-    let commit = settings
-        .update_config_with_effect(
-            &app,
-            "set_show_dday",
-            move |config| {
-                config.show_dday = enabled;
-                Ok(())
-            },
-            move |_, next| tray::sync_dday_panel_visibility(&apply_app, next.show_dday),
-            move |previous, _| tray::sync_dday_panel_visibility(&rollback_app, previous.show_dday),
-        )
-        .await?;
-    if commit.changed {
-        analytics::track(Event::SettingChanged(Setting::ShowDday(enabled)));
-    }
-    Ok(commit.snapshot)
-}
-
-/// Tauri 커맨드: 플랫폼 앱 아이콘 표시 설정 변경 및 저장.
-#[tauri::command]
-pub async fn set_show_app_icon(
-    app: tauri::AppHandle,
-    settings: tauri::State<'_, Arc<SettingsService>>,
-    enabled: bool,
-) -> Result<SettingsSnapshot, String> {
-    log::info!("[settings] 앱 아이콘 표시 변경: {}", enabled);
-    let apply_app = app.clone();
-    let rollback_app = app.clone();
-    let commit = settings
-        .update_config_with_effect(
-            &app,
-            "set_show_app_icon",
-            move |config| {
-                config.show_app_icon = enabled;
-                Ok(())
-            },
-            move |_, next| tray::set_app_icon_visibility(&apply_app, next.show_app_icon),
-            move |previous, _| tray::set_app_icon_visibility(&rollback_app, previous.show_app_icon),
-        )
-        .await?;
-    if commit.changed {
-        analytics::track(Event::SettingChanged(Setting::ShowAppIcon(enabled)));
-    }
-    Ok(commit.snapshot)
-}
-
-// ── 업데이트 ─────────────────────────────────────────────
-
-/// Tauri 커맨드: 업데이트 확인 후 결과를 시스템 다이얼로그로 표시.
-#[tauri::command]
-pub async fn check_and_notify_update(app: tauri::AppHandle) -> Result<(), String> {
-    log::info!("[updater] 업데이트 확인 요청");
-    tauri::async_runtime::spawn(async move {
-        crate::updater::prompt_and_install_update(app, false).await;
-    });
-    Ok(())
-}
-
-// ── 시스템 유틸 ──────────────────────────────────────────
-
-/// Tauri 커맨드: 로그 폴더를 시스템 파일 탐색기로 열기.
-#[tauri::command]
-pub async fn open_log_folder(app: tauri::AppHandle) -> Result<(), String> {
-    let log_dir = app.path().app_log_dir().map_err(|e| e.to_string())?;
-    log::info!("[settings] 로그 폴더 열기: {:?}", log_dir);
-    tauri_plugin_opener::open_path(&log_dir, None::<&str>).map_err(|e| e.to_string())
-}
-
-/// Tauri 커맨드: 온보딩(시작하기) 창을 연다.
-#[tauri::command]
-pub async fn open_onboarding(app: tauri::AppHandle) {
-    tray::open_onboarding_window(&app);
-}
-
-/// Tauri 커맨드: 온보딩 완료 상태를 저장한다.
-#[tauri::command]
-pub async fn complete_onboarding(
-    app: tauri::AppHandle,
-    settings: tauri::State<'_, Arc<SettingsService>>,
-) -> Result<(), String> {
-    let commit = settings
-        .update_config(&app, "complete_onboarding", |config| {
-            let was_completed = config.onboarding_completed;
-            config.onboarding_completed = true;
-            Ok(was_completed)
-        })
-        .await?;
-    let was_completed = commit.value;
-    if !was_completed {
-        log::info!("[onboarding] completed");
-        analytics::track(Event::OnboardingCompleted);
-    } else {
-        log::info!("[onboarding] completed command ignored; already completed");
-    }
-    tray::open_dashboard_window(&app);
-    Ok(())
-}
-
-/// Tauri 커맨드: 출석 페이지 창을 연다 (온보딩의 "출석 페이지 열기" 버튼용).
-/// 트레이 패널의 "출석 페이지 열기"와 동일한 동작.
-#[tauri::command]
-pub async fn open_attendance_window(app: tauri::AppHandle) {
-    tray::open_attendance_window(&app);
-    tray::refresh_login_status(&app);
-}
-
-fn is_attendance_check_in_url(value: &str) -> bool {
-    let Ok(url) = reqwest::Url::parse(value) else {
-        return false;
-    };
-    let path = url.path().trim_end_matches('/');
-    is_lms_url(&url) && path == "/check-in"
-}
-
-fn is_lms_url(url: &reqwest::Url) -> bool {
-    url.scheme() == "https"
-        && url.host_str() == Some("jungle-lms.krafton.com")
-        && url.port_or_known_default() == Some(443)
-        && url.username().is_empty()
-        && url.password().is_none()
-}
-
-fn is_lms_page_url(value: &str) -> bool {
-    reqwest::Url::parse(value).is_ok_and(|url| is_lms_url(&url))
-}
-
-pub(crate) fn attendance_cohort_id(
-    selected_cohort_id: Option<&str>,
-    effective_cohort_id: Option<&str>,
-    cohort_options: &[attendance::CohortOption],
-) -> Option<String> {
-    selected_cohort_id
-        .filter(|selected| cohort_options.is_empty() || cohort_options.iter().any(|option| option.id == *selected))
-        .or(effective_cohort_id)
-        .map(str::to_owned)
-}
-
-/// LMS 출석 WebView가 Jungle Bell과 같은 기수를 표시하도록 사용하는 최소 read model.
-#[tauri::command]
-pub async fn get_attendance_cohort_id(
+pub async fn get_desktop_settings(
     window: tauri::WebviewWindow,
-    state: tauri::State<'_, Arc<Mutex<AppState>>>,
-    page_url: String,
-) -> Result<Option<String>, String> {
-    if window.label() != "attendance" {
-        return Err("허용되지 않은 창입니다.".into());
-    }
-    if !is_lms_page_url(&page_url) {
-        return Err("허용되지 않은 페이지입니다.".into());
-    }
-
-    let state = state.lock().await;
-    Ok(attendance_cohort_id(
-        state.config.selected_cohort_id.as_deref(),
-        state.effective_cohort_id.as_deref(),
-        &state.cohort_options,
-    ))
+    settings: tauri::State<'_, Arc<DesktopSettingsService>>,
+) -> Result<DesktopSettings, String> {
+    remote_sync::ensure_dashboard_window(&window)?;
+    Ok(DesktopSettings {
+        auto_start: settings.auto_start().await,
+    })
 }
 
-/// 출석 WebView가 감지한 실제 "학습 시작" 클릭을 수신한다.
-/// 이 명령은 새로고침하지 않고 hidden checker의 서버 확인만 시작한다.
 #[tauri::command]
-pub async fn report_attendance_start_clicked(
+pub async fn update_desktop_settings(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    settings: tauri::State<'_, Arc<DesktopSettingsService>>,
+    input: DesktopSettingsInput,
+) -> Result<DesktopSettings, String> {
+    remote_sync::ensure_dashboard_window(&window)?;
+    log::info!("[settings] 자동 시작 설정 변경: {}", input.auto_start);
+    let auto_start = settings.update_auto_start(&app, input.auto_start).await?;
+    Ok(DesktopSettings { auto_start })
+}
+
+/// 대시보드 홈에 표시할 로컬 출석·알림·캠퍼스 캐시를 반환한다.
+#[tauri::command]
+pub async fn get_dashboard_home_overview(
     app: tauri::AppHandle,
     window: tauri::WebviewWindow,
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
-    page_url: String,
-) -> Result<(), String> {
-    if window.label() != "attendance" {
-        return Err("허용되지 않은 창입니다.".into());
-    }
-    if !is_attendance_check_in_url(&page_url) {
-        return Err("허용되지 않은 페이지입니다.".into());
-    }
+    campus: tauri::State<'_, Arc<CampusService>>,
+    inbox: tauri::State<'_, Arc<NotificationInboxService>>,
+) -> Result<tray::DashboardHomeOverview, String> {
+    remote_sync::ensure_dashboard_window(&window)?;
 
-    let action = {
-        let mut state = state.lock().await;
-        let morning_checked = state.morning_checked;
-        attendance_auto_refresh::request_start_confirmation(&mut state.attendance_auto_refresh, morning_checked)
+    let attendance = tray::get_dashboard_attendance_summary(&app)?;
+    let lms_session_state = {
+        let state = state.lock().await;
+        remote_sync::lms_session_state(&state)
     };
+    let unread_count = inbox.snapshot()?.unread_count;
+    let (laundry, meals) = tokio::join!(
+        campus.cached_dashboard_data(CampusDataKind::Laundry),
+        campus.cached_dashboard_data(CampusDataKind::Meals),
+    );
 
-    match action {
-        StartRequestAction::StartPolling { request_id } => {
-            log::info!(
-                "[attendance-refresh] exact start click observed; waiting for server confirmation: request_id={}",
-                request_id,
-            );
-            attendance_auto_refresh::spawn_confirmation_poll(app, request_id);
-        }
-        StartRequestAction::AlreadyPending => {
-            log::debug!("[attendance-refresh] duplicate start click ignored");
-        }
-        StartRequestAction::AlreadyConfirmed => {
-            log::debug!("[attendance-refresh] start click ignored: attendance already confirmed");
-        }
-    }
-
-    Ok(())
+    Ok(tray::DashboardHomeOverview {
+        attendance,
+        lms_session_state,
+        unread_count,
+        laundry,
+        meals,
+    })
 }
 
-/// 커스텀 트레이 패널이 렌더링할 최신 상태를 반환한다.
-#[tauri::command]
-pub fn get_tray_panel_state(app: tauri::AppHandle) -> Result<tray::TrayPanelState, String> {
-    tray::get_tray_panel_state(&app)
-}
-
-#[tauri::command]
-pub async fn get_local_dashboard_snapshot(
-    local_consumption: tauri::State<'_, Arc<LocalConsumptionService>>,
-) -> Result<LocalDashboardSnapshot, String> {
-    Ok(local_consumption.dashboard_snapshot().await)
-}
-
-/// 트레이 패널에 표시할 영속 앱 알림 목록을 반환한다.
+/// 대시보드 알림함에 표시할 영속 앱 알림 목록을 반환한다.
 #[tauri::command]
 pub fn get_notification_inbox_snapshot(
     window: tauri::WebviewWindow,
     inbox: tauri::State<'_, Arc<NotificationInboxService>>,
 ) -> Result<NotificationInboxSnapshot, String> {
-    notification_inbox::ensure_tray_panel_window(&window)?;
+    ensure_notification_reader_window(&window)?;
     inbox.snapshot()
+}
+
+fn ensure_notification_reader_window(window: &tauri::WebviewWindow) -> Result<(), String> {
+    remote_sync::ensure_dashboard_window(window)
 }
 
 /// 앱 또는 OS 알림에서 선택한 항목을 읽음 처리하고 연결된 화면을 연다.
@@ -995,7 +571,7 @@ pub fn activate_notification(
     inbox: tauri::State<'_, Arc<NotificationInboxService>>,
     id: String,
 ) -> Result<NotificationInboxSnapshot, String> {
-    notification_inbox::ensure_tray_panel_window(&window)?;
+    ensure_notification_reader_window(&window)?;
     inbox.activate(&app, &id)
 }
 
@@ -1016,7 +592,7 @@ pub async fn send_test_notification(
     inbox: tauri::State<'_, Arc<NotificationInboxService>>,
     remote_sync: tauri::State<'_, Arc<RemoteSyncService>>,
 ) -> Result<TestNotificationResult, String> {
-    notification_inbox::ensure_tray_panel_window(&window)?;
+    remote_sync::ensure_dashboard_window(&window)?;
     let key = format!("manual-test:{}", chrono::Utc::now().timestamp_millis());
     let report = notifications.deliver(
         &app,
@@ -1042,178 +618,59 @@ pub async fn send_test_notification(
     })
 }
 
-/// 트레이 패널의 영속 앱 알림을 모두 삭제한다.
-#[tauri::command]
-pub fn clear_notification_inbox(
-    app: tauri::AppHandle,
-    window: tauri::WebviewWindow,
-    inbox: tauri::State<'_, Arc<NotificationInboxService>>,
-) -> Result<NotificationInboxSnapshot, String> {
-    notification_inbox::ensure_tray_panel_window(&window)?;
-    inbox.clear(&app)
-}
-
-/// 커스텀 트레이 패널에서 선택한 허용된 액션을 실행한다.
-#[tauri::command]
-pub fn run_tray_panel_action(app: tauri::AppHandle, action: tray::TrayPanelAction) -> Result<(), String> {
-    tray::run_tray_panel_action(&app, action)
-}
-
-/// Esc 키 등 패널 내부 요청으로 커스텀 트레이 패널을 숨긴다.
-#[tauri::command]
-pub fn hide_tray_panel(app: tauri::AppHandle) -> Result<(), String> {
-    tray::hide_tray_panel(&app)
-}
-
-/// GitHub Pages에 게시된 소식 피드를 1시간 캐시와 함께 반환한다.
-#[tauri::command]
-pub async fn get_news_feed(
-    app: tauri::AppHandle,
-    service: tauri::State<'_, Arc<NewsService>>,
-) -> Result<NewsFeed, String> {
-    service.get(&app).await
-}
-
-/// 피드가 허용한 현재 저장소의 Discussion/Release 링크만 시스템 브라우저로 연다.
-#[tauri::command]
-pub fn open_news_item(app: tauri::AppHandle, url: String) -> Result<(), String> {
-    news::validate_news_url(&url)?;
-    tray::hide_tray_panel(&app)?;
-    tauri_plugin_opener::open_url(url, None::<&str>).map_err(|error| error.to_string())
-}
-
-/// Tauri 커맨드: 현재 로그인 확인 상태 조회.
-/// 온보딩 슬라이드 진입 시 초기 표시 여부 결정용.
-#[tauri::command]
-pub async fn get_login_status(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<LoginStatus, String> {
-    let state = state.lock().await;
-    Ok(LoginStatus::from_state(&state))
-}
-
-/// Tauri 커맨드: hidden checker를 다시 출석 페이지로 이동시켜 로그인 상태를 재확인한다.
-/// 온보딩에서 출석 창 로그인 완료를 빠르게 감지하기 위한 보조 커맨드.
-#[tauri::command]
-pub fn refresh_login_status(app: tauri::AppHandle) {
-    tray::refresh_login_status(&app);
-}
-
-/// Tauri 커맨드: OS 알림 설정 화면을 연다.
-#[tauri::command]
-pub async fn open_notification_settings() -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    {
-        let targets = [
-            "x-apple.systempreferences:com.apple.Notifications-Settings.extension",
-            "x-apple.systempreferences:com.apple.preference.notifications",
-        ];
-
-        for target in targets {
-            let status = Command::new("open")
-                .arg(target)
-                .status()
-                .map_err(|e| format!("macOS 설정 앱 실행 실패: {}", e))?;
-            if status.success() {
-                log::info!("[settings] macOS 알림 설정 열기: {}", target);
-                return Ok(());
-            }
-        }
-
-        Err("macOS 알림 설정을 열지 못했습니다.".into())
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        let status = Command::new("cmd")
-            .args(["/C", "start", "", "ms-settings:notifications"])
-            .status()
-            .map_err(|e| format!("Windows 설정 앱 실행 실패: {}", e))?;
-        if status.success() {
-            log::info!("[settings] Windows 알림 설정 열기");
-            return Ok(());
-        }
-
-        Err("Windows 알림 설정을 열지 못했습니다.".into())
-    }
-
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-    {
-        Err("이 플랫폼에서는 시스템 알림 설정 바로가기를 지원하지 않습니다.".into())
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{attendance_cohort_id, is_attendance_check_in_url, is_lms_page_url, validate_image_asset_url};
-    use crate::attendance::CohortOption;
-
-    fn cohort(id: &str) -> CohortOption {
-        CohortOption {
-            id: id.into(),
-            label: id.into(),
-            is_active: true,
-            start_date: chrono::NaiveDate::from_ymd_opt(2026, 3, 1).unwrap(),
-            end_date: Some(chrono::NaiveDate::from_ymd_opt(2026, 7, 30).unwrap()),
-        }
-    }
+    use super::{validate_image_asset_url, validate_js_log_payload, CheckerEventInput, CheckerEventResponse};
 
     #[test]
     fn 이미지_자산_url은_https와_로컬_assets만_허용한다() {
-        assert!(validate_image_asset_url("https://api.example.com/v1/assets/menu.png").is_ok());
-        assert!(validate_image_asset_url("http://127.0.0.1:43120/v1/assets/menu.png").is_ok());
-        assert!(validate_image_asset_url("http://localhost:43120/v1/assets/menu.png").is_ok());
-        assert!(validate_image_asset_url("http://example.com/v1/assets/menu.png").is_err());
-        assert!(validate_image_asset_url("https://api.example.com/other/menu.png").is_err());
+        let origin = crate::data_api::base_url();
+        assert!(validate_image_asset_url(&format!("{origin}/api/public/assets/menu.png")).is_ok());
+        assert!(validate_image_asset_url(&format!("{origin}/api/public/assets/menu-2026_08.png")).is_ok());
+        assert!(validate_image_asset_url("https://evil.example/api/public/assets/menu.png").is_err());
+        assert!(validate_image_asset_url(&format!("{origin}/api/public/assets/nested/menu.png")).is_err());
+        assert!(validate_image_asset_url(&format!("{origin}/api/public/assets/%2e%2e%2fsecret")).is_err());
+        assert!(validate_image_asset_url(&format!("{origin}/api/public/assets/menu.png?token=x")).is_err());
+        assert!(validate_image_asset_url(&format!("{origin}/other/menu.png")).is_err());
         assert!(validate_image_asset_url("javascript:alert(1)").is_err());
     }
 
     #[test]
-    fn 자동_새로고침_요청은_정확한_lms_출석_url만_허용한다() {
-        assert!(is_attendance_check_in_url("https://jungle-lms.krafton.com/check-in"));
-        assert!(is_attendance_check_in_url("https://jungle-lms.krafton.com/check-in/"));
-        assert!(!is_attendance_check_in_url("http://jungle-lms.krafton.com/check-in"));
-        assert!(!is_attendance_check_in_url(
-            "https://jungle-lms.krafton.com.evil.test/check-in"
-        ));
-        assert!(!is_attendance_check_in_url(
-            "https://jungle-lms.krafton.com/check-in/history"
-        ));
-        assert!(!is_attendance_check_in_url(
-            "https://jungle-lms.krafton.com:444/check-in"
-        ));
-        assert!(!is_attendance_check_in_url(
-            "https://user@jungle-lms.krafton.com/check-in"
-        ));
+    fn 원격_js_로그_payload는_레벨_크기_제어문자를_검증한다() {
+        assert!(validate_js_log_payload("info", "checker ready").is_ok());
+        assert!(validate_js_log_payload("trace", "checker ready").is_err());
+        assert!(validate_js_log_payload("warn", "").is_err());
+        assert!(validate_js_log_payload("warn", "line\nbreak").is_err());
+        assert!(validate_js_log_payload("warn", &"x".repeat(2_049)).is_err());
     }
 
     #[test]
-    fn 출석창에는_수동_선택을_우선하고_자동선택을_fallback한다() {
-        let options = vec![cohort("manual-cohort"), cohort("effective-cohort")];
-        assert_eq!(
-            attendance_cohort_id(Some("manual-cohort"), Some("effective-cohort"), &options),
-            Some("manual-cohort".into())
-        );
-        assert_eq!(
-            attendance_cohort_id(None, Some("effective-cohort"), &options),
-            Some("effective-cohort".into())
-        );
-        assert_eq!(
-            attendance_cohort_id(Some("removed-cohort"), Some("effective-cohort"), &options),
-            Some("effective-cohort".into())
-        );
-        assert_eq!(
-            attendance_cohort_id(Some("manual-cohort"), None, &[]),
-            Some("manual-cohort".into())
-        );
-        assert_eq!(attendance_cohort_id(None, None, &options), None);
-    }
+    fn checker_event는_단일_camel_case_tagged_계약만_받는다() {
+        let valid = serde_json::json!({
+            "type": "resolveCohort",
+            "cohortOptions": [{
+                "id": "cohort-1",
+                "label": "1기",
+                "startDate": "2026-08-01",
+                "endDate": "2026-08-31",
+                "isActive": true
+            }]
+        });
+        assert!(matches!(
+            serde_json::from_value::<CheckerEventInput>(valid),
+            Ok(CheckerEventInput::ResolveCohort { .. })
+        ));
+        for invalid in [
+            serde_json::json!({"type": "resolveCohort", "cohort_options": []}),
+            serde_json::json!({"type": "resolveCohort", "cohortOptions": [], "legacy": true}),
+            serde_json::json!({"type": "reportAttendance", "status": {}}),
+        ] {
+            assert!(serde_json::from_value::<CheckerEventInput>(invalid).is_err());
+        }
 
-    #[test]
-    fn 기수_동기화는_정확한_lms_origin만_허용한다() {
-        assert!(is_lms_page_url("https://jungle-lms.krafton.com/check-in"));
-        assert!(is_lms_page_url("https://jungle-lms.krafton.com/check-in/history"));
-        assert!(!is_lms_page_url("http://jungle-lms.krafton.com/check-in"));
-        assert!(!is_lms_page_url("https://jungle-lms.krafton.com.evil.test/check-in"));
-        assert!(!is_lms_page_url("https://jungle-lms.krafton.com:444/check-in"));
-        assert!(!is_lms_page_url("https://user@jungle-lms.krafton.com/check-in"));
+        assert_eq!(
+            serde_json::to_value(CheckerEventResponse::Acknowledged).unwrap(),
+            serde_json::json!({"type": "acknowledged"})
+        );
     }
 }

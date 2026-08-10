@@ -1,6 +1,4 @@
-mod analytics;
 mod attendance;
-mod attendance_auto_refresh;
 mod attendance_day;
 mod autostart;
 mod campus;
@@ -8,9 +6,8 @@ mod checker;
 mod commands;
 mod config;
 mod data_api;
+mod desktop_settings;
 mod interval_tasks;
-mod local_consumption;
-mod news;
 #[cfg(desktop)]
 mod notification_inbox;
 #[cfg(desktop)]
@@ -19,7 +16,6 @@ mod remote_sync;
 mod runtime;
 mod scheduler;
 mod secure_credential;
-mod settings_state;
 mod state;
 mod tray;
 mod updater;
@@ -29,18 +25,17 @@ use tauri::Manager;
 use tokio::sync::Mutex;
 
 use config::Config;
-use local_consumption::LocalConsumptionService;
+use desktop_settings::DesktopSettingsService;
 use notification_inbox::NotificationInboxService;
 use notification_service::{NotificationRequest, NotificationService};
-use settings_state::SettingsService;
 use state::AppState;
 
 /// 로그 파일 최대 크기 (5 MB). 초과 시 이전 파일 삭제 후 새 파일 시작.
 const MAX_LOG_FILE_SIZE: u128 = 5_000_000;
 const AUTOSTART_ARGUMENT: &str = "--autostart";
 
-fn should_open_dashboard_on_start(onboarding_completed: bool, launched_from_autostart: bool) -> bool {
-    onboarding_completed && !launched_from_autostart
+fn should_open_dashboard_on_start(launched_from_autostart: bool) -> bool {
+    !launched_from_autostart
 }
 
 #[cfg(desktop)]
@@ -54,7 +49,7 @@ fn persisted_window_state_flags() -> tauri_plugin_window_state::StateFlags {
 }
 
 fn sync_auto_start_setting(app: &tauri::AppHandle, shared_state: &Arc<Mutex<AppState>>) {
-    let auto_start = shared_state.try_lock().map(|s| s.config.auto_start).unwrap_or(true);
+    let auto_start = shared_state.try_lock().map(|s| s.config.auto_start).unwrap_or(false);
 
     if let Err(e) = autostart::sync_auto_start(app, auto_start) {
         let action = if auto_start { "등록" } else { "해제" };
@@ -62,76 +57,28 @@ fn sync_auto_start_setting(app: &tauri::AppHandle, shared_state: &Arc<Mutex<AppS
     }
 }
 
-fn notify_startup_status(
-    app: &tauri::AppHandle,
-    shared_state: &Arc<Mutex<AppState>>,
-    notifications: &NotificationService,
-) {
-    let current = shared_state.try_lock().unwrap().config.clone();
+fn notify_startup_status(app: &tauri::AppHandle, notifications: &NotificationService) {
     let current_version = app.package_info().version.to_string();
-    let should_open_onboarding = !current.onboarding_completed;
-
-    match &current.last_version {
-        None => {
-            notifications.deliver(
-                app,
-                NotificationRequest::system(
-                    "app.installed",
-                    "Jungle Bell 설치 완료",
-                    "트레이 아이콘에서 출석 창을 열고 LMS에 로그인해 주세요.",
-                ),
-            );
-            log::info!("[app] 환영 알림 발송 (첫 설치)");
-        }
-        Some(last) if last != &current_version => {
-            let body = format!("v{} → v{}로 업데이트되었습니다.", last, current_version);
-            let notification_key = format!("app.updated:{current_version}");
-            notifications.deliver(
-                app,
-                NotificationRequest::system(&notification_key, "Jungle Bell 업데이트 완료", &body),
-            );
-            log::info!("[app] 업데이트 완료 알림 발송: v{} → v{}", last, current_version);
-            analytics::prepare_app_updated(last.clone(), current_version.clone());
-        }
-        _ => {}
-    }
-
-    let mut next = current.clone();
-    next.last_version = Some(current_version);
-    next.welcome_notification_sent = true;
-    match next.save() {
-        Ok(()) => {
-            let mut state = shared_state.try_lock().unwrap();
-            if state.config != current {
-                log::warn!("[app] 시작 상태 저장 중 config가 변경되어 최신 시작 snapshot으로 재동기화");
-            }
-            state.config = next;
-        }
-        Err(error) => log::error!("[app] 시작 상태 저장 실패: {error}"),
-    }
-
-    if should_open_onboarding {
-        tray::open_onboarding_window(app);
-    }
+    let key = format!("app.version-ready:{current_version}");
+    let body = format!("Jungle Bell v{current_version}가 준비되었습니다.");
+    notifications.deliver(
+        app,
+        NotificationRequest::system(&key, "Jungle Bell 실행 준비 완료", &body),
+    );
 }
 
-fn spawn_startup_update_check(app: tauri::AppHandle, shared_state: Arc<Mutex<AppState>>) {
+fn spawn_startup_update_check(app: tauri::AppHandle) {
     tauri::async_runtime::spawn(async move {
-        let auto_update = shared_state.lock().await.config.auto_update;
-        if auto_update {
-            updater::auto_install_update(app).await;
-        } else {
-            updater::check_and_store_pending_update(&app).await;
-        }
+        updater::auto_install_update(app).await;
     });
 }
 
-fn spawn_periodic_update_check(app: tauri::AppHandle, shared_state: Arc<Mutex<AppState>>) {
+fn spawn_periodic_update_check(app: tauri::AppHandle) {
     tauri::async_runtime::spawn(async move {
         const INTERVAL_SECS: u64 = 60 * 60; // 1시간마다 체크
         loop {
             tokio::time::sleep(tokio::time::Duration::from_secs(INTERVAL_SECS)).await;
-            updater::check_update_periodic(&app, &shared_state).await;
+            updater::auto_install_update(app.clone()).await;
         }
     });
 }
@@ -144,24 +91,12 @@ fn spawn_periodic_update_check(app: tauri::AppHandle, shared_state: Arc<Mutex<Ap
 pub fn run() {
     let launched_from_autostart = std::env::args().any(|argument| argument == AUTOSTART_ARGUMENT);
     let config = Config::load();
-    let log_level = if config.debug_mode {
-        log::LevelFilter::Debug
-    } else {
-        log::LevelFilter::Info
-    };
+    let log_level = log::LevelFilter::Info;
     let shared_state = Arc::new(Mutex::new(AppState::new(config)));
     let notification_inbox_service = Arc::new(NotificationInboxService::load());
     let notification_service = Arc::new(NotificationService::new(notification_inbox_service.clone()));
-    let settings_service = Arc::new(SettingsService::new(
-        shared_state.clone(),
-        env!("CARGO_PKG_VERSION").to_string(),
-    ));
-    let local_consumption_service = Arc::new(LocalConsumptionService::new(
-        shared_state.clone(),
-        notification_service.clone(),
-    ));
+    let settings_service = Arc::new(DesktopSettingsService::new(shared_state.clone()));
     let campus_service = Arc::new(campus::CampusService::new());
-    let news_service = Arc::new(news::NewsService::new());
 
     tauri::Builder::default()
         // single-instance 플러그인: 공식 문서 권장대로 가장 먼저 등록한다.
@@ -174,7 +109,6 @@ pub fn run() {
         // KeepOne 전략으로 500KB 초과 시 이전 파일 삭제 → 최대 ~1MB 유지.
         // 로그 위치: macOS ~/Library/Logs/dev.sijun-yang.jungle-bell/
         //            Windows %APPDATA%\dev.sijun-yang.jungle-bell\logs\
-        // debug_mode가 활성화되면 Debug 레벨까지 출력.
         .plugin(
             tauri_plugin_log::Builder::new()
                 .level(log_level)
@@ -198,74 +132,33 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec![AUTOSTART_ARGUMENT]),
         ))
-        // opener 플러그인: 시스템 브라우저로 URL 열기 (설정 페이지에서 사용)
+        // opener 플러그인: 검증된 공개 링크를 시스템 브라우저로 연다.
         .plugin(tauri_plugin_opener::init())
         // updater 플러그인: 자동 업데이트 지원
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_dialog::init())
+        .plugin(checker::navigation_guard())
         // AppState를 Tauri의 managed state로 등록.
         // 핸들러에서 `tauri::State<Arc<Mutex<AppState>>>`로 받아 사용.
         .manage(shared_state.clone())
         .manage(notification_inbox_service.clone())
         .manage(notification_service.clone())
         .manage(settings_service)
-        .manage(local_consumption_service)
         .manage(campus_service.clone())
-        .manage(news_service)
         // JS에서 `window.__TAURI__.core.invoke()`로 호출할 수 있는 Tauri 커맨드 등록.
         .invoke_handler(tauri::generate_handler![
-            commands::report_attendance_status,
-            commands::report_checker_ready,
-            commands::report_cms_identity,
-            commands::log_from_js,
-            commands::get_settings_snapshot,
-            commands::resolve_cohort_selection,
-            commands::set_selected_cohort,
-            commands::set_auto_update,
+            commands::report_checker_event,
+            commands::get_desktop_settings,
+            commands::update_desktop_settings,
             commands::report_campus_ready,
-            commands::report_campus_interaction,
             commands::refresh_campus_data,
             commands::get_dashboard_campus_data,
-            commands::load_meal_history,
             commands::open_image_viewer,
-            commands::check_and_notify_update,
-            commands::set_auto_start,
-            commands::set_start_notification_enabled,
-            commands::set_end_notification_enabled,
-            commands::set_meal_subscription_enabled,
-            commands::set_laundry_watch,
-            commands::dismiss_laundry_activity,
-            commands::set_start_notification_interval,
-            commands::set_end_notification_interval,
-            commands::set_notification_start,
-            commands::set_notification_end,
-            commands::set_skip_attendance,
-            commands::set_skip_sunday,
-            commands::open_notification_settings,
-            commands::set_debug_mode,
-            commands::get_usage_analytics_enabled,
-            commands::set_usage_analytics_enabled,
-            commands::set_show_dday,
-            commands::set_show_app_icon,
-            commands::open_log_folder,
-            commands::open_onboarding,
-            commands::complete_onboarding,
-            commands::open_attendance_window,
-            commands::get_attendance_cohort_id,
-            commands::report_attendance_start_clicked,
-            commands::get_tray_panel_state,
-            commands::get_local_dashboard_snapshot,
-            commands::run_tray_panel_action,
-            commands::hide_tray_panel,
-            commands::get_news_feed,
-            commands::open_news_item,
-            commands::get_login_status,
-            commands::refresh_login_status,
+            commands::get_dashboard_home_overview,
             commands::get_notification_inbox_snapshot,
             commands::activate_notification,
             commands::send_test_notification,
-            commands::clear_notification_inbox,
             commands::get_connected_service_status,
+            commands::reset_desktop_identity,
             commands::open_lms_login,
             commands::create_mobile_pairing,
             commands::get_mobile_pairing_status,
@@ -273,6 +166,16 @@ pub fn run() {
             commands::list_mobile_sessions,
             commands::revoke_mobile_session,
             commands::get_remote_attendance_snapshot,
+            commands::get_attendance_preferences,
+            commands::update_attendance_preferences,
+            commands::get_meal_preferences,
+            commands::update_meal_preferences,
+            commands::list_laundry_watches,
+            commands::create_laundry_watch,
+            commands::delete_laundry_watch,
+            commands::list_laundry_queue,
+            commands::join_laundry_queue,
+            commands::leave_laundry_queue,
             commands::refresh_platform_sync,
         ])
         // setup(): 앱 초기화 후 이벤트 루프 시작 전에 한 번 실행.
@@ -291,25 +194,18 @@ pub fn run() {
                 log_level,
                 MAX_LOG_FILE_SIZE / 1000,
             );
-            // 분석: PostHog 클라이언트 초기화.
-            // app_opened 이벤트는 identity 설정 시(set_identity) 전송한다.
-            let usage_analytics_enabled = {
-                let state = shared_state.try_lock().unwrap();
-                state.config.usage_analytics_enabled
-            };
-            analytics::init(usage_analytics_enabled);
-
-            // 자동 시작: Config 값을 기준으로 OS 상태를 동기화.
-            // 기본값이 true이므로 첫 설치 시 자동으로 등록됨.
+            // 자동 시작: 현재 설정값만 OS 상태와 동기화한다. 기본값은 꺼짐이다.
             sync_auto_start_setting(app.handle(), &shared_state);
             let remote_sync_service = Arc::new(remote_sync::RemoteSyncService::configured(app.handle())?);
             app.manage(remote_sync_service.clone());
             tray::setup_tray(app)?;
-            notification_inbox_service.initialize(app.handle());
             if let Err(error) = notification_service.initialize_system_backend() {
                 log::warn!("[notification] OS backend initialization failed: {error}");
             }
             let checker_window = checker::build_webview(app.handle())?;
+            // macOS Dock 배지는 윈도우 API를 통해 앱 전역으로 설정되므로,
+            // 자동 시작에서도 존재하는 checker를 만든 뒤 초기 배지를 동기화한다.
+            notification_inbox_service.initialize(app.handle());
             match checker_window.theme() {
                 Ok(theme) => {
                     if let Err(error) = tray::sync_icon_theme(app.handle(), theme) {
@@ -318,16 +214,12 @@ pub fn run() {
                 }
                 Err(error) => log::warn!("[app] system theme detection failed: {error}"),
             }
-            notify_startup_status(app.handle(), &shared_state, &notification_service);
-            let onboarding_completed = shared_state
-                .try_lock()
-                .map(|state| state.config.onboarding_completed)
-                .unwrap_or(false);
-            if should_open_dashboard_on_start(onboarding_completed, launched_from_autostart) {
+            notify_startup_status(app.handle(), &notification_service);
+            if should_open_dashboard_on_start(launched_from_autostart) {
                 tray::open_dashboard_window(app.handle());
             }
-            spawn_startup_update_check(app.handle().clone(), shared_state.clone());
-            spawn_periodic_update_check(app.handle().clone(), shared_state.clone());
+            spawn_startup_update_check(app.handle().clone());
+            spawn_periodic_update_check(app.handle().clone());
 
             // 백그라운드 루프: 상태 계산, 트레이 갱신, 체커 주기적 리로드.
             let app_handle = app.handle().clone();
@@ -352,18 +244,15 @@ mod tests {
 
     #[test]
     fn 이미지_뷰어만_변경한_크기를_기억한다() {
-        assert!(!window_size_should_persist("attendance"));
         assert!(window_size_should_persist("image-viewer"));
-        assert!(!window_size_should_persist("campus"));
-        assert!(!window_size_should_persist("settings"));
-        assert!(!window_size_should_persist("tray-panel"));
+        assert!(!window_size_should_persist("dashboard"));
+        assert!(!window_size_should_persist("checker"));
     }
 
     #[test]
     fn 자동시작은_대시보드를_열지_않고_수동실행은_연다() {
-        assert!(should_open_dashboard_on_start(true, false));
-        assert!(!should_open_dashboard_on_start(true, true));
-        assert!(!should_open_dashboard_on_start(false, false));
+        assert!(should_open_dashboard_on_start(false));
+        assert!(!should_open_dashboard_on_start(true));
     }
 
     #[test]

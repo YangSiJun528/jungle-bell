@@ -4,7 +4,7 @@ use std::sync::Arc;
 use notify_rust::{Notification, NotificationResponse};
 
 use crate::notification_inbox::NotificationInboxService;
-use crate::tray::{self, TrayPanelAction};
+use crate::tray::{self, DashboardRoute};
 
 const OPEN_ACTION_ID: &str = "open";
 // 반복 알림이 겹쳐도 액션 listener가 장시간 누적되지 않도록 유한 시간 뒤 정리한다.
@@ -172,8 +172,8 @@ fn response_timeout(action: Option<NotificationAction>) -> notify_rust::Timeout 
     }
 }
 
-fn system_notification_tray_action(action: Option<NotificationAction>) -> Option<TrayPanelAction> {
-    action.map(NotificationAction::tray_action)
+fn system_notification_dashboard_route(action: Option<NotificationAction>) -> Option<DashboardRoute> {
+    action.map(NotificationAction::dashboard_route)
 }
 
 fn should_dispatch_system_notification_to_main_thread(target_is_macos: bool, current_is_main_thread: bool) -> bool {
@@ -261,8 +261,8 @@ pub fn show_system(
             if let Err(error) = inbox.mark_read_from_system(&app, &notification_id) {
                 log::warn!("[notification] inbox read failed: {error}");
             }
-            if let Some(action) = system_notification_tray_action(action) {
-                if let Err(error) = tray::run_tray_panel_action(&app, action) {
+            if let Some(route) = system_notification_dashboard_route(action) {
+                if let Err(error) = tray::open_dashboard_route(&app, route) {
                     log::warn!("[notification] system action failed: {error}");
                 }
             }
@@ -345,30 +345,26 @@ mod tests {
     #[test]
     fn 삭제된_알림의_os_클릭은_원래_액션으로_fallback한다() {
         assert_eq!(
-            system_notification_tray_action(Some(NotificationAction::Laundry)),
-            Some(TrayPanelAction::OpenLaundry)
+            system_notification_dashboard_route(Some(NotificationAction::Laundry)),
+            Some(DashboardRoute::Laundry)
         );
-        assert_eq!(system_notification_tray_action(None), None);
+        assert_eq!(system_notification_dashboard_route(None), None);
     }
 
     #[test]
-    fn 모든_알림_액션은_tray와_os_버튼_표현을_가진다() {
+    fn 모든_알림_액션은_dashboard_route와_os_버튼_표현을_가진다() {
         let cases = [
             (
                 NotificationAction::Attendance,
-                TrayPanelAction::OpenAttendance,
+                DashboardRoute::Attendance,
                 "출석 페이지 열기",
             ),
-            (
-                NotificationAction::Laundry,
-                TrayPanelAction::OpenLaundry,
-                "워시타워 열기",
-            ),
-            (NotificationAction::Meals, TrayPanelAction::OpenMeals, "식단 열기"),
+            (NotificationAction::Laundry, DashboardRoute::Laundry, "워시타워 열기"),
+            (NotificationAction::Meals, DashboardRoute::Meals, "식단 열기"),
         ];
 
-        for (action, tray, label) in cases {
-            assert_eq!(action.tray_action(), tray);
+        for (action, route, label) in cases {
+            assert_eq!(action.dashboard_route(), route);
             assert_eq!(action.button_label(), label);
         }
     }

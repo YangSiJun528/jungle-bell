@@ -4,19 +4,12 @@ use chrono::{DateTime, FixedOffset, NaiveDate, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Notify;
 
-use crate::{
-    attendance::CohortOption, attendance_auto_refresh::AttendanceAutoRefreshRuntime, config::Config,
-    interval_tasks::JobStore,
-};
+use crate::{attendance::CohortOption, config::Config, interval_tasks::JobStore};
 
 /// 앱 전역 상태. scheduler, checker, tray 모듈에서 공유.
 /// `Arc<Mutex<AppState>>`로 보호되며 Tauri managed state로 접근.
 pub struct AppState {
     pub config: Config,
-    /// UI 설정 snapshot의 단조 증가 revision.
-    pub settings_revision: u64,
-    /// 마지막 설정 변경 경로. snapshot/event 진단에 사용.
-    pub settings_source: String,
     /// 학습 시작(체크인) 완료 여부 (LMS 테이블 기준)
     pub morning_checked: bool,
     /// 학습 종료(체크아웃) 완료 여부 (LMS 테이블 기준)
@@ -42,16 +35,6 @@ pub struct AppState {
     pub interval_jobs: JobStore,
     /// hidden checker WebView readiness/report 상태.
     pub checker: CheckerRuntime,
-    /// 사용자가 누른 학습 시작이 서버에 반영됐을 때만 출석 창을 갱신하는 상태.
-    pub attendance_auto_refresh: AttendanceAutoRefreshRuntime,
-    /// 로그인 재시도 윈도우 마감 시각.
-    /// 출석 페이지가 닫힌 후 일정 시간 동안만 로그인 상태를 재확인.
-    pub login_retry_until: Option<DateTime<Utc>>,
-    /// 발견된 업데이트 버전 (None이면 최신 버전 또는 미확인)
-    pub pending_update: Option<String>,
-    /// 출석 알림의 현재 권위. 연결 전에는 기존 로컬 계획을 유지하고,
-    /// 서버 연결이 건강하면 서버 inbox가 담당하며, 장시간 단절 시 로컬 fallback으로 전환한다.
-    pub attendance_notification_authority: AttendanceNotificationAuthority,
     /// 상태 변경 시 스케줄러의 다음 deadline 대기를 깨운다.
     pub scheduler_wakeup: Arc<Notify>,
 }
@@ -60,8 +43,6 @@ impl AppState {
     pub fn new(config: Config) -> Self {
         Self {
             config,
-            settings_revision: 0,
-            settings_source: "startup".into(),
             morning_checked: false,
             evening_checked: false,
             phase: DailyPhase::Idle,
@@ -74,10 +55,6 @@ impl AppState {
             last_reset_day: None,
             interval_jobs: JobStore::default(),
             checker: CheckerRuntime::default(),
-            attendance_auto_refresh: AttendanceAutoRefreshRuntime::default(),
-            login_retry_until: None,
-            pending_update: None,
-            attendance_notification_authority: AttendanceNotificationAuthority::LegacyLocal,
             scheduler_wakeup: Arc::new(Notify::new()),
         }
     }
@@ -97,13 +74,6 @@ impl AppState {
             checker_status: self.checker.status,
         }
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AttendanceNotificationAuthority {
-    LegacyLocal,
-    Server,
-    LocalFallback,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -231,12 +201,7 @@ pub enum DailyPhase {
 /// 현재 일일 상태와 다음 전환까지 남은 초를 계산.
 ///
 /// 카운트다운이 의미 있으면 `(phase, Some(초))`, 없으면 `(phase, None)` 반환.
-pub fn compute_daily_phase(
-    config: &Config,
-    now: DateTime<Utc>,
-    started: bool,
-    ended: bool,
-) -> (DailyPhase, Option<i64>) {
+pub fn compute_daily_phase(now: DateTime<Utc>, started: bool, ended: bool) -> (DailyPhase, Option<i64>) {
     if ended {
         return (DailyPhase::Complete, None);
     }
@@ -245,9 +210,12 @@ pub fn compute_daily_phase(
     let now_secs = (kst_now.hour() as i64) * 3600 + (kst_now.minute() as i64) * 60 + (kst_now.second() as i64);
 
     // 스케줄 경계 (초 단위)
-    let day_start_secs = config.morning_start.to_secs();
-    let end_window_secs = config.evening_start.to_secs();
-    let day_end_secs = config.evening_end.to_secs();
+    let day_start_secs =
+        crate::config::seconds_since_midnight(crate::config::MORNING_START_HOUR, crate::config::MORNING_START_MINUTE);
+    let end_window_secs =
+        crate::config::seconds_since_midnight(crate::config::EVENING_START_HOUR, crate::config::EVENING_START_MINUTE);
+    let day_end_secs =
+        crate::config::seconds_since_midnight(crate::config::EVENING_END_HOUR, crate::config::EVENING_END_MINUTE);
 
     // 시간대 판별 (두 구간이 24시간을 커버)
     let in_start_window = now_secs >= day_start_secs && now_secs < end_window_secs; // 04:00-22:59
@@ -256,7 +224,10 @@ pub fn compute_daily_phase(
     if !started {
         if in_start_window {
             // 체크인 가능 (04:00-22:59)
-            let goal_secs = config.morning_end.to_secs();
+            let goal_secs = crate::config::seconds_since_midnight(
+                crate::config::MORNING_END_HOUR,
+                crate::config::MORNING_END_MINUTE,
+            );
             let remaining_to_goal = goal_secs - now_secs;
 
             if remaining_to_goal <= 0 {

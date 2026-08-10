@@ -4,7 +4,7 @@ import {test} from 'vitest';
 
 const styles = readFileSync(new URL('./styles.css', import.meta.url), 'utf8');
 const uiStyles = readFileSync(new URL('./ui.css', import.meta.url), 'utf8');
-const templates = ['index.html', 'onboarding.html', 'campus.html', 'image-viewer.html']
+const templates = ['dashboard.html', 'image-viewer.html']
     .map((path) => readFileSync(new URL(path, import.meta.url), 'utf8'));
 
 test('Pretendard Variable 폰트는 크로스 플랫폼 선언과 fallback을 사용한다', () => {

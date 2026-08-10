@@ -30,7 +30,7 @@ RUN case "$TARGETARCH" in \
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
-COPY --from=build /app/dist/collector/collector.js ./dist/collector/collector.js
+COPY --from=build /app/dist/jobs/jobs.js ./dist/jobs/jobs.js
 COPY docker/crontab /etc/jungle-bell/crontab
 
 ENTRYPOINT ["/usr/local/bin/supercronic", "-json", "/etc/jungle-bell/crontab"]

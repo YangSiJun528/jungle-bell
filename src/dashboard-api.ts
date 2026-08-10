@@ -9,6 +9,24 @@ import {
     normalizeNotificationInboxSnapshot,
     type NotificationInboxSnapshot,
 } from './notification-inbox';
+import {
+    createDashboardPersonalApi,
+    type DashboardPersonalApi,
+} from './dashboard-personal-api';
+import {
+    createDashboardDesktopSettingsApi,
+    type DashboardDesktopSettingsApi,
+} from './dashboard-desktop-settings';
+export type {
+    AttendancePreferences,
+    LaundryApplianceKind,
+    LaundryQueueEntry,
+    LaundryQueueInput,
+    LaundryWatch,
+    LaundryWatchInput,
+    MealPreferences,
+    MealPreferencesInput,
+} from './dashboard-personal-api';
 
 export type DashboardFetch = (
     input: RequestInfo | URL,
@@ -25,7 +43,6 @@ export interface DashboardApiOptions {
     platformApiBaseUrl?: string;
     fetcher?: DashboardFetch;
     invokeCommand?: DashboardInvoke;
-    authorizationProvider?: () => string | null;
     desktopRuntime?: boolean;
 }
 
@@ -87,8 +104,6 @@ export interface AttendanceSnapshot {
     morningChecked: boolean;
     eveningChecked: boolean;
     collectedAt: string;
-    sourceDeviceId: string;
-    version: number;
 }
 
 export type AttendanceData =
@@ -119,11 +134,35 @@ export type AttendanceDashboard =
     | {state: 'loaded'; attendance: AttendanceData; devices: DesktopDevice[]};
 
 export interface DesktopConnectionState {
-    state: 'disconnected' | 'unknown' | 'connected' | 'expiring' | 'expired';
+    state: 'disconnected' | 'unknown' | 'connected' | 'reset-required';
     desktopId: string | null;
     lastVerifiedAt: string | null;
     lastSeenAt: string | null;
     health: 'unknown' | 'online' | 'offline' | null;
+    lmsSessionState: 'unknown' | 'connected' | 'login-required';
+}
+
+export type DashboardHomeStatus =
+    | 'loading'
+    | 'recovering'
+    | 'offline'
+    | 'needsLogin'
+    | 'active'
+    | 'complete'
+    | 'normal';
+
+export interface DashboardHomeOverview {
+    attendance: {
+        status: DashboardHomeStatus;
+        statusText: string;
+        ddayText: string | null;
+        ddayPeriod: {startDate: string; endDate: string} | null;
+        currentVersion: string;
+    };
+    lmsSessionState: 'unknown' | 'connected' | 'login-required';
+    unreadCount: number;
+    laundry: DashboardLaundrySnapshot | null;
+    meals: DashboardMealsSnapshot | null;
 }
 
 export interface MobilePairingCreated {
@@ -135,7 +174,6 @@ export interface MobilePairingCreated {
 
 export interface PairingClaim {
     claimId: string;
-    claimReceipt: string;
     status: 'awaiting-desktop-approval';
 }
 
@@ -149,9 +187,9 @@ export interface MobilePairingStatus {
 }
 
 export interface MobileSession {
-    sessionId: string;
     deviceId: string;
     deviceLabel: string;
+    installationId: string;
     createdAt: string;
     expiresAt: string;
     lastSeenAt: string;
@@ -176,14 +214,15 @@ export interface DesktopTestNotificationResult {
     mobileQueued: number | null;
 }
 
-export interface DashboardApi {
+export interface DashboardApi extends DashboardPersonalApi, DashboardDesktopSettingsApi {
     getPublicLaundry(): Promise<DashboardLaundrySnapshot>;
     getPublicMeals(): Promise<DashboardMealsSnapshot>;
     getAttendance(surface: 'desktop' | 'companion'): Promise<AttendanceDashboard>;
-    probeMobileSession(): Promise<boolean>;
     getDesktopConnectionState(): Promise<DesktopConnectionState>;
+    resetDesktopIdentity(): Promise<DesktopConnectionState>;
     refreshPlatformSync(): Promise<void>;
     openLmsLogin(): Promise<void>;
+    getDashboardHomeOverview(): Promise<DashboardHomeOverview>;
     createMobilePairing(): Promise<MobilePairingCreated>;
     getMobilePairingStatus(pairingId: string): Promise<MobilePairingStatus>;
     approveMobilePairing(pairingId: string, claimId: string): Promise<void>;
@@ -200,7 +239,7 @@ export interface DashboardApi {
         deviceLabel: string;
         installationId: string;
     }): Promise<PairingClaim>;
-    completePairing(pairingId: string, claim: PairingClaim): Promise<'waiting' | 'completed'>;
+    completePairing(pairingId: string): Promise<'waiting' | 'completed'>;
     disconnectMobileSession(): Promise<void>;
     getNotifications(): Promise<DashboardNotification[]>;
     getDesktopNotificationInbox(): Promise<NotificationInboxSnapshot>;
@@ -214,8 +253,22 @@ export interface DashboardApi {
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
 const PAIRING_ID = new RegExp(`^jbp_${UUID}$`, 'u');
 const CLAIM_ID = new RegExp(`^jbp_${UUID}$`, 'u');
-const CLAIM_RECEIPT = /^jbcr_[0-9a-f]{64}$/u;
 const PAIRING_CHALLENGE = /^jbpc_[0-9a-f]{64}$/u;
+const UUID_IDENTIFIER = new RegExp(`^${UUID}$`, 'u');
+const PUSH_SUBSCRIPTION_ID = /^jbps_[0-9a-f]{64}$/u;
+const MOBILE_INSTALLATION_ID = /^jbmi_[0-9a-f]{32}$/u;
+const MOBILE_SESSION_ID = new RegExp(`^jbsi_${UUID}$`, 'u');
+const ATTENDANCE_COHORT_STATUSES = new Set(['active', 'upcoming', 'ended', 'none', 'unknown']);
+const NOTIFICATION_KINDS = new Set([
+    'meal-published',
+    'laundry-finishing',
+    'laundry-completed',
+    'laundry-available',
+    'laundry-attention',
+    'attendance-action-required',
+    'login-required',
+    'test',
+]);
 
 export function createDashboardApi(options: DashboardApiOptions = {}): DashboardApi {
     const fetcher = options.fetcher ?? window.fetch.bind(window);
@@ -243,7 +296,6 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
     };
 
     const privateResponse = (path: string, init: RequestInit = {}): Promise<Response> => {
-        const authorization = options.authorizationProvider?.() ?? null;
         return fetcher(apiUrl(platformBase, path), {
             ...init,
             credentials: 'include',
@@ -251,7 +303,6 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
             headers: {
                 accept: 'application/json',
                 ...(init.body === undefined ? {} : {'content-type': 'application/json'}),
-                ...(authorization ? {authorization} : {}),
                 ...init.headers,
             },
         });
@@ -263,52 +314,61 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
     const privateNoContent = async (path: string, init: RequestInit): Promise<void> => {
         const response = await privateResponse(path, init);
         if (!response.ok) throw await responseError(response);
-        if (response.status !== 204 && response.status !== 200) throw new Error('API_RESPONSE_INVALID');
+        if (response.status !== 204) throw new Error('API_RESPONSE_INVALID');
     };
 
+    const personalApi = createDashboardPersonalApi({
+        platformBase,
+        fetcher,
+        invokeCommand,
+    });
+    const desktopSettingsApi = createDashboardDesktopSettingsApi(invokeCommand);
+
     return {
+        ...personalApi,
+        ...desktopSettingsApi,
         async getPublicLaundry() {
             const value = desktopRuntime
                 ? await invokeCommand('get_dashboard_campus_data', {kind: 'laundry'})
-                : await publicJson('/v1/laundry/latest');
+                : await publicJson('/api/public/laundry');
             return parseDashboardLaundrySnapshot(value);
         },
 
         async getPublicMeals() {
             const value = desktopRuntime
                 ? await invokeCommand('get_dashboard_campus_data', {kind: 'meals'})
-                : await publicJson('/v1/meals');
-            return parseMeals(value);
+                : await publicJson('/api/public/meals');
+            return parseDashboardMealsSnapshot(value);
         },
 
         async getAttendance(surface) {
             if (surface === 'desktop') {
-                return parseAttendanceDashboard(await invokeCommand('get_remote_attendance_snapshot'));
+                return {
+                    state: 'loaded',
+                    attendance: parseAttendancePayload(
+                        await invokeCommand('get_remote_attendance_snapshot'),
+                        false,
+                    ),
+                    devices: [],
+                };
             }
-            const response = await privateResponse('/v1/attendance/snapshots', {method: 'GET'});
+            const response = await privateResponse('/api/mobile/attendance', {method: 'GET'});
             if (response.status === 401) return {state: 'auth-required'};
             const attendanceValue = await responseJson(response);
-            const attendanceRecord = recordOrNull(attendanceValue);
-            if (attendanceRecord?.state === 'auth-required') return {state: 'auth-required'};
-            if (attendanceRecord && Array.isArray(attendanceRecord.devices)) {
-                return parseAttendanceDashboard(attendanceRecord);
-            }
+            const source = exactRecord(attendanceValue, ['attendance', 'freshness', 'devices']);
             return {
                 state: 'loaded',
-                attendance: parseAttendancePayload(attendanceValue),
-                devices: [],
+                attendance: parseAttendancePayload(attendanceValue, true),
+                devices: parseDevices(source.devices),
             };
-        },
-
-        async probeMobileSession() {
-            const response = await privateResponse('/v1/mobile/session', {method: 'GET'});
-            if (response.status === 401 || response.status === 404) return false;
-            if (!response.ok) throw await responseError(response);
-            return true;
         },
 
         async getDesktopConnectionState() {
             return parseDesktopConnection(await invokeCommand('get_connected_service_status'));
+        },
+
+        async resetDesktopIdentity() {
+            return parseDesktopConnection(await invokeCommand('reset_desktop_identity', {confirmed: true}));
         },
 
         async refreshPlatformSync() {
@@ -319,38 +379,42 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
             await invokeCommand('open_lms_login');
         },
 
+        async getDashboardHomeOverview() {
+            return parseDashboardHomeOverview(await invokeCommand('get_dashboard_home_overview'));
+        },
+
         async createMobilePairing() {
             return parsePairingCreated(await invokeCommand('create_mobile_pairing'));
         },
 
         async getMobilePairingStatus(pairingId) {
-            assertIdentifier(pairingId, PAIRING_ID);
+            assertIdentifier(pairingId, PAIRING_ID, true);
             return parsePairingStatus(await invokeCommand('get_mobile_pairing_status', {pairingId}));
         },
 
         async approveMobilePairing(pairingId, claimId) {
-            assertIdentifier(pairingId, PAIRING_ID);
-            assertIdentifier(claimId, CLAIM_ID);
+            assertIdentifier(pairingId, PAIRING_ID, true);
+            assertIdentifier(claimId, CLAIM_ID, true);
             await invokeCommand('approve_mobile_pairing', {pairingId, claimId});
         },
 
         async listMobileSessions() {
             const value = await invokeCommand('list_mobile_sessions');
-            const sessions = Array.isArray(value) ? value : record(value).sessions;
-            return parseMobileSessions(sessions);
+            return parseMobileSessions(value);
         },
 
         async revokeMobileSession(deviceId) {
-            if (!deviceId || deviceId.length > 128) throw new Error('API_CLIENT_INVALID_ARGUMENT');
+            assertIdentifier(deviceId, MOBILE_SESSION_ID, true);
             await invokeCommand('revoke_mobile_session', {deviceId});
         },
 
         async claimManualPairing(input) {
             const manualCode = normalizeManualPairingCode(input.manualCode);
-            if (!/^[0-9A-HJKMNP-TV-Z]{10}$/u.test(manualCode)) {
+            if (!/^[0-9A-HJKMNP-TV-Z]{10}$/u.test(manualCode)
+                || !validMobileClaimIdentity(input.deviceLabel, input.installationId)) {
                 throw new Error('API_CLIENT_INVALID_ARGUMENT');
             }
-            return parsePairingClaim(await privateJson('/v1/pairing-claims', {
+            return parsePairingClaim(await privateJson('/api/pairings/claims', {
                 method: 'POST',
                 body: JSON.stringify({
                     manualCode,
@@ -361,12 +425,13 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
         },
 
         async claimQrPairing(input) {
-            assertIdentifier(input.pairingId, PAIRING_ID);
-            if (!PAIRING_CHALLENGE.test(input.challenge)) {
+            assertIdentifier(input.pairingId, PAIRING_ID, true);
+            if (!PAIRING_CHALLENGE.test(input.challenge)
+                || !validMobileClaimIdentity(input.deviceLabel, input.installationId)) {
                 throw new Error('API_CLIENT_INVALID_ARGUMENT');
             }
             return parsePairingClaim(await privateJson(
-                `/v1/pairings/${encodeURIComponent(input.pairingId)}/claims`,
+                `/api/pairings/${encodeURIComponent(input.pairingId)}/claims`,
                 {
                     method: 'POST',
                     body: JSON.stringify({
@@ -378,36 +443,28 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
             ));
         },
 
-        async completePairing(pairingId, claim) {
-            assertIdentifier(pairingId, PAIRING_ID);
-            assertIdentifier(claim.claimId, CLAIM_ID);
-            assertIdentifier(claim.claimReceipt, CLAIM_RECEIPT);
-            const response = await privateResponse(`/v1/pairings/${encodeURIComponent(pairingId)}/complete`, {
+        async completePairing(pairingId) {
+            assertIdentifier(pairingId, PAIRING_ID, true);
+            const response = await privateResponse(`/api/pairings/${encodeURIComponent(pairingId)}/complete`, {
                 method: 'POST',
-                body: JSON.stringify({
-                    claimId: claim.claimId,
-                    claimReceipt: claim.claimReceipt,
-                }),
+                body: JSON.stringify({}),
             });
             if (response.status === 409) {
                 const value = await safeJson(response);
                 if (recordOrNull(value)?.error === 'PAIRING_NOT_APPROVED') return 'waiting';
             }
             if (!response.ok) throw await responseError(response);
+            if (response.status !== 204) throw new Error('API_RESPONSE_INVALID');
             return 'completed';
         },
 
         async disconnectMobileSession() {
-            await privateNoContent('/v1/mobile/session', {method: 'DELETE'});
+            await privateNoContent('/api/mobile/session', {method: 'DELETE'});
         },
 
         async getNotifications() {
-            const value = await privateJson('/v1/notifications/inbox?limit=20', {method: 'GET'});
-            const source = record(value);
-            const items = Array.isArray(value)
-                ? value
-                : source.notifications ?? source.items;
-            return parseNotifications(items);
+            const value = await privateJson('/api/mobile/notifications?limit=20', {method: 'GET'});
+            return parseNotifications(exactRecord(value, ['notifications']).notifications);
         },
 
         async getDesktopNotificationInbox() {
@@ -428,7 +485,10 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
         },
 
         async sendDesktopTestNotification() {
-            const value = record(await invokeCommand('send_test_notification'));
+            const value = exactRecord(
+                await invokeCommand('send_test_notification'),
+                ['snapshot', 'systemDelivered', 'mobileQueued'],
+            );
             const snapshot = normalizeNotificationInboxSnapshot(value.snapshot);
             const mobileQueued = value.mobileQueued;
             if (!snapshot
@@ -441,20 +501,25 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
         },
 
         async sendMobileTestNotification() {
-            const value = record(await privateJson('/v1/notifications/test', {
+            const value = exactRecord(await privateJson('/api/mobile/notifications/test', {
                 method: 'POST',
                 body: JSON.stringify({}),
-            }));
+            }), ['notificationId', 'queued']);
             if (!Number.isSafeInteger(value.queued) || (value.queued as number) < 1) {
                 throw new Error('API_RESPONSE_INVALID');
             }
-            text(value.notificationId, 128);
+            validatedIdentifier(text(value.notificationId, 36), UUID_IDENTIFIER);
             return value.queued as number;
         },
 
         async getPushPublicKey() {
-            const value = record(await privateJson('/v1/push/vapid-public-key', {method: 'GET'}));
-            return text(value.publicKey, 512);
+            const value = exactRecord(
+                await privateJson('/api/push/vapid-public-key', {method: 'GET'}),
+                ['publicKey'],
+            );
+            const publicKey = text(value.publicKey, 87);
+            if (!/^B[A-Za-z0-9_-]{86}$/u.test(publicKey)) throw new Error('API_RESPONSE_INVALID');
+            return publicKey;
         },
 
         async registerPushSubscription(subscription) {
@@ -462,13 +527,14 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
             if (!subscription.endpoint || !keys?.p256dh || !keys.auth) {
                 throw new Error('API_CLIENT_INVALID_ARGUMENT');
             }
-            await privateJson('/v1/push/subscriptions', {
+            const value = exactRecord(await privateJson('/api/push/subscriptions', {
                 method: 'PUT',
                 body: JSON.stringify({
                     endpoint: subscription.endpoint,
                     keys: {p256dh: keys.p256dh, auth: keys.auth},
                 }),
-            });
+            }), ['subscriptionId']);
+            validatedIdentifier(text(value.subscriptionId, 69), PUSH_SUBSCRIPTION_ID);
         },
     };
 }
@@ -526,6 +592,16 @@ function recordOrNull(value: unknown): Record<string, unknown> | null {
         : null;
 }
 
+function exactRecord(value: unknown, keys: readonly string[]): Record<string, unknown> {
+    const source = record(value);
+    const actualKeys = Object.keys(source);
+    if (actualKeys.length !== keys.length
+        || keys.some((key) => !Object.prototype.hasOwnProperty.call(source, key))) {
+        throw new Error('API_RESPONSE_INVALID');
+    }
+    return source;
+}
+
 function text(value: unknown, max = 512): string {
     if (typeof value !== 'string' || value.length < 1 || value.length > max) {
         throw new Error('API_RESPONSE_INVALID');
@@ -534,7 +610,7 @@ function text(value: unknown, max = 512): string {
 }
 
 function nullableText(value: unknown, max = 512): string | null {
-    return value === null || value === undefined ? null : text(value, max);
+    return value === null ? null : text(value, max);
 }
 
 function boolean(value: unknown): boolean {
@@ -573,7 +649,71 @@ function iso(value: unknown): string {
 }
 
 function nullableIso(value: unknown): string | null {
-    return value === null || value === undefined ? null : iso(value);
+    return value === null ? null : iso(value);
+}
+
+function calendarDate(value: unknown): string {
+    const valueText = text(value, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/u.test(valueText)) throw new Error('API_RESPONSE_INVALID');
+    const [yearText, monthText, dayText] = valueText.split('-');
+    const year = Number(yearText);
+    const month = Number(monthText);
+    const day = Number(dayText);
+    const parsed = new Date(Date.UTC(year, month - 1, day));
+    if (parsed.getUTCFullYear() !== year
+        || parsed.getUTCMonth() !== month - 1
+        || parsed.getUTCDate() !== day) {
+        throw new Error('API_RESPONSE_INVALID');
+    }
+    return valueText;
+}
+
+function nullableCalendarDate(value: unknown): string | null {
+    return value === null ? null : calendarDate(value);
+}
+
+function parseDashboardHomeOverview(value: unknown): DashboardHomeOverview {
+    const source = exactRecord(value, ['attendance', 'lmsSessionState', 'unreadCount', 'laundry', 'meals']);
+    const attendance = exactRecord(source.attendance, [
+        'status', 'statusText', 'ddayText', 'ddayPeriod', 'currentVersion',
+    ]);
+    const statuses = new Set<DashboardHomeStatus>([
+        'loading', 'recovering', 'offline', 'needsLogin', 'active', 'complete', 'normal',
+    ]);
+    if (typeof attendance.status !== 'string' || !statuses.has(attendance.status as DashboardHomeStatus)) {
+        throw new Error('API_RESPONSE_INVALID');
+    }
+    const lmsSessionState = source.lmsSessionState;
+    if (lmsSessionState !== 'unknown'
+        && lmsSessionState !== 'connected'
+        && lmsSessionState !== 'login-required') {
+        throw new Error('API_RESPONSE_INVALID');
+    }
+    const unreadCount = source.unreadCount;
+    if (typeof unreadCount !== 'number' || !Number.isSafeInteger(unreadCount) || unreadCount < 0) {
+        throw new Error('API_RESPONSE_INVALID');
+    }
+    const ddayPeriodSource = attendance.ddayPeriod === null
+        ? null
+        : exactRecord(attendance.ddayPeriod, ['startDate', 'endDate']);
+    const ddayPeriod = ddayPeriodSource === null ? null : {
+        startDate: calendarDate(ddayPeriodSource.startDate),
+        endDate: calendarDate(ddayPeriodSource.endDate),
+    };
+    if (ddayPeriod && ddayPeriod.endDate < ddayPeriod.startDate) throw new Error('API_RESPONSE_INVALID');
+    return {
+        attendance: {
+            status: attendance.status as DashboardHomeStatus,
+            statusText: text(attendance.statusText, 256),
+            ddayText: nullableText(attendance.ddayText, 128),
+            ddayPeriod,
+            currentVersion: text(attendance.currentVersion, 64),
+        },
+        lmsSessionState,
+        unreadCount,
+        laundry: source.laundry === null ? null : parseDashboardLaundrySnapshot(source.laundry),
+        meals: source.meals === null ? null : parseDashboardMealsSnapshot(source.meals),
+    };
 }
 
 function machineZone(id: string): DashboardLaundryMachine['zone'] {
@@ -588,8 +728,19 @@ function machineZone(id: string): DashboardLaundryMachine['zone'] {
 export function parseDashboardLaundrySnapshot(value: unknown): DashboardLaundrySnapshot {
     const source = record(value);
     const quality = record(source.quality);
+    if (source.schemaVersion !== 1
+        || (quality.collection !== 'SUCCESS' && quality.collection !== 'STALE')
+        || ![
+            'REFRESH_OBSERVED',
+            'WITHIN_REFRESH_WINDOW',
+            'REFRESH_OVERDUE',
+            'UNVERIFIABLE_STABLE',
+            'COLLECTION_GAP',
+        ].includes(String(quality.sourceFreshness))) {
+        throw new Error('API_RESPONSE_INVALID');
+    }
     return {
-        schemaVersion: finiteNumber(source.schemaVersion),
+        schemaVersion: 1,
         asOf: iso(source.asOf),
         final: boolean(source.final),
         quality: {
@@ -614,7 +765,7 @@ export function parseDashboardLaundrySnapshot(value: unknown): DashboardLaundryS
 }
 
 function parseLaundryCapacity(value: unknown): LaundryCapacitySnapshot {
-    const source = record(value);
+    const source = exactRecord(value, ['basis', 'men', 'women']);
     if (source.basis !== 'WASHER_AND_DRYER_HEADROOM_60_MIN') {
         throw new Error('API_RESPONSE_INVALID');
     }
@@ -629,7 +780,10 @@ function parseLaundryCapacityEstimate(
     value: unknown,
     expectedAccess: LaundryCapacityEstimate['access'],
 ): LaundryCapacityEstimate {
-    const source = record(value);
+    const source = exactRecord(value, [
+        'access', 'washerAvailable', 'projectedDryerSupply', 'pendingDryerLoads',
+        'dryerHeadroom', 'startableLoads', 'reliable',
+    ]);
     if (source.access !== expectedAccess) throw new Error('API_RESPONSE_INVALID');
     const washerAvailable = boundedLaundryCount(source.washerAvailable);
     const projectedDryerSupply = boundedLaundryCount(source.projectedDryerSupply);
@@ -684,17 +838,16 @@ function parseLaundryAppliance(value: unknown): DashboardLaundryAppliance {
     };
 }
 
-function parseMeals(value: unknown): DashboardMealsSnapshot {
+export function parseDashboardMealsSnapshot(value: unknown): DashboardMealsSnapshot {
     const source = record(value);
     const data = record(source.data);
-    const recent = data.recentMenus ?? data.otherPosts ?? [];
     return {
         asOf: iso(source.asOf),
         lastCheckedAt: nullableIso(source.lastCheckedAt),
         data: {
             dailyMenus: parseMealPosts(data.dailyMenus),
             pinnedMenus: parseMealPosts(data.pinnedMenus),
-            recentMenus: parseMealPosts(recent),
+            recentMenus: parseMealPosts(data.recentMenus),
         },
     };
 }
@@ -730,50 +883,20 @@ export function safeMealPermalink(value: unknown): string | null {
     }
 }
 
-function parseAttendanceDashboard(value: unknown): AttendanceDashboard {
-    const source = record(value);
-    if (source.state === 'auth-required') return {state: 'auth-required'};
-    const attendance = parseAttendancePayload(source);
-    const devices = source.devices === undefined ? [] : parseDevices(source.devices);
-    return {state: 'loaded', attendance, devices};
-}
-
-function parseAttendancePayload(value: unknown): AttendanceData {
-    const source = record(value);
-    if (Object.prototype.hasOwnProperty.call(source, 'attendance')) {
-        const freshness = attendanceFreshness(source.freshness);
-        if (source.attendance === null) {
-            if (freshness !== 'missing') throw new Error('API_RESPONSE_INVALID');
-            return {status: 'unavailable', freshness: 'missing', lastSyncedAt: null, snapshot: null};
-        }
-        if (freshness === 'missing') throw new Error('API_RESPONSE_INVALID');
-        return attendanceFromSnapshot(source.attendance, freshness);
+function parseAttendancePayload(value: unknown, includesDevices: boolean): AttendanceData {
+    const source = exactRecord(
+        value,
+        includesDevices ? ['attendance', 'freshness', 'devices'] : ['attendance', 'freshness'],
+    );
+    const freshness = attendanceFreshness(source.freshness);
+    if (source.attendance === null) {
+        if (freshness !== 'missing') throw new Error('API_RESPONSE_INVALID');
+        return {status: 'unavailable', freshness: 'missing', lastSyncedAt: null, snapshot: null};
     }
-    if (source.latest !== undefined) {
-        const freshness = attendanceFreshness(source.freshness);
-        if (source.latest === null) {
-            if (freshness !== 'missing') throw new Error('API_RESPONSE_INVALID');
-            return {status: 'unavailable', freshness: 'missing', lastSyncedAt: null, snapshot: null};
-        }
-        if (freshness === 'missing') throw new Error('API_RESPONSE_INVALID');
-        return attendanceFromSnapshot(source.latest, freshness);
+    if (source.attendance === undefined || freshness === 'missing') {
+        throw new Error('API_RESPONSE_INVALID');
     }
-    if (Array.isArray(source.snapshots)) {
-        const latest = source.snapshots[0];
-        const freshness = attendanceFreshness(source.freshness);
-        if (latest === undefined) {
-            if (freshness !== 'missing') throw new Error('API_RESPONSE_INVALID');
-            return {status: 'unavailable', freshness: 'missing', lastSyncedAt: null, snapshot: null};
-        }
-        if (freshness === 'missing') throw new Error('API_RESPONSE_INVALID');
-        return attendanceFromSnapshot(latest, freshness);
-    }
-    if (source.morningChecked !== undefined && source.eveningChecked !== undefined) {
-        const freshness = attendanceFreshness(source.freshness);
-        if (freshness === 'missing') throw new Error('API_RESPONSE_INVALID');
-        return attendanceFromSnapshot(source, freshness);
-    }
-    return parseAttendance(source);
+    return attendanceFromSnapshot(source.attendance, freshness);
 }
 
 function attendanceFromSnapshot(value: unknown, freshnessValue: unknown): AttendanceData {
@@ -795,45 +918,46 @@ function attendanceFreshness(value: unknown): 'fresh' | 'stale' | 'missing' {
     return value;
 }
 
-function parseAttendance(value: unknown): AttendanceData {
-    const source = record(value);
-    if (source.status === 'unavailable') {
-        return {status: 'unavailable', freshness: 'missing', lastSyncedAt: null, snapshot: null};
-    }
-    if (source.status !== 'available' || (source.freshness !== 'fresh' && source.freshness !== 'stale')) {
+function parseAttendanceSnapshot(snapshot: Record<string, unknown>): AttendanceSnapshot {
+    const source = exactRecord(snapshot, [
+        'attendanceDate', 'cohortId', 'cohortStatus', 'cohortStartDate', 'cohortEndDate',
+        'morningChecked', 'eveningChecked', 'collectedAt',
+    ]);
+    const attendanceDate = calendarDate(source.attendanceDate);
+    const cohortId = nullableText(source.cohortId, 128);
+    const cohortStatus = text(source.cohortStatus, 32);
+    const cohortStartDate = nullableCalendarDate(source.cohortStartDate);
+    const cohortEndDate = nullableCalendarDate(source.cohortEndDate);
+    const morningChecked = boolean(source.morningChecked);
+    const eveningChecked = boolean(source.eveningChecked);
+    if (!ATTENDANCE_COHORT_STATUSES.has(cohortStatus)
+        || (cohortStartDate !== null && cohortEndDate !== null && cohortStartDate > cohortEndDate)
+        || (cohortStatus === 'active' && cohortId === null)
+        || ((cohortStatus === 'upcoming' || cohortStatus === 'ended')
+            && (cohortId !== null || morningChecked || eveningChecked))
+        || (cohortStatus === 'none'
+            && (cohortId !== null || cohortStartDate !== null || cohortEndDate !== null
+                || morningChecked || eveningChecked))
+        || (cohortStatus === 'unknown' && cohortId !== null)) {
         throw new Error('API_RESPONSE_INVALID');
     }
-    const snapshot = record(source.snapshot);
     return {
-        status: 'available',
-        freshness: source.freshness,
-        lastSyncedAt: iso(source.lastSyncedAt),
-        snapshot: parseAttendanceSnapshot(snapshot),
-    };
-}
-
-function parseAttendanceSnapshot(snapshot: Record<string, unknown>): AttendanceSnapshot {
-    return {
-        attendanceDate: text(snapshot.attendanceDate, 10),
-        cohortId: nullableText(snapshot.cohortId, 256),
-        cohortStatus: snapshot.cohortStatus === undefined
-            ? 'unknown'
-            : text(snapshot.cohortStatus, 32),
-        cohortStartDate: nullableText(snapshot.cohortStartDate, 10),
-        cohortEndDate: nullableText(snapshot.cohortEndDate, 10),
-        morningChecked: boolean(snapshot.morningChecked),
-        eveningChecked: boolean(snapshot.eveningChecked),
-        collectedAt: iso(snapshot.collectedAt),
-        sourceDeviceId: snapshot.sourceDeviceId === undefined
-            ? 'unknown'
-            : text(snapshot.sourceDeviceId, 128),
-        version: snapshot.version === undefined ? 0 : finiteNumber(snapshot.version),
+        attendanceDate,
+        cohortId,
+        cohortStatus,
+        cohortStartDate,
+        cohortEndDate,
+        morningChecked,
+        eveningChecked,
+        collectedAt: iso(source.collectedAt),
     };
 }
 
 function parseDevices(value: unknown): DesktopDevice[] {
     return array(value, 32).map((entry) => {
-        const device = record(entry);
+        const device = exactRecord(entry, [
+            'id', 'deviceLabel', 'lastSeenAt', 'lmsSessionState', 'health', 'appVersion',
+        ]);
         const lms = device.lmsSessionState;
         const health = device.health;
         if (lms !== 'unknown' && lms !== 'connected' && lms !== 'login-required') {
@@ -854,37 +978,31 @@ function parseDevices(value: unknown): DesktopDevice[] {
 }
 
 function parseDesktopConnection(value: unknown): DesktopConnectionState {
-    const source = record(value);
-    if (typeof source.authenticated === 'boolean') {
-        return {
-            state: source.authenticated ? 'connected' : 'disconnected',
-            desktopId: nullableText(source.installationId, 128),
-            lastVerifiedAt: nullableIso(source.lastServerContact),
-            lastSeenAt: nullableIso(source.lastServerContact),
-            health: source.authenticated
-                ? (source.lastError === null || source.lastError === undefined ? 'online' : 'unknown')
-                : null,
-        };
-    }
-    const state = source.state;
-    const health = source.health;
-    if (!['disconnected', 'unknown', 'connected', 'expiring', 'expired'].includes(String(state))) {
+    const source = exactRecord(value, [
+        'authenticated', 'installationId', 'credentialPersistent', 'identityResetRequired',
+        'lmsSessionState', 'lastServerContact', 'lastError',
+    ]);
+    const authenticated = boolean(source.authenticated);
+    const identityResetRequired = boolean(source.identityResetRequired);
+    const lmsSessionState = source.lmsSessionState;
+    if (lmsSessionState !== 'unknown' && lmsSessionState !== 'connected' && lmsSessionState !== 'login-required') {
         throw new Error('API_RESPONSE_INVALID');
     }
-    if (health !== null && health !== undefined && !['unknown', 'online', 'offline'].includes(String(health))) {
-        throw new Error('API_RESPONSE_INVALID');
-    }
+    boolean(source.credentialPersistent);
+    nullableText(source.lastError, 128);
+    const lastContact = nullableIso(source.lastServerContact);
     return {
-        state: state as DesktopConnectionState['state'],
-        desktopId: nullableText(source.desktopId, 128),
-        lastVerifiedAt: nullableIso(source.lastVerifiedAt),
-        lastSeenAt: nullableIso(source.lastSeenAt),
-        health: (health ?? null) as DesktopConnectionState['health'],
+        state: identityResetRequired ? 'reset-required' : authenticated ? 'connected' : 'disconnected',
+        desktopId: nullableText(source.installationId, 128),
+        lastVerifiedAt: lastContact,
+        lastSeenAt: lastContact,
+        health: authenticated ? (source.lastError === null ? 'online' : 'unknown') : null,
+        lmsSessionState,
     };
 }
 
 function parsePairingCreated(value: unknown): MobilePairingCreated {
-    const source = record(value);
+    const source = exactRecord(value, ['pairingId', 'qrPayload', 'manualCode', 'expiresAt']);
     const pairingId = text(source.pairingId, 64);
     const manualCode = normalizeManualPairingCode(text(source.manualCode, 32));
     assertIdentifier(pairingId, PAIRING_ID);
@@ -898,17 +1016,15 @@ function parsePairingCreated(value: unknown): MobilePairingCreated {
 }
 
 function parsePairingClaim(value: unknown): PairingClaim {
-    const source = record(value);
+    const source = exactRecord(value, ['claimId', 'status']);
     const claimId = text(source.claimId, 64);
-    const claimReceipt = text(source.claimReceipt, 128);
     assertIdentifier(claimId, CLAIM_ID);
-    assertIdentifier(claimReceipt, CLAIM_RECEIPT);
     if (source.status !== 'awaiting-desktop-approval') throw new Error('API_RESPONSE_INVALID');
-    return {claimId, claimReceipt, status: source.status};
+    return {claimId, status: source.status};
 }
 
 function parsePairingStatus(value: unknown): MobilePairingStatus {
-    const source = record(value);
+    const source = exactRecord(value, ['status', 'claim']);
     const status = source.status;
     if (status !== 'pending'
         && status !== 'claimed'
@@ -922,7 +1038,7 @@ function parsePairingStatus(value: unknown): MobilePairingStatus {
         return {status, claim: null};
     }
     if (source.claim === null || source.claim === undefined) throw new Error('API_RESPONSE_INVALID');
-    const claim = record(source.claim);
+    const claim = exactRecord(source.claim, ['claimId', 'deviceLabel', 'confirmationCode']);
     const confirmationCode = text(claim.confirmationCode, 4);
     if (!/^[A-Za-z0-9]{4}$/u.test(confirmationCode)) throw new Error('API_RESPONSE_INVALID');
     return {
@@ -937,22 +1053,33 @@ function parsePairingStatus(value: unknown): MobilePairingStatus {
 
 function parseMobileSessions(value: unknown): MobileSession[] {
     return array(value).map((entry) => {
-        const session = record(entry);
+        const session = exactRecord(entry, [
+            'deviceId', 'deviceLabel', 'installationId', 'createdAt', 'expiresAt',
+            'lastSeenAt', 'pushEnabled', 'status',
+        ]);
         const status = session.status;
         if (status !== 'active' && status !== 'revoked' && status !== 'expired') {
             throw new Error('API_RESPONSE_INVALID');
         }
-        const deviceId = text(session.deviceId, 128);
-        const sessionId = session.sessionId === undefined
-            ? deviceId
-            : text(session.sessionId, 64);
+        const deviceId = validatedIdentifier(text(session.deviceId, 64), MOBILE_SESSION_ID);
+        const installationId = validatedIdentifier(
+            text(session.installationId, 37),
+            MOBILE_INSTALLATION_ID,
+        );
+        const createdAt = iso(session.createdAt);
+        const expiresAt = iso(session.expiresAt);
+        const lastSeenAt = iso(session.lastSeenAt);
+        if (Date.parse(expiresAt) <= Date.parse(createdAt)
+            || Date.parse(lastSeenAt) < Date.parse(createdAt)) {
+            throw new Error('API_RESPONSE_INVALID');
+        }
         return {
-            sessionId,
             deviceId,
             deviceLabel: text(session.deviceLabel, 80),
-            createdAt: iso(session.createdAt),
-            expiresAt: iso(session.expiresAt),
-            lastSeenAt: iso(session.lastSeenAt),
+            installationId,
+            createdAt,
+            expiresAt,
+            lastSeenAt,
             pushEnabled: boolean(session.pushEnabled),
             status,
         };
@@ -961,7 +1088,10 @@ function parseMobileSessions(value: unknown): MobileSession[] {
 
 function parseNotifications(value: unknown): DashboardNotification[] {
     return array(value).map((entry) => {
-        const item = record(entry);
+        const item = exactRecord(entry, [
+            'id', 'kind', 'title', 'body', 'path', 'createdAtEpochMs',
+            'expiresAtEpochMs', 'attempt',
+        ]);
         const path = text(item.path, 128);
         if (!/^\/dashboard\.html#(?:attendance|laundry|meals|notifications|connections)$/u.test(path)) {
             throw new Error('API_RESPONSE_INVALID');
@@ -972,9 +1102,11 @@ function parseNotifications(value: unknown): DashboardNotification[] {
         if (expiresAtEpochMs < createdAtEpochMs || attempt > 1_000) {
             throw new Error('API_RESPONSE_INVALID');
         }
+        const kind = text(item.kind, 128);
+        if (!NOTIFICATION_KINDS.has(kind)) throw new Error('API_RESPONSE_INVALID');
         return {
-            id: text(item.id, 128),
-            kind: text(item.kind, 128),
+            id: validatedIdentifier(text(item.id, 36), UUID_IDENTIFIER),
+            kind,
             title: text(item.title, 256),
             body: text(item.body, 2_048),
             path,
@@ -985,8 +1117,18 @@ function parseNotifications(value: unknown): DashboardNotification[] {
     });
 }
 
-function assertIdentifier(value: string, pattern: RegExp): void {
-    if (!pattern.test(value)) throw new Error('API_RESPONSE_INVALID');
+function validMobileClaimIdentity(deviceLabel: string, installationId: string): boolean {
+    return typeof deviceLabel === 'string'
+        && deviceLabel.trim() === deviceLabel
+        && deviceLabel.length >= 1
+        && deviceLabel.length <= 80
+        && MOBILE_INSTALLATION_ID.test(installationId);
+}
+
+function assertIdentifier(value: string, pattern: RegExp, clientArgument = false): void {
+    if (!pattern.test(value)) {
+        throw new Error(clientArgument ? 'API_CLIENT_INVALID_ARGUMENT' : 'API_RESPONSE_INVALID');
+    }
 }
 
 function validatedIdentifier(value: string, pattern: RegExp): string {

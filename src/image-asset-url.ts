@@ -5,7 +5,7 @@ export function isSafeImageAssetUrl(value: string): boolean {
         return !url.username
             && !url.password
             && (url.protocol === 'https:' || isLocalHttp)
-            && url.pathname.startsWith('/v1/assets/');
+            && url.pathname.startsWith('/api/public/assets/');
     } catch {
         return false;
     }

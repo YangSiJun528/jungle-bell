@@ -17,14 +17,6 @@ const injectionScripts: InjectionScript[] = [
         sources: [resolve(import.meta.dirname, 'src/injected/checker.ts')],
         output: resolve(import.meta.dirname, 'dist/injected/checker.js'),
     },
-    {
-        name: 'attendance',
-        sources: [
-            resolve(import.meta.dirname, 'src/injected/attendance-decision.ts'),
-            resolve(import.meta.dirname, 'src/injected/attendance.ts'),
-        ],
-        output: resolve(import.meta.dirname, 'dist/injected/attendance.js'),
-    },
 ];
 
 async function compileInjectionScript(script: InjectionScript): Promise<void> {
@@ -82,7 +74,10 @@ export default defineConfig({
         port: 5173,
         strictPort: true,
     },
-    envPrefix: ['VITE_', 'TAURI_ENV_*'],
+    // Tauri build variables are consumed by this Node-side config only. Never
+    // expose the TAURI_ namespace to browser bundles because it can contain
+    // updater signing material in release environments.
+    envPrefix: ['VITE_'],
     build: {
         target: process.env.TAURI_ENV_PLATFORM === 'windows' ? 'chrome105' : 'safari13',
         outDir: '../dist',
@@ -91,13 +86,8 @@ export default defineConfig({
         minify: process.env.TAURI_ENV_DEBUG === 'true' ? false : 'oxc',
         rolldownOptions: {
             input: {
-                settings: resolve(import.meta.dirname, 'src/index.html'),
-                onboarding: resolve(import.meta.dirname, 'src/onboarding.html'),
-                campus: resolve(import.meta.dirname, 'src/campus.html'),
                 imageViewer: resolve(import.meta.dirname, 'src/image-viewer.html'),
-                trayPanel: resolve(import.meta.dirname, 'src/tray-panel.html'),
                 dashboard: resolve(import.meta.dirname, 'src/dashboard.html'),
-                pair: resolve(import.meta.dirname, 'src/pair/index.html'),
             },
         },
     },

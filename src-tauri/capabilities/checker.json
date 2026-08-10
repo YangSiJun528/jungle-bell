@@ -9,11 +9,6 @@
   "windows": ["checker"],
   "permissions": [
     "core:event:allow-listen",
-    "allow-report-attendance-status",
-    "allow-report-checker-ready",
-    "allow-report-cms-identity",
-    "allow-log-from-js",
-    "allow-resolve-cohort-selection",
-    "allow-get-usage-analytics-enabled"
+    "allow-report-checker-event"
   ]
 }

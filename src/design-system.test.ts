@@ -6,10 +6,7 @@ const readSource = (path: string) => readFileSync(new URL(path, import.meta.url)
 const foundationStyles = readSource('./styles.css');
 const uiStyles = readSource('./ui.css');
 const pagePaths = [
-    './index.html',
-    './onboarding.html',
-    './campus.html',
-    './tray-panel.html',
+    './dashboard.html',
     './image-viewer.html',
 ];
 const pages = pagePaths.map((path) => ({path, source: readSource(path)}));
@@ -91,7 +88,7 @@ test('타이포그래피는 다섯 단계와 두 가지 강조 굵기로 제한�
             const classes = match[1] ?? '';
             assert.match(
                 classes,
-                /\b(?:ui-settings-description|text-(?:ui-(?:caption|label|body|title|display)|xs|sm|base|lg|2xl))\b/,
+                /\btext-(?:ui-(?:caption|label|body|title|display)|xs|sm|base|lg|2xl)\b/,
                 `${path}의 small 요소가 브라우저 기본 축소 비율을 사용합니다.`,
             );
         }
@@ -169,16 +166,12 @@ test('모든 창은 같은 UI 프리미티브와 페이지 역할을 사용한�
     assert.match(uiStyles, /select\.ui-control\s*\{[^}]*height:\s*40px/s);
 });
 
-test('상태 배지·팝오버·진행률은 반복 가능한 공통 컴포넌트를 사용한다', () => {
-    const campus = readSource('./campus.html');
-    const onboarding = readSource('./onboarding.html');
-    const tray = readSource('./tray-panel.html');
+test('상태 배지·카드·빈 상태는 반복 가능한 공통 컴포넌트를 사용한다', () => {
+    const dashboard = readSource('./dashboard.html');
 
-    assert.match(campus, /\bui-badge\b/);
-    assert.match(campus, /\bui-popover\b/);
-    assert.match(campus, /\bui-progress\b/);
-    assert.match(onboarding, /\bui-progress\b/);
-    assert.match(tray, /\bui-progress\b/);
+    assert.match(dashboard, /\bui-badge\b/);
+    assert.match(dashboard, /\bui-card\b/);
+    assert.match(dashboard, /\bdashboard-empty\b/);
 });
 
 test('기본 표면은 테두리 없이 배경과 여백으로 구분한다', () => {

@@ -2,14 +2,18 @@
 //!
 //! Vite가 생성한 checker script가 WebView에 주입되어 LMS REST API를 호출한다.
 //! Rust가 `trigger_check()`로 이벤트를 발송하면,
-//! JS가 API를 조회해 `report_attendance_status` invoke로 반환한다.
+//! JS가 API를 조회해 `report_checker_event` invoke로 반환한다.
 //! 이 모듈은 WebView generation/readiness/report watchdog을 관리한다.
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use serde::Serialize;
-use tauri::{webview::PageLoadEvent, Emitter, Manager};
+use tauri::{
+    plugin::{Builder as PluginBuilder, TauriPlugin},
+    webview::{NewWindowResponse, PageLoadEvent},
+    Emitter, Manager, Runtime, Url,
+};
 use tokio::sync::Mutex;
 
 use crate::state::{AppState, CheckerRuntime, CheckerRuntimeStatus};
@@ -18,6 +22,21 @@ use crate::tray;
 const ATTENDANCE_URL: &str = "https://jungle-lms.krafton.com/check-in";
 pub(crate) const CHECKER_NO_REPORT_REFRESH_LIMIT: u32 = 3;
 const CHECKER_REPORT_TIMEOUT: Duration = Duration::from_secs(7);
+
+fn is_allowed_checker_navigation(url: &Url) -> bool {
+    url.as_str() == "about:blank"
+        || (url.scheme() == "https"
+            && matches!(url.host_str(), Some("jungle-lms.krafton.com" | "accounts.google.com"))
+            && url.port_or_known_default() == Some(443)
+            && url.username().is_empty()
+            && url.password().is_none())
+}
+
+pub(crate) fn navigation_guard<R: Runtime>() -> TauriPlugin<R> {
+    PluginBuilder::new("checker-navigation-guard")
+        .on_navigation(|webview, url| webview.label() != "checker" || is_allowed_checker_navigation(url))
+        .build()
+}
 
 #[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -153,7 +172,7 @@ pub(crate) fn record_checker_give_up(state: &mut AppState, generation: u64) {
 
 /// checker WebView에 trigger-check 이벤트를 발송.
 /// JS가 이벤트를 수신하면 API를 조회해
-/// `report_attendance_status` invoke로 반환한다.
+/// `report_checker_event` invoke로 반환한다.
 pub fn trigger_check(app: &tauri::AppHandle, generation: u64) -> bool {
     log::debug!("[checker] trigger_check emitted: generation={}", generation);
     let _ = app.emit_to(
@@ -166,13 +185,14 @@ pub fn trigger_check(app: &tauri::AppHandle, generation: u64) -> bool {
     true
 }
 
-pub fn trigger_current_check(app: &tauri::AppHandle) -> bool {
+async fn current_checker_generation(state: &Mutex<AppState>) -> u64 {
+    state.lock().await.checker.page_load_generation
+}
+
+pub async fn trigger_current_check(app: &tauri::AppHandle) -> bool {
     let state: tauri::State<Arc<Mutex<AppState>>> = app.state();
-    let Ok(s) = state.try_lock() else {
-        log::warn!("[checker] trigger_check skipped: state locked");
-        return false;
-    };
-    trigger_check(app, s.checker.page_load_generation)
+    let generation = current_checker_generation(state.inner().as_ref()).await;
+    trigger_check(app, generation)
 }
 
 /// checker WebView를 출석 페이지 기준으로 갱신한다.
@@ -235,10 +255,16 @@ pub(crate) fn build_webview(app: &tauri::AppHandle) -> tauri::Result<tauri::Webv
         "checker",
         tauri::WebviewUrl::External(ATTENDANCE_URL.parse().unwrap()),
     )
-    .title("Jungle Bell")
+    .title("Jungle Campus")
+    .inner_size(1100.0, 760.0)
+    .min_inner_size(760.0, 560.0)
+    .center()
+    .resizable(true)
     .visible(false)
     .focused(false)
     .skip_taskbar(true)
+    .devtools(false)
+    .on_new_window(|_, _| NewWindowResponse::Deny)
     .initialization_script(checker_script)
     .on_page_load(|window, payload| {
         if payload.event() == PageLoadEvent::Finished {
@@ -281,7 +307,9 @@ pub(crate) fn build_webview(app: &tauri::AppHandle) -> tauri::Result<tauri::Webv
         tauri::WindowEvent::CloseRequested { api, .. } => {
             api.prevent_close();
             if let Some(window) = app_handle.get_webview_window("checker") {
+                let _ = window.set_skip_taskbar(true);
                 let _ = window.hide();
+                crate::tray::sync_foreground_app_visibility(&app_handle);
             }
         }
         tauri::WindowEvent::ThemeChanged(theme) => {
@@ -293,6 +321,25 @@ pub(crate) fn build_webview(app: &tauri::AppHandle) -> tauri::Result<tauri::Webv
     });
 
     Ok(checker)
+}
+
+pub(crate) fn show_lms_window(app: &tauri::AppHandle) -> Result<(), String> {
+    let window = app
+        .get_webview_window("checker")
+        .ok_or_else(|| "LMS_CHECKER_UNAVAILABLE".to_string())?;
+    window
+        .set_skip_taskbar(false)
+        .map_err(|error| format!("LMS_WINDOW_TASKBAR_FAILED: {error}"))?;
+    window
+        .unminimize()
+        .map_err(|error| format!("LMS_WINDOW_RESTORE_FAILED: {error}"))?;
+    window
+        .show()
+        .map_err(|error| format!("LMS_WINDOW_SHOW_FAILED: {error}"))?;
+    crate::tray::sync_foreground_app_visibility(app);
+    window
+        .set_focus()
+        .map_err(|error| format!("LMS_WINDOW_FOCUS_FAILED: {error}"))
 }
 
 fn spawn_report_watchdog(app: tauri::AppHandle, generation: u64, page_url: String) {
@@ -378,6 +425,27 @@ mod tests {
 
     fn default_state() -> AppState {
         AppState::new(Config::default())
+    }
+
+    #[tokio::test]
+    async fn 수동_출석_갱신은_상태_잠금이_잠시_사용중이어도_기다린다() {
+        let state = Arc::new(Mutex::new(default_state()));
+        let mut held = state.lock().await;
+        held.checker.page_load_generation = 7;
+
+        let waiting_state = state.clone();
+        let waiting = tokio::spawn(async move { current_checker_generation(waiting_state.as_ref()).await });
+        tokio::task::yield_now().await;
+        assert!(!waiting.is_finished());
+
+        drop(held);
+        assert_eq!(
+            tokio::time::timeout(Duration::from_secs(1), waiting)
+                .await
+                .unwrap()
+                .unwrap(),
+            7
+        );
     }
 
     #[test]
@@ -791,5 +859,36 @@ mod tests {
             vec![CheckerAction::GiveUp { generation: 1 }]
         );
         assert_eq!(runtime.status, CheckerRuntimeStatus::Offline { generation: 1 });
+    }
+
+    #[test]
+    fn checker_navigation은_exact_lms와_google_login만_허용한다() {
+        for allowed in [
+            "about:blank",
+            "https://jungle-lms.krafton.com/check-in",
+            "https://accounts.google.com/o/oauth2/v2/auth",
+        ] {
+            assert!(
+                is_allowed_checker_navigation(&Url::parse(allowed).unwrap()),
+                "{allowed}"
+            );
+        }
+        for denied in [
+            "http://jungle-lms.krafton.com/check-in",
+            "https://jungle-lms.krafton.com.evil.test/check-in",
+            "https://user@jungle-lms.krafton.com/check-in",
+            "https://jungle-lms.krafton.com:444/check-in",
+            "https://google.com/",
+            "javascript:alert(1)",
+        ] {
+            assert!(!is_allowed_checker_navigation(&Url::parse(denied).unwrap()), "{denied}");
+        }
+    }
+
+    #[test]
+    fn checker_builder는_devtools와_새창을_명시적으로_차단한다() {
+        let source = include_str!("checker.rs");
+        assert!(source.contains(".devtools(false)"));
+        assert!(source.contains(".on_new_window(|_, _| NewWindowResponse::Deny)"));
     }
 }

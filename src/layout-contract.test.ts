@@ -6,11 +6,7 @@ const uiStyles = readFileSync(new URL('./ui.css', import.meta.url), 'utf8');
 const dashboardStyles = readFileSync(new URL('./dashboard.css', import.meta.url), 'utf8');
 const dashboard = readFileSync(new URL('./dashboard.html', import.meta.url), 'utf8');
 const ordinaryPages = [
-    './index.html',
-    './onboarding.html',
-    './campus.html',
     './dashboard.html',
-    './pair/index.html',
 ].map((path) => ({path, source: readFileSync(new URL(path, import.meta.url), 'utf8')}));
 
 test('페이지 외곽 여백은 16px이고 우측 8px 스크롤바를 포함한다', () => {
