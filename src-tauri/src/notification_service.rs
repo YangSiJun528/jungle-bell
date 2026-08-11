@@ -172,8 +172,8 @@ fn response_timeout(action: Option<NotificationAction>) -> notify_rust::Timeout 
     }
 }
 
-fn system_notification_dashboard_route(action: Option<NotificationAction>) -> Option<DashboardRoute> {
-    action.map(NotificationAction::dashboard_route)
+fn system_notification_dashboard_route(action: Option<NotificationAction>) -> DashboardRoute {
+    action.map_or(DashboardRoute::Notifications, NotificationAction::dashboard_route)
 }
 
 fn should_dispatch_system_notification_to_main_thread(target_is_macos: bool, current_is_main_thread: bool) -> bool {
@@ -261,10 +261,8 @@ pub fn show_system(
             if let Err(error) = inbox.mark_read_from_system(&app, &notification_id) {
                 log::warn!("[notification] inbox read failed: {error}");
             }
-            if let Some(route) = system_notification_dashboard_route(action) {
-                if let Err(error) = tray::open_dashboard_route(&app, route) {
-                    log::warn!("[notification] system action failed: {error}");
-                }
+            if let Err(error) = tray::open_dashboard_route(&app, system_notification_dashboard_route(action)) {
+                log::warn!("[notification] system action failed: {error}");
             }
         }) {
             log::debug!("[notification] response listener ended: {error}");
@@ -343,12 +341,12 @@ mod tests {
     }
 
     #[test]
-    fn 삭제된_알림의_os_클릭은_원래_액션으로_fallback한다() {
+    fn os_알림_클릭은_도메인_액션을_유지하고_일반_알림은_알림함을_연다() {
         assert_eq!(
             system_notification_dashboard_route(Some(NotificationAction::Laundry)),
-            Some(DashboardRoute::Laundry)
+            DashboardRoute::Laundry
         );
-        assert_eq!(system_notification_dashboard_route(None), None);
+        assert_eq!(system_notification_dashboard_route(None), DashboardRoute::Notifications);
     }
 
     #[test]

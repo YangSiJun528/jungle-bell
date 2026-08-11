@@ -14,6 +14,7 @@ import {
   type MealPost,
   type WeeklyMealMenu,
 } from "../collector/meals";
+import type { MealHistoryCursor } from "../domain/meal-history";
 
 const storageLogger = getLogger(["jungle-bell", "api-storage"]);
 
@@ -207,18 +208,21 @@ export class CloudflareApiStorage {
     return result.results.map(toEvent);
   }
 
-  async listMealPosts(before: string | null, limit: number): Promise<ArchivedMealPost[]> {
+  async listMealPosts(before: MealHistoryCursor | null, limit: number): Promise<ArchivedMealPost[]> {
     const statement = before
       ? this.db.prepare(`
           SELECT * FROM meal_post
-          WHERE kind = 'DAILY_MENU' AND COALESCE(published_at, first_seen_at) < ?
-          ORDER BY COALESCE(published_at, first_seen_at) DESC
+          WHERE kind = 'DAILY_MENU' AND (
+            COALESCE(published_at, first_seen_at) < ?
+            OR (COALESCE(published_at, first_seen_at) = ? AND id < ?)
+          )
+          ORDER BY COALESCE(published_at, first_seen_at) DESC, id DESC
           LIMIT ?
-        `).bind(before, limit)
+        `).bind(before.timestamp, before.timestamp, before.postId, limit)
       : this.db.prepare(`
           SELECT * FROM meal_post
           WHERE kind = 'DAILY_MENU'
-          ORDER BY COALESCE(published_at, first_seen_at) DESC
+          ORDER BY COALESCE(published_at, first_seen_at) DESC, id DESC
           LIMIT ?
         `).bind(limit);
     const posts = (await statement.all<MealPostRow>()).results;

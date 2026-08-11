@@ -80,7 +80,7 @@ v2-test에는 별도 값으로 같은 세 secret을 `wrangler.api-test.jsonc`에
 
 배포 스크립트의 predeploy 단계는 production/test에 맞는
 `JUNGLE_BELL_PUBLIC_ORIGIN`으로 루트 웹 빌드를 실행합니다. 따라서 대시보드와
-`site/` Markdown 블로그가 같은 deployment의 Static Assets에 포함되고 canonical과
+`src/site/` Markdown 블로그가 같은 deployment의 Static Assets에 포함되고 canonical과
 RSS도 대상 Worker origin을 사용합니다. 별도 블로그 Worker를 배포하지 않습니다.
 
 ```bash

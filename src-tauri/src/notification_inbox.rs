@@ -36,6 +36,10 @@ impl NotificationAction {
     }
 }
 
+fn activation_dashboard_route(action: Option<NotificationAction>) -> DashboardRoute {
+    action.map_or(DashboardRoute::Notifications, NotificationAction::dashboard_route)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NotificationInboxItem {
@@ -291,9 +295,7 @@ impl NotificationInboxService {
 
     pub fn activate(&self, app: &tauri::AppHandle, id: &str) -> Result<NotificationInboxSnapshot, String> {
         let (snapshot, action) = self.mark_read(app, id)?;
-        if let Some(action) = action {
-            tray::open_dashboard_route(app, action.dashboard_route())?;
-        }
+        tray::open_dashboard_route(app, activation_dashboard_route(action))?;
         Ok(snapshot)
     }
 
@@ -644,6 +646,15 @@ mod tests {
             snapshot.items.iter().find(|item| item.id == first_id).unwrap().read_at,
             Some(3_000)
         );
+    }
+
+    #[test]
+    fn 알림함_항목_활성화는_도메인_액션을_유지하고_일반_알림은_알림함을_연다() {
+        assert_eq!(
+            activation_dashboard_route(Some(NotificationAction::Attendance)),
+            DashboardRoute::Attendance
+        );
+        assert_eq!(activation_dashboard_route(None), DashboardRoute::Notifications);
     }
 
     #[test]

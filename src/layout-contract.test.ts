@@ -2,53 +2,92 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {test} from 'vitest';
 
-const uiStyles = readFileSync(new URL('./ui.css', import.meta.url), 'utf8');
-const dashboardStyles = readFileSync(new URL('./dashboard.css', import.meta.url), 'utf8');
-const dashboard = readFileSync(new URL('./dashboard.html', import.meta.url), 'utf8');
-const ordinaryPages = [
-    './dashboard.html',
-].map((path) => ({path, source: readFileSync(new URL(path, import.meta.url), 'utf8')}));
+const source = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
+const dashboard = source('./dashboard.html');
+const app = source('./app/dashboard-app.tsx');
+const shell = source('./app/shell/DashboardShell.tsx');
+const routes = source('./app/routes.ts');
 
-test('페이지 외곽 여백은 16px이고 우측 8px 스크롤바를 포함한다', () => {
-    assert.match(uiStyles, /--page-gutter:\s*var\(--space-4\)/);
-    assert.match(uiStyles, /--scrollbar-size:\s*var\(--space-2\)/);
-    assert.match(uiStyles, /scrollbar-gutter:\s*stable both-edges/);
-    assert.match(
-        uiStyles,
-        /body\s*\{[^}]*padding-inline:\s*calc\(var\(--page-gutter\) - var\(--scrollbar-size\)\);/s,
-    );
-    assert.match(
-        uiStyles,
-        /\*::\-webkit-scrollbar\s*\{[^}]*width:\s*var\(--scrollbar-size\);/s,
-    );
+test('HTML 문서는 레이아웃을 복제하지 않고 React 셸을 위한 단일 mount만 제공한다', () => {
+    assert.equal((dashboard.match(/id="root"/g) ?? []).length, 1);
+    assert.equal((dashboard.match(/<script\b/g) ?? []).length, 1);
+    assert.match(dashboard, /src="\/app\/main\.tsx"/);
+    assert.doesNotMatch(dashboard, /<aside|<header|<nav|<main/);
+    assert.doesNotMatch(dashboard, /(?:styles|ui|dashboard)\.css/);
 });
 
-test('대시보드는 공통 외곽 여백을 덮어쓰지 않는다', () => {
-    const dashboardBody = dashboardStyles.match(/body\[data-ui-page=["']dashboard["']\]\s*\{([^}]*)\}/)?.[1] ?? '';
-    assert.doesNotMatch(dashboardBody, /\bpadding\s*:\s*0\s*;/);
-    assert.match(dashboardBody, /padding-block:\s*0\s*;/);
-    assert.match(dashboardStyles, /\.dashboard-shell\s*\{[^}]*width:\s*min\(1180px,\s*100%\);/s);
-    assert.doesNotMatch(dashboardStyles, /\.dashboard-shell\s*\{[^}]*padding-inline:/s);
+test('모든 기능 경로는 하나의 DashboardShell과 main 콘텐츠 영역을 재사용한다', () => {
+    assert.equal((app.match(/<DashboardShell\b/g) ?? []).length, 1);
+    assert.equal((app.match(/<RouteContent\b/g) ?? []).length, 1);
+    assert.match(app, /<DashboardShell[\s\S]*<RouteContent[\s\S]*route=\{route\}[\s\S]*onRequestInstall=\{openInstallPrompt\}[\s\S]*seenMobileIds=\{seenMobileIds\}[\s\S]*\/>[\s\S]*<\/DashboardShell>/);
+
+    assert.equal((shell.match(/<Sidebar\b/g) ?? []).length, 1);
+    assert.equal((shell.match(/<header\b/g) ?? []).length, 0);
+    assert.equal((shell.match(/<SidebarInset\b/g) ?? []).length, 1);
+    assert.equal((shell.match(/id="dashboard-content"/g) ?? []).length, 1);
 });
 
-test('redirect 화면을 포함한 일반 페이지는 공통 gutter 스타일을 사용한다', () => {
-    for (const {path, source} of ordinaryPages) {
-        assert.match(source, /<link\b[^>]*href=["'][^"']*ui\.css["']/, `${path}가 공통 UI CSS를 불러오지 않습니다.`);
-        assert.match(source, /<body\b[^>]*data-ui-page=["'][^"']+["']/, `${path}에 페이지 역할이 없습니다.`);
-        assert.doesNotMatch(source, /<html\b[^>]*data-page-layout=["']bleed["']/, `${path}가 일반 gutter를 우회합니다.`);
+test('데스크톱 사이드바는 14.5rem과 3rem 아이콘 모드를 전환하고 글로벌 헤더를 두지 않는다', () => {
+    assert.match(shell, /<Sidebar\s+collapsible="icon"/);
+    assert.match(shell, /sidebarWidth="14\.5rem"/);
+    assert.match(shell, /sidebarWidthIcon="3rem"/);
+    assert.match(shell, /<SidebarTrigger[\s\S]{0,220}aria-label=/);
+    assert.match(shell, /tooltip=\{ariaLabel\}/);
+    assert.doesNotMatch(shell, /<header\b/);
+    assert.doesNotMatch(shell, /sticky top-0/);
+    assert.match(shell, /data-shell-top-spacer="true"/);
+    assert.match(shell, /h-14[\s\S]{0,120}sm:h-16/);
+    assert.match(shell, /max-w-\[90rem\]/);
+    assert.match(shell, /md:p-5[\s\S]*lg:p-6/);
+});
+
+test('모바일은 safe-area를 반영한 하단 내비게이션과 충분한 본문 여백을 사용한다', () => {
+    assert.match(shell, /fixed inset-x-0 bottom-0 z-40/);
+    assert.match(shell, /pb-\[calc\(env\(safe-area-inset-bottom\)\+0\.375rem\)\]/);
+    assert.match(shell, /md:hidden/);
+    assert.match(shell, /style=\{\{gridTemplateColumns: `repeat\(\$\{routes\.length\}, minmax\(0, 1fr\)\)`\}\}/);
+    assert.match(shell, /p-3[\s\S]*sm:p-4[\s\S]*md:p-5[\s\S]*lg:p-6/);
+    assert.match(shell, /max-w-lg/);
+});
+
+test('공통 푸터는 외부 링크와 모바일 하단 메뉴 여백만 제공한다', () => {
+    const footer = source('./app/shell/DashboardFooter.tsx');
+
+    assert.match(shell, /<DashboardFooter\s*\/>/);
+    assert.match(footer, /<footer\b/);
+    assert.doesNotMatch(footer, /Jungle Bell은 정글 캠퍼스/);
+    assert.match(footer, /github\.com\/YangSiJun528\/jungle-bell/);
+    assert.match(footer, /피드백 남기기/);
+    assert.match(footer, /릴리즈/);
+    assert.match(footer, /\.\/blog\/index\.html/);
+    assert.match(footer, /pb-28[\s\S]{0,160}md:pb-8/);
+});
+
+test('공개 화면은 3개, 개인 화면은 4개 주요 메뉴를 유지하고 보조 기능을 분리한다', () => {
+    assert.match(routes, /PUBLIC_NAVIGATION_ROUTES\s*=\s*\[[\s\S]*'home'[\s\S]*'laundry'[\s\S]*'meals'[\s\S]*\]/);
+    assert.match(routes, /PERSONAL_NAVIGATION_ROUTES\s*=\s*\[[\s\S]*'home'[\s\S]*'attendance'[\s\S]*'laundry'[\s\S]*'meals'[\s\S]*\]/);
+    assert.match(routes, /PERSONAL_UTILITY_ROUTES\s*=\s*\[[\s\S]*'notifications'[\s\S]*'connections'[\s\S]*\]/);
+    assert.match(shell, /aria-label="개인 도구"/);
+    assert.match(shell, /border-t border-sidebar-border/);
+    assert.match(shell, /aria-label=\{notificationAriaLabel/);
+    assert.match(shell, /aria-label="기기 연결 관리"/);
+    assert.match(shell, /md:hidden/);
+    assert.match(shell, /onClick=\{\(\) => navigate\('connections'\)\}/);
+});
+
+test('각 기능 화면은 공통 PageHeader를 사용하고 페이지 내부 레이아웃만 소유한다', () => {
+    const featurePages = [
+        './features/home/home-page.tsx',
+        './features/attendance/attendance-page.tsx',
+        './features/laundry/pages/laundry-page.tsx',
+        './features/meals/pages/meals-page.tsx',
+        './features/notifications/notifications-page.tsx',
+        './features/connections/connections-page.tsx',
+    ];
+    for (const page of featurePages) {
+        const pageSource = source(page);
+        assert.match(pageSource, /import \{PageHeader\} from ['"]@\/components\/dashboard\/page-header['"]/, `${page}가 공통 PageHeader를 사용하지 않습니다.`);
+        assert.match(pageSource, /<PageHeader\b/, `${page}에 PageHeader 렌더링이 없습니다.`);
+        assert.doesNotMatch(pageSource, /<DashboardShell\b/, `${page}가 앱 셸을 중복 렌더링합니다.`);
     }
-});
-
-test('대시보드의 모든 경로는 하나의 공통 셸 헤더와 푸터를 재사용한다', () => {
-    assert.match(uiStyles, /\.ui-app-header\s*\{/);
-    assert.match(uiStyles, /\.ui-app-footer\s*\{/);
-    assert.equal((dashboard.match(/class="[^"]*\bui-app-header\b[^"]*"/g) ?? []).length, 1);
-    assert.equal((dashboard.match(/class="[^"]*\bui-app-footer\b[^"]*"/g) ?? []).length, 1);
-
-    const sharedHeader = dashboard.indexOf('ui-app-header');
-    const firstRoute = dashboard.indexOf('data-dashboard-page="attendance"');
-    const lastRoute = dashboard.indexOf('data-dashboard-page="connections"');
-    const sharedFooter = dashboard.indexOf('ui-app-footer');
-    assert.ok(sharedHeader >= 0 && sharedHeader < firstRoute);
-    assert.ok(sharedFooter > lastRoute);
 });

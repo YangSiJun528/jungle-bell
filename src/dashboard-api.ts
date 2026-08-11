@@ -79,10 +79,46 @@ export interface DashboardLaundrySnapshot {
 
 export interface DashboardMealPost {
     id: string;
+    kind?: 'PINNED_MENU' | 'DAILY_MENU' | 'OTHER';
+    contentSha?: string;
     title: string | null;
     text: string;
+    pinned?: boolean;
     publishedAt: string | null;
+    updatedAt?: string | null;
     permalink: string | null;
+    status?: string | null;
+    images?: DashboardMealImage[];
+    firstSeenAt?: string;
+    lastSeenAt?: string;
+}
+
+export interface DashboardMealImage {
+    sha: string;
+    url: string;
+    contentType: 'image/avif' | 'image/gif' | 'image/jpeg' | 'image/png' | 'image/webp';
+    extension: 'avif' | 'gif' | 'jpg' | 'jpeg' | 'png' | 'webp';
+    width: number | null;
+    height: number | null;
+    byteLength: number;
+}
+
+export interface DashboardWeeklyMealMenu {
+    weekKey: string;
+    contentSha: string;
+    post: DashboardMealPost;
+}
+
+export interface DashboardCurrentWeeklyMealMenu {
+    targetWeekKey: string;
+    status: 'AVAILABLE' | 'AWAITING_UPDATE';
+    contentSha: string | null;
+    post: DashboardMealPost | null;
+}
+
+export interface DashboardMealHistoryPage {
+    posts: DashboardMealPost[];
+    nextBefore: string | null;
 }
 
 export interface DashboardMealsSnapshot {
@@ -92,6 +128,9 @@ export interface DashboardMealsSnapshot {
         dailyMenus: DashboardMealPost[];
         pinnedMenus: DashboardMealPost[];
         recentMenus: DashboardMealPost[];
+        currentWeeklyMenu?: DashboardCurrentWeeklyMealMenu;
+        weeklyMenus?: DashboardWeeklyMealMenu[];
+        historyNextBefore?: string | null;
     };
 }
 
@@ -217,6 +256,8 @@ export interface DesktopTestNotificationResult {
 export interface DashboardApi extends DashboardPersonalApi, DashboardDesktopSettingsApi {
     getPublicLaundry(): Promise<DashboardLaundrySnapshot>;
     getPublicMeals(): Promise<DashboardMealsSnapshot>;
+    getPublicMealHistory(before: string | null, limit: number): Promise<DashboardMealHistoryPage>;
+    refreshCampusData(kind: 'laundry' | 'meals'): Promise<void>;
     getAttendance(surface: 'desktop' | 'companion'): Promise<AttendanceDashboard>;
     getDesktopConnectionState(): Promise<DesktopConnectionState>;
     resetDesktopIdentity(): Promise<DesktopConnectionState>;
@@ -280,6 +321,10 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
         ?? import.meta.env.VITE_CAMPUS_API_URL
         ?? '';
     const campusBase = normalizeBaseUrl(configuredCampusBase);
+    const pageOrigin = typeof window !== 'undefined' && /^https?:$/u.test(window.location.protocol)
+        ? window.location.origin
+        : null;
+    const mealAssetOrigin = campusBase || (!desktopRuntime ? pageOrigin : null);
     const platformBase = normalizeBaseUrl(
         options.platformApiBaseUrl
             ?? import.meta.env.VITE_PLATFORM_API_URL
@@ -338,7 +383,25 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
             const value = desktopRuntime
                 ? await invokeCommand('get_dashboard_campus_data', {kind: 'meals'})
                 : await publicJson('/api/public/meals');
-            return parseDashboardMealsSnapshot(value);
+            return parseDashboardMealsSnapshot(value, mealAssetOrigin);
+        },
+
+        async getPublicMealHistory(before, limit) {
+            if ((before !== null && !isMealHistoryCursor(before))
+                || !Number.isSafeInteger(limit)
+                || limit < 1
+                || limit > 100) {
+                throw new Error('API_CLIENT_INVALID_ARGUMENT');
+            }
+            const value = desktopRuntime
+                ? await invokeCommand('get_dashboard_meal_history', {before, limit})
+                : await publicJson(mealHistoryPath(before, limit));
+            return parseDashboardMealHistoryPage(value, mealAssetOrigin);
+        },
+
+        async refreshCampusData(kind) {
+            if (!desktopRuntime) throw new Error('TAURI_RUNTIME_REQUIRED');
+            await invokeCommand('refresh_campus_data', {kind});
         },
 
         async getAttendance(surface) {
@@ -838,33 +901,251 @@ function parseLaundryAppliance(value: unknown): DashboardLaundryAppliance {
     };
 }
 
-export function parseDashboardMealsSnapshot(value: unknown): DashboardMealsSnapshot {
+export function parseDashboardMealsSnapshot(
+    value: unknown,
+    expectedAssetOrigin: string | null = null,
+): DashboardMealsSnapshot {
     const source = record(value);
     const data = record(source.data);
+    const currentWeeklyMenu = data.currentWeeklyMenu === undefined
+        ? undefined
+        : parseCurrentWeeklyMealMenu(data.currentWeeklyMenu, expectedAssetOrigin);
+    const weeklyMenus = data.weeklyMenus === undefined
+        ? undefined
+        : parseWeeklyMealMenus(data.weeklyMenus, expectedAssetOrigin);
+    const historyNextBefore = data.historyNextBefore === undefined
+        ? undefined
+        : nullableMealHistoryCursor(data.historyNextBefore);
     return {
         asOf: iso(source.asOf),
         lastCheckedAt: nullableIso(source.lastCheckedAt),
         data: {
-            dailyMenus: parseMealPosts(data.dailyMenus),
-            pinnedMenus: parseMealPosts(data.pinnedMenus),
-            recentMenus: parseMealPosts(data.recentMenus),
+            dailyMenus: parseMealPosts(data.dailyMenus, 128, expectedAssetOrigin),
+            pinnedMenus: parseMealPosts(data.pinnedMenus, 128, expectedAssetOrigin),
+            recentMenus: parseMealPosts(data.recentMenus, 128, expectedAssetOrigin),
+            ...(currentWeeklyMenu === undefined ? {} : {currentWeeklyMenu}),
+            ...(weeklyMenus === undefined ? {} : {weeklyMenus}),
+            ...(historyNextBefore === undefined ? {} : {historyNextBefore}),
         },
     };
 }
 
-function parseMealPosts(value: unknown): DashboardMealPost[] {
-    return array(value).map((entry) => {
-        const post = record(entry);
+export function parseDashboardMealHistoryPage(
+    value: unknown,
+    expectedAssetOrigin: string | null = null,
+): DashboardMealHistoryPage {
+    const source = exactRecord(value, ['posts', 'nextBefore']);
+    return {
+        posts: parseMealPosts(source.posts, 100, expectedAssetOrigin),
+        nextBefore: nullableMealHistoryCursor(source.nextBefore),
+    };
+}
+
+function parseCurrentWeeklyMealMenu(
+    value: unknown,
+    expectedAssetOrigin: string | null,
+): DashboardCurrentWeeklyMealMenu {
+    const source = exactRecord(value, ['targetWeekKey', 'status', 'contentSha', 'post']);
+    if (source.status !== 'AVAILABLE' && source.status !== 'AWAITING_UPDATE') {
+        throw new Error('API_RESPONSE_INVALID');
+    }
+    const contentSha = source.contentSha === null ? null : mealSha(source.contentSha);
+    const post = source.post === null ? null : parseMealPost(source.post, expectedAssetOrigin);
+    if ((source.status === 'AVAILABLE') !== (contentSha !== null && post !== null)) {
+        throw new Error('API_RESPONSE_INVALID');
+    }
+    if (post?.contentSha !== undefined && post.contentSha !== contentSha) {
+        throw new Error('API_RESPONSE_INVALID');
+    }
+    return {
+        targetWeekKey: mealWeekKey(source.targetWeekKey),
+        status: source.status,
+        contentSha,
+        post,
+    };
+}
+
+function parseWeeklyMealMenus(
+    value: unknown,
+    expectedAssetOrigin: string | null,
+): DashboardWeeklyMealMenu[] {
+    return array(value, 100).map((entry) => {
+        const source = exactRecord(entry, ['weekKey', 'contentSha', 'post']);
+        const weekKey = mealWeekKey(source.weekKey);
+        const contentSha = mealSha(source.contentSha);
+        const post = parseMealPost(source.post, expectedAssetOrigin);
+        if (post.contentSha !== undefined && post.contentSha !== contentSha) {
+            throw new Error('API_RESPONSE_INVALID');
+        }
+        return {weekKey, contentSha, post};
+    });
+}
+
+function parseMealPosts(
+    value: unknown,
+    max = 128,
+    expectedAssetOrigin: string | null = null,
+): DashboardMealPost[] {
+    return array(value, max).map((entry) => parseMealPost(entry, expectedAssetOrigin));
+}
+
+function parseMealPost(entry: unknown, expectedAssetOrigin: string | null): DashboardMealPost {
+    const post = record(entry);
+    const kind = post.kind;
+    if (kind !== undefined && kind !== 'PINNED_MENU' && kind !== 'DAILY_MENU' && kind !== 'OTHER') {
+        throw new Error('API_RESPONSE_INVALID');
+    }
+    const contentSha = post.contentSha === undefined ? undefined : mealSha(post.contentSha);
+    const pinned = post.pinned === undefined ? undefined : boolean(post.pinned);
+    const updatedAt = post.updatedAt === undefined ? undefined : nullableIso(post.updatedAt);
+    const status = post.status === undefined ? undefined : nullableText(post.status, 128);
+    const images = post.images === undefined
+        ? undefined
+        : parseMealImages(post.images, expectedAssetOrigin);
+    const firstSeenAt = post.firstSeenAt === undefined ? undefined : iso(post.firstSeenAt);
+    const lastSeenAt = post.lastSeenAt === undefined ? undefined : iso(post.lastSeenAt);
+    return {
+        id: text(post.id, 128),
+        ...(kind === undefined ? {} : {kind}),
+        ...(contentSha === undefined ? {} : {contentSha}),
+        title: nullableText(post.title, 1_024),
+        text: typeof post.text === 'string' && post.text.length <= 100_000
+            ? post.text
+            : (() => { throw new Error('API_RESPONSE_INVALID'); })(),
+        ...(pinned === undefined ? {} : {pinned}),
+        publishedAt: nullableIso(post.publishedAt),
+        ...(updatedAt === undefined ? {} : {updatedAt}),
+        permalink: safeMealPermalink(post.permalink),
+        ...(status === undefined ? {} : {status}),
+        ...(images === undefined ? {} : {images}),
+        ...(firstSeenAt === undefined ? {} : {firstSeenAt}),
+        ...(lastSeenAt === undefined ? {} : {lastSeenAt}),
+    };
+}
+
+const MEAL_IMAGE_TYPES = {
+    avif: 'image/avif',
+    gif: 'image/gif',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    webp: 'image/webp',
+} as const;
+
+function parseMealImages(value: unknown, expectedAssetOrigin: string | null): DashboardMealImage[] {
+    return array(value, 12).map((entry) => {
+        const image = record(entry);
+        const sha = mealSha(image.sha);
+        const extension = text(image.extension, 8).toLowerCase() as keyof typeof MEAL_IMAGE_TYPES;
+        const expectedContentType = MEAL_IMAGE_TYPES[extension];
+        if (!expectedContentType || image.contentType !== expectedContentType) {
+            throw new Error('API_RESPONSE_INVALID');
+        }
+        const width = nullableImageDimension(image.width);
+        const height = nullableImageDimension(image.height);
+        const byteLength = image.byteLength;
+        if (!Number.isSafeInteger(byteLength) || (byteLength as number) < 1 || (byteLength as number) > 25_000_000) {
+            throw new Error('API_RESPONSE_INVALID');
+        }
         return {
-            id: text(post.id, 128),
-            title: nullableText(post.title, 1_024),
-            text: typeof post.text === 'string' && post.text.length <= 100_000
-                ? post.text
-                : (() => { throw new Error('API_RESPONSE_INVALID'); })(),
-            publishedAt: nullableIso(post.publishedAt),
-            permalink: safeMealPermalink(post.permalink),
+            sha,
+            url: safeMealAssetUrl(image.url, sha, extension, expectedAssetOrigin),
+            contentType: expectedContentType,
+            extension,
+            width,
+            height,
+            byteLength: byteLength as number,
         };
     });
+}
+
+function nullableImageDimension(value: unknown): number | null {
+    if (value === null) return null;
+    if (!Number.isSafeInteger(value) || (value as number) < 1 || (value as number) > 20_000) {
+        throw new Error('API_RESPONSE_INVALID');
+    }
+    return value as number;
+}
+
+function mealSha(value: unknown): string {
+    const sha = text(value, 64);
+    if (!/^[a-f0-9]{64}$/u.test(sha)) throw new Error('API_RESPONSE_INVALID');
+    return sha;
+}
+
+function mealWeekKey(value: unknown): string {
+    const key = calendarDate(value);
+    if (new Date(`${key}T00:00:00.000Z`).getUTCDay() !== 1) {
+        throw new Error('API_RESPONSE_INVALID');
+    }
+    return key;
+}
+
+function safeMealAssetUrl(
+    value: unknown,
+    sha: string,
+    extension: string,
+    expectedOrigin: string | null,
+): string {
+    if (typeof value !== 'string' || value.length > 2_048) throw new Error('API_RESPONSE_INVALID');
+    try {
+        const parsed = new URL(value);
+        const localHttp = parsed.protocol === 'http:'
+            && (parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost');
+        const expectedPath = `/api/public/assets/${sha}.${extension}`;
+        if ((parsed.protocol !== 'https:' && !localHttp)
+            || parsed.username
+            || parsed.password
+            || (expectedOrigin !== null && parsed.origin !== expectedOrigin)
+            || parsed.pathname !== expectedPath
+            || parsed.search
+            || parsed.hash) {
+            throw new Error('API_RESPONSE_INVALID');
+        }
+        return parsed.toString();
+    } catch {
+        throw new Error('API_RESPONSE_INVALID');
+    }
+}
+
+function mealHistoryPath(before: string | null, limit: number): string {
+    const params = new URLSearchParams();
+    if (before !== null) params.set('before', before);
+    params.set('limit', String(limit));
+    return `/api/public/meals/history?${params.toString()}`;
+}
+
+const MEAL_HISTORY_CURSOR_MAX_LENGTH = 2_048;
+
+function isMealHistoryCursor(value: string): boolean {
+    if (value.length < 26 || value.length > MEAL_HISTORY_CURSOR_MAX_LENGTH || value[24] !== '~') {
+        return false;
+    }
+    const timestamp = value.slice(0, 24);
+    const encodedPostId = value.slice(25);
+    if (!isCanonicalIso(timestamp) || encodedPostId.length === 0) return false;
+    try {
+        const postId = decodeURIComponent(encodedPostId);
+        return postId.length >= 1
+            && postId.length <= 128
+            && encodeURIComponent(postId) === encodedPostId;
+    } catch {
+        return false;
+    }
+}
+
+function isCanonicalIso(value: string): boolean {
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u.test(value)) return false;
+    const parsed = new Date(value);
+    return Number.isFinite(parsed.getTime()) && parsed.toISOString() === value;
+}
+
+function nullableMealHistoryCursor(value: unknown): string | null {
+    if (value === null) return null;
+    if (typeof value !== 'string' || !isMealHistoryCursor(value)) {
+        throw new Error('API_RESPONSE_INVALID');
+    }
+    return value;
 }
 
 export function safeMealPermalink(value: unknown): string | null {

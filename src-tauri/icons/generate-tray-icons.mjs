@@ -7,7 +7,7 @@ import {fileURLToPath} from 'node:url';
 const iconDirectory = dirname(fileURLToPath(import.meta.url));
 const documentationIconDirectory = resolve(iconDirectory, '../../docs/assets/readme');
 const source = readFileSync(join(iconDirectory, 'tray-source.svg'), 'utf8');
-const artwork = source.slice(source.indexOf('  <rect'), source.lastIndexOf('</svg>')).trim();
+const artwork = source.slice(source.indexOf('  <defs>'), source.lastIndexOf('</svg>')).trim();
 const temporaryDirectory = mkdtempSync(join(tmpdir(), 'jungle-bell-tray-icons-'));
 
 const palettes = {

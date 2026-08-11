@@ -2,8 +2,15 @@
   <title>출석 완료 상태 트레이 아이콘</title>
   <rect width="52" height="44" rx="8" fill="#F5F5F5"/>
   <g transform="translate(4 0)">
-    <rect x="3" y="3" width="38" height="38" rx="10" fill="none" stroke="currentColor" stroke-width="1.6"/>
-      <g fill="currentColor" transform="translate(8 8) scale(.02734375)">
+    <defs>
+        <mask id="compass-field" maskUnits="userSpaceOnUse" x="0" y="0" width="44" height="44">
+          <rect x="3" y="3" width="38" height="38" rx="10" fill="white"/>
+          <circle cx="22" cy="22" r="16" fill="black"/>
+        </mask>
+      </defs>
+      <rect x="3" y="3" width="38" height="38" rx="10" fill="currentColor" mask="url(#compass-field)"/>
+      <rect x="3" y="3" width="38" height="38" rx="10" fill="none" stroke="currentColor" stroke-width="1.6"/>
+      <g fill="currentColor" transform="translate(3.5 3.5) scale(.0361328125)">
         <path d="M512 896a384 384 0 1 0 0-768 384 384 0 0 0 0 768zm0 64a448 448 0 1 1 0-896 448 448 0 0 1 0 896z"/>
         <path d="M725.888 315.008C676.48 428.672 624 513.28 568.576 568.64c-55.424 55.424-139.968 107.904-253.568 157.312a12.8 12.8 0 0 1-16.896-16.832c49.536-113.728 102.016-198.272 157.312-253.632 55.36-55.296 139.904-107.776 253.632-157.312a12.8 12.8 0 0 1 16.832 16.832z"/>
       </g>

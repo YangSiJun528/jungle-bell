@@ -30,6 +30,7 @@
     "allow-report-campus-ready",
     "allow-refresh-campus-data",
     "allow-get-dashboard-campus-data",
+    "allow-get-dashboard-meal-history",
     "allow-open-image-viewer",
     "allow-get-dashboard-home-overview",
     "allow-get-notification-inbox-snapshot",

@@ -1,11 +1,24 @@
 const CACHE_PREFIX = 'jungle-bell-dashboard-';
-const CACHE_VERSION = 'jungle-bell-dashboard-0.5.0';
+const CACHE_VERSION = 'jungle-bell-dashboard-__BUILD_ID__';
+const GENERATED_ASSET_MANIFEST = './sw-assets.json?build=__BUILD_ID__';
 const APP_SHELL = [
   './dashboard.html',
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png',
 ];
+
+async function generatedAppAssets() {
+  const response = await fetch(GENERATED_ASSET_MANIFEST, {cache: 'no-store'});
+  if (!response.ok) throw new Error('APP_ASSET_MANIFEST_UNAVAILABLE');
+  const value = await response.json();
+  if (!value || value.version !== 1 || !Array.isArray(value.assets) || value.assets.length > 256
+    || value.assets.some((asset) => typeof asset !== 'string'
+      || !/^\.\/assets\/[A-Za-z0-9_.-]+$/u.test(asset))) {
+    throw new Error('APP_ASSET_MANIFEST_INVALID');
+  }
+  return value.assets;
+}
 function sameOriginUrl(request) {
   const url = new URL(request.url);
   return url.origin === self.location.origin ? url : null;
@@ -18,6 +31,12 @@ function isPersonalRequest(request, url) {
 
 function isBlogRequest(url) {
   return url.pathname === '/blog' || url.pathname.startsWith('/blog/');
+}
+
+function isPublicCampusDataRequest(url) {
+  return url.pathname === '/api/public/laundry'
+    || url.pathname === '/api/public/meals'
+    || url.pathname === '/api/public/meals/history';
 }
 
 function responseCanBeCached(response) {
@@ -67,9 +86,11 @@ async function assetResponse(request) {
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_VERSION)
-      .then((cache) => cache.addAll(APP_SHELL))
-      .then(() => self.skipWaiting()),
+    generatedAppAssets()
+      .then(async (assets) => {
+        const cache = await caches.open(CACHE_VERSION);
+        await cache.addAll([...APP_SHELL, ...assets]);
+      }),
   );
 });
 
@@ -97,7 +118,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(navigationResponse(request, url));
     return;
   }
-  if (url.pathname === '/api/public/laundry' || url.pathname === '/api/public/meals') {
+  if (isPublicCampusDataRequest(url)) {
     event.respondWith(publicApiResponse(request));
     return;
   }

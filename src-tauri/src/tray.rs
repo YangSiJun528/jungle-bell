@@ -2,7 +2,7 @@
 //!
 //! 트레이 아이콘은 현재 상태에 따라 색상이 변경됨:
 //!   - 회색 (오프라인/확인 중): checker 미보고, 복구 중, 확인 불가
-//!   - 검정/흰색 선 (조작 불필요): Idle, Studying, Complete
+//!   - 검정/흰색 (조작 불필요): Idle, Studying, Complete
 //!   - 오렌지 (경고): 로그인 필요
 //!   - 빨간색 (긴급): NeedStart, StartOverdue, NeedEnd
 
@@ -97,6 +97,7 @@ pub(crate) enum DashboardRoute {
     Attendance,
     Laundry,
     Meals,
+    Notifications,
 }
 
 impl DashboardRoute {
@@ -106,6 +107,7 @@ impl DashboardRoute {
             Self::Attendance => "attendance",
             Self::Laundry => "laundry",
             Self::Meals => "meals",
+            Self::Notifications => "notifications",
         }
     }
 }
@@ -609,6 +611,7 @@ fn select_dashboard_route(window: &WebviewWindow<tauri::Wry>, route: DashboardRo
         DashboardRoute::Attendance => "window.location.hash = '#attendance'",
         DashboardRoute::Laundry => "window.location.hash = '#laundry'",
         DashboardRoute::Meals => "window.location.hash = '#meals'",
+        DashboardRoute::Notifications => "window.location.hash = '#notifications'",
     };
     if let Err(error) = window.eval(script) {
         log::warn!("[dashboard] route selection failed: {error}");
@@ -891,7 +894,7 @@ mod tests {
     }
 
     #[test]
-    fn 트레이_아이콘은_투명한_배경에_얇은_외곽선만_사용한다() {
+    fn 트레이_아이콘은_나침반_바깥과_배경_박스_사이를_상태색으로_채운다() {
         let light = icon_for_kind(TrayIconKind::Alert, TrayIconTheme::Light);
         let dark = icon_for_kind(TrayIconKind::Alert, TrayIconTheme::Dark);
 
@@ -908,7 +911,11 @@ mod tests {
             assert!(rgba_at(image, image.width() - 1, 0)[3] < 16);
             assert!(rgba_at(image, 0, image.height() - 1)[3] < 16);
             assert!(rgba_at(image, image.width() - 1, image.height() - 1)[3] < 16);
-            assert!(visible_pixel_ratio(image) < 0.35);
+            assert!(rgba_at(image, image.width() * 5 / 44, image.height() / 2)[3] > 240);
+            assert!(rgba_at(image, image.width() * 15 / 44, image.height() / 2)[3] < 32);
+            assert!(rgba_at(image, image.width() / 2, image.height() / 2)[3] > 240);
+            assert!(visible_pixel_ratio(image) > 0.30);
+            assert!(visible_pixel_ratio(image) < 0.60);
             assert!(has_antialiased_edge(image));
 
             let (min_x, min_y, max_x, max_y) = visible_bounds(image);
@@ -921,19 +928,23 @@ mod tests {
     }
 
     #[test]
-    fn 트레이_svg는_원본_나침반과_얇은_테두리를_보존한다() {
+    fn 트레이_svg는_원본_나침반_바깥과_배경_박스_사이만_채운다() {
         let svg = include_str!("../icons/tray-source.svg");
 
         assert!(svg.contains("viewBox=\"0 0 44 44\""));
-        assert!(svg.contains("<rect x=\"3\" y=\"3\" width=\"38\" height=\"38\" rx=\"10\" fill=\"none\""));
-        assert!(svg.contains("stroke=\"currentColor\" stroke-width=\"1.6\""));
+        assert!(svg.contains("<mask id=\"compass-field\""));
+        assert!(svg.contains("<rect x=\"3\" y=\"3\" width=\"38\" height=\"38\" rx=\"10\" fill=\"white\""));
+        assert!(svg.contains("<circle cx=\"22\" cy=\"22\" r=\"16\" fill=\"black\""));
+        assert!(svg.contains(
+            "<rect x=\"3\" y=\"3\" width=\"38\" height=\"38\" rx=\"10\" fill=\"currentColor\" mask=\"url(#compass-field)\""
+        ));
+        assert!(svg.contains("<g fill=\"currentColor\" transform=\"translate(3.5 3.5) scale(.0361328125)\""));
         assert!(svg.contains("M512 896a384 384 0 1 0 0-768"));
         assert!(svg.contains("M725.888 315.008C676.48 428.672"));
-        assert!(!svg.contains("<rect x=\"3\" y=\"3\" width=\"38\" height=\"38\" rx=\"10\" fill=\"currentColor\""));
     }
 
     #[test]
-    fn 출석완료_아이콘은_테마별_무채색_선으로_표시한다() {
+    fn 출석완료_아이콘은_테마별_무채색으로_표시한다() {
         let light = icon_for_kind(TrayIconKind::Complete, TrayIconTheme::Light);
         let dark = icon_for_kind(TrayIconKind::Complete, TrayIconTheme::Dark);
         let normal_light = icon_for_kind(TrayIconKind::Normal, TrayIconTheme::Light);
@@ -943,8 +954,8 @@ mod tests {
         assert_eq!(dark.rgba(), normal_dark.rgba());
         assert!(contains_opaque_color(&light, [36, 49, 59]));
         assert!(contains_opaque_color(&dark, [238, 242, 243]));
-        assert!(visible_pixel_ratio(&light) < 0.35);
-        assert!(visible_pixel_ratio(&dark) < 0.35);
+        assert!(visible_pixel_ratio(&light) > 0.30);
+        assert!(visible_pixel_ratio(&dark) > 0.30);
     }
 
     #[test]
@@ -958,12 +969,28 @@ mod tests {
         assert_eq!((alert.width(), alert.height()), (48, 48));
         assert_eq!((complete_dark.width(), complete_dark.height()), (48, 48));
         assert!(rgba_at(&alert, 0, 0)[3] < 16);
+        assert!(rgba_at(&alert, alert.width() * 5 / 44, alert.height() / 2)[3] > 240);
+        assert!(rgba_at(&alert, alert.width() * 15 / 44, alert.height() / 2)[3] < 32);
+        assert!(rgba_at(&alert, alert.width() / 2, alert.height() / 2)[3] > 240);
         assert!(contains_opaque_color(&alert, [180, 35, 44]));
-        assert!(visible_pixel_ratio(&alert) < 0.35);
+        assert!(visible_pixel_ratio(&alert) > 0.30);
+        assert!(visible_pixel_ratio(&alert) < 0.60);
         assert_eq!(normal_light.rgba(), complete_light.rgba());
         assert_eq!(normal_dark.rgba(), complete_dark.rgba());
         assert!(contains_opaque_color(&complete_light, [36, 49, 59]));
         assert!(contains_opaque_color(&complete_dark, [238, 242, 243]));
+    }
+
+    #[test]
+    fn 나침반_확대는_박스와의_거리를_절반_이상_줄이고_링을_과도하게_굵히지_않는다() {
+        let original_scale = 28.0 / 1024.0;
+        let enlarged_scale = 37.0 / 1024.0;
+        let original_gap = 22.0 - 448.0 * original_scale - 3.0;
+        let enlarged_gap = 22.0 - 448.0 * enlarged_scale - 3.0;
+        let enlarged_ring_width = 64.0 * enlarged_scale;
+
+        assert!(enlarged_gap < original_gap / 2.0);
+        assert!(enlarged_ring_width <= 2.4);
     }
 
     #[test]
@@ -1080,7 +1107,7 @@ mod tests {
     }
 
     #[test]
-    fn 확인이나_조작이_필요하지_않은_상태는_무채색_선_아이콘을_표시한다() {
+    fn 확인이나_조작이_필요하지_않은_상태는_무채색_아이콘을_표시한다() {
         let idle = build_tray_view_model(&healthy_snapshot(DailyPhase::Idle, None, false), Utc::now());
         let studying = build_tray_view_model(&healthy_snapshot(DailyPhase::Studying, Some(14_580), false), Utc::now());
         let complete = build_tray_view_model(&healthy_snapshot(DailyPhase::Complete, None, false), Utc::now());
@@ -1096,7 +1123,8 @@ mod tests {
 
             assert_eq!(normal.rgba(), complete.rgba());
             assert!(rgba_at(&normal, 0, 0)[3] < 16);
-            assert!(visible_pixel_ratio(&normal) < 0.35);
+            assert!(visible_pixel_ratio(&normal) > 0.30);
+            assert!(visible_pixel_ratio(&normal) < 0.60);
         }
     }
 
@@ -1325,6 +1353,10 @@ mod tests {
         );
         assert_eq!(dashboard_app_url(DashboardRoute::Laundry), "dashboard.html#laundry");
         assert_eq!(dashboard_app_url(DashboardRoute::Meals), "dashboard.html#meals");
+        assert_eq!(
+            dashboard_app_url(DashboardRoute::Notifications),
+            "dashboard.html#notifications"
+        );
     }
 
     #[test]
