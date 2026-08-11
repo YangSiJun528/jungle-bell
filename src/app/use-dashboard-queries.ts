@@ -1,6 +1,6 @@
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
-import type {DashboardNotification} from '@/dashboard-api';
-import type {NotificationInboxSnapshot} from '@/notification-inbox';
+import type {DashboardNotification} from '@/api/dashboard-api';
+import type {NotificationInboxSnapshot} from '@/domain/notifications/inbox';
 import type {CampusDataKind} from './campus-data-health';
 import {
     laundryQueryContract,

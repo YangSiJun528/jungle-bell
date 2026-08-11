@@ -3,7 +3,7 @@ import {
     type DashboardApi,
     parseDashboardLaundrySnapshot,
     parseDashboardMealsSnapshot,
-} from '@/dashboard-api';
+} from '@/api/dashboard-api';
 
 export const laundryQueryContract = {
     queryKey: ['campus', 'laundry'] as const,

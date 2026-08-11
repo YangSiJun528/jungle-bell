@@ -1,10 +1,3 @@
-const dateFormatter = new Intl.DateTimeFormat('ko-KR', {
-    month: 'long',
-    day: 'numeric',
-    weekday: 'short',
-    timeZone: 'Asia/Seoul',
-});
-
 const dateTimeFormatter = new Intl.DateTimeFormat('ko-KR', {
     month: 'short',
     day: 'numeric',
@@ -12,10 +5,6 @@ const dateTimeFormatter = new Intl.DateTimeFormat('ko-KR', {
     minute: '2-digit',
     timeZone: 'Asia/Seoul',
 });
-
-export function todayLabel(now = new Date()): string {
-    return dateFormatter.format(now);
-}
 
 export function dateTimeLabel(value: string | number | null | undefined): string {
     if (value === null || value === undefined) return '확인 기록 없음';

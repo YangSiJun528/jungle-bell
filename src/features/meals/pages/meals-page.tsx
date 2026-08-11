@@ -11,14 +11,14 @@ import {EmptyState, ErrorState, LoadingState} from '@/components/dashboard/async
 import {PageHeader} from '@/components/dashboard/page-header';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Button} from '@/components/ui/button';
-import type {PersonalSurface} from '@/dashboard-personal-api';
+import type {PersonalSurface} from '@/api/personal-api';
+import {selectTodayMeals} from '@/domain/meals/today';
 import {relativeTimeLabel} from '@/lib/format';
 import {cn} from '@/lib/utils';
 import {MealHistorySection} from '../components/meal-history-section';
-import {MealPostCard} from '../components/meal-post-card';
 import {MealPreferencesSection} from '../components/meal-preferences-section';
+import {TodayMealGrid} from '../components/today-meal-grid';
 import {WeeklyMealMenu} from '../components/weekly-meal-menu';
-import {selectMealSections} from '../lib/meal-view';
 
 const personalSurface = (kind: string): PersonalSurface | null =>
     kind === 'desktop' || kind === 'companion' ? kind : null;
@@ -29,8 +29,8 @@ export function MealsPage() {
     const manualRefresh = useCampusManualRefresh('meals');
     const campusIssue = useCampusDataIssue('meals');
     const personal = personalSurface(surface.kind);
-    const sections = useMemo(
-        () => meals.data ? selectMealSections(meals.data) : {today: [], recent: []},
+    const todayMeals = useMemo(
+        () => meals.data ? selectTodayMeals(meals.data) : [],
         [meals.data, meals.dataUpdatedAt],
     );
     const currentWeekly = meals.data?.data.currentWeeklyMenu;
@@ -82,18 +82,7 @@ export function MealsPage() {
                                 마지막 확인 {relativeTimeLabel(meals.data.lastCheckedAt ?? meals.data.asOf)}
                             </p>
                         </div>
-                        {sections.today.length > 0 ? (
-                            <div className="grid gap-4 lg:grid-cols-2">
-                                {sections.today.map((meal, index) => (
-                                    <MealPostCard eagerImage={index < 2} key={meal.id} meal={meal}/>
-                                ))}
-                            </div>
-                        ) : (
-                            <EmptyState
-                                title="오늘 급식이 아직 게시되지 않았습니다."
-                                description="게시되면 메뉴와 급식 사진을 함께 표시합니다."
-                            />
-                        )}
+                        <TodayMealGrid meals={todayMeals}/>
                     </section>
 
                     <section aria-labelledby="weekly-meal-title">

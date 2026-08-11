@@ -1,85 +1,30 @@
-import type {DashboardMealPost, DashboardMealsSnapshot} from '@/dashboard-api';
+import type {
+    DashboardMealPost,
+    DashboardWeeklyMealMenu,
+} from '@/api/dashboard-api';
+import {mealPeriodLabel, mealServiceDate} from '@/domain/meals/today';
 
-const KST_OFFSET_MS = 9 * 60 * 60 * 1_000;
 const DAY_MS = 24 * 60 * 60 * 1_000;
-const TITLED_DATE = /(?:(\d{4})\uB144\s*)?(\d{1,2})\uC6D4\s*(\d{1,2})\uC77C/u;
-
-export interface MealSections {
-    today: DashboardMealPost[];
-    recent: DashboardMealPost[];
-}
 
 export interface CalendarMonthCell {
     date: string;
     day: number;
 }
 
-const mealOrder = (title: string | null): number => {
-    if (title?.includes('\uC870\uC2DD')) return 0;
-    if (title?.includes('\uC911\uC2DD')) return 1;
-    if (title?.includes('\uC11D\uC2DD')) return 2;
-    return 3;
-};
+export type TodayMealPeriod = '\uC911\uC2DD' | '\uC11D\uC2DD';
 
-export function mealPeriodLabel(title: string | null): '\uC870\uC2DD' | '\uC911\uC2DD' | '\uC11D\uC2DD' | '\uC2DD\uB2E8' {
-    if (title?.includes('\uC870\uC2DD')) return '\uC870\uC2DD';
-    if (title?.includes('\uC911\uC2DD')) return '\uC911\uC2DD';
-    if (title?.includes('\uC11D\uC2DD')) return '\uC11D\uC2DD';
-    return '\uC2DD\uB2E8';
+export interface TodayMealSlot {
+    period: TodayMealPeriod;
+    meal: DashboardMealPost | null;
 }
 
-export function kstDateKey(reference: Date): string {
-    if (!Number.isFinite(reference.getTime())) throw new Error('INVALID_DATE');
-    return new Date(reference.getTime() + KST_OFFSET_MS).toISOString().slice(0, 10);
-}
+const TODAY_MEAL_PERIODS: readonly TodayMealPeriod[] = ['\uC911\uC2DD', '\uC11D\uC2DD'];
 
-export function mealServiceDate(meal: DashboardMealPost, reference = new Date()): string | null {
-    const timestamp = meal.publishedAt ?? meal.firstSeenAt ?? null;
-    const anchor = timestamp ? new Date(timestamp) : reference;
-    const validAnchor = Number.isFinite(anchor.getTime()) ? anchor : reference;
-    const match = meal.title?.match(TITLED_DATE);
-    if (match?.[2] && match[3]) {
-        const month = Number(match[2]);
-        const day = Number(match[3]);
-        const anchorYear = Number(kstDateKey(validAnchor).slice(0, 4));
-        const years = match[1]
-            ? [Number(match[1])]
-            : [anchorYear, anchorYear - 1, anchorYear + 1];
-        const candidates = years
-            .map((year) => calendarDateKey(year, month, day))
-            .filter((value): value is string => value !== null);
-        if (candidates.length > 0) {
-            const anchorDay = Date.parse(`${kstDateKey(validAnchor)}T00:00:00.000Z`);
-            return candidates.reduce((selected, candidate) =>
-                Math.abs(Date.parse(`${candidate}T00:00:00.000Z`) - anchorDay)
-                    < Math.abs(Date.parse(`${selected}T00:00:00.000Z`) - anchorDay)
-                    ? candidate
-                    : selected);
-        }
-    }
-    return timestamp && Number.isFinite(new Date(timestamp).getTime())
-        ? kstDateKey(new Date(timestamp))
-        : null;
-}
-
-export function selectMealSections(
-    snapshot: DashboardMealsSnapshot,
-    reference = new Date(),
-): MealSections {
-    const todayKey = kstDateKey(reference);
-    const allDaily = uniqueMeals([
-        ...snapshot.data.dailyMenus,
-        ...snapshot.data.recentMenus,
-    ]);
-    const today = allDaily
-        .filter((meal) => mealServiceDate(meal, reference) === todayKey)
-        .sort(compareMealPeriod);
-    const todayIds = new Set(today.map((meal) => meal.id));
-    const recent = allDaily
-        .filter((meal) => !todayIds.has(meal.id))
-        .sort(compareRecentMeals)
-        .slice(0, 30);
-    return {today, recent};
+export function todayMealSlots(meals: readonly DashboardMealPost[]): TodayMealSlot[] {
+    return TODAY_MEAL_PERIODS.map((period) => ({
+        period,
+        meal: meals.find((meal) => mealPeriodLabel(meal.title) === period) ?? null,
+    }));
 }
 
 export function mealsGroupedByDate(
@@ -141,6 +86,21 @@ export function weekRangeLabel(weekKey: string): string {
     return `${start.getUTCMonth() + 1}\uC6D4 ${start.getUTCDate()}\uC77C ~ ${end.getUTCMonth() + 1}\uC6D4 ${end.getUTCDate()}\uC77C`;
 }
 
+export function weekKeyForDate(dateKey: string): string {
+    const [year, month, day] = parseCalendarDate(dateKey);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    const daysSinceMonday = (date.getUTCDay() + 6) % 7;
+    return new Date(date.getTime() - daysSinceMonday * DAY_MS).toISOString().slice(0, 10);
+}
+
+export function weeklyMenuForDate(
+    weeklyMenus: readonly DashboardWeeklyMealMenu[],
+    dateKey: string,
+): DashboardWeeklyMealMenu | null {
+    const targetWeekKey = weekKeyForDate(dateKey);
+    return weeklyMenus.find((menu) => menu.weekKey === targetWeekKey) ?? null;
+}
+
 function uniqueMeals(meals: readonly DashboardMealPost[]): DashboardMealPost[] {
     const unique = new Map<string, DashboardMealPost>();
     for (const meal of meals) {
@@ -150,13 +110,14 @@ function uniqueMeals(meals: readonly DashboardMealPost[]): DashboardMealPost[] {
 }
 
 function compareMealPeriod(left: DashboardMealPost, right: DashboardMealPost): number {
-    return mealOrder(left.title) - mealOrder(right.title);
-}
-
-function compareRecentMeals(left: DashboardMealPost, right: DashboardMealPost): number {
-    const leftTime = Date.parse(left.publishedAt ?? left.firstSeenAt ?? '') || 0;
-    const rightTime = Date.parse(right.publishedAt ?? right.firstSeenAt ?? '') || 0;
-    return rightTime - leftTime || compareMealPeriod(left, right);
+    const order = (title: string | null): number => {
+        const period = mealPeriodLabel(title);
+        if (period === '\uC870\uC2DD') return 0;
+        if (period === '\uC911\uC2DD') return 1;
+        if (period === '\uC11D\uC2DD') return 2;
+        return 3;
+    };
+    return order(left.title) - order(right.title);
 }
 
 function calendarDateKey(year: number, month: number, day: number): string | null {

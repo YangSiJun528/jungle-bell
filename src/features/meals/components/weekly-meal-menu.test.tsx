@@ -1,6 +1,6 @@
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, it} from 'vitest';
-import type {DashboardMealPost} from '@/dashboard-api';
+import type {DashboardMealPost} from '@/api/dashboard-api';
 import {WeeklyMealMenu} from './weekly-meal-menu';
 
 describe('WeeklyMealMenu', () => {
@@ -28,12 +28,16 @@ describe('WeeklyMealMenu', () => {
         expect(markup).toContain('8월 2주차 식단표');
         expect(markup).toContain('8월 10일 ~ 8월 16일');
         expect(markup).toContain('<img');
+        expect(markup).toContain(`href="https://campus.example.com/api/public/assets/${sha}.jpg"`);
+        expect(markup).toContain('target="_blank"');
+        expect(markup).toContain('rel="noopener noreferrer"');
+        expect(markup).toContain('aria-label="8월 2주차 식단표 급식표 새 탭에서 열기"');
         expect(markup).toContain('object-contain');
-        expect(markup).toContain('<figure');
-        expect(markup).toContain('<figcaption');
-        expect(markup).toContain('요일별 급식 메뉴가 표로 정리된 상세 이미지');
-        expect(markup).toContain('텍스트 형식의 상세 메뉴는 제공되지 않았습니다.');
-        expect(markup).toContain('급식표 원문에서 전체 내용 확인');
+        expect(markup).toContain('8월 2주차 식단표, 8월 10일 ~ 8월 16일 급식표');
+        expect(markup).not.toContain('<figcaption');
+        expect(markup).not.toContain('data-text-alternative');
+        expect(markup).not.toContain('role="status"');
+        expect(markup).toContain('급식표 보러가기');
     });
 
     it('서버가 구조화 가능한 텍스트를 제공하면 이미지와 함께 동등 내용을 노출한다', () => {

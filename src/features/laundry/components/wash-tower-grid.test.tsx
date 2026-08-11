@@ -1,6 +1,6 @@
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, it} from 'vitest';
-import type {DashboardLaundryMachine} from '../../../dashboard-model';
+import type {DashboardLaundryMachine} from '@/domain/laundry/capacity';
 import {WashTowerGrid} from './wash-tower-grid';
 
 const NOW_MS = Date.parse('2026-08-11T03:00:00.000Z');
@@ -49,7 +49,6 @@ describe('WashTowerGrid', () => {
         const markup = renderToStaticMarkup(
             <WashTowerGrid machines={machines} nowMs={NOW_MS}/>,
         );
-
         expect(markup).toContain('워시타워 번호별 세탁기와 건조기 상태');
         expect(markup).toContain('role="region"');
         expect(markup).toContain('aria-label="워시타워 상태표"');
@@ -66,6 +65,19 @@ describe('WashTowerGrid', () => {
         const markup = renderToStaticMarkup(
             <WashTowerGrid machines={machines} nowMs={NOW_MS}/>,
         );
+        const availableMarkup = renderToStaticMarkup(
+            <WashTowerGrid
+                machines={machines.map((machine) => ({
+                    ...machine,
+                    washer: {
+                        appliance: 'washer',
+                        operationalStatus: 'IDLE',
+                        projection: {status: 'IDLE', remainingMinutes: 0},
+                    },
+                }))}
+                nowMs={NOW_MS}
+            />,
+        );
 
         expect(markup).toContain('data-zone="men"');
         expect(markup).toContain('data-zone="common"');
@@ -74,16 +86,30 @@ describe('WashTowerGrid', () => {
         expect(markup).toContain('data-state="unavailable"');
         expect(markup).toContain('data-state="error"');
         expect(markup).toContain('>✓</span>');
-        expect(markup).toContain('>!</span>');
+        expect(markup).toContain('>경고</span>');
+        expect(markup).not.toContain('>!</span>');
         expect(markup).toContain('>--:--</span>');
         expect(markup).toContain('aria-label="워시타워_1 세탁기 사용 가능"');
         expect(markup).toContain('title="워시타워_6 세탁기 오류"');
         expect(markup).toContain('aria-label="1번, 남성 구역"');
         expect(markup).toContain('aria-label="6번, 공용 구역"');
         expect(markup).toContain('aria-label="9번, 여성 구역"');
-        expect(markup).toContain('border-blue-200 bg-blue-50 text-blue-700');
-        expect(markup).toContain('border-violet-200 bg-violet-50 text-violet-700');
-        expect(markup).toContain('border-rose-200 bg-rose-50 text-rose-700');
+        expect(markup).toContain('title="남성 구역"');
+        expect(markup).toContain('text-blue-700 dark:text-blue-300');
+        expect(markup).toContain('text-violet-700 dark:text-violet-300');
+        expect(markup).toContain('text-rose-700 dark:text-rose-300');
+        expect(availableMarkup).toContain('bg-[oklch(0.68_0.07_250)]');
+        expect(availableMarkup).toContain('bg-[oklch(0.68_0.065_300)]');
+        expect(availableMarkup).toContain('bg-[oklch(0.68_0.07_15)]');
+        expect(markup).toContain('bg-[oklch(0.68_0.055_25)]');
+        expect(availableMarkup).not.toMatch(/bg-(?:blue|violet|rose)-100/u);
+        expect(markup).not.toContain('bg-red-100/70');
+
+        const numberTags = markup.match(/<span[^>]*data-laundry-zone-number="true"[^>]*>/gu) ?? [];
+        expect(numberTags).toHaveLength(3);
+        for (const tag of numberTags) {
+            expect(tag).not.toMatch(/\b(?:border(?:-\S+)?|rounded(?:-\S+)?|bg-(?:blue|violet|rose)-\S+)/u);
+        }
     });
 
     it('세탁기와 건조기 셀을 같은 규격으로 고정한다', () => {
@@ -95,6 +121,14 @@ describe('WashTowerGrid', () => {
         expect(markup).toContain('h-10 w-full');
         expect(markup).toContain('data-kind="dryer"');
         expect(markup).toContain('data-kind="washer"');
+    });
+
+    it('카드 구분선 아래에 별도 상단 마진을 만들지 않는다', () => {
+        const markup = renderToStaticMarkup(
+            <WashTowerGrid machines={machines} nowMs={NOW_MS}/>,
+        );
+
+        expect(markup).not.toContain('class="mt-4 ');
     });
 
     it('전달한 nowMs를 기준으로 실행 중 잔여 시간을 고정한다', () => {

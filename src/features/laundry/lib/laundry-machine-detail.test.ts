@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import type {DashboardLaundryMachine} from '@/dashboard-model';
+import type {DashboardLaundryMachine} from '@/domain/laundry/capacity';
 import {
     laundryApplianceDetail,
     laundryMachineDetail,
@@ -49,6 +49,7 @@ describe('laundryApplianceDetail', () => {
             statusLabel: '헹굼 중 · 예상',
             remainingLabel: '약 30분 남음',
             progress: 50,
+            helpText: null,
             estimated: true,
         });
     });
@@ -108,7 +109,7 @@ describe('laundryApplianceDetail', () => {
         }, 'dryer', NOW_MS)).toMatchObject({
             statusLabel: '완료 확인 지연',
             tone: 'warning',
-            helpText: '예상 종료 시각이 지났지만 완료 상태가 아직 확인되지 않았어요.',
+            helpText: '표시된 시간과 진행률은 Jungle Bell이 보정한 예상값이며, LG ThinQ의 확정 결과를 기다리고 있어요.',
         });
 
         expect(laundryApplianceDetail({
@@ -120,6 +121,7 @@ describe('laundryApplianceDetail', () => {
         }, 'dryer', NOW_MS)).toMatchObject({
             statusLabel: '완료 확인 중',
             tone: 'active',
+            helpText: '표시된 시간과 진행률은 Jungle Bell이 보정한 예상값이며, LG ThinQ의 확정 결과를 기다리고 있어요.',
         });
     });
 

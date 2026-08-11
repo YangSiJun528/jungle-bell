@@ -10,20 +10,23 @@ import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@/compo
 import {Input} from '@/components/ui/input';
 import {Label} from '@/components/ui/label';
 import {Switch} from '@/components/ui/switch';
-import type {MobilePairingCreated} from '@/dashboard-api';
-import {formatManualPairingCode, validManualPairingCode} from '@/dashboard-model';
-import {pairingQrDataUrl} from '@/dashboard-qr';
+import type {MobilePairingCreated} from '@/api/dashboard-api';
+import {
+    formatManualPairingCode,
+    validManualPairingCode,
+} from '@/domain/connections/manual-pairing-code';
+import {pairingQrDataUrl} from './lib/pairing-qr';
 import {
     clearPendingMobilePairing,
     readPendingMobilePairing,
     storePendingMobilePairing,
-} from '@/dashboard-pending-pairing';
+} from './lib/pending-pairing';
 import {dateTimeLabel, relativeTimeLabel} from '@/lib/format';
 import {
     mobileDeviceLabel,
     mobileInstallationId,
 } from './mobile-identity';
-import {readInitialPairingEntry} from './pairing-bootstrap';
+import {readInitialPairingEntry} from '@/app/pairing-bootstrap';
 import {desktopConnectionUiState} from './desktop-connection-state';
 import {
     automaticPairingAction,

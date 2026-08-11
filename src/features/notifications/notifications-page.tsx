@@ -8,10 +8,10 @@ import {PageHeader} from '@/components/dashboard/page-header';
 import {Button} from '@/components/ui/button';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Card} from '@/components/ui/card';
-import type {DashboardNotification} from '@/dashboard-api';
-import {companionAuthenticationRequired} from '@/dashboard-model';
+import type {DashboardNotification} from '@/api/dashboard-api';
+import {companionAuthenticationRequired} from '@/app/surface';
 import {dateTimeLabel} from '@/lib/format';
-import type {NotificationInboxItem} from '@/notification-inbox';
+import type {NotificationInboxItem} from '@/domain/notifications/inbox';
 import {desktopTestNotificationMessage} from './notification-result';
 
 function applicationServerKey(value: string): ArrayBuffer {

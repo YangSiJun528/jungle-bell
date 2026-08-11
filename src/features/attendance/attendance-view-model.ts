@@ -2,8 +2,8 @@ import type {
     AttendanceDashboard,
     AttendanceSnapshot,
     DesktopDevice,
-} from '@/dashboard-api';
-import type {AttendancePreferences} from '@/dashboard-personal-api';
+} from '@/api/dashboard-api';
+import type {AttendancePreferences} from '@/api/personal-api';
 
 export type AttendanceDetailModel =
     | {kind: 'loading'}

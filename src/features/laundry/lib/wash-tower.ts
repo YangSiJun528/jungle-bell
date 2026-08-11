@@ -1,10 +1,10 @@
-import type {DashboardLaundryMachine} from '../../../dashboard-model';
+import type {DashboardLaundryMachine} from '@/domain/laundry/capacity';
 import {
     laundryAvailabilityState,
     laundryOverviewText,
     laundryRemainingText,
     type LaundryAvailabilityState,
-} from '../../../laundry-status';
+} from '@/domain/laundry/status';
 
 export type WashTowerApplianceKind = 'dryer' | 'washer';
 
@@ -56,7 +56,7 @@ export function washTowerCellView(
     const baseText = state === 'available'
         ? '✓'
         : state === 'error'
-            ? '!'
+            ? '경고'
             : laundryOverviewText(appliance, nowMs);
     const text = estimated ? `≈${baseText}` : baseText;
     const applianceLabel = kind === 'washer' ? '세탁기' : '건조기';

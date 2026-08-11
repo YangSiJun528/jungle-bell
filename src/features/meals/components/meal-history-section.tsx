@@ -4,11 +4,17 @@ import {CalendarDays} from 'lucide-react';
 import {useDashboardEnvironment} from '@/app/dashboard-context';
 import {EmptyState} from '@/components/dashboard/async-state';
 import {Card} from '@/components/ui/card';
-import type {DashboardMealPost, DashboardMealsSnapshot} from '@/dashboard-api';
+import type {DashboardMealPost, DashboardMealsSnapshot} from '@/api/dashboard-api';
+import {kstDateKey} from '@/domain/meals/today';
 import {MealHistoryCalendar} from './meal-history-calendar';
 import {MealHistoryLoadMore} from './meal-history-load-more';
 import {MealPostCard} from './meal-post-card';
-import {kstDateKey, mealDateLabel, mealsGroupedByDate} from '../lib/meal-view';
+import {WeeklyMealMenu} from './weekly-meal-menu';
+import {
+    mealDateLabel,
+    mealsGroupedByDate,
+    weeklyMenuForDate,
+} from '../lib/meal-view';
 
 export function MealHistorySection({meals}: {meals: DashboardMealsSnapshot}) {
     const {api} = useDashboardEnvironment();
@@ -42,20 +48,18 @@ export function MealHistorySection({meals}: {meals: DashboardMealsSnapshot}) {
         ? selectedHistoryDate
         : historyDates[0] ?? '';
     const activeHistoryMeals = activeHistoryDate ? historyByDate.get(activeHistoryDate) ?? [] : [];
+    const activeWeeklyMenu = activeHistoryDate
+        ? weeklyMenuForDate(meals.data.weeklyMenus ?? [], activeHistoryDate)
+        : null;
     const canLoadOlder = historyCursor !== null
         && (olderHistory.data === undefined || olderHistory.hasNextPage);
 
     return (
         <section aria-labelledby="meal-history-title">
-            <div className="mb-3">
-                <h2 className="flex items-center gap-2 font-semibold" id="meal-history-title">
-                    <CalendarDays className="size-4 text-primary"/>
-                    지난 급식 기록
-                </h2>
-                <p className="mt-1 text-xs text-muted-foreground">
-                    날짜를 선택해 이전 메뉴와 사진을 확인할 수 있습니다.
-                </p>
-            </div>
+            <h2 className="mb-3 flex items-center gap-2 font-semibold" id="meal-history-title">
+                <CalendarDays className="size-4 text-primary"/>
+                지난 급식 기록
+            </h2>
             {activeHistoryDate ? (
                 <div className="grid items-start gap-4 lg:grid-cols-[20rem_minmax(0,1fr)]">
                     <Card className="gap-4 p-5 shadow-none">
@@ -75,15 +79,30 @@ export function MealHistorySection({meals}: {meals: DashboardMealsSnapshot}) {
                             <p className="text-xs text-destructive">이전 기록을 불러오지 못했습니다.</p>
                         ) : null}
                     </Card>
-                    <div>
-                        <h3 className="mb-3 text-sm font-semibold">
-                            {mealDateLabel(activeHistoryDate)}
-                        </h3>
-                        <div className="grid gap-4 xl:grid-cols-2">
-                            {activeHistoryMeals.map((meal) => (
-                                <MealPostCard compact key={meal.id} meal={meal}/>
-                            ))}
+                    <div className="space-y-6">
+                        <div>
+                            <h3 className="mb-3 text-sm font-semibold">
+                                {mealDateLabel(activeHistoryDate)}
+                            </h3>
+                            <div className="grid gap-4 xl:grid-cols-2">
+                                {activeHistoryMeals.map((meal) => (
+                                    <MealPostCard compact key={meal.id} meal={meal}/>
+                                ))}
+                            </div>
                         </div>
+                        <section aria-labelledby="selected-history-week-title">
+                            <h3 className="mb-3 text-sm font-semibold" id="selected-history-week-title">
+                                선택한 주 급식표
+                            </h3>
+                            {activeWeeklyMenu ? (
+                                <WeeklyMealMenu
+                                    meal={activeWeeklyMenu.post}
+                                    weekKey={activeWeeklyMenu.weekKey}
+                                />
+                            ) : (
+                                <EmptyState title="저장된 주간 급식표가 없습니다."/>
+                            )}
+                        </section>
                     </div>
                 </div>
             ) : (

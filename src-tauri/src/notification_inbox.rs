@@ -14,7 +14,7 @@ pub const MAX_NOTIFICATION_ITEMS: usize = 100;
 
 const NOTIFICATION_INBOX_VERSION: u32 = 1;
 #[cfg(target_os = "windows")]
-const WINDOWS_BADGE_WINDOW_LABELS: [&str; 3] = ["dashboard", "checker", "image-viewer"];
+const WINDOWS_BADGE_WINDOW_LABELS: [&str; 2] = ["dashboard", "checker"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum NotificationAction {

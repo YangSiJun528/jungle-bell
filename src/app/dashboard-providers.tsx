@@ -11,7 +11,7 @@ import {invoke} from '@tauri-apps/api/core';
 import {
     normalizeNotificationInboxSnapshot,
     type NotificationInboxSnapshot,
-} from '@/notification-inbox';
+} from '@/domain/notifications/inbox';
 import {
     campusDataHealthReducer,
     type CampusDataHealthAction,

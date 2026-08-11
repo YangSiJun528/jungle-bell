@@ -6,6 +6,22 @@ import react from '@vitejs/plugin-react';
 import {defineConfig, transformWithOxc, type Plugin} from 'vite';
 
 const host = process.env.TAURI_DEV_HOST;
+export const defaultDevApiOrigin = 'https://jungle-bell-api-test.yangsijun5528.workers.dev';
+
+export function normalizeDevApiOrigin(value: string): string {
+    const parsed = new URL(value);
+    const localHttp = parsed.protocol === 'http:'
+        && (parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost');
+    if ((parsed.protocol !== 'https:' && !localHttp)
+        || parsed.username
+        || parsed.password
+        || parsed.pathname !== '/'
+        || parsed.search
+        || parsed.hash) {
+        throw new Error('JUNGLE_BELL_DEV_API_ORIGIN_INVALID');
+    }
+    return parsed.origin;
+}
 
 interface InjectionScript {
     name: string;
@@ -92,37 +108,57 @@ function serviceWorkerAssetsPlugin(): Plugin {
     };
 }
 
-export default defineConfig({
-    plugins: [react(), tailwindcss(), injectionScriptPlugin(), serviceWorkerAssetsPlugin()],
-    resolve: {
-        alias: {
-            '@': resolve(import.meta.dirname, 'src'),
-        },
-    },
-    root: 'src',
-    base: './',
-    clearScreen: false,
-    publicDir: 'public',
-    server: {
-        host: host ?? '127.0.0.1',
-        port: 5173,
-        strictPort: true,
-    },
-    // Tauri build variables are consumed by this Node-side config only. Never
-    // expose the TAURI_ namespace to browser bundles because it can contain
-    // updater signing material in release environments.
-    envPrefix: ['VITE_'],
-    build: {
-        target: process.env.TAURI_ENV_PLATFORM === 'windows' ? 'chrome105' : 'safari13',
-        outDir: '../dist',
-        emptyOutDir: true,
-        sourcemap: process.env.TAURI_ENV_DEBUG === 'true',
-        minify: process.env.TAURI_ENV_DEBUG === 'true' ? false : 'oxc',
-        rolldownOptions: {
-            input: {
-                imageViewer: resolve(import.meta.dirname, 'src/image-viewer.html'),
-                dashboard: resolve(import.meta.dirname, 'src/dashboard.html'),
+export default defineConfig(({command}) => {
+    const devApiOrigin = normalizeDevApiOrigin(
+        process.env.JUNGLE_BELL_DEV_API_ORIGIN ?? defaultDevApiOrigin,
+    );
+
+    return {
+        plugins: [react(), tailwindcss(), injectionScriptPlugin(), serviceWorkerAssetsPlugin()],
+        resolve: {
+            alias: {
+                '@': resolve(import.meta.dirname, 'src'),
             },
         },
-    },
+        root: 'src',
+        cacheDir: '../node_modules/.vite',
+        base: './',
+        clearScreen: false,
+        publicDir: 'public',
+        define: command === 'serve'
+            ? {
+                'import.meta.env.VITE_CAMPUS_API_URL': JSON.stringify(devApiOrigin),
+                'import.meta.env.VITE_PLATFORM_API_URL': JSON.stringify(''),
+            }
+            : undefined,
+        server: {
+            host: host ?? '127.0.0.1',
+            port: 5173,
+            strictPort: true,
+            proxy: {
+                '/api': {
+                    target: devApiOrigin,
+                    changeOrigin: true,
+                    secure: true,
+                    headers: {origin: devApiOrigin},
+                },
+            },
+        },
+        // Tauri build variables are consumed by this Node-side config only. Never
+        // expose the TAURI_ namespace to browser bundles because it can contain
+        // updater signing material in release environments.
+        envPrefix: ['VITE_'],
+        build: {
+            target: process.env.TAURI_ENV_PLATFORM === 'windows' ? 'chrome105' : 'safari13',
+            outDir: '../dist',
+            emptyOutDir: true,
+            sourcemap: process.env.TAURI_ENV_DEBUG === 'true',
+            minify: process.env.TAURI_ENV_DEBUG === 'true' ? false : 'oxc',
+            rolldownOptions: {
+                input: {
+                    dashboard: resolve(import.meta.dirname, 'src/dashboard.html'),
+                },
+            },
+        },
+    };
 });

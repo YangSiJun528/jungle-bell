@@ -1,5 +1,5 @@
 import {useCallback, useSyncExternalStore} from 'react';
-import type {DashboardRoute, DashboardSurfaceKind} from '@/dashboard-model';
+import type {DashboardRoute, DashboardSurfaceKind} from '@/app/surface';
 import {dashboardRouteFromHash, dashboardRouteHref} from './routes';
 
 function subscribe(callback: () => void): () => void {

@@ -19,7 +19,7 @@ use tauri::{
     image::Image,
     menu::MenuBuilder,
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Emitter, Manager, WebviewWindow,
+    Manager, WebviewWindow,
 };
 
 const STATUS_COURSE_UPCOMING: &str = "코스 시작 전";
@@ -28,10 +28,6 @@ const STATUS_NO_COHORT: &str = "진행 중인 코스 없음";
 const STATUS_NO_ATTENDANCE: &str = "현재 출석 없음";
 const STATUS_COURSE_CHECKING: &str = "코스 확인 중";
 
-const IMAGE_VIEWER_WIDTH: f64 = 1120.0;
-const IMAGE_VIEWER_HEIGHT: f64 = 840.0;
-const IMAGE_VIEWER_MIN_WIDTH: f64 = 420.0;
-const IMAGE_VIEWER_MIN_HEIGHT: f64 = 320.0;
 const DASHBOARD_WINDOW_WIDTH: f64 = 1180.0;
 const DASHBOARD_WINDOW_HEIGHT: f64 = 780.0;
 const DASHBOARD_WINDOW_MIN_WIDTH: f64 = 760.0;
@@ -81,12 +77,6 @@ const ICON_ALERT_DARK: &[u8] = include_bytes!("../icons/tray-alert-dark-windows.
 const ICON_COMPLETE_DARK: &[u8] = include_bytes!("../icons/tray-complete-dark.png");
 #[cfg(not(target_os = "macos"))]
 const ICON_COMPLETE_DARK: &[u8] = include_bytes!("../icons/tray-complete-dark-windows.png");
-
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct ImageViewerPayload {
-    image_url: String,
-}
 
 const TRAY_MENU_OPEN_ID: &str = "open-dashboard";
 const TRAY_MENU_QUIT_ID: &str = "quit";
@@ -554,52 +544,6 @@ fn sync_foreground_app_visibility_soon(app: tauri::AppHandle) {
     });
 }
 
-pub fn open_image_viewer(app: &tauri::AppHandle, image_url: String) -> Result<(), String> {
-    let payload = ImageViewerPayload { image_url };
-
-    show_foreground_app(app);
-    if let Some(window) = app.get_webview_window("image-viewer") {
-        app.emit_to("image-viewer", "image-viewer-update", &payload)
-            .map_err(|error| format!("이미지 갱신 실패: {error}"))?;
-        focus_window_checked(&window)?;
-        return Ok(());
-    }
-
-    let mut viewer_url = reqwest::Url::parse("http://localhost/image-viewer.html")
-        .map_err(|error| format!("이미지 뷰어 주소 생성 실패: {error}"))?;
-    viewer_url.query_pairs_mut().append_pair("src", &payload.image_url);
-    let app_url = format!(
-        "image-viewer.html?{}",
-        viewer_url
-            .query()
-            .ok_or_else(|| "이미지 뷰어 주소를 만들지 못했습니다.".to_string())?
-    );
-
-    let window = tauri::WebviewWindowBuilder::new(app, "image-viewer", tauri::WebviewUrl::App(app_url.into()))
-        .title("이미지 뷰어")
-        .theme(Some(tauri::Theme::Light))
-        .inner_size(IMAGE_VIEWER_WIDTH, IMAGE_VIEWER_HEIGHT)
-        .min_inner_size(IMAGE_VIEWER_MIN_WIDTH, IMAGE_VIEWER_MIN_HEIGHT)
-        .center()
-        .prevent_overflow()
-        .resizable(true)
-        .minimizable(true)
-        .maximizable(true)
-        .skip_taskbar(foreground_window_skip_taskbar(app))
-        .focused(true)
-        .build()
-        .map_err(|error| format!("이미지 창 생성 실패: {error}"))?;
-
-    focus_window_checked(&window)?;
-    let app_handle = app.clone();
-    window.on_window_event(move |event| {
-        if let tauri::WindowEvent::Destroyed = event {
-            sync_foreground_app_visibility_soon(app_handle.clone());
-        }
-    });
-    Ok(())
-}
-
 fn dashboard_app_url(route: DashboardRoute) -> String {
     format!("dashboard.html#{}", route.as_str())
 }
@@ -1022,12 +966,6 @@ mod tests {
             (TrayIconKind::Alert, TrayIconTheme::Dark)
         );
         assert!(!store.set_icon_theme(TrayIconTheme::Dark).unwrap());
-    }
-
-    #[test]
-    fn 이미지_창은_넓은_기본_크기로_열린다() {
-        assert_eq!(IMAGE_VIEWER_WIDTH, 1120.0);
-        assert_eq!(IMAGE_VIEWER_HEIGHT, 840.0);
     }
 
     #[test]

@@ -1,4 +1,4 @@
-import type {DesktopConnectionState} from '@/dashboard-api';
+import type {DesktopConnectionState} from '@/api/dashboard-api';
 
 export interface DesktopConnectionUiState {
     canCreatePairing: boolean;

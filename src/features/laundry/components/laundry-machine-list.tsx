@@ -9,7 +9,7 @@ import {
 import {Card, CardContent, CardHeader} from '@/components/ui/card';
 import {Progress} from '@/components/ui/progress';
 import {TooltipProvider} from '@/components/ui/tooltip';
-import type {DashboardLaundryMachine} from '@/dashboard-model';
+import type {DashboardLaundryMachine} from '@/domain/laundry/capacity';
 import {cn} from '@/lib/utils';
 import {
     laundryMachineDetail,
@@ -71,7 +71,7 @@ function ApplianceDetail({
                 view.remainingLabel,
                 view.totalLabel,
             ].filter(Boolean).join(', ');
-    const hasStatusHint = view.helpText !== null || view.errorCode !== null || view.estimated;
+    const hasStatusHint = view.helpText !== null || view.errorCode !== null;
 
     return (
         <section
@@ -97,9 +97,6 @@ function ApplianceDetail({
                             {view.helpText ? <p>{view.helpText}</p> : null}
                             {view.errorCode ? (
                                 <p>오류 코드 <code className="break-all font-mono">{view.errorCode}</code></p>
-                            ) : null}
-                            {view.estimated ? (
-                                <p>진행률과 종료 시각은 수집된 정보로 계산한 예상값입니다.</p>
                             ) : null}
                         </LaundryStatusHint>
                     ) : null}
@@ -149,17 +146,12 @@ export function LaundryMachineList({machines, nowMs = Date.now()}: LaundryMachin
 
     return (
         <section className="space-y-3" aria-labelledby={titleId} data-laundry-detail-list="true">
-            <div>
-                <h2 className="font-semibold" id={titleId}>기기별 상세 상태</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                    마지막 수집 시점 기준 각 세탁기와 건조기의 남은 시간과 진행 상태입니다.
-                </p>
-            </div>
+            <h2 className="font-semibold" id={titleId}>기기별 상세 상태</h2>
             <TooltipProvider delayDuration={200}>
                 <div className="grid auto-rows-fr gap-3 md:grid-cols-2 2xl:grid-cols-3">
                     {views.map((machine, machineIndex) => (
                         <Card className="h-full gap-0 overflow-hidden py-0 shadow-none" data-laundry-machine-card="true" key={machine.id}>
-                            <CardHeader className="flex flex-row items-center justify-between gap-3 border-b px-4 py-3">
+                            <CardHeader className="flex flex-row items-center justify-between gap-3 border-b px-4 py-3 [.border-b]:pb-3">
                                 <h3 className="text-base font-semibold leading-none">{machine.title}</h3>
                                 <LaundryZoneBadge zone={machine.zone}/>
                             </CardHeader>

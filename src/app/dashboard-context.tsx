@@ -2,9 +2,9 @@ import {
     createContext,
     useContext,
 } from 'react';
-import {createDashboardApi, type DashboardApi} from '@/dashboard-api';
-import {resolveDashboardSurface, type DashboardSurface} from '@/dashboard-model';
-import {detectDashboardRuntime, type DashboardRuntime} from '@/dashboard-runtime';
+import {createDashboardApi, type DashboardApi} from '@/api/dashboard-api';
+import {resolveDashboardSurface, type DashboardSurface} from '@/app/surface';
+import {detectDashboardRuntime, type DashboardRuntime} from '@/app/runtime';
 import {
     type CampusDataHealth,
     type CampusDataKind,

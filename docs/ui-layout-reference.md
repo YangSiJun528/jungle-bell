@@ -6,7 +6,7 @@
 >
 > 대상: Jungle Bell 웹·PWA·Tauri 대시보드
 
-대시보드는 React와 Tailwind CSS로 구성하며, shadcn/ui 컴포넌트를 저장소 안에 복사해 재사용한다. 이미지 뷰어는 작은 독립 Tauri 표면이라 기존 정적 HTML/CSS를 유지한다.
+대시보드는 React와 Tailwind CSS로 구성하며, shadcn/ui 컴포넌트를 저장소 안에 복사해 재사용한다. 급식 이미지는 별도 화면을 만들지 않고 검증된 원본 URL을 새 탭에서 연다.
 
 ## 소스 경계
 
@@ -19,7 +19,6 @@
 | 저장소에 포함한 shadcn/ui | [`src/components/ui`](../src/components/ui) |
 | Tailwind·색상 토큰 | [`src/app/styles/globals.css`](../src/app/styles/globals.css) |
 | 정적 Markdown 블로그 | [`src/site`](../src/site) |
-| 독립 이미지 뷰어 | [`src/image-viewer.html`](../src/image-viewer.html), [`src/ui.css`](../src/ui.css) |
 
 ## 대시보드 셸
 

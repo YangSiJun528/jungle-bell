@@ -2,9 +2,45 @@ import {useMemo, useState} from 'react';
 import {ChevronLeft, ChevronRight} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {cn} from '@/lib/utils';
-import {calendarMonthCells, monthLabel, shiftMonth} from '../lib/meal-view';
+import {
+    calendarMonthCells,
+    type CalendarMonthCell,
+    monthLabel,
+    shiftMonth,
+} from '../lib/meal-view';
 
 const WEEKDAYS = ['\uC77C', '\uC6D4', '\uD654', '\uC218', '\uBAA9', '\uAE08', '\uD1A0'] as const;
+
+export function MealHistoryDayButton({
+    cell,
+    hasMeal,
+    onSelect,
+    selected,
+}: {
+    cell: CalendarMonthCell;
+    hasMeal: boolean;
+    onSelect: (date: string) => void;
+    selected: boolean;
+}) {
+    return (
+        <button
+            aria-label={`${cell.date}${hasMeal ? ' \uAE09\uC2DD \uAE30\uB85D \uC788\uC74C' : ' \uAE09\uC2DD \uAE30\uB85D \uC5C6\uC74C'}`}
+            aria-pressed={selected}
+            className={cn(
+                'aspect-square rounded-md text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                hasMeal && 'font-semibold text-primary hover:bg-accent',
+                selected && 'bg-primary text-primary-foreground hover:bg-primary',
+                !hasMeal && 'cursor-default text-muted-foreground/45',
+            )}
+            data-has-meal={hasMeal}
+            disabled={!hasMeal}
+            type="button"
+            onClick={() => onSelect(cell.date)}
+        >
+            {cell.day}
+        </button>
+    );
+}
 
 export function MealHistoryCalendar({
     availableDates,
@@ -48,27 +84,16 @@ export function MealHistoryCalendar({
                     const hasMeal = availableDates.has(cell.date);
                     const selected = selectedDate === cell.date;
                     return (
-                        <button
-                            aria-label={`${cell.date}${hasMeal ? ' \uAE09\uC2DD \uAE30\uB85D \uC788\uC74C' : ' \uAE09\uC2DD \uAE30\uB85D \uC5C6\uC74C'}`}
-                            aria-pressed={selected}
-                            className={cn(
-                                'aspect-square rounded-md text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                                hasMeal && 'font-semibold text-primary hover:bg-accent',
-                                selected && 'bg-primary text-primary-foreground hover:bg-primary',
-                                !hasMeal && 'cursor-default text-muted-foreground/45',
-                            )}
-                            data-has-meal={hasMeal}
-                            disabled={!hasMeal}
+                        <MealHistoryDayButton
+                            cell={cell}
+                            hasMeal={hasMeal}
                             key={cell.date}
-                            type="button"
-                            onClick={() => onSelect(cell.date)}
-                        >
-                            {cell.day}
-                        </button>
+                            selected={selected}
+                            onSelect={onSelect}
+                        />
                     );
                 })}
             </div>
-            <p className="mt-3 text-xs text-muted-foreground">진하게 표시된 날짜에 저장된 급식 기록이 있습니다.</p>
         </div>
     );
 }

@@ -8,7 +8,6 @@ const APP_COMMANDS: &[&str] = &[
     "refresh_campus_data",
     "get_dashboard_campus_data",
     "get_dashboard_meal_history",
-    "open_image_viewer",
     "get_dashboard_home_overview",
     "get_notification_inbox_snapshot",
     "activate_notification",

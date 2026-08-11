@@ -29,8 +29,8 @@ import {
     useHomeOverviewQuery,
     useRefreshAllMutation,
 } from '@/app/use-dashboard-queries';
-import type {AttendancePreferences} from '@/dashboard-personal-api';
-import {companionAuthenticationRequired} from '@/dashboard-model';
+import type {AttendancePreferences} from '@/api/personal-api';
+import {companionAuthenticationRequired} from '@/app/surface';
 import {dateTimeLabel, relativeTimeLabel} from '@/lib/format';
 import jungleCompassIcon from '@/assets/logo.png';
 import {

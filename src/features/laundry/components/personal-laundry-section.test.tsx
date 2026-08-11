@@ -1,7 +1,7 @@
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, test, vi} from 'vitest';
-import type {DashboardLaundrySnapshot, LaundryQueueEntry, LaundryWatch} from '@/dashboard-api';
+import type {DashboardLaundrySnapshot, LaundryQueueEntry, LaundryWatch} from '@/api/dashboard-api';
 import {PersonalLaundrySection} from './personal-laundry-section';
 
 const {api, queryKeys} = vi.hoisted(() => ({

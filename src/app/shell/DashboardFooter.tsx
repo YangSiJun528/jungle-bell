@@ -20,7 +20,7 @@ function ExternalFooterLink({href, children}: {href: string; children: string}) 
 
 export function DashboardFooter() {
     return (
-        <footer className="mx-auto mt-auto w-full max-w-[90rem] px-3 pb-28 pt-12 sm:px-4 md:px-5 md:pb-8 lg:px-6">
+        <footer className="mx-auto mt-auto w-full max-w-6xl px-3 pb-28 pt-12 sm:px-4 md:px-5 md:pb-8 lg:px-6">
             <div className="border-t pt-6 text-sm text-muted-foreground">
                 <nav className="flex flex-wrap gap-x-5 gap-y-3" aria-label="프로젝트 정보">
                     <ExternalFooterLink href={PROJECT_URL}>GitHub</ExternalFooterLink>
