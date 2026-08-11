@@ -1,6 +1,8 @@
 import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
 import {resolve} from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
+import react from '@vitejs/plugin-react';
 import {defineConfig, transformWithOxc, type Plugin} from 'vite';
 
 const host = process.env.TAURI_DEV_HOST;
@@ -63,8 +65,40 @@ function injectionScriptPlugin(): Plugin {
     };
 }
 
+function serviceWorkerAssetsPlugin(): Plugin {
+    return {
+        name: 'service-worker-assets',
+        apply: 'build',
+        writeBundle(_options, bundle) {
+            const assets = Object.values(bundle)
+                .map((entry) => entry.fileName)
+                .filter((fileName) => /\.(?:css|js|txt|woff2)$/u.test(fileName))
+                .sort()
+                .map((fileName) => `./${fileName}`);
+            const buildId = createHash('sha256')
+                .update(JSON.stringify(assets))
+                .digest('hex')
+                .slice(0, 12);
+            const outputDirectory = resolve(import.meta.dirname, 'dist');
+            writeFileSync(
+                resolve(outputDirectory, 'sw-assets.json'),
+                `${JSON.stringify({version: 1, assets})}\n`,
+            );
+            const serviceWorkerPath = resolve(outputDirectory, 'sw.js');
+            const serviceWorker = readFileSync(serviceWorkerPath, 'utf8')
+                .replaceAll('__BUILD_ID__', buildId);
+            writeFileSync(serviceWorkerPath, serviceWorker);
+        },
+    };
+}
+
 export default defineConfig({
-    plugins: [tailwindcss(), injectionScriptPlugin()],
+    plugins: [react(), tailwindcss(), injectionScriptPlugin(), serviceWorkerAssetsPlugin()],
+    resolve: {
+        alias: {
+            '@': resolve(import.meta.dirname, 'src'),
+        },
+    },
     root: 'src',
     base: './',
     clearScreen: false,

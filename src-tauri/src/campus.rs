@@ -15,6 +15,8 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 const LAUNDRY_INTERVAL_SECS: u64 = 30;
 const MEALS_ACTIVE_INTERVAL_SECS: u64 = 60;
 const MEALS_IDLE_INTERVAL_SECS: u64 = 5 * 60;
+const MAX_MEAL_HISTORY_RESPONSE_BYTES: u64 = 4 * 1024 * 1024;
+const MAX_MEAL_HISTORY_CURSOR_BYTES: usize = 2_048;
 const CAMPUS_DATA_UPDATED_EVENT: &str = "campus-data-updated";
 const CAMPUS_DATA_ERROR_EVENT: &str = "campus-data-error";
 
@@ -204,7 +206,7 @@ impl CampusService {
                 .json::<Value>()
                 .await
                 .map_err(|error| format!("{} response was not valid JSON: {error}", kind.name()))?;
-            validate_payload(kind, &data)?;
+            validate_payload(kind, &data, &self.base_url)?;
             let snapshot = CampusSnapshot { saved_at, data };
             *self.cache.lock().await.entry_mut(kind) = Some(CacheEntry {
                 snapshot: snapshot.clone(),
@@ -250,6 +252,42 @@ impl CampusService {
         }
     }
 
+    /// 대시보드의 과거 급식 탐색을 위한 읽기 전용 페이지 프록시.
+    /// WebView에는 API origin 접근 권한을 주지 않고 제한된 cursor/limit만 전달한다.
+    pub async fn meal_history(&self, before: Option<&str>, limit: u8) -> Result<Value, String> {
+        let url = meal_history_url(&self.base_url, before, limit)?;
+        let mut response = self
+            .client
+            .get(url)
+            .header(ACCEPT, "application/json")
+            .send()
+            .await
+            .map_err(|error| format!("meal history request failed: {error}"))?
+            .error_for_status()
+            .map_err(|error| format!("meal history request failed: {error}"))?;
+        if response
+            .content_length()
+            .is_some_and(|length| length > MAX_MEAL_HISTORY_RESPONSE_BYTES)
+        {
+            return Err("meal history response was too large".into());
+        }
+        let mut body = Vec::new();
+        while let Some(chunk) = response
+            .chunk()
+            .await
+            .map_err(|error| format!("meal history response body failed: {error}"))?
+        {
+            if body.len().saturating_add(chunk.len()) > MAX_MEAL_HISTORY_RESPONSE_BYTES as usize {
+                return Err("meal history response was too large".into());
+            }
+            body.extend_from_slice(&chunk);
+        }
+        let value = serde_json::from_slice::<Value>(&body)
+            .map_err(|error| format!("meal history response was not valid JSON: {error}"))?;
+        validate_meal_history_payload(&value, &self.base_url)?;
+        Ok(value)
+    }
+
     pub async fn cached_dashboard_data(&self, kind: CampusDataKind) -> Option<Value> {
         self.cache
             .lock()
@@ -290,7 +328,82 @@ impl CampusService {
     }
 }
 
-fn validate_payload(kind: CampusDataKind, data: &Value) -> Result<(), String> {
+fn meal_history_url(base_url: &str, before: Option<&str>, limit: u8) -> Result<reqwest::Url, String> {
+    if !(1..=100).contains(&limit) {
+        return Err("급식 기록 요청 개수가 올바르지 않습니다.".into());
+    }
+    if let Some(cursor) = before {
+        if !meal_history_cursor_valid(cursor) {
+            return Err("급식 기록 cursor가 올바르지 않습니다.".into());
+        }
+    }
+
+    let mut url = reqwest::Url::parse(base_url).map_err(|_| "급식 기록 서버 주소가 올바르지 않습니다.".to_string())?;
+    url.set_path("/api/public/meals/history");
+    url.set_query(None);
+    {
+        let mut query = url.query_pairs_mut();
+        if let Some(cursor) = before {
+            query.append_pair("before", cursor);
+        }
+        query.append_pair("limit", &limit.to_string());
+    }
+    Ok(url)
+}
+
+fn meal_history_cursor_valid(value: &str) -> bool {
+    if value.len() < 26 || value.len() > MAX_MEAL_HISTORY_CURSOR_BYTES {
+        return false;
+    }
+    let Some((timestamp, encoded_post_id)) = value.split_once('~') else {
+        return false;
+    };
+    let timestamp_valid = DateTime::parse_from_rfc3339(timestamp)
+        .ok()
+        .is_some_and(|parsed| parsed.with_timezone(&Utc).format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string() == timestamp);
+    if !timestamp_valid || encoded_post_id.is_empty() {
+        return false;
+    }
+    let bytes = encoded_post_id.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if byte == b'%' {
+            if index + 2 >= bytes.len()
+                || !bytes[index + 1].is_ascii_hexdigit()
+                || !bytes[index + 2].is_ascii_hexdigit()
+                || bytes[index + 1].is_ascii_lowercase()
+                || bytes[index + 2].is_ascii_lowercase()
+            {
+                return false;
+            }
+            index += 3;
+            continue;
+        }
+        if !(byte.is_ascii_alphanumeric()
+            || matches!(byte, b'-' | b'_' | b'.' | b'!' | b'~' | b'*' | b'\'' | b'(' | b')'))
+        {
+            return false;
+        }
+        index += 1;
+    }
+    true
+}
+
+fn validate_meal_history_payload(value: &Value, expected_base_url: &str) -> Result<(), String> {
+    let posts_valid = value.get("posts").is_some_and(Value::is_array);
+    let cursor_valid = value
+        .get("nextBefore")
+        .is_some_and(|cursor| cursor.is_null() || cursor.as_str().is_some_and(meal_history_cursor_valid));
+    let assets_valid = value
+        .get("posts")
+        .is_some_and(|posts| meal_post_list_assets_valid(posts, expected_base_url));
+    (posts_valid && cursor_valid && assets_valid)
+        .then_some(())
+        .ok_or_else(|| "meal history response schema was invalid".into())
+}
+
+fn validate_payload(kind: CampusDataKind, data: &Value, expected_base_url: &str) -> Result<(), String> {
     let valid = match kind {
         CampusDataKind::Laundry => {
             data.get("schemaVersion").and_then(Value::as_u64) == Some(1)
@@ -300,7 +413,10 @@ fn validate_payload(kind: CampusDataKind, data: &Value) -> Result<(), String> {
         CampusDataKind::Meals => {
             let meals = data.get("data");
             let current_weekly = meals.and_then(|value| value.get("currentWeeklyMenu"));
-            meals
+            let history_cursor_valid = meals
+                .and_then(|value| value.get("historyNextBefore"))
+                .is_none_or(|cursor| cursor.is_null() || cursor.as_str().is_some_and(meal_history_cursor_valid));
+            let contract_valid = meals
                 .and_then(|value| value.get("schemaVersion"))
                 .and_then(Value::as_u64)
                 == Some(2)
@@ -320,11 +436,87 @@ fn validate_payload(kind: CampusDataKind, data: &Value) -> Result<(), String> {
                 && current_weekly
                     .and_then(|value| value.get("post"))
                     .is_some_and(|post| post.is_null() || post.is_object())
+                && history_cursor_valid;
+            contract_valid && meals.is_some_and(|meals| meal_data_assets_valid(meals, expected_base_url))
         }
     };
     valid
         .then_some(())
         .ok_or_else(|| format!("{} response schema was invalid", kind.name()))
+}
+
+fn meal_data_assets_valid(data: &Value, expected_base_url: &str) -> bool {
+    let direct_posts_valid = ["dailyMenus", "pinnedMenus", "recentMenus", "otherPosts"]
+        .into_iter()
+        .all(|key| {
+            data.get(key)
+                .is_none_or(|posts| meal_post_list_assets_valid(posts, expected_base_url))
+        });
+    let current_valid = data
+        .get("currentWeeklyMenu")
+        .and_then(|current| current.get("post"))
+        .is_none_or(|post| post.is_null() || meal_post_assets_valid(post, expected_base_url));
+    let weekly_valid = data.get("weeklyMenus").is_none_or(|menus| {
+        menus.as_array().is_some_and(|menus| {
+            menus.iter().all(|menu| {
+                menu.get("post")
+                    .is_some_and(|post| meal_post_assets_valid(post, expected_base_url))
+            })
+        })
+    });
+    direct_posts_valid && current_valid && weekly_valid
+}
+
+fn meal_post_list_assets_valid(posts: &Value, expected_base_url: &str) -> bool {
+    posts
+        .as_array()
+        .is_some_and(|posts| posts.iter().all(|post| meal_post_assets_valid(post, expected_base_url)))
+}
+
+fn meal_post_assets_valid(post: &Value, expected_base_url: &str) -> bool {
+    let Some(images) = post.get("images") else {
+        return true;
+    };
+    images.as_array().is_some_and(|images| {
+        images
+            .iter()
+            .all(|image| meal_image_asset_valid(image, expected_base_url))
+    })
+}
+
+fn meal_image_asset_valid(image: &Value, expected_base_url: &str) -> bool {
+    let Some(sha) = image.get("sha").and_then(Value::as_str) else {
+        return false;
+    };
+    let Some(extension) = image.get("extension").and_then(Value::as_str) else {
+        return false;
+    };
+    let Some(url) = image.get("url").and_then(Value::as_str) else {
+        return false;
+    };
+    if sha.len() != 64
+        || !sha
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        || !matches!(extension, "avif" | "gif" | "jpg" | "jpeg" | "png" | "webp")
+    {
+        return false;
+    }
+
+    let Ok(expected) = reqwest::Url::parse(expected_base_url) else {
+        return false;
+    };
+    let Ok(parsed) = reqwest::Url::parse(url) else {
+        return false;
+    };
+    parsed.scheme() == expected.scheme()
+        && parsed.host_str() == expected.host_str()
+        && parsed.port_or_known_default() == expected.port_or_known_default()
+        && parsed.username().is_empty()
+        && parsed.password().is_none()
+        && parsed.path() == format!("/api/public/assets/{sha}.{extension}")
+        && parsed.query().is_none()
+        && parsed.fragment().is_none()
 }
 
 fn in_meal_poll_window(seconds: u32) -> bool {
@@ -360,6 +552,111 @@ mod tests {
     }
 
     #[test]
+    fn meal_history_url_is_scoped_and_paginated() {
+        let cursor = "2026-08-10T02:07:38.000Z~meal-30";
+        let url = meal_history_url("https://data.example.com", Some(cursor), 30).unwrap();
+
+        assert_eq!(url.path(), "/api/public/meals/history");
+        assert_eq!(
+            url.query_pairs().collect::<Vec<_>>(),
+            vec![("before".into(), cursor.into()), ("limit".into(), "30".into())],
+        );
+    }
+
+    #[test]
+    fn meal_history_url_rejects_invalid_cursor_and_limit() {
+        assert!(meal_history_url("https://data.example.com", Some("yesterday"), 30).is_err());
+        assert!(meal_history_url("https://data.example.com", Some("2026-08-10T02:07:38.000Z"), 30).is_err());
+        assert!(meal_history_url(
+            "https://data.example.com",
+            Some("2026-08-10T02:07:38.000Z~invalid%2fid"),
+            30
+        )
+        .is_err());
+        assert!(meal_history_url("https://data.example.com", None, 0).is_err());
+        assert!(meal_history_url("https://data.example.com", None, 101).is_err());
+    }
+
+    #[test]
+    fn meal_history_payload_requires_posts_and_nullable_cursor() {
+        assert!(validate_meal_history_payload(
+            &serde_json::json!({
+                "posts": [],
+                "nextBefore": null,
+            }),
+            "https://data.example.com"
+        )
+        .is_ok());
+        assert!(validate_meal_history_payload(
+            &serde_json::json!({
+                "posts": [],
+                "nextBefore": "2026-08-10T02:07:38.000Z~meal-30",
+            }),
+            "https://data.example.com"
+        )
+        .is_ok());
+        assert!(validate_meal_history_payload(
+            &serde_json::json!({
+                "posts": {},
+                "nextBefore": null,
+            }),
+            "https://data.example.com"
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn meal_payloads_reject_images_outside_the_configured_api_origin() {
+        let post = |origin: &str| {
+            serde_json::json!({
+                "images": [{
+                    "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "extension": "jpg",
+                    "url": format!("{origin}/api/public/assets/{}.jpg", "a".repeat(64)),
+                    "contentType": "image/jpeg"
+                }]
+            })
+        };
+        let root = |origin: &str| {
+            serde_json::json!({
+                "data": {
+                    "schemaVersion": 2,
+                    "dailyMenus": [post(origin)],
+                    "pinnedMenus": [],
+                    "recentMenus": [],
+                    "currentWeeklyMenu": {
+                        "targetWeekKey": "2026-08-10",
+                        "status": "AWAITING_UPDATE",
+                        "contentSha": null,
+                        "post": null
+                    }
+                }
+            })
+        };
+
+        assert!(validate_payload(
+            CampusDataKind::Meals,
+            &root("https://data.example.com"),
+            "https://data.example.com"
+        )
+        .is_ok());
+        assert!(validate_payload(
+            CampusDataKind::Meals,
+            &root("https://evil.example"),
+            "https://data.example.com"
+        )
+        .is_err());
+        assert!(validate_meal_history_payload(
+            &serde_json::json!({
+                "posts": [post("https://evil.example")],
+                "nextBefore": null,
+            }),
+            "https://data.example.com"
+        )
+        .is_err());
+    }
+
+    #[test]
     fn meals_payload_requires_current_week_verdict() {
         let valid = serde_json::json!({
             "data": {
@@ -378,8 +675,8 @@ mod tests {
             "data": { "schemaVersion": 1, "dailyMenus": [], "pinnedMenus": [] }
         });
 
-        assert!(validate_payload(CampusDataKind::Meals, &valid).is_ok());
-        assert!(validate_payload(CampusDataKind::Meals, &old).is_err());
+        assert!(validate_payload(CampusDataKind::Meals, &valid, "https://data.example.com").is_ok());
+        assert!(validate_payload(CampusDataKind::Meals, &old, "https://data.example.com").is_err());
     }
 
     #[test]

@@ -130,15 +130,24 @@ interface CalendarDate {
     day: string;
 }
 
+const SEOUL_CALENDAR_DATE_FORMAT = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Seoul',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+});
+
+const SEOUL_NOTIFICATION_TIME_FORMAT = new Intl.DateTimeFormat('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+});
+
 function calendarDate(timestamp: number): CalendarDate | null {
     const date = new Date(timestamp);
     if (!Number.isFinite(date.getTime())) return null;
-    const parts = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'Asia/Seoul',
-        year: 'numeric',
-        month: 'numeric',
-        day: 'numeric',
-    }).formatToParts(date);
+    const parts = SEOUL_CALENDAR_DATE_FORMAT.formatToParts(date);
     const year = parts.find((part) => part.type === 'year')?.value;
     const month = parts.find((part) => part.type === 'month')?.value;
     const day = parts.find((part) => part.type === 'day')?.value;
@@ -152,12 +161,7 @@ export function notificationTimeLabel(createdAt: number, now = Date.now()): stri
     if (created.year === current.year
         && created.month === current.month
         && created.day === current.day) {
-        return new Intl.DateTimeFormat('ko-KR', {
-            timeZone: 'Asia/Seoul',
-            hour: '2-digit',
-            minute: '2-digit',
-            hourCycle: 'h23',
-        }).format(new Date(createdAt));
+        return SEOUL_NOTIFICATION_TIME_FORMAT.format(new Date(createdAt));
     }
     return `${Number(created.month)}.${Number(created.day)}.`;
 }

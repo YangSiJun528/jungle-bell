@@ -5,7 +5,7 @@ export type LaundryMachineZone = 'men' | 'common' | 'women' | 'other';
 export interface LaundryStatusAppliance {
     appliance?: string;
     operationalStatus?: string;
-    projection?: {status?: string; remainingMinutes?: number} | null;
+    projection?: {status?: string; remainingMinutes?: number; estimated?: boolean} | null;
     state?: {code?: string; labelKo?: string} | null;
     totalMinutes?: number;
     startedAt?: string | null;

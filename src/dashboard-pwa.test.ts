@@ -8,6 +8,7 @@ const manifest = JSON.parse(
 ) as Record<string, unknown>;
 const dashboardApi = readFileSync(new URL('./dashboard-api.ts', import.meta.url), 'utf8');
 const worker = readFileSync(new URL('./public/sw.js', import.meta.url), 'utf8');
+const main = readFileSync(new URL('./app/main.tsx', import.meta.url), 'utf8');
 const headers = readFileSync(new URL('./public/_headers', import.meta.url), 'utf8');
 const vite = readFileSync(new URL('../vite.config.ts', import.meta.url), 'utf8');
 
@@ -23,7 +24,9 @@ test('manifest는 모바일 standalone 설치와 최소 아이콘을 선언한�
 
 test('service worker는 앱 셸만 선캐시하고 개인 API·인증 요청은 캐시하지 않는다', () => {
     assert.match(worker, /CACHE_PREFIX\s*=\s*['"]jungle-bell-dashboard-['"]/);
-    assert.match(worker, /CACHE_VERSION\s*=\s*['"]jungle-bell-dashboard-0\.5\.0['"]/);
+    assert.match(worker, /CACHE_VERSION\s*=\s*['"]jungle-bell-dashboard-__BUILD_ID__['"]/);
+    assert.match(worker, /\.\/sw-assets\.json\?build=__BUILD_ID__/);
+    assert.match(worker, /cache\.addAll\(\[\.\.\.APP_SHELL, \.\.\.assets\]\)/);
     assert.match(worker, /dashboard\.html/);
     assert.match(worker, /manifest\.webmanifest/);
     assert.doesNotMatch(worker, /APP_SHELL[\s\S]*?assets\/logo\.png[\s\S]*?\];/);
@@ -37,6 +40,21 @@ test('service worker는 앱 셸만 선캐시하고 개인 API·인증 요청은 
     assert.doesNotMatch(worker, /endsWith\(['"]\/(?:pair|app)['"]\)/);
     assert.match(worker, /url\.pathname\s*===\s*dashboardPath/);
     assert.match(worker, /key\.startsWith\(CACHE_PREFIX\)/);
+});
+
+test('급식 과거 페이지는 정적 자산 캐시가 아니라 공개 API network-first 정책을 사용한다', () => {
+    assert.match(worker, /function isPublicCampusDataRequest\(url\)/);
+    assert.match(worker, /url\.pathname === ['"]\/api\/public\/meals\/history['"]/);
+    assert.match(worker, /if \(isPublicCampusDataRequest\(url\)\)[\s\S]*publicApiResponse\(request\)/);
+});
+
+test('새 service worker는 기존 React client가 닫힐 때까지 waiting 상태와 구버전 캐시를 유지한다', () => {
+    assert.doesNotMatch(worker, /\bskipWaiting\s*\(/);
+    assert.doesNotMatch(main, /SKIP_WAITING|registration\.waiting\.postMessage/);
+    assert.match(worker, /self\.addEventListener\(['"]activate['"]/);
+    assert.match(worker, /key\.startsWith\(CACHE_PREFIX\) && key !== CACHE_VERSION/);
+    assert.match(worker, /caches\.delete\(key\)/);
+    assert.match(main, /wait for existing clients to close/);
 });
 
 test('프론트엔드 API와 PWA 계약에 기존 v1 경로가 남지 않는다', () => {
@@ -108,6 +126,9 @@ test('Vite는 PWA public 디렉터리와 dashboard 멀티페이지 입력을 빌
     assert.match(vite, /publicDir:\s*['"]public['"]/);
     assert.match(vite, /dashboard:\s*resolve\([^\n]*src\/dashboard\.html/);
     assert.doesNotMatch(vite, /pair:\s*resolve\(/);
+    assert.match(vite, /serviceWorkerAssetsPlugin\(\)/);
+    assert.match(vite, /sw-assets\.json/);
+    assert.match(vite, /__BUILD_ID__/);
 });
 
 test('공개 정적 앱은 QR fragment와 개인 화면을 위한 최소 보안 헤더를 선언한다', () => {

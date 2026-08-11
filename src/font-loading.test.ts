@@ -1,31 +1,45 @@
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {existsSync, readFileSync} from 'node:fs';
 import {test} from 'vitest';
 
-const styles = readFileSync(new URL('./styles.css', import.meta.url), 'utf8');
-const uiStyles = readFileSync(new URL('./ui.css', import.meta.url), 'utf8');
-const templates = ['dashboard.html', 'image-viewer.html']
-    .map((path) => readFileSync(new URL(path, import.meta.url), 'utf8'));
+const source = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
+const globals = source('./app/styles/globals.css');
+const main = source('./app/main.tsx');
+const dashboard = source('./dashboard.html');
 
-test('Pretendard Variable 폰트는 크로스 플랫폼 선언과 fallback을 사용한다', () => {
-    assert.match(styles, /font-family:\s*["']Pretendard Variable["']/);
-    assert.match(styles, /format\(["']woff2-variations["']\)/);
-    assert.match(styles, /--font-family:\s*["']Pretendard Variable["'],\s*Pretendard,/);
+test('Pretendard Variable은 저장소의 woff2 파일에서 한 번만 선언한다', () => {
+    assert.equal(existsSync(new URL('./assets/fonts/PretendardVariable.woff2', import.meta.url)), true);
+    assert.equal((globals.match(/@font-face/g) ?? []).length, 1);
+    assert.match(globals, /font-family:\s*["']Pretendard Variable["']/);
+    assert.match(globals, /url\(["']\.\.\/\.\.\/assets\/fonts\/PretendardVariable\.woff2["']\)/);
+    assert.match(globals, /format\(["']woff2-variations["']\)/);
+    assert.match(globals, /font-weight:\s*45 920/);
+    assert.match(globals, /font-display:\s*swap/);
 });
 
-test('font-sans와 font-mono는 모두 번들된 전역 폰트를 사용한다', () => {
-    const sources = [styles, uiStyles, ...templates].join('\n');
-    assert.match(uiStyles, /--font-sans:\s*var\(--font-family\)/);
-    assert.match(uiStyles, /--font-mono:\s*var\(--font-family\)/);
-    assert.doesNotMatch(sources, /--font-data|\bfont-data\b|SFMono|Cascadia Code|Roboto Mono/);
-    assert.match(styles, /button,\s*input,\s*select,\s*textarea,\s*code,\s*kbd,\s*samp,\s*pre\s*{\s*font:\s*inherit/);
+test('Tailwind font-sans와 body는 번들 폰트 및 크로스 플랫폼 fallback을 공유한다', () => {
+    assert.match(
+        globals,
+        /--font-sans:\s*["']Pretendard Variable["'],\s*Pretendard,\s*-apple-system,\s*BlinkMacSystemFont,\s*system-ui,\s*sans-serif/,
+    );
+    assert.match(globals, /body\s*\{[\s\S]*@apply[^;]*font-sans/);
+    assert.match(main, /import ['"]\.\/styles\/globals\.css['"]/);
+    assert.doesNotMatch(dashboard, /<link[^>]+(?:googleapis|fonts\.)/i);
+    assert.match(dashboard, /rel="license" href="\.\/assets\/fonts\/Pretendard-LICENSE\.txt"/);
+});
 
-    for (const template of templates) {
-        assert.match(template, /<body\b[^>]*class="[^"]*\bfont-sans\b/);
-        for (const match of template.matchAll(/class="([^"]*\btabular-nums\b[^"]*)"/g)) {
-            const className = match[1];
-            assert.ok(className);
-            assert.match(className, /\bfont-mono\b/);
-        }
-    }
+test('화면 컴포넌트는 font-family를 개별 지정하지 않고 전역 타이포그래피를 상속한다', () => {
+    const componentSources = [
+        './app/shell/DashboardShell.tsx',
+        './features/home/home-page.tsx',
+        './features/attendance/attendance-page.tsx',
+        './features/laundry/pages/laundry-page.tsx',
+        './features/meals/pages/meals-page.tsx',
+        './features/notifications/notifications-page.tsx',
+        './features/connections/connections-page.tsx',
+    ].map(source).join('\n');
+
+    assert.doesNotMatch(componentSources, /font-family\s*:/i);
+    assert.doesNotMatch(componentSources, /\b(?:Roboto|Inter|Noto Sans|SF Pro|Cascadia Code)\b/i);
+    assert.match(componentSources, /tabular-nums/);
 });

@@ -418,6 +418,7 @@ pub async fn report_campus_ready(
     service: tauri::State<'_, Arc<CampusService>>,
 ) -> Result<(), String> {
     remote_sync::ensure_dashboard_window(&window)?;
+    log::info!("[dashboard] frontend ready");
     service.emit_cached_snapshots(&app).await;
     Ok(())
 }
@@ -445,6 +446,18 @@ pub async fn get_dashboard_campus_data(
 ) -> Result<serde_json::Value, String> {
     remote_sync::ensure_dashboard_window(&window)?;
     service.dashboard_data(&app, kind).await
+}
+
+/// 로컬 대시보드 전용 과거 급식 페이지 경계.
+#[tauri::command]
+pub async fn get_dashboard_meal_history(
+    window: tauri::WebviewWindow,
+    service: tauri::State<'_, Arc<CampusService>>,
+    before: Option<String>,
+    limit: u8,
+) -> Result<serde_json::Value, String> {
+    remote_sync::ensure_dashboard_window(&window)?;
+    service.meal_history(before.as_deref(), limit).await
 }
 
 fn validate_image_asset_url(value: &str) -> Result<String, String> {

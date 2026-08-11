@@ -152,6 +152,7 @@ pub fn run() {
             commands::report_campus_ready,
             commands::refresh_campus_data,
             commands::get_dashboard_campus_data,
+            commands::get_dashboard_meal_history,
             commands::open_image_viewer,
             commands::get_dashboard_home_overview,
             commands::get_notification_inbox_snapshot,

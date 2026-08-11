@@ -2,6 +2,10 @@ import { type Hook } from "@hono/zod-validator";
 import type { Env as HonoEnvironment } from "hono";
 import { z } from "zod";
 import { isAllowedBrowserPushEndpoint } from "../renewal/push-sender";
+import {
+  decodeMealHistoryCursor,
+  MEAL_HISTORY_CURSOR_MAX_LENGTH,
+} from "../domain/meal-history";
 
 export const rfc3339Schema = z.iso.datetime({ offset: true });
 export const timeQuerySchema = z.object({ time: rfc3339Schema });
@@ -12,7 +16,9 @@ export const eventsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(500).default(100),
 });
 export const mealHistoryQuerySchema = z.object({
-  before: rfc3339Schema.optional(),
+  before: z.string().max(MEAL_HISTORY_CURSOR_MAX_LENGTH)
+    .refine((value) => decodeMealHistoryCursor(value) !== null)
+    .optional(),
   limit: z.coerce.number().int().min(1).max(100).default(30),
 });
 export const assetParamSchema = z.object({ asset: z.string().regex(/^[a-f0-9]{64}\.[a-z0-9]{1,8}$/) });

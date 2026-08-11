@@ -111,6 +111,60 @@ describe("API middleware", () => {
     await expect(invalid.json()).resolves.toMatchObject({ error: "INVALID_REQUEST" });
   });
 
+  it("accepts only timestamp-plus-id meal history cursors", async () => {
+    const cursor = "2026-08-10T02:07:38.000Z~meal-30";
+    const valid = await app.request(
+      `https://api.test/api/public/meals/history?before=${encodeURIComponent(cursor)}&limit=30`,
+      {},
+      env,
+    );
+    expect(valid.status).toBe(200);
+    await expect(valid.json()).resolves.toEqual({ posts: [], nextBefore: null });
+
+    const timestampOnly = await app.request(
+      "https://api.test/api/public/meals/history?before=2026-08-10T02%3A07%3A38.000Z&limit=30",
+      {},
+      env,
+    );
+    expect(timestampOnly.status).toBe(400);
+    await expect(timestampOnly.json()).resolves.toMatchObject({ error: "INVALID_REQUEST" });
+
+    const timestamp = "2026-08-09T02:07:38.000Z";
+    const row = {
+      id: "meal-1",
+      kind: "DAILY_MENU",
+      content_sha: "a".repeat(64),
+      title: "8월 9일 중식",
+      text: "밥",
+      pinned: 0,
+      published_at: timestamp,
+      updated_at: null,
+      permalink: null,
+      status: "published",
+      first_seen_at: timestamp,
+      last_seen_at: timestamp,
+    };
+    const historyDb = {
+      prepare: (sql: string) => {
+        const statement = {
+          bind: (..._values: unknown[]) => statement,
+          all: async () => ({ results: sql.includes("SELECT * FROM meal_post") ? [row] : [] }),
+        };
+        return statement;
+      },
+    } as unknown as D1Database;
+    const page = await app.request(
+      "https://api.test/api/public/meals/history?limit=1",
+      {},
+      { ...env, DB: historyDb },
+    );
+    expect(page.status).toBe(200);
+    await expect(page.json()).resolves.toMatchObject({
+      posts: [{ id: "meal-1" }],
+      nextBefore: `${timestamp}~meal-1`,
+    });
+  });
+
   it("does not expose the removed v1 compatibility routes", async () => {
     const response = await app.request("https://api.test/v1/status", {}, env);
     expect(response.status).toBe(404);

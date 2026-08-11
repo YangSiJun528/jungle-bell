@@ -78,6 +78,25 @@ test('공개 생활 정보는 인증 없이 공개 API만 호출한다', async (
     assert.equal(new Headers(calls[0]?.init?.headers).has('authorization'), false);
 });
 
+test('PC 생활 정보 수동 새로고침은 캐시 조회가 아닌 전용 IPC를 호출한다', async () => {
+    const calls: Array<{command: string; args?: Record<string, unknown>}> = [];
+    const api = createDashboardApi({
+        desktopRuntime: true,
+        fetcher: async () => jsonResponse({}),
+        invokeCommand: async (command, args) => {
+            calls.push({command, args});
+        },
+    });
+
+    await api.refreshCampusData('laundry');
+    await api.refreshCampusData('meals');
+
+    assert.deepEqual(calls, [
+        {command: 'refresh_campus_data', args: {kind: 'laundry'}},
+        {command: 'refresh_campus_data', args: {kind: 'meals'}},
+    ]);
+});
+
 test('세탁 가능 횟수는 서버 authoritative capacity 계약을 엄격히 유지한다', async () => {
     const capacity = {
         basis: 'WASHER_AND_DRYER_HEADROOM_60_MIN',
@@ -184,6 +203,136 @@ test('급식 원문 링크는 Kakao HTTPS allowlist만 화면 모델에 남긴�
     assert.equal(meals.data.dailyMenus[3]?.permalink, null);
     assert.equal(meals.data.dailyMenus[4]?.permalink, null);
     assert.equal(meals.data.dailyMenus[5]?.permalink, null);
+});
+
+test('급식 응답의 아카이브 이미지와 주간 식단을 검증해 보존한다', async () => {
+    const sha = 'a'.repeat(64);
+    const post = {
+        id: 'meal-1',
+        title: '8월 11일(화) 중식 메뉴',
+        text: '잡곡밥, 육개장',
+        publishedAt: '2026-08-11T02:00:00.000Z',
+        permalink: 'https://pf.kakao.com/_xhzNjn/114222378',
+        images: [{
+            sha,
+            url: `https://campus.example.com/api/public/assets/${sha}.jpg`,
+            contentType: 'image/jpeg',
+            extension: 'jpg',
+            width: 1600,
+            height: 1200,
+            byteLength: 120_000,
+        }],
+    };
+    const api = createDashboardApi({
+        campusApiBaseUrl: 'https://campus.example.com',
+        fetcher: async () => jsonResponse({
+            asOf: '2026-08-11T09:00:00.000Z',
+            lastCheckedAt: '2026-08-11T09:00:00.000Z',
+            data: {
+                dailyMenus: [post],
+                pinnedMenus: [],
+                recentMenus: [post],
+                currentWeeklyMenu: {
+                    targetWeekKey: '2026-08-10',
+                    status: 'AVAILABLE',
+                    contentSha: sha,
+                    post,
+                },
+                weeklyMenus: [{weekKey: '2026-08-10', contentSha: sha, post}],
+                historyNextBefore: '2026-07-01T00:00:00.000Z~meal-30',
+            },
+        }),
+        invokeCommand: async () => undefined,
+    });
+
+    const meals = await api.getPublicMeals();
+
+    assert.equal(meals.data.dailyMenus[0]?.images?.[0]?.url,
+        `https://campus.example.com/api/public/assets/${sha}.jpg`);
+    assert.equal(meals.data.currentWeeklyMenu?.targetWeekKey, '2026-08-10');
+    assert.equal(meals.data.weeklyMenus?.[0]?.post.id, 'meal-1');
+    assert.equal(meals.data.historyNextBefore, '2026-07-01T00:00:00.000Z~meal-30');
+});
+
+test('급식 이미지는 검증된 공개 asset 경로만 허용한다', async () => {
+    const sha = 'b'.repeat(64);
+    const validImage = {
+        sha,
+        url: `https://campus.example.com/api/public/assets/${sha}.jpg`,
+        contentType: 'image/jpeg',
+        extension: 'jpg',
+        width: 1,
+        height: 1,
+        byteLength: 1,
+    };
+    for (const image of [
+        {...validImage, url: `https://evil.example/api/public/assets/${sha}.jpg`},
+        {...validImage, url: `https://campus.example.com/tracker/${sha}.jpg`},
+        {...validImage, url: `${validImage.url}?token=secret`},
+        {...validImage, url: `https://campus.example.com/api/public/assets/${'c'.repeat(64)}.jpg`},
+        {...validImage, extension: 'svg', contentType: 'image/svg+xml'},
+        {...validImage, width: 20_001},
+        {...validImage, byteLength: 0},
+    ]) {
+        const api = createDashboardApi({
+            campusApiBaseUrl: 'https://campus.example.com',
+            fetcher: async () => jsonResponse({
+                asOf: '2026-08-11T09:00:00.000Z',
+                lastCheckedAt: null,
+                data: {
+                    dailyMenus: [{
+                        id: 'meal-1', title: '중식', text: '밥', publishedAt: null, permalink: null,
+                        images: [image],
+                    }],
+                    pinnedMenus: [],
+                    recentMenus: [],
+                },
+            }),
+            invokeCommand: async () => undefined,
+        });
+        await assert.rejects(api.getPublicMeals(), /API_RESPONSE_INVALID/);
+    }
+});
+
+test('과거 급식 페이지는 웹에서 검증된 커서로 공개 API를 호출한다', async () => {
+    const calls: string[] = [];
+    const api = createDashboardApi({
+        campusApiBaseUrl: 'https://campus.example.com',
+        fetcher: async (input) => {
+            calls.push(String(input));
+            return jsonResponse({posts: [], nextBefore: '2026-07-31T02:03:04.000Z~meal-1'});
+        },
+        invokeCommand: async () => undefined,
+    });
+
+    assert.deepEqual(await api.getPublicMealHistory('2026-08-01T02:03:04.000Z~meal-30', 30), {
+        posts: [],
+        nextBefore: '2026-07-31T02:03:04.000Z~meal-1',
+    });
+    assert.equal(calls[0],
+        'https://campus.example.com/api/public/meals/history?before=2026-08-01T02%3A03%3A04.000Z%7Emeal-30&limit=30');
+    await assert.rejects(api.getPublicMealHistory('2026-08-01T02:03:04.000Z', 30), /API_CLIENT_INVALID_ARGUMENT/);
+    await assert.rejects(api.getPublicMealHistory('not-a-date', 30), /API_CLIENT_INVALID_ARGUMENT/);
+    await assert.rejects(api.getPublicMealHistory(null, 0), /API_CLIENT_INVALID_ARGUMENT/);
+});
+
+test('데스크톱 과거 급식 페이지는 외부 origin 대신 Rust IPC를 사용한다', async () => {
+    const calls: Array<{command: string; args?: Record<string, unknown>}> = [];
+    const api = createDashboardApi({
+        desktopRuntime: true,
+        fetcher: async () => jsonResponse({}),
+        invokeCommand: async (command, args) => {
+            calls.push({command, args});
+            return {posts: [], nextBefore: null};
+        },
+    });
+
+    await api.getPublicMealHistory(null, 50);
+
+    assert.deepEqual(calls, [{
+        command: 'get_dashboard_meal_history',
+        args: {before: null, limit: 50},
+    }]);
 });
 
 test('모바일 알림 내역은 서버의 epoch 응답 필드를 그대로 검증한다', async () => {

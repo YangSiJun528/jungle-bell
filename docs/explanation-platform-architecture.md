@@ -100,11 +100,12 @@ Web Push는 PWA가 백그라운드에서 LMS를 조회하는 수단이 아닙니
 공통 UI는 기존 Rust 로컬 앱의 Pretendard 글꼴, 4px 간격 체계, 밝은 fog 배경,
 border 없는 paper 카드, leaf 강조색과 상태별 soft 배경을 유지합니다. 넓은
 화면에서는 왼쪽 navigation rail, 모바일 PWA에서는 safe area를 반영한 하단
-navigation을 사용합니다.
+navigation을 사용합니다. 오늘·출석·세탁실·급식만 주요 navigation에 두고,
+알림 센터와 기기 연결은 별도의 개인 도구 영역으로 분리합니다.
 
-홈 화면은 오늘의 출석, 과정 D-Day, Jungle Campus 연결, 세탁, 급식, 읽지 않은
-알림을 요약합니다. PC에서는 앱 버전도 같은 홈에서 확인합니다. 시스템
-트레이 아이콘은 별도 목록 창을 만들지 않고 이 홈을 엽니다. 일반 웹에서는 개인
+홈 화면은 오늘의 출석, 과정 D-Day, Jungle Campus 연결, 세탁과 급식을
+요약합니다. 알림 기록과 수신 상태는 전역 알림 센터에서 확인합니다. 시스템
+트레이 아이콘은 별도 목록 창을 만들지 않고 홈을 엽니다. 일반 웹에서는 개인
 출석·알림 동작 대신 PC 앱 또는 PWA 설치 안내를 표시합니다. Jungle Campus는
 웹·PWA에서는 외부 바로가기이고, PC에서는 전용 LMS WebView의 연결 상태와 함께
 표시합니다. 댓글 없는 Markdown 블로그는 App Worker의 정적 자산으로 함께

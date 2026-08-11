@@ -9,6 +9,7 @@ import {
 import { projectLaundry } from "../../collector/projection";
 import { compactUtcMinute, floorToMinute, minuteEpoch, parseCompactUtcMinute } from "../../collector/time";
 import { SOURCE_NAMES, type SourceName, type SourceState } from "../../collector/types";
+import { decodeMealHistoryCursor, encodeMealHistoryCursor } from "../../domain/meal-history";
 import type { CloudflareApiStorage } from "../../workers/cloudflare-storage";
 import {
   assetParamSchema, eventsQuerySchema, mealHistoryQuerySchema, minuteParamSchema,
@@ -122,18 +123,22 @@ export function registerPublicRoutes(app: Hono<ApiEnvironment>): void {
         currentWeeklyMenu: { ...currentWeekly, post: currentWeekly.post ? withPostAssetUrls(currentWeekly.post, context.req.url) : null },
         recentMenus: recentMenus.map((post) => withPostAssetUrls(post, context.req.url)),
         weeklyMenus: weeklyMenus.map((menu) => ({ ...menu, post: withPostAssetUrls(menu.post, context.req.url) })),
-        historyNextBefore: recentMenus.length === MEAL_HISTORY_PAGE_SIZE && last ? last.publishedAt ?? last.firstSeenAt : null,
+        historyNextBefore: recentMenus.length === MEAL_HISTORY_PAGE_SIZE && last
+          ? encodeMealHistoryCursor(last)
+          : null,
       },
     });
   });
   app.get("/api/public/meals/history", zValidator("query", mealHistoryQuerySchema, validationHook), async (context) => {
-    const { before = null, limit } = context.req.valid("query");
+    const { before: encodedBefore, limit } = context.req.valid("query");
+    const before = encodedBefore ? decodeMealHistoryCursor(encodedBefore) : null;
+    if (encodedBefore && !before) throw new Error("Validated meal history cursor could not be decoded");
     const posts = await context.var.storage.listMealPosts(before, limit);
     const last = posts.at(-1);
     context.header("Cache-Control", LATEST_CACHE);
     return context.json({
       posts: posts.map((post) => withPostAssetUrls(post, context.req.url)),
-      nextBefore: posts.length === limit && last ? last.publishedAt ?? last.firstSeenAt : null,
+      nextBefore: posts.length === limit && last ? encodeMealHistoryCursor(last) : null,
     });
   });
   app.get("/api/public/assets/:asset", zValidator("param", assetParamSchema, validationHook), async (context) => {

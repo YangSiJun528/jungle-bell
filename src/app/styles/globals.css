@@ -1,0 +1,140 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@font-face {
+    font-family: "Pretendard Variable";
+    src: url("../../assets/fonts/PretendardVariable.woff2") format("woff2-variations");
+    font-weight: 45 920;
+    font-style: normal;
+    font-display: swap;
+}
+
+:root {
+    color-scheme: light;
+    --radius: 0.75rem;
+    --background: oklch(0.972 0.009 145);
+    --foreground: oklch(0.23 0.017 145);
+    --card: oklch(0.995 0.004 145);
+    --card-foreground: oklch(0.23 0.017 145);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.23 0.017 145);
+    --primary: oklch(0.43 0.12 148);
+    --primary-foreground: oklch(0.985 0.004 145);
+    --secondary: oklch(0.935 0.014 145);
+    --secondary-foreground: oklch(0.29 0.018 145);
+    --muted: oklch(0.94 0.01 145);
+    --muted-foreground: oklch(0.48 0.018 145);
+    --accent: oklch(0.91 0.038 148);
+    --accent-foreground: oklch(0.35 0.09 148);
+    --destructive: oklch(0.54 0.19 27);
+    --border: oklch(0.88 0.012 145);
+    --input: oklch(0.88 0.012 145);
+    --ring: oklch(0.52 0.11 148);
+    --chart-1: oklch(0.52 0.11 245);
+    --chart-2: oklch(0.52 0.1 300);
+    --chart-3: oklch(0.55 0.12 355);
+    --chart-4: oklch(0.58 0.12 75);
+    --chart-5: oklch(0.48 0.11 172);
+    --sidebar: oklch(0.989 0.006 145);
+    --sidebar-foreground: oklch(0.29 0.018 145);
+    --sidebar-primary: oklch(0.43 0.12 148);
+    --sidebar-primary-foreground: oklch(0.985 0.004 145);
+    --sidebar-accent: oklch(0.925 0.026 148);
+    --sidebar-accent-foreground: oklch(0.35 0.09 148);
+    --sidebar-border: oklch(0.9 0.012 145);
+    --sidebar-ring: oklch(0.52 0.11 148);
+}
+
+.dark {
+    color-scheme: dark;
+    --background: oklch(0.19 0.012 145);
+    --foreground: oklch(0.94 0.008 145);
+    --card: oklch(0.235 0.014 145);
+    --card-foreground: oklch(0.94 0.008 145);
+    --popover: oklch(0.235 0.014 145);
+    --popover-foreground: oklch(0.94 0.008 145);
+    --primary: oklch(0.7 0.13 148);
+    --primary-foreground: oklch(0.19 0.012 145);
+    --secondary: oklch(0.29 0.014 145);
+    --secondary-foreground: oklch(0.92 0.008 145);
+    --muted: oklch(0.28 0.014 145);
+    --muted-foreground: oklch(0.69 0.012 145);
+    --accent: oklch(0.31 0.045 148);
+    --accent-foreground: oklch(0.86 0.08 148);
+    --destructive: oklch(0.66 0.18 27);
+    --border: oklch(1 0 0 / 12%);
+    --input: oklch(1 0 0 / 16%);
+    --ring: oklch(0.65 0.12 148);
+    --sidebar: oklch(0.215 0.014 145);
+    --sidebar-foreground: oklch(0.92 0.008 145);
+    --sidebar-primary: oklch(0.7 0.13 148);
+    --sidebar-primary-foreground: oklch(0.19 0.012 145);
+    --sidebar-accent: oklch(0.29 0.035 148);
+    --sidebar-accent-foreground: oklch(0.86 0.08 148);
+    --sidebar-border: oklch(1 0 0 / 10%);
+    --sidebar-ring: oklch(0.65 0.12 148);
+}
+
+@theme inline {
+    --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-destructive: var(--destructive);
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+    --color-chart-1: var(--chart-1);
+    --color-chart-2: var(--chart-2);
+    --color-chart-3: var(--chart-3);
+    --color-chart-4: var(--chart-4);
+    --color-chart-5: var(--chart-5);
+    --color-sidebar: var(--sidebar);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-ring: var(--sidebar-ring);
+    --radius-sm: calc(var(--radius) - 4px);
+    --radius-md: calc(var(--radius) - 2px);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+    * {
+        @apply border-border outline-ring/50;
+    }
+
+    html {
+        min-width: 320px;
+        background: var(--background);
+    }
+
+    body {
+        @apply min-h-svh bg-background font-sans text-foreground antialiased;
+        margin: 0;
+    }
+
+    button,
+    a,
+    input,
+    select {
+        -webkit-tap-highlight-color: transparent;
+    }
+}

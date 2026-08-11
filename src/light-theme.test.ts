@@ -3,35 +3,47 @@ import {readFileSync} from 'node:fs';
 import {test} from 'vitest';
 
 const source = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
-const localPages = [
-    './dashboard.html',
-    './image-viewer.html',
-];
-const localStyles = [source('./styles.css'), source('./ui.css')].join('\n');
-const checkerSource = source('../src-tauri/src/checker.rs');
-const traySource = source('../src-tauri/src/tray.rs');
+const dashboard = source('./dashboard.html');
+const globals = source('./app/styles/globals.css');
+const main = source('./app/main.tsx');
+const checker = source('../src-tauri/src/checker.rs');
+const tray = source('../src-tauri/src/tray.rs');
 
-test('로컬 UI는 라이트 color scheme만 선언한다', () => {
-    assert.match(localStyles, /color-scheme:\s*only light/);
-    assert.doesNotMatch(localStyles, /light-dark\(|prefers-color-scheme|color-scheme:\s*light dark/);
-
-    for (const page of localPages) {
-        assert.match(
-            source(page),
-            /<meta name="color-scheme" content="light"\/>/,
-            `${page}가 초기 렌더링부터 라이트 모드를 선언해야 합니다.`,
-        );
-    }
+test('대시보드는 첫 페인트부터 라이트·다크 color scheme과 테마 색상을 모두 선언한다', () => {
+    assert.match(dashboard, /<meta name="color-scheme" content="light dark"\/>/);
+    assert.match(dashboard, /<meta name="theme-color" media="\(prefers-color-scheme: light\)" content="#[0-9a-f]{6}"\/>/i);
+    assert.match(dashboard, /<meta name="theme-color" media="\(prefers-color-scheme: dark\)" content="#[0-9a-f]{6}"\/>/i);
+    assert.match(globals, /:root\s*\{[\s\S]*color-scheme:\s*light/);
+    assert.match(globals, /\.dark\s*\{[\s\S]*color-scheme:\s*dark/);
 });
 
-test('사용자 UI 창은 라이트로 고정하고 숨겨진 checker만 시스템 테마를 감지한다', () => {
-    const userWindowBuilderCount = traySource.match(/WebviewWindowBuilder::new\(/g)?.length ?? 0;
-    const lightThemeCount = traySource.match(/\.theme\(Some\(tauri::Theme::Light\)\)/g)?.length ?? 0;
+test('React 진입점은 시스템 테마를 즉시 적용하고 변경도 추적한다', () => {
+    assert.match(main, /window\.matchMedia\('\(prefers-color-scheme: dark\)'\)/);
+    assert.match(main, /document\.documentElement\.classList\.toggle\('dark', theme\.matches\)/);
+    assert.match(main, /syncTheme\(\)/);
+    assert.match(main, /theme\.addEventListener\('change', syncTheme\)/);
+    assert.match(globals, /@custom-variant dark/);
+});
 
-    assert.ok(userWindowBuilderCount > 0);
-    assert.equal(lightThemeCount, userWindowBuilderCount);
-    assert.match(checkerSource, /WebviewWindowBuilder::new\(/);
-    assert.doesNotMatch(checkerSource, /\.theme\(Some\(tauri::Theme::Light\)\)/);
-    assert.match(checkerSource, /WindowEvent::ThemeChanged\(theme\)/);
-    assert.match(checkerSource, /tray::sync_icon_theme\(&app_handle, \*theme\)/);
+test('핵심 화면의 상태 색상은 다크 테마 대응 유틸리티를 함께 제공한다', () => {
+    const sources = [
+        source('./features/home/home-page.tsx'),
+        source('./features/attendance/attendance-page.tsx'),
+    ].join('\n');
+
+    assert.match(sources, /dark:text-emerald-/);
+    assert.match(sources, /dark:text-amber-/);
+    assert.doesNotMatch(sources, /color-scheme:\s*only light/);
+});
+
+test('트레이 아이콘도 시스템 테마 변경에 맞춰 라이트·다크 자산을 교체한다', () => {
+    assert.match(tray, /enum TrayIconTheme\s*\{[\s\S]*Light,[\s\S]*Dark/);
+    assert.match(tray, /impl From<tauri::Theme> for TrayIconTheme/);
+    for (const status of ['OFFLINE', 'NORMAL', 'WARNING', 'ALERT', 'COMPLETE']) {
+        assert.match(tray, new RegExp(`ICON_${status}_LIGHT`));
+        assert.match(tray, new RegExp(`ICON_${status}_DARK`));
+    }
+    assert.match(tray, /pub fn sync_icon_theme/);
+    assert.match(checker, /WindowEvent::ThemeChanged\(theme\)/);
+    assert.match(checker, /tray::sync_icon_theme\(&app_handle, \*theme\)/);
 });
