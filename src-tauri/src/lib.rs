@@ -38,16 +38,6 @@ fn should_open_dashboard_on_start(launched_from_autostart: bool) -> bool {
     !launched_from_autostart
 }
 
-#[cfg(desktop)]
-fn window_size_should_persist(label: &str) -> bool {
-    label == "image-viewer"
-}
-
-#[cfg(desktop)]
-fn persisted_window_state_flags() -> tauri_plugin_window_state::StateFlags {
-    tauri_plugin_window_state::StateFlags::SIZE
-}
-
 fn sync_auto_start_setting(app: &tauri::AppHandle, shared_state: &Arc<Mutex<AppState>>) {
     let auto_start = shared_state.try_lock().map(|s| s.config.auto_start).unwrap_or(false);
 
@@ -153,7 +143,6 @@ pub fn run() {
             commands::refresh_campus_data,
             commands::get_dashboard_campus_data,
             commands::get_dashboard_meal_history,
-            commands::open_image_viewer,
             commands::get_dashboard_home_overview,
             commands::get_notification_inbox_snapshot,
             commands::activate_notification,
@@ -181,14 +170,6 @@ pub fn run() {
         ])
         // setup(): 앱 초기화 후 이벤트 루프 시작 전에 한 번 실행.
         .setup(move |app| {
-            #[cfg(desktop)]
-            app.handle().plugin(
-                tauri_plugin_window_state::Builder::default()
-                    .with_state_flags(persisted_window_state_flags())
-                    .with_filter(window_size_should_persist)
-                    .build(),
-            )?;
-
             log::info!(
                 "[app] starting v{} (log_level={}, log_max_size={}KB)",
                 app.package_info().version,
@@ -238,30 +219,13 @@ pub fn run() {
         .expect("error while running tauri application");
 }
 
-#[cfg(all(test, desktop))]
+#[cfg(test)]
 mod tests {
     use super::*;
-    use tauri_plugin_window_state::StateFlags;
-
-    #[test]
-    fn 이미지_뷰어만_변경한_크기를_기억한다() {
-        assert!(window_size_should_persist("image-viewer"));
-        assert!(!window_size_should_persist("dashboard"));
-        assert!(!window_size_should_persist("checker"));
-    }
 
     #[test]
     fn 자동시작은_대시보드를_열지_않고_수동실행은_연다() {
         assert!(should_open_dashboard_on_start(false));
         assert!(!should_open_dashboard_on_start(true));
-    }
-
-    #[test]
-    fn 창_상태는_위치나_최대화가_아닌_크기만_저장한다() {
-        let flags = persisted_window_state_flags();
-        assert_eq!(flags.bits(), StateFlags::SIZE.bits());
-        assert!(!flags.contains(StateFlags::POSITION));
-        assert!(!flags.contains(StateFlags::MAXIMIZED));
-        assert!(!flags.contains(StateFlags::VISIBLE));
     }
 }

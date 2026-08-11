@@ -460,41 +460,6 @@ pub async fn get_dashboard_meal_history(
     service.meal_history(before.as_deref(), limit).await
 }
 
-fn validate_image_asset_url(value: &str) -> Result<String, String> {
-    let url = reqwest::Url::parse(value).map_err(|_| "잘못된 이미지 주소입니다.".to_string())?;
-    let allowed_origin = reqwest::Url::parse(&crate::data_api::base_url())
-        .map_err(|_| "이미지 서버 주소를 확인할 수 없습니다.".to_string())?;
-    let has_credentials = !url.username().is_empty() || url.password().is_some();
-    let same_origin = url.scheme() == allowed_origin.scheme()
-        && url.host_str() == allowed_origin.host_str()
-        && url.port_or_known_default() == allowed_origin.port_or_known_default();
-    let asset_name = url.path().strip_prefix("/api/public/assets/");
-    let safe_asset_name = asset_name.is_some_and(|name| {
-        !name.is_empty()
-            && name.len() <= 255
-            && name
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
-    });
-    if has_credentials || !same_origin || !safe_asset_name || url.query().is_some() || url.fragment().is_some() {
-        return Err("허용되지 않은 이미지 주소입니다.".into());
-    }
-    Ok(url.to_string())
-}
-
-/// 검증된 이미지를 별도의 크기 조절 가능 창에서 연다.
-#[tauri::command]
-pub async fn open_image_viewer(
-    app: tauri::AppHandle,
-    window: tauri::WebviewWindow,
-    image_url: String,
-) -> Result<(), String> {
-    remote_sync::ensure_dashboard_window(&window)?;
-    let image_url = validate_image_asset_url(&image_url)?;
-    tray::open_image_viewer(&app, image_url)?;
-    Ok(())
-}
-
 #[derive(Debug, Clone, Copy, serde::Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct DesktopSettingsInput {
@@ -633,20 +598,7 @@ pub async fn send_test_notification(
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_image_asset_url, validate_js_log_payload, CheckerEventInput, CheckerEventResponse};
-
-    #[test]
-    fn 이미지_자산_url은_https와_로컬_assets만_허용한다() {
-        let origin = crate::data_api::base_url();
-        assert!(validate_image_asset_url(&format!("{origin}/api/public/assets/menu.png")).is_ok());
-        assert!(validate_image_asset_url(&format!("{origin}/api/public/assets/menu-2026_08.png")).is_ok());
-        assert!(validate_image_asset_url("https://evil.example/api/public/assets/menu.png").is_err());
-        assert!(validate_image_asset_url(&format!("{origin}/api/public/assets/nested/menu.png")).is_err());
-        assert!(validate_image_asset_url(&format!("{origin}/api/public/assets/%2e%2e%2fsecret")).is_err());
-        assert!(validate_image_asset_url(&format!("{origin}/api/public/assets/menu.png?token=x")).is_err());
-        assert!(validate_image_asset_url(&format!("{origin}/other/menu.png")).is_err());
-        assert!(validate_image_asset_url("javascript:alert(1)").is_err());
-    }
+    use super::{validate_js_log_payload, CheckerEventInput, CheckerEventResponse};
 
     #[test]
     fn 원격_js_로그_payload는_레벨_크기_제어문자를_검증한다() {

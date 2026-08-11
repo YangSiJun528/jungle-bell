@@ -1,4 +1,4 @@
-import type {DashboardLaundryMachine} from '../../../dashboard-model';
+import type {DashboardLaundryMachine} from '@/domain/laundry/capacity';
 import {
     sortWashTowers,
     washTowerCellView,
@@ -13,10 +13,10 @@ export interface WashTowerGridProps {
 }
 
 const availableCellClasses: Record<DashboardLaundryMachine['zone'], string> = {
-    men: 'bg-blue-600 text-white',
-    common: 'bg-violet-600 text-white',
-    women: 'bg-rose-600 text-white',
-    other: 'bg-muted-foreground text-background',
+    men: 'bg-[oklch(0.68_0.07_250)] text-[oklch(0.24_0.04_250)] dark:bg-[oklch(0.42_0.055_250)] dark:text-[oklch(0.93_0.025_250)]',
+    common: 'bg-[oklch(0.68_0.065_300)] text-[oklch(0.24_0.04_300)] dark:bg-[oklch(0.42_0.05_300)] dark:text-[oklch(0.93_0.025_300)]',
+    women: 'bg-[oklch(0.68_0.07_15)] text-[oklch(0.24_0.04_15)] dark:bg-[oklch(0.42_0.055_15)] dark:text-[oklch(0.93_0.025_15)]',
+    other: 'bg-muted text-foreground',
 };
 
 export function WashTowerGrid({machines, nowMs = Date.now()}: WashTowerGridProps) {
@@ -26,7 +26,7 @@ export function WashTowerGrid({machines, nowMs = Date.now()}: WashTowerGridProps
     return (
         <div
             aria-label="워시타워 상태표"
-            className="mt-4 overflow-x-auto pb-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="overflow-x-auto pb-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             role="region"
             tabIndex={0}
         >
@@ -54,8 +54,9 @@ export function WashTowerGrid({machines, nowMs = Date.now()}: WashTowerGridProps
                                 >
                                     <span
                                         aria-label={`${heading}번, ${zone.label}`}
-                                        className={`mx-auto grid size-7 place-items-center rounded-md border ${zone.numberClassName}`}
+                                        className={`mx-auto block w-fit text-sm font-semibold tabular-nums ${zone.numberClassName}`}
                                         data-laundry-zone-number="true"
+                                        title={zone.label}
                                     >
                                         {heading}
                                     </span>
@@ -78,8 +79,8 @@ export function WashTowerGrid({machines, nowMs = Date.now()}: WashTowerGridProps
                                 const tone = cell.state === 'available'
                                     ? availableCellClasses[machine.zone]
                                     : cell.state === 'error'
-                                        ? 'bg-destructive text-white'
-                                        : 'bg-muted-foreground text-background';
+                                        ? 'bg-[oklch(0.68_0.055_25)] text-[oklch(0.24_0.04_25)] dark:bg-[oklch(0.42_0.045_25)] dark:text-[oklch(0.93_0.025_25)]'
+                                        : 'bg-muted text-muted-foreground';
 
                                 return (
                                     <td className="h-10 p-0" key={`${row.kind}-${machine.id}`}>

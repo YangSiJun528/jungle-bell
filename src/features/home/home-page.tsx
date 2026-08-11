@@ -23,12 +23,13 @@ import {
     useMealsQuery,
     useRefreshHomeMutation,
 } from '@/app/use-dashboard-queries';
-import {readInitialPairingEntry} from '@/features/connections/pairing-bootstrap';
+import {readInitialPairingEntry} from '@/app/pairing-bootstrap';
+import {cn} from '@/lib/utils';
 import {JungleCampusSummary} from './jungle-campus-summary';
+import {HomeMealSlotsList} from './home-meal-slots';
 import {
     homeLaundrySummary,
-    homeTodayMeals,
-    mealPeriodLabel,
+    homeTodayMealSlots,
     type HomeQueryState,
 } from './home-view-model';
 
@@ -46,8 +47,8 @@ function SummaryCard({icon: Icon, title, children, footer, className}: {
     className?: string;
 }) {
     return (
-        <Card className={className}>
-            <CardHeader>
+        <Card className={cn('min-h-60 gap-0 overflow-hidden py-0', className)}>
+            <CardHeader className="min-h-16 shrink-0 px-5 py-3 sm:px-6">
                 <div className="flex items-center gap-3">
                     <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
                         <Icon aria-hidden="true" className="size-5"/>
@@ -55,8 +56,12 @@ function SummaryCard({icon: Icon, title, children, footer, className}: {
                     <h2 className="font-semibold leading-none">{title}</h2>
                 </div>
             </CardHeader>
-            <CardContent className="flex flex-1 flex-col gap-3">{children}</CardContent>
-            <CardFooter className="gap-2 border-t">{footer}</CardFooter>
+            <CardContent className="flex min-h-0 flex-1 flex-col justify-center gap-3 px-5 py-3 sm:px-6">
+                {children}
+            </CardContent>
+            <CardFooter className="min-h-11 shrink-0 gap-2 border-t px-5 py-1.5 [.border-t]:pt-1.5 sm:px-6">
+                {footer}
+            </CardFooter>
         </Card>
     );
 }
@@ -98,7 +103,7 @@ export function HomePage({onRequestInstall}: HomePageProps = {}) {
         queryState: queryState(laundry),
         snapshot: laundry.data,
     });
-    const todayMeals = homeTodayMeals(meals.data);
+    const todayMealSlots = homeTodayMealSlots(meals.data);
     const laundryRefreshFailed = laundry.isError || laundryIssue !== null;
     const mealsRefreshFailed = meals.isError || mealsIssue !== null;
     return (
@@ -147,7 +152,7 @@ export function HomePage({onRequestInstall}: HomePageProps = {}) {
                 <SummaryCard
                     icon={WashingMachine}
                     title="세탁실"
-                    footer={<Button asChild variant="link" className="px-0"><a href="#laundry">기기별 현황 보기 <ArrowRight/></a></Button>}
+                    footer={<Button asChild size="sm" variant="link" className="px-0"><a href="#laundry">기기별 현황 보기 <ArrowRight/></a></Button>}
                 >
                     {laundry.isPending && !laundry.data ? (
                         <CardLoading/>
@@ -168,12 +173,22 @@ export function HomePage({onRequestInstall}: HomePageProps = {}) {
                                 <>
                                     <div className="grid grid-cols-2 gap-2">
                                         <div className="rounded-lg bg-blue-500/10 p-3">
-                                            <p className="text-xs font-medium text-blue-700 dark:text-blue-300">남성</p>
-                                            <p className="mt-1 text-2xl font-bold">{laundrySummary.men === null ? '—' : `${laundrySummary.men}회`}</p>
+                                            <p className="text-xs font-medium text-blue-700 dark:text-blue-300">남성 가능</p>
+                                            <p className="mt-1 flex items-baseline gap-2">
+                                                <strong className="text-2xl">{laundrySummary.men === null ? '—' : `${laundrySummary.men}회`}</strong>
+                                                {laundrySummary.men === null ? null : (
+                                                    <span className="text-xs text-muted-foreground">지금 시작 가능</span>
+                                                )}
+                                            </p>
                                         </div>
                                         <div className="rounded-lg bg-rose-500/10 p-3">
-                                            <p className="text-xs font-medium text-rose-700 dark:text-rose-300">여성</p>
-                                            <p className="mt-1 text-2xl font-bold">{laundrySummary.women === null ? '—' : `${laundrySummary.women}회`}</p>
+                                            <p className="text-xs font-medium text-rose-700 dark:text-rose-300">여성 가능</p>
+                                            <p className="mt-1 flex items-baseline gap-2">
+                                                <strong className="text-2xl">{laundrySummary.women === null ? '—' : `${laundrySummary.women}회`}</strong>
+                                                {laundrySummary.women === null ? null : (
+                                                    <span className="text-xs text-muted-foreground">지금 시작 가능</span>
+                                                )}
+                                            </p>
                                         </div>
                                     </div>
                                 </>
@@ -185,7 +200,7 @@ export function HomePage({onRequestInstall}: HomePageProps = {}) {
                 <SummaryCard
                     icon={Utensils}
                     title="오늘 급식"
-                    footer={<Button asChild variant="link" className="px-0"><a href="#meals">전체 식단 보기 <ArrowRight/></a></Button>}
+                    footer={<Button asChild size="sm" variant="link" className="px-0"><a href="#meals">전체 식단 보기 <ArrowRight/></a></Button>}
                 >
                     {meals.isPending && !meals.data ? (
                         <CardLoading lines={3}/>
@@ -196,21 +211,14 @@ export function HomePage({onRequestInstall}: HomePageProps = {}) {
                             {mealsRefreshFailed ? (
                                 <p className="text-xs text-amber-700 dark:text-amber-300">최신 식단을 가져오지 못해 마지막 확인값을 표시합니다.</p>
                             ) : null}
-                            {todayMeals.length === 0 ? (
+                            {todayMealSlots === null ? (
                                 <p className="text-sm leading-6 text-muted-foreground">
                                     {mealsRefreshFailed
                                         ? '마지막으로 확인한 데이터에는 오늘 식단이 없습니다.'
                                         : '오늘 식단이 아직 게시되지 않았습니다.'}
                                 </p>
                             ) : (
-                                <ul className="divide-y rounded-lg border">
-                                    {todayMeals.slice(0, 2).map((meal) => (
-                                        <li key={meal.id} className="grid grid-cols-[3rem_1fr] gap-3 p-3 text-sm">
-                                            <strong className="text-primary">{mealPeriodLabel(meal)}</strong>
-                                            <span className="line-clamp-2 whitespace-pre-line text-muted-foreground">{meal.text || meal.title || '메뉴 준비 중'}</span>
-                                        </li>
-                                    ))}
-                                </ul>
+                                <HomeMealSlotsList slots={todayMealSlots}/>
                             )}
                         </>
                     ) : null}

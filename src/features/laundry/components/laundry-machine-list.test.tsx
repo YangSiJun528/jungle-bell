@@ -1,6 +1,6 @@
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, it} from 'vitest';
-import type {DashboardLaundryMachine} from '@/dashboard-model';
+import type {DashboardLaundryMachine} from '@/domain/laundry/capacity';
 import {LaundryMachineList} from './laundry-machine-list';
 
 const NOW_MS = Date.parse('2026-08-11T03:00:00.000Z');
@@ -41,6 +41,7 @@ describe('LaundryMachineList', () => {
         );
 
         expect(markup).toContain('기기별 상세 상태');
+        expect(markup).not.toContain('마지막 수집 시점 기준');
         expect(markup.indexOf('1번 워시타워')).toBeLessThan(markup.indexOf('2번 워시타워'));
         expect(markup.indexOf('>건조기<')).toBeLessThan(markup.indexOf('>세탁기<'));
         expect(markup).toContain('세탁기');
@@ -51,6 +52,7 @@ describe('LaundryMachineList', () => {
         expect(markup).toContain('사용 가능');
         expect(markup).toContain('배관 에러');
         expect(markup).toContain('aria-label="1번 워시타워 건조기 상세 안내"');
+        expect(markup).not.toContain('aria-label="2번 워시타워 세탁기 상세 안내"');
         expect(markup).not.toContain('EMPTY_WATER_ALERT_ERROR');
     });
 
@@ -62,12 +64,38 @@ describe('LaundryMachineList', () => {
         expect(markup).toContain('role="progressbar"');
         expect(markup).toContain('aria-label="2번 워시타워 세탁 진행률"');
         expect(markup).toContain('aria-valuenow="50"');
-        expect(markup).toContain('aria-label="2번 워시타워 세탁기 상세 안내"');
         expect(markup).not.toContain('>예상 진행률 50%</p>');
         expect(markup).toContain('aria-valuetext="예상 50% 진행, 약 30분 남음, 전체 60분"');
         expect(markup).toContain('aria-valuetext="오류로 진행률을 확인할 수 없음"');
         expect(markup).toContain('11:30 시작');
         expect(markup).toContain('12:30 예상 종료');
+    });
+
+    it('완료 확인 상태에만 보정값 안내를 열 수 있는 버튼을 표시한다', () => {
+        const markup = renderToStaticMarkup(
+            <LaundryMachineList
+                machines={[{
+                    id: '워시타워_3',
+                    zone: 'men',
+                    washer: null,
+                    dryer: {
+                        appliance: 'dryer',
+                        operationalStatus: 'RUNNING',
+                        state: {code: 'END'},
+                        estimatedFinishAt: '2026-08-11T03:05:00.000Z',
+                        projection: {
+                            status: 'AWAITING_COMPLETION_CONFIRMATION',
+                            remainingMinutes: 5,
+                            estimated: true,
+                        },
+                    },
+                }]}
+                nowMs={NOW_MS}
+            />,
+        );
+
+        expect(markup).toContain('완료 확인 중 · 예상');
+        expect(markup).toContain('aria-label="3번 워시타워 건조기 상세 안내"');
     });
 
     it('상세 목록은 가로 최소 너비를 강제하지 않고 반응형 열로 배치한다', () => {
@@ -77,6 +105,7 @@ describe('LaundryMachineList', () => {
 
         expect(markup).toContain('data-laundry-detail-list="true"');
         expect(markup).toContain('data-laundry-machine-card="true"');
+        expect(markup).toContain('[.border-b]:pb-3');
         expect(markup).toContain('<h3 class="text-base font-semibold leading-none">1번 워시타워</h3>');
         expect(markup).toContain('auto-rows-fr');
         expect(markup).toContain('md:grid-cols-2');

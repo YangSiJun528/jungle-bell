@@ -1,4 +1,4 @@
-import type {DesktopTestNotificationResult} from '@/dashboard-api';
+import type {DesktopTestNotificationResult} from '@/api/dashboard-api';
 
 export function desktopTestNotificationMessage(result: DesktopTestNotificationResult): string {
     if (result.systemDelivered && result.mobileQueued !== null) {

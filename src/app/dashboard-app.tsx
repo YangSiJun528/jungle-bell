@@ -1,8 +1,8 @@
 import {lazy, Suspense, useEffect, useMemo, useState, useSyncExternalStore} from 'react';
 import {LoadingState} from '@/components/dashboard/async-state';
-import type {DashboardNotification} from '@/dashboard-api';
-import type {DashboardRoute} from '@/dashboard-model';
-import type {NotificationInboxSnapshot} from '@/notification-inbox';
+import type {DashboardNotification} from '@/api/dashboard-api';
+import type {DashboardRoute} from '@/app/surface';
+import type {NotificationInboxSnapshot} from '@/domain/notifications/inbox';
 import {useDashboardEnvironment} from './dashboard-context';
 import {InstallPrompt, useInstallPromptVisibility} from './install-prompt';
 import {DashboardShell} from './shell';

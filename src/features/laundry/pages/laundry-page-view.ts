@@ -1,7 +1,7 @@
 import type {
     LaundryCapacityEstimate,
     LaundryCapacitySnapshot,
-} from '@/dashboard-model';
+} from '@/domain/laundry/capacity';
 
 export interface CapacityCardView {
     access: LaundryCapacityEstimate['access'];
@@ -23,7 +23,7 @@ export function capacityCards(
         return {
             access,
             count,
-            label: access === 'men' ? '남성 세탁실' : '여성 세탁실',
+            label: access === 'men' ? '남성 가능' : '여성 가능',
             status: count === null ? 'checking' : count > 0 ? 'available' : 'full',
             description: count === null
                 ? '최신 기기 상태를 확인하고 있어요.'

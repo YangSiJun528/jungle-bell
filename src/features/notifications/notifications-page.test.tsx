@@ -1,8 +1,8 @@
 import {readFileSync} from 'node:fs';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, test} from 'vitest';
-import type {DashboardNotification} from '@/dashboard-api';
-import type {NotificationInboxItem} from '@/notification-inbox';
+import type {DashboardNotification} from '@/api/dashboard-api';
+import type {NotificationInboxItem} from '@/domain/notifications/inbox';
 import {NotificationRow} from './notifications-page';
 
 const pageSource = readFileSync(new URL('./notifications-page.tsx', import.meta.url), 'utf8');

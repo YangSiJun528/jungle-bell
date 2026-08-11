@@ -8,9 +8,9 @@ import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@/components/ui/card';
 import {Separator} from '@/components/ui/separator';
 import {Switch} from '@/components/ui/switch';
-import type {MealPreferences, MealPreferencesInput} from '@/dashboard-api';
-import type {PersonalSurface} from '@/dashboard-personal-api';
-import {companionAuthenticationRequired} from '@/dashboard-model';
+import type {MealPreferences, MealPreferencesInput} from '@/api/dashboard-api';
+import type {PersonalSurface} from '@/api/personal-api';
+import {companionAuthenticationRequired} from '@/app/surface';
 
 const asInput = (preferences: MealPreferences): MealPreferencesInput => ({
     enabled: preferences.enabled,

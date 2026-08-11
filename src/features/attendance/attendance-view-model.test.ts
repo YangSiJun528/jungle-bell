@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import type {AttendanceDashboard} from '@/dashboard-api';
+import type {AttendanceDashboard} from '@/api/dashboard-api';
 import {
     attendanceDetailModel,
     attendancePreferencesEqual,

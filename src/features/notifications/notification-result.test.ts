@@ -1,10 +1,9 @@
 import {describe, expect, test} from 'vitest';
-import type {DesktopTestNotificationResult} from '@/dashboard-api';
-import {EMPTY_NOTIFICATION_INBOX} from '@/notification-inbox';
+import type {DesktopTestNotificationResult} from '@/api/dashboard-api';
 import {desktopTestNotificationMessage} from './notification-result';
 
 const result = (systemDelivered: boolean, mobileQueued: number | null): DesktopTestNotificationResult => ({
-    snapshot: EMPTY_NOTIFICATION_INBOX,
+    snapshot: {revision: 0, unreadCount: 0, items: []},
     systemDelivered,
     mobileQueued,
 });

@@ -1,6 +1,6 @@
 import {readFileSync} from 'node:fs';
 import {describe, expect, test} from 'vitest';
-import type {DesktopConnectionState} from '@/dashboard-api';
+import type {DesktopConnectionState} from '@/api/dashboard-api';
 import {desktopConnectionUiState} from './desktop-connection-state';
 
 const connection = (state: DesktopConnectionState['state']): DesktopConnectionState => ({

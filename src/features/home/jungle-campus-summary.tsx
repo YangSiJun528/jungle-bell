@@ -17,14 +17,13 @@ import {Button} from '@/components/ui/button';
 import {
     Card,
     CardContent,
-    CardDescription,
     CardFooter,
     CardHeader,
 } from '@/components/ui/card';
 import {Skeleton} from '@/components/ui/skeleton';
-import type {AttendanceSnapshot} from '@/dashboard-api';
-import {dashboardDdayLabel, dashboardDdayPeriod} from '@/dashboard-home';
-import {buildDdayProgress, kstDateString} from '@/dday-progress';
+import type {AttendanceSnapshot} from '@/api/dashboard-api';
+import {dashboardDdayLabel, dashboardDdayPeriod} from '@/features/home/lib/home-overview';
+import {buildDdayProgress, kstDateString} from '@/features/home/lib/dday-progress';
 import {dateTimeLabel} from '@/lib/format';
 import jungleCompassIcon from '@/assets/logo.png';
 import {homeAttendanceForToday} from './home-view-model';
@@ -73,7 +72,6 @@ function CampusCardFrame({children, footer}: {
                     </span>
                     <div className="min-w-0">
                         <h2 className="font-semibold leading-none">정글캠퍼스</h2>
-                        <CardDescription className="mt-1">공식 출석 상태와 Jungle Bell 동기화 결과</CardDescription>
                     </div>
                 </div>
             </CardHeader>

@@ -1,4 +1,4 @@
-import type {DashboardLaundryMachine} from '@/dashboard-model';
+import type {DashboardLaundryMachine} from '@/domain/laundry/capacity';
 import {
     laundryAvailabilityState,
     laundryOperationLabel,
@@ -6,7 +6,7 @@ import {
     laundryRemainingText,
     laundryStartAt,
     type LaundryStatusAppliance,
-} from '@/laundry-status';
+} from '@/domain/laundry/status';
 import {
     washTowerHeading,
     type WashTowerApplianceKind,
@@ -49,6 +49,9 @@ const PROJECTION_STATUS_LABELS: Readonly<Record<string, string>> = {
     IDLE: '사용 가능',
     UNKNOWN: '확인 불가',
 };
+
+const COMPLETION_CONFIRMATION_HELP_TEXT =
+    '표시된 시간과 진행률은 Jungle Bell이 보정한 예상값이며, LG ThinQ의 확정 결과를 기다리고 있어요.';
 
 function validDateTime(value?: string | null): string | null {
     return value && Number.isFinite(Date.parse(value)) ? value : null;
@@ -111,7 +114,7 @@ function applianceStatus(
         return {
             statusLabel: '완료 확인 지연',
             tone: 'warning',
-            helpText: '예상 종료 시각이 지났지만 완료 상태가 아직 확인되지 않았어요.',
+            helpText: COMPLETION_CONFIRMATION_HELP_TEXT,
         };
     }
 
@@ -120,7 +123,7 @@ function applianceStatus(
         return {
             statusLabel: '완료 확인 중',
             tone: 'active',
-            helpText: null,
+            helpText: COMPLETION_CONFIRMATION_HELP_TEXT,
         };
     }
 

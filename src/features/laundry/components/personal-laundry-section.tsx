@@ -31,9 +31,9 @@ import type {
     DashboardLaundrySnapshot,
     LaundryQueueEntry,
     LaundryWatch,
-} from '@/dashboard-api';
-import {companionAuthenticationRequired} from '@/dashboard-model';
-import type {PersonalSurface} from '@/dashboard-personal-api';
+} from '@/api/dashboard-api';
+import {companionAuthenticationRequired} from '@/app/surface';
+import type {PersonalSurface} from '@/api/personal-api';
 import {
     applianceLabel,
     hasDuplicateActiveWatch,
@@ -43,7 +43,7 @@ import {
     queueStatusLabel,
     watchConditionLabel,
     type LaundryTarget,
-} from '@/dashboard-personal-state';
+} from '@/features/laundry/lib/personal-laundry';
 
 interface PersonalLaundrySectionProps {
     surface: PersonalSurface;

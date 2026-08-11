@@ -48,8 +48,8 @@ LMS credential은 첫 번째 행 밖으로 이동하지 않습니다. 서버와 
 
 - 하나의 `checker` WebView가 LMS session을 유지하고 출석을 주기적으로 확인합니다.
 - Rust가 정규화한 snapshot만 서버로 올리고 heartbeat와 알림 poll을 수행합니다.
-- 대시보드·이미지 뷰어는 로컬 앱 URL만 사용합니다. 트레이 아이콘을 누르면 별도
-  목록 창 없이 대시보드 홈을 엽니다.
+- 대시보드는 로컬 앱 URL만 사용합니다. 트레이 아이콘을 누르면 별도 목록 창 없이
+  대시보드 홈을 엽니다.
 - 사용자 설정은 현재 버전의 `autoStart` 한 필드만 노출합니다.
 
 ## 불변 조건
@@ -68,10 +68,10 @@ LMS credential은 첫 번째 행 밖으로 이동하지 않습니다. 서버와 
 
 | 계약 | 구현 |
 | --- | --- |
-| 런타임 판정 | [`dashboard-runtime.ts`](../src/dashboard-runtime.ts) |
-| 브라우저 API adapter | [`dashboard-api.ts`](../src/dashboard-api.ts), [`dashboard-personal-api.ts`](../src/dashboard-personal-api.ts) |
-| 대시보드 홈 projection | [`dashboard-home.ts`](../src/dashboard-home.ts), [`dday-progress.ts`](../src/dday-progress.ts) |
-| pairing 임시 상태 | [`dashboard-pending-pairing.ts`](../src/dashboard-pending-pairing.ts) |
+| 런타임 판정 | [`runtime.ts`](../src/app/runtime.ts), [`surface.ts`](../src/app/surface.ts) |
+| 브라우저 API adapter | [`dashboard-api.ts`](../src/api/dashboard-api.ts), [`personal-api.ts`](../src/api/personal-api.ts) |
+| 대시보드 홈 projection | [`home-overview.ts`](../src/features/home/lib/home-overview.ts), [`dday-progress.ts`](../src/features/home/lib/dday-progress.ts) |
+| pairing 임시 상태 | [`pending-pairing.ts`](../src/features/connections/lib/pending-pairing.ts) |
 | PWA cache·Push | [`sw.js`](../src/public/sw.js) |
 | 데스크톱 연결 service | [`remote_sync.rs`](../src-tauri/src/remote_sync.rs) |
 | checker WebView | [`checker.rs`](../src-tauri/src/checker.rs), [`checker.ts`](../src/injected/checker.ts) |

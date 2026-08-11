@@ -10,7 +10,7 @@ import {
     WashingMachine,
 } from 'lucide-react';
 
-import type {DashboardRoute, DashboardSurfaceKind} from '../../dashboard-model';
+import type {DashboardRoute, DashboardSurfaceKind} from '../surface';
 import {Button} from '../../components/ui/button';
 import {
     Sidebar,
@@ -160,9 +160,8 @@ function Brand({navigate}: Pick<DashboardShellProps, 'navigate'>) {
                         <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground shadow-xs">
                             <BellRing className="size-[1.125rem]" aria-hidden="true" strokeWidth={2}/>
                         </span>
-                        <span className="min-w-0 leading-tight group-data-[collapsible=icon]:hidden">
-                            <span className="block truncate text-sm font-semibold tracking-[-0.01em]">Jungle Bell</span>
-                            <span className="block truncate text-xs text-muted-foreground">캠퍼스 생활 현황</span>
+                        <span className="min-w-0 truncate text-sm font-semibold tracking-[-0.01em] group-data-[collapsible=icon]:hidden">
+                            Jungle Bell
                         </span>
                     </a>
                 </SidebarMenuButton>
@@ -366,7 +365,7 @@ export function DashboardShell({
                     hasUnreadNotifications={hasUnreadNotifications}
                     notificationAriaLabel={notificationAriaLabel}
                 />
-                <div className="mx-auto w-full max-w-[90rem] p-3 sm:p-4 md:p-5 lg:p-6">
+                <div className="mx-auto w-full max-w-6xl p-3 sm:p-4 md:p-5 lg:p-6">
                     {children}
                 </div>
                 <DashboardFooter/>

@@ -1,8 +1,9 @@
 import {readFileSync} from 'node:fs';
 import {describe, expect, it} from 'vitest';
-import type {AttendanceDashboard, DashboardMealsSnapshot} from '@/dashboard-api';
+import type {AttendanceDashboard, DashboardMealsSnapshot} from '@/api/dashboard-api';
 import {
     homeAttendanceForToday,
+    homeTodayMealSlots,
     homeTodayMeals,
     mealPeriodLabel,
 } from './home-view-model';
@@ -53,6 +54,25 @@ describe('home feature boundaries', () => {
             .toBeLessThan(source.indexOf('aria-label="오늘의 생활 정보"'));
         expect(source).not.toContain('title="출석"');
         expect(source).not.toContain('<CardTitle>공식 정글캠퍼스</CardTitle>');
+    });
+
+    it('centers compact living summaries and keeps their footer divider tight', () => {
+        const source = readFileSync(new URL('./home-page.tsx', import.meta.url), 'utf8');
+
+        expect(source).toContain("'min-h-60 gap-0 overflow-hidden py-0'");
+        expect(source).toMatch(/CardContent className="[^"]*justify-center/u);
+        expect(source).toMatch(/CardFooter className="[^"]*\[\.border-t\]:pt-1\.5/u);
+        expect(source).toContain('<HomeMealSlotsList slots={todayMealSlots}/>');
+    });
+
+    it('labels laundry capacity as people who can start now', () => {
+        const source = readFileSync(new URL('./home-page.tsx', import.meta.url), 'utf8');
+
+        expect(source).toContain('남성 가능');
+        expect(source).toContain('여성 가능');
+        expect(source.match(/지금 시작 가능/g)).toHaveLength(2);
+        expect(source).not.toContain('남성 세탁실');
+        expect(source).not.toContain('여성 세탁실');
     });
 });
 
@@ -110,7 +130,63 @@ describe('home meal summaries', () => {
 
         expect(homeTodayMeals(snapshot, new Date('2026-08-11T03:00:00.000Z'))).toEqual([]);
     });
+
+    it('keeps lunch and dinner in fixed slots while excluding breakfast', () => {
+        const snapshot = mealsSnapshot([
+            meal('dinner', '8월 11일 석식', '저녁'),
+            meal('breakfast', '8월 11일 조식', '아침'),
+            meal('lunch', '8월 11일 중식', '점심'),
+        ]);
+
+        expect(homeTodayMealSlots(snapshot, new Date('2026-08-11T03:00:00.000Z')))
+            .toEqual([
+                {period: '중식', meal: meal('lunch', '8월 11일 중식', '점심')},
+                {period: '석식', meal: meal('dinner', '8월 11일 석식', '저녁')},
+            ]);
+    });
+
+    it('preserves an empty dinner slot when only lunch has been posted', () => {
+        const snapshot = mealsSnapshot([meal('lunch', '8월 11일 중식', '점심')]);
+
+        expect(homeTodayMealSlots(snapshot, new Date('2026-08-11T03:00:00.000Z')))
+            .toEqual([
+                {period: '중식', meal: meal('lunch', '8월 11일 중식', '점심')},
+                {period: '석식', meal: null},
+            ]);
+    });
+
+    it('preserves an empty lunch slot when only dinner has been posted', () => {
+        const snapshot = mealsSnapshot([meal('dinner', '8월 11일 석식', '저녁')]);
+
+        expect(homeTodayMealSlots(snapshot, new Date('2026-08-11T03:00:00.000Z')))
+            .toEqual([
+                {period: '중식', meal: null},
+                {period: '석식', meal: meal('dinner', '8월 11일 석식', '저녁')},
+            ]);
+    });
+
+    it('returns the empty-state signal when neither lunch nor dinner exists', () => {
+        const reference = new Date('2026-08-11T03:00:00.000Z');
+
+        expect(homeTodayMealSlots(mealsSnapshot([]), reference)).toBeNull();
+        expect(homeTodayMealSlots(
+            mealsSnapshot([meal('breakfast', '8월 11일 조식', '아침')]),
+            reference,
+        )).toBeNull();
+    });
 });
+
+function meal(id: string, title: string, text: string) {
+    return {id, title, text, publishedAt: null, permalink: null};
+}
+
+function mealsSnapshot(dailyMenus: DashboardMealsSnapshot['data']['dailyMenus']): DashboardMealsSnapshot {
+    return {
+        asOf: '2026-08-11T03:00:00.000Z',
+        lastCheckedAt: '2026-08-11T03:00:00.000Z',
+        data: {dailyMenus, pinnedMenus: [], recentMenus: []},
+    };
+}
 
 describe('home attendance summary', () => {
     const reference = new Date('2026-08-11T03:00:00.000Z');

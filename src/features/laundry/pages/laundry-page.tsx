@@ -16,8 +16,8 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
-import type {PersonalSurface} from '@/dashboard-personal-api';
-import {laundrySituationDataIsReliable} from '@/laundry-situation';
+import type {PersonalSurface} from '@/api/personal-api';
+import {laundrySituationDataIsReliable} from '@/domain/laundry/freshness';
 import {relativeTimeLabel} from '@/lib/format';
 import {cn} from '@/lib/utils';
 import {LaundryMachineList} from '../components/laundry-machine-list';
@@ -30,9 +30,10 @@ const personalSurface = (kind: string): PersonalSurface | null =>
     kind === 'desktop' || kind === 'companion' ? kind : null;
 
 function capacityTone(card: CapacityCardView): string {
-    if (card.status === 'available') return 'border-primary/30 bg-primary/5';
-    if (card.status === 'full') return 'border-amber-500/30 bg-amber-500/5';
-    return 'border-border bg-muted/30';
+    if (card.status === 'checking') return 'border-border bg-muted/30';
+    return card.access === 'men'
+        ? 'border-blue-800/25 bg-blue-950/[0.06] text-blue-950 dark:border-blue-300/20 dark:bg-blue-200/[0.08] dark:text-blue-100'
+        : 'border-rose-800/25 bg-rose-950/[0.06] text-rose-950 dark:border-rose-300/20 dark:bg-rose-200/[0.08] dark:text-rose-100';
 }
 
 export function LaundryPage() {
@@ -98,11 +99,23 @@ export function LaundryPage() {
                         </div>
                         <div className="grid gap-3 sm:grid-cols-2">
                             {summaries.map((card) => (
-                                <Card className={cn('gap-3 py-5 shadow-none', capacityTone(card))} key={card.access}>
+                                <Card
+                                    className={cn(
+                                        'gap-3 py-5 shadow-none',
+                                        card.status === 'available' && 'justify-center',
+                                        capacityTone(card),
+                                    )}
+                                    key={card.access}
+                                >
                                     <CardHeader className="gap-1 px-5">
                                         <CardDescription>{card.label}</CardDescription>
-                                        <CardTitle className="text-3xl tabular-nums">
+                                        <CardTitle className="flex items-baseline gap-2 text-3xl tabular-nums">
                                             {card.count === null ? '—' : `${card.count}회`}
+                                            {card.count === null ? null : (
+                                                <span className="text-xs font-normal text-muted-foreground">
+                                                    지금 시작 가능
+                                                </span>
+                                            )}
                                         </CardTitle>
                                     </CardHeader>
                                     {card.status !== 'available' ? (
@@ -116,7 +129,7 @@ export function LaundryPage() {
                     </section>
 
                     <Card className="gap-0 overflow-hidden py-0">
-                        <CardHeader className="flex items-center justify-between gap-2 border-b px-4 py-3 sm:px-6">
+                        <CardHeader className="flex items-center justify-between gap-2 border-b px-4 py-3 [.border-b]:pb-3 sm:px-6">
                             <h2 className="flex items-center gap-2 font-semibold leading-none">
                                 <WashingMachine className="size-4 text-primary"/>
                                 워시타워 상태
@@ -131,11 +144,11 @@ export function LaundryPage() {
                                 <LaundryZoneBadge zone="women"/>
                             </div>
                         </CardHeader>
-                        <CardContent className="px-4 pb-4 sm:px-6">
+                        <CardContent className="px-4 pb-3 pt-0 sm:px-6">
                             {snapshot.machines.length > 0 ? (
                                 <WashTowerGrid machines={snapshot.machines}/>
                             ) : (
-                                <p className="py-8 text-center text-sm text-muted-foreground">
+                                <p className="py-5 text-center text-sm text-muted-foreground">
                                     표시할 워시타워가 없습니다.
                                 </p>
                             )}

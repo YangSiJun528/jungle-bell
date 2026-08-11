@@ -2,9 +2,9 @@ import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import {DashboardApp} from './dashboard-app';
 import {DashboardProviders} from './dashboard-providers';
-import {resolveDashboardSurface} from '@/dashboard-model';
-import {detectDashboardRuntime} from '@/dashboard-runtime';
-import {captureInitialPairingFromWindow} from '@/features/connections/pairing-bootstrap';
+import {resolveDashboardSurface} from '@/app/surface';
+import {detectDashboardRuntime} from '@/app/runtime';
+import {captureInitialPairingFromWindow} from '@/app/pairing-bootstrap';
 import './styles/globals.css';
 
 const initialRuntime = detectDashboardRuntime();

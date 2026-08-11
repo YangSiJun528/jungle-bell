@@ -65,6 +65,7 @@ describe('DashboardShell', () => {
         expect(html).toContain('--sidebar-width:14.5rem');
         expect(html).toContain('--sidebar-width-icon:3rem');
         expect(html).toContain('data-shell-top-spacer="true"');
+        expect((html.match(/max-w-6xl/g) ?? []).length).toBe(2);
         expect(html).not.toContain('<header');
         expect(html).not.toContain('Jungle Bell은 정글 캠퍼스 생활 정보를 한곳에 모아 보여주는 오픈소스 프로젝트입니다.');
         expect(html).toContain('href="https://github.com/YangSiJun528/jungle-bell"');

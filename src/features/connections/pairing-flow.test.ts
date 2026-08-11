@@ -1,5 +1,4 @@
 import {describe, expect, test, vi} from 'vitest';
-import {mobilePairingLinkFromHash} from './mobile-identity';
 import {
     automaticPairingAction,
     releasePairingStart,
@@ -8,14 +7,6 @@ import {
 } from './pairing-flow';
 
 describe('mobile pairing flow', () => {
-    test('QR fragment를 연결 입력으로 복원한다', () => {
-        expect(mobilePairingLinkFromHash('#pairing=jbp_123&challenge=jbpc_456')).toEqual({
-            pairingId: 'jbp_123',
-            challenge: 'jbpc_456',
-        });
-        expect(mobilePairingLinkFromHash('#home')).toBeNull();
-    });
-
     test('일시적인 네트워크 오류 뒤 완료를 계속 확인한다', async () => {
         const complete = vi.fn()
             .mockRejectedValueOnce(new Error('NETWORK_ERROR'))

@@ -1,5 +1,5 @@
-import type {DashboardRoute, DashboardSurfaceKind} from '../dashboard-model';
-import {dashboardRouteForSurface} from '../dashboard-model';
+import type {DashboardRoute, DashboardSurfaceKind} from './surface';
+import {dashboardRouteForSurface} from './surface';
 
 export interface DashboardRouteMeta {
     label: string;

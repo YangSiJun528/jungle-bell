@@ -14,7 +14,7 @@ const preferencesSource = readFileSync(
 describe('MealsPage information architecture', () => {
     it('오늘 사진, 주간 급식표, 날짜별 과거 기록을 독립 섹션으로 둔다', () => {
         expect(source).toContain('aria-labelledby="today-meals-title"');
-        expect(source).toContain('<MealPostCard eagerImage=');
+        expect(source).toContain('<TodayMealGrid meals={todayMeals}/>');
         expect(source).toContain('aria-labelledby="weekly-meal-title"');
         expect(source).toContain('<WeeklyMealMenu');
         expect(source).toContain('<MealHistorySection meals={meals.data}/>');
@@ -24,7 +24,7 @@ describe('MealsPage information architecture', () => {
     });
 
     it('오늘 급식에 주간 pinned fallback을 쓰지 않고 Badge나 그라데이션을 사용하지 않는다', () => {
-        expect(source).not.toMatch(/sections\.today[\s\S]{0,200}pinnedMenus/u);
+        expect(source).not.toMatch(/todayMeals[\s\S]{0,200}pinnedMenus/u);
         expect(source).not.toMatch(/\bBadge\b|gradient/u);
     });
 

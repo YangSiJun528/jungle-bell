@@ -4,14 +4,14 @@ import type {
     DashboardLaundrySnapshot,
     DashboardMealPost,
     DashboardMealsSnapshot,
-} from '@/dashboard-api';
-import {laundryCapacity} from '@/dashboard-model';
-import {laundrySituationDataIsReliable} from '@/laundry-situation';
+} from '@/api/dashboard-api';
+import {laundryCapacity} from '@/domain/laundry/capacity';
+import {laundrySituationDataIsReliable} from '@/domain/laundry/freshness';
 import {
     mealPeriodLabel as sharedMealPeriodLabel,
-    selectMealSections,
-} from '@/features/meals/lib/meal-view';
-import {kstDateString} from '@/dday-progress';
+    selectTodayMeals,
+} from '@/domain/meals/today';
+import {kstDateString} from '@/features/home/lib/dday-progress';
 
 export type HomeQueryState = 'pending' | 'error' | 'ready';
 
@@ -19,6 +19,15 @@ export interface LaundryHomeSummary {
     men: number | null;
     women: number | null;
 }
+
+export type HomeMealPeriod = '중식' | '석식';
+
+export interface HomeMealSlot {
+    period: HomeMealPeriod;
+    meal: DashboardMealPost | null;
+}
+
+export type HomeMealSlots = readonly [HomeMealSlot, HomeMealSlot];
 
 type AvailableAttendance = Extract<AttendanceData, {status: 'available'}>;
 
@@ -64,7 +73,27 @@ export function homeTodayMeals(
     reference = new Date(),
 ): DashboardMealPost[] {
     if (!snapshot) return [];
-    return selectMealSections(snapshot, reference).today.slice(0, 4);
+    return selectTodayMeals(snapshot, reference).slice(0, 4);
+}
+
+export function homeTodayMealSlots(
+    snapshot?: DashboardMealsSnapshot,
+    reference = new Date(),
+): HomeMealSlots | null {
+    const mealsByPeriod = new Map<HomeMealPeriod, DashboardMealPost>();
+    for (const meal of homeTodayMeals(snapshot, reference)) {
+        const period = mealPeriodLabel(meal);
+        if ((period === '중식' || period === '석식') && !mealsByPeriod.has(period)) {
+            mealsByPeriod.set(period, meal);
+        }
+    }
+    if (mealsByPeriod.size === 0) return null;
+
+    const slot = (period: HomeMealPeriod): HomeMealSlot => ({
+        period,
+        meal: mealsByPeriod.get(period) ?? null,
+    });
+    return [slot('중식'), slot('석식')];
 }
 
 export function mealPeriodLabel(meal: Pick<DashboardMealPost, 'title'>): string {
