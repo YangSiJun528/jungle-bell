@@ -143,9 +143,11 @@ unset VALUE
 chmod 600 ~/.config/jungle-bell-jobs/*
 ```
 
-환경 파일을 만들고 VAPID subject와 장기 운영할 HTTPS `LAUNDRY_URL`을 입력합니다.
-임시 tunnel URL은 사용하지 않습니다. Gateway URL은 production 고정값을 유지합니다.
-Secret 원문은 환경 파일에 넣지 않습니다.
+production 환경 파일을 만들고 VAPID subject와 장기 운영할 HTTPS
+`LAUNDRY_URL`을 입력합니다. production에서는 임시 tunnel URL을 사용하지 않습니다.
+v2-test가 내부 전용 세탁 서비스에 접근하기 위해 사용하는 `trycloudflare.com`
+tunnel은 의도된 구성이고 배포 결함이 아닙니다. Gateway URL은 production 고정값을
+유지하며 Secret 원문은 환경 파일에 넣지 않습니다.
 
 ```bash
 cd /home/ubuntu/jungle-bell/server
@@ -216,7 +218,8 @@ curl --fail --silent --show-error \
 - `jungle-bell-jobs`가 `Up`
 - 매분 cycle이 시작되고 같은 분에 중복 실행되지 않음
 - 세탁은 매분, 급식 두 source는 5분마다 수집됨
-- `LAUNDRY_URL`이 임시 tunnel이 아닌 운영 HTTPS endpoint를 가리킴
+- production `LAUNDRY_URL`이 임시 tunnel이 아닌 운영 HTTPS endpoint를 가리킴.
+  v2-test의 내부 서비스용 `trycloudflare.com` tunnel은 정상 구성으로 취급함
 - Jobs 로그의 `failed`가 비어 있음
 - D1/R2 gateway에 `401`, `429`, `5xx`가 없음
 - `/api/health`가 `200`
@@ -230,6 +233,8 @@ curl --fail --silent --show-error \
 `https://jungle-bell-api-test.yangsijun5528.workers.dev/internal/jobs/d1`로 고정하고
 같은 test Worker의 `DATA_BUCKET` binding만 사용합니다. 별도 image/container와 secret 디렉터리를
 사용하며 production secret을 복사하거나 mount하지 않습니다.
+내부 전용 세탁 서비스에 접근하는 `LAUNDRY_URL`은 `trycloudflare.com` tunnel을
+사용할 수 있으며, 주소가 실제로 응답하면 임시 도메인이라는 이유만으로 실패 처리하지 않습니다.
 
 ```bash
 test -f apps/jobs-runner/deploy/.env.oci-v2-test || \
