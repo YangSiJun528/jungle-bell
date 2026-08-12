@@ -6,6 +6,7 @@ import {DashboardShell} from './shell';
 import {useHashRoute} from './use-hash-route';
 import {useNotificationsQuery} from './use-dashboard-queries';
 import {DASHBOARD_ROUTE_META} from './routes';
+import {DashboardAccountNotice} from './dashboard-account-notice';
 import {
     mergeSeenMobileNotificationIds,
     readSeenMobileNotificationIds,
@@ -87,6 +88,7 @@ export function DashboardApp() {
             activeRoute={contentRoute}
             navigate={navigate}
             unreadCount={unreadCount}
+            accountNotice={<DashboardAccountNotice/>}
             notificationPanel={{
                 open: notificationPanelOpen,
                 onOpenChange: (open) => {

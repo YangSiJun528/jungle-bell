@@ -2,10 +2,26 @@ import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {CircleAlert, KeyRound, Link2, MonitorCheck, QrCode, RotateCcw, Smartphone, Trash2} from 'lucide-react';
 import {queryKeys, removeDesktopIdentityQueries, useDashboardEnvironment} from '@/app/dashboard-context';
-import {useDesktopConnectionQuery} from '@/app/use-dashboard-queries';
+import {
+    assertLmsAuthenticated,
+    assertServerSessionReady,
+    serverSessionReady,
+    useDashboardAccount,
+} from '@/app/dashboard-account';
+import {useDesktopConnectionQuery, useRefreshAttendanceMutation} from '@/app/use-dashboard-queries';
 import {EmptyState, ErrorState, LoadingState} from '@/components/dashboard/async-state';
 import {PageHeader} from '@/components/dashboard/page-header';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@/components/ui/card';
 import {Input} from '@/components/ui/input';
@@ -13,6 +29,7 @@ import {Label} from '@/components/ui/label';
 import {Tabs, TabsContent, TabsList, TabsTrigger} from '@/components/ui/tabs';
 import type {MobilePairingCreated} from '@/api/dashboard-api';
 import {NotificationSettings} from '@/app/settings/notification-settings';
+import {PersonalAccountGate} from '@/app/personal-account-gate';
 import {
     formatManualPairingCode,
     validManualPairingCode,
@@ -53,19 +70,25 @@ function pairingSessionStorage(): Storage | null {
 
 function DesktopConnections() {
     const {api} = useDashboardEnvironment();
+    const account = useDashboardAccount();
     const client = useQueryClient();
     const [pairing, setPairing] = useState<MobilePairingCreated | null>(null);
+    const [identityResetReason, setIdentityResetReason] = useState<'recovery' | 'reset' | null>(null);
+    const refreshAccount = useRefreshAttendanceMutation();
+    const personalReady = account.status.lmsAuthentication === 'authenticated'
+        && serverSessionReady(account.status);
 
     const connection = useDesktopConnectionQuery();
     const sessions = useQuery({
         queryKey: queryKeys.mobileSessions,
         queryFn: () => api.listMobileSessions(),
+        enabled: personalReady,
         refetchInterval: 60_000,
     });
     const pairingStatus = useQuery({
         queryKey: ['pairing-status', pairing?.pairingId],
         queryFn: () => api.getMobilePairingStatus(pairing!.pairingId),
-        enabled: pairing !== null,
+        enabled: pairing !== null && personalReady,
         refetchInterval: ({state}) => {
             const status = state.data?.status;
             return status === 'completed' || status === 'expired' ? false : 1_000;
@@ -86,6 +109,8 @@ function DesktopConnections() {
 
     const createPairing = useMutation({
         mutationFn: () => {
+            assertLmsAuthenticated(account.status);
+            assertServerSessionReady(account.status);
             if (connection.data?.state !== 'connected'
                 && connection.data?.state !== 'disconnected') {
                 throw new Error('DESKTOP_CONNECTION_REQUIRED');
@@ -99,6 +124,8 @@ function DesktopConnections() {
     });
     const approve = useMutation({
         mutationFn: async () => {
+            assertLmsAuthenticated(account.status);
+            assertServerSessionReady(account.status);
             const claim = pairingStatus.data?.claim;
             if (!pairing || !claim) throw new Error('PAIRING_CLAIM_MISSING');
             await api.approveMobilePairing(pairing.pairingId, claim.claimId);
@@ -106,7 +133,11 @@ function DesktopConnections() {
         onSuccess: () => void pairingStatus.refetch(),
     });
     const revoke = useMutation({
-        mutationFn: (id: string) => api.revokeMobileSession(id),
+        mutationFn: (id: string) => {
+            assertLmsAuthenticated(account.status);
+            assertServerSessionReady(account.status);
+            return api.revokeMobileSession(id);
+        },
         onSuccess: () => void client.invalidateQueries({queryKey: queryKeys.mobileSessions}),
     });
     const reset = useMutation({
@@ -124,6 +155,22 @@ function DesktopConnections() {
     const qr = useMemo(() => pairing ? pairingQrDataUrl(pairing.qrPayload) : null, [pairing]);
     const connectionUi = desktopConnectionUiState(connection.data);
     const activeSessions = sessions.data?.filter((item) => item.status === 'active') ?? [];
+    const serverSessionLabel = account.status.serverSession === 'stored'
+        ? '보안 저장됨'
+        : account.status.serverSession === 'memory-only'
+            ? '현재 실행에서만 유지'
+            : account.status.serverSession === 'recovery-required'
+                ? '복구 필요'
+                : account.status.serverSession === 'missing'
+                    ? '없음'
+                    : '확인 중';
+    const lmsAuthenticationLabel = account.status.lmsAuthentication === 'authenticated'
+        ? '로그인됨'
+        : account.status.lmsAuthentication === 'required'
+            ? '로그인 필요'
+            : account.status.lmsAuthentication === 'unavailable'
+                ? '확인 실패'
+                : '확인 중';
     return (
         <div className="space-y-6">
             {connection.isPending ? <LoadingState/> : connection.isError ? <ErrorState retry={() => void connection.refetch()}/> : (
@@ -133,6 +180,8 @@ function DesktopConnections() {
                     </CardHeader>
                     <CardContent className="grid gap-4 sm:grid-cols-2">
                         <div className="rounded-lg bg-muted/55 p-4 text-sm"><strong>마지막 확인</strong><p className="mt-1 text-muted-foreground">{relativeTimeLabel(connection.data?.lastSeenAt)}</p></div>
+                        <div className="rounded-lg bg-muted/55 p-4 text-sm"><strong>서버 인증 정보</strong><p className="mt-1 text-muted-foreground">{serverSessionLabel}</p></div>
+                        <div className="rounded-lg bg-muted/55 p-4 text-sm"><strong>LMS 계정</strong><p className="mt-1 text-muted-foreground">{lmsAuthenticationLabel}</p></div>
                         {connection.data?.state === 'connected' ? (
                             <p className="text-sm text-muted-foreground sm:col-span-2">연결 상태 · {connectionUi.label}</p>
                         ) : null}
@@ -146,9 +195,7 @@ function DesktopConnections() {
                                         className="mt-3"
                                         size="sm"
                                         variant="outline"
-                                        onClick={() => {
-                                            if (window.confirm('PC 연결 정보를 복구할까요? 모든 모바일을 다시 연결해야 합니다.')) reset.mutate();
-                                        }}
+                                        onClick={() => setIdentityResetReason('recovery')}
                                         disabled={reset.isPending}
                                     >
                                         <RotateCcw className="size-4"/>{reset.isPending ? '복구 중' : 'PC 연결 정보 복구'}
@@ -162,8 +209,15 @@ function DesktopConnections() {
                                 <AlertTitle>{connectionUi.label}</AlertTitle>
                                 <AlertDescription>
                                     <p>{connectionUi.reason}</p>
-                                    <Button className="mt-3" size="sm" variant="outline" onClick={() => void connection.refetch()} disabled={connection.isFetching}>
-                                        {connection.isFetching ? '확인 중' : '연결 상태 다시 확인'}
+                                    <Button
+                                        className="mt-3"
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => refreshAccount.mutate()}
+                                        disabled={refreshAccount.isPending
+                                            || account.status.lmsAuthentication !== 'authenticated'}
+                                    >
+                                        {refreshAccount.isPending ? '연결 중' : '계정 연결'}
                                     </Button>
                                 </AlertDescription>
                             </Alert>
@@ -176,8 +230,8 @@ function DesktopConnections() {
                 <Card>
                     <CardHeader><CardTitle className="flex items-center gap-2"><QrCode className="size-5"/>모바일 연결</CardTitle><CardDescription>설치한 PWA에서 QR 또는 10자리 코드를 입력하세요. 코드는 2분 동안 유효합니다.</CardDescription></CardHeader>
                     <CardContent className="space-y-4">
-                        {!connectionUi.canCreatePairing ? (
-                            <p className="text-sm text-muted-foreground">PC 연결 상태를 확인한 뒤 코드를 만들 수 있습니다.</p>
+                        {!personalReady || !connectionUi.canCreatePairing ? (
+                            <p className="text-sm text-muted-foreground">LMS 로그인과 계정 연결 후 코드를 만들 수 있습니다.</p>
                         ) : !pairing ? (
                             <div className="space-y-3">
                                 <Button onClick={() => createPairing.mutate()} disabled={createPairing.isPending || !connectionUi.canCreatePairing}><Link2 className="size-4"/>{connection.data?.state === 'disconnected' ? 'PC 등록 및 연결 코드 만들기' : '연결 코드 만들기'}</Button>
@@ -199,7 +253,7 @@ function DesktopConnections() {
                                     {pairingStatus.isError ? (
                                         <div className="space-y-2 text-sm text-destructive">
                                             <p>연결 상태를 확인하지 못했습니다.</p>
-                                            <Button variant="outline" size="sm" onClick={() => void pairingStatus.refetch()}>다시 확인</Button>
+                                            <Button variant="outline" size="sm" onClick={() => void pairingStatus.refetch()}>새로고침</Button>
                                         </div>
                                     ) : null}
                                     {approve.isError ? <p className="text-sm text-destructive">이 기기를 승인하지 못했습니다.</p> : null}
@@ -214,7 +268,7 @@ function DesktopConnections() {
                 <Card>
                     <CardHeader><CardTitle className="flex items-center gap-2"><Smartphone className="size-5"/>연결된 모바일</CardTitle></CardHeader>
                     <CardContent className="space-y-3">
-                        {sessions.isPending ? <LoadingState/> : sessions.isError ? <ErrorState retry={() => void sessions.refetch()}/> : activeSessions.length ? activeSessions.map((session) => (
+                        {!personalReady ? <EmptyState title="계정 연결이 필요합니다."/> : sessions.isPending ? <LoadingState/> : sessions.isError ? <ErrorState retry={() => void sessions.refetch()}/> : activeSessions.length ? activeSessions.map((session) => (
                             <div key={session.deviceId} className="flex items-center justify-between gap-3 rounded-lg border p-3">
                                 <div className="min-w-0"><strong className="block truncate text-sm">{session.deviceLabel}</strong><span className="text-xs text-muted-foreground">최근 사용 {dateTimeLabel(session.lastSeenAt)} · {session.pushEnabled ? '푸시 켜짐' : '푸시 꺼짐'}</span></div>
                                 <Button variant="ghost" size="icon-sm" aria-label={`${session.deviceLabel} 연결 해제`} onClick={() => revoke.mutate(session.deviceId)}><Trash2 className="size-4"/></Button>
@@ -227,8 +281,37 @@ function DesktopConnections() {
 
             {connection.data?.state === 'connected' ? <Card className="border-destructive/25">
                 <CardHeader><CardTitle className="text-base">PC 연결 정보 초기화</CardTitle><CardDescription>서버 연결을 새로 만들며 모든 모바일을 다시 연결해야 합니다.</CardDescription></CardHeader>
-                <CardContent className="space-y-3"><Button variant="destructive" onClick={() => { if (window.confirm('PC 연결 정보를 초기화할까요?')) reset.mutate(); }} disabled={reset.isPending}><RotateCcw className="size-4"/>초기화</Button>{reset.isError ? <p className="text-sm text-destructive">PC 연결 정보를 초기화하지 못했습니다.</p> : null}</CardContent>
+                <CardContent className="space-y-3"><Button variant="destructive" onClick={() => setIdentityResetReason('reset')} disabled={reset.isPending}><RotateCcw className="size-4"/>초기화</Button>{reset.isError ? <p className="text-sm text-destructive">PC 연결 정보를 초기화하지 못했습니다.</p> : null}</CardContent>
             </Card> : null}
+
+            <AlertDialog
+                open={identityResetReason !== null}
+                onOpenChange={(open) => {
+                    if (!open) setIdentityResetReason(null);
+                }}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>
+                            {identityResetReason === 'recovery'
+                                ? 'PC 연결 정보를 복구할까요?'
+                                : 'PC 연결 정보를 초기화할까요?'}
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                            이 PC의 서버 인증 정보를 삭제하고 새로 만듭니다. 연결된 모바일은 모두 해제되며 되돌릴 수 없습니다.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>아니요</AlertDialogCancel>
+                        <AlertDialogAction
+                            disabled={reset.isPending}
+                            onClick={() => reset.mutate()}
+                        >
+                            네, PC 초기화
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }
@@ -379,7 +462,9 @@ export function ConnectionsPage() {
                     <TabsTrigger value="devices">기기 연결</TabsTrigger>
                 </TabsList>
                 <TabsContent value="notifications">
-                    <NotificationSettings surface={personalSurface}/>
+                    <PersonalAccountGate>
+                        <NotificationSettings surface={personalSurface}/>
+                    </PersonalAccountGate>
                 </TabsContent>
                 <TabsContent value="services">
                     <ServiceSettings/>

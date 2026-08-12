@@ -1,27 +1,69 @@
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, test, vi} from 'vitest';
-import type {DashboardLaundrySnapshot, LaundryQueueEntry, LaundryWatch} from '@/api/dashboard-api';
+import type {DashboardLaundrySnapshot, LaundryWatch} from '@/api/dashboard-api';
 import {PersonalLaundrySection} from './personal-laundry-section';
 
-const {api, queryKeys} = vi.hoisted(() => ({
+const {api, queryKeys, state} = vi.hoisted(() => ({
     queryKeys: {
         laundryWatches: ['personal', 'laundry-watches'] as const,
-        laundryQueue: ['personal', 'laundry-queue'] as const,
     },
     api: {
         listLaundryWatches: vi.fn(),
         createLaundryWatch: vi.fn(),
         deleteLaundryWatch: vi.fn(),
-        listLaundryQueue: vi.fn(),
-        joinLaundryQueue: vi.fn(),
-        leaveLaundryQueue: vi.fn(),
+        openLmsLogin: vi.fn(),
+    },
+    state: {
+        lmsAuthentication: 'authenticated',
+        attendanceStatus: 'available',
+        serverSession: 'stored',
     },
 }));
 
 vi.mock('@/app/dashboard-context', () => ({
     queryKeys,
-    useDashboardEnvironment: () => ({api}),
+    useDashboardEnvironment: () => ({api, surface: {kind: 'desktop'}}),
+}));
+
+vi.mock('@/app/dashboard-account', () => ({
+    assertLmsAuthenticated: () => {
+        if (state.lmsAuthentication !== 'authenticated') throw new Error('LMS_AUTH_REQUIRED');
+    },
+    assertServerSessionReady: () => {
+        if (state.serverSession !== 'stored' && state.serverSession !== 'memory-only') {
+            throw new Error('SERVER_SESSION_REQUIRED');
+        }
+    },
+    serverSessionReady: () => state.serverSession === 'stored' || state.serverSession === 'memory-only',
+    useDashboardAccount: () => ({
+        status: {
+            serverSession: state.serverSession,
+            lmsAuthentication: state.lmsAuthentication,
+        },
+        connectionQuery: {refetch: vi.fn()},
+    }),
+}));
+
+vi.mock('@/app/use-dashboard-queries', () => ({
+    useAttendanceQuery: () => ({
+        data: {
+            state: 'loaded',
+            attendance: state.attendanceStatus === 'available'
+                ? {
+                    status: 'available',
+                    freshness: 'fresh',
+                    lastSyncedAt: '2026-08-12T00:00:00.000Z',
+                    snapshot: {},
+                }
+                : {status: 'unavailable', freshness: 'missing', lastSyncedAt: null, snapshot: null},
+            devices: [],
+        },
+        isPending: false,
+        isError: false,
+        refetch: vi.fn(),
+    }),
+    useRefreshAttendanceMutation: () => ({isPending: false, mutate: vi.fn()}),
 }));
 
 const machines: DashboardLaundrySnapshot['machines'] = [{
@@ -51,24 +93,18 @@ const activeWatch: LaundryWatch = {
     updatedAtEpochMs: 1,
 };
 
-const waitingQueue: LaundryQueueEntry = {
-    id: 'queue-1',
-    machineId: null,
-    appliance: 'washer',
-    status: 'waiting',
-    joinedAtEpochMs: 1,
-    leftAtEpochMs: null,
-    position: 2,
-};
-
 function renderPersonalLaundry(options: {
     watches?: LaundryWatch[];
-    queue?: LaundryQueueEntry[];
     machines?: DashboardLaundrySnapshot['machines'];
+    lmsAuthentication?: string;
+    attendanceStatus?: string;
+    serverSession?: string;
 } = {}): string {
     const client = new QueryClient();
+    state.lmsAuthentication = options.lmsAuthentication ?? 'authenticated';
+    state.attendanceStatus = options.attendanceStatus ?? 'available';
+    state.serverSession = options.serverSession ?? 'stored';
     client.setQueryData(queryKeys.laundryWatches, options.watches ?? [activeWatch]);
-    client.setQueryData(queryKeys.laundryQueue, options.queue ?? [waitingQueue]);
 
     return renderToStaticMarkup(
         <QueryClientProvider client={client}>
@@ -81,24 +117,42 @@ function renderPersonalLaundry(options: {
 }
 
 describe('PersonalLaundrySection', () => {
-    test('개인 알림과 자율 대기열을 독립된 섹션으로 표시한다', () => {
+    test('출석 계정이 준비되면 개인 세탁 알림만 표시한다', () => {
         const markup = renderPersonalLaundry();
 
         expect(markup).toContain('aria-label="개인 세탁 기능"');
         expect(markup).toContain('내 세탁 알림');
         expect(markup).toContain('1번 · 세탁기');
         expect(markup).toContain('이 동작 종료 10분 전·완료·사용 가능 전환 알림');
-        expect(markup).toContain('자율 대기열');
-        expect(markup).toContain('세탁기 대기 취소');
-        expect(markup).toContain('대기 중 · 현재 2번째');
     });
 
     test('기기 상태가 없어도 개인 제어의 빈 상태를 안전하게 표시한다', () => {
-        const markup = renderPersonalLaundry({watches: [], queue: [], machines: []});
+        const markup = renderPersonalLaundry({watches: [], machines: []});
 
         expect(markup).toContain('기기 상태가 확인되면 알림 대상을 선택할 수 있습니다.');
         expect(markup).toContain('설정된 세탁 알림이 없습니다.');
-        expect(markup).toContain('참여 중인 자율 대기열이 없습니다.');
+    });
+
+    test('LMS 인증 전에는 개인 세탁 영역을 표시하지 않는다', () => {
+        const markup = renderPersonalLaundry({lmsAuthentication: 'required'});
+
+        expect(markup).toBe('');
+    });
+
+    test('출석 snapshot이 없으면 개인 세탁 요청 전에 동기화를 안내한다', () => {
+        const markup = renderPersonalLaundry({attendanceStatus: 'unavailable'});
+
+        expect(markup).toContain('출석 동기화가 필요합니다.');
+        expect(markup).toContain('새로고침');
+        expect(markup).not.toContain('내 세탁 알림');
+    });
+
+    test('서버 credential이 없으면 개인 API 대신 계정 연결을 안내한다', () => {
+        const markup = renderPersonalLaundry({serverSession: 'missing'});
+
+        expect(markup).toContain('계정 연결이 필요합니다.');
+        expect(markup).toContain('계정 연결');
+        expect(markup).not.toContain('내 세탁 알림');
     });
 
     test('알림 대상 선택 영역은 카드 폭 안에서 줄어들고 버튼은 침범하지 않는다', () => {

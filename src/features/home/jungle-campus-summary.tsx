@@ -9,6 +9,7 @@ import {
     X,
 } from 'lucide-react';
 import {useDashboardEnvironment} from '@/app/dashboard-context';
+import {useDashboardAccount} from '@/app/dashboard-account';
 import {
     useAttendanceQuery,
     useRefreshAttendanceMutation,
@@ -118,6 +119,7 @@ export interface JungleCampusSummaryProps {
 
 export function JungleCampusSummary({onRequestInstall}: JungleCampusSummaryProps) {
     const {api, surface} = useDashboardEnvironment();
+    const account = useDashboardAccount();
     const attendance = useAttendanceQuery();
     const refreshAttendance = useRefreshAttendanceMutation();
     const openCampus = useMutation({mutationFn: () => api.openLmsLogin()});
@@ -126,17 +128,82 @@ export function JungleCampusSummary({onRequestInstall}: JungleCampusSummaryProps
         return <PublicCampusContent onRequestInstall={onRequestInstall}/>;
     }
 
-    const dday = selectHomeDday({
-        surface: surface.kind,
-        attendance: attendance.data,
-    });
-    const availableAttendance = homeAttendanceForToday(attendance.data);
+    const desktopAccountReady = surface.kind !== 'desktop'
+        || account.status.lmsAuthentication === 'authenticated'
+            && (account.status.serverSession === 'stored' || account.status.serverSession === 'memory-only');
+    const dday = desktopAccountReady
+        ? selectHomeDday({
+            surface: surface.kind,
+            attendance: attendance.data,
+        })
+        : null;
+    const availableAttendance = desktopAccountReady
+        ? homeAttendanceForToday(attendance.data)
+        : null;
     const attendanceNeedsRefresh = attendance.data?.state === 'loaded'
         && attendance.data.attendance.status === 'available'
         && availableAttendance === null;
 
     let content: React.ReactNode;
-    if (attendance.isPending && !attendance.data) {
+    if (surface.kind === 'desktop' && account.status.lmsAuthentication === 'checking') {
+        content = (
+            <div className="space-y-2" aria-label="LMS 로그인 상태 확인 중">
+                <Skeleton className="h-10 w-full"/>
+                <p className="text-sm text-muted-foreground">LMS 로그인 상태를 확인하고 있습니다.</p>
+            </div>
+        );
+    } else if (surface.kind === 'desktop' && account.status.lmsAuthentication === 'required') {
+        content = (
+            <div className="text-sm leading-6">
+                <p className="font-medium">LMS 로그인이 필요합니다.</p>
+            </div>
+        );
+    } else if (surface.kind === 'desktop' && account.status.lmsAuthentication === 'unavailable') {
+        content = (
+            <div className="text-sm leading-6">
+                <p className="text-destructive">LMS 로그인 상태를 확인하지 못했습니다.</p>
+                <Button
+                    className="mt-2"
+                    disabled={account.connectionQuery.isFetching}
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void account.connectionQuery.refetch()}
+                >
+                    {account.connectionQuery.isFetching ? '새로고침 중' : '새로고침'}
+                </Button>
+            </div>
+        );
+    } else if (surface.kind === 'desktop' && account.status.serverSession === 'checking') {
+        content = (
+            <div className="space-y-2" aria-label="계정 연결 상태 확인 중">
+                <Skeleton className="h-10 w-full"/>
+                <p className="text-sm text-muted-foreground">계정 연결 상태를 확인하고 있습니다.</p>
+            </div>
+        );
+    } else if (surface.kind === 'desktop' && account.status.serverSession === 'recovery-required') {
+        content = (
+            <div className="text-sm leading-6">
+                <p className="text-destructive">계정 복구가 필요합니다.</p>
+                <Button asChild className="mt-2" size="sm" variant="outline">
+                    <a href="#connections">연결 설정</a>
+                </Button>
+            </div>
+        );
+    } else if (surface.kind === 'desktop' && account.status.serverSession === 'missing') {
+        content = (
+            <div className="text-sm leading-6">
+                <p className="font-medium">계정 연결이 필요합니다.</p>
+                <Button
+                    className="mt-2"
+                    disabled={refreshAttendance.isPending}
+                    size="sm"
+                    onClick={() => refreshAttendance.mutate()}
+                >
+                    {refreshAttendance.isPending ? '연결 중' : '계정 연결'}
+                </Button>
+            </div>
+        );
+    } else if (attendance.isPending && !attendance.data) {
         content = (
             <div className="space-y-2" aria-label="출석 정보를 불러오는 중">
                 <Skeleton className="h-10 w-full"/>
@@ -154,7 +221,7 @@ export function JungleCampusSummary({onRequestInstall}: JungleCampusSummaryProps
                     variant="outline"
                     onClick={() => refreshAttendance.mutate()}
                 >
-                    {refreshAttendance.isPending ? '확인 중' : '다시 시도'}
+                    {refreshAttendance.isPending ? '새로고침 중' : '새로고침'}
                 </Button>
             </div>
         );
@@ -180,7 +247,7 @@ export function JungleCampusSummary({onRequestInstall}: JungleCampusSummaryProps
                     variant="outline"
                     onClick={() => refreshAttendance.mutate()}
                 >
-                    {refreshAttendance.isPending ? '확인 중' : '다시 확인'}
+                    {refreshAttendance.isPending ? '새로고침 중' : '새로고침'}
                 </Button>
             </div>
         );
@@ -207,7 +274,11 @@ export function JungleCampusSummary({onRequestInstall}: JungleCampusSummaryProps
                     <>
                         {surface.kind === 'desktop' ? (
                             <Button size="sm" disabled={openCampus.isPending} onClick={() => openCampus.mutate()}>
-                                {openCampus.isPending ? '여는 중' : '정글캠퍼스 열기'} <ExternalLink/>
+                                {openCampus.isPending
+                                    ? '여는 중'
+                                    : account.status.lmsAuthentication === 'required'
+                                        ? 'LMS 로그인'
+                                        : '정글캠퍼스 열기'} <ExternalLink/>
                             </Button>
                         ) : (
                             <Button asChild size="sm">

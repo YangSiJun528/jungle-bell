@@ -2,9 +2,7 @@ import assert from 'node:assert/strict';
 import {test} from 'vitest';
 import {
     hasDuplicateActiveWatch,
-    hasWaitingQueue,
     laundryTargets,
-    queueStatusLabel,
     watchConditionLabel,
 } from './personal-laundry';
 
@@ -43,18 +41,6 @@ test('세탁 기기 target은 실행 중 session과 사용 가능 전환을 구�
     assert.equal(hasDuplicateActiveWatch([activeWatch], targets[0]!), true);
 });
 
-test('watch와 자율 대기열 문구는 알림 조건과 best-effort 순번만 표시한다', () => {
+test('watch 문구는 알림 조건을 표시한다', () => {
     assert.equal(watchConditionLabel(activeWatch), '이 동작 종료 10분 전·완료·사용 가능 전환 알림');
-    const waiting = {
-        id: `jbq_${'b'.repeat(64)}`,
-        machineId: null,
-        appliance: 'washer' as const,
-        status: 'waiting' as const,
-        joinedAtEpochMs: 1,
-        leftAtEpochMs: null,
-        position: 3,
-    };
-    assert.equal(hasWaitingQueue([waiting], 'washer'), true);
-    assert.equal(queueStatusLabel(waiting), '대기 중 · 현재 3번째');
-    assert.doesNotMatch(queueStatusLabel(waiting), /예약|우선권/);
 });

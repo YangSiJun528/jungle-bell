@@ -1,6 +1,5 @@
 import type {
     LaundryApplianceKind,
-    LaundryQueueEntry,
     LaundryWatch,
 } from '@/api/personal-api';
 
@@ -70,13 +69,6 @@ export function hasDuplicateActiveWatch(
             : watch.sessionId === target.sessionId));
 }
 
-export function hasWaitingQueue(
-    entries: readonly LaundryQueueEntry[],
-    appliance: LaundryApplianceKind,
-): boolean {
-    return entries.some((entry) => entry.status === 'waiting' && entry.appliance === appliance);
-}
-
 export function watchConditionLabel(watch: LaundryWatch): string {
     if (watch.sessionId === null) {
         return watch.notifyWhenAvailable ? '다음 사용 가능 전환 알림' : '사용 가능 알림 꺼짐';
@@ -85,13 +77,6 @@ export function watchConditionLabel(watch: LaundryWatch): string {
         ? `이 동작 종료 ${watch.notifyBeforeMinutes}분 전·완료`
         : '이 동작 완료';
     return watch.notifyWhenAvailable ? `${before}·사용 가능 전환 알림` : `${before} 알림`;
-}
-
-export function queueStatusLabel(entry: LaundryQueueEntry): string {
-    if (entry.status === 'waiting') return `대기 중 · 현재 ${entry.position ?? '—'}번째`;
-    if (entry.status === 'claimed') return '차례 알림 전송됨 · 5분 안내';
-    if (entry.status === 'expired') return '차례 안내 시간 만료';
-    return '대기 참여 취소';
 }
 
 export function applianceLabel(appliance: LaundryApplianceKind): string {

@@ -67,7 +67,7 @@ export function LaundryPage() {
                         onClick={() => manualRefresh.mutate()}
                     >
                         <RefreshCw className={cn(refreshing && 'animate-spin')}/>
-                        새로고침
+                        {refreshing ? '새로고침 중' : '새로고침'}
                     </Button>
                 )}
             />

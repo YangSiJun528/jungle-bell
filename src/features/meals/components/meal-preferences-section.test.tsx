@@ -21,7 +21,6 @@ vi.mock('@/app/dashboard-context', () => ({
 
 const preferences: MealPreferences = {
     enabled: true,
-    breakfast: false,
     lunch: true,
     dinner: true,
     updatedAtEpochMs: 1,
@@ -43,7 +42,7 @@ describe('MealPreferencesSection', () => {
 
         expect(markup).toContain('급식 알림');
         expect(markup).toContain('aria-label="급식 알림 사용"');
-        expect(markup).toContain('aria-label="조식"');
+        expect(markup).not.toContain('aria-label="조식"');
         expect(markup).toContain('aria-label="중식"');
         expect(markup).toContain('aria-label="석식"');
         expect(markup).toContain('설정 저장');

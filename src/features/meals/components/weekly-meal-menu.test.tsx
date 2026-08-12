@@ -40,6 +40,25 @@ describe('WeeklyMealMenu', () => {
         expect(markup).toContain('급식표 보러가기');
     });
 
+    it('지난 기록의 선택 주 화면에서는 변경 가능한 원본 게시물 링크를 숨긴다', () => {
+        const meal: DashboardMealPost = {
+            id: 'weekly-history',
+            title: '7월 4주차 식단표',
+            text: '',
+            publishedAt: '2026-07-20T00:00:00.000Z',
+            updatedAt: null,
+            permalink: 'https://pf.kakao.com/example/history',
+            images: [],
+        };
+
+        const markup = renderToStaticMarkup(
+            <WeeklyMealMenu meal={meal} showSourceLink={false} weekKey="2026-07-20"/>,
+        );
+
+        expect(markup).not.toContain('급식표 보러가기');
+        expect(markup).not.toContain(meal.permalink);
+    });
+
     it('서버가 구조화 가능한 텍스트를 제공하면 이미지와 함께 동등 내용을 노출한다', () => {
         const meal: DashboardMealPost = {
             id: 'weekly-text',

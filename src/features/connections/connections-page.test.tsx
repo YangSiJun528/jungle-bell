@@ -31,4 +31,12 @@ describe('ConnectionsPage settings information architecture', () => {
         expect(source).not.toContain('api.updateDesktopSettings(');
         expect(source).not.toContain('로그인 시 자동 시작');
     });
+
+    test('PC 초기화는 명시적인 확인 다이얼로그의 동의 동작에서만 실행한다', () => {
+        expect(source).toContain("setIdentityResetReason('reset')");
+        expect(source).toContain('PC 연결 정보를 초기화할까요?');
+        expect(source).toContain('네, PC 초기화');
+        expect(source).toContain('onClick={() => reset.mutate()}');
+        expect(source).not.toContain('window.confirm');
+    });
 });

@@ -80,7 +80,7 @@ function CompactError({retry}: {retry: () => void}) {
     return (
         <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">
             <p>정보를 불러오지 못했습니다.</p>
-            <Button className="mt-2" size="sm" variant="outline" onClick={retry}>다시 시도</Button>
+            <Button className="mt-2" size="sm" variant="outline" onClick={retry}>새로고침</Button>
         </div>
     );
 }
@@ -111,7 +111,7 @@ export function HomePage({onRequestInstall}: HomePageProps = {}) {
                 actions={surface.kind !== 'public' ? (
                     <Button variant="outline" disabled={refreshHome.isPending} onClick={() => refreshHome.mutate()}>
                         <RefreshCw aria-hidden="true" className={refreshHome.isPending ? 'animate-spin' : ''}/>
-                        {refreshHome.isPending ? '갱신 중' : '전체 새로고침'}
+                        {refreshHome.isPending ? '새로고침 중' : '새로고침'}
                     </Button>
                 ) : undefined}
             />
@@ -130,7 +130,7 @@ export function HomePage({onRequestInstall}: HomePageProps = {}) {
                             variant="outline"
                             onClick={() => refreshHome.mutate()}
                         >
-                            다시 시도
+                            새로고침
                         </Button>
                     </AlertDescription>
                 </Alert>

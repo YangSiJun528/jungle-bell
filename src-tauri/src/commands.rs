@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use serde::Serialize;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tokio::sync::Mutex;
 
 use crate::analytics::{self, Event};
@@ -19,6 +19,8 @@ use crate::notification_service::{NotificationRequest, NotificationService};
 use crate::remote_sync::{self, RemoteSyncService};
 use crate::state::{self, AppState};
 use crate::tray;
+
+const LMS_SESSION_STATE_UPDATED_EVENT: &str = "lms-session-state-updated";
 
 // ── 연결 서비스 대시보드 경계 ───────────────────────────
 
@@ -109,6 +111,7 @@ async fn handle_attendance_snapshot(
         return Err("CHECKER_GENERATION_INVALID".into());
     }
     let now = chrono::Utc::now();
+    let previous_lms_session_state = remote_sync::lms_session_state(&s);
     let checker_actions = checker::record_checker_report(&mut s, status.generation, status.api_error);
     if checker_actions
         .iter()
@@ -146,10 +149,17 @@ async fn handle_attendance_snapshot(
         None => None,
     };
     let remote_snapshot = remote_sync::attendance_snapshot_from_checker(&s, &status, now);
+    let lms_session_state = remote_sync::lms_session_state(&s);
     let verification_url = (!status.needs_login)
         .then(|| s.checker.last_loaded_url.clone())
         .flatten();
     drop(s);
+
+    if lms_session_state != previous_lms_session_state {
+        if let Err(error) = app.emit_to("dashboard", LMS_SESSION_STATE_UPDATED_EVENT, lms_session_state) {
+            log::warn!("[checker] LMS session state event failed: {error}");
+        }
+    }
 
     if let Some(snapshot) = tray_snapshot {
         if let Err(error) = tray::update_tray(&app, &snapshot) {

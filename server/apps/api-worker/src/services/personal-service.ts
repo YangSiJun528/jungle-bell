@@ -1,12 +1,11 @@
 import { RenewalError } from "../domain/session";
 import { randomOpaqueToken } from "@jungle-bell/backend-common/renewal/crypto";
 import type {
-  LaundryAppliance, LaundryQueueEntryRecord, LaundryWatchRecord, MealPreferenceRecord, RenewalStore,
+  LaundryWatchRecord, MealPreferenceRecord, RenewalStore,
 } from "@jungle-bell/backend-common/ports/account-storage";
 import type {
   AttendancePreferences,
   AttendancePreferencesV2,
-  LaundryQueueInput,
   LaundryWatchInput,
   MealPreferencesInput,
 } from "@jungle-bell/backend-common/contracts/personal";
@@ -14,13 +13,10 @@ import type {
 const ACTIVE_WATCH_LIMIT = 64;
 
 export type PersonalControlsStore = Pick<RenewalStore,
-  | "cancelLaundryQueueEntry"
   | "cancelLaundryWatch"
   | "createLaundryWatch"
-  | "enqueueLaundry"
   | "getAttendancePreference"
   | "getMealPreference"
-  | "listLaundryQueue"
   | "listLaundryWatches"
   | "setAttendancePreference"
   | "setLegacyAttendancePreference"
@@ -28,7 +24,7 @@ export type PersonalControlsStore = Pick<RenewalStore,
 >;
 
 export const DEFAULT_MEAL_PREFERENCE: MealPreferenceRecord = {
-  enabled: false, breakfast: false, lunch: false, dinner: false, updatedAtEpochMs: 0,
+  enabled: false, lunch: false, dinner: false, updatedAtEpochMs: 0,
 };
 
 export async function readMealPreference(store: PersonalControlsStore, userId: string): Promise<MealPreferenceRecord> {
@@ -62,33 +58,11 @@ export async function createLaundryWatch(input: {
   return watch;
 }
 
-export async function joinLaundryQueue(input: {
-  store: PersonalControlsStore;
-  userId: string;
-  value: { machineId: string | null; appliance: LaundryAppliance };
-  nowEpochMs: number;
-}): Promise<LaundryQueueEntryRecord> {
-  const entry = await input.store.enqueueLaundry({
-    id: randomOpaqueToken("jbq_"), userId: input.userId, ...input.value, status: "waiting",
-    joinedAtEpochMs: input.nowEpochMs, leftAtEpochMs: null,
-  });
-  if (!entry) throw new RenewalError("LAUNDRY_QUEUE_ALREADY_JOINED", 409);
-  return entry;
-}
-
 export function publicLaundryWatch(watch: LaundryWatchRecord) {
   return {
     id: watch.id, machineId: watch.machineId, appliance: watch.appliance, sessionId: watch.sessionId,
     notifyBeforeMinutes: watch.notifyBeforeMinutes, notifyWhenAvailable: watch.notifyWhenAvailable,
     status: watch.status, createdAtEpochMs: watch.createdAtEpochMs, updatedAtEpochMs: watch.updatedAtEpochMs,
-  };
-}
-
-export function publicLaundryQueueEntry(entry: LaundryQueueEntryRecord) {
-  return {
-    id: entry.id, machineId: entry.machineId, appliance: entry.appliance, status: entry.status,
-    joinedAtEpochMs: entry.joinedAtEpochMs, leftAtEpochMs: entry.leftAtEpochMs,
-    position: entry.status === "waiting" ? entry.position : null,
   };
 }
 
@@ -154,17 +128,6 @@ export class PersonalService {
     return this.store.cancelLaundryWatch(userId, watchId, nowEpochMs);
   }
 
-  async listLaundryQueue(userId: string, nowEpochMs: number) {
-    return (await this.store.listLaundryQueue(userId, nowEpochMs)).map(publicLaundryQueueEntry);
-  }
-
-  async joinLaundryQueue(userId: string, value: LaundryQueueInput, nowEpochMs: number) {
-    return publicLaundryQueueEntry(await joinLaundryQueue({ store: this.store, userId, value, nowEpochMs }));
-  }
-
-  leaveLaundryQueue(userId: string, entryId: string, nowEpochMs: number) {
-    return this.store.cancelLaundryQueueEntry(userId, entryId, nowEpochMs);
-  }
 }
 
 function legacyAttendancePreferences(preference: AttendancePreferencesV2): AttendancePreferences {

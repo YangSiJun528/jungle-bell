@@ -4,12 +4,19 @@ import {
     Bell,
     BellPlus,
     CircleAlert,
-    Clock3,
     LoaderCircle,
+    RefreshCw,
     Smartphone,
     X,
 } from 'lucide-react';
+import {
+    assertLmsAuthenticated,
+    assertServerSessionReady,
+    useDashboardAccount,
+} from '@/app/dashboard-account';
 import {queryKeys, useDashboardEnvironment} from '@/app/dashboard-context';
+import {PersonalAccountGate} from '@/app/personal-account-gate';
+import {useAttendanceQuery, useRefreshAttendanceMutation} from '@/app/use-dashboard-queries';
 import {LoadingState} from '@/components/dashboard/async-state';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Button} from '@/components/ui/button';
@@ -29,7 +36,6 @@ import {
 } from '@/components/ui/select';
 import type {
     DashboardLaundrySnapshot,
-    LaundryQueueEntry,
     LaundryWatch,
 } from '@/api/dashboard-api';
 import {companionAuthenticationRequired} from '@/app/surface';
@@ -37,10 +43,8 @@ import type {PersonalSurface} from '@/api/personal-api';
 import {
     applianceLabel,
     hasDuplicateActiveWatch,
-    hasWaitingQueue,
     laundryTargets,
     machineLabel,
-    queueStatusLabel,
     watchConditionLabel,
     type LaundryTarget,
 } from '@/features/laundry/lib/personal-laundry';
@@ -162,126 +166,52 @@ function LaundryWatchCard({
     );
 }
 
-interface LaundryQueueCardProps {
-    busy: boolean;
-    entries: readonly LaundryQueueEntry[];
-    loading: boolean;
-    onJoin: (appliance: 'washer' | 'dryer') => void;
-    onLeave: (id: string) => void;
-}
-
-function LaundryQueueCard({
-    busy,
-    entries,
-    loading,
-    onJoin,
-    onLeave,
-}: LaundryQueueCardProps) {
-    const visibleEntries = entries.filter((entry) => entry.status !== 'cancelled');
-
-    return (
-        <Card className="min-w-0 gap-4">
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                    <Clock3 className="size-4 text-primary"/>
-                    자율 대기열
-                </CardTitle>
-                <CardDescription>기기 예약이 아닌 사용자 간 순서 안내 기능입니다.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                {loading ? (
-                    <LoadingState label="대기열을 불러오고 있습니다."/>
-                ) : (
-                    <>
-                        <div className="grid gap-2 sm:grid-cols-2">
-                            {(['washer', 'dryer'] as const).map((appliance) => {
-                                const waiting = entries.find((entry) =>
-                                    entry.status === 'waiting' && entry.appliance === appliance);
-                                return waiting ? (
-                                    <Button
-                                        disabled={busy}
-                                        key={appliance}
-                                        variant="outline"
-                                        onClick={() => onLeave(waiting.id)}
-                                    >
-                                        <X/>
-                                        {applianceLabel(appliance)} 대기 취소
-                                    </Button>
-                                ) : (
-                                    <Button
-                                        disabled={busy || hasWaitingQueue(entries, appliance)}
-                                        key={appliance}
-                                        variant="outline"
-                                        onClick={() => onJoin(appliance)}
-                                    >
-                                        <Clock3/>
-                                        {applianceLabel(appliance)} 대기 참여
-                                    </Button>
-                                );
-                            })}
-                        </div>
-                        {visibleEntries.length > 0 ? (
-                            <ul className="divide-y rounded-lg border">
-                                {visibleEntries.map((entry) => (
-                                    <li className="flex items-center justify-between gap-3 p-3" key={entry.id}>
-                                        <span className="text-sm font-medium">{applianceLabel(entry.appliance)}</span>
-                                        <span className="text-xs text-muted-foreground">{queueStatusLabel(entry)}</span>
-                                    </li>
-                                ))}
-                            </ul>
-                        ) : (
-                            <p className="text-sm text-muted-foreground">참여 중인 자율 대기열이 없습니다.</p>
-                        )}
-                    </>
-                )}
-            </CardContent>
-        </Card>
-    );
-}
-
-export function PersonalLaundrySection({
+function AuthenticatedPersonalLaundrySection({
     surface,
     machines,
 }: PersonalLaundrySectionProps) {
     const {api} = useDashboardEnvironment();
+    const account = useDashboardAccount();
+    const attendance = useAttendanceQuery();
+    const refreshAttendance = useRefreshAttendanceMutation();
     const client = useQueryClient();
     const [selectedTargetKey, setSelectedTargetKey] = useState('');
+    const attendanceReady = attendance.data?.state === 'loaded'
+        && attendance.data.attendance.status === 'available';
 
     const watches = useQuery({
         queryKey: queryKeys.laundryWatches,
         queryFn: () => api.listLaundryWatches(surface),
-    });
-    const queue = useQuery({
-        queryKey: queryKeys.laundryQueue,
-        queryFn: () => api.listLaundryQueue(surface),
+        enabled: attendanceReady,
     });
 
     const invalidateWatches = () => client.invalidateQueries({queryKey: queryKeys.laundryWatches});
-    const invalidateQueue = () => client.invalidateQueries({queryKey: queryKeys.laundryQueue});
+    const assertPersonalAccess = () => {
+        if (surface === 'desktop') {
+            assertLmsAuthenticated(account.status);
+            assertServerSessionReady(account.status);
+        }
+        if (!attendanceReady) throw new Error('PERSONAL_ACCOUNT_REQUIRED');
+    };
     const addWatch = useMutation({
-        mutationFn: (target: LaundryTarget) => api.createLaundryWatch(surface, {
-            machineId: target.machineId,
-            appliance: target.appliance,
-            sessionId: target.sessionId,
-            notifyBeforeMinutes: target.sessionId === null ? 0 : 10,
-            notifyWhenAvailable: true,
-        }),
+        mutationFn: (target: LaundryTarget) => {
+            assertPersonalAccess();
+            return api.createLaundryWatch(surface, {
+                machineId: target.machineId,
+                appliance: target.appliance,
+                sessionId: target.sessionId,
+                notifyBeforeMinutes: target.sessionId === null ? 0 : 10,
+                notifyWhenAvailable: true,
+            });
+        },
         onSuccess: invalidateWatches,
     });
     const removeWatch = useMutation({
-        mutationFn: (id: string) => api.deleteLaundryWatch(surface, id),
+        mutationFn: (id: string) => {
+            assertPersonalAccess();
+            return api.deleteLaundryWatch(surface, id);
+        },
         onSuccess: invalidateWatches,
-    });
-    const joinQueue = useMutation({
-        mutationFn: (appliance: 'washer' | 'dryer') => api.joinLaundryQueue(
-            surface,
-            {machineId: null, appliance},
-        ),
-        onSuccess: invalidateQueue,
-    });
-    const leaveQueue = useMutation({
-        mutationFn: (id: string) => api.leaveLaundryQueue(surface, id),
-        onSuccess: invalidateQueue,
     });
 
     const targets = laundryTargets(machines.map((machine) => ({
@@ -293,17 +223,12 @@ export function PersonalLaundrySection({
         ?? targets[0]
         ?? null;
     const activeWatches = (watches.data ?? []).filter((watch) => watch.status === 'active');
-    const personalBusy = addWatch.isPending
-        || removeWatch.isPending
-        || joinQueue.isPending
-        || leaveQueue.isPending;
+    const personalBusy = addWatch.isPending || removeWatch.isPending;
     const personalError = watches.error
-        ?? queue.error
         ?? addWatch.error
-        ?? removeWatch.error
-        ?? joinQueue.error
-        ?? leaveQueue.error;
-    const authRequired = surface === 'companion' && companionAuthenticationRequired(personalError);
+        ?? removeWatch.error;
+    const authRequired = surface === 'companion'
+        && (attendance.data?.state === 'auth-required' || companionAuthenticationRequired(personalError));
 
     if (authRequired) {
         return (
@@ -317,8 +242,46 @@ export function PersonalLaundrySection({
         );
     }
 
+    if (attendance.isPending) {
+        return <LoadingState label="개인 세탁 기능을 준비하고 있습니다."/>;
+    }
+
+    if (attendance.isError) {
+        return (
+            <Alert variant="destructive">
+                <CircleAlert aria-hidden="true"/>
+                <AlertTitle>계정 상태를 확인하지 못했습니다.</AlertTitle>
+                <AlertDescription>
+                    <Button size="sm" variant="outline" onClick={() => void attendance.refetch()}>
+                        새로고침
+                    </Button>
+                </AlertDescription>
+            </Alert>
+        );
+    }
+
+    if (!attendanceReady) {
+        return (
+            <Alert>
+                <RefreshCw aria-hidden="true"/>
+                <AlertTitle>출석 동기화가 필요합니다.</AlertTitle>
+                <AlertDescription>
+                    <Button
+                        className="mt-2"
+                        disabled={refreshAttendance.isPending}
+                        size="sm"
+                        variant="outline"
+                        onClick={() => refreshAttendance.mutate()}
+                    >
+                        {refreshAttendance.isPending ? '새로고침 중' : '새로고침'}
+                    </Button>
+                </AlertDescription>
+            </Alert>
+        );
+    }
+
     return (
-        <section className="grid min-w-0 gap-4 xl:grid-cols-2" aria-label="개인 세탁 기능">
+        <section className="min-w-0 space-y-4" aria-label="개인 세탁 기능">
             <LaundryWatchCard
                 activeWatches={activeWatches}
                 adding={addWatch.isPending}
@@ -331,30 +294,36 @@ export function PersonalLaundrySection({
                 onTargetChange={setSelectedTargetKey}
             />
 
-            <LaundryQueueCard
-                busy={personalBusy}
-                entries={queue.data ?? []}
-                loading={queue.isPending}
-                onJoin={(appliance) => joinQueue.mutate(appliance)}
-                onLeave={(id) => leaveQueue.mutate(id)}
-            />
-
             {personalError ? (
-                <Alert className="xl:col-span-2" variant="destructive">
+                <Alert variant="destructive">
                     <CircleAlert/>
-                    <AlertTitle>개인 세탁 기능을 처리하지 못했습니다.</AlertTitle>
+                    <AlertTitle>세탁 알림을 처리하지 못했습니다.</AlertTitle>
                     <AlertDescription className="gap-3">
-                        <p>연결 상태를 확인한 뒤 다시 시도해 주세요.</p>
+                        <p>잠시 후 다시 시도해 주세요.</p>
                         <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => void Promise.all([watches.refetch(), queue.refetch()])}
+                            onClick={() => void watches.refetch()}
                         >
-                            다시 시도
+                            새로고침
                         </Button>
                     </AlertDescription>
                 </Alert>
             ) : null}
         </section>
+    );
+}
+
+export function PersonalLaundrySection(props: PersonalLaundrySectionProps) {
+    const account = useDashboardAccount();
+
+    if (props.surface === 'desktop' && account.status.lmsAuthentication !== 'authenticated') {
+        return null;
+    }
+
+    return (
+        <PersonalAccountGate>
+            <AuthenticatedPersonalLaundrySection {...props}/>
+        </PersonalAccountGate>
     );
 }

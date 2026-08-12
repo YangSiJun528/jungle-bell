@@ -518,7 +518,7 @@ test('데스크톱 서버 데이터는 단기 세션 HTTP, 네이티브 기능�
         },
     });
 
-    await api.getDesktopConnectionState();
+    assert.equal((await api.getDesktopConnectionState()).credentialPersistent, true);
     await api.getAttendance('desktop');
     await api.refreshPlatformSync();
 
@@ -815,7 +815,6 @@ test('테스트 알림은 PC에서는 OS 알림 IPC, 모바일에서는 인증�
 
 const mealPreferences = {
     enabled: true,
-    breakfast: false,
     lunch: true,
     dinner: true,
     updatedAtEpochMs: 1_785_727_000_000,
@@ -843,16 +842,6 @@ const laundryWatch = {
     status: 'active' as const,
     createdAtEpochMs: 1_785_727_000_000,
     updatedAtEpochMs: 1_785_727_000_001,
-};
-
-const laundryQueueEntry = {
-    id: `jbq_${'b'.repeat(64)}`,
-    machineId: null,
-    appliance: 'dryer' as const,
-    status: 'waiting' as const,
-    joinedAtEpochMs: 1_785_727_000_000,
-    leftAtEpochMs: null,
-    position: 2,
 };
 
 test('데스크톱 서비스 설정은 canonical current-only commands와 exact DTO를 사용한다', async () => {
@@ -913,10 +902,7 @@ test('데스크톱 개인 생활 설정은 desktop-ui HTTP namespace와 단기 b
                 return jsonResponse({watches: [laundryWatch]});
             }
             if (url.endsWith('/laundry-watches')) return jsonResponse(laundryWatch, 201);
-            if (url.endsWith('/laundry-queue') && init?.method === 'GET') {
-                return jsonResponse({entries: [laundryQueueEntry]});
-            }
-            return jsonResponse(laundryQueueEntry, 201);
+            throw new Error(`unexpected URL: ${url}`);
         },
         invokeCommand: async (command) => {
             commands.push(command);
@@ -930,7 +916,7 @@ test('데스크톱 개인 생활 설정은 desktop-ui HTTP namespace와 단기 b
     }), attendancePreferences);
     assert.deepEqual(await api.getMealPreferences('desktop'), mealPreferences);
     assert.deepEqual(await api.updateMealPreferences('desktop', {
-        enabled: true, breakfast: false, lunch: true, dinner: true,
+        enabled: true, lunch: true, dinner: true,
     }), mealPreferences);
     assert.deepEqual(await api.listLaundryWatches('desktop'), [laundryWatch]);
     assert.deepEqual(await api.createLaundryWatch('desktop', {
@@ -938,12 +924,6 @@ test('데스크톱 개인 생활 설정은 desktop-ui HTTP namespace와 단기 b
         notifyBeforeMinutes: 10, notifyWhenAvailable: true,
     }), laundryWatch);
     await api.deleteLaundryWatch('desktop', laundryWatch.id);
-    assert.deepEqual(await api.listLaundryQueue('desktop'), [laundryQueueEntry]);
-    assert.deepEqual(await api.joinLaundryQueue('desktop', {
-        machineId: null, appliance: 'dryer',
-    }), laundryQueueEntry);
-    await api.leaveLaundryQueue('desktop', laundryQueueEntry.id);
-
     assert.deepEqual(commands, ['bootstrap_desktop_http_session']);
     assert.deepEqual(requests.map(({url}) => new URL(url).pathname), [
         '/api/desktop-ui/v2/attendance/preferences',
@@ -953,9 +933,6 @@ test('데스크톱 개인 생활 설정은 desktop-ui HTTP namespace와 단기 b
         '/api/desktop-ui/laundry-watches',
         '/api/desktop-ui/laundry-watches',
         `/api/desktop-ui/laundry-watches/${laundryWatch.id}`,
-        '/api/desktop-ui/laundry-queue',
-        '/api/desktop-ui/laundry-queue',
-        `/api/desktop-ui/laundry-queue/${laundryQueueEntry.id}`,
     ]);
     for (const {init} of requests) {
         assert.equal(init?.credentials, 'omit');
@@ -977,11 +954,6 @@ test('PWA 개인 생활 설정은 mobile canonical API와 HttpOnly cookie만 사
             }
             if (url.endsWith('/laundry-watches')) return jsonResponse(laundryWatch, 201);
             if (url.endsWith(`/laundry-watches/${laundryWatch.id}`)) return new Response(null, {status: 204});
-            if (url.endsWith('/laundry-queue') && init?.method === 'GET') {
-                return jsonResponse({entries: [laundryQueueEntry]});
-            }
-            if (url.endsWith('/laundry-queue')) return jsonResponse(laundryQueueEntry, 201);
-            if (url.endsWith(`/laundry-queue/${laundryQueueEntry.id}`)) return new Response(null, {status: 204});
             throw new Error(`unexpected URL: ${url}`);
         },
         invokeCommand: async () => { throw new Error('unexpected invoke'); },
@@ -993,7 +965,7 @@ test('PWA 개인 생활 설정은 mobile canonical API와 HttpOnly cookie만 사
     });
     await api.getMealPreferences('companion');
     await api.updateMealPreferences('companion', {
-        enabled: false, breakfast: false, lunch: true, dinner: false,
+        enabled: false, lunch: true, dinner: false,
     });
     await api.listLaundryWatches('companion');
     await api.createLaundryWatch('companion', {
@@ -1001,10 +973,6 @@ test('PWA 개인 생활 설정은 mobile canonical API와 HttpOnly cookie만 사
         notifyBeforeMinutes: 0, notifyWhenAvailable: true,
     });
     await api.deleteLaundryWatch('companion', laundryWatch.id);
-    await api.listLaundryQueue('companion');
-    await api.joinLaundryQueue('companion', {machineId: null, appliance: 'dryer'});
-    await api.leaveLaundryQueue('companion', laundryQueueEntry.id);
-
     assert.deepEqual(calls.map(({url, init}) => ({
         path: new URL(url).pathname,
         method: init?.method,
@@ -1021,15 +989,12 @@ test('PWA 개인 생활 설정은 mobile canonical API와 HttpOnly cookie만 사
         {path: '/api/mobile/laundry-watches', method: 'GET', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: null},
         {path: '/api/mobile/laundry-watches', method: 'POST', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: 'application/json'},
         {path: `/api/mobile/laundry-watches/${laundryWatch.id}`, method: 'DELETE', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: null},
-        {path: '/api/mobile/laundry-queue', method: 'GET', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: null},
-        {path: '/api/mobile/laundry-queue', method: 'POST', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: 'application/json'},
-        {path: `/api/mobile/laundry-queue/${laundryQueueEntry.id}`, method: 'DELETE', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: null},
     ]);
     assert.deepEqual(JSON.parse(String(calls[1]?.init?.body)), {
         ...attendancePreferences, evening: false, skipSunday: true,
     });
     assert.deepEqual(JSON.parse(String(calls[3]?.init?.body)), {
-        enabled: false, breakfast: false, lunch: true, dinner: false,
+        enabled: false, lunch: true, dinner: false,
     });
 });
 
@@ -1039,10 +1004,8 @@ test('개인 생활 설정 DTO는 unknown field와 깨진 상태 불변식을 �
         {...mealPreferences, legacyAlias: true},
         {watches: [{...laundryWatch, id: 'watch-1'}]},
         {watches: [{...laundryWatch, updatedAtEpochMs: laundryWatch.createdAtEpochMs - 1}]},
-        {entries: [{...laundryQueueEntry, position: null}]},
-        {entries: [{...laundryQueueEntry, status: 'claimed', leftAtEpochMs: null, position: null}]},
     ];
-    const operations = ['attendance', 'meal', 'watches', 'watches', 'queue', 'queue'] as const;
+    const operations = ['attendance', 'meal', 'watches', 'watches'] as const;
     for (let index = 0; index < invalidResponses.length; index += 1) {
         const api = createDashboardApi({
             fetcher: async () => jsonResponse(invalidResponses[index]),
@@ -1054,9 +1017,7 @@ test('개인 생활 설정 DTO는 unknown field와 깨진 상태 불변식을 �
                 ? api.getAttendancePreferences('companion')
                 : operation === 'meal'
                 ? api.getMealPreferences('companion')
-                : operation === 'watches'
-                    ? api.listLaundryWatches('companion')
-                    : api.listLaundryQueue('companion'),
+                : api.listLaundryWatches('companion'),
             /API_RESPONSE_INVALID/,
         );
     }

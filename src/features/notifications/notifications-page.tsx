@@ -225,7 +225,7 @@ export function NotificationPanelContent({seenMobileIds, onMobileNotificationSee
                         <AlertDescription className="gap-3">
                             <p>마지막으로 확인한 알림을 표시합니다.</p>
                             <Button size="sm" variant="outline" onClick={() => void notifications.refetch()}>
-                                다시 시도
+                                새로고침
                             </Button>
                         </AlertDescription>
                     </Alert>

@@ -88,11 +88,6 @@ export class D1HousekeepingRepository {
       this.db.prepare(`DELETE FROM meal_post_processing WHERE processed_at_epoch_ms < ?
         AND content_sha <> (SELECT post.content_sha FROM meal_post post
           WHERE post.id = meal_post_processing.post_id) AND ${RUN_GUARD_SQL}`).bind(cutoff30, runToken),
-      this.db.prepare(`DELETE FROM laundry_queue_claim WHERE expires_at_epoch_ms < ?
-        AND ${RUN_GUARD_SQL}`).bind(cutoff30, runToken),
-      this.db.prepare(`DELETE FROM laundry_queue_entry WHERE status NOT IN ('waiting', 'claimed')
-        AND left_at_epoch_ms IS NOT NULL AND left_at_epoch_ms < ? AND ${RUN_GUARD_SQL}`)
-        .bind(cutoff30, runToken),
       this.db.prepare(`DELETE FROM laundry_watch WHERE status <> 'active' AND updated_at_epoch_ms < ?
         AND ${RUN_GUARD_SQL}`).bind(cutoff30, runToken),
       this.db.prepare(`DELETE FROM laundry_lifecycle_processing WHERE processed_at_epoch_ms < ? AND

@@ -1,8 +1,8 @@
 //! 시스템 트레이 모듈 — 아이콘, 메뉴, 툴팁, 메뉴 이벤트 처리.
 //!
-//! 트레이 아이콘은 현재 상태에 따라 색상이 변경됨:
+//! 트레이 아이콘은 현재 상태에 따라 표시 방식이 변경됨:
 //!   - 회색 (오프라인/확인 중): checker 미보고, 복구 중, 확인 불가
-//!   - 검정/흰색 (조작 불필요): Idle, Studying, Complete
+//!   - 시스템 단색 (조작 불필요): Idle, Studying, Complete
 //!   - 오렌지 (경고): 로그인 필요
 //!   - 빨간색 (긴급): NeedStart, StartOverdue, NeedEnd
 
@@ -200,9 +200,13 @@ fn icon_for_kind(kind: TrayIconKind, theme: TrayIconTheme) -> Image<'static> {
     Image::from_bytes(icon_bytes_for_kind(kind, theme)).expect("invalid icon PNG")
 }
 
+fn icon_as_template(kind: TrayIconKind) -> bool {
+    cfg!(target_os = "macos") && matches!(kind, TrayIconKind::Normal | TrayIconKind::Complete)
+}
+
 fn apply_tray_icon(app: &tauri::AppHandle, kind: TrayIconKind, theme: TrayIconTheme) -> Result<(), String> {
     if let Some(tray) = app.tray_by_id("main-tray") {
-        tray.set_icon_with_as_template(Some(icon_for_kind(kind, theme)), false)
+        tray.set_icon_with_as_template(Some(icon_for_kind(kind, theme)), icon_as_template(kind))
             .map_err(|error| format!("트레이 아이콘 적용 실패: {error}"))?;
     };
     Ok(())
@@ -610,7 +614,7 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     let _tray = TrayIconBuilder::with_id("main-tray")
         .icon(icon_for_kind(initial_view.icon, TrayIconTheme::Light))
-        .icon_as_template(false)
+        .icon_as_template(icon_as_template(initial_view.icon))
         .tooltip("Jungle Bell - 상태 확인 중...")
         .menu(&tray_menu)
         .show_menu_on_left_click(false)
@@ -908,6 +912,17 @@ mod tests {
     fn 시스템_테마를_트레이_아이콘_테마로_변환한다() {
         assert_eq!(TrayIconTheme::from(tauri::Theme::Light), TrayIconTheme::Light);
         assert_eq!(TrayIconTheme::from(tauri::Theme::Dark), TrayIconTheme::Dark);
+    }
+
+    #[test]
+    fn macos_정상과_완료_상태만_시스템_템플릿_아이콘을_사용한다() {
+        let expected = cfg!(target_os = "macos");
+
+        assert_eq!(icon_as_template(TrayIconKind::Normal), expected);
+        assert_eq!(icon_as_template(TrayIconKind::Complete), expected);
+        assert!(!icon_as_template(TrayIconKind::Offline));
+        assert!(!icon_as_template(TrayIconKind::Warning));
+        assert!(!icon_as_template(TrayIconKind::Alert));
     }
 
     #[test]

@@ -35,10 +35,14 @@ describe("meal publication lifecycle", () => {
     });
   });
 
+  it("does not create notification events for breakfast posts", () => {
+    expect(mealPublicationEvent(post({ title: "2026년 8월 10일 조식" }), NOW)).toBeNull();
+  });
+
   it("fans a fresh subscribed meal out once and uses an event-relative 12-hour TTL", async () => {
     const store = new MemoryRenewalStore();
     store.mealPreferences.set("user-1", {
-      enabled: true, breakfast: false, lunch: true, dinner: false,
+      enabled: true, lunch: true, dinner: false,
       updatedAtEpochMs: Date.parse("2026-08-10T00:00:00.000Z"),
     });
     store.mealPosts.set("post-1", post());
@@ -62,7 +66,7 @@ describe("meal publication lifecycle", () => {
   it("baselines expired history and does not replay it when preferences are enabled later", async () => {
     const store = new MemoryRenewalStore();
     store.mealPreferences.set("user-1", {
-      enabled: true, breakfast: false, lunch: true, dinner: false,
+      enabled: true, lunch: true, dinner: false,
       updatedAtEpochMs: NOW - 60_000,
     });
     store.mealPosts.set("old-post", post({

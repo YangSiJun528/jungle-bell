@@ -2,8 +2,6 @@ import { zValidator } from "@hono/zod-validator";
 import {
   attendancePreferencesSchema,
   attendancePreferencesV2Schema,
-  laundryQueueIdSchema,
-  laundryQueueInputSchema,
   laundryWatchIdSchema,
   laundryWatchInputSchema,
   mealPreferencesInputSchema,
@@ -108,34 +106,6 @@ export function createPersonalRoutes(
         context.req.valid("param").id,
         Date.now(),
       ) ? context.body(null, 204) : context.json({ error: "LAUNDRY_WATCH_NOT_FOUND" }, 404);
-    },
-  );
-  app.get("/laundry-queue", async (context) => {
-    const principal = await principalFor(context);
-    return context.json({ entries: await context.var.services.personal.listLaundryQueue(principal.userId, Date.now()) });
-  });
-  app.post(
-    "/laundry-queue",
-    zValidator("json", laundryQueueInputSchema, validationHook),
-    async (context) => {
-      const principal = await principalFor(context);
-      return context.json(await context.var.services.personal.joinLaundryQueue(
-        principal.userId,
-        context.req.valid("json"),
-        Date.now(),
-      ), 201);
-    },
-  );
-  app.delete(
-    "/laundry-queue/:id",
-    zValidator("param", z.strictObject({ id: laundryQueueIdSchema }), validationHook),
-    async (context) => {
-      const principal = await principalFor(context);
-      return await context.var.services.personal.leaveLaundryQueue(
-        principal.userId,
-        context.req.valid("param").id,
-        Date.now(),
-      ) ? context.body(null, 204) : context.json({ error: "LAUNDRY_QUEUE_ENTRY_NOT_FOUND" }, 404);
     },
   );
   return app;

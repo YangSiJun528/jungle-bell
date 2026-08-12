@@ -79,13 +79,12 @@ export type LegacyAttendancePreferenceRecord = Pick<AttendancePreferenceRecord,
 
 export interface MealPreferenceRecord {
   enabled: boolean;
-  breakfast: boolean;
   lunch: boolean;
   dinner: boolean;
   updatedAtEpochMs: number;
 }
 
-export type MealPeriod = "breakfast" | "lunch" | "dinner";
+export type MealPeriod = "lunch" | "dinner";
 
 export interface MealPublicationRecord {
   id: string;
@@ -114,25 +113,11 @@ export interface LaundryWatchRecord {
   updatedAtEpochMs: number;
 }
 
-export type LaundryQueueStatus = "waiting" | "claimed" | "cancelled" | "expired";
-
-export interface LaundryQueueEntryRecord {
-  id: string;
-  userId: string;
-  machineId: string | null;
-  appliance: LaundryAppliance;
-  status: LaundryQueueStatus;
-  joinedAtEpochMs: number;
-  leftAtEpochMs: number | null;
-  position: number;
-}
-
 export interface LaundryAvailabilityTargetRecord {
   machineId: string;
   appliance: LaundryAppliance;
   sessionId: string | null;
   watches: LaundryWatchRecord[];
-  queueEntry: LaundryQueueEntryRecord | null;
 }
 
 export interface DesktopRecord {
@@ -279,30 +264,18 @@ export interface RenewalStore {
   createLaundryWatch(watch: LaundryWatchRecord, activeLimit: number): Promise<"created" | "duplicate" | "limit">;
   listLaundryWatches(userId: string): Promise<LaundryWatchRecord[]>;
   cancelLaundryWatch(userId: string, id: string, nowEpochMs: number): Promise<boolean>;
-  enqueueLaundry(entry: Omit<LaundryQueueEntryRecord, "position">): Promise<LaundryQueueEntryRecord | null>;
-  listLaundryQueue(userId: string, nowEpochMs: number): Promise<LaundryQueueEntryRecord[]>;
-  cancelLaundryQueueEntry(userId: string, id: string, nowEpochMs: number): Promise<boolean>;
   listPendingLaundryEvents(limit: number): Promise<LaundryEvent[]>;
   listActiveLaundryWatches(input: {
     machineId: string; appliance: LaundryAppliance; sessionId: string | null;
   }): Promise<LaundryWatchRecord[]>;
-  findWaitingLaundryQueueHead(input: {
-    machineId: string; appliance: LaundryAppliance; nowEpochMs: number;
-  }): Promise<LaundryQueueEntryRecord | null>;
   listLaundryAvailabilityTargets(input: {
     appliances: ReadonlyArray<{ machineId: string; appliance: LaundryAppliance; sessionId: string | null }>;
-    nowEpochMs: number;
   }): Promise<LaundryAvailabilityTargetRecord[]>;
-  expireLaundryQueueClaims(nowEpochMs: number): Promise<number>;
   applyLaundryLifecycleEvent(input: {
     eventId: string;
     processingToken: string;
     notifications: PlannedLaundryNotification[];
     completedWatchIds: string[];
-    queueClaim: {
-      entryId: string; userId: string; machineId: string; appliance: LaundryAppliance;
-      claimToken: string; expiresAtEpochMs: number;
-    } | null;
     nowEpochMs: number;
   }): Promise<boolean>;
   listDesktopDevices(userId: string): Promise<DesktopRecord[]>;

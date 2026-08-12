@@ -126,7 +126,7 @@ localhost port와 원격 origin은 허용하지 않습니다.
 - PC에서 실행할 임의 명령
 
 서버에는 정규화된 출석 snapshot, Jungle Bell session hash, 설치·연결 기기 metadata,
-개인 출석·급식 설정, 세탁 watch·자율 대기열, Web Push subscription key, pairing
+개인 출석·급식 설정, 세탁 watch, Web Push subscription key, pairing
 상태와 알림 본문·delivery 이력을 저장합니다. LMS cookie·token과 LMS 페이지 원문은
 저장하지 않습니다.
 

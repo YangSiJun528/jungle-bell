@@ -21,10 +21,11 @@ import {
 import {EmptyState, ErrorState, LoadingState} from '@/components/dashboard/async-state';
 import {PageHeader} from '@/components/dashboard/page-header';
 import {useDashboardEnvironment} from '@/app/dashboard-context';
+import {useDashboardAccount} from '@/app/dashboard-account';
 import {
     useAttendanceQuery,
     useDesktopConnectionQuery,
-    useRefreshAllMutation,
+    useRefreshAttendanceMutation,
 } from '@/app/use-dashboard-queries';
 import {dateTimeLabel, relativeTimeLabel} from '@/lib/format';
 import {
@@ -55,9 +56,10 @@ function AttendanceCheck({label, checked}: {label: string; checked: boolean}) {
 
 export function AttendancePage() {
     const {api, surface} = useDashboardEnvironment();
+    const account = useDashboardAccount();
     const attendance = useAttendanceQuery();
     const desktopConnection = useDesktopConnectionQuery();
-    const refreshAll = useRefreshAllMutation();
+    const refreshAttendance = useRefreshAttendanceMutation();
     const openCampus = useMutation({mutationFn: () => api.openLmsLogin()});
     const detail = attendanceDetailModel({
         isPending: attendance.isPending,
@@ -70,6 +72,18 @@ export function AttendancePage() {
         ? desktopConnection.data?.lmsSessionState
         : primaryDevice?.lmsSessionState;
     const campusNotice = lmsState === 'login-required' ? 'LMS 로그인이 필요합니다.' : null;
+    const desktopLmsChecking = surface.kind === 'desktop'
+        && account.status.lmsAuthentication === 'checking';
+    const desktopLmsRequired = surface.kind === 'desktop'
+        && account.status.lmsAuthentication === 'required';
+    const desktopLmsUnavailable = surface.kind === 'desktop'
+        && account.status.lmsAuthentication === 'unavailable';
+    const desktopSessionChecking = surface.kind === 'desktop'
+        && account.status.serverSession === 'checking';
+    const desktopSessionMissing = surface.kind === 'desktop'
+        && account.status.serverSession === 'missing';
+    const desktopSessionRecovery = surface.kind === 'desktop'
+        && account.status.serverSession === 'recovery-required';
 
     if (surface.kind === 'public') {
         return (
@@ -94,18 +108,43 @@ export function AttendancePage() {
             <PageHeader
                 title="출석"
                 actions={(
-                    <Button variant="outline" disabled={refreshAll.isPending} onClick={() => refreshAll.mutate()}>
-                        <RefreshCw aria-hidden="true" className={refreshAll.isPending ? 'animate-spin' : ''}/>
-                        {refreshAll.isPending ? '동기화 중' : surface.kind === 'desktop' ? '지금 동기화' : '새로고침'}
-                    </Button>
+                    desktopLmsRequired ? (
+                        <Button disabled={openCampus.isPending} onClick={() => openCampus.mutate()}>
+                            <ExternalLink aria-hidden="true"/>
+                            {openCampus.isPending ? '여는 중' : 'LMS 로그인'}
+                        </Button>
+                    ) : (
+                        <Button
+                            variant="outline"
+                            disabled={refreshAttendance.isPending
+                                || desktopLmsChecking
+                                || desktopLmsUnavailable
+                                || desktopSessionChecking
+                                || desktopSessionRecovery}
+                            onClick={() => refreshAttendance.mutate()}
+                        >
+                            <RefreshCw aria-hidden="true" className={refreshAttendance.isPending ? 'animate-spin' : ''}/>
+                            {refreshAttendance.isPending
+                                ? '새로고침 중'
+                                : desktopLmsChecking
+                                    ? '인증 확인 중'
+                                    : desktopSessionMissing
+                                        ? '계정 연결'
+                                        : '새로고침'}
+                        </Button>
+                    )
                 )}
             />
 
-            {refreshAll.isError ? (
+            {refreshAttendance.isError ? (
                 <Alert variant="destructive">
                     <RefreshCw aria-hidden="true"/>
                     <AlertTitle>최신 상태를 동기화하지 못했습니다.</AlertTitle>
-                    <AlertDescription>네트워크와 PC 앱의 실행 상태를 확인한 뒤 다시 시도하세요.</AlertDescription>
+                    <AlertDescription>
+                        {refreshAttendance.error.message === 'LMS_AUTH_REQUIRED'
+                            ? 'LMS 로그인 후 다시 시도하세요.'
+                            : '네트워크와 PC 앱의 실행 상태를 확인한 뒤 다시 시도하세요.'}
+                    </AlertDescription>
                 </Alert>
             ) : null}
 
@@ -115,7 +154,22 @@ export function AttendancePage() {
                         <CardTitle>오늘 출석</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        {detail.kind === 'loading' ? (
+                        {desktopLmsChecking ? (
+                            <LoadingState label="LMS 로그인 상태를 확인하고 있습니다."/>
+                        ) : desktopLmsRequired ? (
+                            <EmptyState title="LMS 로그인이 필요합니다."/>
+                        ) : desktopLmsUnavailable ? (
+                            <ErrorState
+                                title="LMS 로그인 상태를 확인하지 못했습니다."
+                                retry={() => void account.connectionQuery.refetch()}
+                            />
+                        ) : desktopSessionChecking ? (
+                            <LoadingState label="계정 연결 상태를 확인하고 있습니다."/>
+                        ) : desktopSessionRecovery ? (
+                            <EmptyState title="계정 복구가 필요합니다." description="연결 설정에서 PC 연결 정보를 복구하세요."/>
+                        ) : desktopSessionMissing ? (
+                            <EmptyState title="계정 연결이 필요합니다." description="계정 연결을 누르면 출석 동기화를 시작합니다."/>
+                        ) : detail.kind === 'loading' ? (
                             <LoadingState label="출석 정보를 확인하고 있습니다."/>
                         ) : detail.kind === 'error' ? (
                             <ErrorState retry={() => void attendance.refetch()}/>
@@ -138,7 +192,7 @@ export function AttendancePage() {
                                     <Alert className="border-amber-500/25 bg-amber-500/10 text-amber-900 dark:text-amber-200">
                                         <RefreshCw aria-hidden="true"/>
                                         <AlertTitle>마지막 확인 이후 시간이 지났습니다.</AlertTitle>
-                                        <AlertDescription className="text-current/80">PC 앱을 실행하고 지금 동기화를 눌러 다시 확인하세요.</AlertDescription>
+                                        <AlertDescription className="text-current/80">PC 앱을 실행하고 새로고침을 눌러 확인하세요.</AlertDescription>
                                     </Alert>
                                 ) : null}
                             </div>

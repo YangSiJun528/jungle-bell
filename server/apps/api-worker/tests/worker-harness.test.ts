@@ -94,7 +94,7 @@ describe("API Worker in the official Wrangler test harness", () => {
     })).status).toBe(401);
   });
 
-  it("atomically claims the FIFO turn, inserts its notification, and fans out to the active desktop", async () => {
+  it("atomically completes an availability watch, inserts its notification, and fans out to the active desktop", async () => {
     const worker = harness.getWorker<ApiBindings>();
     const environment = await worker.getEnv();
     const now = Date.parse("2026-08-10T03:00:00.000Z");
@@ -108,9 +108,11 @@ describe("API Worker in the official Wrangler test harness", () => {
         created_at_epoch_ms, expires_at_epoch_ms, last_seen_at_epoch_ms, revoked_at_epoch_ms, source_pairing_id)
         VALUES ('desktop-session', 'user-1', 'desktop-1', 'desktop', NULL, ?, ?, ?, ?, NULL, NULL)`)
         .bind("4".repeat(64), now, now + 60_000, now),
-      environment.DB.prepare(`INSERT INTO laundry_queue_entry
-        (id, user_id, machine_id, appliance, status, joined_at_epoch_ms, left_at_epoch_ms)
-        VALUES ('queue-1', 'user-1', NULL, 'washer', 'waiting', ?, NULL)`).bind(now - 1_000),
+      environment.DB.prepare(`INSERT INTO laundry_watch
+        (id, user_id, machine_id, appliance, session_id, notify_before_minutes,
+          notify_when_available, status, created_at_epoch_ms, updated_at_epoch_ms)
+        VALUES ('watch-1', 'user-1', 'tower-3', 'washer', NULL, 0, 1, 'active', ?, ?)`)
+        .bind(now - 1_000, now - 1_000),
       environment.DB.prepare(`INSERT INTO laundry_event (id, machine_id, appliance, session_id, type,
         previous_observed_at, observed_at, eta_delta_minutes, previous_state, current_state, detail_json)
         VALUES ('event-1', 'tower-3', 'washer', NULL, 'STATE_CHANGED', ?, ?, NULL, 'RUNNING', 'POWER_OFF', '{}')`)
@@ -137,11 +139,11 @@ describe("API Worker in the official Wrangler test harness", () => {
     };
 
     await expect(runLaundryLifecycle(store, projectedStorage, now)).resolves.toEqual({
-      processedEvents: 1, notifications: 1, queueClaims: 1,
+      processedEvents: 1, notifications: 1,
     });
     await expect(environment.DB.prepare(
-      "SELECT status, left_at_epoch_ms FROM laundry_queue_entry WHERE id = 'queue-1'",
-    ).first()).resolves.toEqual({ status: "claimed", left_at_epoch_ms: now });
+      "SELECT status, updated_at_epoch_ms FROM laundry_watch WHERE id = 'watch-1'",
+    ).first()).resolves.toEqual({ status: "completed", updated_at_epoch_ms: now });
     const notification = await environment.DB.prepare(
       "SELECT id, user_id, source_event_id FROM notification WHERE user_id = 'user-1'",
     ).first<{ id: string; user_id: string; source_event_id: string }>();
@@ -156,7 +158,7 @@ describe("API Worker in the official Wrangler test harness", () => {
       "SELECT source_id FROM laundry_lifecycle_processing WHERE source_id = 'event-1'",
     ).all()).resolves.toMatchObject({ results: [{ source_id: "event-1" }] });
     await expect(runLaundryLifecycle(store, projectedStorage, now + 1)).resolves.toEqual({
-      processedEvents: 0, notifications: 0, queueClaims: 0,
+      processedEvents: 0, notifications: 0,
     });
   });
 });
