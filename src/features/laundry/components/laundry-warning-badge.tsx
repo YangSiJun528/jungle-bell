@@ -1,4 +1,3 @@
-import {TriangleAlert} from 'lucide-react';
 import {Badge} from '@/components/ui/badge';
 import {LAUNDRY_WARNING_CLASS_NAME} from '../lib/laundry-warning';
 
@@ -10,7 +9,6 @@ export function LaundryWarningBadge() {
             data-laundry-warning="true"
             variant="outline"
         >
-            <TriangleAlert aria-hidden="true"/>
             경고
         </Badge>
     );

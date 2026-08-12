@@ -36,9 +36,10 @@ LMS access cookie와 refresh cookie는 Tauri의 전용 LMS WebView profile에만
 검증 가능한 LMS 상태와 정규화한 출석 snapshot만 전달합니다.
 
 PC가 서버에 사용하는 자격 증명은 LMS 자격 증명과 무관한 임의의 Jungle Bell
-desktop credential입니다. 서버는 원문 대신 hash만 저장하고 PC는 원문을 운영체제
-credential vault에 보관합니다. 과거 앱 전용 파일은 검증 후 vault로 한 번 이전하고
-제거합니다.
+desktop credential입니다. 서버는 원문 대신 hash만 저장합니다. Windows는 원문을
+Credential Manager에 보관하고, macOS·Linux는 앱 전용 디렉터리의 mode 0600 파일에
+원자적으로 저장합니다. 현재 macOS 배포는 Apple 서명이 없으므로 Keychain을 사용하면
+앱을 다시 빌드할 때마다 인증을 반복하게 됩니다.
 
 React 대시보드는 장기 desktop credential을 받지 않습니다. Rust가 장기 credential로
 7분짜리 opaque desktop-ui session을 발급받아 호출한 WebView의 메모리에만 전달합니다.

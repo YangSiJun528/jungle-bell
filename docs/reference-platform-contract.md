@@ -72,7 +72,7 @@ browser session이 반드시 설치 PWA에서만 사용됐다고 서버가 보�
 | Push | `GET /api/push/vapid-public-key`, `PUT /api/push/subscriptions`, `DELETE /api/push/subscriptions/:id` |
 | OCI 내부 | `POST /internal/jobs/d1`, `GET\|HEAD\|PUT /internal/jobs/r2?key=...` |
 
-Rust background service의 `/api/desktop/*` endpoint는 OS credential vault에 보관한
+Rust background service의 `/api/desktop/*` endpoint는 플랫폼별 보호 저장소에 보관한
 장기 `jbd_…` bearer를 사용합니다. 대시보드 WebView는 이 credential을 받지 않고,
 Rust가 발급받아 메모리로 전달한 7분짜리 `jbui_…` bearer로
 `/api/desktop-ui/*`만 호출합니다. UI session은 발급한 WebView origin과 부모
@@ -85,7 +85,7 @@ endpoint는 JavaScript가 읽을 수 없는 Strict HttpOnly cookie를 사용하�
 | 항목 | 계약 |
 | --- | --- |
 | PC credential | 서버 발급 후 최대 90일, 만료 7일 전부터 인증된 rotate |
-| PC 저장 | 운영체제 credential vault. 과거 앱 전용 credential 파일은 1회 이전 후 제거 |
+| PC 저장 | Windows Credential Manager. macOS·Linux는 앱 전용 디렉터리의 mode 0600 원자적 파일 |
 | PC WebView session | 7분 절대 만료, 메모리 전용, 부모 desktop session당 하나, exact origin binding |
 | pairing | QR 또는 10자리 코드, 2분 유효, PC의 명시적 승인 필요 |
 | pending claim | claim receipt는 2분 Strict HttpOnly cookie에만 저장 |
@@ -144,8 +144,9 @@ person profile 생성을 끕니다. 허용 항목은 앱 실행, 서비스 설�
   `database/migrations/`의 검토된 비파괴 SQL을 백업 후 한 번만 적용합니다.
 - 출석 알림 확장 배포 중 기존 클라이언트는 4필드 attendance preference 경로를
   계속 사용하고, 신규 클라이언트만 명시적인 v2 경로를 사용합니다.
-- 과거 앱 전용 desktop credential 파일은 검증 후 OS credential vault로 1회
-  이전합니다. 모바일 cookie와 pairing은 재사용하지 않습니다.
+- Apple 서명이 없는 macOS 빌드는 바이너리 갱신마다 Keychain 인증을 반복시키지
+  않도록 앱 전용 mode 0600 저장소를 사용합니다. 모바일 cookie와 pairing은
+  재사용하지 않습니다.
 - 과거 로컬 설정 파일을 읽거나 자동 변환하지 않습니다.
 - 과거 `/pair`, `/app`, `/v1` URL entry와 alias를 제공하지 않습니다.
 - test Worker의 `DB`·`DATA_BUCKET` binding은 운영 리소스와 분리해야 합니다.

@@ -1,3 +1,5 @@
+const DEFAULT_DEV_API_ORIGIN: &str = "https://jungle-bell-api-test.yangsijun5528.workers.dev";
+
 pub(crate) fn normalize_base_url(value: &str, allow_local_http: bool) -> Result<String, String> {
     let value = value.trim().trim_end_matches('/');
     if value.is_empty() {
@@ -27,7 +29,12 @@ fn configured_base_url() -> &'static str {
     option_env!("JUNGLE_BELL_DATA_API_URL").unwrap_or("https://data-api.test")
 }
 
-#[cfg(not(test))]
+#[cfg(all(not(test), debug_assertions))]
+fn configured_base_url() -> &'static str {
+    option_env!("JUNGLE_BELL_DATA_API_URL").unwrap_or(DEFAULT_DEV_API_ORIGIN)
+}
+
+#[cfg(all(not(test), not(debug_assertions)))]
 fn configured_base_url() -> &'static str {
     option_env!("JUNGLE_BELL_DATA_API_URL")
         .unwrap_or_else(|| panic!("JUNGLE_BELL_DATA_API_URL must be set when building jungle-bell"))
@@ -80,5 +87,13 @@ mod tests {
     #[test]
     fn tests_have_a_deterministic_origin_without_build_environment() {
         assert!(base_url().starts_with("https://"));
+    }
+
+    #[test]
+    fn debug_builds_default_to_the_v2_test_worker() {
+        assert_eq!(
+            DEFAULT_DEV_API_ORIGIN,
+            "https://jungle-bell-api-test.yangsijun5528.workers.dev"
+        );
     }
 }

@@ -28,6 +28,8 @@ import {
     useRefreshAttendanceMutation,
 } from '@/app/use-dashboard-queries';
 import {dateTimeLabel, relativeTimeLabel} from '@/lib/format';
+import {DdayCard} from '@/components/dashboard/dday-card';
+import {selectDdayView} from '@/domain/attendance/dday-view';
 import {
     attendanceDetailModel,
     deviceStatus,
@@ -102,6 +104,11 @@ export function AttendancePage() {
             </div>
         );
     }
+
+    const dday = selectDdayView({
+        surface: surface.kind,
+        attendance: attendance.data,
+    });
 
     return (
         <div className="space-y-6">
@@ -234,6 +241,8 @@ export function AttendancePage() {
                     </CardFooter>
                 </Card>
             </section>
+
+            {dday ? <DdayCard view={dday}/> : null}
 
             {devices.length > 0 ? (
                 <Card>

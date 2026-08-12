@@ -24,8 +24,8 @@ import {
 import {Skeleton} from '@/components/ui/skeleton';
 import type {AttendanceSnapshot} from '@/api/dashboard-api';
 import {dateTimeLabel} from '@/lib/format';
-import {HomeDdayCard} from './components/home-dday-card';
-import {selectHomeDday} from './lib/home-dday';
+import {DdayCard} from '@/components/dashboard/dday-card';
+import {selectDdayView} from '@/domain/attendance/dday-view';
 import {homeAttendanceForToday} from './home-view-model';
 
 const CAMPUS_URL = 'https://jungle-lms.krafton.com/check-in';
@@ -132,7 +132,7 @@ export function JungleCampusSummary({onRequestInstall}: JungleCampusSummaryProps
         || account.status.lmsAuthentication === 'authenticated'
             && (account.status.serverSession === 'stored' || account.status.serverSession === 'memory-only');
     const dday = desktopAccountReady
-        ? selectHomeDday({
+        ? selectDdayView({
             surface: surface.kind,
             attendance: attendance.data,
         })
@@ -294,7 +294,7 @@ export function JungleCampusSummary({onRequestInstall}: JungleCampusSummaryProps
             >
                 {content}
             </CampusCardFrame>
-            {dday ? <HomeDdayCard view={dday}/> : null}
+            {dday ? <DdayCard view={dday}/> : null}
         </div>
     );
 }

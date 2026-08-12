@@ -10,5 +10,5 @@ export function desktopTestNotificationMessage(result: DesktopTestNotificationRe
     if (result.mobileQueued !== null && result.mobileQueued > 0) {
         return `모바일 ${result.mobileQueued}대에는 보냈지만 PC 운영체제 알림은 실패했습니다.`;
     }
-    return '알림함에는 추가했지만 운영체제 알림을 표시하지 못했습니다. 알림 권한을 확인해 주세요.';
+    return '알림함에는 추가했지만 운영체제 알림을 표시하지 못했습니다. 알림 권한을 확인하세요.';
 }

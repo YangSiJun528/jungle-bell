@@ -26,10 +26,10 @@ export function capacityCards(
             label: access === 'men' ? '남성 가능' : '여성 가능',
             status: count === null ? 'checking' : count > 0 ? 'available' : 'full',
             description: count === null
-                ? '최신 기기 상태를 확인하고 있어요.'
+                ? '최신 기기 상태 확인 중'
                 : count > 0
-                    ? `건조 여유를 포함해 지금 ${count}회 시작할 수 있어요.`
-                    : '현재는 건조기 여유가 부족해요.',
+                    ? `건조 여유 포함 · ${count}회 시작 가능`
+                    : '건조기 여유 부족',
         };
     });
 }

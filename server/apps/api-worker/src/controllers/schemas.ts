@@ -20,7 +20,10 @@ export const mealHistoryQuerySchema = z.object({
   before: z.string().max(MEAL_HISTORY_CURSOR_MAX_LENGTH)
     .refine((value) => decodeMealHistoryCursor(value) !== null)
     .optional(),
+  month: z.string().regex(/^\d{4}-(?:0[1-9]|1[0-2])$/u).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(30),
+}).refine((value) => !(value.before && value.month), {
+  message: "Meal history cursor and month cannot be combined",
 });
 export const assetParamSchema = z.object({ asset: z.string().regex(/^[a-f0-9]{64}\.[a-z0-9]{1,8}$/) });
 export const installationIdSchema = z.string().min(8).max(128).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]+$/u);

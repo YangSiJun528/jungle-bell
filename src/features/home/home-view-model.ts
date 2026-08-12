@@ -11,7 +11,7 @@ import {
     mealPeriodLabel as sharedMealPeriodLabel,
     selectTodayMeals,
 } from '@/domain/meals/today';
-import {kstDateString} from '@/features/home/lib/dday-progress';
+import {kstDateString} from '@/domain/attendance/dday-progress';
 
 export type HomeQueryState = 'pending' | 'error' | 'ready';
 
@@ -61,6 +61,7 @@ export function homeLaundrySummary(input: {
             hasData: snapshot.machines.length > 0,
             error: null,
             sourceFreshness: snapshot.quality.sourceFreshness,
+            expectedRefreshIntervalSeconds: snapshot.quality.expectedRefreshIntervalSeconds,
             snapshotSavedAt: savedAt,
             nowMs: input.nowMs ?? Date.now(),
         });

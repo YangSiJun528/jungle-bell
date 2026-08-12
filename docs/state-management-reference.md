@@ -6,9 +6,9 @@
 | --- | --- | --- | --- |
 | LMS cookie·SSO session | 전용 `checker` WebView profile | PC의 LMS 연결 상태 | same-origin collector → tagged checker IPC |
 | checker·출석 runtime | Rust `AppState` | 트레이 아이콘·서버 출석 snapshot | checker IPC·desktop HTTP API |
-| 서버용 PC credential | 운영체제 credential vault + `RemoteSyncService` | PC 연결 상태 | 장기 desktop HTTP API |
+| 서버용 PC credential | Windows Credential Manager 또는 mode 0600 앱 파일 + `RemoteSyncService` | PC 연결 상태 | 장기 desktop HTTP API |
 | WebView HTTP session | React 메모리 + 서버 D1 hash | PC의 서버 소유 개인 화면 | bootstrap IPC → `/api/desktop-ui` |
-| PC 서비스 설정 | Rust `DesktopSettingsService` | 자동 시작·업데이트·사용 통계·디버그 | exact get/update IPC |
+| PC 서비스 설정 | Rust `DesktopSettingsService` | LMS 기수 선택·자동 시작·업데이트·사용 통계·디버그 | exact get/update IPC |
 | 공개 세탁·급식 cache | React Query | 대시보드 생활 정보 | public HTTP API |
 | PC 알림함 | `NotificationInboxService` | 대시보드 unread projection | snapshot command + inbox event |
 | 연결·개인 설정·알림 delivery | 서버 D1 | PC/PWA 개인 화면 | short desktop-ui bearer 또는 mobile HttpOnly cookie |

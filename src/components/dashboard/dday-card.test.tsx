@@ -1,25 +1,25 @@
 import {createElement} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, it} from 'vitest';
-import {buildDdayProgress} from '@/features/home/lib/dday-progress';
-import type {HomeDdayView} from '@/features/home/lib/home-dday';
-import {HomeDdayCard} from './home-dday-card';
+import {buildDdayProgress} from '@/domain/attendance/dday-progress';
+import type {DdayView} from '@/domain/attendance/dday-view';
+import {DdayCard} from './dday-card';
 
 const period = {startDate: '2026-01-29', endDate: '2026-03-02'};
 const progress = buildDdayProgress(period, '2026-02-02');
 if (!progress) throw new Error('TEST_DDAY_PROGRESS_REQUIRED');
 
-const view: HomeDdayView = {
+const view: DdayView = {
     text: '수료까지 D-28',
     period,
     progress,
 };
 
-describe('HomeDdayCard', () => {
+describe('DdayCard', () => {
     it('renders a collapsed full-card trigger with the compact progress summary', () => {
-        const markup = renderToStaticMarkup(createElement(HomeDdayCard, {view}));
+        const markup = renderToStaticMarkup(createElement(DdayCard, {view}));
 
-        expect(markup).toContain('data-home-dday-card="true"');
+        expect(markup).toContain('data-dday-card="true"');
         expect(markup).toContain('수료까지 D-28');
         expect(markup).toContain('12.1%');
         expect(markup).toMatch(/완료 <strong[^>]*>4<\/strong>일/u);
@@ -33,7 +33,7 @@ describe('HomeDdayCard', () => {
     });
 
     it('renders the month-by-31-day matrix and accessible aggregate when expanded', () => {
-        const markup = renderToStaticMarkup(createElement(HomeDdayCard, {view, defaultOpen: true}));
+        const markup = renderToStaticMarkup(createElement(DdayCard, {view, defaultOpen: true}));
 
         expect(markup).toContain('aria-expanded="true"');
         expect(markup).toContain('과정 달력 접기');
@@ -55,7 +55,7 @@ describe('HomeDdayCard', () => {
     });
 
     it('keeps a text-only state visible but disables expansion', () => {
-        const markup = renderToStaticMarkup(createElement(HomeDdayCard, {
+        const markup = renderToStaticMarkup(createElement(DdayCard, {
             view: {text: '수료일 정보 없음', period: null, progress: null},
         }));
 

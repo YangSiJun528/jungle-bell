@@ -59,12 +59,16 @@ impl RemoteSyncService {
         run_blocking_initialization(move || {
             let identity =
                 secure_credential::load_or_create_installation_identity(&app_data_dir).map_err(str::to_owned)?;
-            let credential_store: Arc<dyn CredentialStore> =
-                Arc::new(KeyringCredentialStore::new(&app_data_dir).map_err(str::to_owned)?);
+            let credential_store =
+                secure_credential::platform_credential_store(&app_data_dir).map_err(str::to_owned)?;
             let api = RemoteApi::new(&api_base_url).map_err(|error| error.code().to_owned())?;
             let service = Self::with_store(api, app_data_dir, identity.id, identity.newly_created, credential_store)
                 .map_err(|error| error.code().to_owned())?;
-            log::info!("[connected-service] server credential uses the operating system credential vault");
+            let storage = match secure_credential::platform_credential_store_kind() {
+                PlatformCredentialStoreKind::PrivateFile => "private app storage",
+                PlatformCredentialStoreKind::OperatingSystemVault => "the operating system credential vault",
+            };
+            log::info!("[connected-service] server credential uses {storage}");
             Ok(service)
         })
         .await

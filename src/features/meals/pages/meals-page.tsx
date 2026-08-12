@@ -47,18 +47,15 @@ export function MealsPage() {
             />
 
             {meals.isPending && !meals.data ? (
-                <LoadingState label="급식 정보를 확인하고 있습니다."/>
+                <LoadingState label="급식 정보 확인 중"/>
             ) : meals.isError && !meals.data ? (
-                <ErrorState
-                    description="급식 게시 정보를 불러오지 못했습니다."
-                    retry={() => manualRefresh.mutate()}
-                />
+                <ErrorState title="급식 정보를 불러오지 못했습니다." retry={() => manualRefresh.mutate()}/>
             ) : meals.data ? (
                 <>
                     {refreshFailed ? (
                         <Alert variant="destructive">
                             <CircleAlert/>
-                            <AlertTitle>최신 식단으로 갱신하지 못했습니다.</AlertTitle>
+                            <AlertTitle>최신 식단을 불러오지 못했습니다.</AlertTitle>
                             <AlertDescription>마지막으로 확인한 게시 정보를 표시합니다.</AlertDescription>
                         </Alert>
                     ) : null}
@@ -85,8 +82,8 @@ export function MealsPage() {
                             <WeeklyMealMenu meal={weeklyMeal} weekKey={weeklyKey}/>
                         ) : (
                             <EmptyState
-                                title="이번 주 급식표를 기다리고 있습니다."
-                                description="새 주간 급식표가 확인되면 이곳에 표시됩니다."
+                                title="이번 주 급식표 없음"
+                                description="새 급식표가 확인되면 표시합니다."
                             />
                         )}
                     </section>

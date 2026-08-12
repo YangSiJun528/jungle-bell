@@ -1,5 +1,5 @@
 import {useMemo, useState} from 'react';
-import {useInfiniteQuery} from '@tanstack/react-query';
+import {useQuery} from '@tanstack/react-query';
 import {CalendarDays} from 'lucide-react';
 import {useDashboardEnvironment} from '@/app/dashboard-context';
 import {EmptyState} from '@/components/dashboard/async-state';
@@ -7,7 +7,6 @@ import {Card} from '@/components/ui/card';
 import type {DashboardMealPost, DashboardMealsSnapshot} from '@/api/dashboard-api';
 import {kstDateKey} from '@/domain/meals/today';
 import {MealHistoryCalendar} from './meal-history-calendar';
-import {MealHistoryLoadMore} from './meal-history-load-more';
 import {MealPostCard} from './meal-post-card';
 import {WeeklyMealMenu} from './weekly-meal-menu';
 import {
@@ -19,23 +18,31 @@ import {
 export function MealHistorySection({meals}: {meals: DashboardMealsSnapshot}) {
     const {api} = useDashboardEnvironment();
     const [selectedHistoryDate, setSelectedHistoryDate] = useState('');
-    const historyCursor = meals.data.historyNextBefore;
-    const olderHistory = useInfiniteQuery({
-        queryKey: ['campus', 'meals', 'history', historyCursor],
-        queryFn: ({pageParam}) => api.getPublicMealHistory(pageParam, 30),
-        initialPageParam: historyCursor,
-        getNextPageParam: (page) => page.nextBefore ?? undefined,
-        enabled: false,
+    const initialHistory = useMemo(
+        () => [...meals.data.dailyMenus, ...meals.data.recentMenus],
+        [meals.data.dailyMenus, meals.data.recentMenus],
+    );
+    const initialHistoryByDate = useMemo(() => mealsGroupedByDate(initialHistory), [initialHistory]);
+    const initialDates = useMemo(
+        () => [...initialHistoryByDate.keys()].sort((left, right) => right.localeCompare(left)),
+        [initialHistoryByDate],
+    );
+    const [visibleMonthKey, setVisibleMonthKey] = useState(
+        () => initialDates[0]?.slice(0, 7) ?? kstDateKey(new Date()).slice(0, 7),
+    );
+    const monthlyHistory = useQuery({
+        queryKey: ['campus', 'meals', 'history', visibleMonthKey],
+        queryFn: () => api.getPublicMealHistoryMonth(visibleMonthKey),
+        staleTime: 5 * 60_000,
     });
     const historyMeals = useMemo(() => {
-        const initial = [...meals.data.dailyMenus, ...meals.data.recentMenus];
-        const additional = olderHistory.data?.pages.flatMap((page) => page.posts) ?? [];
+        const additional = monthlyHistory.data?.posts ?? [];
         const unique = new Map<string, DashboardMealPost>();
-        for (const meal of [...initial, ...additional]) {
+        for (const meal of [...initialHistory, ...additional]) {
             if (!unique.has(meal.id)) unique.set(meal.id, meal);
         }
         return [...unique.values()];
-    }, [meals, olderHistory.data]);
+    }, [initialHistory, monthlyHistory.data]);
     const historyByDate = useMemo(() => mealsGroupedByDate(historyMeals), [historyMeals]);
     const historyDates = useMemo(() => {
         const todayKey = kstDateKey(new Date());
@@ -44,15 +51,16 @@ export function MealHistorySection({meals}: {meals: DashboardMealsSnapshot}) {
             .sort((left, right) => right.localeCompare(left));
     }, [historyByDate]);
     const availableDates = useMemo(() => new Set(historyDates), [historyDates]);
-    const activeHistoryDate = selectedHistoryDate && historyByDate.has(selectedHistoryDate)
+    const visibleHistoryDates = historyDates.filter((date) => date.startsWith(`${visibleMonthKey}-`));
+    const activeHistoryDate = selectedHistoryDate
+        && selectedHistoryDate.startsWith(`${visibleMonthKey}-`)
+        && historyByDate.has(selectedHistoryDate)
         ? selectedHistoryDate
-        : historyDates[0] ?? '';
+        : visibleHistoryDates[0] ?? '';
     const activeHistoryMeals = activeHistoryDate ? historyByDate.get(activeHistoryDate) ?? [] : [];
     const activeWeeklyMenu = activeHistoryDate
         ? weeklyMenuForDate(meals.data.weeklyMenus, activeHistoryDate)
         : null;
-    const canLoadOlder = historyCursor !== null
-        && (olderHistory.data === undefined || olderHistory.hasNextPage);
 
     return (
         <section aria-labelledby="meal-history-title">
@@ -69,18 +77,19 @@ export function MealHistorySection({meals}: {meals: DashboardMealsSnapshot}) {
                         <Card className="mx-auto w-full max-w-80 gap-4 p-4 shadow-none lg:mx-0">
                             <MealHistoryCalendar
                                 availableDates={availableDates}
-                                key={activeHistoryDate.slice(0, 7)}
+                                month={visibleMonthKey}
                                 selectedDate={activeHistoryDate}
+                                onMonthChange={(month) => {
+                                    setVisibleMonthKey(month);
+                                    setSelectedHistoryDate('');
+                                }}
                                 onSelect={setSelectedHistoryDate}
                             />
-                            {canLoadOlder ? (
-                                <MealHistoryLoadMore
-                                    loading={olderHistory.isFetchingNextPage}
-                                    onLoad={() => void olderHistory.fetchNextPage()}
-                                />
+                            {monthlyHistory.isFetching ? (
+                                <p className="text-xs text-muted-foreground">급식 기록을 불러오는 중입니다.</p>
                             ) : null}
-                            {olderHistory.isError ? (
-                                <p className="text-xs text-destructive">이전 기록을 불러오지 못했습니다.</p>
+                            {monthlyHistory.isError ? (
+                                <p className="text-xs text-destructive">급식 기록을 불러오지 못했습니다.</p>
                             ) : null}
                         </Card>
                         <section aria-labelledby="selected-history-date-title" className="min-w-0">
@@ -113,21 +122,26 @@ export function MealHistorySection({meals}: {meals: DashboardMealsSnapshot}) {
                     </section>
                 </div>
             ) : (
-                <div className="space-y-3">
-                    <EmptyState title="저장된 지난 급식 기록이 없습니다."/>
-                    {canLoadOlder ? (
-                        <div className="flex justify-center">
-                            <MealHistoryLoadMore
-                                loading={olderHistory.isFetchingNextPage}
-                                onLoad={() => void olderHistory.fetchNextPage()}
-                            />
-                        </div>
-                    ) : null}
-                    {olderHistory.isError ? (
-                        <p className="text-center text-xs text-destructive">
-                            이전 기록을 불러오지 못했습니다.
-                        </p>
-                    ) : null}
+                <div className="space-y-4">
+                    <Card className="mx-auto w-full max-w-80 gap-4 p-4 shadow-none">
+                        <MealHistoryCalendar
+                            availableDates={availableDates}
+                            month={visibleMonthKey}
+                            selectedDate={`${visibleMonthKey}-01`}
+                            onMonthChange={(month) => {
+                                setVisibleMonthKey(month);
+                                setSelectedHistoryDate('');
+                            }}
+                            onSelect={setSelectedHistoryDate}
+                        />
+                    </Card>
+                    {monthlyHistory.isFetching ? (
+                        <p className="text-center text-sm text-muted-foreground">급식 기록을 불러오는 중입니다.</p>
+                    ) : monthlyHistory.isError ? (
+                        <p className="text-center text-sm text-destructive">급식 기록을 불러오지 못했습니다.</p>
+                    ) : (
+                        <EmptyState title="이 달에 저장된 급식 기록이 없습니다."/>
+                    )}
                 </div>
             )}
         </section>

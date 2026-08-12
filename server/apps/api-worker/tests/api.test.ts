@@ -165,6 +165,26 @@ describe("API middleware", () => {
     });
   });
 
+  it("accepts one canonical meal history month and rejects mixed pagination", async () => {
+    const valid = await app.request(
+      "https://api.test/api/public/meals/history?month=2026-07",
+      {},
+      env,
+    );
+    expect(valid.status).toBe(200);
+    await expect(valid.json()).resolves.toEqual({ posts: [], nextBefore: null });
+
+    for (const query of [
+      "month=2026-7",
+      "month=2026-13",
+      "month=2026-07&before=2026-08-10T02%3A07%3A38.000Z~meal-30",
+    ]) {
+      const response = await app.request(`https://api.test/api/public/meals/history?${query}`, {}, env);
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toMatchObject({ error: "INVALID_REQUEST" });
+    }
+  });
+
   it("does not expose the removed v1 compatibility routes", async () => {
     const response = await app.request("https://api.test/v1/status", {}, env);
     expect(response.status).toBe(404);

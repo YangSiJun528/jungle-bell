@@ -17,8 +17,10 @@ describe('MealHistoryCalendar', () => {
         const markup = renderToStaticMarkup(
             <MealHistoryCalendar
                 availableDates={new Set(['2026-08-10', '2026-08-11'])}
+                month="2026-08"
                 selectedDate="2026-08-10"
                 onSelect={() => undefined}
+                onMonthChange={() => undefined}
             />,
         );
 
@@ -26,7 +28,8 @@ describe('MealHistoryCalendar', () => {
         expect(markup).toContain('data-selected-single="true"');
         expect(markup).toContain('2026년 8월 10일, 급식 기록 있음, 선택됨');
         expect(markup).toContain('2026년 8월 13일, 급식 기록 없음');
-        expect(markup).toMatch(/disabled=""[^>]*aria-label="2026년 8월 13일, 급식 기록 없음"/u);
+        expect(markup).toContain('data-day="2026-08-13"');
+        expect(markup).toContain('data-disabled="true"');
         expect(markup).toContain('이전 달');
         expect(markup).toContain('다음 달');
         expect(markup).toContain('aria-label="달력 월 이동"');
@@ -35,7 +38,8 @@ describe('MealHistoryCalendar', () => {
 
     it('공식 ShadCN Calendar에 날짜 선택과 월 이동을 위임한다', () => {
         expect(source).toContain("import {Calendar} from '@/components/ui/calendar'");
-        expect(source).toContain('defaultMonth={selected}');
+        expect(source).toContain('month={visibleMonth}');
+        expect(source).toContain('onMonthChange={(value) => onMonthChange(monthKey(value))}');
         expect(source).toContain("modifiers.today ? '오늘' : null");
         expect(source).not.toContain('navLayout="around"');
         expect(source).not.toContain('calendarMonthCells');
@@ -55,10 +59,12 @@ describe('MealHistoryCalendar', () => {
         const before = weeklyMenuForDate(weeklyMenus, selectedDate)!;
         const calendar = MealHistoryCalendar({
             availableDates: new Set(['2026-08-11', '2026-08-18']),
+            month: '2026-08',
             selectedDate,
             onSelect: (date) => {
                 selectedDate = date;
             },
+            onMonthChange: () => undefined,
         });
 
         (calendar.props as {onSelect: (date: Date) => void}).onSelect(new Date(2026, 7, 18));

@@ -164,7 +164,7 @@ export function NotificationPanelContent({seenMobileIds, onMobileNotificationSee
                     <Smartphone/>
                     <AlertTitle>PC 연결이 필요합니다.</AlertTitle>
                     <AlertDescription className="gap-3">
-                        <p>기기 연결 화면에서 이 PWA를 PC 앱과 연결해 주세요.</p>
+                        <p>기기 연결 화면에서 이 PWA를 PC 앱과 연결하세요.</p>
                         <Button asChild size="sm" variant="outline"><a href="#connections">기기 연결 열기</a></Button>
                     </AlertDescription>
                 </Alert>
@@ -261,7 +261,7 @@ export function NotificationPanelContent({seenMobileIds, onMobileNotificationSee
                         <Alert variant="destructive">
                             <Send aria-hidden="true"/>
                             <AlertTitle>알림을 보내지 못했습니다.</AlertTitle>
-                            <AlertDescription>알림 권한 또는 연결 상태를 확인해 주세요.</AlertDescription>
+                            <AlertDescription>알림 권한 또는 연결 상태를 확인하세요.</AlertDescription>
                         </Alert>
                     ) : null}
                     {deliveryMessage ? <p aria-live="polite" className="text-sm text-muted-foreground">{deliveryMessage}</p> : null}

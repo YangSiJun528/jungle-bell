@@ -26,6 +26,15 @@ const settings: DesktopSettings = {
     autoUpdate: true,
     usageAnalytics: true,
     debugMode: false,
+    selectedCohortId: null,
+    effectiveCohortId: 'cohort-1',
+    cohortOptions: [{
+        id: 'cohort-1',
+        label: '정글 10기',
+        startDate: '2026-07-01',
+        endDate: '2026-08-31',
+        isActive: true,
+    }],
 };
 
 function renderSettings(): string {
@@ -52,6 +61,10 @@ describe('ServiceSettings', () => {
         expect(source).toContain("if (checked) setConfirmDebugOn(true)");
         expect(markup).toContain('출석·식단 내용과 LMS 계정 정보는 전송하지 않습니다.');
         expect(markup).toContain('개발자 도구나 외부 명령 실행 권한은 열지 않습니다.');
+        expect(markup).toContain('출석 확인 기수');
+        expect(markup).toContain('자동 선택');
+        expect(source).toContain('{cohort.label}');
+        expect(source).toContain("updateSelectedCohort(value === 'automatic' ? null : value)");
     });
 
     test('모바일에서는 PC 로컬 설정을 편집하지 않는다', () => {
