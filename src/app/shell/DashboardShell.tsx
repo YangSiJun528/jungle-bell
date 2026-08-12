@@ -1,4 +1,4 @@
-import {useRef, type ReactNode} from 'react';
+import {useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode} from 'react';
 import type {LucideIcon} from 'lucide-react';
 import {
     Bell,
@@ -43,6 +43,16 @@ import {
     dashboardUtilityRoutes,
 } from '../routes';
 import {DashboardFooter} from './DashboardFooter';
+import {
+    MAX_SIDEBAR_WIDTH,
+    MIN_SIDEBAR_WIDTH,
+    normalizeSidebarWidth,
+    readSidebarWidth,
+    SIDEBAR_WIDTH_STEP,
+    sidebarWidthFromKey,
+    sidebarWidthFromPointer,
+    writeSidebarWidth,
+} from '../sidebar-width';
 
 export interface DashboardShellProps {
     surface: DashboardSurfaceKind;
@@ -203,6 +213,49 @@ function Brand({navigate}: Pick<DashboardShellProps, 'navigate'>) {
     );
 }
 
+function SidebarWidthControl({
+    value,
+    onChange,
+}: {
+    value: number;
+    onChange: (value: number) => void;
+}) {
+    const updateFromPointer = (event: ReactPointerEvent<HTMLInputElement>): void => {
+        const bounds = event.currentTarget.getBoundingClientRect();
+        const next = sidebarWidthFromPointer(event.clientX, bounds.left, bounds.width);
+        if (next !== null) onChange(next);
+    };
+
+    return (
+        <label className="flex items-center gap-2 px-1 text-xs text-sidebar-foreground/70">
+            <span className="shrink-0">너비</span>
+            <input
+                type="range"
+                aria-label="사이드바 너비"
+                min={MIN_SIDEBAR_WIDTH}
+                max={MAX_SIDEBAR_WIDTH}
+                step={SIDEBAR_WIDTH_STEP}
+                value={value}
+                onInput={(event) => onChange(normalizeSidebarWidth(event.currentTarget.valueAsNumber))}
+                onPointerDown={(event) => {
+                    event.currentTarget.setPointerCapture(event.pointerId);
+                    updateFromPointer(event);
+                }}
+                onPointerMove={(event) => {
+                    if (event.currentTarget.hasPointerCapture(event.pointerId)) updateFromPointer(event);
+                }}
+                onKeyDown={(event) => {
+                    const next = sidebarWidthFromKey(value, event.key);
+                    if (next === null) return;
+                    event.preventDefault();
+                    onChange(next);
+                }}
+                className="min-w-0 flex-1 cursor-ew-resize accent-primary"
+            />
+        </label>
+    );
+}
+
 function ShellTopSpacer({
     personal,
     activeRoute,
@@ -319,14 +372,19 @@ export function DashboardShell({
         if (open) navigate('notifications');
     });
     const notificationTriggerRef = useRef<HTMLButtonElement | null>(null);
+    const [sidebarWidth, setSidebarWidth] = useState(readSidebarWidth);
     const rememberNotificationTrigger = (trigger: HTMLButtonElement): void => {
         notificationTriggerRef.current = trigger;
+    };
+    const updateSidebarWidth = (next: number): void => {
+        setSidebarWidth(next);
+        writeSidebarWidth(window.localStorage, next);
     };
 
     return (
         <Sheet open={notificationPanelOpen} onOpenChange={onNotificationPanelOpenChange}>
             <SidebarProvider
-                sidebarWidth="14.5rem"
+                sidebarWidth={`${sidebarWidth}px`}
                 keyboardShortcut={null}
                 className="bg-muted/35 text-foreground"
                 data-dashboard-shell="renewal"
@@ -367,7 +425,7 @@ export function DashboardShell({
                     </SidebarGroup>
                 </SidebarContent>
 
-                <SidebarFooter className="border-t border-sidebar-border">
+                <SidebarFooter className={personal ? 'border-t border-sidebar-border' : undefined}>
                     {personal ? (
                         <nav aria-label="개인 도구" data-navigation-group="utilities">
                             <SidebarMenu>
@@ -391,6 +449,7 @@ export function DashboardShell({
                             </SidebarMenu>
                         </nav>
                     ) : null}
+                    <SidebarWidthControl value={sidebarWidth} onChange={updateSidebarWidth}/>
                 </SidebarFooter>
             </Sidebar>
 

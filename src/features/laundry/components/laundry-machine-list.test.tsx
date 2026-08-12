@@ -46,9 +46,10 @@ describe('LaundryMachineList', () => {
         expect(markup.indexOf('>건조기<')).toBeLessThan(markup.indexOf('>세탁기<'));
         expect(markup).toContain('세탁기');
         expect(markup).toContain('건조기');
-        expect(markup).toContain('헹굼 중 · 예상');
-        expect(markup).toContain('약 30분 남음');
-        expect(markup).toContain('전체 60분');
+        expect(markup).toContain('헹굼 중');
+        expect(markup).toContain('30분');
+        expect(markup).toContain('총 60분');
+        expect(markup).not.toMatch(/예상|약 30분|30분 남음/u);
         expect(markup).toContain('사용 가능');
         expect(markup).toContain('배관 에러');
         expect(markup).toContain('aria-label="1번 워시타워 건조기 상세 안내"');
@@ -65,10 +66,10 @@ describe('LaundryMachineList', () => {
         expect(markup).toContain('aria-label="2번 워시타워 세탁 진행률"');
         expect(markup).toContain('aria-valuenow="50"');
         expect(markup).not.toContain('>예상 진행률 50%</p>');
-        expect(markup).toContain('aria-valuetext="예상 50% 진행, 약 30분 남음, 전체 60분"');
+        expect(markup).toContain('aria-valuetext="50% 진행, 30분, 총 60분"');
         expect(markup).toContain('aria-valuetext="오류로 진행률을 확인할 수 없음"');
         expect(markup).toContain('11:30 시작');
-        expect(markup).toContain('12:30 예상 종료');
+        expect(markup).toContain('12:30 종료');
     });
 
     it('완료 확인 상태에만 보정값 안내를 열 수 있는 버튼을 표시한다', () => {
@@ -82,10 +83,10 @@ describe('LaundryMachineList', () => {
                         appliance: 'dryer',
                         operationalStatus: 'RUNNING',
                         state: {code: 'END'},
-                        estimatedFinishAt: '2026-08-11T03:05:00.000Z',
+                        estimatedFinishAt: '2026-08-11T02:59:00.000Z',
                         projection: {
                             status: 'AWAITING_COMPLETION_CONFIRMATION',
-                            remainingMinutes: 5,
+                            remainingMinutes: 0,
                             estimated: true,
                         },
                     },
@@ -94,7 +95,12 @@ describe('LaundryMachineList', () => {
             />,
         );
 
-        expect(markup).toContain('완료 확인 중 · 예상');
+        expect(markup).toContain('완료 확인 중');
+        expect(markup).toContain('data-state="confirming"');
+        expect(markup).toContain('aria-valuenow="100"');
+        expect(markup).toContain('aria-valuetext="100% 진행, 0분"');
+        expect(markup).toContain('lucide-info');
+        expect(markup).not.toContain('예상');
         expect(markup).toContain('aria-label="3번 워시타워 건조기 상세 안내"');
     });
 

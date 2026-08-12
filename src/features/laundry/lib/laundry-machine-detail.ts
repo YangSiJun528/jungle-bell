@@ -13,7 +13,13 @@ import {
 } from './wash-tower';
 import {laundryZoneMeta, type LaundryZone} from './laundry-zone';
 
-export type LaundryApplianceTone = 'active' | 'available' | 'error' | 'neutral' | 'warning';
+export type LaundryApplianceTone =
+    | 'active'
+    | 'available'
+    | 'confirming'
+    | 'error'
+    | 'neutral'
+    | 'warning';
 
 export interface LaundryApplianceDetailView {
     kind: WashTowerApplianceKind;
@@ -51,7 +57,7 @@ const PROJECTION_STATUS_LABELS: Readonly<Record<string, string>> = {
 };
 
 const COMPLETION_CONFIRMATION_HELP_TEXT =
-    '표시된 시간과 진행률은 Jungle Bell이 보정한 예상값이며, LG ThinQ의 확정 결과를 기다리고 있어요.';
+    '보정 시간은 끝났지만 LG ThinQ API의 완료 확인을 기다리는 중입니다.';
 
 function validDateTime(value?: string | null): string | null {
     return value && Number.isFinite(Date.parse(value)) ? value : null;
@@ -76,18 +82,8 @@ function normalizedErrorCode(appliance?: LaundryStatusAppliance | null): string 
     return value || null;
 }
 
-function completionConfirmationDelayed(
-    appliance: LaundryStatusAppliance,
-    nowMs: number,
-): boolean {
-    if (appliance.projection?.status !== 'AWAITING_COMPLETION_CONFIRMATION') return false;
-    const finishAt = Date.parse(appliance.estimatedFinishAt ?? '');
-    return Number.isFinite(finishAt) && nowMs > finishAt;
-}
-
 function applianceStatus(
     appliance: LaundryStatusAppliance | null | undefined,
-    nowMs: number,
 ): Pick<LaundryApplianceDetailView, 'helpText' | 'statusLabel' | 'tone'> {
     if (!appliance) {
         return {statusLabel: '정보 없음', tone: 'neutral', helpText: null};
@@ -101,8 +97,8 @@ function applianceStatus(
             statusLabel: plumbingError ? '배관 에러' : '오류',
             tone: 'error',
             helpText: plumbingError
-                ? '필터를 청소한 뒤 기기 상태를 직접 확인해 주세요.'
-                : '기기에 오류가 표시되고 있어요. 기기 상태를 직접 확인해 주세요.',
+                ? '필터 청소 후 기기 상태를 확인하세요.'
+                : '기기 오류. 기기 상태를 확인하세요.',
         };
     }
 
@@ -110,19 +106,11 @@ function applianceStatus(
         return {statusLabel: '사용 가능', tone: 'available', helpText: null};
     }
 
-    if (completionConfirmationDelayed(appliance, nowMs)) {
-        return {
-            statusLabel: '완료 확인 지연',
-            tone: 'warning',
-            helpText: COMPLETION_CONFIRMATION_HELP_TEXT,
-        };
-    }
-
     const projectionStatus = appliance.projection?.status ?? '';
     if (projectionStatus === 'AWAITING_COMPLETION_CONFIRMATION') {
         return {
             statusLabel: '완료 확인 중',
-            tone: 'active',
+            tone: 'confirming',
             helpText: COMPLETION_CONFIRMATION_HELP_TEXT,
         };
     }
@@ -155,22 +143,21 @@ function applianceRemainingLabel(
     appliance: LaundryStatusAppliance | null | undefined,
     tone: LaundryApplianceTone,
     nowMs: number,
-    estimated: boolean,
 ): string {
-    if (!appliance) return '상태를 확인할 수 없어요';
-    if (tone === 'available') return '바로 사용할 수 있어요';
-    if (tone === 'error') return '기기 확인이 필요해요';
+    if (!appliance) return '확인 불가';
+    if (tone === 'available') return '사용 가능';
+    if (tone === 'error') return '확인 필요';
 
     const remaining = laundryRemainingText(appliance, nowMs);
-    if (remaining === '--') return '잔여 시간 확인 중';
-    if (remaining === '예약') return '예약된 기기예요';
-    return `${estimated ? '약 ' : ''}${remaining} 남음`;
+    if (remaining === '--') return '시간 확인 중';
+    if (remaining === '예약') return '예약됨';
+    return remaining;
 }
 
 function totalTimeLabel(appliance?: LaundryStatusAppliance | null): string | null {
     const value = appliance?.totalMinutes;
     return Number.isFinite(value) && (value as number) > 0
-        ? `전체 ${Math.round(value as number)}분`
+        ? `총 ${Math.round(value as number)}분`
         : null;
 }
 
@@ -179,21 +166,25 @@ export function laundryApplianceDetail(
     kind: WashTowerApplianceKind,
     nowMs = Date.now(),
 ): LaundryApplianceDetailView {
-    const status = applianceStatus(appliance, nowMs);
+    const status = applianceStatus(appliance);
     const progress = status.tone === 'error'
         ? 0
-        : status.tone === 'active' || status.tone === 'warning'
-            ? laundryProgress(appliance, nowMs)
-            : null;
-    const showSessionTiming = status.tone === 'active' || status.tone === 'warning';
+        : status.tone === 'confirming'
+            ? 100
+            : status.tone === 'active' || status.tone === 'warning'
+                ? laundryProgress(appliance, nowMs)
+                : null;
+    const showSessionTiming = status.tone === 'active'
+        || status.tone === 'confirming'
+        || status.tone === 'warning';
     const estimated = appliance?.projection?.estimated === true && showSessionTiming;
 
     return {
         kind,
         label: kind === 'washer' ? '세탁기' : '건조기',
-        statusLabel: estimated ? `${status.statusLabel} · 예상` : status.statusLabel,
+        statusLabel: status.statusLabel,
         tone: status.tone,
-        remainingLabel: applianceRemainingLabel(appliance, status.tone, nowMs, estimated),
+        remainingLabel: applianceRemainingLabel(appliance, status.tone, nowMs),
         totalLabel: totalTimeLabel(appliance),
         progress: progress === null ? null : Math.round(progress),
         startedAt: showSessionTiming ? validStartedAt(appliance, nowMs) : null,

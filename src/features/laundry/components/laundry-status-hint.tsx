@@ -1,5 +1,5 @@
 import {useState, type ReactNode} from 'react';
-import {CircleHelp} from 'lucide-react';
+import {Info} from 'lucide-react';
 import {
     Tooltip,
     TooltipContent,
@@ -26,11 +26,11 @@ export function LaundryStatusHint({
                     type="button"
                     onClick={() => setOpen((current) => !current)}
                 >
-                    <CircleHelp className="size-4"/>
+                    <Info className="size-4"/>
                 </button>
             </TooltipTrigger>
             <TooltipContent className="max-w-72" sideOffset={6}>
-                <div className="space-y-1.5 leading-5">{children}</div>
+                <div className="break-keep space-y-1.5 leading-5">{children}</div>
             </TooltipContent>
         </Tooltip>
     );

@@ -67,7 +67,13 @@ describe('DashboardShell', () => {
         expect(html).not.toContain('data-dashboard-route="notifications"');
         expect(html).not.toContain('기기 연결 관리');
         expect(html).toContain('data-slot="sidebar"');
-        expect(html).toContain('--sidebar-width:14.5rem');
+        expect(html).toContain('--sidebar-width:232px');
+        expect(html).toContain('type="range"');
+        expect(html).toContain('aria-label="사이드바 너비"');
+        expect(html).toContain('min="192"');
+        expect(html).toContain('max="320"');
+        expect(html).toContain('step="8"');
+        expect(html).not.toContain('border-t border-sidebar-border');
         expect(html).not.toContain('data-sidebar="trigger"');
         expect(html).not.toContain('data-sidebar="rail"');
         expect(html).toContain('data-shell-top-spacer="true"');
@@ -113,6 +119,7 @@ describe('DashboardShell', () => {
         expect(html).not.toContain('data-sidebar="trigger"');
         expect(html).not.toContain('data-sidebar="rail"');
         expect(html).toContain('data-shell-top-spacer="true"');
+        expect(html).toContain('border-t border-sidebar-border');
     });
 
     test('uses the canonical compass image for the Jungle Bell brand', () => {

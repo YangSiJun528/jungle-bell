@@ -15,6 +15,23 @@ export interface NotificationInboxSnapshot {
     items: NotificationInboxItem[];
 }
 
+export function markNotificationInboxItemRead(
+    snapshot: NotificationInboxSnapshot,
+    id: string,
+    readAt: number,
+): NotificationInboxSnapshot {
+    const index = snapshot.items.findIndex((item) => item.id === id);
+    const item = snapshot.items[index];
+    if (!item || item.readAt !== null) return snapshot;
+    const items = snapshot.items.slice();
+    items[index] = {...item, readAt};
+    return {
+        ...snapshot,
+        unreadCount: Math.max(0, snapshot.unreadCount - 1),
+        items,
+    };
+}
+
 const MAX_TIMESTAMP = 8_640_000_000_000_000;
 const MAX_NOTIFICATION_ITEMS = 100;
 

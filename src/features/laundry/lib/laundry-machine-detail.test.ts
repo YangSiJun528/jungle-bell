@@ -22,8 +22,8 @@ describe('laundryApplianceDetail', () => {
             label: '세탁기',
             statusLabel: '헹굼 중',
             tone: 'active',
-            remainingLabel: '30분 남음',
-            totalLabel: '전체 60분',
+            remainingLabel: '30분',
+            totalLabel: '총 60분',
             progress: 50,
             startedAt: '2026-08-11T02:30:00.000Z',
             estimatedFinishAt: '2026-08-11T03:30:00.000Z',
@@ -33,7 +33,7 @@ describe('laundryApplianceDetail', () => {
         });
     });
 
-    it('서버가 추정한 상태·잔여 시간·진행률은 예상값으로 명시한다', () => {
+    it('서버 추정 여부를 사용자 문구에 덧붙이지 않는다', () => {
         expect(laundryApplianceDetail({
             appliance: 'washer',
             operationalStatus: 'RUNNING',
@@ -46,8 +46,8 @@ describe('laundryApplianceDetail', () => {
                 estimated: true,
             },
         }, 'washer', NOW_MS)).toMatchObject({
-            statusLabel: '헹굼 중 · 예상',
-            remainingLabel: '약 30분 남음',
+            statusLabel: '헹굼 중',
+            remainingLabel: '30분',
             progress: 50,
             helpText: null,
             estimated: true,
@@ -62,14 +62,14 @@ describe('laundryApplianceDetail', () => {
         }, 'dryer', NOW_MS)).toMatchObject({
             statusLabel: '사용 가능',
             tone: 'available',
-            remainingLabel: '바로 사용할 수 있어요',
+            remainingLabel: '사용 가능',
             progress: null,
         });
 
         expect(laundryApplianceDetail(null, 'washer', NOW_MS)).toMatchObject({
             statusLabel: '정보 없음',
             tone: 'neutral',
-            remainingLabel: '상태를 확인할 수 없어요',
+            remainingLabel: '확인 불가',
             progress: null,
         });
 
@@ -81,14 +81,14 @@ describe('laundryApplianceDetail', () => {
         }, 'dryer', NOW_MS)).toMatchObject({
             statusLabel: '배관 에러',
             tone: 'error',
-            remainingLabel: '기기 확인이 필요해요',
+            remainingLabel: '확인 필요',
             progress: 0,
             errorCode: 'EMPTY_WATER_ALERT_ERROR',
-            helpText: '필터를 청소한 뒤 기기 상태를 직접 확인해 주세요.',
+            helpText: '필터 청소 후 기기 상태를 확인하세요.',
         });
     });
 
-    it('일시 정지와 완료 확인 지연을 경고 상태로 설명한다', () => {
+    it('일시 정지는 경고로, LG 완료 확인 대기는 초록색 확인 상태로 설명한다', () => {
         expect(laundryApplianceDetail({
             appliance: 'washer',
             operationalStatus: 'PAUSED',
@@ -97,7 +97,7 @@ describe('laundryApplianceDetail', () => {
         }, 'washer', NOW_MS)).toMatchObject({
             statusLabel: '일시 정지',
             tone: 'warning',
-            remainingLabel: '12분 남음',
+            remainingLabel: '12분',
             progress: 60,
         });
 
@@ -107,21 +107,11 @@ describe('laundryApplianceDetail', () => {
             estimatedFinishAt: '2026-08-11T02:59:00.000Z',
             projection: {status: 'AWAITING_COMPLETION_CONFIRMATION', remainingMinutes: 0},
         }, 'dryer', NOW_MS)).toMatchObject({
-            statusLabel: '완료 확인 지연',
-            tone: 'warning',
-            helpText: '표시된 시간과 진행률은 Jungle Bell이 보정한 예상값이며, LG ThinQ의 확정 결과를 기다리고 있어요.',
-        });
-
-        expect(laundryApplianceDetail({
-            appliance: 'dryer',
-            operationalStatus: 'RUNNING',
-            state: {code: 'END'},
-            estimatedFinishAt: '2026-08-11T03:05:00.000Z',
-            projection: {status: 'AWAITING_COMPLETION_CONFIRMATION', remainingMinutes: 5},
-        }, 'dryer', NOW_MS)).toMatchObject({
             statusLabel: '완료 확인 중',
-            tone: 'active',
-            helpText: '표시된 시간과 진행률은 Jungle Bell이 보정한 예상값이며, LG ThinQ의 확정 결과를 기다리고 있어요.',
+            tone: 'confirming',
+            remainingLabel: '0분',
+            progress: 100,
+            helpText: '보정 시간은 끝났지만 LG ThinQ API의 완료 확인을 기다리는 중입니다.',
         });
     });
 

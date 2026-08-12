@@ -21,9 +21,11 @@ import {laundrySituationDataIsReliable} from '@/domain/laundry/freshness';
 import {relativeTimeLabel} from '@/lib/format';
 import {cn} from '@/lib/utils';
 import {LaundryMachineList} from '../components/laundry-machine-list';
+import {LaundryWarningBadge} from '../components/laundry-warning-badge';
 import {LaundryZoneBadge} from '../components/laundry-zone-badge';
 import {PersonalLaundrySection} from '../components/personal-laundry-section';
 import {WashTowerGrid} from '../components/wash-tower-grid';
+import {laundryZoneMeta} from '../lib/laundry-zone';
 import {capacityCards, type CapacityCardView} from './laundry-page-view';
 
 const personalSurface = (kind: string): PersonalSurface | null =>
@@ -31,9 +33,7 @@ const personalSurface = (kind: string): PersonalSurface | null =>
 
 function capacityTone(card: CapacityCardView): string {
     if (card.status === 'checking') return 'border-border bg-muted/30';
-    return card.access === 'men'
-        ? 'border-blue-800/25 bg-blue-950/[0.06] text-blue-950 dark:border-blue-300/20 dark:bg-blue-200/[0.08] dark:text-blue-100'
-        : 'border-rose-800/25 bg-rose-950/[0.06] text-rose-950 dark:border-rose-300/20 dark:bg-rose-200/[0.08] dark:text-rose-100';
+    return laundryZoneMeta(card.access).surfaceClassName;
 }
 
 export function LaundryPage() {
@@ -135,13 +135,14 @@ export function LaundryPage() {
                                 워시타워 상태
                             </h2>
                             <div
-                                aria-label="워시타워 구역 범례"
+                                aria-label="워시타워 구역 및 경고 범례"
                                 className="flex shrink-0 items-center gap-1"
                                 data-laundry-zone-legend="true"
                             >
                                 <LaundryZoneBadge zone="men"/>
                                 <LaundryZoneBadge zone="common"/>
                                 <LaundryZoneBadge zone="women"/>
+                                <LaundryWarningBadge/>
                             </div>
                         </CardHeader>
                         <CardContent className="px-4 pb-3 pt-0 sm:px-6">

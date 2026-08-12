@@ -10,6 +10,7 @@ const APP_COMMANDS: &[&str] = &[
     "get_dashboard_meal_history",
     "get_dashboard_home_overview",
     "get_notification_inbox_snapshot",
+    "mark_notification_read",
     "activate_notification",
     "send_test_notification",
     "get_connected_service_status",

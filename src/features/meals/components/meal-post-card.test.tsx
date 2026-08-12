@@ -1,7 +1,7 @@
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, it} from 'vitest';
 import type {DashboardMealPost} from '@/api/dashboard-api';
-import {MealPostCard} from './meal-post-card';
+import {MealPostCard, MissingMealPostCard} from './meal-post-card';
 
 const meal: DashboardMealPost = {
     id: 'lunch',
@@ -57,5 +57,14 @@ describe('MealPostCard', () => {
         expect(markup).toContain('bg-muted/60');
         expect(markup).toContain('text-muted-foreground');
         expect(markup).not.toContain('animate-pulse');
+    });
+
+    it('게시물 전체가 없으면 빈 상태를 한 번만 표시한다', () => {
+        const markup = renderToStaticMarkup(<MissingMealPostCard period="석식"/>);
+
+        expect(markup).toContain('aria-label="석식 사진 없음"');
+        expect(markup.match(/아직 올라오지 않았습니다\./gu)).toHaveLength(1);
+        expect(markup).not.toContain('메뉴가 아직 올라오지 않았습니다.');
+        expect(markup).not.toContain('data-slot="card-content"');
     });
 });

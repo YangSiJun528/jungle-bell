@@ -24,6 +24,7 @@ const uiComponents = [
     'separator',
     'skeleton',
     'switch',
+    'tabs',
     'tooltip',
 ] as const;
 

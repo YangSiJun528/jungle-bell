@@ -25,6 +25,7 @@ describe('MealHistoryCalendar', () => {
         expect(markup).toMatch(/disabled=""[^>]*aria-label="2026년 8월 13일, 급식 기록 없음"/u);
         expect(markup).toContain('이전 달');
         expect(markup).toContain('다음 달');
+        expect(markup).toContain('aria-label="달력 월 이동"');
         expect(markup).not.toMatch(/<p(?:\s|>)/u);
     });
 
@@ -32,6 +33,7 @@ describe('MealHistoryCalendar', () => {
         expect(source).toContain("import {Calendar} from '@/components/ui/calendar'");
         expect(source).toContain('defaultMonth={selected}');
         expect(source).toContain("modifiers.today ? '오늘' : null");
+        expect(source).not.toContain('navLayout="around"');
         expect(source).not.toContain('calendarMonthCells');
         expect(source).not.toContain('useEffect');
     });

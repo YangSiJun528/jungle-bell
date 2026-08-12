@@ -258,7 +258,7 @@ pub fn show_system(
             if !opens_action(response, action) {
                 return;
             }
-            if let Err(error) = inbox.mark_read_from_system(&app, &notification_id) {
+            if let Err(error) = inbox.mark_read_without_activation(&app, &notification_id) {
                 log::warn!("[notification] inbox read failed: {error}");
             }
             if let Err(error) = tray::open_dashboard_route(&app, system_notification_dashboard_route(action)) {

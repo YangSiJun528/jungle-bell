@@ -4,7 +4,7 @@ import {
     CircleCheck,
     CircleDashed,
     Clock3,
-    PauseCircle,
+    TriangleAlert,
 } from 'lucide-react';
 import {Card, CardContent, CardHeader} from '@/components/ui/card';
 import {Progress} from '@/components/ui/progress';
@@ -35,9 +35,10 @@ const clockFormatter = new Intl.DateTimeFormat('ko-KR', {
 const statusClasses: Readonly<Record<LaundryApplianceTone, string>> = {
     active: 'text-primary',
     available: 'text-primary',
+    confirming: 'text-primary',
     error: 'text-destructive',
     neutral: 'text-muted-foreground',
-    warning: 'text-amber-700 dark:text-amber-400',
+    warning: 'text-red-700 dark:text-red-300',
 };
 
 function clockLabel(value: string): string {
@@ -48,7 +49,8 @@ function StatusIcon({tone}: {tone: LaundryApplianceTone}) {
     const className = 'size-4 shrink-0';
     if (tone === 'available') return <CircleCheck className={className}/>;
     if (tone === 'error') return <CircleAlert className={className}/>;
-    if (tone === 'warning') return <PauseCircle className={className}/>;
+    if (tone === 'warning') return <TriangleAlert className={className}/>;
+    if (tone === 'confirming') return <Clock3 className={className}/>;
     if (tone === 'active') return <Clock3 className={className}/>;
     return <CircleDashed className={className}/>;
 }
@@ -67,7 +69,7 @@ function ApplianceDetail({
         : view.tone === 'error'
             ? '오류로 진행률을 확인할 수 없음'
             : [
-                `${view.estimated ? '예상 ' : ''}${view.progress}% 진행`,
+                `${view.progress}% 진행`,
                 view.remainingLabel,
                 view.totalLabel,
             ].filter(Boolean).join(', ');
@@ -116,7 +118,7 @@ function ApplianceDetail({
                         aria-label={`${machineTitle} ${view.kind === 'washer' ? '세탁' : '건조'} 진행률`}
                         aria-valuetext={progressText ?? undefined}
                         className={cn(view.tone === 'warning'
-                            && '[&_[data-slot=progress-indicator]]:bg-amber-500')}
+                            && '[&_[data-slot=progress-indicator]]:bg-red-400')}
                         value={view.progress}
                     />
                 </div>
@@ -129,7 +131,7 @@ function ApplianceDetail({
                     ) : null}
                     {view.estimatedFinishAt ? (
                         <time dateTime={view.estimatedFinishAt}>
-                            {clockLabel(view.estimatedFinishAt)} {view.estimated ? '예상 종료' : '종료'}
+                            {clockLabel(view.estimatedFinishAt)} 종료
                         </time>
                     ) : null}
                 </p>

@@ -86,11 +86,12 @@ describe('WashTowerGrid', () => {
         expect(markup).toContain('data-state="unavailable"');
         expect(markup).toContain('data-state="error"');
         expect(markup).toContain('>✓</span>');
-        expect(markup).toContain('>경고</span>');
-        expect(markup).not.toContain('>!</span>');
+        expect(markup).toContain('<span class="sr-only">경고</span>');
+        expect(markup).toContain('lucide-triangle-alert');
         expect(markup).toContain('>--:--</span>');
         expect(markup).toContain('aria-label="워시타워_1 세탁기 사용 가능"');
-        expect(markup).toContain('title="워시타워_6 세탁기 오류"');
+        expect(markup).toContain('aria-label="워시타워_6 세탁기 경고"');
+        expect(markup).toContain('title="워시타워_6 세탁기 경고"');
         expect(markup).toContain('aria-label="1번, 남성 구역"');
         expect(markup).toContain('aria-label="6번, 공용 구역"');
         expect(markup).toContain('aria-label="9번, 여성 구역"');
@@ -98,12 +99,11 @@ describe('WashTowerGrid', () => {
         expect(markup).toContain('text-blue-700 dark:text-blue-300');
         expect(markup).toContain('text-violet-700 dark:text-violet-300');
         expect(markup).toContain('text-rose-700 dark:text-rose-300');
-        expect(availableMarkup).toContain('bg-[oklch(0.68_0.07_250)]');
-        expect(availableMarkup).toContain('bg-[oklch(0.68_0.065_300)]');
-        expect(availableMarkup).toContain('bg-[oklch(0.68_0.07_15)]');
-        expect(markup).toContain('bg-[oklch(0.68_0.055_25)]');
-        expect(availableMarkup).not.toMatch(/bg-(?:blue|violet|rose)-100/u);
-        expect(markup).not.toContain('bg-red-100/70');
+        expect(availableMarkup).toContain('bg-blue-50/60');
+        expect(availableMarkup).toContain('bg-violet-50/60');
+        expect(availableMarkup).toContain('bg-rose-50/60');
+        expect(markup).toContain('bg-red-50/70');
+        expect(markup).toContain('text-red-700');
 
         const numberTags = markup.match(/<span[^>]*data-laundry-zone-number="true"[^>]*>/gu) ?? [];
         expect(numberTags).toHaveLength(3);
@@ -141,7 +141,7 @@ describe('WashTowerGrid', () => {
         expect(markup).toContain('title="워시타워_1 건조기 1시간 5분"');
     });
 
-    it('추정 잔여 시간은 기호 없이 표시하고 접근성 설명에서 예상값임을 알린다', () => {
+    it('추정 잔여 시간도 별도 예상 문구 없이 표시한다', () => {
         const estimatedMachines = machines.map((machine) => machine.id === '워시타워_1'
             ? {
                 ...machine,
@@ -157,7 +157,8 @@ describe('WashTowerGrid', () => {
 
         expect(markup).toContain('>01:05</span>');
         expect(markup).not.toContain('≈');
-        expect(markup).toContain('aria-label="워시타워_1 건조기 예상 1시간 5분"');
-        expect(markup).toContain('title="워시타워_1 건조기 예상 1시간 5분"');
+        expect(markup).toContain('aria-label="워시타워_1 건조기 1시간 5분"');
+        expect(markup).toContain('title="워시타워_1 건조기 1시간 5분"');
+        expect(markup).not.toContain('예상');
     });
 });

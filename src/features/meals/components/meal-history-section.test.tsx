@@ -66,7 +66,12 @@ describe('MealHistorySection', () => {
         expect(markup).toContain('선택한 주 급식표');
         expect(markup).toContain('2019년 12월 30일 주차 급식표');
         expect(markup).toContain('이전 기록 더 불러오기');
-        expect(markup).toContain('</h2><div class="grid items-start');
+        expect(markup).toContain('data-meal-history-overview="true"');
+        expect(markup).toContain('data-meal-history-weekly="true"');
+        expect(source).toContain('lg:grid-cols-[minmax(17rem,20rem)_minmax(0,1fr)]');
+        expect(source).toMatch(
+            /data-meal-history-overview="true"[\s\S]*<\/div>\s*<section[\s\S]*data-meal-history-weekly="true"/u,
+        );
     });
 
     test('선택한 날짜의 주간 급식표가 저장되지 않았으면 고정된 빈 상태를 표시한다', () => {
