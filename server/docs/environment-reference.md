@@ -39,7 +39,7 @@ App Worker는 fetch handler와 Static Assets만 제공합니다. Cron Trigger, S
 | `JOBS_D1_GATEWAY_URL` | 예 | 환경별 고정 HTTPS `/internal/jobs/d1` endpoint |
 | `JOBS_D1_GATEWAY_SECRET_FILE` | 예 | App Worker와 같은 32자 이상 shared secret 파일 |
 | `D1_GATEWAY_TIMEOUT_MS` | 아니요 | D1/R2 gateway 요청 제한 시간. 기본 `30000` |
-| `D1_GATEWAY_RETRIES` | 아니요 | D1/R2 gateway의 network, `429`, `5xx` 재시도 횟수. 기본 `3` |
+| `D1_GATEWAY_RETRIES` | 아니요 | 명백한 D1 `SELECT`와 R2 gateway의 network, `429`, `5xx` 재시도 횟수. D1 쓰기 및 쓰기가 섞인 batch는 재시도하지 않음. 기본 `3` |
 
 OCI Jobs에는 D1 관리 자격 증명이나 database 식별자를 배포하지 않습니다. 모든 D1 query와 batch는 `JOBS_D1_GATEWAY_URL`의 App Worker를 거쳐 해당 Worker의 고정 `DB` binding에서 실행됩니다. R2 gateway URL은 같은 origin의 `/internal/jobs/r2`로 파생합니다.
 

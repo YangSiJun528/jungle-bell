@@ -85,6 +85,87 @@ describe("D1GatewayDatabase", () => {
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 
+  it.each([
+    {
+      name: "an ambiguous server failure",
+      failure: async () => Response.json({ error: "TEMPORARY" }, { status: 503 }),
+      expected: "HTTP 503",
+    },
+    {
+      name: "an ambiguous network failure",
+      failure: () => Promise.reject(new TypeError("connection reset")),
+      expected: "connection reset",
+    },
+  ])("never replays a write after $name", async ({ failure, expected }) => {
+    const fetchMock = vi.fn(failure);
+    const sleep = vi.fn(async () => undefined);
+    const db = new D1GatewayDatabase({
+      url: "https://api.test/internal/jobs/d1",
+      sharedSecret: "s".repeat(64),
+      requestRetries: 3,
+    }, { fetch: fetchMock, sleep });
+
+    await expect(db.prepare("UPDATE item SET value = ? WHERE id = ?").bind("new", "one").run())
+      .rejects.toThrow(expected);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it("never replays a batch when any statement can write", async () => {
+    const fetchMock = vi.fn(async () => Response.json({ error: "TEMPORARY" }, { status: 503 }));
+    const sleep = vi.fn(async () => undefined);
+    const db = new D1GatewayDatabase({
+      url: "https://api.test/internal/jobs/d1",
+      sharedSecret: "s".repeat(64),
+      requestRetries: 3,
+    }, { fetch: fetchMock, sleep });
+
+    await expect(db.batch([
+      db.prepare("SELECT id FROM item"),
+      db.prepare("INSERT INTO audit_log(id) VALUES (?)").bind("one"),
+    ])).rejects.toThrow("HTTP 503");
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it("never replays a repository CTE write after an ambiguous failure", async () => {
+    const fetchMock = vi.fn(async () => Response.json({ error: "TEMPORARY" }, { status: 503 }));
+    const sleep = vi.fn(async () => undefined);
+    const db = new D1GatewayDatabase({
+      url: "https://api.test/internal/jobs/d1",
+      sharedSecret: "s".repeat(64),
+      requestRetries: 3,
+    }, { fetch: fetchMock, sleep });
+
+    await expect(db.prepare(`WITH planned AS (SELECT value FROM json_each(?))
+      INSERT INTO notification(id) SELECT value FROM planned`).bind('["one"]').run())
+      .rejects.toThrow("HTTP 503");
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it("retries a direct read whose replay is safe", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(Response.json({ error: "TEMPORARY" }, { status: 503 }))
+      .mockResolvedValueOnce(response([{
+        success: true,
+        results: [{ id: "one" }],
+        meta: { changes: 0 },
+      }]));
+    const sleep = vi.fn(async () => undefined);
+    const db = new D1GatewayDatabase({
+      url: "https://api.test/internal/jobs/d1",
+      sharedSecret: "s".repeat(64),
+      requestRetries: 3,
+    }, { fetch: fetchMock, sleep });
+
+    await expect(db.prepare("SELECT id FROM item").all()).resolves.toMatchObject({
+      results: [{ id: "one" }],
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledOnce();
+  });
+
   it("passes repository CTE writes through the authenticated gateway", async () => {
     const statement = { bind: () => statement, run: async () => ({ success: true, results: [], meta: { changes: 1 } }) };
     const database = {

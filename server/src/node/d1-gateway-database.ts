@@ -49,6 +49,12 @@ function retryDelayMs(response: Response | null, attempt: number): number {
   return Math.min(500 * 2 ** attempt, 10_000);
 }
 
+function isDirectRead(query: D1GatewayQuery): boolean {
+  // WITH may contain INSERT/UPDATE/DELETE, so only an unambiguous top-level
+  // SELECT is safe to replay after an unknown gateway outcome.
+  return /^\s*SELECT\b/iu.test(query.sql);
+}
+
 class D1GatewayPreparedStatement {
   constructor(
     private readonly database: D1GatewayDatabase,
@@ -122,19 +128,23 @@ export class D1GatewayDatabase {
       return statement.queryFor(this);
     });
     if (queries.length === 0) return [];
-    return this.request<T>({ batch: queries });
+    return this.request<T>({ batch: queries }, queries.every(isDirectRead));
   }
 
   async execute<T = Record<string, unknown>>(query: D1GatewayQuery): Promise<D1Result<T>> {
-    const results = await this.request<T>(query);
+    const results = await this.request<T>(query, isDirectRead(query));
     const result = results[0];
     if (!result) throw new Error("D1 gateway returned no query result");
     return result;
   }
 
-  private async request<T>(body: D1GatewayQuery | { batch: D1GatewayQuery[] }): Promise<D1Result<T>[]> {
+  private async request<T>(
+    body: D1GatewayQuery | { batch: D1GatewayQuery[] },
+    replaySafe: boolean,
+  ): Promise<D1Result<T>[]> {
     let lastError: unknown = null;
-    for (let attempt = 0; attempt <= this.retries; attempt += 1) {
+    const retries = replaySafe ? this.retries : 0;
+    for (let attempt = 0; attempt <= retries; attempt += 1) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
       let response: Response | null = null;
@@ -151,7 +161,7 @@ export class D1GatewayDatabase {
         });
         const parsed = await response.json() as D1GatewayResponse;
         const retryable = response.status === 429 || response.status >= 500;
-        if (retryable && attempt < this.retries) {
+        if (retryable && attempt < retries) {
           await this.sleep(retryDelayMs(response, attempt));
           continue;
         }
@@ -175,7 +185,7 @@ export class D1GatewayDatabase {
         const retryable = !(error instanceof D1GatewayError)
           || error.status === 429
           || error.status >= 500;
-        if (!retryable || attempt >= this.retries) throw error;
+        if (!retryable || attempt >= retries) throw error;
         await this.sleep(retryDelayMs(response, attempt));
       } finally {
         clearTimeout(timeout);

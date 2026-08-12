@@ -1,5 +1,5 @@
-import { getLogger } from "@logtape/logtape";
 import { Hono } from "hono";
+import { apiErrorHandler } from "../http/errors";
 import { registerApiMiddleware } from "../http/middleware";
 import { registerAttendanceRoutes } from "../http/routes/attendance";
 import { registerDesktopRoutes } from "../http/routes/desktop";
@@ -10,12 +10,9 @@ import { registerPersonalControlRoutes } from "../http/routes/personal";
 import { registerPublicRoutes } from "../http/routes/public";
 import { registerPushRoutes } from "../http/routes/push";
 import type { ApiEnvironment } from "../http/types";
-import { RenewalError } from "../renewal/service";
 import type { ApiBindings } from "../http/types";
 import { D1_GATEWAY_PATH, handleD1Gateway } from "./d1-gateway";
 import { handleR2Gateway, R2_GATEWAY_PATH } from "./r2-gateway";
-
-const apiLogger = getLogger(["jungle-bell", "api-worker"]);
 
 export const app = new Hono<ApiEnvironment>();
 
@@ -35,15 +32,7 @@ registerNotificationRoutes(app);
 registerPushRoutes(app);
 
 app.notFound((context) => context.json({ error: "NOT_FOUND" }, 404));
-app.onError((error, context) => {
-  if (error instanceof RenewalError) return context.json({ error: error.code }, error.status);
-  apiLogger.error("API request failed", {
-    method: context.req.method,
-    path: context.req.path,
-    error: error.message,
-  });
-  return context.json({ error: "INTERNAL_ERROR" }, 500);
-});
+app.onError(apiErrorHandler);
 
 export default {
   fetch(request: Request, env: ApiBindings, context: ExecutionContext): Response | Promise<Response> {

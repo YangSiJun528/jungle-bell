@@ -134,7 +134,16 @@ describe("test Worker resource isolation", () => {
     expect(schema).toContain("CREATE TABLE laundry_watch");
     expect(schema).toContain("CREATE TABLE laundry_queue_entry");
     expect(schema).toContain("CREATE TABLE laundry_lifecycle_processing");
-    expect(schema).not.toMatch(/lms_subject|access_token|refresh_token|CREATE TABLE push_delivery/u);
+    expect(schema).not.toMatch(/lms_subject|access_token|refresh_token|CREATE TABLE push_delivery|source_version/u);
+  });
+
+  it("keeps collection writes in the OCI storage adapter only", () => {
+    const apiStorage = readFileSync(new URL("../src/workers/cloudflare-storage.ts", import.meta.url), "utf8");
+    const jobsStorage = readFileSync(new URL("../src/node/cloudflare-rest-storage.ts", import.meta.url), "utf8");
+
+    expect(apiStorage).not.toMatch(/\bapplyCommit\s*\(/u);
+    expect(jobsStorage).toContain('import { buildD1CommitQueries, type D1Query } from "../storage/d1-commit";');
+    expect(jobsStorage).toMatch(/async commit\(commit: CollectionCommit\): Promise<void> \{\s+const queries = await buildD1CommitQueries\(commit\);/u);
   });
 
   it("keeps API and edge-operation rate contracts synchronized with the policy constants", () => {

@@ -8,8 +8,10 @@ describe('JungleCampusSummary', () => {
         expect(source).toContain('h-[20rem]');
         expect(source).toContain("surface.kind === 'public'");
         expect(source).toContain('앱을 설치하고 PC와 연결하면 오늘 출석 상태를 확인할 수 있습니다.');
-        expect(source).toContain("import jungleCompassIcon from '@/assets/logo.png'");
-        expect(source).toContain('src={jungleCompassIcon}');
+        expect(source).toContain('CalendarCheck');
+        expect(source).toContain('data-home-campus-status-icon="true"');
+        expect(source).not.toContain("import jungleCompassIcon from '@/assets/logo.png'");
+        expect(source).not.toContain('src={jungleCompassIcon}');
         expect(source).toContain('앱 설치 안내');
         expect(source).not.toContain('일반 웹에서는 출석 정보를 저장하거나 표시하지 않습니다.');
         expect(source).toContain('AttendanceChecks');

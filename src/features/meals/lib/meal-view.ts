@@ -6,11 +6,6 @@ import {mealPeriodLabel, mealServiceDate} from '@/domain/meals/today';
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
 
-export interface CalendarMonthCell {
-    date: string;
-    day: number;
-}
-
 export type TodayMealPeriod = '\uC911\uC2DD' | '\uC11D\uC2DD';
 
 export interface TodayMealSlot {
@@ -41,37 +36,6 @@ export function mealsGroupedByDate(
     }
     for (const values of grouped.values()) values.sort(compareMealPeriod);
     return grouped;
-}
-
-export function calendarMonthCells(monthKey: string): Array<CalendarMonthCell | null> {
-    const match = /^(\d{4})-(\d{2})$/u.exec(monthKey);
-    if (!match?.[1] || !match[2]) throw new Error('INVALID_MONTH');
-    const year = Number(match[1]);
-    const month = Number(match[2]);
-    if (year < 1900 || year > 2200 || month < 1 || month > 12) throw new Error('INVALID_MONTH');
-    const firstWeekday = new Date(Date.UTC(year, month - 1, 1)).getUTCDay();
-    const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
-    return Array.from({length: 42}, (_, index) => {
-        const day = index - firstWeekday + 1;
-        if (day < 1 || day > daysInMonth) return null;
-        return {date: calendarDateKey(year, month, day) as string, day};
-    });
-}
-
-export function shiftMonth(monthKey: string, amount: number): string {
-    const cells = calendarMonthCells(monthKey);
-    const first = cells.find((cell): cell is CalendarMonthCell => cell !== null);
-    if (!first || !Number.isSafeInteger(amount)) throw new Error('INVALID_MONTH');
-    const [yearText, monthText] = first.date.split('-');
-    const shifted = new Date(Date.UTC(Number(yearText), Number(monthText) - 1 + amount, 1));
-    return shifted.toISOString().slice(0, 7);
-}
-
-export function monthLabel(monthKey: string): string {
-    const first = calendarMonthCells(monthKey).find((cell): cell is CalendarMonthCell => cell !== null);
-    if (!first) throw new Error('INVALID_MONTH');
-    const [year, month] = first.date.split('-');
-    return `${year}\uB144 ${Number(month)}\uC6D4`;
 }
 
 export function mealDateLabel(dateKey: string): string {

@@ -22,7 +22,6 @@ DROP TABLE IF EXISTS meal_post;
 DROP TABLE IF EXISTS laundry_lifecycle_processing;
 DROP TABLE IF EXISTS laundry_event;
 DROP TABLE IF EXISTS minute_observation;
-DROP TABLE IF EXISTS source_version;
 DROP TABLE IF EXISTS source_state;
 DROP TABLE IF EXISTS maintenance_state;
 

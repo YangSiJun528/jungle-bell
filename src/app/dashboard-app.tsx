@@ -1,7 +1,6 @@
 import {lazy, Suspense, useEffect, useMemo, useState, useSyncExternalStore} from 'react';
 import {LoadingState} from '@/components/dashboard/async-state';
 import type {DashboardNotification} from '@/api/dashboard-api';
-import type {DashboardRoute} from '@/app/surface';
 import type {NotificationInboxSnapshot} from '@/domain/notifications/inbox';
 import {useDashboardEnvironment} from './dashboard-context';
 import {InstallPrompt, useInstallPromptVisibility} from './install-prompt';
@@ -15,12 +14,16 @@ import {
     writeSeenMobileNotificationIds,
 } from './mobile-notification-seen';
 import {documentIsVisible, subscribeToDocumentVisibility} from './document-visibility';
+import {
+    notificationPanelBackgroundRoute,
+    type DashboardContentRoute,
+} from './notification-panel-route';
 
 const HomePage = lazy(() => import('@/features/home/home-page').then((module) => ({default: module.HomePage})));
 const AttendancePage = lazy(() => import('@/features/attendance/attendance-page').then((module) => ({default: module.AttendancePage})));
 const LaundryPage = lazy(() => import('@/features/laundry/pages/laundry-page').then((module) => ({default: module.LaundryPage})));
 const MealsPage = lazy(() => import('@/features/meals/pages/meals-page').then((module) => ({default: module.MealsPage})));
-const NotificationsPage = lazy(() => import('@/features/notifications/notifications-page').then((module) => ({default: module.NotificationsPage})));
+const NotificationPanelContent = lazy(() => import('@/features/notifications/notifications-page').then((module) => ({default: module.NotificationPanelContent})));
 const ConnectionsPage = lazy(() => import('@/features/connections/connections-page').then((module) => ({default: module.ConnectionsPage})));
 
 function mobileNotificationIds(data: DashboardNotification[] | NotificationInboxSnapshot | undefined): string[] {
@@ -30,17 +33,14 @@ function mobileNotificationIds(data: DashboardNotification[] | NotificationInbox
 function RouteContent({
     route,
     onRequestInstall,
-    seenMobileIds,
 }: {
-    route: DashboardRoute;
+    route: DashboardContentRoute;
     onRequestInstall: () => void;
-    seenMobileIds: ReadonlySet<string>;
 }) {
     switch (route) {
         case 'attendance': return <AttendancePage/>;
         case 'laundry': return <LaundryPage/>;
         case 'meals': return <MealsPage/>;
-        case 'notifications': return <NotificationsPage seenMobileIds={seenMobileIds}/>;
         case 'connections': return <ConnectionsPage/>;
         default: return <HomePage onRequestInstall={onRequestInstall}/>;
     }
@@ -48,30 +48,45 @@ function RouteContent({
 
 export function DashboardApp() {
     const {surface} = useDashboardEnvironment();
-    const {route, navigate} = useHashRoute(surface.kind);
+    const {route, navigate, replace} = useHashRoute(surface.kind);
     const notifications = useNotificationsQuery();
     const [seenMobileIds, setSeenMobileIds] = useState(readSeenMobileNotificationIds);
+    const [notificationPanelRequestedOpen, setNotificationPanelRequestedOpen] = useState(false);
+    const [notificationBackgroundRoute, setNotificationBackgroundRoute] = useState<DashboardContentRoute>(
+        () => notificationPanelBackgroundRoute('home', route),
+    );
     const documentVisible = useSyncExternalStore(
         subscribeToDocumentVisibility,
         documentIsVisible,
         () => true,
     );
     const {installPromptOpen, openInstallPrompt, setInstallPromptVisibility} = useInstallPromptVisibility();
+    const contentRoute = notificationPanelBackgroundRoute(notificationBackgroundRoute, route);
+    const notificationPanelOpen = route === 'notifications' || notificationPanelRequestedOpen;
 
     useEffect(() => {
         document.title = `${DASHBOARD_ROUTE_META[route].label} · Jungle Bell`;
-        window.scrollTo({top: 0, left: 0, behavior: 'auto'});
     }, [route]);
 
     useEffect(() => {
-        if (surface.kind !== 'companion' || route !== 'notifications' || !documentVisible) return;
+        window.scrollTo({top: 0, left: 0, behavior: 'auto'});
+    }, [contentRoute]);
+
+    useEffect(() => {
+        if (route === 'notifications') return;
+        setNotificationBackgroundRoute(route);
+        setNotificationPanelRequestedOpen(false);
+    }, [route]);
+
+    useEffect(() => {
+        if (surface.kind !== 'companion' || !notificationPanelOpen || !documentVisible) return;
         const ids = mobileNotificationIds(notifications.data);
         if (ids.length === 0) return;
         const next = mergeSeenMobileNotificationIds(seenMobileIds, ids);
         if (next === seenMobileIds) return;
         writeSeenMobileNotificationIds(window.localStorage, next);
         setSeenMobileIds(next);
-    }, [documentVisible, notifications.data, route, seenMobileIds, surface.kind]);
+    }, [documentVisible, notificationPanelOpen, notifications.data, seenMobileIds, surface.kind]);
 
     const unreadCount = useMemo(() => {
         const data = notifications.data;
@@ -83,15 +98,26 @@ export function DashboardApp() {
     return (
         <DashboardShell
             surface={surface.kind}
-            activeRoute={route}
+            activeRoute={contentRoute}
             navigate={navigate}
             unreadCount={unreadCount}
+            notificationPanel={{
+                open: notificationPanelOpen,
+                onOpenChange: (open) => {
+                    setNotificationPanelRequestedOpen(open);
+                    if (!open && route === 'notifications') replace(contentRoute);
+                },
+                content: (
+                    <Suspense fallback={<LoadingState label="알림을 준비하고 있습니다."/>}>
+                        <NotificationPanelContent seenMobileIds={seenMobileIds}/>
+                    </Suspense>
+                ),
+            }}
         >
             <Suspense fallback={<LoadingState label="화면을 준비하고 있습니다."/>}>
                 <RouteContent
-                    route={route}
+                    route={contentRoute}
                     onRequestInstall={openInstallPrompt}
-                    seenMobileIds={seenMobileIds}
                 />
             </Suspense>
             <InstallPrompt open={installPromptOpen} onOpenChange={setInstallPromptVisibility}/>

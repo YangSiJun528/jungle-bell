@@ -178,7 +178,9 @@ pub fn run() {
             );
             // 자동 시작: 현재 설정값만 OS 상태와 동기화한다. 기본값은 꺼짐이다.
             sync_auto_start_setting(app.handle(), &shared_state);
-            let remote_sync_service = Arc::new(remote_sync::RemoteSyncService::configured(app.handle())?);
+            let remote_sync_service = Arc::new(tauri::async_runtime::block_on(
+                remote_sync::RemoteSyncService::configured(app.handle()),
+            )?);
             app.manage(remote_sync_service.clone());
             tray::setup_tray(app)?;
             if let Err(error) = notification_service.initialize_system_backend() {

@@ -1,7 +1,6 @@
 import {describe, expect, it} from 'vitest';
 import type {DashboardMealsSnapshot} from '@/api/dashboard-api';
 import {
-    calendarMonthCells,
     mealsGroupedByDate,
     todayMealSlots,
     weekKeyForDate,
@@ -13,6 +12,7 @@ const snapshot: DashboardMealsSnapshot = {
     asOf: '2026-08-11T00:00:00.000Z',
     lastCheckedAt: null,
     data: {
+        schemaVersion: 2,
         dailyMenus: [
             {id: 'dinner', title: '8월 11일 석식', text: '저녁', publishedAt: null, permalink: null},
             {id: 'lunch', title: '8월 11일 중식', text: '점심', publishedAt: null, permalink: null},
@@ -22,6 +22,9 @@ const snapshot: DashboardMealsSnapshot = {
             {id: 'lunch', title: '중복', text: '중복', publishedAt: null, permalink: null},
             {id: 'older', title: '8월 10일 중식', text: '이전', publishedAt: null, permalink: null},
         ],
+        currentWeeklyMenu: null,
+        weeklyMenus: [],
+        historyNextBefore: null,
     },
 };
 
@@ -40,13 +43,6 @@ describe('급식 이력 보조 모델', () => {
     it('급식 기록을 날짜별로 묶고 식사 순서로 정렬한다', () => {
         const grouped = mealsGroupedByDate(snapshot.data.dailyMenus, new Date('2026-08-11T03:00:00.000Z'));
         expect(grouped.get('2026-08-11')?.map((meal) => meal.id)).toEqual(['lunch', 'dinner']);
-    });
-
-    it('달력은 6주 그리드와 정확한 날짜 키를 제공한다', () => {
-        const cells = calendarMonthCells('2026-08');
-        expect(cells).toHaveLength(42);
-        expect(cells.find((cell) => cell?.date === '2026-08-01')?.day).toBe(1);
-        expect(cells.find((cell) => cell?.date === '2026-08-31')?.day).toBe(31);
     });
 
     it('주간 식단의 월요일부터 일요일까지를 표시한다', () => {

@@ -63,7 +63,7 @@ describe('notification row navigation semantics', () => {
 
 describe('notification center information architecture', () => {
     test('알림 기록과 수신 제어를 탭 없이 별도 섹션으로 구분한다', () => {
-        expect(pageSource).toContain('<PageHeader title="알림 센터"/>');
+        expect(pageSource).toContain('export function NotificationPanelContent');
         expect(pageSource).toContain('aria-labelledby="notification-inbox-title"');
         expect(pageSource).toContain('id="notification-inbox-title">받은 알림</h2>');
         expect(pageSource).toContain('aria-labelledby="notification-delivery-title"');
@@ -79,5 +79,11 @@ describe('notification center information architecture', () => {
 
     test('새 푸시 연결이나 테스트를 시작할 때 이전 성공 문구를 지운다', () => {
         expect(pageSource.match(/onMutate: \(\) => setDeliveryMessage\(''\)/gu)).toHaveLength(2);
+    });
+
+    test('패널에서는 중복 제목 없이 기존 알림 처리 UI를 재사용한다', () => {
+        expect(pageSource).toContain('export function NotificationPanelContent');
+        expect(pageSource).not.toContain('export function NotificationsPage');
+        expect(pageSource).not.toContain('<PageHeader');
     });
 });

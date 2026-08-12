@@ -1,74 +1,118 @@
-import { zValidator } from "@hono/zod-validator";
 import type { Context, Hono } from "hono";
+import {
+  createPersonalRoutes,
+  type PersonalRouteHandlers,
+} from "../contracts/personal";
 import {
   createLaundryWatch, joinLaundryQueue, publicLaundryQueueEntry, publicLaundryWatch,
   readMealPreference, updateMealPreference,
 } from "../../application/personal-controls";
 import type { Principal } from "../../domain/session";
+import type { AttendancePreferenceRecord } from "../../workers/account-storage";
 import { desktopPrincipal, mobilePrincipal } from "../auth";
-import {
-  laundryQueueParamSchema, laundryQueueSchema, laundryWatchParamSchema, laundryWatchSchema,
-  mealPreferenceSchema, validationHook,
-} from "../schemas";
+import { apiErrorHandler } from "../errors";
 import type { ApiEnvironment } from "../types";
 
 type PrincipalLoader = (context: Context<ApiEnvironment>) => Promise<Principal>;
 
-export function registerPersonalControlRoutes(app: Hono<ApiEnvironment>): void {
-  registerRole(app, "desktop", desktopPrincipal);
-  registerRole(app, "mobile", mobilePrincipal);
+function apiContext(context: Context): Context<ApiEnvironment> {
+  return context as unknown as Context<ApiEnvironment>;
 }
 
-function registerRole(app: Hono<ApiEnvironment>, role: "desktop" | "mobile", principalFor: PrincipalLoader): void {
-  const base = `/api/${role}`;
-  app.get(`${base}/meal-preferences`, async (context) => {
-    const principal = await principalFor(context);
-    return context.json(await readMealPreference(context.var.renewalStore, principal.userId));
-  });
-  app.put(`${base}/meal-preferences`, zValidator("json", mealPreferenceSchema, validationHook), async (context) => {
-    const principal = await principalFor(context);
-    return context.json(await updateMealPreference(
-      context.var.renewalStore, principal.userId, context.req.valid("json"), Date.now(),
-    ));
-  });
+function handlers(principalFor: PrincipalLoader): PersonalRouteHandlers {
+  return {
+    async getAttendancePreferences(context) {
+      const api = apiContext(context);
+      const principal = await principalFor(api);
+      return readPreferences(api.var.renewalStore, principal.userId);
+    },
+    async updateAttendancePreferences(context, input) {
+      const api = apiContext(context);
+      const principal = await principalFor(api);
+      return updatePreferences(api.var.renewalStore, principal.userId, input, Date.now());
+    },
+    async getMealPreferences(context) {
+      const api = apiContext(context);
+      const principal = await principalFor(api);
+      return readMealPreference(api.var.renewalStore, principal.userId);
+    },
+    async updateMealPreferences(context, input) {
+      const api = apiContext(context);
+      const principal = await principalFor(api);
+      return updateMealPreference(api.var.renewalStore, principal.userId, input, Date.now());
+    },
+    async listLaundryWatches(context) {
+      const api = apiContext(context);
+      const principal = await principalFor(api);
+      const watches = await api.var.renewalStore.listLaundryWatches(principal.userId);
+      return watches.map(publicLaundryWatch);
+    },
+    async createLaundryWatch(context, input) {
+      const api = apiContext(context);
+      const principal = await principalFor(api);
+      return publicLaundryWatch(await createLaundryWatch({
+        store: api.var.renewalStore,
+        userId: principal.userId,
+        value: input,
+        nowEpochMs: Date.now(),
+      }));
+    },
+    async deleteLaundryWatch(context, id) {
+      const api = apiContext(context);
+      const principal = await principalFor(api);
+      return api.var.renewalStore.cancelLaundryWatch(principal.userId, id, Date.now());
+    },
+    async listLaundryQueue(context) {
+      const api = apiContext(context);
+      const principal = await principalFor(api);
+      const entries = await api.var.renewalStore.listLaundryQueue(principal.userId, Date.now());
+      return entries.map(publicLaundryQueueEntry);
+    },
+    async joinLaundryQueue(context, input) {
+      const api = apiContext(context);
+      const principal = await principalFor(api);
+      return publicLaundryQueueEntry(await joinLaundryQueue({
+        store: api.var.renewalStore,
+        userId: principal.userId,
+        value: input,
+        nowEpochMs: Date.now(),
+      }));
+    },
+    async leaveLaundryQueue(context, id) {
+      const api = apiContext(context);
+      const principal = await principalFor(api);
+      return api.var.renewalStore.cancelLaundryQueueEntry(principal.userId, id, Date.now());
+    },
+  };
+}
 
-  app.get(`${base}/laundry-watches`, async (context) => {
-    const principal = await principalFor(context);
-    const watches = await context.var.renewalStore.listLaundryWatches(principal.userId);
-    return context.json({ watches: watches.map(publicLaundryWatch) });
-  });
-  app.post(`${base}/laundry-watches`, zValidator("json", laundryWatchSchema, validationHook), async (context) => {
-    const principal = await principalFor(context);
-    return context.json(publicLaundryWatch(await createLaundryWatch({
-      store: context.var.renewalStore, userId: principal.userId,
-      value: context.req.valid("json"), nowEpochMs: Date.now(),
-    })), 201);
-  });
-  app.delete(`${base}/laundry-watches/:id`, zValidator("param", laundryWatchParamSchema, validationHook), async (context) => {
-    const principal = await principalFor(context);
-    if (!(await context.var.renewalStore.cancelLaundryWatch(
-      principal.userId, context.req.valid("param").id, Date.now(),
-    ))) return context.json({ error: "LAUNDRY_WATCH_NOT_FOUND" }, 404);
-    return context.body(null, 204);
-  });
+export const desktopPersonalRoutes = createPersonalRoutes(handlers(desktopPrincipal), apiErrorHandler);
+export const mobilePersonalRoutes = createPersonalRoutes(handlers(mobilePrincipal), apiErrorHandler);
 
-  app.get(`${base}/laundry-queue`, async (context) => {
-    const principal = await principalFor(context);
-    const entries = await context.var.renewalStore.listLaundryQueue(principal.userId, Date.now());
-    return context.json({ entries: entries.map(publicLaundryQueueEntry) });
-  });
-  app.post(`${base}/laundry-queue`, zValidator("json", laundryQueueSchema, validationHook), async (context) => {
-    const principal = await principalFor(context);
-    return context.json(publicLaundryQueueEntry(await joinLaundryQueue({
-      store: context.var.renewalStore, userId: principal.userId,
-      value: context.req.valid("json"), nowEpochMs: Date.now(),
-    })), 201);
-  });
-  app.delete(`${base}/laundry-queue/:id`, zValidator("param", laundryQueueParamSchema, validationHook), async (context) => {
-    const principal = await principalFor(context);
-    if (!(await context.var.renewalStore.cancelLaundryQueueEntry(
-      principal.userId, context.req.valid("param").id, Date.now(),
-    ))) return context.json({ error: "LAUNDRY_QUEUE_ENTRY_NOT_FOUND" }, 404);
-    return context.body(null, 204);
-  });
+export function registerPersonalControlRoutes(app: Hono<ApiEnvironment>): void {
+  app.route("/api/desktop", desktopPersonalRoutes);
+  app.route("/api/mobile", mobilePersonalRoutes);
+}
+
+async function readPreferences(
+  store: ApiEnvironment["Variables"]["renewalStore"],
+  userId: string,
+): Promise<AttendancePreferenceRecord> {
+  return await store.getAttendancePreference(userId) ?? {
+    morning: true,
+    evening: true,
+    skipSunday: false,
+    skipAttendanceDate: null,
+  };
+}
+
+async function updatePreferences(
+  store: ApiEnvironment["Variables"]["renewalStore"],
+  userId: string,
+  body: AttendancePreferenceRecord,
+  now: number,
+): Promise<AttendancePreferenceRecord> {
+  const preference: AttendancePreferenceRecord = { ...body };
+  await store.setAttendancePreference(userId, preference, now);
+  return preference;
 }

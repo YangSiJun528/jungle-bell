@@ -6,6 +6,7 @@ const snapshot: DashboardMealsSnapshot = {
     asOf: '2026-08-11T00:00:00.000Z',
     lastCheckedAt: null,
     data: {
+        schemaVersion: 2,
         dailyMenus: [
             {id: 'dinner', title: '8월 11일 석식', text: '저녁', publishedAt: null, permalink: null},
             {id: 'lunch', title: '8월 11일 중식', text: '점심', publishedAt: null, permalink: null},
@@ -15,6 +16,9 @@ const snapshot: DashboardMealsSnapshot = {
             {id: 'lunch', title: '중복', text: '중복', publishedAt: null, permalink: null},
             {id: 'older', title: '8월 10일 중식', text: '이전', publishedAt: null, permalink: null},
         ],
+        currentWeeklyMenu: null,
+        weeklyMenus: [],
+        historyNextBefore: null,
     },
 };
 
@@ -28,6 +32,7 @@ describe('selectTodayMeals', () => {
         const staleDaily: DashboardMealsSnapshot = {
             ...snapshot,
             data: {
+                schemaVersion: 2,
                 dailyMenus: [{
                     id: 'yesterday', title: '8월 10일 중식', text: '어제 메뉴',
                     publishedAt: '2026-08-10T02:00:00.000Z', permalink: null,
@@ -37,6 +42,9 @@ describe('selectTodayMeals', () => {
                     publishedAt: '2026-08-10T00:00:00.000Z', permalink: null,
                 }],
                 recentMenus: [],
+                currentWeeklyMenu: null,
+                weeklyMenus: [],
+                historyNextBefore: null,
             },
         };
 

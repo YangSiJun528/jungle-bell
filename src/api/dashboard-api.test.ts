@@ -180,6 +180,7 @@ test('급식 원문 링크는 Kakao HTTPS allowlist만 화면 모델에 남긴�
             asOf: '2026-08-03T09:00:00.000Z',
             lastCheckedAt: '2026-08-03T09:00:00.000Z',
             data: {
+                schemaVersion: 2,
                 dailyMenus: [
                     {id: '1', title: '중식', text: '밥', publishedAt: null, permalink: 'javascript:alert(1)'},
                     {id: '2', title: '석식', text: '밥', publishedAt: null, permalink: 'http://pf.kakao.com/_xhzNjn/114130545'},
@@ -190,6 +191,9 @@ test('급식 원문 링크는 Kakao HTTPS allowlist만 화면 모델에 남긴�
                 ],
                 pinnedMenus: [],
                 recentMenus: [],
+                currentWeeklyMenu: null,
+                weeklyMenus: [],
+                historyNextBefore: null,
             },
         }),
         invokeCommand: async () => undefined,
@@ -203,6 +207,49 @@ test('급식 원문 링크는 Kakao HTTPS allowlist만 화면 모델에 남긴�
     assert.equal(meals.data.dailyMenus[3]?.permalink, null);
     assert.equal(meals.data.dailyMenus[4]?.permalink, null);
     assert.equal(meals.data.dailyMenus[5]?.permalink, null);
+});
+
+test('급식은 current schemaVersion 2와 주간·기록 필드를 모두 요구한다', async () => {
+    const current = {
+        asOf: '2026-08-11T09:00:00.000Z',
+        lastCheckedAt: null,
+        data: {
+            schemaVersion: 2,
+            dailyMenus: [],
+            pinnedMenus: [],
+            recentMenus: [],
+            currentWeeklyMenu: null,
+            weeklyMenus: [],
+            historyNextBefore: null,
+        },
+    };
+    const validApi = createDashboardApi({
+        fetcher: async () => jsonResponse(current),
+        invokeCommand: async () => undefined,
+    });
+
+    assert.deepEqual((await validApi.getPublicMeals()).data, current.data);
+
+    const without = (field: keyof typeof current.data) => {
+        const data: Partial<typeof current.data> = {...current.data};
+        delete data[field];
+        return {...current, data};
+    };
+    for (const invalid of [
+        without('schemaVersion'),
+        {...current, data: {...current.data, schemaVersion: 1}},
+        without('currentWeeklyMenu'),
+        without('weeklyMenus'),
+        {...current, data: {...current.data, weeklyMenus: null}},
+        without('historyNextBefore'),
+        {...current, data: {...current.data, historyNextBefore: 'not-a-cursor'}},
+    ]) {
+        const api = createDashboardApi({
+            fetcher: async () => jsonResponse(invalid),
+            invokeCommand: async () => undefined,
+        });
+        await assert.rejects(api.getPublicMeals(), /API_RESPONSE_INVALID/);
+    }
 });
 
 test('급식 응답의 아카이브 이미지와 주간 식단을 검증해 보존한다', async () => {
@@ -229,6 +276,7 @@ test('급식 응답의 아카이브 이미지와 주간 식단을 검증해 보�
             asOf: '2026-08-11T09:00:00.000Z',
             lastCheckedAt: '2026-08-11T09:00:00.000Z',
             data: {
+                schemaVersion: 2,
                 dailyMenus: [post],
                 pinnedMenus: [],
                 recentMenus: [post],
@@ -280,12 +328,16 @@ test('급식 이미지는 검증된 공개 asset 경로만 허용한다', async 
                 asOf: '2026-08-11T09:00:00.000Z',
                 lastCheckedAt: null,
                 data: {
+                    schemaVersion: 2,
                     dailyMenus: [{
                         id: 'meal-1', title: '중식', text: '밥', publishedAt: null, permalink: null,
                         images: [image],
                     }],
                     pinnedMenus: [],
                     recentMenus: [],
+                    currentWeeklyMenu: null,
+                    weeklyMenus: [],
+                    historyNextBefore: null,
                 },
             }),
             invokeCommand: async () => undefined,
@@ -590,7 +642,15 @@ test('데스크톱 생활 정보는 외부 fetch 대신 CampusService IPC를 사
                 : {
                     asOf: '2026-08-03T09:00:00.000Z',
                     lastCheckedAt: '2026-08-03T09:00:00.000Z',
-                    data: {dailyMenus: [], pinnedMenus: [], recentMenus: []},
+                    data: {
+                        schemaVersion: 2,
+                        dailyMenus: [],
+                        pinnedMenus: [],
+                        recentMenus: [],
+                        currentWeeklyMenu: null,
+                        weeklyMenus: [],
+                        historyNextBefore: null,
+                    },
                 };
         },
     });
@@ -934,17 +994,18 @@ test('PWA 개인 생활 설정은 mobile canonical API와 HttpOnly cookie만 사
         method: init?.method,
         credentials: init?.credentials,
         authorization: new Headers(init?.headers).has('authorization'),
+        contentType: new Headers(init?.headers).get('content-type'),
     })), [
-        {path: '/api/mobile/attendance/preferences', method: 'GET', credentials: 'include', authorization: false},
-        {path: '/api/mobile/attendance/preferences', method: 'PUT', credentials: 'include', authorization: false},
-        {path: '/api/mobile/meal-preferences', method: 'GET', credentials: 'include', authorization: false},
-        {path: '/api/mobile/meal-preferences', method: 'PUT', credentials: 'include', authorization: false},
-        {path: '/api/mobile/laundry-watches', method: 'GET', credentials: 'include', authorization: false},
-        {path: '/api/mobile/laundry-watches', method: 'POST', credentials: 'include', authorization: false},
-        {path: `/api/mobile/laundry-watches/${laundryWatch.id}`, method: 'DELETE', credentials: 'include', authorization: false},
-        {path: '/api/mobile/laundry-queue', method: 'GET', credentials: 'include', authorization: false},
-        {path: '/api/mobile/laundry-queue', method: 'POST', credentials: 'include', authorization: false},
-        {path: `/api/mobile/laundry-queue/${laundryQueueEntry.id}`, method: 'DELETE', credentials: 'include', authorization: false},
+        {path: '/api/mobile/attendance/preferences', method: 'GET', credentials: 'include', authorization: false, contentType: null},
+        {path: '/api/mobile/attendance/preferences', method: 'PUT', credentials: 'include', authorization: false, contentType: 'application/json'},
+        {path: '/api/mobile/meal-preferences', method: 'GET', credentials: 'include', authorization: false, contentType: null},
+        {path: '/api/mobile/meal-preferences', method: 'PUT', credentials: 'include', authorization: false, contentType: 'application/json'},
+        {path: '/api/mobile/laundry-watches', method: 'GET', credentials: 'include', authorization: false, contentType: null},
+        {path: '/api/mobile/laundry-watches', method: 'POST', credentials: 'include', authorization: false, contentType: 'application/json'},
+        {path: `/api/mobile/laundry-watches/${laundryWatch.id}`, method: 'DELETE', credentials: 'include', authorization: false, contentType: null},
+        {path: '/api/mobile/laundry-queue', method: 'GET', credentials: 'include', authorization: false, contentType: null},
+        {path: '/api/mobile/laundry-queue', method: 'POST', credentials: 'include', authorization: false, contentType: 'application/json'},
+        {path: `/api/mobile/laundry-queue/${laundryQueueEntry.id}`, method: 'DELETE', credentials: 'include', authorization: false, contentType: null},
     ]);
     assert.deepEqual(JSON.parse(String(calls[1]?.init?.body)), {
         morning: true, evening: false, skipSunday: true, skipAttendanceDate: null,

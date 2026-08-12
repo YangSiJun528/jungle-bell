@@ -3,7 +3,7 @@ import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, it} from 'vitest';
 import type {DashboardWeeklyMealMenu} from '@/api/dashboard-api';
 import {weeklyMenuForDate} from '../lib/meal-view';
-import {MealHistoryCalendar, MealHistoryDayButton} from './meal-history-calendar';
+import {MealHistoryCalendar} from './meal-history-calendar';
 import {WeeklyMealMenu} from './weekly-meal-menu';
 
 const source = readFileSync(new URL('./meal-history-calendar.tsx', import.meta.url), 'utf8');
@@ -19,15 +19,20 @@ describe('MealHistoryCalendar', () => {
         );
 
         expect(markup).toContain('aria-label="2026년 8월 급식 기록 달력"');
-        expect(markup).toContain('data-has-meal="true"');
-        expect(markup).toContain('aria-pressed="true"');
+        expect(markup).toContain('data-selected-single="true"');
+        expect(markup).toContain('2026년 8월 10일, 급식 기록 있음, 선택됨');
+        expect(markup).toContain('2026년 8월 13일, 급식 기록 없음');
+        expect(markup).toMatch(/disabled=""[^>]*aria-label="2026년 8월 13일, 급식 기록 없음"/u);
         expect(markup).toContain('이전 달');
         expect(markup).toContain('다음 달');
         expect(markup).not.toMatch(/<p(?:\s|>)/u);
     });
 
-    it('선택 날짜는 초기 월에만 사용하고 월 이동 상태를 effect로 되돌리지 않는다', () => {
-        expect(source).toContain('useState(() => selectedDate.slice(0, 7))');
+    it('공식 ShadCN Calendar에 날짜 선택과 월 이동을 위임한다', () => {
+        expect(source).toContain("import {Calendar} from '@/components/ui/calendar'");
+        expect(source).toContain('defaultMonth={selected}');
+        expect(source).toContain("modifiers.today ? '오늘' : null");
+        expect(source).not.toContain('calendarMonthCells');
         expect(source).not.toContain('useEffect');
     });
 
@@ -38,16 +43,15 @@ describe('MealHistoryCalendar', () => {
         ];
         let selectedDate = '2026-08-11';
         const before = weeklyMenuForDate(weeklyMenus, selectedDate)!;
-        const button = MealHistoryDayButton({
-            cell: {date: '2026-08-18', day: 18},
-            hasMeal: true,
-            selected: false,
+        const calendar = MealHistoryCalendar({
+            availableDates: new Set(['2026-08-11', '2026-08-18']),
+            selectedDate,
             onSelect: (date) => {
                 selectedDate = date;
             },
         });
 
-        (button.props as {onClick: () => void}).onClick();
+        (calendar.props as {onSelect: (date: Date) => void}).onSelect(new Date(2026, 7, 18));
         const after = weeklyMenuForDate(weeklyMenus, selectedDate)!;
         const markup = renderToStaticMarkup(
             <WeeklyMealMenu meal={after.post} weekKey={after.weekKey}/>,

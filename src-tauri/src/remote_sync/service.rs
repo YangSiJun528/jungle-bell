@@ -30,18 +30,24 @@ pub(crate) struct RemoteSyncService {
 }
 
 impl RemoteSyncService {
-    pub(crate) fn configured(app: &tauri::AppHandle) -> Result<Self, String> {
+    pub(crate) async fn configured(app: &tauri::AppHandle) -> Result<Self, String> {
         let app_data_dir = app
             .path()
             .app_data_dir()
             .map_err(|_| "CONNECTED_SERVICE_STORAGE_UNAVAILABLE".to_owned())?;
-        let identity = secure_credential::load_or_create_installation_identity(&app_data_dir).map_err(str::to_owned)?;
-        let credential_store: Arc<dyn CredentialStore> =
-            Arc::new(FileCredentialStore::new(&app_data_dir).map_err(str::to_owned)?);
-        log::info!("[connected-service] server credential uses private app storage");
-        let api = RemoteApi::new(&crate::data_api::base_url()).map_err(|error| error.code().to_owned())?;
-        Self::with_store(api, app_data_dir, identity.id, identity.newly_created, credential_store)
-            .map_err(|error| error.code().to_owned())
+        let api_base_url = crate::data_api::base_url();
+        run_blocking_initialization(move || {
+            let identity =
+                secure_credential::load_or_create_installation_identity(&app_data_dir).map_err(str::to_owned)?;
+            let credential_store: Arc<dyn CredentialStore> =
+                Arc::new(KeyringCredentialStore::new(&app_data_dir).map_err(str::to_owned)?);
+            let api = RemoteApi::new(&api_base_url).map_err(|error| error.code().to_owned())?;
+            let service = Self::with_store(api, app_data_dir, identity.id, identity.newly_created, credential_store)
+                .map_err(|error| error.code().to_owned())?;
+            log::info!("[connected-service] server credential uses the operating system credential vault");
+            Ok(service)
+        })
+        .await
     }
 
     pub(crate) fn with_store(
@@ -53,7 +59,9 @@ impl RemoteSyncService {
     ) -> Result<Self, ServiceError> {
         secure_credential::parse_installation_id(&installation_id).map_err(|_| ServiceError::Storage)?;
         let loaded = if credential_store.is_persistent() {
-            credential_store.load()
+            credential_store.load_validated(&|value| {
+                decode_stored_credential(value).is_ok_and(|credential| credential.is_valid_at(Utc::now()))
+            })
         } else {
             Ok(None)
         };
@@ -159,7 +167,7 @@ impl RemoteSyncService {
 
     async fn invalidate_credential(&self) {
         *self.credential.write().await = None;
-        let cleared = self.credential_store.clear().is_ok();
+        let cleared = clear_credential_store(Arc::clone(&self.credential_store)).await.is_ok();
         let mut runtime = self.runtime.lock().await;
         runtime.credential_persistent = false;
         runtime.enrollment_state = EnrollmentState::ResetRequired;
@@ -234,7 +242,10 @@ impl RemoteSyncService {
 
     async fn install_credential(&self, credential: BearerCredential) {
         let persistence_enabled = self.credential_store.is_persistent();
-        let persisted = persistence_enabled && persist_credential(self.credential_store.as_ref(), &credential).is_ok();
+        let persisted = persistence_enabled
+            && persist_credential_async(Arc::clone(&self.credential_store), &credential)
+                .await
+                .is_ok();
         *self.credential.write().await = Some(credential);
         let mut runtime = self.runtime.lock().await;
         runtime.credential_persistent = persisted;
@@ -249,7 +260,9 @@ impl RemoteSyncService {
 
     pub(crate) async fn reset_identity(&self) -> Result<ConnectedServiceStatus, String> {
         let registration = self.registration.lock().await;
-        self.credential_store.clear().map_err(str::to_owned)?;
+        clear_credential_store(Arc::clone(&self.credential_store))
+            .await
+            .map_err(|error| error.code().to_owned())?;
         let identity = secure_credential::reset_installation_identity(&self.app_data_dir).map_err(str::to_owned)?;
         *self.installation_id.write().await = identity.id;
         *self.credential.write().await = None;
@@ -618,6 +631,16 @@ impl RemoteSyncService {
     }
 }
 
+async fn run_blocking_initialization<T, F>(initializer: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(initializer)
+        .await
+        .map_err(|_| "CONNECTED_SERVICE_STORAGE_UNAVAILABLE".to_owned())?
+}
+
 pub(crate) fn decode_stored_credential(value: &str) -> Result<BearerCredential, ServiceError> {
     let stored: StoredCredentialValue = serde_json::from_str(value).map_err(|_| ServiceError::Storage)?;
     if stored.schema != DESKTOP_SESSION_SCHEMA || stored.schema_version != DESKTOP_SESSION_SCHEMA_VERSION {
@@ -626,16 +649,64 @@ pub(crate) fn decode_stored_credential(value: &str) -> Result<BearerCredential, 
     BearerCredential::from_wire(stored.access_token, &stored.expires_at).map_err(|_| ServiceError::Storage)
 }
 
-pub(crate) fn persist_credential(
-    store: &dyn CredentialStore,
-    credential: &BearerCredential,
-) -> Result<(), ServiceError> {
+fn encode_stored_credential(credential: &BearerCredential) -> Result<Zeroizing<String>, ServiceError> {
     let value = StoredCredentialRef {
         schema: DESKTOP_SESSION_SCHEMA,
         schema_version: DESKTOP_SESSION_SCHEMA_VERSION,
         access_token: &credential.token,
         expires_at: credential.expires_at.to_rfc3339_opts(SecondsFormat::Millis, true),
     };
-    let serialized = Zeroizing::new(serde_json::to_string(&value).map_err(|_| ServiceError::Storage)?);
+    serde_json::to_string(&value)
+        .map(Zeroizing::new)
+        .map_err(|_| ServiceError::Storage)
+}
+
+#[cfg(test)]
+pub(crate) fn persist_credential(
+    store: &dyn CredentialStore,
+    credential: &BearerCredential,
+) -> Result<(), ServiceError> {
+    let serialized = encode_stored_credential(credential)?;
     store.store(&serialized).map_err(|_| ServiceError::Storage)
+}
+
+async fn persist_credential_async(
+    store: Arc<dyn CredentialStore>,
+    credential: &BearerCredential,
+) -> Result<(), ServiceError> {
+    let serialized = encode_stored_credential(credential)?;
+    tauri::async_runtime::spawn_blocking(move || store.store(&serialized))
+        .await
+        .map_err(|_| ServiceError::Storage)?
+        .map_err(|_| ServiceError::Storage)
+}
+
+async fn clear_credential_store(store: Arc<dyn CredentialStore>) -> Result<(), ServiceError> {
+    tauri::async_runtime::spawn_blocking(move || store.clear())
+        .await
+        .map_err(|_| ServiceError::Storage)?
+        .map_err(|_| ServiceError::Storage)
+}
+
+#[cfg(test)]
+mod initialization_tests {
+    use super::*;
+    use std::sync::{Arc as StdArc, Mutex as StdMutex};
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn configured_initialization_runs_on_the_blocking_pool_and_is_awaited() {
+        let caller = std::thread::current().id();
+        let initializer_thread = StdArc::new(StdMutex::new(None));
+        let observed = StdArc::clone(&initializer_thread);
+
+        run_blocking_initialization(move || {
+            *observed.lock().unwrap() = Some(std::thread::current().id());
+            Ok::<_, String>(())
+        })
+        .await
+        .unwrap();
+
+        let initialized_on = initializer_thread.lock().unwrap().unwrap();
+        assert_ne!(initialized_on, caller);
+    }
 }

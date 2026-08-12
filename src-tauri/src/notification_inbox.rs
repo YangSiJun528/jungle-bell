@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use chrono::Utc;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use tauri::{Emitter, Manager};
 
 use crate::tray::{self, DashboardRoute};
@@ -41,17 +41,28 @@ fn activation_dashboard_route(action: Option<NotificationAction>) -> DashboardRo
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NotificationInboxItem {
     pub id: String,
     pub title: String,
     pub body: String,
     pub created_at: i64,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
     pub read_at: Option<i64>,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
     pub action: Option<NotificationAction>,
 }
 
+fn deserialize_required_nullable<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::<T>::deserialize(deserializer)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct StoredNotification {
     item: NotificationInboxItem,
     key: String,
@@ -66,7 +77,7 @@ pub struct NotificationInboxSnapshot {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(deny_unknown_fields)]
 struct NotificationInboxStore {
     version: u32,
     revision: u64,
@@ -153,15 +164,19 @@ impl NotificationInboxStore {
         };
         let mut store: Self =
             serde_json::from_slice(&data).map_err(|error| format!("알림함({}) 파싱 실패: {error}", path.display()))?;
-        if store.version > NOTIFICATION_INBOX_VERSION {
+        if store.version != NOTIFICATION_INBOX_VERSION {
+            let version_kind = if store.version > NOTIFICATION_INBOX_VERSION {
+                "미래 버전"
+            } else {
+                "버전"
+            };
             return Err(format!(
-                "알림함({}) 안전한 로드 실패: 지원하지 않는 미래 버전 {}입니다(현재 {}).",
+                "알림함({}) 안전한 로드 실패: 지원하지 않는 {version_kind} {}입니다(현재 {}).",
                 path.display(),
                 store.version,
                 NOTIFICATION_INBOX_VERSION
             ));
         }
-        store.version = NOTIFICATION_INBOX_VERSION;
         store.items.truncate(MAX_NOTIFICATION_ITEMS);
         store.next_id = store
             .items
@@ -720,6 +735,77 @@ mod tests {
         assert!(error.contains("미래 버전"));
 
         let _ = std::fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn 알림함_저장소는_현재_버전의_exact_snapshot만_받는다() {
+        let mut store = NotificationInboxStore::default();
+        store.push(
+            "strict-snapshot".into(),
+            "제목".into(),
+            "본문".into(),
+            None,
+            None,
+            1_700_000_000_000,
+        );
+        let current = serde_json::to_value(store).unwrap();
+        let mut version_zero = current.clone();
+        version_zero["version"] = serde_json::json!(0);
+        let mut unsupported = current.clone();
+        unsupported["version"] = serde_json::json!(NOTIFICATION_INBOX_VERSION + 1);
+        let mut unknown_store_field = current.clone();
+        unknown_store_field["unknown"] = serde_json::json!(true);
+
+        let without_store_field = |field: &str| {
+            let mut value = current.clone();
+            value.as_object_mut().unwrap().remove(field);
+            value
+        };
+        let without_item_field = |field: &str| {
+            let mut value = current.clone();
+            value["items"][0]["item"].as_object_mut().unwrap().remove(field);
+            value
+        };
+        let mut unknown_stored_field = current.clone();
+        unknown_stored_field["items"][0]["unknown"] = serde_json::json!(true);
+        let mut unknown_item_field = current.clone();
+        unknown_item_field["items"][0]["item"]["unknown"] = serde_json::json!(true);
+
+        for (name, value) in [
+            ("missing-version", without_store_field("version")),
+            ("missing-revision", without_store_field("revision")),
+            ("missing-next-id", without_store_field("next_id")),
+            ("missing-items", without_store_field("items")),
+            ("missing-stored-item", {
+                let mut value = current.clone();
+                value["items"][0].as_object_mut().unwrap().remove("item");
+                value
+            }),
+            ("missing-stored-key", {
+                let mut value = current.clone();
+                value["items"][0].as_object_mut().unwrap().remove("key");
+                value
+            }),
+            ("missing-item-id", without_item_field("id")),
+            ("missing-item-title", without_item_field("title")),
+            ("missing-item-body", without_item_field("body")),
+            ("missing-item-created-at", without_item_field("createdAt")),
+            ("missing-item-read-at", without_item_field("readAt")),
+            ("missing-item-action", without_item_field("action")),
+            ("version-zero", version_zero),
+            ("unsupported-version", unsupported),
+            ("unknown-store-field", unknown_store_field),
+            ("unknown-stored-field", unknown_stored_field),
+            ("unknown-item-field", unknown_item_field),
+        ] {
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().join(format!("{name}.json"));
+            std::fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
+            assert!(
+                NotificationInboxStore::load_from(&path).is_err(),
+                "{name} must be rejected"
+            );
+        }
     }
 
     #[test]

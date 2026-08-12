@@ -19,7 +19,7 @@ import {
 export function MealHistorySection({meals}: {meals: DashboardMealsSnapshot}) {
     const {api} = useDashboardEnvironment();
     const [selectedHistoryDate, setSelectedHistoryDate] = useState('');
-    const historyCursor = meals.data.historyNextBefore ?? null;
+    const historyCursor = meals.data.historyNextBefore;
     const olderHistory = useInfiniteQuery({
         queryKey: ['campus', 'meals', 'history', historyCursor],
         queryFn: ({pageParam}) => api.getPublicMealHistory(pageParam, 30),
@@ -49,7 +49,7 @@ export function MealHistorySection({meals}: {meals: DashboardMealsSnapshot}) {
         : historyDates[0] ?? '';
     const activeHistoryMeals = activeHistoryDate ? historyByDate.get(activeHistoryDate) ?? [] : [];
     const activeWeeklyMenu = activeHistoryDate
-        ? weeklyMenuForDate(meals.data.weeklyMenus ?? [], activeHistoryDate)
+        ? weeklyMenuForDate(meals.data.weeklyMenus, activeHistoryDate)
         : null;
     const canLoadOlder = historyCursor !== null
         && (olderHistory.data === undefined || olderHistory.hasNextPage);
