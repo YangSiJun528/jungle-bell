@@ -50,7 +50,7 @@ test('기능 화면은 공통 셸 아래에서 경로별 지연 로딩된다', (
     ]) {
         assert.match(app, new RegExp(`lazy\\(\\(\\) => import\\(['"]@/features/${feature}['"]\\)`));
     }
-    assert.match(app, /<DashboardShell[\s\S]*notificationPanel=\{\{[\s\S]*open: notificationPanelOpen[\s\S]*setNotificationPanelRequestedOpen\(open\)[\s\S]*route === 'notifications'\) replace\(contentRoute\)[\s\S]*<NotificationPanelContent seenMobileIds=\{seenMobileIds\}\/>[\s\S]*<RouteContent[\s\S]*route=\{contentRoute\}[\s\S]*onRequestInstall=\{openInstallPrompt\}[\s\S]*\/>[\s\S]*<InstallPrompt open=\{installPromptOpen\} onOpenChange=\{setInstallPromptVisibility\}\/>[\s\S]*<\/DashboardShell>/);
+    assert.match(app, /<DashboardShell[\s\S]*notificationPanel=\{\{[\s\S]*open: notificationPanelOpen[\s\S]*setNotificationPanelRequestedOpen\(open\)[\s\S]*route === 'notifications'\) replace\(contentRoute\)[\s\S]*<NotificationPanelContent[\s\S]*seenMobileIds=\{seenMobileIds\}[\s\S]*onMobileNotificationSeen=\{markMobileNotificationSeen\}[\s\S]*\/>[\s\S]*<RouteContent[\s\S]*route=\{contentRoute\}[\s\S]*onRequestInstall=\{openInstallPrompt\}[\s\S]*\/>[\s\S]*<InstallPrompt open=\{installPromptOpen\} onOpenChange=\{setInstallPromptVisibility\}\/>[\s\S]*<\/DashboardShell>/);
     assert.match(app, /useHashRoute\(surface\.kind\)/);
     assert.match(app, /window\.scrollTo\(\{top: 0, left: 0, behavior: 'auto'\}\)/);
     assert.match(shell, /data-dashboard-shell="renewal"/);
@@ -242,7 +242,7 @@ test('PWA 메타데이터·서비스 워커·설치 프롬프트는 React 진입
     );
     assert.doesNotMatch(installPrompt, /className="fixed (?:inset-x-3 )?bottom-3/);
     assert.match(app, /<RouteContent[\s\S]*route=\{contentRoute\}[\s\S]*onRequestInstall=\{openInstallPrompt\}/);
-    assert.match(app, /<NotificationPanelContent seenMobileIds=\{seenMobileIds\}\/>/);
+    assert.match(app, /<NotificationPanelContent[\s\S]*seenMobileIds=\{seenMobileIds\}[\s\S]*onMobileNotificationSeen=\{markMobileNotificationSeen\}[\s\S]*\/>/);
     assert.match(app, /<InstallPrompt open=\{installPromptOpen\} onOpenChange=\{setInstallPromptVisibility\}\/>/);
     assert.doesNotMatch(home, /홈 화면 추가·PC 앱 안내/);
     assert.match(home, /이 QR은 설치한 모바일 PWA에서 열어야 합니다/);

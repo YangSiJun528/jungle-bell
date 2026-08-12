@@ -1,7 +1,5 @@
-import {lazy, Suspense, useEffect, useMemo, useState, useSyncExternalStore} from 'react';
+import {lazy, Suspense, useCallback, useEffect, useMemo, useState} from 'react';
 import {LoadingState} from '@/components/dashboard/async-state';
-import type {DashboardNotification} from '@/api/dashboard-api';
-import type {NotificationInboxSnapshot} from '@/domain/notifications/inbox';
 import {useDashboardEnvironment} from './dashboard-context';
 import {InstallPrompt, useInstallPromptVisibility} from './install-prompt';
 import {DashboardShell} from './shell';
@@ -13,7 +11,6 @@ import {
     readSeenMobileNotificationIds,
     writeSeenMobileNotificationIds,
 } from './mobile-notification-seen';
-import {documentIsVisible, subscribeToDocumentVisibility} from './document-visibility';
 import {
     notificationPanelBackgroundRoute,
     type DashboardContentRoute,
@@ -25,10 +22,6 @@ const LaundryPage = lazy(() => import('@/features/laundry/pages/laundry-page').t
 const MealsPage = lazy(() => import('@/features/meals/pages/meals-page').then((module) => ({default: module.MealsPage})));
 const NotificationPanelContent = lazy(() => import('@/features/notifications/notifications-page').then((module) => ({default: module.NotificationPanelContent})));
 const ConnectionsPage = lazy(() => import('@/features/connections/connections-page').then((module) => ({default: module.ConnectionsPage})));
-
-function mobileNotificationIds(data: DashboardNotification[] | NotificationInboxSnapshot | undefined): string[] {
-    return Array.isArray(data) ? data.map((notification) => notification.id) : [];
-}
 
 function RouteContent({
     route,
@@ -55,11 +48,6 @@ export function DashboardApp() {
     const [notificationBackgroundRoute, setNotificationBackgroundRoute] = useState<DashboardContentRoute>(
         () => notificationPanelBackgroundRoute('home', route),
     );
-    const documentVisible = useSyncExternalStore(
-        subscribeToDocumentVisibility,
-        documentIsVisible,
-        () => true,
-    );
     const {installPromptOpen, openInstallPrompt, setInstallPromptVisibility} = useInstallPromptVisibility();
     const contentRoute = notificationPanelBackgroundRoute(notificationBackgroundRoute, route);
     const notificationPanelOpen = route === 'notifications' || notificationPanelRequestedOpen;
@@ -78,15 +66,13 @@ export function DashboardApp() {
         setNotificationPanelRequestedOpen(false);
     }, [route]);
 
-    useEffect(() => {
-        if (surface.kind !== 'companion' || !notificationPanelOpen || !documentVisible) return;
-        const ids = mobileNotificationIds(notifications.data);
-        if (ids.length === 0) return;
-        const next = mergeSeenMobileNotificationIds(seenMobileIds, ids);
-        if (next === seenMobileIds) return;
-        writeSeenMobileNotificationIds(window.localStorage, next);
-        setSeenMobileIds(next);
-    }, [documentVisible, notificationPanelOpen, notifications.data, seenMobileIds, surface.kind]);
+    const markMobileNotificationSeen = useCallback((id: string) => {
+        setSeenMobileIds((current) => {
+            const next = mergeSeenMobileNotificationIds(current, [id]);
+            if (next !== current) writeSeenMobileNotificationIds(window.localStorage, next);
+            return next;
+        });
+    }, []);
 
     const unreadCount = useMemo(() => {
         const data = notifications.data;
@@ -109,7 +95,10 @@ export function DashboardApp() {
                 },
                 content: (
                     <Suspense fallback={<LoadingState label="알림을 준비하고 있습니다."/>}>
-                        <NotificationPanelContent seenMobileIds={seenMobileIds}/>
+                        <NotificationPanelContent
+                            seenMobileIds={seenMobileIds}
+                            onMobileNotificationSeen={markMobileNotificationSeen}
+                        />
                     </Suspense>
                 ),
             }}

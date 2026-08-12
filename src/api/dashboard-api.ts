@@ -287,6 +287,7 @@ export interface DashboardApi extends DashboardPersonalApi, DashboardDesktopSett
     disconnectMobileSession(): Promise<void>;
     getNotifications(): Promise<DashboardNotification[]>;
     getDesktopNotificationInbox(): Promise<NotificationInboxSnapshot>;
+    markDesktopNotificationRead(id: string): Promise<NotificationInboxSnapshot>;
     activateDesktopNotification(id: string): Promise<NotificationInboxSnapshot>;
     sendDesktopTestNotification(): Promise<DesktopTestNotificationResult>;
     sendMobileTestNotification(): Promise<number>;
@@ -536,6 +537,15 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
         async getDesktopNotificationInbox() {
             const snapshot = normalizeNotificationInboxSnapshot(
                 await invokeCommand('get_notification_inbox_snapshot'),
+            );
+            if (!snapshot) throw new Error('API_RESPONSE_INVALID');
+            return snapshot;
+        },
+
+        async markDesktopNotificationRead(id) {
+            if (!/^\d+$/u.test(id)) throw new Error('API_CLIENT_INVALID_ARGUMENT');
+            const snapshot = normalizeNotificationInboxSnapshot(
+                await invokeCommand('mark_notification_read', {id}),
             );
             if (!snapshot) throw new Error('API_RESPONSE_INVALID');
             return snapshot;

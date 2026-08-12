@@ -36,3 +36,11 @@ test('seen notification merge preserves identity when no new IDs are added', () 
     assert.equal(mergeSeenMobileNotificationIds(current, ['two', 'one']), current);
     assert.deepEqual([...mergeSeenMobileNotificationIds(current, ['three'])], ['three', 'one', 'two']);
 });
+
+test('개별 알림을 본 처리하면 다른 새 알림은 유지한다', () => {
+    const current = new Set(['one']);
+    const next = mergeSeenMobileNotificationIds(current, ['two']);
+
+    assert.deepEqual([...next], ['two', 'one']);
+    assert.equal(next.has('three'), false);
+});

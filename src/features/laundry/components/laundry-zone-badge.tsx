@@ -7,7 +7,7 @@ export function LaundryZoneBadge({zone}: {zone: LaundryZone}) {
     return (
         <Badge
             aria-label={meta.label}
-            className={meta.badgeClassName}
+            className={meta.surfaceClassName}
             data-laundry-zone={zone}
             variant="outline"
         >

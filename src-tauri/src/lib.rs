@@ -145,6 +145,7 @@ pub fn run() {
             commands::get_dashboard_meal_history,
             commands::get_dashboard_home_overview,
             commands::get_notification_inbox_snapshot,
+            commands::mark_notification_read,
             commands::activate_notification,
             commands::send_test_notification,
             commands::get_connected_service_status,

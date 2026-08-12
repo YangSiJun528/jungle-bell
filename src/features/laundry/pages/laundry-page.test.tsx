@@ -2,13 +2,20 @@ import {readFileSync} from 'node:fs';
 import {describe, expect, it} from 'vitest';
 
 const source = readFileSync(new URL('./laundry-page.tsx', import.meta.url), 'utf8');
+const zoneSource = readFileSync(new URL('../lib/laundry-zone.ts', import.meta.url), 'utf8');
 
 describe('LaundryPage capacity summary', () => {
-    it('신뢰할 수 있는 시작 가능 카드를 남성과 여성의 차분한 색으로 구분한다', () => {
-        expect(source).toContain("card.access === 'men'");
-        expect(source).toMatch(/border-blue-[^'\s]+[\s\S]*bg-blue-[^'\s]+/u);
-        expect(source).toMatch(/border-rose-[^'\s]+[\s\S]*bg-rose-[^'\s]+/u);
+    it('시작 가능 카드도 구역 뱃지와 같은 중앙 색상 토큰을 사용한다', () => {
+        expect(source).toContain('laundryZoneMeta(card.access).surfaceClassName');
+        expect(zoneSource).toContain('surfaceClassName: MEN_ZONE_SURFACE');
+        expect(zoneSource).toContain('surfaceClassName: WOMEN_ZONE_SURFACE');
+        expect(zoneSource).toContain('surfaceClassName: COMMON_ZONE_SURFACE');
         expect(source).toContain("card.status === 'checking'");
+    });
+
+    it('워시타워 범례에 구역과 별도 경고 뱃지를 함께 표시한다', () => {
+        expect(source).toContain('aria-label="워시타워 구역 및 경고 범례"');
+        expect(source).toContain('<LaundryWarningBadge/>');
     });
 
     it('횟수와 지금 시작 가능 의미를 한 줄로 표시한다', () => {

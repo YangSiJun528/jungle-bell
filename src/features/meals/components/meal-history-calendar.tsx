@@ -65,7 +65,6 @@ export function MealHistoryCalendar({
             modifiersClassNames={{
                 hasMeal: '[&_button]:bg-primary/10 [&_button]:font-semibold [&_button]:text-primary [&_button]:hover:bg-primary/15',
             }}
-            navLayout="around"
             noonSafe
             required
             selected={selected}

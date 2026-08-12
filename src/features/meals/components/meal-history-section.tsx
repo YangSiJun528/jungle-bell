@@ -61,49 +61,55 @@ export function MealHistorySection({meals}: {meals: DashboardMealsSnapshot}) {
                 지난 급식 기록
             </h2>
             {activeHistoryDate ? (
-                <div className="grid items-start gap-4 lg:grid-cols-[20rem_minmax(0,1fr)]">
-                    <Card className="gap-4 p-5 shadow-none">
-                        <MealHistoryCalendar
-                            availableDates={availableDates}
-                            key={activeHistoryDate.slice(0, 7)}
-                            selectedDate={activeHistoryDate}
-                            onSelect={setSelectedHistoryDate}
-                        />
-                        {canLoadOlder ? (
-                            <MealHistoryLoadMore
-                                loading={olderHistory.isFetchingNextPage}
-                                onLoad={() => void olderHistory.fetchNextPage()}
+                <div className="space-y-6">
+                    <div
+                        className="grid items-start gap-4 lg:grid-cols-[minmax(17rem,20rem)_minmax(0,1fr)]"
+                        data-meal-history-overview="true"
+                    >
+                        <Card className="mx-auto w-full max-w-80 gap-4 p-4 shadow-none lg:mx-0">
+                            <MealHistoryCalendar
+                                availableDates={availableDates}
+                                key={activeHistoryDate.slice(0, 7)}
+                                selectedDate={activeHistoryDate}
+                                onSelect={setSelectedHistoryDate}
                             />
-                        ) : null}
-                        {olderHistory.isError ? (
-                            <p className="text-xs text-destructive">이전 기록을 불러오지 못했습니다.</p>
-                        ) : null}
-                    </Card>
-                    <div className="space-y-6">
-                        <div>
-                            <h3 className="mb-3 text-sm font-semibold">
+                            {canLoadOlder ? (
+                                <MealHistoryLoadMore
+                                    loading={olderHistory.isFetchingNextPage}
+                                    onLoad={() => void olderHistory.fetchNextPage()}
+                                />
+                            ) : null}
+                            {olderHistory.isError ? (
+                                <p className="text-xs text-destructive">이전 기록을 불러오지 못했습니다.</p>
+                            ) : null}
+                        </Card>
+                        <section aria-labelledby="selected-history-date-title" className="min-w-0">
+                            <h3 className="mb-3 text-sm font-semibold" id="selected-history-date-title">
                                 {mealDateLabel(activeHistoryDate)}
                             </h3>
-                            <div className="grid gap-4 xl:grid-cols-2">
+                            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
                                 {activeHistoryMeals.map((meal) => (
                                     <MealPostCard compact key={meal.id} meal={meal}/>
                                 ))}
                             </div>
-                        </div>
-                        <section aria-labelledby="selected-history-week-title">
-                            <h3 className="mb-3 text-sm font-semibold" id="selected-history-week-title">
-                                선택한 주 급식표
-                            </h3>
-                            {activeWeeklyMenu ? (
-                                <WeeklyMealMenu
-                                    meal={activeWeeklyMenu.post}
-                                    weekKey={activeWeeklyMenu.weekKey}
-                                />
-                            ) : (
-                                <EmptyState title="저장된 주간 급식표가 없습니다."/>
-                            )}
                         </section>
                     </div>
+                    <section
+                        aria-labelledby="selected-history-week-title"
+                        data-meal-history-weekly="true"
+                    >
+                        <h3 className="mb-3 text-sm font-semibold" id="selected-history-week-title">
+                            선택한 주 급식표
+                        </h3>
+                        {activeWeeklyMenu ? (
+                            <WeeklyMealMenu
+                                meal={activeWeeklyMenu.post}
+                                weekKey={activeWeeklyMenu.weekKey}
+                            />
+                        ) : (
+                            <EmptyState title="저장된 주간 급식표가 없습니다."/>
+                        )}
+                    </section>
                 </div>
             ) : (
                 <div className="space-y-3">

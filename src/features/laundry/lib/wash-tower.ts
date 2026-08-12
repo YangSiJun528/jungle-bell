@@ -9,7 +9,6 @@ import {
 export type WashTowerApplianceKind = 'dryer' | 'washer';
 
 export interface WashTowerCellView {
-    estimated: boolean;
     label: string;
     state: LaundryAvailabilityState;
     text: string;
@@ -52,17 +51,18 @@ export function washTowerCellView(
 ): WashTowerCellView {
     const appliance = machine[kind];
     const state = laundryAvailabilityState(appliance);
-    const estimated = state === 'unavailable' && appliance?.projection?.estimated === true;
     const baseText = state === 'available'
         ? '✓'
         : state === 'error'
             ? '경고'
             : laundryOverviewText(appliance, nowMs);
     const applianceLabel = kind === 'washer' ? '세탁기' : '건조기';
+    const statusLabel = state === 'error'
+        ? '경고'
+        : laundryRemainingText(appliance, nowMs);
 
     return {
-        estimated,
-        label: `${machine.id} ${applianceLabel} ${estimated ? '예상 ' : ''}${laundryRemainingText(appliance, nowMs)}`,
+        label: `${machine.id} ${applianceLabel} ${statusLabel}`,
         state,
         text: baseText,
     };

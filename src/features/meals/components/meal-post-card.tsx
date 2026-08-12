@@ -1,4 +1,4 @@
-import {ExternalLink} from 'lucide-react';
+import {ExternalLink, ImageOff} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {
     Card,
@@ -104,25 +104,20 @@ export function MealPostCard({
 
 export function MissingMealPostCard({period}: {period: TodayMealPeriod}) {
     return (
-        <Card className="overflow-hidden py-0 shadow-none" data-meal-state="missing">
+        <Card className="gap-0 overflow-hidden py-0 shadow-none" data-meal-state="missing">
             <div
                 aria-label={`${period} \uC0AC\uC9C4 \uC5C6\uC74C`}
-                className="flex aspect-[4/3] items-center justify-center border-b bg-muted/60 px-5 text-center text-xs text-muted-foreground"
+                className="flex aspect-[4/3] items-center justify-center border-b bg-muted/60 text-muted-foreground"
                 role="img"
             >
-                급식 사진이 아직 올라오지 않았습니다.
+                <ImageOff aria-hidden="true" className="size-6"/>
             </div>
-            <CardHeader className="px-5 pt-5">
+            <CardHeader className="p-5">
                 <CardTitle className="text-base leading-6">{period}</CardTitle>
                 <CardDescription className="mt-1">
                     아직 올라오지 않았습니다.
                 </CardDescription>
             </CardHeader>
-            <CardContent className="px-5 pb-5">
-                <p className="rounded-md bg-muted/60 p-3 text-sm leading-6 text-muted-foreground">
-                    메뉴가 아직 올라오지 않았습니다.
-                </p>
-            </CardContent>
         </Card>
     );
 }

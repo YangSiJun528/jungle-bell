@@ -300,7 +300,7 @@ impl NotificationInboxService {
         Ok((snapshot, action))
     }
 
-    pub(crate) fn mark_read_from_system(
+    pub(crate) fn mark_read_without_activation(
         &self,
         app: &tauri::AppHandle,
         id: &str,
@@ -661,6 +661,27 @@ mod tests {
             snapshot.items.iter().find(|item| item.id == first_id).unwrap().read_at,
             Some(3_000)
         );
+    }
+
+    #[test]
+    fn 이동없는_읽음_처리는_액션을_보존하고_반복_호출에_멱등이다() {
+        let mut store = NotificationInboxStore::default();
+        let (id, _, _) = push(
+            &mut store,
+            "laundry",
+            "세탁 완료",
+            Some(NotificationAction::Laundry),
+            None,
+            1_000,
+        );
+
+        assert_eq!(store.mark_read(&id, 2_000).unwrap(), Some(NotificationAction::Laundry));
+        let first = store.snapshot();
+        assert_eq!(first.unread_count, 0);
+        assert_eq!(first.items[0].read_at, Some(2_000));
+
+        assert_eq!(store.mark_read(&id, 3_000).unwrap(), Some(NotificationAction::Laundry));
+        assert_eq!(store.snapshot(), first);
     }
 
     #[test]

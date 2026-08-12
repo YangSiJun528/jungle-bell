@@ -20,7 +20,7 @@ test('HTML 문서는 레이아웃을 복제하지 않고 React 셸을 위한 단
 test('모든 기능 경로는 하나의 DashboardShell과 main 콘텐츠 영역을 재사용한다', () => {
     assert.equal((app.match(/<DashboardShell\b/g) ?? []).length, 1);
     assert.equal((app.match(/<RouteContent\b/g) ?? []).length, 1);
-    assert.match(app, /<DashboardShell[\s\S]*notificationPanel=\{\{[\s\S]*<NotificationPanelContent seenMobileIds=\{seenMobileIds\}\/?>[\s\S]*<RouteContent[\s\S]*route=\{contentRoute\}[\s\S]*onRequestInstall=\{openInstallPrompt\}[\s\S]*\/>[\s\S]*<\/DashboardShell>/);
+    assert.match(app, /<DashboardShell[\s\S]*notificationPanel=\{\{[\s\S]*<NotificationPanelContent[\s\S]*seenMobileIds=\{seenMobileIds\}[\s\S]*onMobileNotificationSeen=\{markMobileNotificationSeen\}[\s\S]*\/>[\s\S]*<RouteContent[\s\S]*route=\{contentRoute\}[\s\S]*onRequestInstall=\{openInstallPrompt\}[\s\S]*\/>[\s\S]*<\/DashboardShell>/);
 
     assert.equal((shell.match(/<Sidebar\b/g) ?? []).length, 1);
     assert.equal((shell.match(/<header\b/g) ?? []).length, 0);
@@ -28,10 +28,13 @@ test('모든 기능 경로는 하나의 DashboardShell과 main 콘텐츠 영역�
     assert.equal((shell.match(/id="dashboard-content"/g) ?? []).length, 1);
 });
 
-test('데스크톱 사이드바는 고정 폭을 유지하고 접기 기능과 글로벌 헤더를 두지 않는다', () => {
-    assert.match(shell, /<SidebarProvider[\s\S]{0,180}sidebarWidth="14\.5rem"[\s\S]{0,180}keyboardShortcut=\{null\}/);
+test('데스크톱 사이드바는 저장 가능한 폭 조절과 글로벌 헤더 없는 레이아웃을 제공한다', () => {
+    assert.match(shell, /<SidebarProvider[\s\S]{0,180}sidebarWidth=\{`\$\{sidebarWidth\}px`\}[\s\S]{0,180}keyboardShortcut=\{null\}/);
     assert.match(shell, /<Sidebar[\s\S]{0,120}collapsible="none"/);
-    assert.match(shell, /sidebarWidth="14\.5rem"/);
+    assert.match(shell, /type="range"/);
+    assert.match(shell, /aria-label="사이드바 너비"/);
+    assert.match(shell, /min=\{MIN_SIDEBAR_WIDTH\}[\s\S]*max=\{MAX_SIDEBAR_WIDTH\}[\s\S]*step=\{SIDEBAR_WIDTH_STEP\}/);
+    assert.match(shell, /writeSidebarWidth\(window\.localStorage, next\)/);
     assert.doesNotMatch(shell, /sidebarWidthIcon=|<SidebarTrigger|<SidebarRail/);
     assert.doesNotMatch(shell, /<header\b/);
     assert.match(shell, /sticky top-0/);
@@ -69,7 +72,7 @@ test('공개 화면은 3개, 개인 화면은 4개 주요 메뉴를 유지하고
     assert.match(routes, /PERSONAL_NAVIGATION_ROUTES\s*=\s*\[[\s\S]*'home'[\s\S]*'attendance'[\s\S]*'laundry'[\s\S]*'meals'[\s\S]*\]/);
     assert.match(routes, /PERSONAL_UTILITY_ROUTES\s*=\s*\[[\s\S]*'notifications'[\s\S]*'connections'[\s\S]*\]/);
     assert.match(shell, /aria-label="개인 도구"/);
-    assert.match(shell, /border-t border-sidebar-border/);
+    assert.match(shell, /className=\{personal \? 'border-t border-sidebar-border' : undefined\}/);
     assert.match(shell, /aria-label=\{notificationAriaLabel/);
     assert.match(shell, /aria-label="설정"/);
     assert.match(shell, /aria-haspopup="dialog"/);

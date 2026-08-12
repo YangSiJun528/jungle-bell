@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {test} from 'vitest';
 
 import {
+    markNotificationInboxItemRead,
     normalizeNotificationInboxSnapshot,
 } from './inbox';
 
@@ -90,4 +91,28 @@ test('알림함 snapshot은 잘못된 ID, 시각, 액션과 미읽음 개수 불
         ...base,
         items: [{...base.items[0], action: 'openSettings'}],
     }), null);
+});
+
+test('알림 본 처리는 해당 항목과 미읽음 개수만 낙관적으로 갱신한다', () => {
+    const snapshot = normalizeNotificationInboxSnapshot({
+        revision: 2,
+        unreadCount: 2,
+        items: [
+            {
+                id: '2', title: '둘', body: '본문', createdAt: 1_000, readAt: null, action: null,
+            },
+            {
+                id: '1', title: '하나', body: '본문', createdAt: 900, readAt: null, action: null,
+            },
+        ],
+    });
+    assert.ok(snapshot);
+
+    const next = markNotificationInboxItemRead(snapshot, '2', 2_000);
+    assert.notEqual(next, snapshot);
+    assert.equal(next.unreadCount, 1);
+    assert.equal(next.items[0]?.readAt, 2_000);
+    assert.equal(next.items[1]?.readAt, null);
+    assert.equal(markNotificationInboxItemRead(next, '2', 3_000), next);
+    assert.equal(markNotificationInboxItemRead(next, 'missing', 3_000), next);
 });

@@ -33,6 +33,7 @@
     "allow-get-dashboard-meal-history",
     "allow-get-dashboard-home-overview",
     "allow-get-notification-inbox-snapshot",
+    "allow-mark-notification-read",
     "allow-activate-notification",
     "allow-send-test-notification"
   ]

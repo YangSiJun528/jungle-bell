@@ -537,6 +537,18 @@ pub fn get_notification_inbox_snapshot(
     inbox.snapshot()
 }
 
+/// 알림을 이동 없이 읽음 처리한다. 대시보드 알림 패널의 개별 본 처리 전용이다.
+#[tauri::command]
+pub fn mark_notification_read(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    inbox: tauri::State<'_, Arc<NotificationInboxService>>,
+    id: String,
+) -> Result<NotificationInboxSnapshot, String> {
+    ensure_notification_reader_window(&window)?;
+    inbox.mark_read_without_activation(&app, &id)
+}
+
 fn ensure_notification_reader_window(window: &tauri::WebviewWindow) -> Result<(), String> {
     remote_sync::ensure_dashboard_window(window)
 }

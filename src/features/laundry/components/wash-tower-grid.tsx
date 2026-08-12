@@ -1,3 +1,4 @@
+import {TriangleAlert} from 'lucide-react';
 import type {DashboardLaundryMachine} from '@/domain/laundry/capacity';
 import {
     sortWashTowers,
@@ -6,18 +7,12 @@ import {
     WASH_TOWER_ROWS,
 } from '../lib/wash-tower';
 import {laundryZoneMeta} from '../lib/laundry-zone';
+import {LAUNDRY_WARNING_CLASS_NAME} from '../lib/laundry-warning';
 
 export interface WashTowerGridProps {
     machines: readonly DashboardLaundryMachine[];
     nowMs?: number;
 }
-
-const availableCellClasses: Record<DashboardLaundryMachine['zone'], string> = {
-    men: 'bg-[oklch(0.68_0.07_250)] text-[oklch(0.24_0.04_250)] dark:bg-[oklch(0.42_0.055_250)] dark:text-[oklch(0.93_0.025_250)]',
-    common: 'bg-[oklch(0.68_0.065_300)] text-[oklch(0.24_0.04_300)] dark:bg-[oklch(0.42_0.05_300)] dark:text-[oklch(0.93_0.025_300)]',
-    women: 'bg-[oklch(0.68_0.07_15)] text-[oklch(0.24_0.04_15)] dark:bg-[oklch(0.42_0.055_15)] dark:text-[oklch(0.93_0.025_15)]',
-    other: 'bg-muted text-foreground',
-};
 
 export function WashTowerGrid({machines, nowMs = Date.now()}: WashTowerGridProps) {
     const towers = sortWashTowers(machines);
@@ -77,23 +72,28 @@ export function WashTowerGrid({machines, nowMs = Date.now()}: WashTowerGridProps
                             {towers.map((machine) => {
                                 const cell = washTowerCellView(machine, row.kind, nowMs);
                                 const tone = cell.state === 'available'
-                                    ? availableCellClasses[machine.zone]
+                                    ? laundryZoneMeta(machine.zone).surfaceClassName
                                     : cell.state === 'error'
-                                        ? 'bg-[oklch(0.68_0.055_25)] text-[oklch(0.24_0.04_25)] dark:bg-[oklch(0.42_0.045_25)] dark:text-[oklch(0.93_0.025_25)]'
+                                        ? LAUNDRY_WARNING_CLASS_NAME
                                         : 'bg-muted text-muted-foreground';
 
                                 return (
                                     <td className="h-10 p-0" key={`${row.kind}-${machine.id}`}>
                                         <span
                                             aria-label={cell.label}
-                                            className={`grid h-10 w-full place-items-center rounded-md text-xs font-bold tabular-nums ${tone}`}
+                                            className={`grid h-10 w-full place-items-center rounded-md border text-xs font-bold tabular-nums ${tone}`}
                                             data-wash-tower-cell="true"
                                             data-machine-id={machine.id}
                                             data-state={cell.state}
                                             data-zone={machine.zone}
                                             title={cell.label}
                                         >
-                                            {cell.text}
+                                            {cell.state === 'error' ? (
+                                                <>
+                                                    <TriangleAlert aria-hidden="true" className="size-4"/>
+                                                    <span className="sr-only">경고</span>
+                                                </>
+                                            ) : cell.text}
                                         </span>
                                     </td>
                                 );

@@ -3,9 +3,11 @@ import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, test} from 'vitest';
 import type {DashboardNotification} from '@/api/dashboard-api';
 import type {NotificationInboxItem} from '@/domain/notifications/inbox';
+import {notificationRowsForTab} from './notification-tabs';
 import {NotificationRow} from './notifications-page';
 
 const pageSource = readFileSync(new URL('./notifications-page.tsx', import.meta.url), 'utf8');
+const tabsSource = readFileSync(new URL('./notification-tabs.ts', import.meta.url), 'utf8');
 
 const mobileNotification: DashboardNotification = {
     id: 'cf7e8982-b6aa-418d-8e79-3ac8232b8653',
@@ -30,7 +32,13 @@ const desktopNotification: NotificationInboxItem = {
 describe('notification row navigation semantics', () => {
     test('companion 알림 경로는 실제 링크로 렌더링한다', () => {
         const markup = renderToStaticMarkup(
-            <NotificationRow item={mobileNotification} unread href={mobileNotification.path}/>,
+            <NotificationRow
+                item={mobileNotification}
+                unread
+                href={mobileNotification.path}
+                onActivate={() => undefined}
+                onDismiss={() => undefined}
+            />,
         );
 
         expect(markup).toContain('<a');
@@ -38,16 +46,23 @@ describe('notification row navigation semantics', () => {
         expect(markup).toContain('data-unread="true"');
         expect(markup).toContain('읽지 않은 알림');
         expect(markup).not.toContain('rounded-full');
-        expect(markup).not.toContain('<button');
+        expect(markup).toContain('aria-label="본 알림으로 처리"');
+        expect(markup).toContain('<button');
     });
 
     test('desktop 활성화 동작은 기존 버튼으로 유지한다', () => {
         const markup = renderToStaticMarkup(
-            <NotificationRow item={desktopNotification} unread onOpen={() => undefined}/>,
+            <NotificationRow
+                item={desktopNotification}
+                unread
+                onActivate={() => undefined}
+                onDismiss={() => undefined}
+            />,
         );
 
         expect(markup).toContain('<button');
         expect(markup).not.toContain('<a ');
+        expect((markup.match(/<button/g) ?? [])).toHaveLength(2);
     });
 
     test('이동하거나 실행할 동작이 없는 행은 article이다', () => {
@@ -61,14 +76,33 @@ describe('notification row navigation semantics', () => {
     });
 });
 
+describe('notification tab filtering', () => {
+    test('companion과 desktop 알림은 각각 seen ID와 readAt으로 새 목록에서 지난 목록으로 이동한다', () => {
+        const readDesktop = {...desktopNotification, readAt: Date.parse('2026-08-11T03:00:00.000Z')};
+        const rows = [mobileNotification, desktopNotification, readDesktop];
+
+        expect(notificationRowsForTab(rows, new Set(), 'new')).toEqual([mobileNotification, desktopNotification]);
+        expect(notificationRowsForTab(rows, new Set([mobileNotification.id]), 'new')).toEqual([desktopNotification]);
+        expect(notificationRowsForTab(rows, new Set([mobileNotification.id]), 'history')).toEqual([
+            mobileNotification,
+            readDesktop,
+        ]);
+    });
+});
+
 describe('notification center information architecture', () => {
-    test('알림 기록과 수신 제어를 탭 없이 별도 섹션으로 구분한다', () => {
+    test('새 알림과 지난 알림을 의미론적 탭으로 구분한다', () => {
         expect(pageSource).toContain('export function NotificationPanelContent');
         expect(pageSource).toContain('aria-labelledby="notification-inbox-title"');
         expect(pageSource).toContain('id="notification-inbox-title">받은 알림</h2>');
         expect(pageSource).toContain('aria-labelledby="notification-delivery-title"');
         expect(pageSource).toContain('id="notification-delivery-title">알림 수신</h2>');
-        expect(pageSource).not.toMatch(/<Tabs\b|role="tab(?:list)?"/u);
+        expect(pageSource).toContain('<Tabs defaultValue="new"');
+        expect(pageSource).toContain('<TabsTrigger value="new">새 알림</TabsTrigger>');
+        expect(pageSource).toContain('<TabsTrigger value="history">지난 알림</TabsTrigger>');
+        expect(tabsSource).toContain("'createdAtEpochMs' in item ? seenMobileIds.has(item.id) : item.readAt !== null");
+        expect(tabsSource).toContain('seenMobileIds.has(item.id)');
+        expect(pageSource).toContain('onMobileNotificationSeen(item.id)');
     });
 
     test('캐시된 알림은 백그라운드 재조회 실패 시에도 유지한다', () => {

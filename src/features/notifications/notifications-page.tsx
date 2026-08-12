@@ -1,17 +1,23 @@
 import {useState} from 'react';
 import {useMutation, useQueryClient} from '@tanstack/react-query';
-import {ExternalLink, Send, Smartphone} from 'lucide-react';
+import {Check, ExternalLink, Send, Smartphone} from 'lucide-react';
 import {queryKeys, useDashboardEnvironment} from '@/app/dashboard-context';
 import {useNotificationsQuery} from '@/app/use-dashboard-queries';
 import {EmptyState, ErrorState, LoadingState} from '@/components/dashboard/async-state';
 import {Button} from '@/components/ui/button';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Card} from '@/components/ui/card';
+import {Tabs, TabsContent, TabsList, TabsTrigger} from '@/components/ui/tabs';
 import type {DashboardNotification} from '@/api/dashboard-api';
 import {companionAuthenticationRequired} from '@/app/surface';
 import {dateTimeLabel} from '@/lib/format';
-import type {NotificationInboxItem} from '@/domain/notifications/inbox';
+import {
+    markNotificationInboxItemRead,
+    type NotificationInboxItem,
+    type NotificationInboxSnapshot,
+} from '@/domain/notifications/inbox';
 import {desktopTestNotificationMessage} from './notification-result';
+import {notificationRowsForTab} from './notification-tabs';
 
 function applicationServerKey(value: string): ArrayBuffer {
     const padding = '='.repeat((4 - value.length % 4) % 4);
@@ -20,10 +26,12 @@ function applicationServerKey(value: string): ArrayBuffer {
     return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 }
 
-export function NotificationRow({item, unread, onOpen, href}: {
+export function NotificationRow({item, unread, onActivate, onDismiss, dismissing = false, href}: {
     item: DashboardNotification | NotificationInboxItem;
     unread: boolean;
-    onOpen?: () => void;
+    onActivate?: () => void;
+    onDismiss?: () => void;
+    dismissing?: boolean;
     href?: string;
 }) {
     const createdAt = 'createdAtEpochMs' in item ? item.createdAtEpochMs : item.createdAt;
@@ -37,33 +45,45 @@ export function NotificationRow({item, unread, onOpen, href}: {
                 </span>
                 <span className="mt-1 block text-sm leading-6 text-muted-foreground">{item.body}</span>
             </span>
-            {(onOpen || href) ? <ExternalLink aria-hidden="true" className="mt-1 size-4 shrink-0 text-muted-foreground"/> : null}
+            {(onActivate || href) ? <ExternalLink aria-hidden="true" className="mt-1 size-4 shrink-0 text-muted-foreground"/> : null}
         </>
     );
     const className = `flex w-full gap-3 border-b px-4 py-4 text-left last:border-b-0 ${unread ? 'bg-primary/5' : ''}`;
-    if (onOpen) return (
-        <button
-            type="button"
-            data-unread={unread}
-            onClick={onOpen}
-            className={`${className} hover:bg-muted/45`}
-        >
-            {content}
-        </button>
-    );
-    if (href) return (
-        <a href={href} data-unread={unread} className={`${className} hover:bg-muted/45`}>
+    const main = href ? (
+        <a href={href} data-unread={unread} onClick={onActivate} className={`${className} hover:bg-muted/45`}>
             {content}
         </a>
-    );
-    return (
-        <article data-unread={unread} className={className}>
+    ) : onActivate ? (
+        <button type="button" data-unread={unread} onClick={onActivate} className={`${className} hover:bg-muted/45`}>
             {content}
-        </article>
+        </button>
+    ) : (
+        <article data-unread={unread} className={className}>{content}</article>
+    );
+    if (!onDismiss) return main;
+    return (
+        <div className="relative border-b last:border-b-0">
+            <div className="[&>*]:border-b-0 [&>*]:pr-14">{main}</div>
+            <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label="본 알림으로 처리"
+                title="본 알림으로 처리"
+                disabled={dismissing}
+                onClick={onDismiss}
+                className="absolute right-3 top-1/2 -translate-y-1/2"
+            >
+                <Check aria-hidden="true" className="size-4"/>
+            </Button>
+        </div>
     );
 }
 
-export function NotificationPanelContent({seenMobileIds}: {seenMobileIds: ReadonlySet<string>}) {
+export function NotificationPanelContent({seenMobileIds, onMobileNotificationSeen}: {
+    seenMobileIds: ReadonlySet<string>;
+    onMobileNotificationSeen: (id: string) => void;
+}) {
     const {api, surface} = useDashboardEnvironment();
     const client = useQueryClient();
     const notifications = useNotificationsQuery();
@@ -117,6 +137,25 @@ export function NotificationPanelContent({seenMobileIds}: {seenMobileIds: Readon
         onSuccess: (snapshot) => client.setQueryData(queryKeys.notifications('desktop'), snapshot),
     });
 
+    const markRead = useMutation({
+        mutationFn: (id: string) => api.markDesktopNotificationRead(id),
+        onMutate: async (id) => {
+            await client.cancelQueries({queryKey: queryKeys.notifications('desktop')});
+            const previous = client.getQueryData<NotificationInboxSnapshot>(queryKeys.notifications('desktop'));
+            if (previous) {
+                client.setQueryData(
+                    queryKeys.notifications('desktop'),
+                    markNotificationInboxItemRead(previous, id, Date.now()),
+                );
+            }
+            return {previous};
+        },
+        onError: (_error, _id, context) => {
+            if (context?.previous) client.setQueryData(queryKeys.notifications('desktop'), context.previous);
+        },
+        onSuccess: (snapshot) => client.setQueryData(queryKeys.notifications('desktop'), snapshot),
+    });
+
     const content = (() => {
         if (notifications.isPending && !notifications.data) return <LoadingState label="알림함을 불러오고 있습니다."/>;
         if (authenticationRequired) {
@@ -135,27 +174,43 @@ export function NotificationPanelContent({seenMobileIds}: {seenMobileIds: Readon
         const data = notifications.data;
         if (!data) return <EmptyState title="아직 알림이 없습니다."/>;
         const rows = Array.isArray(data) ? data : data.items;
-        if (rows.length === 0) return <EmptyState title="아직 알림이 없습니다."/>;
+        const renderRows = (history: boolean) => {
+            const matching = notificationRowsForTab(rows, seenMobileIds, history ? 'history' : 'new');
+            if (matching.length === 0) {
+                return <EmptyState title={history ? '지난 알림이 없습니다.' : '새 알림이 없습니다.'}/>;
+            }
+            return (
+                <Card className="gap-0 overflow-hidden py-0">
+                    {matching.map((item) => {
+                        const mobile = 'createdAtEpochMs' in item;
+                        return (
+                            <NotificationRow
+                                key={item.id}
+                                item={item}
+                                unread={!history}
+                                href={mobile ? item.path : undefined}
+                                onActivate={mobile
+                                    ? () => onMobileNotificationSeen(item.id)
+                                    : () => activate.mutate(item.id)}
+                                onDismiss={!history ? (mobile
+                                    ? () => onMobileNotificationSeen(item.id)
+                                    : () => markRead.mutate(item.id)) : undefined}
+                                dismissing={markRead.isPending && markRead.variables === item.id}
+                            />
+                        );
+                    })}
+                </Card>
+            );
+        };
         return (
-            <Card className="gap-0 overflow-hidden py-0">
-                {Array.isArray(data)
-                    ? data.map((item) => (
-                        <NotificationRow
-                            key={item.id}
-                            item={item}
-                            unread={!seenMobileIds.has(item.id)}
-                            href={item.path}
-                        />
-                    ))
-                    : data.items.map((item) => (
-                        <NotificationRow
-                            key={item.id}
-                            item={item}
-                            unread={item.readAt === null}
-                            onOpen={() => activate.mutate(item.id)}
-                        />
-                    ))}
-            </Card>
+            <Tabs defaultValue="new" className="gap-3">
+                <TabsList aria-label="알림 목록 구분">
+                    <TabsTrigger value="new">새 알림</TabsTrigger>
+                    <TabsTrigger value="history">지난 알림</TabsTrigger>
+                </TabsList>
+                <TabsContent value="new">{renderRows(false)}</TabsContent>
+                <TabsContent value="history">{renderRows(true)}</TabsContent>
+            </Tabs>
         );
     })();
 

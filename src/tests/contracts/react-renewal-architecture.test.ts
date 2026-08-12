@@ -65,11 +65,12 @@ describe('React renewal architecture', () => {
         expect(read('src/components/ui/card.tsx')).toContain('data-slot="card-action"');
     });
 
-    test('the dashboard reserves badges for laundry zone identification', () => {
+    test('the dashboard reserves badges for laundry zone and warning identification', () => {
         const dashboardFiles = globSync('src/{app,components/dashboard,features}/**/*.tsx', {cwd: root});
         const siteStyles = read('src/site/styles/global.css');
         const badgeAllowedFiles = new Set([
             'src/features/laundry/components/laundry-zone-badge.tsx',
+            'src/features/laundry/components/laundry-warning-badge.tsx',
         ]);
 
         expect(existsSync(resolve(root, 'src/components/ui/badge.tsx'))).toBe(true);
@@ -83,6 +84,11 @@ describe('React renewal architecture', () => {
         const zoneBadge = read('src/features/laundry/components/laundry-zone-badge.tsx');
         expect(zoneBadge).toMatch(/components\/ui\/badge/u);
         expect(zoneBadge).toMatch(/<Badge\b/u);
+
+        const warningBadge = read('src/features/laundry/components/laundry-warning-badge.tsx');
+        expect(warningBadge).toMatch(/components\/ui\/badge/u);
+        expect(warningBadge).toMatch(/<Badge\b/u);
+        expect(warningBadge).toMatch(/TriangleAlert/u);
 
         const shell = read('src/app/shell/DashboardShell.tsx');
         expect(shell).not.toContain('SURFACE_LABELS');
