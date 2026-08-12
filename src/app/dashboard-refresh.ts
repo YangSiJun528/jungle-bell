@@ -3,21 +3,16 @@ export interface DashboardRefreshTasks {
     refreshMeals(): Promise<unknown>;
     refreshPlatform?(): Promise<unknown>;
     refreshAttendance?(): Promise<unknown>;
-    refreshHomeOverview?(): Promise<unknown>;
 }
 
 export interface AttendanceRefreshTasks {
     refreshPlatform?(): Promise<unknown>;
     refreshAttendance(): Promise<unknown>;
-    refreshHomeOverview?(): Promise<unknown>;
 }
 
 export async function runAttendanceRefresh(tasks: AttendanceRefreshTasks): Promise<void> {
     await tasks.refreshPlatform?.();
-    await Promise.all([
-        tasks.refreshAttendance(),
-        tasks.refreshHomeOverview?.(),
-    ]);
+    await tasks.refreshAttendance();
 }
 
 export async function runDashboardRefresh(tasks: DashboardRefreshTasks): Promise<void> {
@@ -28,10 +23,7 @@ export async function runDashboardRefresh(tasks: DashboardRefreshTasks): Promise
     const platformRefresh = tasks.refreshPlatform?.();
     const personalRefresh = (async () => {
         if (platformRefresh) await platformRefresh;
-        await Promise.all([
-            tasks.refreshAttendance?.(),
-            tasks.refreshHomeOverview?.(),
-        ]);
+        await tasks.refreshAttendance?.();
     })();
 
     await Promise.all([campusRefresh, personalRefresh]);

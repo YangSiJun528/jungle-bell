@@ -23,7 +23,7 @@ import {PageHeader} from '@/components/dashboard/page-header';
 import {useDashboardEnvironment} from '@/app/dashboard-context';
 import {
     useAttendanceQuery,
-    useHomeOverviewQuery,
+    useDesktopConnectionQuery,
     useRefreshAllMutation,
 } from '@/app/use-dashboard-queries';
 import {dateTimeLabel, relativeTimeLabel} from '@/lib/format';
@@ -56,7 +56,7 @@ function AttendanceCheck({label, checked}: {label: string; checked: boolean}) {
 export function AttendancePage() {
     const {api, surface} = useDashboardEnvironment();
     const attendance = useAttendanceQuery();
-    const overview = useHomeOverviewQuery();
+    const desktopConnection = useDesktopConnectionQuery();
     const refreshAll = useRefreshAllMutation();
     const openCampus = useMutation({mutationFn: () => api.openLmsLogin()});
     const detail = attendanceDetailModel({
@@ -67,7 +67,7 @@ export function AttendancePage() {
     const devices = attendance.data?.state === 'loaded' ? attendance.data.devices : [];
     const primaryDevice = devices[0];
     const lmsState = surface.kind === 'desktop'
-        ? overview.data?.lmsSessionState
+        ? desktopConnection.data?.lmsSessionState
         : primaryDevice?.lmsSessionState;
     const campusNotice = lmsState === 'login-required' ? 'LMS 로그인이 필요합니다.' : null;
 

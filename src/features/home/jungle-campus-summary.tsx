@@ -11,7 +11,6 @@ import {
 import {useDashboardEnvironment} from '@/app/dashboard-context';
 import {
     useAttendanceQuery,
-    useHomeOverviewQuery,
     useRefreshAttendanceMutation,
 } from '@/app/use-dashboard-queries';
 import {Button} from '@/components/ui/button';
@@ -120,7 +119,6 @@ export interface JungleCampusSummaryProps {
 export function JungleCampusSummary({onRequestInstall}: JungleCampusSummaryProps) {
     const {api, surface} = useDashboardEnvironment();
     const attendance = useAttendanceQuery();
-    const overview = useHomeOverviewQuery();
     const refreshAttendance = useRefreshAttendanceMutation();
     const openCampus = useMutation({mutationFn: () => api.openLmsLogin()});
 
@@ -130,7 +128,6 @@ export function JungleCampusSummary({onRequestInstall}: JungleCampusSummaryProps
 
     const dday = selectHomeDday({
         surface: surface.kind,
-        overview: overview.data,
         attendance: attendance.data,
     });
     const availableAttendance = homeAttendanceForToday(attendance.data);

@@ -1,4 +1,10 @@
-import type { AppSessionRecord, LmsSessionState, PairingRecord, SessionKind } from "../ports/account-storage";
+import type {
+  AppSessionRecord,
+  DesktopUiSessionRecord,
+  LmsSessionState,
+  PairingRecord,
+  SessionKind,
+} from "../ports/account-storage";
 import type { SqlDatabase } from "../ports/sql-database";
 
 interface SessionRow {
@@ -11,6 +17,11 @@ interface PairingRow {
   manual_code_hash: string; claim_receipt_sha256: string | null; status: PairingRecord["status"];
   mobile_installation_id: string | null; mobile_label: string | null; created_at_epoch_ms: number;
   expires_at_epoch_ms: number; approved_at_epoch_ms: number | null;
+}
+interface DesktopUiSessionRow {
+  id: string; parent_session_id: string; user_id: string; installation_id: string;
+  token_sha256: string; origin: string; scope: string; created_at_epoch_ms: number;
+  expires_at_epoch_ms: number;
 }
 
 export class D1SessionRepository {
@@ -91,13 +102,55 @@ export class D1SessionRepository {
     return row ? session(row) : null;
   }
 
-  async hasCurrentDesktopOwnership(input: { sessionId: string; userId: string; installationId: string }): Promise<boolean> {
+  async hasCurrentDesktopOwnership(input: {
+    sessionId: string; userId: string; installationId: string; nowEpochMs?: number;
+  }): Promise<boolean> {
     const row = await this.db.prepare(`SELECT 1 AS owned FROM app_session session
       JOIN desktop_device desktop ON desktop.installation_id = session.installation_id AND desktop.user_id = session.user_id
       WHERE session.id = ? AND session.user_id = ? AND session.installation_id = ? AND session.kind = 'desktop'
-      AND session.revoked_at_epoch_ms IS NULL`).bind(input.sessionId, input.userId, input.installationId)
+      AND session.revoked_at_epoch_ms IS NULL AND (? IS NULL OR session.expires_at_epoch_ms > ?)`)
+      .bind(input.sessionId, input.userId, input.installationId,
+        input.nowEpochMs ?? null, input.nowEpochMs ?? null)
       .first<{ owned: number }>();
     return row?.owned === 1;
+  }
+
+  async replaceDesktopUiSession(value: DesktopUiSessionRecord): Promise<boolean> {
+    const result = await this.db.prepare(`INSERT INTO desktop_ui_session
+      (id, parent_session_id, user_id, installation_id, token_sha256, origin, scope,
+        created_at_epoch_ms, expires_at_epoch_ms)
+      SELECT ?, parent.id, parent.user_id, parent.installation_id, ?, ?, ?, ?, ?
+      FROM app_session parent JOIN desktop_device desktop
+        ON desktop.installation_id = parent.installation_id AND desktop.user_id = parent.user_id
+      WHERE parent.id = ? AND parent.user_id = ? AND parent.installation_id = ?
+        AND parent.kind = 'desktop' AND parent.revoked_at_epoch_ms IS NULL
+        AND parent.expires_at_epoch_ms > ?
+      ON CONFLICT(parent_session_id) DO UPDATE SET
+        id = excluded.id,
+        token_sha256 = excluded.token_sha256,
+        origin = excluded.origin,
+        scope = excluded.scope,
+        created_at_epoch_ms = excluded.created_at_epoch_ms,
+        expires_at_epoch_ms = excluded.expires_at_epoch_ms`)
+      .bind(value.id, value.tokenSha256, value.origin, value.scope,
+        value.createdAtEpochMs, value.expiresAtEpochMs, value.parentSessionId,
+        value.userId, value.installationId, value.createdAtEpochMs).run();
+    return result.meta.changes === 1;
+  }
+
+  async findDesktopUiSessionByTokenHash(tokenSha256: string): Promise<DesktopUiSessionRecord | null> {
+    const row = await this.db.prepare("SELECT * FROM desktop_ui_session WHERE token_sha256 = ?")
+      .bind(tokenSha256).first<DesktopUiSessionRow>();
+    return row ? desktopUiSession(row) : null;
+  }
+
+  async deleteDesktopUiSession(input: {
+    parentSessionId: string; userId: string; installationId: string; origin: string;
+  }): Promise<boolean> {
+    const result = await this.db.prepare(`DELETE FROM desktop_ui_session WHERE parent_session_id = ?
+      AND user_id = ? AND installation_id = ? AND origin = ?`)
+      .bind(input.parentSessionId, input.userId, input.installationId, input.origin).run();
+    return result.meta.changes === 1;
   }
 
   async touch(id: string, now: number): Promise<void> {
@@ -286,5 +339,18 @@ function pairing(row: PairingRow): PairingRecord {
     mobileInstallationId: row.mobile_installation_id, mobileLabel: row.mobile_label,
     createdAtEpochMs: row.created_at_epoch_ms, expiresAtEpochMs: row.expires_at_epoch_ms,
     approvedAtEpochMs: row.approved_at_epoch_ms,
+  };
+}
+function desktopUiSession(row: DesktopUiSessionRow): DesktopUiSessionRecord {
+  return {
+    id: row.id,
+    parentSessionId: row.parent_session_id,
+    userId: row.user_id,
+    installationId: row.installation_id,
+    tokenSha256: row.token_sha256,
+    origin: row.origin,
+    scope: row.scope,
+    createdAtEpochMs: row.created_at_epoch_ms,
+    expiresAtEpochMs: row.expires_at_epoch_ms,
   };
 }

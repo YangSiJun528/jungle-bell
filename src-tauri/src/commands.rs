@@ -12,7 +12,6 @@ use tokio::sync::Mutex;
 
 use crate::analytics::{self, Event};
 use crate::attendance;
-use crate::campus::{CampusDataKind, CampusService};
 use crate::checker;
 use crate::desktop_settings::DesktopSettingsService;
 use crate::notification_inbox::{NotificationInboxService, NotificationInboxSnapshot};
@@ -22,6 +21,14 @@ use crate::state::{self, AppState};
 use crate::tray;
 
 // ── 연결 서비스 대시보드 경계 ───────────────────────────
+
+#[tauri::command]
+pub(crate) async fn bootstrap_desktop_http_session(
+    window: tauri::WebviewWindow,
+    service: tauri::State<'_, Arc<RemoteSyncService>>,
+) -> Result<remote_sync::DesktopHttpSession, String> {
+    remote_sync::bootstrap_desktop_http_session(window, service).await
+}
 
 #[tauri::command]
 pub(crate) async fn get_connected_service_status(
@@ -45,144 +52,6 @@ pub(crate) async fn reset_desktop_identity(
 #[tauri::command]
 pub(crate) fn open_lms_login(window: tauri::WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
     remote_sync::open_lms_login(window, app)
-}
-
-#[tauri::command]
-pub(crate) async fn create_mobile_pairing(
-    window: tauri::WebviewWindow,
-    service: tauri::State<'_, Arc<RemoteSyncService>>,
-) -> Result<remote_sync::MobilePairing, String> {
-    remote_sync::create_mobile_pairing(window, service).await
-}
-
-#[tauri::command]
-pub(crate) async fn get_mobile_pairing_status(
-    window: tauri::WebviewWindow,
-    service: tauri::State<'_, Arc<RemoteSyncService>>,
-    pairing_id: String,
-) -> Result<remote_sync::MobilePairingStatus, String> {
-    remote_sync::get_mobile_pairing_status(window, service, pairing_id).await
-}
-
-#[tauri::command]
-pub(crate) async fn approve_mobile_pairing(
-    window: tauri::WebviewWindow,
-    service: tauri::State<'_, Arc<RemoteSyncService>>,
-    pairing_id: String,
-    claim_id: String,
-) -> Result<(), String> {
-    remote_sync::approve_mobile_pairing(window, service, pairing_id, claim_id).await
-}
-
-#[tauri::command]
-pub(crate) async fn list_mobile_sessions(
-    window: tauri::WebviewWindow,
-    service: tauri::State<'_, Arc<RemoteSyncService>>,
-) -> Result<Vec<remote_sync::MobileDevice>, String> {
-    remote_sync::list_mobile_sessions(window, service).await
-}
-
-#[tauri::command]
-pub(crate) async fn revoke_mobile_session(
-    window: tauri::WebviewWindow,
-    service: tauri::State<'_, Arc<RemoteSyncService>>,
-    device_id: String,
-) -> Result<(), String> {
-    remote_sync::revoke_mobile_session(window, service, device_id).await
-}
-
-#[tauri::command]
-pub(crate) async fn get_remote_attendance_snapshot(
-    window: tauri::WebviewWindow,
-    service: tauri::State<'_, Arc<RemoteSyncService>>,
-) -> Result<remote_sync::RemoteAttendanceEnvelope, String> {
-    remote_sync::get_remote_attendance_snapshot(window, service).await
-}
-
-#[tauri::command]
-pub(crate) async fn get_attendance_preferences(
-    window: tauri::WebviewWindow,
-    service: tauri::State<'_, Arc<RemoteSyncService>>,
-) -> Result<remote_sync::AttendancePreferences, String> {
-    remote_sync::get_attendance_preferences(window, service).await
-}
-
-#[tauri::command]
-pub(crate) async fn update_attendance_preferences(
-    window: tauri::WebviewWindow,
-    service: tauri::State<'_, Arc<RemoteSyncService>>,
-    input: remote_sync::AttendancePreferences,
-) -> Result<remote_sync::AttendancePreferences, String> {
-    remote_sync::update_attendance_preferences(window, service, input).await
-}
-
-#[tauri::command]
-pub(crate) async fn get_meal_preferences(
-    window: tauri::WebviewWindow,
-    service: tauri::State<'_, Arc<RemoteSyncService>>,
-) -> Result<remote_sync::MealPreferences, String> {
-    remote_sync::get_meal_preferences(window, service).await
-}
-
-#[tauri::command]
-pub(crate) async fn update_meal_preferences(
-    window: tauri::WebviewWindow,
-    service: tauri::State<'_, Arc<RemoteSyncService>>,
-    input: remote_sync::MealPreferencesInput,
-) -> Result<remote_sync::MealPreferences, String> {
-    remote_sync::update_meal_preferences(window, service, input).await
-}
-
-#[tauri::command]
-pub(crate) async fn list_laundry_watches(
-    window: tauri::WebviewWindow,
-    service: tauri::State<'_, Arc<RemoteSyncService>>,
-) -> Result<remote_sync::LaundryWatchEnvelope, String> {
-    remote_sync::list_laundry_watches(window, service).await
-}
-
-#[tauri::command]
-pub(crate) async fn create_laundry_watch(
-    window: tauri::WebviewWindow,
-    service: tauri::State<'_, Arc<RemoteSyncService>>,
-    input: remote_sync::LaundryWatchInput,
-) -> Result<remote_sync::RemoteLaundryWatch, String> {
-    remote_sync::create_laundry_watch(window, service, input).await
-}
-
-#[tauri::command]
-pub(crate) async fn delete_laundry_watch(
-    window: tauri::WebviewWindow,
-    service: tauri::State<'_, Arc<RemoteSyncService>>,
-    watch_id: String,
-) -> Result<(), String> {
-    remote_sync::delete_laundry_watch(window, service, watch_id).await
-}
-
-#[tauri::command]
-pub(crate) async fn list_laundry_queue(
-    window: tauri::WebviewWindow,
-    service: tauri::State<'_, Arc<RemoteSyncService>>,
-) -> Result<remote_sync::LaundryQueueEnvelope, String> {
-    remote_sync::list_laundry_queue(window, service).await
-}
-
-#[tauri::command]
-pub(crate) async fn join_laundry_queue(
-    window: tauri::WebviewWindow,
-    service: tauri::State<'_, Arc<RemoteSyncService>>,
-    input: remote_sync::LaundryQueueInput,
-) -> Result<remote_sync::LaundryQueueEntry, String> {
-    remote_sync::join_laundry_queue(window, service, input).await
-}
-
-#[tauri::command]
-pub(crate) async fn leave_laundry_queue(
-    window: tauri::WebviewWindow,
-    service: tauri::State<'_, Arc<RemoteSyncService>>,
-    entry_id: String,
-) -> Result<(), String> {
-    remote_sync::leave_laundry_queue(window, service, entry_id).await
 }
 
 #[tauri::command]
@@ -412,56 +281,6 @@ pub async fn report_checker_event(
     }
 }
 
-/// 생활정보 창이 이벤트 구독을 마쳤음을 보고한다.
-#[tauri::command]
-pub async fn report_campus_ready(
-    app: tauri::AppHandle,
-    window: tauri::WebviewWindow,
-    service: tauri::State<'_, Arc<CampusService>>,
-) -> Result<(), String> {
-    remote_sync::ensure_dashboard_window(&window)?;
-    log::info!("[dashboard] frontend ready");
-    service.emit_cached_snapshots(&app).await;
-    Ok(())
-}
-
-/// 사용자가 누른 수동 새로고침을 즉시 실행한다.
-#[tauri::command]
-pub async fn refresh_campus_data(
-    app: tauri::AppHandle,
-    window: tauri::WebviewWindow,
-    service: tauri::State<'_, Arc<CampusService>>,
-    kind: CampusDataKind,
-) -> Result<(), String> {
-    remote_sync::ensure_dashboard_window(&window)?;
-    service.refresh(&app, kind).await
-}
-
-/// 로컬 대시보드 전용 공개 생활정보 경계.
-/// WebView가 API origin에 직접 연결하거나 인증 헤더를 다루지 않게 한다.
-#[tauri::command]
-pub async fn get_dashboard_campus_data(
-    app: tauri::AppHandle,
-    window: tauri::WebviewWindow,
-    service: tauri::State<'_, Arc<CampusService>>,
-    kind: CampusDataKind,
-) -> Result<serde_json::Value, String> {
-    remote_sync::ensure_dashboard_window(&window)?;
-    service.dashboard_data(&app, kind).await
-}
-
-/// 로컬 대시보드 전용 과거 급식 페이지 경계.
-#[tauri::command]
-pub async fn get_dashboard_meal_history(
-    window: tauri::WebviewWindow,
-    service: tauri::State<'_, Arc<CampusService>>,
-    before: Option<String>,
-    limit: u8,
-) -> Result<serde_json::Value, String> {
-    remote_sync::ensure_dashboard_window(&window)?;
-    service.meal_history(before.as_deref(), limit).await
-}
-
 #[derive(Debug, Clone, Copy, serde::Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct DesktopSettingsInput {
@@ -573,37 +392,6 @@ pub fn open_log_folder(window: tauri::WebviewWindow, app: tauri::AppHandle) -> R
     let log_dir = app.path().app_log_dir().map_err(|error| error.to_string())?;
     log::info!("[settings] 로그 폴더 열기: {}", log_dir.display());
     tauri_plugin_opener::open_path(log_dir, None::<&str>).map_err(|error| error.to_string())
-}
-
-/// 대시보드 홈에 표시할 로컬 출석·알림·캠퍼스 캐시를 반환한다.
-#[tauri::command]
-pub async fn get_dashboard_home_overview(
-    app: tauri::AppHandle,
-    window: tauri::WebviewWindow,
-    state: tauri::State<'_, Arc<Mutex<AppState>>>,
-    campus: tauri::State<'_, Arc<CampusService>>,
-    inbox: tauri::State<'_, Arc<NotificationInboxService>>,
-) -> Result<tray::DashboardHomeOverview, String> {
-    remote_sync::ensure_dashboard_window(&window)?;
-
-    let attendance = tray::get_dashboard_attendance_summary(&app)?;
-    let lms_session_state = {
-        let state = state.lock().await;
-        remote_sync::lms_session_state(&state)
-    };
-    let unread_count = inbox.snapshot()?.unread_count;
-    let (laundry, meals) = tokio::join!(
-        campus.cached_dashboard_data(CampusDataKind::Laundry),
-        campus.cached_dashboard_data(CampusDataKind::Meals),
-    );
-
-    Ok(tray::DashboardHomeOverview {
-        attendance,
-        lms_session_state,
-        unread_count,
-        laundry,
-        meals,
-    })
 }
 
 /// 대시보드 알림함에 표시할 영속 앱 알림 목록을 반환한다.

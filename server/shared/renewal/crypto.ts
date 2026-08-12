@@ -10,6 +10,8 @@ export async function hashAppSessionToken(token: string): Promise<string> {
     ? "jungle-bell:desktop-session:v2"
     : token.startsWith("jbs_")
       ? "jungle-bell:mobile-session:v2"
+      : token.startsWith("jbui_")
+        ? "jungle-bell:desktop-ui-session:v2"
       : "jungle-bell:invalid-session:v2";
   return sha256Hex(`${domain}\0${token}`);
 }

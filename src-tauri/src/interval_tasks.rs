@@ -1,4 +1,4 @@
-//! Jungle Bell이 실제 사용하는 세 개 반복 작업을 위한 작은 스케줄 상태 저장소.
+//! Jungle Bell의 반복 작업을 위한 작은 스케줄 상태 저장소.
 
 use std::collections::BTreeMap;
 
@@ -207,13 +207,6 @@ impl JobStore {
         runtime.last_success_at = Some(evaluation.now);
         runtime.consecutive_failures = 0;
         runtime.given_up = false;
-        runtime.next_due_at = next_regular_due(spec, evaluation.now);
-    }
-
-    pub(crate) fn mark_not_eligible_with_context(&mut self, spec: &JobSpec, evaluation: &JobEvaluation) {
-        let runtime = self.jobs.entry(spec.kind).or_default();
-        runtime.initialized = true;
-        runtime.consecutive_failures = 0;
         runtime.next_due_at = next_regular_due(spec, evaluation.now);
     }
 

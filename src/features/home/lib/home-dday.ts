@@ -1,7 +1,4 @@
-import type {
-    AttendanceDashboard,
-    DashboardHomeOverview,
-} from '@/api/dashboard-api';
+import type {AttendanceDashboard} from '@/api/dashboard-api';
 import {
     buildDdayProgress,
     kstDateString,
@@ -18,7 +15,6 @@ export interface HomeDdayView {
 
 export interface HomeDdayInput {
     surface: 'public' | 'desktop' | 'companion';
-    overview?: DashboardHomeOverview;
     attendance?: AttendanceDashboard;
     today?: string;
 }
@@ -30,19 +26,16 @@ function personalAttendanceSnapshot(attendance?: AttendanceDashboard) {
 
 export function selectHomeDday({
     surface,
-    overview,
     attendance,
     today = kstDateString(),
 }: HomeDdayInput): HomeDdayView | null {
     if (surface === 'public') return null;
 
     const snapshot = personalAttendanceSnapshot(attendance);
-    const candidatePeriod = overview?.attendance.ddayPeriod
-        ?? (snapshot ? dashboardDdayPeriod(snapshot) : null);
+    const candidatePeriod = snapshot ? dashboardDdayPeriod(snapshot) : null;
     const progress = candidatePeriod ? buildDdayProgress(candidatePeriod, today) : null;
     const period = progress ? candidatePeriod : null;
-    const text = overview?.attendance.ddayText
-        ?? (snapshot ? dashboardDdayLabel(snapshot, today) : null);
+    const text = snapshot ? dashboardDdayLabel(snapshot, today) : null;
 
     if (!text && !progress) return null;
     return {

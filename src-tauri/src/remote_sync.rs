@@ -33,19 +33,13 @@ const CHECKER_WINDOW_LABEL: &str = "checker";
 const DASHBOARD_WINDOW_LABEL: &str = "dashboard";
 const INSTALLATIONS_PATH: &str = "/api/desktop/installations";
 const ROTATE_INSTALLATION_PATH: &str = "/api/desktop/installations/rotate";
+const WEBVIEW_SESSIONS_PATH: &str = "/api/desktop/webview-sessions";
+const CURRENT_WEBVIEW_SESSION_PATH: &str = "/api/desktop/webview-sessions/current";
 const ATTENDANCE_SNAPSHOT_PATH: &str = "/api/desktop/attendance";
-const ATTENDANCE_PREFERENCES_PATH: &str = "/api/desktop/v2/attendance/preferences";
 const HEARTBEAT_PATH: &str = "/api/desktop/heartbeat";
 const NOTIFICATIONS_PATH: &str = "/api/desktop/notifications";
-const MOBILE_SESSIONS_PATH: &str = "/api/desktop/mobile-sessions";
-const MEAL_PREFERENCES_PATH: &str = "/api/desktop/meal-preferences";
-const LAUNDRY_WATCHES_PATH: &str = "/api/desktop/laundry-watches";
-const LAUNDRY_QUEUE_PATH: &str = "/api/desktop/laundry-queue";
-const PAIRINGS_PATH: &str = "/api/pairings";
 const MAX_RESPONSE_BYTES: u64 = 512 * 1024;
 const MAX_NOTIFICATION_DELIVERIES: usize = 20;
-const MAX_LAUNDRY_WATCHES: usize = 64;
-const MAX_LAUNDRY_QUEUE_ENTRIES: usize = 256;
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(45);
 const CREDENTIAL_ROTATION_WINDOW_DAYS: i64 = 7;
 const DESKTOP_SESSION_SCHEMA: &str = "jungle-bell.desktop-session";
@@ -105,26 +99,36 @@ async fn deliver_server_notifications(
     app: &tauri::AppHandle,
     service: &RemoteSyncService,
     notifications: &NotificationService,
-    deliveries: Vec<RemoteNotification>,
+    batch: RemoteNotificationBatch,
 ) {
-    for delivery in deliveries {
+    for delivery in batch.notifications {
         let key = format!("server:{}", delivery.id);
-        let report = notifications.deliver(
-            app,
-            NotificationRequest {
-                key: &key,
-                title: &delivery.title,
-                body: &delivery.body,
-                action: notification_action(delivery.kind),
-                repeat_after_ms: None,
-            },
-        );
+        let Some(report) = service
+            .with_current_identity(batch.identity_generation, || {
+                notifications.deliver(
+                    app,
+                    NotificationRequest {
+                        key: &key,
+                        title: &delivery.title,
+                        body: &delivery.body,
+                        action: notification_action(delivery.kind),
+                        repeat_after_ms: None,
+                    },
+                )
+            })
+            .await
+        else {
+            return;
+        };
         let outcome = if report.any_delivered() {
             NotificationAckOutcome::Displayed
         } else {
             NotificationAckOutcome::Failed
         };
-        if let Err(error) = service.acknowledge(&delivery.id, outcome).await {
+        if let Err(error) = service
+            .acknowledge(&delivery.id, outcome, batch.identity_generation)
+            .await
+        {
             log::warn!(
                 "[connected-service] notification ack deferred: id={} error={}",
                 delivery.id,
@@ -181,13 +185,23 @@ pub(crate) async fn get_connected_service_status(
     Ok(status)
 }
 
+pub(crate) async fn bootstrap_desktop_http_session(
+    window: WebviewWindow,
+    service: tauri::State<'_, Arc<RemoteSyncService>>,
+) -> Result<DesktopHttpSession, String> {
+    let url = window.url().map_err(|_| "COMMAND_CONTEXT_DENIED".to_owned())?;
+    let origin = dashboard_webview_origin(window.label(), &url)?;
+    service.bootstrap_http_session(&origin).await
+}
+
 pub(crate) async fn reset_desktop_identity(
     window: WebviewWindow,
     service: tauri::State<'_, Arc<RemoteSyncService>>,
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
     confirmed: bool,
 ) -> Result<ConnectedServiceStatus, String> {
-    ensure_dashboard_window(&window)?;
+    let url = window.url().map_err(|_| "COMMAND_CONTEXT_DENIED".to_owned())?;
+    let origin = dashboard_webview_origin(window.label(), &url)?;
     if !confirmed {
         return Err("IDENTITY_RESET_CONFIRMATION_REQUIRED".into());
     }
@@ -195,7 +209,7 @@ pub(crate) async fn reset_desktop_identity(
         let state = state.lock().await;
         lms_session_state(&state)
     };
-    let mut status = service.reset_identity().await?;
+    let mut status = service.reset_identity(&origin).await?;
     status.lms_session_state = lms_state;
     Ok(status)
 }
@@ -203,145 +217,6 @@ pub(crate) async fn reset_desktop_identity(
 pub(crate) fn open_lms_login(window: WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
     ensure_dashboard_window(&window)?;
     crate::checker::show_lms_window(&app)
-}
-
-pub(crate) async fn create_mobile_pairing(
-    window: WebviewWindow,
-    service: tauri::State<'_, Arc<RemoteSyncService>>,
-) -> Result<MobilePairing, String> {
-    ensure_dashboard_window(&window)?;
-    service.create_pairing().await
-}
-
-pub(crate) async fn get_mobile_pairing_status(
-    window: WebviewWindow,
-    service: tauri::State<'_, Arc<RemoteSyncService>>,
-    pairing_id: String,
-) -> Result<MobilePairingStatus, String> {
-    ensure_dashboard_window(&window)?;
-    service.pairing_status(&pairing_id).await
-}
-
-pub(crate) async fn approve_mobile_pairing(
-    window: WebviewWindow,
-    service: tauri::State<'_, Arc<RemoteSyncService>>,
-    pairing_id: String,
-    claim_id: String,
-) -> Result<(), String> {
-    ensure_dashboard_window(&window)?;
-    service.approve_pairing(&pairing_id, &claim_id).await
-}
-
-pub(crate) async fn list_mobile_sessions(
-    window: WebviewWindow,
-    service: tauri::State<'_, Arc<RemoteSyncService>>,
-) -> Result<Vec<MobileDevice>, String> {
-    ensure_dashboard_window(&window)?;
-    service.devices().await
-}
-
-pub(crate) async fn revoke_mobile_session(
-    window: WebviewWindow,
-    service: tauri::State<'_, Arc<RemoteSyncService>>,
-    device_id: String,
-) -> Result<(), String> {
-    ensure_dashboard_window(&window)?;
-    service.revoke_device(&device_id).await
-}
-
-pub(crate) async fn get_remote_attendance_snapshot(
-    window: WebviewWindow,
-    service: tauri::State<'_, Arc<RemoteSyncService>>,
-) -> Result<RemoteAttendanceEnvelope, String> {
-    ensure_dashboard_window(&window)?;
-    service.attendance().await
-}
-
-pub(crate) async fn get_attendance_preferences(
-    window: WebviewWindow,
-    service: tauri::State<'_, Arc<RemoteSyncService>>,
-) -> Result<AttendancePreferences, String> {
-    ensure_dashboard_window(&window)?;
-    service.attendance_preferences().await
-}
-
-pub(crate) async fn update_attendance_preferences(
-    window: WebviewWindow,
-    service: tauri::State<'_, Arc<RemoteSyncService>>,
-    input: AttendancePreferences,
-) -> Result<AttendancePreferences, String> {
-    ensure_dashboard_window(&window)?;
-    validate_attendance_preferences(&input).map_err(|error| error.code().to_owned())?;
-    service.update_attendance_preferences(&input).await
-}
-
-pub(crate) async fn get_meal_preferences(
-    window: WebviewWindow,
-    service: tauri::State<'_, Arc<RemoteSyncService>>,
-) -> Result<MealPreferences, String> {
-    ensure_dashboard_window(&window)?;
-    service.meal_preferences().await
-}
-
-pub(crate) async fn update_meal_preferences(
-    window: WebviewWindow,
-    service: tauri::State<'_, Arc<RemoteSyncService>>,
-    input: MealPreferencesInput,
-) -> Result<MealPreferences, String> {
-    ensure_dashboard_window(&window)?;
-    service.update_meal_preferences(&input).await
-}
-
-pub(crate) async fn list_laundry_watches(
-    window: WebviewWindow,
-    service: tauri::State<'_, Arc<RemoteSyncService>>,
-) -> Result<LaundryWatchEnvelope, String> {
-    ensure_dashboard_window(&window)?;
-    service.laundry_watches().await
-}
-
-pub(crate) async fn create_laundry_watch(
-    window: WebviewWindow,
-    service: tauri::State<'_, Arc<RemoteSyncService>>,
-    input: LaundryWatchInput,
-) -> Result<RemoteLaundryWatch, String> {
-    ensure_dashboard_window(&window)?;
-    service.create_laundry_watch(&input).await
-}
-
-pub(crate) async fn delete_laundry_watch(
-    window: WebviewWindow,
-    service: tauri::State<'_, Arc<RemoteSyncService>>,
-    watch_id: String,
-) -> Result<(), String> {
-    ensure_dashboard_window(&window)?;
-    service.delete_laundry_watch(&watch_id).await
-}
-
-pub(crate) async fn list_laundry_queue(
-    window: WebviewWindow,
-    service: tauri::State<'_, Arc<RemoteSyncService>>,
-) -> Result<LaundryQueueEnvelope, String> {
-    ensure_dashboard_window(&window)?;
-    service.laundry_queue().await
-}
-
-pub(crate) async fn join_laundry_queue(
-    window: WebviewWindow,
-    service: tauri::State<'_, Arc<RemoteSyncService>>,
-    input: LaundryQueueInput,
-) -> Result<LaundryQueueEntry, String> {
-    ensure_dashboard_window(&window)?;
-    service.join_laundry_queue(&input).await
-}
-
-pub(crate) async fn leave_laundry_queue(
-    window: WebviewWindow,
-    service: tauri::State<'_, Arc<RemoteSyncService>>,
-    entry_id: String,
-) -> Result<(), String> {
-    ensure_dashboard_window(&window)?;
-    service.leave_laundry_queue(&entry_id).await
 }
 
 pub(crate) async fn refresh_platform_sync(
@@ -394,30 +269,69 @@ mod tests {
     }
 
     #[test]
-    fn ipc_route_ids_and_pairing_codes_are_closed_allowlists() {
+    fn desktop_http_session_bootstrap은_dashboard의_정확한_local_origin만_허용한다() {
+        for expected in ["tauri://localhost", "http://tauri.localhost", "http://127.0.0.1:5173"] {
+            let url = Url::parse(&format!("{expected}/settings?tab=service#debug")).unwrap();
+            assert_eq!(dashboard_webview_origin("dashboard", &url).unwrap(), expected);
+        }
+
+        for invalid in [
+            ("checker", "tauri://localhost/"),
+            ("dashboard", "https://tauri.localhost/"),
+            ("dashboard", "http://localhost:5173/"),
+            ("dashboard", "http://127.0.0.1:5174/"),
+            ("dashboard", "https://evil.example/"),
+            ("dashboard", "http://user@tauri.localhost/"),
+        ] {
+            let url = Url::parse(invalid.1).unwrap();
+            assert_eq!(
+                dashboard_webview_origin(invalid.0, &url),
+                Err("COMMAND_CONTEXT_DENIED".into())
+            );
+        }
+    }
+
+    #[test]
+    fn desktop_http_session_response는_엄격한_jbui_token과_미래_iso_expiry만_받는다() {
+        let expires_at = (Utc::now() + chrono::Duration::minutes(5)).to_rfc3339();
+        let valid = serde_json::json!({
+            "accessToken": format!("jbui_{}", "a".repeat(64)),
+            "expiresAt": expires_at,
+        });
+        let response: DesktopHttpSession = serde_json::from_value(valid.clone()).unwrap();
+        assert!(response.validate().is_ok());
+
+        for invalid in [
+            serde_json::json!({
+                "accessToken": format!("jbd_{}", "a".repeat(64)),
+                "expiresAt": expires_at,
+            }),
+            serde_json::json!({
+                "accessToken": format!("jbui_{}", "A".repeat(64)),
+                "expiresAt": expires_at,
+            }),
+            serde_json::json!({
+                "accessToken": format!("jbui_{}", "a".repeat(64)),
+                "expiresAt": "2020-01-01T00:00:00Z",
+            }),
+            serde_json::json!({
+                "accessToken": format!("jbui_{}", "a".repeat(64)),
+                "expiresAt": expires_at,
+                "legacy": true,
+            }),
+        ] {
+            let decoded = serde_json::from_value::<DesktopHttpSession>(invalid);
+            assert!(decoded.is_err() || decoded.unwrap().validate().is_err());
+        }
+    }
+
+    #[test]
+    fn dynamic_notification_route_ids_are_closed_allowlists() {
         for valid in ["pair_123", "device-ABC", "550e8400-e29b-41d4-a716-446655440000"] {
             assert!(is_safe_route_segment(valid), "{valid}");
         }
         for invalid in ["", "../device", "a/b", "한글", "x?token=secret", &"x".repeat(129)] {
             assert!(!is_safe_route_segment(invalid), "{invalid}");
-        }
-        assert!(is_manual_pairing_code("01AHJKMNPZ"));
-        for invalid in ["123456789", "12345678901", "12345-6789", "ABCDEFILOU", "abcdefghij"] {
-            assert!(!is_manual_pairing_code(invalid), "{invalid}");
-        }
-    }
-
-    #[test]
-    fn mobile_installation_ids_accept_server_ids_but_reject_path_or_control_data() {
-        for valid in [
-            "550e8400-e29b-41d4-a716-446655440000",
-            "jbmi_0123456789abcdef0123456789abcdef",
-            "device.mobile:2026",
-        ] {
-            assert!(is_safe_device_installation_id(valid), "{valid}");
-        }
-        for invalid in ["short", "../mobile-device", "device/mobile", "mobile?token=x", "모바일"] {
-            assert!(!is_safe_device_installation_id(invalid), "{invalid}");
         }
     }
 
@@ -469,26 +383,6 @@ mod tests {
             "attendance": null
         }))
         .is_err());
-    }
-
-    #[test]
-    fn pairing_qr_is_bound_to_api_origin_path_pairing_and_one_challenge() {
-        let origin = Url::parse("https://bell.example.com").unwrap();
-        let pairing_id = "jbp_01234567-89ab-4def-8123-456789abcdef";
-        let challenge = format!("jbpc_{}", "a".repeat(64));
-        let valid = format!("https://bell.example.com/dashboard.html#pairing={pairing_id}&challenge={challenge}");
-        assert!(is_safe_pairing_url(&valid, pairing_id, &origin));
-
-        for invalid in [
-            format!("https://evil.example/dashboard.html#pairing={pairing_id}&challenge={challenge}"),
-            format!("https://bell.example.com/pair#pairing={pairing_id}&challenge={challenge}"),
-            format!("https://bell.example.com/dashboard.html?next=x#pairing={pairing_id}&challenge={challenge}"),
-            format!("https://bell.example.com/dashboard.html#pairing=other&challenge={challenge}"),
-            format!("https://bell.example.com/dashboard.html#pairing={pairing_id}&challenge={challenge}&next=x"),
-            format!("https://bell.example.com/dashboard.html#pairing={pairing_id}&pairing={pairing_id}"),
-        ] {
-            assert!(!is_safe_pairing_url(&invalid, pairing_id, &origin), "{invalid}");
-        }
     }
 
     #[test]
@@ -580,7 +474,6 @@ mod tests {
 
         let status = ConnectedServiceStatus {
             authenticated: true,
-            installation_id: "550e8400-e29b-41d4-a716-446655440000".into(),
             credential_persistent: true,
             identity_reset_required: false,
             lms_session_state: LmsSessionState::Connected,
@@ -628,51 +521,17 @@ mod tests {
     }
 
     #[test]
-    fn pairing_approval_status_requires_visible_claim_identity() {
-        let valid = MobilePairingStatus {
-            status: "claimed".into(),
-            claim: Some(MobilePairingClaim {
-                claim_id: "claim_123".into(),
-                device_label: "내 휴대폰".into(),
-                confirmation_code: "A1B2".into(),
-            }),
-        };
-        assert!(validate_pairing_status(&valid).is_ok());
-        assert!(validate_pairing_status(&MobilePairingStatus {
-            status: "claimed".into(),
-            claim: None,
-        })
-        .is_err());
-        assert!(validate_pairing_status(&MobilePairingStatus {
-            status: "pending".into(),
-            claim: valid.claim,
-        })
-        .is_err());
-        assert!(serde_json::from_value::<MobilePairing>(serde_json::json!({
-            "id": "pairing_legacy",
-            "qrPayload": "https://bell.example.com/dashboard.html#pairing=pairing_legacy&challenge=jbpc_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "manualCode": "01AHJKMNPZ",
-            "expiresAt": "2099-01-01T00:00:00Z"
-        }))
-        .is_err());
-    }
-
-    #[test]
     fn api_contract_uses_only_canonical_api_routes() {
         let api = RemoteApi::new("https://bell.example.com").unwrap();
         for path in [
             "/api/desktop/installations",
             "/api/desktop/installations/rotate",
+            "/api/desktop/webview-sessions",
+            "/api/desktop/webview-sessions/current",
             "/api/desktop/heartbeat",
             "/api/desktop/attendance",
-            "/api/desktop/v2/attendance/preferences",
             "/api/desktop/notifications",
             "/api/desktop/notifications/test",
-            "/api/desktop/mobile-sessions",
-            "/api/desktop/meal-preferences",
-            "/api/desktop/laundry-watches",
-            "/api/desktop/laundry-queue",
-            "/api/pairings",
         ] {
             assert_eq!(api.endpoint(path).unwrap().path(), path);
         }
@@ -680,14 +539,10 @@ mod tests {
         assert!(api.endpoint("/v1/attendance/snapshot").is_err());
         assert!(api.endpoint("/api/desktop/automatic-attendance").is_err());
         assert!(api.endpoint("/api/desktop/notifications/notification_1/ack").is_ok());
-        assert!(api.endpoint("/api/desktop/mobile-sessions/device_1").is_ok());
-        assert!(api
-            .endpoint(&format!("/api/desktop/laundry-watches/jbw_{}", "a".repeat(64)))
-            .is_ok());
-        assert!(api
-            .endpoint(&format!("/api/desktop/laundry-queue/jbq_{}", "b".repeat(64)))
-            .is_ok());
-        assert!(api.endpoint("/api/pairings/pairing_1/approve").is_ok());
+        assert!(api.endpoint("/api/desktop/mobile-sessions/device_1").is_err());
+        assert!(api.endpoint("/api/desktop/meal-preferences").is_err());
+        assert!(api.endpoint("/api/desktop/laundry-watches").is_err());
+        assert!(api.endpoint("/api/pairings").is_err());
         assert!(api.endpoint("/api/desktop/notifications/../ack").is_err());
         assert!(api.endpoint("/api/private/laundry-watches").is_err());
         assert_eq!(ATTENDANCE_SNAPSHOT_PATH, "/api/desktop/attendance");
@@ -739,6 +594,34 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn identity_reset은_webview_revoke가_offline이어도_local_identity를_지운다() {
+        let directory = tempfile::tempdir().unwrap();
+        let identity = secure_credential::load_or_create_installation_identity(directory.path()).unwrap();
+        let original_id = identity.id.clone();
+        let credential = BearerCredential {
+            token: Zeroizing::new(format!("jbd_{}", "a".repeat(64))),
+            expires_at: Utc::now() + chrono::Duration::days(30),
+        };
+        let store = Arc::new(MemoryCredentialStore::new(None));
+        persist_credential(store.as_ref(), &credential).unwrap();
+        let service = RemoteSyncService::with_store(
+            RemoteApi::new("http://127.0.0.1:9").unwrap(),
+            directory.path().to_path_buf(),
+            original_id.clone(),
+            false,
+            store.clone(),
+        )
+        .unwrap();
+
+        let status = service.reset_identity("tauri://localhost").await.unwrap();
+        assert!(!status.authenticated);
+        assert_eq!(status.last_error.as_deref(), Some(ServiceError::Unavailable.code()));
+        assert_ne!(service.installation_id_for_analytics().await, original_id);
+        assert!(service.current_bearer().await.is_none());
+        assert!(store.load().unwrap().is_none());
+    }
+
     #[test]
     fn installation_registration_contains_no_lms_identity_or_cookie() {
         let request = DesktopInstallationRequest {
@@ -749,153 +632,5 @@ mod tests {
         for forbidden in ["cookie", "access_token", "refresh_token", "lms", "subject"] {
             assert!(!encoded.to_ascii_lowercase().contains(forbidden));
         }
-    }
-
-    #[test]
-    fn shared_control_dtos_are_strict_and_validate_server_invariants() {
-        let preferences: MealPreferences = serde_json::from_value(serde_json::json!({
-            "enabled": true,
-            "breakfast": false,
-            "lunch": true,
-            "dinner": true,
-            "updatedAtEpochMs": 1_786_000_000_000_i64
-        }))
-        .unwrap();
-        assert!(validate_meal_preferences(&preferences).is_ok());
-        assert!(serde_json::from_value::<MealPreferences>(serde_json::json!({
-            "enabled": true,
-            "breakfast": false,
-            "lunch": true,
-            "dinner": true,
-            "updatedAtEpochMs": 0,
-            "legacy": true
-        }))
-        .is_err());
-
-        let watch: RemoteLaundryWatch = serde_json::from_value(serde_json::json!({
-            "id": format!("jbw_{}", "a".repeat(64)),
-            "machineId": "washer-1",
-            "appliance": "washer",
-            "sessionId": "session-1",
-            "notifyBeforeMinutes": 10,
-            "notifyWhenAvailable": true,
-            "status": "active",
-            "createdAtEpochMs": 1,
-            "updatedAtEpochMs": 2
-        }))
-        .unwrap();
-        assert!(validate_laundry_watch(&watch).is_ok());
-        let watch_envelope = LaundryWatchEnvelope {
-            watches: vec![watch.clone()],
-        };
-        assert!(validate_laundry_watches(&watch_envelope).is_ok());
-
-        let entry: LaundryQueueEntry = serde_json::from_value(serde_json::json!({
-            "id": format!("jbq_{}", "b".repeat(64)),
-            "machineId": null,
-            "appliance": "dryer",
-            "status": "waiting",
-            "joinedAtEpochMs": 1,
-            "leftAtEpochMs": null,
-            "position": 1
-        }))
-        .unwrap();
-        assert!(validate_laundry_queue_entry(&entry).is_ok());
-        assert!(validate_laundry_queue(&LaundryQueueEnvelope { entries: vec![entry] }).is_ok());
-    }
-
-    #[test]
-    fn shared_control_inputs_reject_unbounded_or_noncanonical_values() {
-        for machine_id in ["", " washer-1", "washer-1 ", "washer\n1", &"x".repeat(129)] {
-            assert!(validate_machine_id(machine_id, false).is_err(), "{machine_id:?}");
-        }
-        assert!(validate_machine_id("washer-1", false).is_ok());
-        assert!(validate_machine_id("", true).is_ok());
-
-        let invalid_watch = LaundryWatchInput {
-            machine_id: "washer-1".into(),
-            appliance: LaundryAppliance::Washer,
-            session_id: Some(" ".into()),
-            notify_before_minutes: 181,
-            notify_when_available: true,
-        };
-        assert!(validate_laundry_watch_input(&invalid_watch).is_err());
-
-        let invalid_queue = LaundryQueueInput {
-            machine_id: Some("dryer-1 ".into()),
-            appliance: LaundryAppliance::Dryer,
-        };
-        assert!(validate_laundry_queue_input(&invalid_queue).is_err());
-        assert!(!is_laundry_resource_id("jbw_ABC", "jbw_"));
-        assert!(is_laundry_resource_id(&format!("jbq_{}", "a".repeat(64)), "jbq_"));
-    }
-
-    #[test]
-    fn attendance_preferences_are_a_strict_standalone_contract() {
-        let input = AttendancePreferences {
-            enabled: true,
-            morning: true,
-            evening: false,
-            morning_start_hour: 6,
-            evening_end_hour: 2,
-            morning_interval_minutes: 5,
-            evening_interval_minutes: 10,
-            skip_sunday: true,
-            skip_attendance_date: Some("2026-08-10".into()),
-        };
-        assert!(validate_attendance_preferences(&input).is_ok());
-        assert_eq!(
-            serde_json::to_value(&input).unwrap(),
-            serde_json::json!({
-                "enabled": true,
-                "morning": true,
-                "evening": false,
-                "morningStartHour": 6,
-                "eveningEndHour": 2,
-                "morningIntervalMinutes": 5,
-                "eveningIntervalMinutes": 10,
-                "skipSunday": true,
-                "skipAttendanceDate": "2026-08-10"
-            })
-        );
-        assert!(serde_json::from_value::<AttendancePreferences>(serde_json::json!({
-            "enabled": true,
-            "morning": true,
-            "evening": true,
-            "morningStartHour": 9,
-            "eveningEndHour": 4,
-            "morningIntervalMinutes": 15,
-            "eveningIntervalMinutes": 15,
-            "skipSunday": false,
-            "skipAttendanceDate": null,
-            "legacy": true
-        }))
-        .is_err());
-        assert!(validate_attendance_preferences(&AttendancePreferences {
-            morning_start_hour: 3,
-            ..input.clone()
-        })
-        .is_err());
-        assert!(validate_attendance_preferences(&AttendancePreferences {
-            evening_interval_minutes: 2,
-            ..input.clone()
-        })
-        .is_err());
-        assert!(validate_attendance_preferences(&AttendancePreferences {
-            skip_attendance_date: Some("10-08-2026".into()),
-            ..input
-        })
-        .is_err());
-
-        let heartbeat = Heartbeat {
-            lms_session_state: LmsSessionState::Connected,
-            app_version: "0.5.0",
-        };
-        let encoded = serde_json::to_value(heartbeat).unwrap();
-        assert_eq!(
-            encoded,
-            serde_json::json!({"lmsSessionState": "connected", "appVersion": "0.5.0"})
-        );
-        assert!(encoded.get("attendanceNotifications").is_none());
     }
 }

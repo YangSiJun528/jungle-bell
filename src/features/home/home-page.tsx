@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/card';
 import {Skeleton} from '@/components/ui/skeleton';
 import {PageHeader} from '@/components/dashboard/page-header';
-import {useCampusDataIssue, useDashboardEnvironment} from '@/app/dashboard-context';
+import {useDashboardEnvironment} from '@/app/dashboard-context';
 import {
     useLaundryQuery,
     useMealsQuery,
@@ -93,8 +93,6 @@ export function HomePage({onRequestInstall}: HomePageProps = {}) {
     const {surface} = useDashboardEnvironment();
     const laundry = useLaundryQuery();
     const meals = useMealsQuery();
-    const laundryIssue = useCampusDataIssue('laundry');
-    const mealsIssue = useCampusDataIssue('meals');
     const refreshHome = useRefreshHomeMutation();
     const qrRequiresInstalledPwa = surface.kind === 'public'
         && readInitialPairingEntry()?.kind === 'public-install-required';
@@ -104,8 +102,8 @@ export function HomePage({onRequestInstall}: HomePageProps = {}) {
         snapshot: laundry.data,
     });
     const todayMealSlots = homeTodayMealSlots(meals.data);
-    const laundryRefreshFailed = laundry.isError || laundryIssue !== null;
-    const mealsRefreshFailed = meals.isError || mealsIssue !== null;
+    const laundryRefreshFailed = laundry.isError;
+    const mealsRefreshFailed = meals.isError;
     return (
         <div className="space-y-6">
             <PageHeader

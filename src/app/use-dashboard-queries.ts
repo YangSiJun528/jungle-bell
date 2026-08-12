@@ -1,7 +1,6 @@
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import type {DashboardNotification} from '@/api/dashboard-api';
 import type {NotificationInboxSnapshot} from '@/domain/notifications/inbox';
-import type {CampusDataKind} from './campus-data-health';
 import {
     laundryQueryContract,
     laundryQueryOptions,
@@ -25,24 +24,17 @@ export function useMealsQuery() {
     return useQuery(mealsQueryOptions(api));
 }
 
-export function useCampusManualRefresh(kind: CampusDataKind) {
-    const {api, runtime} = useDashboardEnvironment();
+export function useCampusManualRefresh(kind: 'laundry' | 'meals') {
     const client = useQueryClient();
     const queryKey = kind === 'laundry'
         ? laundryQueryContract.queryKey
         : mealsQueryContract.queryKey;
     return useMutation({
         mutationKey: ['campus', 'manual-refresh', kind],
-        mutationFn: async () => {
-            if (runtime.runningInTauri) {
-                await api.refreshCampusData(kind);
-                return;
-            }
-            await client.refetchQueries(
-                {queryKey, type: 'active'},
-                {throwOnError: true},
-            );
-        },
+        mutationFn: () => client.refetchQueries(
+            {queryKey, type: 'active'},
+            {throwOnError: true},
+        ),
     });
 }
 
@@ -53,6 +45,17 @@ export function useAttendanceQuery() {
         queryKey: queryKeys.attendance(personalSurface),
         queryFn: () => api.getAttendance(personalSurface),
         enabled: surface.canViewAttendance,
+        staleTime: DASHBOARD_REFRESH.personal,
+        refetchInterval: DASHBOARD_REFRESH.personal,
+    });
+}
+
+export function useDesktopConnectionQuery() {
+    const {api, surface} = useDashboardEnvironment();
+    return useQuery({
+        queryKey: queryKeys.desktopConnection,
+        queryFn: () => api.getDesktopConnectionState(),
+        enabled: surface.kind === 'desktop',
         staleTime: DASHBOARD_REFRESH.personal,
         refetchInterval: DASHBOARD_REFRESH.personal,
     });
@@ -70,24 +73,7 @@ export function useRefreshAttendanceMutation() {
                 {queryKey: queryKeys.attendance(attendanceSurface), type: 'active'},
                 {throwOnError: true},
             ),
-            refreshHomeOverview: surface.kind === 'desktop'
-                ? () => client.refetchQueries(
-                    {queryKey: queryKeys.homeOverview, type: 'active'},
-                    {throwOnError: true},
-                )
-                : undefined,
         }),
-    });
-}
-
-export function useHomeOverviewQuery() {
-    const {api, surface} = useDashboardEnvironment();
-    return useQuery({
-        queryKey: queryKeys.homeOverview,
-        queryFn: () => api.getDashboardHomeOverview(),
-        enabled: surface.kind === 'desktop',
-        staleTime: DASHBOARD_REFRESH.personal,
-        refetchInterval: DASHBOARD_REFRESH.personal,
     });
 }
 
@@ -106,47 +92,28 @@ export function useNotificationsQuery() {
 }
 
 export function useRefreshHomeMutation() {
-    const {api, runtime, surface} = useDashboardEnvironment();
+    const {api, surface} = useDashboardEnvironment();
     const client = useQueryClient();
     const attendanceSurface = surface.kind === 'desktop' ? 'desktop' : 'companion';
     return useMutation({
         mutationKey: ['home', 'manual-refresh'],
-        mutationFn: async () => {
-            if (runtime.runningInTauri) {
-                await runDashboardRefresh({
-                    refreshLaundry: () => api.refreshCampusData('laundry'),
-                    refreshMeals: () => api.refreshCampusData('meals'),
-                    refreshPlatform: () => api.refreshPlatformSync(),
-                    refreshAttendance: surface.canViewAttendance
-                        ? () => client.refetchQueries(
-                        {queryKey: queryKeys.attendance(attendanceSurface), type: 'active'},
-                        {throwOnError: true},
-                        )
-                        : undefined,
-                    refreshHomeOverview: () => client.refetchQueries(
-                        {queryKey: queryKeys.homeOverview, type: 'active'},
-                        {throwOnError: true},
-                    ),
-                });
-                return;
-            }
-            await runDashboardRefresh({
-                refreshLaundry: () => client.refetchQueries(
-                    {queryKey: laundryQueryContract.queryKey, type: 'active'},
+        mutationFn: () => runDashboardRefresh({
+            refreshLaundry: () => client.refetchQueries(
+                {queryKey: laundryQueryContract.queryKey, type: 'active'},
+                {throwOnError: true},
+            ),
+            refreshMeals: () => client.refetchQueries(
+                {queryKey: mealsQueryContract.queryKey, type: 'active'},
+                {throwOnError: true},
+            ),
+            refreshPlatform: surface.kind === 'desktop' ? () => api.refreshPlatformSync() : undefined,
+            refreshAttendance: surface.canViewAttendance
+                ? () => client.refetchQueries(
+                    {queryKey: queryKeys.attendance(attendanceSurface), type: 'active'},
                     {throwOnError: true},
-                ),
-                refreshMeals: () => client.refetchQueries(
-                    {queryKey: mealsQueryContract.queryKey, type: 'active'},
-                    {throwOnError: true},
-                ),
-                refreshAttendance: surface.canViewAttendance
-                    ? () => client.refetchQueries(
-                        {queryKey: queryKeys.attendance(attendanceSurface), type: 'active'},
-                        {throwOnError: true},
-                    )
-                    : undefined,
-            });
-        },
+                )
+                : undefined,
+        }),
     });
 }
 
@@ -162,9 +129,6 @@ export function useRefreshAllMutation() {
                 refreshPlatform: surface.kind === 'desktop' ? () => api.refreshPlatformSync() : undefined,
                 refreshAttendance: surface.canViewAttendance
                     ? () => client.invalidateQueries({queryKey: queryKeys.attendance(attendanceSurface)})
-                    : undefined,
-                refreshHomeOverview: surface.kind === 'desktop'
-                    ? () => client.invalidateQueries({queryKey: queryKeys.homeOverview})
                     : undefined,
             });
         },

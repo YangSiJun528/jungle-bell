@@ -12,7 +12,6 @@ use tokio::sync::Mutex as TokioMutex;
 
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::Serialize;
-use serde_json::Value;
 
 use crate::state::{AppState, CheckerRuntimeStatus, CohortPeriod, DailyPhase, DdayStatus, TraySnapshot};
 use tauri::{
@@ -120,13 +119,13 @@ fn tray_click_opens_dashboard(button: MouseButton, state: MouseButtonState) -> b
     button == MouseButton::Left && state == MouseButtonState::Up
 }
 
-/// 트레이 아이콘과 대시보드 홈의 로컬 출석 projection을 보관한다.
+/// 트레이 아이콘과 툴팁의 로컬 표시 상태를 보관한다.
 pub struct TrayState {
     view: TrayViewModel,
     icon_theme: TrayIconTheme,
 }
 
-/// 짧은 메모리 projection 갱신을 유실 없이 직렬화한다.
+/// 짧은 메모리 표시 상태 갱신을 유실 없이 직렬화한다.
 ///
 /// 비동기 작업이나 파일 I/O를 잠금 안에서 수행하지 않으므로 일반 mutex가
 /// `try_lock` 기반 best-effort 갱신보다 이 상태의 성격에 맞다.
@@ -180,26 +179,6 @@ struct TrayViewModel {
     dday_text: String,
     dday_period: Option<CohortPeriod>,
     tooltip: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DashboardAttendanceSummary {
-    status: TrayStatusKind,
-    status_text: String,
-    dday_text: Option<String>,
-    dday_period: Option<CohortPeriod>,
-    current_version: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct DashboardHomeOverview {
-    pub(crate) attendance: DashboardAttendanceSummary,
-    pub(crate) lms_session_state: crate::remote_sync::LmsSessionState,
-    pub(crate) unread_count: usize,
-    pub(crate) laundry: Option<Value>,
-    pub(crate) meals: Option<Value>,
 }
 
 fn icon_bytes_for_kind(kind: TrayIconKind, theme: TrayIconTheme) -> &'static [u8] {
@@ -322,7 +301,7 @@ fn build_attendance_status_text(phase: DailyPhase, remaining: Option<i64>, needs
     }
 }
 
-/// 트레이 툴팁과 대시보드 홈의 로컬 출석 상태 텍스트 생성.
+/// 트레이 툴팁의 로컬 출석 상태 텍스트 생성.
 fn build_status_text(snapshot: &TraySnapshot) -> String {
     if snapshot.checker_status.is_recovering_or_offline() {
         return checker_status_text(snapshot.checker_status).to_string();
@@ -391,18 +370,6 @@ fn build_tray_view_model(snapshot: &TraySnapshot, now: DateTime<Utc>) -> TrayVie
     }
 }
 
-impl TrayState {
-    fn dashboard_attendance_summary(&self, current_version: String) -> DashboardAttendanceSummary {
-        DashboardAttendanceSummary {
-            status: self.view.status,
-            status_text: self.view.status_text.clone(),
-            dday_text: Some(self.view.dday_text.clone()),
-            dday_period: self.view.dday_period,
-            current_version,
-        }
-    }
-}
-
 impl TrayStateStore {
     fn new(state: TrayState) -> Self {
         Self {
@@ -415,10 +382,6 @@ impl TrayStateStore {
         self.state
             .lock()
             .map_err(|_| "트레이 상태 잠금이 손상되었습니다.".to_string())
-    }
-
-    fn dashboard_attendance_summary(&self, current_version: String) -> Result<DashboardAttendanceSummary, String> {
-        Ok(self.lock()?.dashboard_attendance_summary(current_version))
     }
 
     fn set_view(&self, view: TrayViewModel) -> Result<(), String> {
@@ -449,11 +412,6 @@ impl TrayStateStore {
         let (kind, theme) = self.icon_projection()?;
         apply_tray_icon(app, kind, theme)
     }
-}
-
-pub(crate) fn get_dashboard_attendance_summary(app: &tauri::AppHandle) -> Result<DashboardAttendanceSummary, String> {
-    let tray_state: tauri::State<TrayStateStore> = app.state();
-    tray_state.dashboard_attendance_summary(app.package_info().version.to_string())
 }
 
 fn focus_window_checked(window: &WebviewWindow<tauri::Wry>) -> Result<(), String> {
@@ -689,7 +647,7 @@ pub fn sync_icon_theme(app: &tauri::AppHandle, system_theme: tauri::Theme) -> Re
     Ok(())
 }
 
-/// 트레이 아이콘, 툴팁, 대시보드 홈의 로컬 출석 projection을 갱신한다.
+/// 트레이 아이콘과 툴팁의 로컬 표시 상태를 갱신한다.
 /// 스케줄러(주기적)와 체커(보고 시) 양쪽에서 호출됨.
 pub fn update_tray(app: &tauri::AppHandle, snapshot: &TraySnapshot) -> Result<(), String> {
     let view = build_tray_view_model(snapshot, Utc::now());
@@ -1298,46 +1256,6 @@ mod tests {
     }
 
     #[test]
-    fn 대시보드_홈_overview는_현재_camel_case_dto만_직렬화한다() {
-        let overview = DashboardHomeOverview {
-            attendance: DashboardAttendanceSummary {
-                status: TrayStatusKind::Active,
-                status_text: "학습 중".into(),
-                dday_text: Some("수료까지 D-14".into()),
-                dday_period: Some(CohortPeriod {
-                    start_date: NaiveDate::from_ymd_opt(2026, 8, 1).unwrap(),
-                    end_date: NaiveDate::from_ymd_opt(2026, 12, 31).unwrap(),
-                }),
-                current_version: "0.5.0".into(),
-            },
-            lms_session_state: crate::remote_sync::LmsSessionState::Connected,
-            unread_count: 2,
-            laundry: Some(serde_json::json!({ "available": 1 })),
-            meals: None,
-        };
-
-        assert_eq!(
-            serde_json::to_value(overview).unwrap(),
-            serde_json::json!({
-                "attendance": {
-                    "status": "active",
-                    "statusText": "학습 중",
-                    "ddayText": "수료까지 D-14",
-                    "ddayPeriod": {
-                        "startDate": "2026-08-01",
-                        "endDate": "2026-12-31"
-                    },
-                    "currentVersion": "0.5.0"
-                },
-                "lmsSessionState": "connected",
-                "unreadCount": 2,
-                "laundry": { "available": 1 },
-                "meals": null
-            })
-        );
-    }
-
-    #[test]
     fn 트레이_패널_webview는_생성하지_않는다() {
         let source = include_str!("tray.rs");
         let removed_label = ["tray", "panel"].join("-");
@@ -1380,9 +1298,6 @@ mod tests {
 
         finished_rx.recv_timeout(Duration::from_secs(1)).unwrap().unwrap();
         worker.join().unwrap();
-        assert_eq!(
-            store.dashboard_attendance_summary("0.5.0".into()).unwrap().status,
-            TrayStatusKind::Complete
-        );
+        assert_eq!(store.lock().unwrap().view.status, TrayStatusKind::Complete);
     }
 }

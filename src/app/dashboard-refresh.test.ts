@@ -17,7 +17,6 @@ test('desktop refresh starts campus and platform work together, then refreshes d
     const meals = deferred();
     const platform = deferred();
     const attendance = deferred();
-    const overview = deferred();
     const starts: string[] = [];
 
     const refresh = runDashboardRefresh({
@@ -25,18 +24,16 @@ test('desktop refresh starts campus and platform work together, then refreshes d
         refreshMeals: () => { starts.push('meals'); return meals.promise; },
         refreshPlatform: () => { starts.push('platform'); return platform.promise; },
         refreshAttendance: () => { starts.push('attendance'); return attendance.promise; },
-        refreshHomeOverview: () => { starts.push('overview'); return overview.promise; },
     });
 
     assert.deepEqual(starts, ['laundry', 'meals', 'platform']);
     platform.resolve();
     await Promise.resolve();
-    assert.deepEqual(starts, ['laundry', 'meals', 'platform', 'attendance', 'overview']);
+    assert.deepEqual(starts, ['laundry', 'meals', 'platform', 'attendance']);
 
     laundry.resolve();
     meals.resolve();
     attendance.resolve();
-    overview.resolve();
     await refresh;
 });
 
@@ -63,13 +60,12 @@ test('desktop attendance refresh syncs the checker before refetching dependent q
     const refresh = runAttendanceRefresh({
         refreshPlatform: () => { starts.push('platform'); return platform.promise; },
         refreshAttendance: async () => { starts.push('attendance'); },
-        refreshHomeOverview: async () => { starts.push('overview'); },
     });
 
     assert.deepEqual(starts, ['platform']);
     platform.resolve();
     await refresh;
-    assert.deepEqual(starts, ['platform', 'attendance', 'overview']);
+    assert.deepEqual(starts, ['platform', 'attendance']);
 });
 
 test('companion attendance refresh refetches without a desktop checker sync', async () => {

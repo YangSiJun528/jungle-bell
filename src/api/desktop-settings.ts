@@ -1,14 +1,12 @@
+import type {NativeBridge} from './native-bridge';
+import {hasOwn} from '@/lib/object';
+
 export interface DesktopSettings {
     autoStart: boolean;
     autoUpdate: boolean;
     usageAnalytics: boolean;
     debugMode: boolean;
 }
-
-export type DesktopSettingsInvoke = (
-    command: string,
-    args?: Record<string, unknown>,
-) => Promise<unknown>;
 
 export interface DashboardDesktopSettingsApi {
     getDesktopSettings(): Promise<DesktopSettings>;
@@ -17,18 +15,18 @@ export interface DashboardDesktopSettingsApi {
 }
 
 export function createDashboardDesktopSettingsApi(
-    invokeCommand: DesktopSettingsInvoke,
+    nativeBridge: Pick<NativeBridge, 'getDesktopSettings' | 'updateDesktopSettings' | 'openLogFolder'>,
 ): DashboardDesktopSettingsApi {
     return {
         async getDesktopSettings() {
-            return parseDesktopSettings(await invokeCommand('get_desktop_settings'));
+            return parseDesktopSettings(await nativeBridge.getDesktopSettings());
         },
         async updateDesktopSettings(input) {
             const body = desktopSettingsInput(input);
-            return parseDesktopSettings(await invokeCommand('update_desktop_settings', {input: body}));
+            return parseDesktopSettings(await nativeBridge.updateDesktopSettings(body));
         },
         async openLogFolder() {
-            const result = await invokeCommand('open_log_folder');
+            const result = await nativeBridge.openLogFolder();
             if (result !== null && result !== undefined) throw invalidResponse();
         },
     };
@@ -38,7 +36,7 @@ function parseDesktopSettings(value: unknown): DesktopSettings {
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidResponse();
     const source = value as Record<string, unknown>;
     const keys = ['autoStart', 'autoUpdate', 'usageAnalytics', 'debugMode'] as const;
-    if (Object.keys(source).length !== keys.length || keys.some((key) => !Object.hasOwn(source, key))) {
+    if (Object.keys(source).length !== keys.length || keys.some((key) => !hasOwn(source, key))) {
         throw invalidResponse();
     }
     if (keys.some((key) => typeof source[key] !== 'boolean')) throw invalidResponse();

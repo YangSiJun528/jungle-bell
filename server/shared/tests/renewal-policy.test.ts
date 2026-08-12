@@ -10,6 +10,8 @@ describe("renewal security primitives", () => {
     const suffix = "a".repeat(64);
     expect(await hashAppSessionToken(`jbd_${suffix}`)).not.toBe(await sha256Hex(`jbd_${suffix}`));
     expect(await hashAppSessionToken(`jbd_${suffix}`)).not.toBe(await hashAppSessionToken(`jbs_${suffix}`));
+    expect(await hashAppSessionToken(`jbui_${suffix}`)).not.toBe(await hashAppSessionToken(`jbd_${suffix}`));
+    expect(await hashAppSessionToken(`jbui_${suffix}`)).not.toBe(await hashAppSessionToken(`jbs_${suffix}`));
   });
 
   it("creates and normalizes an exact ten-character Crockford code", () => {

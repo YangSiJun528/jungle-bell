@@ -1,7 +1,14 @@
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import { desktopPrincipal, rateLimitKey } from "./auth";
-import { desktopEnrollmentSchema, deviceParamSchema, emptyObjectSchema, heartbeatSchema, validationHook } from "./schemas";
+import {
+  desktopEnrollmentSchema,
+  desktopUiSessionSchema,
+  deviceParamSchema,
+  emptyObjectSchema,
+  heartbeatSchema,
+  validationHook,
+} from "./schemas";
 import type { ApiEnvironment } from "./types";
 
 export function createDesktopController(): Hono<ApiEnvironment> {
@@ -21,6 +28,28 @@ export function createDesktopController(): Hono<ApiEnvironment> {
   app.post("/api/desktop/installations/rotate", zValidator("json", emptyObjectSchema, validationHook), async (context) => {
     return context.json(await context.var.services.desktop.rotate(await desktopPrincipal(context), Date.now()));
   });
+
+  app.post(
+    "/api/desktop/webview-sessions",
+    zValidator("json", desktopUiSessionSchema, validationHook),
+    async (context) => context.json(await context.var.services.desktopUiSessions.issue(
+      await desktopPrincipal(context),
+      context.req.valid("json").origin,
+      Date.now(),
+    ), 201),
+  );
+
+  app.delete(
+    "/api/desktop/webview-sessions/current",
+    zValidator("json", desktopUiSessionSchema, validationHook),
+    async (context) => {
+      await context.var.services.desktopUiSessions.revoke(
+        await desktopPrincipal(context),
+        context.req.valid("json").origin,
+      );
+      return context.body(null, 204);
+    },
+  );
 
   app.post("/api/desktop/heartbeat", zValidator("json", heartbeatSchema, validationHook), async (context) => {
     const result = await context.var.services.desktop.heartbeat(

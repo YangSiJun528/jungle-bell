@@ -175,6 +175,8 @@ R2에 보관된 식단 이미지를 반환합니다. 콘텐츠 SHA 주소이므�
 | --- | --- | --- |
 | `POST /api/desktop/installations` | 없음, rate limit | 새 PC 설치 자격 증명 발급 |
 | `POST /api/desktop/installations/rotate` | Desktop bearer | 만료 전 자격 증명 원자적 교체 |
+| `POST /api/desktop/webview-sessions` | Desktop bearer | origin-bound 7분 Desktop UI bearer 발급 |
+| `DELETE /api/desktop/webview-sessions/current` | Desktop bearer | 해당 parent와 origin의 Desktop UI bearer 폐기 |
 | `POST /api/desktop/heartbeat` | Desktop bearer | `lmsSessionState`, `appVersion` heartbeat 보고 |
 | `GET /api/desktop/mobile-sessions` | Desktop bearer | 연결된 모바일 세션·Push 상태 조회 |
 | `DELETE /api/desktop/mobile-sessions/:id` | Desktop bearer | 모바일 세션과 해당 Push 구독 폐기 |
@@ -197,6 +199,15 @@ R2에 보관된 식단 이미지를 반환합니다. 콘텐츠 SHA 주소이므�
 | `GET`, `PUT /api/{desktop\|mobile}/meal-preferences` | 역할별 인증 | 급식 알림 설정 조회·수정 |
 | `GET`, `POST`, `DELETE /api/{desktop\|mobile}/laundry-watches` | 역할별 인증 | 세탁 상태 watch 조회·추가·취소 |
 | `GET`, `POST`, `DELETE /api/{desktop\|mobile}/laundry-queue` | 역할별 인증 | 세탁 차례 알림 조회·추가·취소 |
+| `GET /api/desktop-ui/attendance` | Desktop UI bearer + bound Origin | 최신 출석 조회 |
+| `GET`, `PUT /api/desktop-ui/v2/attendance/preferences` | Desktop UI bearer + bound Origin | v2 출석 알림 설정 조회·수정 |
+| `GET`, `PUT /api/desktop-ui/meal-preferences` | Desktop UI bearer + bound Origin | 급식 알림 설정 조회·수정 |
+| `GET`, `POST`, `DELETE /api/desktop-ui/laundry-watches` | Desktop UI bearer + bound Origin | 세탁 watch 조회·추가·취소 |
+| `GET`, `POST`, `DELETE /api/desktop-ui/laundry-queue` | Desktop UI bearer + bound Origin | 세탁 차례 알림 조회·추가·취소 |
+| `POST /api/desktop-ui/pairings`, `GET /api/desktop-ui/pairings/:id` | Desktop UI bearer + bound Origin | 모바일 연결 생성·상태 조회 |
+| `POST /api/desktop-ui/pairings/:id/approve` | Desktop UI bearer + bound Origin | strict `{ claimId }`로 모바일 연결 승인 |
+| `GET /api/desktop-ui/mobile-sessions` | Desktop UI bearer + bound Origin | 연결된 모바일 목록 조회 |
+| `DELETE /api/desktop-ui/mobile-sessions/:id` | Desktop UI bearer + bound Origin | 연결된 모바일 폐기 |
 
 v2 출석 알림 설정은 계정 단위의 strict DTO입니다. `enabled`는 전체 출석 알림,
 `morning`·`evening`은 단계별 알림, `morningStartHour`는 `4..9`,
@@ -206,6 +217,44 @@ Jobs는 해당 시간 구간을 선택한 간격의 고유 슬롯으로 나눠 �
 롤링 배포 중 기존 클라이언트는 기존 경로의 `morning`, `evening`, `skipSunday`,
 `skipAttendanceDate` 4필드 계약을 계속 사용합니다. 기존 PUT은 v2 전용 필드를 보존하며,
 신규 클라이언트만 `/v2/attendance/preferences`를 사용합니다.
+
+### Desktop WebView HTTP 세션
+
+장기 Desktop bearer는 Rust의 OS credential vault에만 남고 WebView JavaScript에는
+전달하지 않습니다. Rust는 장기 bearer로 `POST /api/desktop/webview-sessions`에 strict
+body `{ "origin": "tauri://localhost" }`를 보내고, 서버는 strict
+`{ "accessToken": "jbui_...", "expiresAt": "..." }`를 반환합니다. 토큰은 32바이트
+opaque random 값이며 D1에는 domain-separated SHA-256 digest만 저장합니다. 만료는 발급
+시점부터 7분의 절대 만료이고 사용에 따라 연장되지 않습니다.
+
+허용 origin은 다음 세 개뿐입니다.
+
+- `tauri://localhost`
+- `http://tauri.localhost`
+- `http://127.0.0.1:5173`
+
+`null`, origin 누락, wildcard, 그 밖의 loopback port는 허용하지 않습니다. CORS도 같은
+목록을 그대로 사용하고 credentialed CORS를 켜지 않습니다. 각 토큰은 발급 body의
+origin과 내부 고정 scope `desktop-ui-v1`에 묶입니다. 같은 parent Desktop 세션에서 다시
+발급하면 기존 행을 원자적으로 교체하므로 이전 UI 토큰은 즉시 무효가 됩니다. parent
+Desktop 세션이 회전·폐기·만료되거나 설치 소유권을 잃어도 UI 토큰은 남은 7분과 관계없이
+즉시 거부됩니다.
+
+앱 identity reset 전에는 장기 bearer로
+`DELETE /api/desktop/webview-sessions/current`와 같은 strict `{ "origin": "..." }` body를
+보내 해당 parent와 origin의 현재 UI 토큰을 best-effort 폐기합니다. 네트워크가 끊겨 이
+요청이 실패해도 토큰은 발급 후 7분을 넘겨 사용할 수 없습니다.
+
+Desktop UI bearer는 `/api/desktop-ui/*`의 위 표에 명시된 서버 소유 데이터 경로에만
+사용합니다. 출석 snapshot upload, heartbeat, credential rotation, notification inbox/ACK,
+로그·자동 시작·업데이트 같은 native 기능은 이 namespace에 존재하지 않습니다. UI
+bearer를 `/api/desktop/*`, `/api/mobile/*`, `/api/push/*`에 보내도 인증되지 않습니다.
+기존 PWA의 `HttpOnly; SameSite=Strict` 모바일 cookie 계약은 변경하지 않으며 PWA는
+Desktop UI bearer를 사용하지 않습니다.
+
+Desktop UI 연결 승인 body의 `claimId`는 현재 pairing ID와 같은 형식이며 path `:id`와
+정확히 일치해야 합니다. 불일치는 `409 PAIRING_CLAIM_MISMATCH`로 거부합니다. 따라서
+화면에서 상태 조회로 확인한 claim 이외의 연결을 실수로 승인할 수 없습니다.
 
 Rate limit의 단일 기준은
 [`DESKTOP_ENROLLMENT_POLICY`, `MANUAL_PAIRING_CLAIM_POLICY`, `PAIRING_CREATION_POLICY`](../shared/domain/enrollment-policy.ts)입니다.
@@ -233,8 +282,12 @@ header가 없어도 허용합니다. 등록 후 24시간 동안 heartbeat, 자�
 뜻입니다. App Worker가 운영체제 알림을 즉시 전송했다는 뜻이 아닙니다. Desktop
 inbox는 다음 poll에서 조회하고 PWA Web Push는 다음 OCI Jobs tick에서 전송합니다.
 
-페어링 생성과 승인은 strict 빈 객체 `{}`만 입력으로 받습니다. 페어링 claim 성공
-응답은 `{ "claimId": "...", "status": "awaiting-desktop-approval" }`만
+`POST /api/pairings`, `POST /api/desktop-ui/pairings`, 기존 Desktop bearer의
+`POST /api/pairings/:id/approve`, `POST /api/pairings/:id/complete`는 strict 빈
+객체 `{}`만 입력으로 받습니다. Desktop UI bearer의
+`POST /api/desktop-ui/pairings/:id/approve`는 위에서 설명한 strict
+`{ "claimId": "..." }`를 받습니다. 페어링 claim 성공 응답은
+`{ "claimId": "...", "status": "awaiting-desktop-approval" }`만
 반환합니다. proof는 JSON이나 브라우저 JavaScript에 노출하지 않고 2분 만료의
 `HttpOnly; SameSite=Strict` pending-claim cookie에만 저장합니다. 승인이 끝난 뒤
 `POST /api/pairings/:id/complete`는 strict 빈 객체 `{}`를 받고 pending cookie로

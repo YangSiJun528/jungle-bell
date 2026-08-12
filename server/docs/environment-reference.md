@@ -6,7 +6,7 @@ Jungle Bell 서버 패키지는 HTTP 전용 App Worker와 주기 작업 전용 O
 
 | 이름 | 종류 | 용도 |
 | --- | --- | --- |
-| `DB` | D1 binding | 공개 조회 모델, session, pairing, 출석, 개인 설정, 알림 delivery와 OCI gateway의 고정 대상 |
+| `DB` | D1 binding | 공개 조회 모델, 장기·Desktop UI session, pairing, 출석, 개인 설정, 알림 delivery와 OCI gateway의 고정 대상 |
 | `DATA_BUCKET` | R2 binding | 정규화 자료와 급식 이미지 조회 |
 | `PAIRING_SECRET` | Worker secret | QR·10자리 코드 연결. 32바이트 이상 난수 |
 | `VAPID_PUBLIC_KEY` | Worker secret | PWA 구독 생성에 공개할 VAPID public key |

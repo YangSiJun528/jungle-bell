@@ -1,5 +1,6 @@
 import { AttendanceService, type AttendanceStore } from "./attendance-service";
 import { DesktopService, type DesktopStore } from "./desktop-service";
+import { DesktopUiSessionService, type DesktopUiSessionStore } from "./desktop-ui-session-service";
 import { MobileService, type MobileStore } from "./mobile-service";
 import { NotificationService, type NotificationStore } from "./notification-service";
 import { PairingService, type PairingStore } from "./pairing-service";
@@ -9,6 +10,7 @@ import { PushService, type PushSubscriptionStore } from "./push-service";
 
 export type ApiRenewalStore = AttendanceStore
   & DesktopStore
+  & DesktopUiSessionStore
   & MobileStore
   & NotificationStore
   & PairingStore
@@ -18,6 +20,7 @@ export type ApiRenewalStore = AttendanceStore
 export interface ApiServices {
   attendance: AttendanceService;
   desktop: DesktopService;
+  desktopUiSessions: DesktopUiSessionService;
   mobile: MobileService;
   notifications: NotificationService;
   pairings: PairingService;
@@ -31,6 +34,7 @@ export function createApiServices(renewalStore: ApiRenewalStore, publicStorage: 
   return {
     attendance: new AttendanceService(renewalStore),
     desktop: new DesktopService(renewalStore),
+    desktopUiSessions: new DesktopUiSessionService(renewalStore),
     mobile: new MobileService(renewalStore),
     notifications: new NotificationService(renewalStore),
     pairings: new PairingService(renewalStore),

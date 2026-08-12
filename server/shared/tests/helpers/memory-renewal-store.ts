@@ -3,6 +3,7 @@ import type {
   AttendanceSnapshotRecord,
   AttendancePreferenceRecord,
   DesktopRecord,
+  DesktopUiSessionRecord,
   LaundryQueueEntryRecord,
   LaundryAvailabilityTargetRecord,
   LaundryWatchRecord,
@@ -27,6 +28,7 @@ export class MemoryRenewalStore implements RenewalStore {
   readonly activatedDesktopInstallations = new Set<string>();
   readonly desktops = new Map<string, DesktopRecord>();
   readonly sessions = new Map<string, AppSessionRecord>();
+  readonly desktopUiSessions = new Map<string, DesktopUiSessionRecord>();
   readonly pairings = new Map<string, PairingRecord>();
   readonly manualPairingAttempts = new Map<string, { windowStartedAt: number; count: number }>();
   readonly pairingCreationAttempts = new Map<string, { windowStartedAt: number; count: number }>();
@@ -140,14 +142,42 @@ export class MemoryRenewalStore implements RenewalStore {
     return [...this.sessions.values()].find((session) => session.tokenSha256 === hash) ?? null;
   }
 
-  async hasCurrentDesktopOwnership(input: { sessionId: string; userId: string; installationId: string }): Promise<boolean> {
+  async hasCurrentDesktopOwnership(input: {
+    sessionId: string; userId: string; installationId: string; nowEpochMs?: number;
+  }): Promise<boolean> {
     const session = this.sessions.get(input.sessionId);
     const desktop = this.desktops.get(input.installationId);
     return session?.kind === "desktop"
       && session.userId === input.userId
       && session.installationId === input.installationId
       && session.revokedAtEpochMs === null
+      && (input.nowEpochMs === undefined || session.expiresAtEpochMs > input.nowEpochMs)
       && desktop?.userId === input.userId;
+  }
+
+  async replaceDesktopUiSession(value: DesktopUiSessionRecord): Promise<boolean> {
+    if (!(await this.hasCurrentDesktopOwnership({
+      sessionId: value.parentSessionId,
+      userId: value.userId,
+      installationId: value.installationId,
+      nowEpochMs: value.createdAtEpochMs,
+    }))) return false;
+    this.desktopUiSessions.set(value.parentSessionId, structuredClone(value));
+    this.persistedValues.push({ ...value, tokenSha256: value.tokenSha256 });
+    return true;
+  }
+
+  async findDesktopUiSessionByTokenHash(tokenSha256: string): Promise<DesktopUiSessionRecord | null> {
+    return [...this.desktopUiSessions.values()].find((session) => session.tokenSha256 === tokenSha256) ?? null;
+  }
+
+  async deleteDesktopUiSession(input: {
+    parentSessionId: string; userId: string; installationId: string; origin: string;
+  }): Promise<boolean> {
+    const current = this.desktopUiSessions.get(input.parentSessionId);
+    if (!current || current.userId !== input.userId || current.installationId !== input.installationId
+      || current.origin !== input.origin) return false;
+    return this.desktopUiSessions.delete(input.parentSessionId);
   }
 
   async touchSession(id: string, now: number): Promise<void> {
@@ -695,6 +725,9 @@ export class MemoryRenewalStore implements RenewalStore {
       return false;
     }
     this.lastHousekeepingAtEpochMs = nowEpochMs;
+    for (const [parentSessionId, session] of this.desktopUiSessions) {
+      if (session.expiresAtEpochMs <= nowEpochMs) this.desktopUiSessions.delete(parentSessionId);
+    }
     const cutoff = nowEpochMs - DESKTOP_ENROLLMENT_POLICY.abandonedRetentionMs;
     for (const [installationId, desktop] of this.desktops) {
       const enrolledAt = this.desktopEnrolledAt.get(installationId);

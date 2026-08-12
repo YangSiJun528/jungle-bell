@@ -23,7 +23,7 @@ export function disposeDesktopSubscriptions(registry: DesktopSubscriptionRegistr
 export async function registerDesktopSubscriptions(
     registry: DesktopSubscriptionRegistry,
     subscriptions: readonly SubscriptionRegistration[],
-    reportReady: () => Promise<unknown>,
+    afterRegistered?: () => Promise<unknown>,
 ): Promise<void> {
     const results: RegistrationResult[] = await Promise.all(subscriptions.map(async (subscribe) => {
         try {
@@ -42,5 +42,5 @@ export async function registerDesktopSubscriptions(
     }
 
     registry.unlisteners.push(...unlisteners);
-    if (!registry.disposed) await reportReady();
+    if (!registry.disposed) await afterRegistered?.();
 }

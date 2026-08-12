@@ -1,7 +1,8 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {CircleAlert, KeyRound, Link2, MonitorCheck, QrCode, RotateCcw, Smartphone, Trash2} from 'lucide-react';
-import {queryKeys, useDashboardEnvironment} from '@/app/dashboard-context';
+import {queryKeys, removeDesktopIdentityQueries, useDashboardEnvironment} from '@/app/dashboard-context';
+import {useDesktopConnectionQuery} from '@/app/use-dashboard-queries';
 import {EmptyState, ErrorState, LoadingState} from '@/components/dashboard/async-state';
 import {PageHeader} from '@/components/dashboard/page-header';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
@@ -55,11 +56,7 @@ function DesktopConnections() {
     const client = useQueryClient();
     const [pairing, setPairing] = useState<MobilePairingCreated | null>(null);
 
-    const connection = useQuery({
-        queryKey: queryKeys.desktopConnection,
-        queryFn: () => api.getDesktopConnectionState(),
-        refetchInterval: 60_000,
-    });
+    const connection = useDesktopConnectionQuery();
     const sessions = useQuery({
         queryKey: queryKeys.mobileSessions,
         queryFn: () => api.listMobileSessions(),
@@ -114,13 +111,13 @@ function DesktopConnections() {
     });
     const reset = useMutation({
         mutationFn: () => api.resetDesktopIdentity(),
-        onSuccess: async (value) => {
+        onMutate: () => {
             setPairing(null);
+            removeDesktopIdentityQueries(client);
+        },
+        onSuccess: async (value) => {
             client.setQueryData(queryKeys.desktopConnection, value);
-            await Promise.all([
-                client.invalidateQueries({queryKey: queryKeys.desktopConnection}),
-                client.invalidateQueries({queryKey: queryKeys.mobileSessions}),
-            ]);
+            await client.invalidateQueries({queryKey: queryKeys.desktopConnection});
         },
     });
 

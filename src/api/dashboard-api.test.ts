@@ -10,41 +10,12 @@ function jsonResponse(value: unknown, status = 200): Response {
     });
 }
 
-test('PC 홈 overview는 로컬 D-Day와 LMS를 보존하는 exact DTO다', async () => {
-    const overview = {
-        attendance: {
-            status: 'active',
-            statusText: '학습 종료 가능 (3시간 49분 남음)',
-            ddayText: '수료까지 D-21',
-            ddayPeriod: {startDate: '2026-08-01', endDate: '2026-08-31'},
-            currentVersion: '0.5.0',
-        },
-        lmsSessionState: 'connected',
-        unreadCount: 2,
-        laundry: null,
-        meals: null,
+function desktopHttpSession() {
+    return {
+        accessToken: `jbui_${'a'.repeat(64)}`,
+        expiresAt: new Date(Date.now() + 7 * 60_000).toISOString(),
     };
-    const api = createDashboardApi({
-        fetcher: async () => jsonResponse({}),
-        invokeCommand: async (command) => command === 'get_dashboard_home_overview' ? overview : null,
-    });
-
-    assert.deepEqual(await api.getDashboardHomeOverview(), overview);
-
-    for (const invalid of [
-        {...overview, extra: true},
-        {...overview, unreadCount: -1},
-        {...overview, lmsSessionState: 'authenticated'},
-        {...overview, attendance: {...overview.attendance, pendingUpdate: null}},
-        {...overview, attendance: {...overview.attendance, ddayPeriod: {startDate: '2026-08-31', endDate: '2026-08-01'}}},
-    ]) {
-        const invalidApi = createDashboardApi({
-            fetcher: async () => jsonResponse({}),
-            invokeCommand: async () => invalid,
-        });
-        await assert.rejects(invalidApi.getDashboardHomeOverview(), /API_RESPONSE_INVALID/);
-    }
-});
+}
 
 test('공개 생활 정보는 인증 없이 공개 API만 호출한다', async () => {
     const calls: Array<{url: string; init?: RequestInit}> = [];
@@ -76,25 +47,6 @@ test('공개 생활 정보는 인증 없이 공개 API만 호출한다', async (
     assert.equal(calls[0]?.init?.method, 'GET');
     assert.equal(calls[0]?.init?.credentials, 'omit');
     assert.equal(new Headers(calls[0]?.init?.headers).has('authorization'), false);
-});
-
-test('PC 생활 정보 수동 새로고침은 캐시 조회가 아닌 전용 IPC를 호출한다', async () => {
-    const calls: Array<{command: string; args?: Record<string, unknown>}> = [];
-    const api = createDashboardApi({
-        desktopRuntime: true,
-        fetcher: async () => jsonResponse({}),
-        invokeCommand: async (command, args) => {
-            calls.push({command, args});
-        },
-    });
-
-    await api.refreshCampusData('laundry');
-    await api.refreshCampusData('meals');
-
-    assert.deepEqual(calls, [
-        {command: 'refresh_campus_data', args: {kind: 'laundry'}},
-        {command: 'refresh_campus_data', args: {kind: 'meals'}},
-    ]);
 });
 
 test('세탁 가능 횟수는 서버 authoritative capacity 계약을 엄격히 유지한다', async () => {
@@ -368,23 +320,27 @@ test('과거 급식 페이지는 웹에서 검증된 커서로 공개 API를 호
     await assert.rejects(api.getPublicMealHistory(null, 0), /API_CLIENT_INVALID_ARGUMENT/);
 });
 
-test('데스크톱 과거 급식 페이지는 외부 origin 대신 Rust IPC를 사용한다', async () => {
-    const calls: Array<{command: string; args?: Record<string, unknown>}> = [];
+test('데스크톱 과거 급식 페이지도 인증 없는 공개 HTTP API를 사용한다', async () => {
+    const urls: string[] = [];
+    const commands: string[] = [];
     const api = createDashboardApi({
         desktopRuntime: true,
-        fetcher: async () => jsonResponse({}),
-        invokeCommand: async (command, args) => {
-            calls.push({command, args});
-            return {posts: [], nextBefore: null};
+        campusApiBaseUrl: 'https://campus.example.com',
+        fetcher: async (input, init) => {
+            urls.push(String(input));
+            assert.equal(init?.credentials, 'omit');
+            return jsonResponse({posts: [], nextBefore: null});
+        },
+        invokeCommand: async (command) => {
+            commands.push(command);
+            return undefined;
         },
     });
 
     await api.getPublicMealHistory(null, 50);
 
-    assert.deepEqual(calls, [{
-        command: 'get_dashboard_meal_history',
-        args: {before: null, limit: 50},
-    }]);
+    assert.deepEqual(urls, ['https://campus.example.com/api/public/meals/history?limit=50']);
+    assert.deepEqual(commands, []);
 });
 
 test('모바일 알림 내역은 서버의 epoch 응답 필드를 그대로 검증한다', async () => {
@@ -538,20 +494,21 @@ test('개인 출석 envelope는 current-only 필드 외의 호환 필드를 거�
     await assert.rejects(api.getAttendance('companion'), /API_RESPONSE_INVALID/);
 });
 
-test('데스크톱 개인 기능은 웹 요청 대신 제한된 Tauri command adapter를 쓴다', async () => {
+test('데스크톱 서버 데이터는 단기 세션 HTTP, 네이티브 기능은 제한된 command를 쓴다', async () => {
     const calls: Array<{command: string; args?: Record<string, unknown>}> = [];
+    const requests: Array<{url: string; init?: RequestInit}> = [];
     const api = createDashboardApi({
-        fetcher: async () => {
-            throw new Error('unexpected fetch');
+        desktopRuntime: true,
+        platformApiBaseUrl: 'https://platform.example.com',
+        fetcher: async (input, init) => {
+            requests.push({url: String(input), init});
+            return jsonResponse({attendance: null, freshness: 'missing'});
         },
         invokeCommand: async (command, args) => {
             calls.push({command, args});
-            if (command === 'get_remote_attendance_snapshot') {
-                return {attendance: null, freshness: 'missing'};
-            }
+            if (command === 'bootstrap_desktop_http_session') return desktopHttpSession();
             return {
                 authenticated: true,
-                installationId: '550e8400-e29b-41d4-a716-446655440000',
                 credentialPersistent: true,
                 identityResetRequired: false,
                 lmsSessionState: 'connected',
@@ -567,9 +524,15 @@ test('데스크톱 개인 기능은 웹 요청 대신 제한된 Tauri command ad
 
     assert.deepEqual(calls.map(({command}) => command), [
         'get_connected_service_status',
-        'get_remote_attendance_snapshot',
+        'bootstrap_desktop_http_session',
         'refresh_platform_sync',
     ]);
+    assert.equal(requests[0]?.url, 'https://platform.example.com/api/desktop-ui/attendance');
+    assert.equal(requests[0]?.init?.credentials, 'omit');
+    assert.equal(
+        new Headers(requests[0]?.init?.headers).get('authorization'),
+        `Bearer ${desktopHttpSession().accessToken}`,
+    );
 });
 
 test('데스크톱 credential 복구는 명시적 확인이 포함된 새 identity command만 사용한다', async () => {
@@ -580,7 +543,6 @@ test('데스크톱 credential 복구는 명시적 확인이 포함된 새 identi
             calls.push({command, args});
             return {
                 authenticated: true,
-                installationId: '550e8400-e29b-41d4-a716-446655440000',
                 credentialPersistent: true,
                 identityResetRequired: false,
                 lmsSessionState: 'unknown',
@@ -622,16 +584,16 @@ test('모바일 수동 연결 요청에는 정규화한 10자리 코드만 전�
     );
 });
 
-test('데스크톱 생활 정보는 외부 fetch 대신 CampusService IPC를 사용한다', async () => {
-    const calls: string[] = [];
+test('데스크톱 생활 정보도 공개 HTTP API를 직접 사용한다', async () => {
+    const urls: string[] = [];
+    const commands: string[] = [];
     const api = createDashboardApi({
         desktopRuntime: true,
-        fetcher: async () => {
-            throw new Error('unexpected fetch');
-        },
-        invokeCommand: async (command, args) => {
-            calls.push(`${command}:${String(args?.kind)}`);
-            return args?.kind === 'laundry'
+        campusApiBaseUrl: 'https://campus.example.com',
+        fetcher: async (input) => {
+            const url = String(input);
+            urls.push(url);
+            return jsonResponse(url.endsWith('/laundry')
                 ? {
                     schemaVersion: 1,
                     asOf: '2026-08-03T09:00:00.000Z',
@@ -651,25 +613,28 @@ test('데스크톱 생활 정보는 외부 fetch 대신 CampusService IPC를 사
                         weeklyMenus: [],
                         historyNextBefore: null,
                     },
-                };
+                });
         },
+        invokeCommand: async (command) => { commands.push(command); },
     });
 
     await api.getPublicLaundry();
     await api.getPublicMeals();
 
-    assert.deepEqual(calls, [
-        'get_dashboard_campus_data:laundry',
-        'get_dashboard_campus_data:meals',
+    assert.deepEqual(urls, [
+        'https://campus.example.com/api/public/laundry',
+        'https://campus.example.com/api/public/meals',
     ]);
+    assert.deepEqual(commands, []);
 });
 
 test('데스크톱 페어링 상태는 서버의 expired 종료 상태를 허용한다', async () => {
     const api = createDashboardApi({
-        fetcher: async () => { throw new Error('unexpected fetch'); },
+        desktopRuntime: true,
+        fetcher: async () => jsonResponse({status: 'expired', claim: null}),
         invokeCommand: async (command) => {
-            assert.equal(command, 'get_mobile_pairing_status');
-            return {status: 'expired', claim: null};
+            assert.equal(command, 'bootstrap_desktop_http_session');
+            return desktopHttpSession();
         },
     });
 
@@ -677,6 +642,29 @@ test('데스크톱 페어링 상태는 서버의 expired 종료 상태를 허용
         await api.getMobilePairingStatus('jbp_01234567-89ab-4def-8123-456789abcdef'),
         {status: 'expired', claim: null},
     );
+});
+
+test('데스크톱 페어링 승인은 actual claimId를 strict desktop-ui body로 보낸다', async () => {
+    const requests: Array<{url: string; init?: RequestInit}> = [];
+    const api = createDashboardApi({
+        desktopRuntime: true,
+        platformApiBaseUrl: 'https://platform.example.com',
+        fetcher: async (input, init) => {
+            requests.push({url: String(input), init});
+            return new Response(null, {status: 204});
+        },
+        invokeCommand: async () => desktopHttpSession(),
+    });
+    const pairingId = 'jbp_01234567-89ab-4def-8123-456789abcdef';
+    const claimId = 'jbp_11234567-89ab-4def-8123-456789abcdef';
+
+    await api.approveMobilePairing(pairingId, claimId);
+
+    assert.equal(
+        requests[0]?.url,
+        `https://platform.example.com/api/desktop-ui/pairings/${pairingId}/approve`,
+    );
+    assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {claimId});
 });
 
 test('데스크톱 모바일 session 목록은 current 배열 DTO만 허용한다', async () => {
@@ -691,8 +679,9 @@ test('데스크톱 모바일 session 목록은 current 배열 DTO만 허용한�
         status: 'active',
     };
     const validApi = createDashboardApi({
-        fetcher: async () => { throw new Error('unexpected fetch'); },
-        invokeCommand: async () => [device],
+        desktopRuntime: true,
+        fetcher: async () => jsonResponse([device]),
+        invokeCommand: async () => desktopHttpSession(),
     });
     assert.deepEqual(await validApi.listMobileSessions(), [device]);
 
@@ -701,8 +690,9 @@ test('데스크톱 모바일 session 목록은 current 배열 DTO만 허용한�
         [{...device, sessionId: device.deviceId}],
     ]) {
         const api = createDashboardApi({
-            fetcher: async () => { throw new Error('unexpected fetch'); },
-            invokeCommand: async () => response,
+            desktopRuntime: true,
+            fetcher: async () => jsonResponse(response),
+            invokeCommand: async () => desktopHttpSession(),
         });
         await assert.rejects(api.listMobileSessions(), /API_RESPONSE_INVALID/);
     }
@@ -721,8 +711,9 @@ test('페어링 claim은 claimed 상태에서만 허용한다', async () => {
         },
     ]) {
         const api = createDashboardApi({
-            fetcher: async () => { throw new Error('unexpected fetch'); },
-            invokeCommand: async () => status,
+            desktopRuntime: true,
+            fetcher: async () => jsonResponse(status),
+            invokeCommand: async () => desktopHttpSession(),
         });
         await assert.rejects(
             api.getMobilePairingStatus('jbp_01234567-89ab-4def-8123-456789abcdef'),
@@ -734,8 +725,8 @@ test('페어링 claim은 claimed 상태에서만 허용한다', async () => {
 test('페어링 확인 코드는 4자리 ASCII 영문·숫자만 허용한다', async () => {
     for (const confirmationCode of ['ABC', 'ABCDE', 'AB-1', '가나다라']) {
         const api = createDashboardApi({
-            fetcher: async () => { throw new Error('unexpected fetch'); },
-            invokeCommand: async () => ({
+            desktopRuntime: true,
+            fetcher: async () => jsonResponse({
                 status: 'claimed',
                 claim: {
                     claimId: 'jbp_01234567-89ab-4def-8123-456789abcdef',
@@ -743,6 +734,7 @@ test('페어링 확인 코드는 4자리 ASCII 영문·숫자만 허용한다', 
                     confirmationCode,
                 },
             }),
+            invokeCommand: async () => desktopHttpSession(),
         });
         await assert.rejects(
             api.getMobilePairingStatus('jbp_01234567-89ab-4def-8123-456789abcdef'),
@@ -905,23 +897,30 @@ test('데스크톱 서비스 설정은 unknown field와 non-boolean을 거부한
     }
 });
 
-test('데스크톱 개인 생활 설정은 canonical Tauri commands와 strict DTO만 사용한다', async () => {
-    const calls: Array<{command: string; args?: Record<string, unknown>}> = [];
+test('데스크톱 개인 생활 설정은 desktop-ui HTTP namespace와 단기 bearer만 사용한다', async () => {
+    const commands: string[] = [];
+    const requests: Array<{url: string; init?: RequestInit}> = [];
     const api = createDashboardApi({
-        fetcher: async () => { throw new Error('unexpected fetch'); },
-        invokeCommand: async (command, args) => {
-            calls.push({command, args});
-            if (command === 'get_meal_preferences' || command === 'update_meal_preferences') {
-                return mealPreferences;
+        desktopRuntime: true,
+        platformApiBaseUrl: 'https://platform.example.com',
+        fetcher: async (input, init) => {
+            const url = String(input);
+            requests.push({url, init});
+            if (init?.method === 'DELETE') return new Response(null, {status: 204});
+            if (url.endsWith('/v2/attendance/preferences')) return jsonResponse(attendancePreferences);
+            if (url.endsWith('/meal-preferences')) return jsonResponse(mealPreferences);
+            if (url.endsWith('/laundry-watches') && init?.method === 'GET') {
+                return jsonResponse({watches: [laundryWatch]});
             }
-            if (command === 'get_attendance_preferences' || command === 'update_attendance_preferences') {
-                return attendancePreferences;
+            if (url.endsWith('/laundry-watches')) return jsonResponse(laundryWatch, 201);
+            if (url.endsWith('/laundry-queue') && init?.method === 'GET') {
+                return jsonResponse({entries: [laundryQueueEntry]});
             }
-            if (command === 'list_laundry_watches') return {watches: [laundryWatch]};
-            if (command === 'create_laundry_watch') return laundryWatch;
-            if (command === 'list_laundry_queue') return {entries: [laundryQueueEntry]};
-            if (command === 'join_laundry_queue') return laundryQueueEntry;
-            return undefined;
+            return jsonResponse(laundryQueueEntry, 201);
+        },
+        invokeCommand: async (command) => {
+            commands.push(command);
+            return desktopHttpSession();
         },
     });
 
@@ -945,25 +944,23 @@ test('데스크톱 개인 생활 설정은 canonical Tauri commands와 strict DT
     }), laundryQueueEntry);
     await api.leaveLaundryQueue('desktop', laundryQueueEntry.id);
 
-    assert.deepEqual(calls, [
-        {command: 'get_attendance_preferences', args: undefined},
-        {command: 'update_attendance_preferences', args: {input: {
-            ...attendancePreferences, morning: false, skipSunday: true, skipAttendanceDate: '2026-08-10',
-        }}},
-        {command: 'get_meal_preferences', args: undefined},
-        {command: 'update_meal_preferences', args: {input: {
-            enabled: true, breakfast: false, lunch: true, dinner: true,
-        }}},
-        {command: 'list_laundry_watches', args: undefined},
-        {command: 'create_laundry_watch', args: {input: {
-            machineId: '워시타워_1', appliance: 'washer', sessionId: 'session-1',
-            notifyBeforeMinutes: 10, notifyWhenAvailable: true,
-        }}},
-        {command: 'delete_laundry_watch', args: {watchId: laundryWatch.id}},
-        {command: 'list_laundry_queue', args: undefined},
-        {command: 'join_laundry_queue', args: {input: {machineId: null, appliance: 'dryer'}}},
-        {command: 'leave_laundry_queue', args: {entryId: laundryQueueEntry.id}},
+    assert.deepEqual(commands, ['bootstrap_desktop_http_session']);
+    assert.deepEqual(requests.map(({url}) => new URL(url).pathname), [
+        '/api/desktop-ui/v2/attendance/preferences',
+        '/api/desktop-ui/v2/attendance/preferences',
+        '/api/desktop-ui/meal-preferences',
+        '/api/desktop-ui/meal-preferences',
+        '/api/desktop-ui/laundry-watches',
+        '/api/desktop-ui/laundry-watches',
+        `/api/desktop-ui/laundry-watches/${laundryWatch.id}`,
+        '/api/desktop-ui/laundry-queue',
+        '/api/desktop-ui/laundry-queue',
+        `/api/desktop-ui/laundry-queue/${laundryQueueEntry.id}`,
     ]);
+    for (const {init} of requests) {
+        assert.equal(init?.credentials, 'omit');
+        assert.equal(new Headers(init?.headers).get('authorization'), `Bearer ${desktopHttpSession().accessToken}`);
+    }
 });
 
 test('PWA 개인 생활 설정은 mobile canonical API와 HttpOnly cookie만 사용한다', async () => {

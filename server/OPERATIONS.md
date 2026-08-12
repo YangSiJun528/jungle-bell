@@ -51,6 +51,38 @@ npm --prefix .. run verify:server
 `database/schema.sql`은 모든 앱 테이블을 다시 만드는 신규 D1 전용 bootstrap입니다. 작은
 운영 변경은 별도로 검토한 비파괴 SQL을 먼저 준비합니다.
 
+### Desktop UI 세션 D1 마이그레이션
+
+`database/migrations/2026-08-12-desktop-ui-sessions.sql`은 기존 행을 수정하거나 삭제하지
+않고 `desktop_ui_session` 테이블과 만료 index만 추가합니다. 직접 HTTP를 사용하는 App
+Worker와 신규 housekeeping을 포함한 OCI Jobs를 배포하기 전에 적용해야 합니다. 순서는
+**복구 지점 확인 → migration → OCI Jobs → App Worker → Tauri**입니다. App Worker를 먼저
+배포하면 WebView bootstrap이 `500`으로 실패하고, migration 없이 신규 Jobs를 먼저
+실행하면 housekeeping 단계가 실패합니다.
+
+아래 명령은 `server/apps/api-worker/`에서 실행합니다.
+
+```bash
+# v2-test
+npx wrangler d1 time-travel info jungle-bell-v2-test --json
+npx wrangler d1 execute jungle-bell-v2-test --remote \
+  --file=../../database/migrations/2026-08-12-desktop-ui-sessions.sql
+npx wrangler d1 execute jungle-bell-v2-test --remote \
+  --command="SELECT origin, scope, count(*) AS count FROM desktop_ui_session GROUP BY origin, scope"
+
+# production: v2-test API와 실제 앱 검증 뒤 실행
+npx wrangler d1 time-travel info jungle-bell-v2 --json
+npx wrangler d1 execute jungle-bell-v2 --remote \
+  --file=../../database/migrations/2026-08-12-desktop-ui-sessions.sql
+npx wrangler d1 execute jungle-bell-v2 --remote \
+  --command="SELECT origin, scope, count(*) AS count FROM desktop_ui_session GROUP BY origin, scope"
+```
+
+검증 쿼리는 token digest를 출력하지 않습니다. `origin`은 허용된 세 값, `scope`는
+`desktop-ui-v1`만 나와야 합니다. 롤백 시 구 App Worker는 새 테이블을 읽지 않으므로
+테이블을 제거하지 않습니다. 새 코드의 housekeeping은 매 실행마다 만료됐거나 유효한
+parent Desktop 소유권이 없는 행을 최대 500개씩 제거합니다.
+
 ### 출석 알림 설정 D1 마이그레이션
 
 `database/migrations/2026-08-12-attendance-notification-preferences.sql`은 기존

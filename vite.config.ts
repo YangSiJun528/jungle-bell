@@ -12,6 +12,10 @@ const {VitePWA} = require('vite-plugin-pwa') as {
 
 const host = process.env.TAURI_DEV_HOST;
 export const defaultDevApiOrigin = 'https://jungle-bell-api-test.yangsijun5528.workers.dev';
+export const tauriApiOrigins = new Set([
+    'https://jungle-bell-api.yangsijun5528.workers.dev',
+    defaultDevApiOrigin,
+]);
 
 export function normalizeDevApiOrigin(value: string): string {
     const parsed = new URL(value);
@@ -28,9 +32,26 @@ export function normalizeDevApiOrigin(value: string): string {
     return parsed.origin;
 }
 
+export function tauriBuildApiOrigin(
+    command: 'serve' | 'build',
+    environment: Record<string, string | undefined>,
+): string | null {
+    if (command !== 'build' || !environment.TAURI_ENV_PLATFORM) return null;
+    const value = environment.JUNGLE_BELL_DATA_API_URL;
+    if (!value) throw new Error('JUNGLE_BELL_DATA_API_URL_REQUIRED');
+    const origin = normalizeDevApiOrigin(value);
+    if (!tauriApiOrigins.has(origin)) throw new Error('JUNGLE_BELL_DATA_API_URL_INVALID');
+    return origin;
+}
+
 export function bypassDevApiModuleRequest(url: string | undefined): string | undefined {
     if (url && /^\/api\/[^/]+\.[cm]?[jt]sx?(?:\?|$)/u.test(url)) return url;
     return undefined;
+}
+
+export function tauriDevOrigin(environment: Record<string, string | undefined>): string | null {
+    if (!environment.TAURI_ENV_PLATFORM) return null;
+    return 'http://127.0.0.1:5173';
 }
 
 interface InjectionScript {
@@ -95,6 +116,8 @@ export default defineConfig(({command}) => {
     const devApiOrigin = normalizeDevApiOrigin(
         process.env.JUNGLE_BELL_DEV_API_ORIGIN ?? defaultDevApiOrigin,
     );
+    const productionTauriApiOrigin = tauriBuildApiOrigin(command, process.env);
+    const developmentTauriOrigin = command === 'serve' ? tauriDevOrigin(process.env) : null;
 
     return {
         plugins: [
@@ -136,12 +159,23 @@ export default defineConfig(({command}) => {
                 'import.meta.env.VITE_CAMPUS_API_URL': JSON.stringify(devApiOrigin),
                 'import.meta.env.VITE_PLATFORM_API_URL': JSON.stringify(''),
             }
-            : undefined,
+            : productionTauriApiOrigin
+                ? {
+                    'import.meta.env.VITE_CAMPUS_API_URL': JSON.stringify(productionTauriApiOrigin),
+                    'import.meta.env.VITE_PLATFORM_API_URL': JSON.stringify(productionTauriApiOrigin),
+                }
+                : undefined,
         server: {
             host: host ?? '127.0.0.1',
             port: 5173,
             strictPort: true,
             proxy: {
+                '/api/desktop-ui': {
+                    target: devApiOrigin,
+                    changeOrigin: true,
+                    secure: true,
+                    ...(developmentTauriOrigin ? {headers: {origin: developmentTauriOrigin}} : {}),
+                },
                 '/api': {
                     target: devApiOrigin,
                     changeOrigin: true,

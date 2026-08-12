@@ -40,8 +40,7 @@ describe('home feature boundaries', () => {
         expect(source).not.toContain('seen-mobile-notifications');
         expect(source).not.toContain('href="#notifications"');
         expect(source).not.toContain('title="알림"');
-        expect(source).toContain("useCampusDataIssue('laundry')");
-        expect(source).toContain("useCampusDataIssue('meals')");
+        expect(source).not.toContain('useCampusDataIssue');
         expect(source).toContain('laundryRefreshFailed && !laundry.data');
         expect(source).toContain('mealsRefreshFailed && !meals.data');
     });

@@ -15,9 +15,11 @@ Jungle Bell은 PC가 Jungle LMS 세션과 출석 수집을 전담하고, Cloudfl
 Jungle LMS ─ 전용 WebView ─ Tauri PC
                               │
                               ├─ 정규화한 출석 snapshot·heartbeat
-                              └─ 알림 delivery poll·ack
+                              ├─ 알림 delivery poll·ack
+                              └─ 단기 WebView HTTP session bootstrap
                                           │
 일반 웹 ─ 공개 정보 ─────────────── App Worker ─ DB binding ─ D1
+Tauri UI ─ 공개·desktop-ui HTTP ────────────┤
 설치 PWA ─ session·Web Push 등록 ───────────┤
                                            └─ R2 binding ─ R2
                                               ↑            ↑
@@ -34,11 +36,16 @@ LMS access cookie와 refresh cookie는 Tauri의 전용 LMS WebView profile에만
 검증 가능한 LMS 상태와 정규화한 출석 snapshot만 전달합니다.
 
 PC가 서버에 사용하는 자격 증명은 LMS 자격 증명과 무관한 임의의 Jungle Bell
-desktop credential입니다. 서버는 원문 대신 hash만 저장합니다. PC는 이
-credential을 앱 전용 데이터 디렉터리의 일반 파일에 보관합니다. Unix에서는
-`0600` mode를 설정·검사하고 Windows에서는 앱 데이터 디렉터리의 상속 ACL에
-의존합니다. OS keychain을 사용하지 않으며 모든 플랫폼에서 파일의 형식·크기·
-종류와 symlink 여부를 확인합니다.
+desktop credential입니다. 서버는 원문 대신 hash만 저장하고 PC는 원문을 운영체제
+credential vault에 보관합니다. 과거 앱 전용 파일은 검증 후 vault로 한 번 이전하고
+제거합니다.
+
+React 대시보드는 장기 desktop credential을 받지 않습니다. Rust가 장기 credential로
+7분짜리 opaque desktop-ui session을 발급받아 호출한 WebView의 메모리에만 전달합니다.
+이 session은 exact Tauri origin, 부모 desktop session과 고정 scope에 묶이며
+`/api/desktop-ui/*`의 폐쇄형 route에서만 사용할 수 있습니다. 공개 세탁·급식도
+Rust proxy를 거치지 않고 React가 `/api/public/*`를 직접 호출합니다. LMS checker,
+heartbeat, 운영체제 알림과 로컬 설정은 계속 Rust 경계에 남습니다.
 
 이 경계에서는 동일 LMS 사용자를 여러 PC에서 자동 병합할 근거가 없습니다.
 각 PC 등록은 별도 계정 경계가 되고, 모바일 PWA는 사용자가 해당 PC에서 직접
