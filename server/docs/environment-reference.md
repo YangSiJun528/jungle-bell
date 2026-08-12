@@ -66,7 +66,7 @@ Private key는 OCI secret 파일에만 저장하며 Worker secret, D1, R2, 저�
 | 이름 | 기본값 또는 용도 |
 | --- | --- |
 | `MEALS_EVERY_MINUTES` | `5`. 세탁은 매분 수집 |
-| `LAUNDRY_URL` | 필수 HTTPS 세탁 상태 원본 URL. 임시 tunnel 기본값 없음 |
+| `LAUNDRY_URL` | 필수 HTTPS 세탁 상태 원본 URL. production은 장기 운영 endpoint를 사용하고, v2-test는 내부 서비스 접근용 `trycloudflare.com` tunnel을 사용할 수 있음 |
 | `MEALS_INCLUDE_PINNED_URL` | pinned 포함 카카오 API |
 | `MEALS_DEFAULT_URL` | 기본 카카오 API |
 | `MEALS_PAGE_URL` | 게시물 permalink 기준 URL |
