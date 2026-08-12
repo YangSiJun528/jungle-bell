@@ -11,6 +11,7 @@ DROP TABLE IF EXISTS attendance_snapshot;
 DROP TABLE IF EXISTS pairing_challenge;
 DROP TABLE IF EXISTS pairing_creation_attempt;
 DROP TABLE IF EXISTS pairing_claim_attempt;
+DROP TABLE IF EXISTS desktop_ui_session;
 DROP TABLE IF EXISTS app_session;
 DROP TABLE IF EXISTS desktop_device;
 DROP TABLE IF EXISTS desktop_enrollment_attempt;
@@ -199,6 +200,29 @@ CREATE INDEX app_session_user_kind ON app_session (user_id, kind, created_at_epo
 CREATE UNIQUE INDEX app_session_active_desktop_installation
   ON app_session (installation_id)
   WHERE kind = 'desktop' AND revoked_at_epoch_ms IS NULL;
+
+-- A WebView receives only a short-lived, origin-bound capability. Reissuing for
+-- the same parent replaces the previous token atomically.
+CREATE TABLE desktop_ui_session (
+  id TEXT PRIMARY KEY,
+  parent_session_id TEXT NOT NULL UNIQUE,
+  user_id TEXT NOT NULL,
+  installation_id TEXT NOT NULL,
+  token_sha256 TEXT NOT NULL UNIQUE CHECK (length(token_sha256) = 64),
+  origin TEXT NOT NULL CHECK (origin IN (
+    'tauri://localhost',
+    'http://tauri.localhost',
+    'http://127.0.0.1:5173'
+  )),
+  scope TEXT NOT NULL CHECK (scope = 'desktop-ui-v1'),
+  created_at_epoch_ms INTEGER NOT NULL,
+  expires_at_epoch_ms INTEGER NOT NULL CHECK (expires_at_epoch_ms > created_at_epoch_ms),
+  FOREIGN KEY (parent_session_id) REFERENCES app_session(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES app_user(id) ON DELETE CASCADE,
+  FOREIGN KEY (installation_id) REFERENCES desktop_device(installation_id) ON DELETE CASCADE
+);
+
+CREATE INDEX desktop_ui_session_expiry ON desktop_ui_session (expires_at_epoch_ms);
 
 CREATE TABLE pairing_challenge (
   id TEXT PRIMARY KEY,

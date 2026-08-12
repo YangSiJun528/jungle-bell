@@ -5,7 +5,6 @@ import {desktopConnectionUiState} from './desktop-connection-state';
 
 const connection = (state: DesktopConnectionState['state']): DesktopConnectionState => ({
     state,
-    desktopId: state === 'connected' ? 'desktop_123' : null,
     lastVerifiedAt: null,
     lastSeenAt: null,
     health: state === 'connected' ? 'online' : null,

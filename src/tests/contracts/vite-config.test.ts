@@ -7,13 +7,31 @@ import {
     bypassDevApiModuleRequest,
     defaultDevApiOrigin,
     normalizeDevApiOrigin,
+    tauriBuildApiOrigin,
+    tauriDevOrigin,
 } from '../../../vite.config';
 
 const configFile = fileURLToPath(new URL('../../../vite.config.ts', import.meta.url));
 
-async function interpretedConfig(command: 'serve' | 'build'): Promise<ResolvedConfig> {
-    const previous = process.env.JUNGLE_BELL_DEV_API_ORIGIN;
+async function interpretedConfig(
+    command: 'serve' | 'build',
+    environment: Record<string, string | undefined> = {},
+): Promise<ResolvedConfig> {
+    const keys = [
+        'JUNGLE_BELL_DEV_API_ORIGIN',
+        'JUNGLE_BELL_DATA_API_URL',
+        'TAURI_ENV_PLATFORM',
+        'TAURI_DEV_HOST',
+    ] as const;
+    const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
     delete process.env.JUNGLE_BELL_DEV_API_ORIGIN;
+    delete process.env.JUNGLE_BELL_DATA_API_URL;
+    delete process.env.TAURI_ENV_PLATFORM;
+    delete process.env.TAURI_DEV_HOST;
+    for (const [key, value] of Object.entries(environment)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+    }
     try {
         return await resolveConfig(
             {configFile},
@@ -21,8 +39,11 @@ async function interpretedConfig(command: 'serve' | 'build'): Promise<ResolvedCo
             command === 'serve' ? 'development' : 'production',
         );
     } finally {
-        if (previous === undefined) delete process.env.JUNGLE_BELL_DEV_API_ORIGIN;
-        else process.env.JUNGLE_BELL_DEV_API_ORIGIN = previous;
+        for (const key of keys) {
+            const value = previous[key];
+            if (value === undefined) delete process.env[key];
+            else process.env[key] = value;
+        }
     }
 }
 
@@ -56,6 +77,78 @@ test('프로덕션 빌드는 개발 API origin을 브라우저 bundle에 주입�
 
     assert.equal(config.define?.['import.meta.env.VITE_CAMPUS_API_URL'], undefined);
     assert.equal(config.define?.['import.meta.env.VITE_PLATFORM_API_URL'], undefined);
+});
+
+test('Tauri production build만 명시적인 원격 API origin을 주입한다', () => {
+    assert.equal(tauriBuildApiOrigin('build', {}), null);
+    assert.equal(tauriBuildApiOrigin('serve', {
+        TAURI_ENV_PLATFORM: 'darwin',
+        JUNGLE_BELL_DATA_API_URL: 'https://api.example.com',
+    }), null);
+    assert.equal(tauriBuildApiOrigin('build', {
+        TAURI_ENV_PLATFORM: 'darwin',
+        JUNGLE_BELL_DATA_API_URL: 'https://jungle-bell-api.yangsijun5528.workers.dev/',
+    }), 'https://jungle-bell-api.yangsijun5528.workers.dev');
+    assert.throws(
+        () => tauriBuildApiOrigin('build', {TAURI_ENV_PLATFORM: 'windows'}),
+        /JUNGLE_BELL_DATA_API_URL_REQUIRED/,
+    );
+    assert.throws(
+        () => tauriBuildApiOrigin('build', {
+            TAURI_ENV_PLATFORM: 'darwin',
+            JUNGLE_BELL_DATA_API_URL: 'http://127.0.0.1:8787',
+        }),
+        /JUNGLE_BELL_DATA_API_URL_INVALID/,
+    );
+    assert.throws(
+        () => tauriBuildApiOrigin('build', {
+            TAURI_ENV_PLATFORM: 'darwin',
+            JUNGLE_BELL_DATA_API_URL: 'https://api.example.com',
+        }),
+        /JUNGLE_BELL_DATA_API_URL_INVALID/,
+    );
+});
+
+test('해석된 Tauri production config는 public/private origin을 함께 고정한다', async () => {
+    const config = await interpretedConfig('build', {
+        TAURI_ENV_PLATFORM: 'darwin',
+        JUNGLE_BELL_DATA_API_URL: 'https://jungle-bell-api.yangsijun5528.workers.dev',
+    });
+    assert.equal(
+        config.define?.['import.meta.env.VITE_CAMPUS_API_URL'],
+        JSON.stringify('https://jungle-bell-api.yangsijun5528.workers.dev'),
+    );
+    assert.equal(
+        config.define?.['import.meta.env.VITE_PLATFORM_API_URL'],
+        JSON.stringify('https://jungle-bell-api.yangsijun5528.workers.dev'),
+    );
+});
+
+test('desktop-ui 개발 proxy는 WebView Origin을 보존한다', async () => {
+    const config = await interpretedConfig('serve');
+    const proxy = config.server.proxy?.['/api/desktop-ui'];
+    assert.ok(proxy && typeof proxy !== 'string');
+    assert.equal(proxy.target, defaultDevApiOrigin);
+    assert.equal(proxy.headers, undefined);
+});
+
+test('Tauri dev desktop-ui proxy는 GET에도 exact WebView Origin을 보낸다', () => {
+    assert.equal(tauriDevOrigin({}), null);
+    assert.equal(
+        tauriDevOrigin({TAURI_ENV_PLATFORM: 'darwin'}),
+        'http://127.0.0.1:5173',
+    );
+    assert.equal(
+        tauriDevOrigin({TAURI_ENV_PLATFORM: 'windows', TAURI_DEV_HOST: 'localhost'}),
+        'http://127.0.0.1:5173',
+    );
+});
+
+test('해석된 Tauri dev proxy에도 exact WebView Origin header가 설정된다', async () => {
+    const config = await interpretedConfig('serve', {TAURI_ENV_PLATFORM: 'darwin'});
+    const proxy = config.server.proxy?.['/api/desktop-ui'];
+    assert.ok(proxy && typeof proxy !== 'string');
+    assert.deepEqual(proxy.headers, {origin: 'http://127.0.0.1:5173'});
 });
 
 test('개발 API origin은 안전한 origin 형태만 허용한다', () => {

@@ -2,7 +2,6 @@ mod analytics;
 mod attendance;
 mod attendance_day;
 mod autostart;
-mod campus;
 mod checker;
 mod commands;
 mod config;
@@ -100,7 +99,6 @@ pub fn run() {
     let notification_inbox_service = Arc::new(NotificationInboxService::load());
     let notification_service = Arc::new(NotificationService::new(notification_inbox_service.clone()));
     let settings_service = Arc::new(DesktopSettingsService::new(shared_state.clone()));
-    let campus_service = Arc::new(campus::CampusService::new());
 
     tauri::Builder::default()
         // single-instance 플러그인: 공식 문서 권장대로 가장 먼저 등록한다.
@@ -149,18 +147,13 @@ pub fn run() {
         .manage(notification_inbox_service.clone())
         .manage(notification_service.clone())
         .manage(settings_service)
-        .manage(campus_service.clone())
         // JS에서 `window.__TAURI__.core.invoke()`로 호출할 수 있는 Tauri 커맨드 등록.
         .invoke_handler(tauri::generate_handler![
             commands::report_checker_event,
+            commands::bootstrap_desktop_http_session,
             commands::get_desktop_settings,
             commands::update_desktop_settings,
             commands::open_log_folder,
-            commands::report_campus_ready,
-            commands::refresh_campus_data,
-            commands::get_dashboard_campus_data,
-            commands::get_dashboard_meal_history,
-            commands::get_dashboard_home_overview,
             commands::get_notification_inbox_snapshot,
             commands::mark_notification_read,
             commands::activate_notification,
@@ -168,22 +161,6 @@ pub fn run() {
             commands::get_connected_service_status,
             commands::reset_desktop_identity,
             commands::open_lms_login,
-            commands::create_mobile_pairing,
-            commands::get_mobile_pairing_status,
-            commands::approve_mobile_pairing,
-            commands::list_mobile_sessions,
-            commands::revoke_mobile_session,
-            commands::get_remote_attendance_snapshot,
-            commands::get_attendance_preferences,
-            commands::update_attendance_preferences,
-            commands::get_meal_preferences,
-            commands::update_meal_preferences,
-            commands::list_laundry_watches,
-            commands::create_laundry_watch,
-            commands::delete_laundry_watch,
-            commands::list_laundry_queue,
-            commands::join_laundry_queue,
-            commands::leave_laundry_queue,
             commands::refresh_platform_sync,
         ])
         // setup(): 앱 초기화 후 이벤트 루프 시작 전에 한 번 실행.
@@ -257,5 +234,49 @@ mod tests {
     fn 디버그_모드는_런타임_로그_상한을_전환한다() {
         assert_eq!(configured_log_level(false), log::LevelFilter::Info);
         assert_eq!(configured_log_level(true), log::LevelFilter::Debug);
+    }
+
+    #[test]
+    fn dashboard_csp는_정확한_api_worker만_연결하고_wildcard를_허용하지_않는다() {
+        let config: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        let csp = config["app"]["security"]["csp"].as_str().unwrap();
+        assert!(csp.contains("https://jungle-bell-api.yangsijun5528.workers.dev"));
+        assert!(csp.contains("https://jungle-bell-api-test.yangsijun5528.workers.dev"));
+        assert!(!csp.contains("*.workers.dev"));
+        assert!(!csp.contains("connect-src *"));
+    }
+
+    #[test]
+    fn native_command_manifest는_os경계_12개와_http_bootstrap만_남긴다() {
+        let build = include_str!("../build.rs");
+        let manifest = build
+            .split("const APP_COMMANDS")
+            .nth(1)
+            .unwrap()
+            .split("];")
+            .next()
+            .unwrap();
+        let commands = manifest
+            .lines()
+            .filter_map(|line| line.trim().strip_prefix('"')?.strip_suffix("\","))
+            .collect::<std::collections::BTreeSet<_>>();
+        let expected = [
+            "activate_notification",
+            "bootstrap_desktop_http_session",
+            "get_connected_service_status",
+            "get_desktop_settings",
+            "get_notification_inbox_snapshot",
+            "mark_notification_read",
+            "open_lms_login",
+            "open_log_folder",
+            "refresh_platform_sync",
+            "report_checker_event",
+            "reset_desktop_identity",
+            "send_test_notification",
+            "update_desktop_settings",
+        ]
+        .into_iter()
+        .collect();
+        assert_eq!(commands, expected);
     }
 }

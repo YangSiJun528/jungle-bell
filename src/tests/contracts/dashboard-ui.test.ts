@@ -205,29 +205,23 @@ test('TanStack Query는 공개 데이터와 개인 데이터를 서로 다른 �
     assert.match(queries, /useQuery\(laundryQueryOptions\(api\)\)/);
     assert.match(queries, /useQuery\(mealsQueryOptions\(api\)\)/);
     assert.match(queries, /queryKey: queryKeys\.attendance\(personalSurface\),[\s\S]{0,220}staleTime: DASHBOARD_REFRESH\.personal/);
-    assert.match(queries, /queryKey: queryKeys\.homeOverview,[\s\S]{0,220}staleTime: DASHBOARD_REFRESH\.personal/);
     assert.match(queries, /queryKey: queryKeys\.notifications\(personalSurface\),[\s\S]{0,260}staleTime: DASHBOARD_REFRESH\.personal/);
 
-    for (const event of ['campus-data-updated', 'campus-data-error', 'notification-inbox-updated']) {
-        assert.match(providers, new RegExp(`['"]${event}['"]`));
-    }
+    assert.match(providers, /['"]notification-inbox-updated['"]/);
+    assert.doesNotMatch(providers, /campus-data-(?:updated|error)/);
     assert.match(providers, /registerDesktopSubscriptions/);
-    assert.match(providers, /laundryQueryContract\.parse\(payload\.snapshot\.data\)/);
-    assert.match(providers, /mealsQueryContract\.parse\(payload\.snapshot\.data\)/);
-    assert.match(providers, /invoke\('report_campus_ready'\)/);
+    assert.doesNotMatch(providers, /report_campus_ready/);
     assert.doesNotMatch(providers, /TooltipProvider/);
-    assert.match(context, /useCampusDataIssue/);
-    assert.match(queries, /api\.refreshCampusData\(kind\)/);
+    assert.doesNotMatch(context, /useCampusDataIssue|homeOverview/);
+    assert.doesNotMatch(queries, /refreshCampusData|refreshHomeOverview|homeOverview/);
     assert.match(queries, /throwOnError:\s*true/);
     assert.match(queries, /useRefreshHomeMutation/);
     assert.match(queries, /api\.refreshPlatformSync\(\)/);
-    assert.match(queries, /api\.refreshCampusData\('laundry'\)/);
-    assert.match(queries, /api\.refreshCampusData\('meals'\)/);
-    assert.match(queries, /refreshHomeOverview:[\s\S]{0,180}queryKeys\.homeOverview/);
+    assert.match(queries, /client\.refetchQueries/);
     assert.match(laundry, /useCampusManualRefresh\('laundry'\)/);
     assert.match(meals, /useCampusManualRefresh\('meals'\)/);
-    assert.match(laundry, /campusIssue/);
-    assert.match(meals, /campusIssue/);
+    assert.doesNotMatch(laundry, /campusIssue/);
+    assert.doesNotMatch(meals, /campusIssue/);
 });
 
 test('PWA 메타데이터·서비스 워커·설치 프롬프트는 React 진입점과 함께 유지한다', () => {

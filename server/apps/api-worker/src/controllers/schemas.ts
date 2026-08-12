@@ -6,6 +6,7 @@ import {
   decodeMealHistoryCursor,
   MEAL_HISTORY_CURSOR_MAX_LENGTH,
 } from "@jungle-bell/backend-common/domain/meal-history";
+import { DESKTOP_UI_ORIGINS } from "../services/desktop-ui-session-service";
 
 export const rfc3339Schema = z.iso.datetime({ offset: true });
 export const timeQuerySchema = z.object({ time: rfc3339Schema });
@@ -27,11 +28,13 @@ export const mobileInstallationIdSchema = z.string().regex(/^jbmi_[a-f0-9]{32}$/
 export const pairingIdSchema = z.string().regex(/^jbp_[0-9a-f-]{36}$/u);
 export const desktopEnrollmentSchema = z.strictObject({ installationId: installationIdSchema });
 export const emptyObjectSchema = z.strictObject({});
+export const desktopUiSessionSchema = z.strictObject({ origin: z.enum(DESKTOP_UI_ORIGINS) });
 export const heartbeatSchema = z.strictObject({
   lmsSessionState: z.enum(["connected", "login-required", "unknown"]),
   appVersion: z.string().trim().min(1).max(64).nullable(),
 });
 export const pairingParamSchema = z.strictObject({ id: pairingIdSchema });
+export const pairingApprovalSchema = z.strictObject({ claimId: pairingIdSchema });
 export const qrClaimSchema = z.strictObject({
   challenge: z.string().regex(/^jbpc_[a-f0-9]{64}$/u),
   deviceLabel: z.string().trim().min(1).max(80),

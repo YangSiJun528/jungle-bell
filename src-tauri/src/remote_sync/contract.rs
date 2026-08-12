@@ -26,13 +26,6 @@ pub(crate) fn is_safe_route_segment(value: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
 }
 
-pub(crate) fn is_manual_pairing_code(value: &str) -> bool {
-    value.len() == 10
-        && value.bytes().all(|byte| {
-            byte.is_ascii_digit() || matches!(byte, b'A'..=b'H' | b'J' | b'K' | b'M' | b'N' | b'P'..=b'T' | b'V'..=b'Z')
-        })
-}
-
 pub(crate) fn is_safe_notification_text(value: &str, max_chars: usize, allow_newline: bool) -> bool {
     let count = value.chars().count();
     (1..=max_chars).contains(&count)
@@ -62,6 +55,56 @@ pub(crate) fn ensure_dashboard_window(window: &WebviewWindow) -> Result<(), Stri
         Ok(())
     } else {
         Err("COMMAND_CONTEXT_DENIED".into())
+    }
+}
+
+/// 대시보드 WebView의 실제 URL에서 서버가 허용하는 canonical origin을 만든다.
+/// WHATWG에서 custom scheme의 `URL.origin`은 `null`이므로 scheme/host를 직접 검사한다.
+pub(crate) fn dashboard_webview_origin(label: &str, url: &Url) -> Result<String, String> {
+    if label != DASHBOARD_WINDOW_LABEL || !url.username().is_empty() || url.password().is_some() {
+        return Err("COMMAND_CONTEXT_DENIED".into());
+    }
+    match (url.scheme(), url.host_str(), url.port()) {
+        ("tauri", Some("localhost"), None) => Ok("tauri://localhost".into()),
+        ("http", Some("tauri.localhost"), None) => Ok("http://tauri.localhost".into()),
+        ("http", Some("127.0.0.1"), Some(5173)) => Ok("http://127.0.0.1:5173".into()),
+        _ => Err("COMMAND_CONTEXT_DENIED".into()),
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DesktopHttpSessionRequest<'a> {
+    pub(crate) origin: &'a str,
+}
+
+/// 단기 WebView bearer는 IPC 응답으로 한 번 전달할 뿐 Rust 상태나 로그에 저장하지 않는다.
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct DesktopHttpSession {
+    pub(crate) access_token: String,
+    pub(crate) expires_at: String,
+}
+
+impl DesktopHttpSession {
+    pub(crate) fn validate(&self) -> Result<(), ServiceError> {
+        let token_valid = self.access_token.len() == 69
+            && self.access_token.starts_with("jbui_")
+            && self.access_token[5..]
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase());
+        let now = Utc::now();
+        let expiry_valid = DateTime::parse_from_rfc3339(&self.expires_at)
+            .ok()
+            .map(|value| value.with_timezone(&Utc))
+            .is_some_and(|value| {
+                value > now + chrono::Duration::seconds(30) && value <= now + chrono::Duration::minutes(10)
+            });
+        if token_valid && expiry_valid {
+            Ok(())
+        } else {
+            Err(ServiceError::InvalidResponse)
+        }
     }
 }
 
@@ -154,66 +197,15 @@ pub(crate) fn is_app_bearer(value: &str) -> bool {
             .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
 }
 
-pub(crate) fn parse_future_timestamp(value: &str) -> Option<DateTime<Utc>> {
-    DateTime::parse_from_rfc3339(value)
-        .ok()
-        .map(|value| value.with_timezone(&Utc))
-        .filter(|value| *value > Utc::now())
-}
-
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ConnectedServiceStatus {
     pub authenticated: bool,
-    pub installation_id: String,
     pub credential_persistent: bool,
     pub identity_reset_required: bool,
     pub lms_session_state: LmsSessionState,
     pub last_server_contact: Option<DateTime<Utc>>,
     pub last_error: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct MobilePairing {
-    pub pairing_id: String,
-    pub qr_payload: String,
-    pub manual_code: String,
-    pub expires_at: String,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct MobilePairingClaim {
-    pub claim_id: String,
-    pub device_label: String,
-    pub confirmation_code: String,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct MobilePairingStatus {
-    pub status: String,
-    pub claim: Option<MobilePairingClaim>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct MobileDevice {
-    pub device_id: String,
-    pub device_label: String,
-    pub installation_id: String,
-    pub created_at: String,
-    pub expires_at: String,
-    pub last_seen_at: String,
-    pub push_enabled: bool,
-    pub status: String,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct MobileDeviceEnvelope {
-    pub(crate) devices: Vec<MobileDevice>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -375,138 +367,6 @@ pub(crate) struct Heartbeat<'a> {
     pub(crate) app_version: &'a str,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct AttendancePreferences {
-    pub enabled: bool,
-    pub morning: bool,
-    pub evening: bool,
-    pub morning_start_hour: u8,
-    pub evening_end_hour: u8,
-    pub morning_interval_minutes: u8,
-    pub evening_interval_minutes: u8,
-    pub skip_sunday: bool,
-    pub skip_attendance_date: Option<String>,
-}
-
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct MealPreferencesInput {
-    pub enabled: bool,
-    pub breakfast: bool,
-    pub lunch: bool,
-    pub dinner: bool,
-}
-
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct MealPreferences {
-    pub enabled: bool,
-    pub breakfast: bool,
-    pub lunch: bool,
-    pub dinner: bool,
-    pub updated_at_epoch_ms: i64,
-}
-
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
-pub(crate) enum LaundryAppliance {
-    Washer,
-    Dryer,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct LaundryWatchInput {
-    pub machine_id: String,
-    pub appliance: LaundryAppliance,
-    pub session_id: Option<String>,
-    pub notify_before_minutes: u16,
-    pub notify_when_available: bool,
-}
-
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
-pub(crate) enum LaundryWatchStatus {
-    Active,
-    Completed,
-    Cancelled,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct RemoteLaundryWatch {
-    pub id: String,
-    pub machine_id: String,
-    pub appliance: LaundryAppliance,
-    pub session_id: Option<String>,
-    pub notify_before_minutes: u16,
-    pub notify_when_available: bool,
-    pub status: LaundryWatchStatus,
-    pub created_at_epoch_ms: i64,
-    pub updated_at_epoch_ms: i64,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct LaundryWatchEnvelope {
-    pub watches: Vec<RemoteLaundryWatch>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct LaundryQueueInput {
-    pub machine_id: Option<String>,
-    pub appliance: LaundryAppliance,
-}
-
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
-pub(crate) enum LaundryQueueStatus {
-    Waiting,
-    Claimed,
-    Cancelled,
-    Expired,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct LaundryQueueEntry {
-    pub id: String,
-    pub machine_id: Option<String>,
-    pub appliance: LaundryAppliance,
-    pub status: LaundryQueueStatus,
-    pub joined_at_epoch_ms: i64,
-    pub left_at_epoch_ms: Option<i64>,
-    pub position: Option<u32>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct LaundryQueueEnvelope {
-    pub entries: Vec<LaundryQueueEntry>,
-}
-
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
-pub(crate) enum SharedControlErrorCode {
-    #[serde(rename = "LAUNDRY_WATCH_ALREADY_EXISTS")]
-    WatchAlreadyExists,
-    #[serde(rename = "LAUNDRY_WATCH_LIMIT_REACHED")]
-    WatchLimitReached,
-    #[serde(rename = "LAUNDRY_WATCH_NOT_FOUND")]
-    WatchNotFound,
-    #[serde(rename = "LAUNDRY_QUEUE_ALREADY_JOINED")]
-    QueueAlreadyJoined,
-    #[serde(rename = "LAUNDRY_QUEUE_ENTRY_NOT_FOUND")]
-    QueueEntryNotFound,
-}
-
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct SharedControlError {
-    pub error: SharedControlErrorCode,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ServiceError {
     AuthenticationRequired,
@@ -515,11 +375,7 @@ pub(crate) enum ServiceError {
     Rejected,
     Storage,
     IdentityResetRequired,
-    LaundryWatchAlreadyExists,
-    LaundryWatchLimitReached,
-    LaundryWatchNotFound,
-    LaundryQueueAlreadyJoined,
-    LaundryQueueEntryNotFound,
+    StaleIdentity,
 }
 
 impl ServiceError {
@@ -531,23 +387,7 @@ impl ServiceError {
             Self::Rejected => "CONNECTED_SERVICE_REQUEST_REJECTED",
             Self::Storage => "CONNECTED_SERVICE_CREDENTIAL_STORAGE_FAILED",
             Self::IdentityResetRequired => "CONNECTED_SERVICE_IDENTITY_RESET_REQUIRED",
-            Self::LaundryWatchAlreadyExists => "LAUNDRY_WATCH_ALREADY_EXISTS",
-            Self::LaundryWatchLimitReached => "LAUNDRY_WATCH_LIMIT_REACHED",
-            Self::LaundryWatchNotFound => "LAUNDRY_WATCH_NOT_FOUND",
-            Self::LaundryQueueAlreadyJoined => "LAUNDRY_QUEUE_ALREADY_JOINED",
-            Self::LaundryQueueEntryNotFound => "LAUNDRY_QUEUE_ENTRY_NOT_FOUND",
-        }
-    }
-}
-
-impl From<SharedControlErrorCode> for ServiceError {
-    fn from(value: SharedControlErrorCode) -> Self {
-        match value {
-            SharedControlErrorCode::WatchAlreadyExists => Self::LaundryWatchAlreadyExists,
-            SharedControlErrorCode::WatchLimitReached => Self::LaundryWatchLimitReached,
-            SharedControlErrorCode::WatchNotFound => Self::LaundryWatchNotFound,
-            SharedControlErrorCode::QueueAlreadyJoined => Self::LaundryQueueAlreadyJoined,
-            SharedControlErrorCode::QueueEntryNotFound => Self::LaundryQueueEntryNotFound,
+            Self::StaleIdentity => "CONNECTED_SERVICE_IDENTITY_CHANGED",
         }
     }
 }

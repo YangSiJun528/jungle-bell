@@ -3,7 +3,7 @@ import {
     RefreshCw,
     WashingMachine,
 } from 'lucide-react';
-import {useCampusDataIssue, useDashboardEnvironment} from '@/app/dashboard-context';
+import {useDashboardEnvironment} from '@/app/dashboard-context';
 import {useCampusManualRefresh, useLaundryQuery} from '@/app/use-dashboard-queries';
 import {ErrorState, LoadingState} from '@/components/dashboard/async-state';
 import {PageHeader} from '@/components/dashboard/page-header';
@@ -40,7 +40,6 @@ export function LaundryPage() {
     const {surface} = useDashboardEnvironment();
     const laundry = useLaundryQuery();
     const manualRefresh = useCampusManualRefresh('laundry');
-    const campusIssue = useCampusDataIssue('laundry');
     const personal = personalSurface(surface.kind);
 
     const snapshot = laundry.data;
@@ -54,7 +53,7 @@ export function LaundryPage() {
         })
         : false;
     const summaries = capacityCards(snapshot?.capacity ?? null, reliable);
-    const refreshFailed = laundry.isError || manualRefresh.isError || campusIssue !== null;
+    const refreshFailed = laundry.isError || manualRefresh.isError;
     const refreshing = laundry.isFetching || manualRefresh.isPending;
 
     return (

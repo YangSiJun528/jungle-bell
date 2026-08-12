@@ -50,6 +50,14 @@ export class D1HousekeepingRepository {
         (SELECT id FROM app_session WHERE kind = 'mobile' AND
           ((revoked_at_epoch_ms IS NOT NULL AND revoked_at_epoch_ms < ?) OR expires_at_epoch_ms < ?)))
         AND ${RUN_GUARD_SQL}`).bind(cutoff30, cutoff30, cutoff30, runToken),
+      this.db.prepare(`DELETE FROM desktop_ui_session WHERE id IN (
+        SELECT ui.id FROM desktop_ui_session ui WHERE ui.expires_at_epoch_ms <= ?
+          OR NOT EXISTS (SELECT 1 FROM app_session parent WHERE parent.id = ui.parent_session_id
+            AND parent.kind = 'desktop' AND parent.user_id = ui.user_id
+            AND parent.installation_id = ui.installation_id
+            AND parent.revoked_at_epoch_ms IS NULL AND parent.expires_at_epoch_ms > ?)
+        ORDER BY ui.expires_at_epoch_ms LIMIT 500)
+        AND ${RUN_GUARD_SQL}`).bind(nowEpochMs, nowEpochMs, runToken),
       this.db.prepare(`DELETE FROM app_session WHERE kind = 'mobile' AND
         ((revoked_at_epoch_ms IS NOT NULL AND revoked_at_epoch_ms < ?) OR expires_at_epoch_ms < ?)
         AND ${RUN_GUARD_SQL}`).bind(cutoff30, cutoff30, runToken),

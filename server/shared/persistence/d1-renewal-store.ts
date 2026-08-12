@@ -1,5 +1,6 @@
 import type {
   AppSessionRecord, AttendancePreferenceRecord, AttendanceSnapshotRecord, DesktopRecord,
+  DesktopUiSessionRecord,
   LegacyAttendancePreferenceRecord,
   LaundryAppliance, LaundryAvailabilityTargetRecord, LaundryQueueEntryRecord, LaundryWatchRecord,
   LmsSessionState, MealPeriod, MealPreferenceRecord, MealPublicationRecord, NotificationRecord,
@@ -60,8 +61,24 @@ export class D1RenewalStore implements RenewalStore {
     return this.sessions.findByTokenHash(hash);
   }
 
-  async hasCurrentDesktopOwnership(input: { sessionId: string; userId: string; installationId: string }): Promise<boolean> {
+  async hasCurrentDesktopOwnership(input: {
+    sessionId: string; userId: string; installationId: string; nowEpochMs?: number;
+  }): Promise<boolean> {
     return this.sessions.hasCurrentDesktopOwnership(input);
+  }
+
+  async replaceDesktopUiSession(value: DesktopUiSessionRecord): Promise<boolean> {
+    return this.sessions.replaceDesktopUiSession(value);
+  }
+
+  async findDesktopUiSessionByTokenHash(tokenSha256: string): Promise<DesktopUiSessionRecord | null> {
+    return this.sessions.findDesktopUiSessionByTokenHash(tokenSha256);
+  }
+
+  async deleteDesktopUiSession(input: {
+    parentSessionId: string; userId: string; installationId: string; origin: string;
+  }): Promise<boolean> {
+    return this.sessions.deleteDesktopUiSession(input);
   }
 
   async touchSession(id: string, now: number): Promise<void> {

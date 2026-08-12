@@ -86,6 +86,67 @@ function mobileSession(id: string, nowEpochMs: number): AppSessionRecord {
   };
 }
 
+describe("desktop UI session D1 migration and persistence", () => {
+  it("is non-destructive, upserts per parent, binds origin and preserves only a token hash", async () => {
+    const database = new DatabaseSync(":memory:");
+    try {
+      database.exec(`
+        PRAGMA foreign_keys = ON;
+        CREATE TABLE app_user (id TEXT PRIMARY KEY, created_at_epoch_ms INTEGER NOT NULL);
+        CREATE TABLE desktop_device (
+          installation_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, created_at_epoch_ms INTEGER NOT NULL,
+          last_seen_at_epoch_ms INTEGER, lms_session_state TEXT NOT NULL, app_version TEXT
+        );
+        CREATE TABLE app_session (
+          id TEXT PRIMARY KEY, user_id TEXT NOT NULL, installation_id TEXT NOT NULL, kind TEXT NOT NULL,
+          label TEXT, token_sha256 TEXT NOT NULL UNIQUE, created_at_epoch_ms INTEGER NOT NULL,
+          expires_at_epoch_ms INTEGER NOT NULL, last_seen_at_epoch_ms INTEGER NOT NULL,
+          revoked_at_epoch_ms INTEGER, source_pairing_id TEXT UNIQUE
+        );
+        INSERT INTO app_user VALUES ('user-1', 1);
+        INSERT INTO desktop_device VALUES ('desktop-1', 'user-1', 1, 1, 'connected', NULL);
+        INSERT INTO app_session VALUES (
+          'parent-1', 'user-1', 'desktop-1', 'desktop', NULL, '${"1".repeat(64)}', 1, 1000, 1, NULL, NULL
+        );
+      `);
+      const migration = readFileSync(
+        new URL("../../database/migrations/2026-08-12-desktop-ui-sessions.sql", import.meta.url),
+        "utf8",
+      );
+      expect(migration).not.toMatch(/^\s*(?:DROP|DELETE|UPDATE|ALTER)\b/imu);
+      database.exec(migration);
+      expect(database.prepare("SELECT id FROM app_user").all()).toEqual([{ id: "user-1" }]);
+
+      const store = new D1RenewalStore(sqliteD1(database));
+      const base = {
+        parentSessionId: "parent-1", userId: "user-1", installationId: "desktop-1",
+        origin: "tauri://localhost", scope: "desktop-ui-v1",
+        createdAtEpochMs: 10, expiresAtEpochMs: 430_000,
+      };
+      expect(await store.replaceDesktopUiSession({
+        ...base, id: "ui-1", tokenSha256: "2".repeat(64),
+      })).toBe(true);
+      expect(await store.replaceDesktopUiSession({
+        ...base, id: "ui-2", tokenSha256: "3".repeat(64), createdAtEpochMs: 11, expiresAtEpochMs: 430_001,
+      })).toBe(true);
+      await expect(store.findDesktopUiSessionByTokenHash("2".repeat(64))).resolves.toBeNull();
+      await expect(store.findDesktopUiSessionByTokenHash("3".repeat(64))).resolves.toMatchObject({
+        id: "ui-2", parentSessionId: "parent-1", origin: "tauri://localhost", scope: "desktop-ui-v1",
+      });
+      await expect(store.deleteDesktopUiSession({
+        parentSessionId: "parent-1", userId: "user-1", installationId: "desktop-1",
+        origin: "http://tauri.localhost",
+      })).resolves.toBe(false);
+      await expect(store.deleteDesktopUiSession({
+        parentSessionId: "parent-1", userId: "user-1", installationId: "desktop-1",
+        origin: "tauri://localhost",
+      })).resolves.toBe(true);
+    } finally {
+      database.close();
+    }
+  });
+});
+
 describe("D1RenewalStore pairing approval", () => {
   it("does not revoke the winning session or subscription when a racing approval loses", async () => {
     const database = new DatabaseSync(":memory:");
@@ -713,11 +774,34 @@ describe("D1RenewalStore housekeeping", () => {
       database.prepare(`INSERT INTO desktop_device (installation_id, user_id, created_at_epoch_ms,
         last_seen_at_epoch_ms, lms_session_state, app_version)
         VALUES ('desktop-old', 'user-1', ?, ?, 'unknown', '0.4.0')`).run(old30, old30);
+      for (const installationId of ["desktop-ui-expired", "desktop-ui-revoked"]) {
+        database.prepare(`INSERT INTO desktop_device (installation_id, user_id, created_at_epoch_ms,
+          last_seen_at_epoch_ms, lms_session_state, app_version)
+          VALUES (?, 'user-1', ?, ?, 'unknown', '0.5.0')`).run(installationId, old30, now);
+      }
       database.prepare(`INSERT INTO app_session (id, user_id, installation_id, kind, label, token_sha256,
         created_at_epoch_ms, expires_at_epoch_ms, last_seen_at_epoch_ms, revoked_at_epoch_ms, source_pairing_id)
         VALUES ('desktop-active', 'user-1', 'desktop-1', 'desktop', NULL, ?, ?, ?, ?, NULL, NULL),
         ('desktop-retired', 'user-1', 'desktop-old', 'desktop', NULL, ?, ?, ?, ?, ?, NULL)`)
         .run("a".repeat(64), now, now + 60_000, now, "b".repeat(64), old30, old30, old30, old30);
+      database.prepare(`INSERT INTO app_session (id, user_id, installation_id, kind, label, token_sha256,
+        created_at_epoch_ms, expires_at_epoch_ms, last_seen_at_epoch_ms, revoked_at_epoch_ms, source_pairing_id)
+        VALUES ('desktop-ui-expired-parent', 'user-1', 'desktop-ui-expired', 'desktop', NULL, ?, ?, ?, ?, NULL, NULL),
+        ('desktop-ui-revoked-parent', 'user-1', 'desktop-ui-revoked', 'desktop', NULL, ?, ?, ?, ?, ?, NULL)`)
+        .run("c".repeat(64), old30, now - 1, now,
+          "d".repeat(64), old30, now + 60_000, now, now - 1);
+      database.prepare(`INSERT INTO desktop_ui_session
+        (id, parent_session_id, user_id, installation_id, token_sha256, origin, scope,
+          created_at_epoch_ms, expires_at_epoch_ms)
+        VALUES ('ui-active', 'desktop-active', 'user-1', 'desktop-1', ?, 'tauri://localhost',
+          'desktop-ui-v1', ?, ?),
+        ('ui-expired', 'desktop-ui-expired-parent', 'user-1', 'desktop-ui-expired', ?, 'tauri://localhost',
+          'desktop-ui-v1', ?, ?),
+        ('ui-revoked', 'desktop-ui-revoked-parent', 'user-1', 'desktop-ui-revoked', ?, 'tauri://localhost',
+          'desktop-ui-v1', ?, ?)`)
+        .run("e".repeat(64), now - 1, now + 60_000,
+          "f".repeat(64), now - 60_000, now - 1,
+          "0".repeat(64), now - 1, now + 60_000);
       for (const [id, installationId, expiresAt, revokedAt, hash] of [
         ["mobile-active", "phone-active", now + 60_000, null, "5".repeat(64)],
         ["mobile-old", "phone-old", old30, old30, "6".repeat(64)],
@@ -763,8 +847,11 @@ describe("D1RenewalStore housekeeping", () => {
       await expect(store.runHousekeeping(now + 59 * 60_000)).resolves.toBe(false);
 
       expect(database.prepare("SELECT id FROM app_session ORDER BY id").all()).toEqual([
-        { id: "desktop-active" }, { id: "mobile-active" },
+        { id: "desktop-active" }, { id: "desktop-ui-expired-parent" },
+        { id: "desktop-ui-revoked-parent" }, { id: "mobile-active" },
       ]);
+      expect(database.prepare("SELECT id FROM desktop_ui_session ORDER BY id").all())
+        .toEqual([{ id: "ui-active" }]);
       await expect(store.hasCurrentDesktopOwnership({
         sessionId: "desktop-active", userId: "user-1", installationId: "desktop-1",
       })).resolves.toBe(true);

@@ -17,6 +17,16 @@ pub(crate) struct SyncRuntime {
     enrollment_state: EnrollmentState,
 }
 
+struct AuthenticatedRequest {
+    bearer: Zeroizing<String>,
+    identity_generation: u64,
+}
+
+pub(crate) struct RemoteNotificationBatch {
+    pub(crate) identity_generation: u64,
+    pub(crate) notifications: Vec<RemoteNotification>,
+}
+
 pub(crate) struct RemoteSyncService {
     api: RemoteApi,
     app_data_dir: PathBuf,
@@ -24,6 +34,10 @@ pub(crate) struct RemoteSyncService {
     credential_store: Arc<dyn CredentialStore>,
     credential: RwLock<Option<BearerCredential>>,
     registration: Mutex<()>,
+    credential_transition: Mutex<()>,
+    identity_transition: RwLock<()>,
+    identity_generation: AtomicU64,
+    webview_session_transition: Mutex<()>,
     pub(crate) runtime: Mutex<SyncRuntime>,
     pub(crate) snapshot_revision: AtomicU64,
     pub(crate) snapshot_uploaded: Notify,
@@ -111,6 +125,10 @@ impl RemoteSyncService {
             credential_store,
             credential: RwLock::new(credential),
             registration: Mutex::new(()),
+            credential_transition: Mutex::new(()),
+            identity_transition: RwLock::new(()),
+            identity_generation: AtomicU64::new(0),
+            webview_session_transition: Mutex::new(()),
             runtime: Mutex::new(runtime),
             snapshot_revision: AtomicU64::new(0),
             snapshot_uploaded: Notify::new(),
@@ -118,12 +136,11 @@ impl RemoteSyncService {
     }
 
     pub(crate) async fn status(&self) -> ConnectedServiceStatus {
+        let _identity = self.identity_transition.read().await;
         let authenticated = self.current_bearer().await.is_some();
-        let installation_id = self.installation_id.read().await.clone();
         let runtime = self.runtime.lock().await;
         ConnectedServiceStatus {
             authenticated,
-            installation_id,
             credential_persistent: runtime.credential_persistent,
             identity_reset_required: runtime.enrollment_state == EnrollmentState::ResetRequired,
             lms_session_state: LmsSessionState::Unknown,
@@ -151,11 +168,42 @@ impl RemoteSyncService {
             .map(|credential| Zeroizing::new(credential.token.to_string()))
     }
 
+    #[cfg(test)]
     async fn require_bearer(&self) -> Result<Zeroizing<String>, ServiceError> {
-        if self.current_bearer().await.is_none() {
-            self.ensure_registered().await?;
+        Ok(self.authenticated_request().await?.bearer)
+    }
+
+    async fn authenticated_request(&self) -> Result<AuthenticatedRequest, ServiceError> {
+        self.authenticated_request_for_generation(None).await
+    }
+
+    async fn authenticated_request_for_generation(
+        &self,
+        expected_generation: Option<u64>,
+    ) -> Result<AuthenticatedRequest, ServiceError> {
+        loop {
+            let generation = self.identity_generation.load(Ordering::Acquire);
+            if expected_generation.is_some_and(|expected| expected != generation) {
+                return Err(ServiceError::StaleIdentity);
+            }
+            let registration = self.ensure_registered().await;
+            let _identity = self.identity_transition.read().await;
+            if self.identity_generation.load(Ordering::Acquire) != generation {
+                if expected_generation.is_some() {
+                    return Err(ServiceError::StaleIdentity);
+                }
+                continue;
+            }
+            registration?;
+            let bearer = self
+                .current_bearer()
+                .await
+                .ok_or(ServiceError::AuthenticationRequired)?;
+            return Ok(AuthenticatedRequest {
+                bearer,
+                identity_generation: generation,
+            });
         }
-        self.current_bearer().await.ok_or(ServiceError::AuthenticationRequired)
     }
 
     async fn record_success(&self) {
@@ -165,14 +213,71 @@ impl RemoteSyncService {
     }
 
     async fn record_error(&self, error: ServiceError) {
-        if error == ServiceError::AuthenticationRequired {
-            self.invalidate_credential().await;
-        }
         self.runtime.lock().await.last_error = Some(error.code().into());
     }
 
-    async fn invalidate_credential(&self) {
-        *self.credential.write().await = None;
+    async fn record_request_error(&self, error: ServiceError, request: &AuthenticatedRequest) -> bool {
+        let _identity = self.identity_transition.read().await;
+        if self.identity_generation.load(Ordering::Acquire) != request.identity_generation {
+            return false;
+        }
+        if error != ServiceError::AuthenticationRequired || self.invalidate_credential_if_current(&request.bearer).await
+        {
+            self.record_error(error).await;
+        }
+        true
+    }
+
+    async fn complete_authenticated_success(&self, request: &AuthenticatedRequest) -> bool {
+        let _identity = self.identity_transition.read().await;
+        if self.identity_generation.load(Ordering::Acquire) != request.identity_generation {
+            return false;
+        }
+        self.record_success().await;
+        true
+    }
+
+    async fn complete_attendance_success(&self, request: &AuthenticatedRequest) -> bool {
+        let _identity = self.identity_transition.read().await;
+        if self.identity_generation.load(Ordering::Acquire) != request.identity_generation {
+            return false;
+        }
+        self.record_success().await;
+        self.snapshot_revision.fetch_add(1, Ordering::Release);
+        self.snapshot_uploaded.notify_waiters();
+        true
+    }
+
+    pub(crate) async fn with_current_identity<T>(
+        &self,
+        identity_generation: u64,
+        apply: impl FnOnce() -> T,
+    ) -> Option<T> {
+        let _identity = self.identity_transition.read().await;
+        (self.identity_generation.load(Ordering::Acquire) == identity_generation).then(apply)
+    }
+
+    async fn install_credential_for_generation(&self, credential: BearerCredential, expected_generation: u64) -> bool {
+        let _identity = self.identity_transition.read().await;
+        if self.identity_generation.load(Ordering::Acquire) != expected_generation {
+            return false;
+        }
+        self.install_credential(credential).await;
+        true
+    }
+
+    async fn invalidate_credential_if_current(&self, request_bearer: &str) -> bool {
+        let _transition = self.credential_transition.lock().await;
+        {
+            let mut credential = self.credential.write().await;
+            if credential
+                .as_ref()
+                .is_none_or(|current| current.token.as_str() != request_bearer)
+            {
+                return false;
+            }
+            *credential = None;
+        }
         let cleared = clear_credential_store(Arc::clone(&self.credential_store)).await.is_ok();
         let mut runtime = self.runtime.lock().await;
         runtime.credential_persistent = false;
@@ -180,6 +285,7 @@ impl RemoteSyncService {
         if self.credential_store.is_persistent() && !cleared {
             runtime.last_error = Some(ServiceError::Storage.code().into());
         }
+        true
     }
 
     pub(crate) async fn ensure_registered(&self) -> Result<(), ServiceError> {
@@ -192,6 +298,7 @@ impl RemoteSyncService {
             }
         }
         let _registration = self.registration.lock().await;
+        let identity_generation = self.identity_generation.load(Ordering::Acquire);
 
         let active = {
             let credential = self.credential.read().await;
@@ -211,12 +318,21 @@ impl RemoteSyncService {
             }
             match self.api.rotate_installation(&bearer).await {
                 Ok(credential) => {
-                    self.install_credential(credential).await;
+                    if !self
+                        .install_credential_for_generation(credential, identity_generation)
+                        .await
+                    {
+                        return Err(ServiceError::StaleIdentity);
+                    }
                     log::info!("[connected-service] desktop credential rotated");
                     return Ok(());
                 }
                 Err(error) => {
-                    self.record_error(error).await;
+                    let request = AuthenticatedRequest {
+                        bearer,
+                        identity_generation: self.identity_generation.load(Ordering::Acquire),
+                    };
+                    self.record_request_error(error, &request).await;
                     if self.current_bearer().await.is_some() {
                         return Ok(());
                     }
@@ -232,7 +348,12 @@ impl RemoteSyncService {
         let result = self.api.register_installation(&installation_id).await;
         match result {
             Ok(credential) => {
-                self.install_credential(credential).await;
+                if !self
+                    .install_credential_for_generation(credential, identity_generation)
+                    .await
+                {
+                    return Err(ServiceError::StaleIdentity);
+                }
                 log::info!("[connected-service] desktop installation registered");
                 Ok(())
             }
@@ -247,6 +368,7 @@ impl RemoteSyncService {
     }
 
     async fn install_credential(&self, credential: BearerCredential) {
+        let _transition = self.credential_transition.lock().await;
         let persistence_enabled = self.credential_store.is_persistent();
         let persisted = persistence_enabled
             && persist_credential_async(Arc::clone(&self.credential_store), &credential)
@@ -264,8 +386,45 @@ impl RemoteSyncService {
         };
     }
 
-    pub(crate) async fn reset_identity(&self) -> Result<ConnectedServiceStatus, String> {
+    pub(crate) async fn bootstrap_http_session(&self, origin: &str) -> Result<DesktopHttpSession, String> {
+        // Identity reset revokes by parent+origin. Hold one transition lock across
+        // bearer lookup and issue so reset cannot revoke and then race with a late issue.
+        let _transition = self.webview_session_transition.lock().await;
+        let request = self
+            .authenticated_request()
+            .await
+            .map_err(|error| error.code().to_owned())?;
+        match self.api.bootstrap_webview_session(&request.bearer, origin).await {
+            Ok(session) => {
+                if self.complete_authenticated_success(&request).await {
+                    Ok(session)
+                } else {
+                    Err(ServiceError::StaleIdentity.code().into())
+                }
+            }
+            Err(error) => {
+                if self.record_request_error(error, &request).await {
+                    Err(error.code().into())
+                } else {
+                    Err(ServiceError::StaleIdentity.code().into())
+                }
+            }
+        }
+    }
+
+    pub(crate) async fn reset_identity(&self, origin: &str) -> Result<ConnectedServiceStatus, String> {
+        let _transition = self.webview_session_transition.lock().await;
         let registration = self.registration.lock().await;
+        let identity_transition = self.identity_transition.write().await;
+        self.identity_generation.fetch_add(1, Ordering::AcqRel);
+        if let Some(bearer) = self.current_bearer().await {
+            if let Err(error) = self.api.revoke_webview_session(&bearer, origin).await {
+                // Revocation is defense in depth. Offline/unavailable service must never
+                // prevent clearing the long-lived credential and local installation ID.
+                log::warn!("[connected-service] UI session revocation deferred: {}", error.code());
+            }
+        }
+        let credential_transition = self.credential_transition.lock().await;
         clear_credential_store(Arc::clone(&self.credential_store))
             .await
             .map_err(|error| error.code().to_owned())?;
@@ -279,297 +438,64 @@ impl RemoteSyncService {
             runtime.last_server_contact = None;
             runtime.last_error = None;
         }
+        drop(credential_transition);
+        drop(identity_transition);
         drop(registration);
-        self.ensure_registered()
-            .await
-            .map_err(|error| error.code().to_owned())?;
+        if let Err(error) = self.ensure_registered().await {
+            log::warn!(
+                "[connected-service] registration after identity reset deferred: {}",
+                error.code()
+            );
+        }
         Ok(self.status().await)
     }
 
-    pub(crate) async fn create_pairing(&self) -> Result<MobilePairing, String> {
-        let bearer = self.require_bearer().await.map_err(|error| error.code().to_owned())?;
-        match self.api.create_pairing(&bearer).await {
-            Ok(pairing) => {
-                self.record_success().await;
-                Ok(pairing)
-            }
-            Err(error) => {
-                self.record_error(error).await;
-                Err(error.code().into())
-            }
-        }
-    }
-
-    pub(crate) async fn pairing_status(&self, pairing_id: &str) -> Result<MobilePairingStatus, String> {
-        if !is_safe_route_segment(pairing_id) {
-            return Err("PAIRING_ID_INVALID".into());
-        }
-        let bearer = self.require_bearer().await.map_err(|error| error.code().to_owned())?;
-        match self.api.get_pairing_status(&bearer, pairing_id).await {
-            Ok(status) => {
-                self.record_success().await;
-                Ok(status)
-            }
-            Err(error) => {
-                self.record_error(error).await;
-                Err(error.code().into())
-            }
-        }
-    }
-
-    pub(crate) async fn approve_pairing(&self, pairing_id: &str, claim_id: &str) -> Result<(), String> {
-        if !is_safe_route_segment(pairing_id) || !is_safe_route_segment(claim_id) {
-            return Err("PAIRING_CLAIM_INVALID".into());
-        }
-        let bearer = self.require_bearer().await.map_err(|error| error.code().to_owned())?;
-        let status = self
-            .api
-            .get_pairing_status(&bearer, pairing_id)
+    pub(crate) async fn upload_attendance(&self, snapshot: &AttendanceSnapshot) -> Result<(), String> {
+        let request = self
+            .authenticated_request()
             .await
             .map_err(|error| error.code().to_owned())?;
-        let claim_matches =
-            status.status == "claimed" && status.claim.as_ref().is_some_and(|claim| claim.claim_id == claim_id);
-        if !claim_matches {
-            return Err("PAIRING_CLAIM_MISMATCH".into());
-        }
-        match self.api.approve_pairing(&bearer, pairing_id).await {
-            Ok(()) => {
-                self.record_success().await;
-                Ok(())
-            }
-            Err(error) => {
-                self.record_error(error).await;
-                Err(error.code().into())
-            }
-        }
-    }
-
-    pub(crate) async fn devices(&self) -> Result<Vec<MobileDevice>, String> {
-        let bearer = self.require_bearer().await.map_err(|error| error.code().to_owned())?;
-        match self.api.list_devices(&bearer).await {
-            Ok(devices) => {
-                self.record_success().await;
-                Ok(devices)
-            }
-            Err(error) => {
-                self.record_error(error).await;
-                Err(error.code().into())
-            }
-        }
-    }
-
-    pub(crate) async fn revoke_device(&self, device_id: &str) -> Result<(), String> {
-        if !is_safe_route_segment(device_id) {
-            return Err("DEVICE_ID_INVALID".into());
-        }
-        let bearer = self.require_bearer().await.map_err(|error| error.code().to_owned())?;
-        match self.api.revoke_device(&bearer, device_id).await {
-            Ok(()) => {
-                self.record_success().await;
-                Ok(())
-            }
-            Err(error) => {
-                self.record_error(error).await;
-                Err(error.code().into())
-            }
-        }
-    }
-
-    pub(crate) async fn upload_attendance(&self, snapshot: &AttendanceSnapshot) -> Result<(), String> {
-        let bearer = self.require_bearer().await.map_err(|error| error.code().to_owned())?;
-        match self.api.put_attendance(&bearer, snapshot).await {
+        match self.api.put_attendance(&request.bearer, snapshot).await {
             Ok(_) => {
-                self.record_success().await;
-                self.snapshot_revision.fetch_add(1, Ordering::Release);
-                self.snapshot_uploaded.notify_waiters();
-                Ok(())
+                if self.complete_attendance_success(&request).await {
+                    Ok(())
+                } else {
+                    Err(ServiceError::StaleIdentity.code().into())
+                }
             }
             Err(error) => {
-                self.record_error(error).await;
-                Err(error.code().into())
-            }
-        }
-    }
-
-    pub(crate) async fn attendance(&self) -> Result<RemoteAttendanceEnvelope, String> {
-        let bearer = self.require_bearer().await.map_err(|error| error.code().to_owned())?;
-        match self.api.get_attendance(&bearer).await {
-            Ok(attendance) => {
-                self.record_success().await;
-                Ok(attendance)
-            }
-            Err(error) => {
-                self.record_error(error).await;
-                Err(error.code().into())
-            }
-        }
-    }
-
-    pub(crate) async fn attendance_preferences(&self) -> Result<AttendancePreferences, String> {
-        let bearer = self.require_bearer().await.map_err(|error| error.code().to_owned())?;
-        match self.api.get_attendance_preferences(&bearer).await {
-            Ok(preferences) => {
-                self.record_success().await;
-                Ok(preferences)
-            }
-            Err(error) => {
-                self.record_error(error).await;
-                Err(error.code().into())
-            }
-        }
-    }
-
-    pub(crate) async fn update_attendance_preferences(
-        &self,
-        input: &AttendancePreferences,
-    ) -> Result<AttendancePreferences, String> {
-        validate_attendance_preferences(input).map_err(|error| error.code().to_owned())?;
-        let bearer = self.require_bearer().await.map_err(|error| error.code().to_owned())?;
-        match self.api.put_attendance_preferences(&bearer, input).await {
-            Ok(preferences) => {
-                self.record_success().await;
-                Ok(preferences)
-            }
-            Err(error) => {
-                self.record_error(error).await;
-                Err(error.code().into())
-            }
-        }
-    }
-
-    pub(crate) async fn meal_preferences(&self) -> Result<MealPreferences, String> {
-        let bearer = self.require_bearer().await.map_err(|error| error.code().to_owned())?;
-        match self.api.get_meal_preferences(&bearer).await {
-            Ok(preferences) => {
-                self.record_success().await;
-                Ok(preferences)
-            }
-            Err(error) => {
-                self.record_error(error).await;
-                Err(error.code().into())
-            }
-        }
-    }
-
-    pub(crate) async fn update_meal_preferences(
-        &self,
-        input: &MealPreferencesInput,
-    ) -> Result<MealPreferences, String> {
-        let bearer = self.require_bearer().await.map_err(|error| error.code().to_owned())?;
-        match self.api.put_meal_preferences(&bearer, input).await {
-            Ok(preferences) => {
-                self.record_success().await;
-                Ok(preferences)
-            }
-            Err(error) => {
-                self.record_error(error).await;
-                Err(error.code().into())
-            }
-        }
-    }
-
-    pub(crate) async fn laundry_watches(&self) -> Result<LaundryWatchEnvelope, String> {
-        let bearer = self.require_bearer().await.map_err(|error| error.code().to_owned())?;
-        match self.api.list_laundry_watches(&bearer).await {
-            Ok(watches) => {
-                self.record_success().await;
-                Ok(watches)
-            }
-            Err(error) => {
-                self.record_error(error).await;
-                Err(error.code().into())
-            }
-        }
-    }
-
-    pub(crate) async fn create_laundry_watch(&self, input: &LaundryWatchInput) -> Result<RemoteLaundryWatch, String> {
-        validate_laundry_watch_input(input).map_err(|error| error.code().to_owned())?;
-        let bearer = self.require_bearer().await.map_err(|error| error.code().to_owned())?;
-        match self.api.create_laundry_watch(&bearer, input).await {
-            Ok(watch) => {
-                self.record_success().await;
-                Ok(watch)
-            }
-            Err(error) => {
-                self.record_error(error).await;
-                Err(error.code().into())
-            }
-        }
-    }
-
-    pub(crate) async fn delete_laundry_watch(&self, watch_id: &str) -> Result<(), String> {
-        if !is_laundry_resource_id(watch_id, "jbw_") {
-            return Err(ServiceError::Rejected.code().into());
-        }
-        let bearer = self.require_bearer().await.map_err(|error| error.code().to_owned())?;
-        match self.api.delete_laundry_watch(&bearer, watch_id).await {
-            Ok(()) => {
-                self.record_success().await;
-                Ok(())
-            }
-            Err(error) => {
-                self.record_error(error).await;
-                Err(error.code().into())
-            }
-        }
-    }
-
-    pub(crate) async fn laundry_queue(&self) -> Result<LaundryQueueEnvelope, String> {
-        let bearer = self.require_bearer().await.map_err(|error| error.code().to_owned())?;
-        match self.api.list_laundry_queue(&bearer).await {
-            Ok(queue) => {
-                self.record_success().await;
-                Ok(queue)
-            }
-            Err(error) => {
-                self.record_error(error).await;
-                Err(error.code().into())
-            }
-        }
-    }
-
-    pub(crate) async fn join_laundry_queue(&self, input: &LaundryQueueInput) -> Result<LaundryQueueEntry, String> {
-        validate_laundry_queue_input(input).map_err(|error| error.code().to_owned())?;
-        let bearer = self.require_bearer().await.map_err(|error| error.code().to_owned())?;
-        match self.api.join_laundry_queue(&bearer, input).await {
-            Ok(entry) => {
-                self.record_success().await;
-                Ok(entry)
-            }
-            Err(error) => {
-                self.record_error(error).await;
-                Err(error.code().into())
-            }
-        }
-    }
-
-    pub(crate) async fn leave_laundry_queue(&self, entry_id: &str) -> Result<(), String> {
-        if !is_laundry_resource_id(entry_id, "jbq_") {
-            return Err(ServiceError::Rejected.code().into());
-        }
-        let bearer = self.require_bearer().await.map_err(|error| error.code().to_owned())?;
-        match self.api.leave_laundry_queue(&bearer, entry_id).await {
-            Ok(()) => {
-                self.record_success().await;
-                Ok(())
-            }
-            Err(error) => {
-                self.record_error(error).await;
-                Err(error.code().into())
+                if self.record_request_error(error, &request).await {
+                    Err(error.code().into())
+                } else {
+                    Err(ServiceError::StaleIdentity.code().into())
+                }
             }
         }
     }
 
     pub(crate) async fn broadcast_test_notification(&self, desktop_delivered: bool) -> Result<usize, String> {
-        let bearer = self.require_bearer().await.map_err(|error| error.code().to_owned())?;
-        match self.api.send_test_notification(&bearer, desktop_delivered).await {
+        let request = self
+            .authenticated_request()
+            .await
+            .map_err(|error| error.code().to_owned())?;
+        match self
+            .api
+            .send_test_notification(&request.bearer, desktop_delivered)
+            .await
+        {
             Ok(broadcast) => {
-                self.record_success().await;
-                Ok(broadcast.queued)
+                if self.complete_authenticated_success(&request).await {
+                    Ok(broadcast.queued)
+                } else {
+                    Err(ServiceError::StaleIdentity.code().into())
+                }
             }
             Err(error) => {
-                self.record_error(error).await;
-                Err(error.code().into())
+                if self.record_request_error(error, &request).await {
+                    Err(error.code().into())
+                } else {
+                    Err(ServiceError::StaleIdentity.code().into())
+                }
             }
         }
     }
@@ -585,31 +511,46 @@ impl RemoteSyncService {
     }
 
     pub(crate) async fn send_heartbeat(&self, state: LmsSessionState) -> Result<(), ServiceError> {
-        let bearer = self.require_bearer().await?;
-        let result = self.api.heartbeat(&bearer, state).await;
+        let request = self.authenticated_request().await?;
+        let result = self.api.heartbeat(&request.bearer, state).await;
         match result {
             Ok(()) => {
-                self.record_success().await;
-                Ok(())
+                if self.complete_authenticated_success(&request).await {
+                    Ok(())
+                } else {
+                    Err(ServiceError::StaleIdentity)
+                }
             }
             Err(error) => {
-                self.record_error(error).await;
-                Err(error)
+                if self.record_request_error(error, &request).await {
+                    Err(error)
+                } else {
+                    Err(ServiceError::StaleIdentity)
+                }
             }
         }
     }
 
-    pub(crate) async fn poll_notifications(&self) -> Result<Vec<RemoteNotification>, ServiceError> {
-        let bearer = self.require_bearer().await?;
-        let result = self.api.notifications(&bearer).await;
+    pub(crate) async fn poll_notifications(&self) -> Result<RemoteNotificationBatch, ServiceError> {
+        let request = self.authenticated_request().await?;
+        let result = self.api.notifications(&request.bearer).await;
         match result {
             Ok(notifications) => {
-                self.record_success().await;
-                Ok(notifications)
+                if self.complete_authenticated_success(&request).await {
+                    Ok(RemoteNotificationBatch {
+                        identity_generation: request.identity_generation,
+                        notifications,
+                    })
+                } else {
+                    Err(ServiceError::StaleIdentity)
+                }
             }
             Err(error) => {
-                self.record_error(error).await;
-                Err(error)
+                if self.record_request_error(error, &request).await {
+                    Err(error)
+                } else {
+                    Err(ServiceError::StaleIdentity)
+                }
             }
         }
     }
@@ -618,20 +559,29 @@ impl RemoteSyncService {
         &self,
         notification_id: &str,
         outcome: NotificationAckOutcome,
+        identity_generation: u64,
     ) -> Result<(), ServiceError> {
-        let bearer = self.require_bearer().await?;
+        let request = self
+            .authenticated_request_for_generation(Some(identity_generation))
+            .await?;
         let result = self
             .api
-            .acknowledge_notification(&bearer, notification_id, outcome)
+            .acknowledge_notification(&request.bearer, notification_id, outcome)
             .await;
         match result {
             Ok(()) => {
-                self.record_success().await;
-                Ok(())
+                if self.complete_authenticated_success(&request).await {
+                    Ok(())
+                } else {
+                    Err(ServiceError::StaleIdentity)
+                }
             }
             Err(error) => {
-                self.record_error(error).await;
-                Err(error)
+                if self.record_request_error(error, &request).await {
+                    Err(error)
+                } else {
+                    Err(ServiceError::StaleIdentity)
+                }
             }
         }
     }
@@ -698,6 +648,7 @@ async fn clear_credential_store(store: Arc<dyn CredentialStore>) -> Result<(), S
 mod initialization_tests {
     use super::*;
     use std::sync::{Arc as StdArc, Mutex as StdMutex};
+    use tokio::sync::oneshot;
 
     #[tokio::test(flavor = "current_thread")]
     async fn configured_initialization_runs_on_the_blocking_pool_and_is_awaited() {
@@ -714,5 +665,232 @@ mod initialization_tests {
 
         let initialized_on = initializer_thread.lock().unwrap().unwrap();
         assert_ne!(initialized_on, caller);
+    }
+
+    #[tokio::test]
+    async fn stale_authenticated_401_after_rotation_does_not_invalidate_new_credential() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = StdArc::new(crate::secure_credential::MemoryCredentialStore::new(None));
+        let service = StdArc::new(
+            RemoteSyncService::with_store(
+                RemoteApi::new("https://bell.example.com").unwrap(),
+                directory.path().to_path_buf(),
+                uuid::Uuid::new_v4().hyphenated().to_string(),
+                true,
+                store.clone(),
+            )
+            .unwrap(),
+        );
+        let old_bearer = format!("jbd_{}", "a".repeat(64));
+        let new_bearer = format!("jbd_{}", "b".repeat(64));
+        service
+            .install_credential(BearerCredential {
+                token: Zeroizing::new(old_bearer.clone()),
+                expires_at: Utc::now() + chrono::Duration::days(30),
+            })
+            .await;
+
+        let (rotation_installed, observe_old_response) = oneshot::channel();
+        let rotating_service = StdArc::clone(&service);
+        let rotated_bearer = new_bearer.clone();
+        let rotation = async move {
+            rotating_service
+                .install_credential(BearerCredential {
+                    token: Zeroizing::new(rotated_bearer),
+                    expires_at: Utc::now() + chrono::Duration::days(30),
+                })
+                .await;
+            rotation_installed.send(()).unwrap();
+        };
+        let stale_response_service = StdArc::clone(&service);
+        let stale_response = async move {
+            observe_old_response.await.unwrap();
+            let request = AuthenticatedRequest {
+                bearer: Zeroizing::new(old_bearer),
+                identity_generation: stale_response_service.identity_generation.load(Ordering::Acquire),
+            };
+            stale_response_service
+                .record_request_error(ServiceError::AuthenticationRequired, &request)
+                .await;
+        };
+        tokio::join!(rotation, stale_response);
+
+        assert_eq!(
+            service.current_bearer().await.as_deref().map(String::as_str),
+            Some(new_bearer.as_str())
+        );
+        let persisted = store.load().unwrap().unwrap();
+        assert_eq!(decode_stored_credential(&persisted).unwrap().token.as_str(), new_bearer);
+        let status = service.status().await;
+        assert!(status.authenticated);
+        assert!(!status.identity_reset_required);
+        assert!(status.last_error.is_none());
+    }
+
+    #[tokio::test]
+    async fn current_authenticated_401_still_invalidates_its_credential() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = StdArc::new(crate::secure_credential::MemoryCredentialStore::new(None));
+        let service = RemoteSyncService::with_store(
+            RemoteApi::new("https://bell.example.com").unwrap(),
+            directory.path().to_path_buf(),
+            uuid::Uuid::new_v4().hyphenated().to_string(),
+            true,
+            store.clone(),
+        )
+        .unwrap();
+        let bearer = format!("jbd_{}", "a".repeat(64));
+        service
+            .install_credential(BearerCredential {
+                token: Zeroizing::new(bearer.clone()),
+                expires_at: Utc::now() + chrono::Duration::days(30),
+            })
+            .await;
+
+        service
+            .record_request_error(
+                ServiceError::AuthenticationRequired,
+                &AuthenticatedRequest {
+                    bearer: Zeroizing::new(bearer),
+                    identity_generation: service.identity_generation.load(Ordering::Acquire),
+                },
+            )
+            .await;
+
+        assert!(service.current_bearer().await.is_none());
+        assert!(store.load().unwrap().is_none());
+        let status = service.status().await;
+        assert!(status.identity_reset_required);
+        assert_eq!(
+            status.last_error.as_deref(),
+            Some(ServiceError::AuthenticationRequired.code())
+        );
+    }
+
+    #[tokio::test]
+    async fn require_bearer_rotates_a_valid_credential_inside_the_rotation_window() {
+        let old_bearer = format!("jbd_{}", "a".repeat(64));
+        let new_bearer = format!("jbd_{}", "b".repeat(64));
+        let directory = tempfile::tempdir().unwrap();
+        let store = StdArc::new(crate::secure_credential::MemoryCredentialStore::new(None));
+        let service = RemoteSyncService::with_store(
+            RemoteApi::with_rotation_result(Ok(BearerCredential {
+                token: Zeroizing::new(new_bearer.clone()),
+                expires_at: Utc::now() + chrono::Duration::days(30),
+            })),
+            directory.path().to_path_buf(),
+            uuid::Uuid::new_v4().hyphenated().to_string(),
+            true,
+            store.clone(),
+        )
+        .unwrap();
+        service
+            .install_credential(BearerCredential {
+                token: Zeroizing::new(old_bearer.clone()),
+                expires_at: Utc::now() + chrono::Duration::days(6),
+            })
+            .await;
+
+        let bearer = service.require_bearer().await.unwrap();
+
+        assert_eq!(bearer.as_str(), new_bearer);
+        assert_eq!(
+            decode_stored_credential(&store.load().unwrap().unwrap())
+                .unwrap()
+                .token
+                .as_str(),
+            new_bearer
+        );
+    }
+
+    #[tokio::test]
+    async fn reset_discards_in_flight_attendance_completion_and_notification_delivery() {
+        let directory = tempfile::tempdir().unwrap();
+        let identity = secure_credential::load_or_create_installation_identity(directory.path()).unwrap();
+        let store = StdArc::new(crate::secure_credential::MemoryCredentialStore::new(None));
+        let service = StdArc::new(
+            RemoteSyncService::with_store(
+                RemoteApi::new("http://127.0.0.1:9").unwrap(),
+                directory.path().to_path_buf(),
+                identity.id,
+                false,
+                store,
+            )
+            .unwrap(),
+        );
+        service
+            .install_credential(BearerCredential {
+                token: Zeroizing::new(format!("jbd_{}", "a".repeat(64))),
+                expires_at: Utc::now() + chrono::Duration::days(30),
+            })
+            .await;
+        let request = service.authenticated_request().await.unwrap();
+        let request_generation = request.identity_generation;
+        let baseline = service.snapshot_revision.load(Ordering::Acquire);
+        let (reset_finished, release_old_response) = oneshot::channel();
+
+        let resetting_service = StdArc::clone(&service);
+        let reset = async move {
+            resetting_service.reset_identity("tauri://localhost").await.unwrap();
+            reset_finished.send(()).unwrap();
+        };
+        let completing_service = StdArc::clone(&service);
+        let completion = async move {
+            release_old_response.await.unwrap();
+            completing_service.complete_attendance_success(&request).await
+        };
+        let (_, applied) = tokio::join!(reset, completion);
+
+        assert!(!applied);
+        assert_eq!(service.snapshot_revision.load(Ordering::Acquire), baseline);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(10), service.wait_for_snapshot_after(baseline))
+                .await
+                .is_err()
+        );
+        let delivered = StdArc::new(std::sync::atomic::AtomicBool::new(false));
+        let delivery_flag = StdArc::clone(&delivered);
+        let delivery = service
+            .with_current_identity(request_generation, move || {
+                delivery_flag.store(true, std::sync::atomic::Ordering::Release);
+            })
+            .await;
+        assert!(delivery.is_none());
+        assert!(!delivered.load(std::sync::atomic::Ordering::Acquire));
+        let status = service.status().await;
+        assert!(status.last_server_contact.is_none());
+        assert_eq!(status.last_error.as_deref(), Some(ServiceError::Unavailable.code()));
+    }
+
+    #[tokio::test]
+    async fn bearer_rotation_keeps_in_flight_success_in_the_same_identity_generation() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = StdArc::new(crate::secure_credential::MemoryCredentialStore::new(None));
+        let service = RemoteSyncService::with_store(
+            RemoteApi::new("https://bell.example.com").unwrap(),
+            directory.path().to_path_buf(),
+            uuid::Uuid::new_v4().hyphenated().to_string(),
+            true,
+            store,
+        )
+        .unwrap();
+        service
+            .install_credential(BearerCredential {
+                token: Zeroizing::new(format!("jbd_{}", "a".repeat(64))),
+                expires_at: Utc::now() + chrono::Duration::days(30),
+            })
+            .await;
+        let request = service.authenticated_request().await.unwrap();
+        service
+            .install_credential(BearerCredential {
+                token: Zeroizing::new(format!("jbd_{}", "b".repeat(64))),
+                expires_at: Utc::now() + chrono::Duration::days(30),
+            })
+            .await;
+        service.runtime.lock().await.last_server_contact = None;
+
+        assert!(service.complete_attendance_success(&request).await);
+        assert_eq!(service.snapshot_revision.load(Ordering::Acquire), 1);
+        assert!(service.status().await.last_server_contact.is_some());
     }
 }

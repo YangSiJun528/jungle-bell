@@ -2,13 +2,10 @@ import {
     createContext,
     useContext,
 } from 'react';
+import type {QueryClient} from '@tanstack/react-query';
 import {createDashboardApi, type DashboardApi} from '@/api/dashboard-api';
 import {resolveDashboardSurface, type DashboardSurface} from '@/app/surface';
 import {detectDashboardRuntime, type DashboardRuntime} from '@/app/runtime';
-import {
-    type CampusDataHealth,
-    type CampusDataKind,
-} from './campus-data-health';
 import {
     laundryQueryContract,
     mealsQueryContract,
@@ -18,7 +15,6 @@ export const queryKeys = {
     laundry: laundryQueryContract.queryKey,
     meals: mealsQueryContract.queryKey,
     attendance: (surface: 'desktop' | 'companion') => ['attendance', surface] as const,
-    homeOverview: ['home-overview'] as const,
     desktopConnection: ['desktop-connection'] as const,
     desktopSettings: ['desktop-settings'] as const,
     notifications: (surface: 'desktop' | 'companion') => ['notifications', surface] as const,
@@ -36,7 +32,6 @@ export interface DashboardEnvironment {
 }
 
 export const DashboardEnvironmentContext = createContext<DashboardEnvironment | null>(null);
-export const CampusDataHealthContext = createContext<CampusDataHealth | null>(null);
 
 export function createEnvironment(): DashboardEnvironment {
     const runtime = detectDashboardRuntime();
@@ -56,8 +51,11 @@ export function useDashboardEnvironment(): DashboardEnvironment {
     return value;
 }
 
-export function useCampusDataIssue(kind: CampusDataKind) {
-    const value = useContext(CampusDataHealthContext);
-    if (!value) throw new Error('CAMPUS_DATA_HEALTH_REQUIRED');
-    return value[kind];
+export function removeDesktopIdentityQueries(client: QueryClient): void {
+    client.removeQueries({queryKey: ['personal']});
+    client.removeQueries({queryKey: queryKeys.desktopConnection, exact: true});
+    client.removeQueries({queryKey: queryKeys.attendance('desktop'), exact: true});
+    client.removeQueries({queryKey: queryKeys.notifications('desktop'), exact: true});
+    client.removeQueries({queryKey: queryKeys.mobileSessions, exact: true});
+    client.removeQueries({queryKey: ['pairing-status']});
 }

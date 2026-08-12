@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { createAttendanceController } from "./controllers/attendance-controller";
 import { createDesktopController } from "./controllers/desktop-controller";
+import { createDesktopUiController } from "./controllers/desktop-ui-controller";
 import { apiErrorHandler } from "./controllers/errors";
 import { registerApiMiddleware } from "./controllers/middleware";
 import { createMobileController } from "./controllers/mobile-controller";
@@ -23,6 +24,7 @@ app.get("/blog", (context) => context.redirect("/blog/index.html", 308));
 app.get("/blog/", (context) => context.redirect("/blog/index.html", 308));
 app.route("/", createPublicController());
 app.route("/", createDesktopController());
+app.route("/", createDesktopUiController());
 app.route("/", createMobileController());
 app.route("/", createPairingController());
 app.route("/", createPersonalController());

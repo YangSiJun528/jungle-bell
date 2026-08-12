@@ -5,12 +5,13 @@
 | 상태 | 기준 저장소 | 화면 projection | 동기화 경계 |
 | --- | --- | --- | --- |
 | LMS cookie·SSO session | 전용 `checker` WebView profile | PC의 LMS 연결 상태 | same-origin collector → tagged checker IPC |
-| checker·출석 runtime | Rust `AppState` | 대시보드 홈·트레이 아이콘 출석 상태 | Tauri command·내부 event |
-| 서버용 PC credential | 앱 전용 credential 파일 + `RemoteSyncService` | PC 연결 상태 | canonical desktop HTTP API |
-| 자동 실행 설정 | Rust `DesktopSettingsService` | 대시보드의 `autoStart` toggle | exact get/update IPC |
-| 공개 세탁·급식 cache | `CampusService` | 대시보드 생활 정보 | snapshot command + campus event |
+| checker·출석 runtime | Rust `AppState` | 트레이 아이콘·서버 출석 snapshot | checker IPC·desktop HTTP API |
+| 서버용 PC credential | 운영체제 credential vault + `RemoteSyncService` | PC 연결 상태 | 장기 desktop HTTP API |
+| WebView HTTP session | React 메모리 + 서버 D1 hash | PC의 서버 소유 개인 화면 | bootstrap IPC → `/api/desktop-ui` |
+| PC 서비스 설정 | Rust `DesktopSettingsService` | 자동 시작·업데이트·사용 통계·디버그 | exact get/update IPC |
+| 공개 세탁·급식 cache | React Query | 대시보드 생활 정보 | public HTTP API |
 | PC 알림함 | `NotificationInboxService` | 대시보드 unread projection | snapshot command + inbox event |
-| 연결·개인 설정·알림 delivery | 서버 D1 | PC/PWA 개인 화면 | desktop bearer 또는 mobile HttpOnly cookie |
+| 연결·개인 설정·알림 delivery | 서버 D1 | PC/PWA 개인 화면 | short desktop-ui bearer 또는 mobile HttpOnly cookie |
 | 공개 수집 원본·자산 | 서버 R2 | 공개 웹·PC·PWA 생활 정보 | public `/api` |
 | PWA Push subscription | 브라우저 PushManager + 서버 D1 | PWA 운영체제 알림 | service worker push event |
 
@@ -28,6 +29,8 @@ LMS credential은 첫 번째 행 밖으로 이동하지 않습니다. 서버와 
 
 모바일 session token과 pending claim receipt는 브라우저 저장 API에 기록하지
 않습니다. 서버가 발급한 Strict HttpOnly cookie가 유일한 인증 기준입니다.
+단기 desktop-ui token도 `localStorage`, `sessionStorage`, IndexedDB, React Query
+cache에 기록하지 않고 한 API client 인스턴스의 메모리에서만 유지합니다.
 
 ## 런타임별 상태
 
@@ -48,9 +51,13 @@ LMS credential은 첫 번째 행 밖으로 이동하지 않습니다. 서버와 
 
 - 하나의 `checker` WebView가 LMS session을 유지하고 출석을 주기적으로 확인합니다.
 - Rust가 정규화한 snapshot만 서버로 올리고 heartbeat와 알림 poll을 수행합니다.
+- 대시보드는 공개 세탁·급식과 서버 출석·설정·연결 데이터를 직접 HTTP로 조회합니다.
+- 장기 desktop credential은 WebView에 노출하지 않고, Rust는 exact origin에 묶인
+  7분짜리 desktop-ui session만 bootstrap합니다.
 - 대시보드는 로컬 앱 URL만 사용합니다. 트레이 아이콘을 누르면 별도 목록 창 없이
   대시보드 홈을 엽니다.
-- 사용자 설정은 현재 버전의 `autoStart` 한 필드만 노출합니다.
+- 자동 시작·자동 업데이트·사용 통계·디버그 설정은 PC 로컬에 저장하고, 로그 폴더는
+  경로 입력 없이 앱 전용 위치만 엽니다.
 
 ## 불변 조건
 
@@ -69,10 +76,10 @@ LMS credential은 첫 번째 행 밖으로 이동하지 않습니다. 서버와 
 | 계약 | 구현 |
 | --- | --- |
 | 런타임 판정 | [`runtime.ts`](../src/app/runtime.ts), [`surface.ts`](../src/app/surface.ts) |
-| 브라우저 API adapter | [`dashboard-api.ts`](../src/api/dashboard-api.ts), [`personal-api.ts`](../src/api/personal-api.ts) |
+| 브라우저 HTTP·native adapter | [`dashboard-api.ts`](../src/api/dashboard-api.ts), [`personal-api.ts`](../src/api/personal-api.ts) |
 | 대시보드 홈 projection | [`home-overview.ts`](../src/features/home/lib/home-overview.ts), [`dday-progress.ts`](../src/features/home/lib/dday-progress.ts) |
 | pairing 임시 상태 | [`pending-pairing.ts`](../src/features/connections/lib/pending-pairing.ts) |
-| PWA cache·Push | [`sw.js`](../src/public/sw.js) |
+| PWA cache·Push | [`sw.js`](../src/service-worker/sw.js) |
 | 데스크톱 연결 service | [`remote_sync.rs`](../src-tauri/src/remote_sync.rs) |
 | checker WebView | [`checker.rs`](../src-tauri/src/checker.rs), [`checker.ts`](../src/injected/checker.ts) |
 | Rust 기준 상태 | [`state.rs`](../src-tauri/src/state.rs), [`desktop_settings.rs`](../src-tauri/src/desktop_settings.rs) |

@@ -6,7 +6,7 @@
 | --- | --- | --- | --- |
 | 오늘 홈 요약 | 공개 정보만 | 전체 | 전체 |
 | 급식·세탁 조회 | 예 | 예 | 예 |
-| 출석 조회 | 설치 안내 | 서버 snapshot | 로컬·서버 snapshot |
+| 출석 조회 | 설치 안내 | 서버 snapshot | 서버 snapshot |
 | LMS 주기 조회 | 아니요 | 아니요 | 예 |
 | 알림 | 설치 안내 | Web Push | 운영체제 알림 |
 | 모바일 연결 | 아니요 | 수동 코드·해제 | QR·코드 생성, 승인·해제 |
@@ -59,27 +59,34 @@ browser session이 반드시 설치 PWA에서만 사용됐다고 서버가 보�
 | 공개 급식 | `GET /api/public/meals`, `GET /api/public/meals/history` |
 | 공개 자산 | `GET /api/public/assets/:asset` |
 | PC 등록 | `POST /api/desktop/installations`, `POST /api/desktop/installations/rotate` |
+| PC WebView session | `POST /api/desktop/webview-sessions`, `DELETE /api/desktop/webview-sessions/current` |
 | PC 동기화 | `POST /api/desktop/heartbeat`, `GET\|PUT /api/desktop/attendance` |
 | PC 알림 | `GET /api/desktop/notifications`, `POST /api/desktop/notifications/:id/ack`, `POST /api/desktop/notifications/test` |
 | 모바일 관리 | `GET /api/desktop/mobile-sessions`, `DELETE /api/desktop/mobile-sessions/:id` |
 | pairing | `POST /api/pairings`, `GET /api/pairings/:id`, claim·approve·complete 하위 endpoint |
 | 모바일 session | `GET\|DELETE /api/mobile/session` |
 | 모바일 개인 정보 | `GET /api/mobile/attendance`, `GET /api/mobile/notifications`, `POST /api/mobile/notifications/test` |
-| 공통 개인 설정 | desktop/mobile 각각 기존 `GET\|PUT attendance/preferences`, 확장 `GET\|PUT v2/attendance/preferences`, `GET\|PUT meal-preferences` |
-| 세탁 개인 기능 | desktop/mobile 각각 laundry watch·queue `GET\|POST\|DELETE` |
+| PC 대시보드 개인 정보 | `/api/desktop-ui` 아래 출석 조회, 확장 출석·급식 설정, 세탁 watch·queue, pairing·모바일 관리 |
+| 모바일 개인 설정 | `/api/mobile` 아래 기존 `GET\|PUT attendance/preferences`, 확장 `GET\|PUT v2/attendance/preferences`, `GET\|PUT meal-preferences` |
+| 모바일 세탁 기능 | `/api/mobile` 아래 laundry watch·queue `GET\|POST\|DELETE` |
 | Push | `GET /api/push/vapid-public-key`, `PUT /api/push/subscriptions`, `DELETE /api/push/subscriptions/:id` |
 | OCI 내부 | `POST /internal/jobs/d1`, `GET\|HEAD\|PUT /internal/jobs/r2?key=...` |
 
-desktop endpoint는 `Authorization: Bearer jbd_…`를 사용합니다. 모바일·PWA endpoint는
-JavaScript가 읽을 수 없는 Strict HttpOnly cookie를 사용하며 브라우저 요청은
-`credentials: include`와 `cache: no-store`로 전송합니다.
+Rust background service의 `/api/desktop/*` endpoint는 OS credential vault에 보관한
+장기 `jbd_…` bearer를 사용합니다. 대시보드 WebView는 이 credential을 받지 않고,
+Rust가 발급받아 메모리로 전달한 7분짜리 `jbui_…` bearer로
+`/api/desktop-ui/*`만 호출합니다. UI session은 발급한 WebView origin과 부모
+desktop session에 묶이며 부모 rotate·폐기·만료 시 즉시 무효입니다. 모바일·PWA
+endpoint는 JavaScript가 읽을 수 없는 Strict HttpOnly cookie를 사용하며 브라우저
+요청은 `credentials: include`와 `cache: no-store`로 전송합니다.
 
 ## 연결과 session
 
 | 항목 | 계약 |
 | --- | --- |
 | PC credential | 서버 발급 후 최대 90일, 만료 7일 전부터 인증된 rotate |
-| PC 저장 | 앱 전용 디렉터리의 일반 파일, keychain 미사용. Unix는 `0600` 검증, Windows는 상속 ACL 사용 |
+| PC 저장 | 운영체제 credential vault. 과거 앱 전용 credential 파일은 1회 이전 후 제거 |
+| PC WebView session | 7분 절대 만료, 메모리 전용, 부모 desktop session당 하나, exact origin binding |
 | pairing | QR 또는 10자리 코드, 2분 유효, PC의 명시적 승인 필요 |
 | pending claim | claim receipt는 2분 Strict HttpOnly cookie에만 저장 |
 | 브라우저 임시 상태 | `pairingId`, `claimId`, 생성 시각만 `sessionStorage`에 보관 |
@@ -91,20 +98,24 @@ claim과 complete JSON에는 access token, bearer, LMS cookie, claim receipt가 
 
 ## 데스크톱 IPC surface
 
-대시보드가 사용하는 IPC는 목적별 current-only command로 제한합니다.
+대시보드가 사용하는 IPC는 운영체제·로컬 앱 경계와 단기 HTTP session bootstrap으로
+제한합니다. 공개 정보와 서버 소유 개인 데이터는 IPC proxy 없이 HTTP로 호출합니다.
 
-- LMS: `open_lms_login`, `report_checker_event`, `get_remote_attendance_snapshot`
-- 연결: `get_connected_service_status`, identity reset, pairing·모바일 session 관리
-- 개인 기능: 출석·급식 설정, 세탁 watch·queue 조회와 변경
-- 생활 정보: `get_dashboard_campus_data`, `refresh_campus_data`
-- 홈: `get_dashboard_home_overview`
-- 알림: 알림함 snapshot·활성화·테스트
+- HTTP bootstrap: `bootstrap_desktop_http_session`
+- LMS: `open_lms_login`, `refresh_platform_sync`
+- 연결: `get_connected_service_status`, `reset_desktop_identity`
+- 알림: 로컬 알림함 snapshot·읽음·활성화와 운영체제 테스트 알림
 - PC 설정: `get_desktop_settings`, `update_desktop_settings`의 `autoStart`,
   `autoUpdate`, `usageAnalytics`, `debugMode`와 경로 입력을 받지 않는
   `open_log_folder`
 
 원격 checker WebView는 tagged `report_checker_event` 하나만 호출할 수 있습니다.
 일반 대시보드 IPC와 임의 명령 실행 권한은 갖지 않습니다.
+
+`bootstrap_desktop_http_session`은 호출한 `dashboard` WebView의 URL을 Rust에서 직접
+검증합니다. 허용 origin은 release macOS·Linux의 `tauri://localhost`, Windows의
+`http://tauri.localhost`, 개발 서버의 `http://127.0.0.1:5173`뿐입니다. `null`, 임의
+localhost port와 원격 origin은 허용하지 않습니다.
 
 ## 저장 금지 데이터
 
@@ -133,7 +144,8 @@ person profile 생성을 끕니다. 허용 항목은 앱 실행, 서비스 설�
   `database/migrations/`의 검토된 비파괴 SQL을 백업 후 한 번만 적용합니다.
 - 출석 알림 확장 배포 중 기존 클라이언트는 4필드 attendance preference 경로를
   계속 사용하고, 신규 클라이언트만 명시적인 v2 경로를 사용합니다.
-- 과거 desktop credential, 모바일 cookie, pairing은 재사용하지 않습니다.
+- 과거 앱 전용 desktop credential 파일은 검증 후 OS credential vault로 1회
+  이전합니다. 모바일 cookie와 pairing은 재사용하지 않습니다.
 - 과거 로컬 설정 파일을 읽거나 자동 변환하지 않습니다.
 - 과거 `/pair`, `/app`, `/v1` URL entry와 alias를 제공하지 않습니다.
 - test Worker의 `DB`·`DATA_BUCKET` binding은 운영 리소스와 분리해야 합니다.

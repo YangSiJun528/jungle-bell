@@ -7,10 +7,15 @@ import { D1RenewalStore } from "@jungle-bell/backend-common/persistence/d1-renew
 import { createApiServices } from "../services/api-services";
 import { CloudflareApiStorage } from "../storage/cloudflare/cloudflare-storage";
 import { publicOrigin } from "./auth";
+import { isDesktopUiOrigin } from "../services/desktop-ui-session-service";
 import type { ApiEnvironment } from "./types";
 
 function isPublicApiPath(path: string): boolean {
   return path.startsWith("/api/public/");
+}
+
+function isDesktopUiApiPath(path: string): boolean {
+  return path === "/api/desktop-ui" || path.startsWith("/api/desktop-ui/");
 }
 
 export function registerApiMiddleware(app: Hono<ApiEnvironment>): void {
@@ -25,9 +30,17 @@ export function registerApiMiddleware(app: Hono<ApiEnvironment>): void {
     allowMethods: ["DELETE", "GET", "HEAD", "OPTIONS", "POST", "PUT"],
     allowHeaders: ["Authorization", "Content-Type"], credentials: true, maxAge: 86_400,
   });
-  app.use("/api/*", (context, next) => isPublicApiPath(context.req.path)
-    ? publicCors(context, next)
-    : privateCors(context, next));
+  const desktopUiCors = cors({
+    origin: (origin) => isDesktopUiOrigin(origin) ? origin : "",
+    allowMethods: ["DELETE", "GET", "HEAD", "OPTIONS", "POST", "PUT"],
+    allowHeaders: ["Authorization", "Content-Type"],
+    maxAge: 86_400,
+  });
+  app.use("/api/*", (context, next) => {
+    if (isPublicApiPath(context.req.path)) return publicCors(context, next);
+    if (isDesktopUiApiPath(context.req.path)) return desktopUiCors(context, next);
+    return privateCors(context, next);
+  });
   app.use("/api/*", etag());
 
   const publicApiCache = cache({ cacheName: "jungle-bell-api", onCacheNotAvailable: false });
@@ -50,6 +63,11 @@ export function registerApiMiddleware(app: Hono<ApiEnvironment>): void {
   app.use("/api/*", async (context, next) => {
     if (["GET", "HEAD", "OPTIONS"].includes(context.req.method)) return next();
     const origin = context.req.header("Origin");
+    if (isDesktopUiApiPath(context.req.path)) {
+      return isDesktopUiOrigin(origin)
+        ? next()
+        : context.json({ error: "ORIGIN_NOT_ALLOWED" }, 403);
+    }
     if (origin === undefined || origin === publicOrigin(context.req.url)) return next();
     return context.json({ error: "ORIGIN_NOT_ALLOWED" }, 403);
   });

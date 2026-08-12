@@ -20,6 +20,7 @@ import {
     type MealPreferences,
     type MealPreferencesInput,
 } from '@jungle-bell/backend-common/contracts/personal';
+import type {HttpApiClient} from './http-api-client';
 
 export type AttendancePreferences = AttendancePreferencesV2;
 
@@ -34,16 +35,6 @@ export type {
 };
 
 export type PersonalSurface = 'desktop' | 'companion';
-
-export type PersonalFetch = (
-    input: RequestInfo | URL,
-    init?: RequestInit,
-) => Promise<Response>;
-
-export type PersonalInvoke = (
-    command: string,
-    args?: Record<string, unknown>,
-) => Promise<unknown>;
 
 export interface DashboardPersonalApi {
     getAttendancePreferences(surface: PersonalSurface): Promise<AttendancePreferences>;
@@ -66,12 +57,10 @@ const errorResponseSchema = z.looseObject({
 });
 
 export function createDashboardPersonalApi(options: {
-    platformBase: string;
-    fetcher: PersonalFetch;
-    invokeCommand: PersonalInvoke;
+    httpClient: HttpApiClient;
 }): DashboardPersonalApi {
-    const mobileBase = `${options.platformBase.replace(/\/+$/u, '')}/api/mobile`;
-    const mobileRequest = (
+    const request = (
+        surface: PersonalSurface,
         method: 'GET' | 'POST' | 'PUT' | 'DELETE',
         path: string,
         body?: unknown,
@@ -79,37 +68,28 @@ export function createDashboardPersonalApi(options: {
         const headers = new Headers();
         headers.set('accept', 'application/json');
         if (body !== undefined) headers.set('content-type', 'application/json');
-        return options.fetcher(`${mobileBase}${path}`, {
+        const init: RequestInit = {
             method,
-            credentials: 'include',
-            cache: 'no-store',
             headers,
             ...(body === undefined ? {} : {body: JSON.stringify(body)}),
-        });
+        };
+        const desktopPath = `/api/desktop-ui/${path.replace(/^\/+/, '')}` as const;
+        const companionPath = `/api/mobile/${path.replace(/^\/+/, '')}` as const;
+        return surface === 'desktop'
+            ? options.httpClient.desktopResponse(desktopPath, init)
+            : options.httpClient.companionResponse(companionPath, init);
     };
 
     const value = async <T>(
         surface: PersonalSurface,
-        command: string,
         schema: ZodType<T>,
-        mobileRequest: () => Promise<Response>,
-        args?: Record<string, unknown>,
-    ): Promise<T> => surface === 'desktop'
-        ? parseResponse(schema, await options.invokeCommand(command, args))
-        : responseValue(schema, await mobileRequest());
+        response: () => Promise<Response>,
+    ): Promise<T> => responseValue(schema, await response());
 
     const noContent = async (
-        surface: PersonalSurface,
-        command: string,
-        mobileRequest: () => Promise<Response>,
-        args: Record<string, unknown>,
+        responseRequest: () => Promise<Response>,
     ): Promise<void> => {
-        if (surface === 'desktop') {
-            const result = await options.invokeCommand(command, args);
-            if (result !== null && result !== undefined) throw invalidResponse();
-            return;
-        }
-        const response = await mobileRequest();
+        const response = await responseRequest();
         if (!response.ok) throw await responseError(response);
         if (response.status !== 204) throw invalidResponse();
     };
@@ -118,45 +98,38 @@ export function createDashboardPersonalApi(options: {
         async getAttendancePreferences(surface) {
             return value(
                 surface,
-                'get_attendance_preferences',
                 attendancePreferencesV2Schema,
-                () => mobileRequest('GET', '/v2/attendance/preferences'),
+                () => request(surface, 'GET', '/v2/attendance/preferences'),
             );
         },
         async updateAttendancePreferences(surface, input) {
             const body = parseInput(attendancePreferencesV2Schema, input);
             return value(
                 surface,
-                'update_attendance_preferences',
                 attendancePreferencesV2Schema,
-                () => mobileRequest('PUT', '/v2/attendance/preferences', body),
-                {input: body},
+                () => request(surface, 'PUT', '/v2/attendance/preferences', body),
             );
         },
         async getMealPreferences(surface) {
             return value(
                 surface,
-                'get_meal_preferences',
                 mealPreferencesSchema,
-                () => mobileRequest('GET', '/meal-preferences'),
+                () => request(surface, 'GET', '/meal-preferences'),
             );
         },
         async updateMealPreferences(surface, input) {
             const body = parseInput(mealPreferencesInputSchema, input);
             return value(
                 surface,
-                'update_meal_preferences',
                 mealPreferencesSchema,
-                () => mobileRequest('PUT', '/meal-preferences', body),
-                {input: body},
+                () => request(surface, 'PUT', '/meal-preferences', body),
             );
         },
         async listLaundryWatches(surface) {
             const result = await value(
                 surface,
-                'list_laundry_watches',
                 laundryWatchListSchema,
-                () => mobileRequest('GET', '/laundry-watches'),
+                () => request(surface, 'GET', '/laundry-watches'),
             );
             return result.watches;
         },
@@ -164,27 +137,21 @@ export function createDashboardPersonalApi(options: {
             const body = parseInput(laundryWatchInputSchema, input);
             return value(
                 surface,
-                'create_laundry_watch',
                 laundryWatchSchema,
-                () => mobileRequest('POST', '/laundry-watches', body),
-                {input: body},
+                () => request(surface, 'POST', '/laundry-watches', body),
             );
         },
         async deleteLaundryWatch(surface, id) {
             const watchId = parseInput(laundryWatchIdSchema, id);
             await noContent(
-                surface,
-                'delete_laundry_watch',
-                () => mobileRequest('DELETE', `/laundry-watches/${encodeURIComponent(watchId)}`),
-                {watchId},
+                () => request(surface, 'DELETE', `/laundry-watches/${encodeURIComponent(watchId)}`),
             );
         },
         async listLaundryQueue(surface) {
             const result = await value(
                 surface,
-                'list_laundry_queue',
                 laundryQueueListSchema,
-                () => mobileRequest('GET', '/laundry-queue'),
+                () => request(surface, 'GET', '/laundry-queue'),
             );
             return result.entries;
         },
@@ -192,19 +159,14 @@ export function createDashboardPersonalApi(options: {
             const body = parseInput(laundryQueueInputSchema, input);
             return value(
                 surface,
-                'join_laundry_queue',
                 laundryQueueEntrySchema,
-                () => mobileRequest('POST', '/laundry-queue', body),
-                {input: body},
+                () => request(surface, 'POST', '/laundry-queue', body),
             );
         },
         async leaveLaundryQueue(surface, id) {
             const entryId = parseInput(laundryQueueIdSchema, id);
             await noContent(
-                surface,
-                'leave_laundry_queue',
-                () => mobileRequest('DELETE', `/laundry-queue/${encodeURIComponent(entryId)}`),
-                {entryId},
+                () => request(surface, 'DELETE', `/laundry-queue/${encodeURIComponent(entryId)}`),
             );
         },
     };

@@ -1,3 +1,5 @@
+import {hasOwn} from '@/lib/object';
+
 export const PENDING_MOBILE_PAIRING_KEY = 'jungle-bell:pending-mobile-pairing';
 const PENDING_MOBILE_PAIRING_TTL_MS = 2 * 60_000;
 
@@ -64,7 +66,7 @@ function validPending(value: unknown, nowEpochMs: number): value is PendingMobil
     const source = value as Record<string, unknown>;
     const keys = Object.keys(source);
     if (keys.length !== 3
-        || !['pairingId', 'claimId', 'createdAtEpochMs'].every((key) => Object.hasOwn(source, key))) {
+        || !['pairingId', 'claimId', 'createdAtEpochMs'].every((key) => hasOwn(source, key))) {
         return false;
     }
     const createdAtEpochMs = source.createdAtEpochMs;

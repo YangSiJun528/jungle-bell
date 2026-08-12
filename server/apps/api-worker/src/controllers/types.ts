@@ -1,5 +1,6 @@
 import type { RenewalStore } from "@jungle-bell/backend-common/ports/account-storage";
 import type { ApiServices } from "../services/api-services";
+import type { Principal } from "../domain/session";
 
 export interface ApiBindings {
   DB: D1Database;
@@ -12,6 +13,7 @@ export interface ApiBindings {
 
 export type ApiVariables = {
   services: ApiServices;
+  desktopUiPrincipal: Principal;
 };
 
 export type ApiEnvironment = { Bindings: ApiBindings; Variables: ApiVariables };

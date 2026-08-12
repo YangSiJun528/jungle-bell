@@ -31,6 +31,14 @@ export function desktopPrincipal(context: Context<ApiEnvironment>): Promise<Prin
   return context.var.services.pairings.authenticate(bearerToken(context), Date.now(), "desktop");
 }
 
+export function desktopUiPrincipal(context: Context<ApiEnvironment>): Promise<Principal> {
+  return context.var.services.desktopUiSessions.authenticate(
+    bearerToken(context),
+    context.req.header("Origin"),
+    Date.now(),
+  );
+}
+
 export function mobilePrincipal(context: Context<ApiEnvironment>): Promise<Principal> {
   const token = readCookie(context.req.header("Cookie"), "__Host-jb_device")
     ?? readCookie(context.req.header("Cookie"), "jb_device")

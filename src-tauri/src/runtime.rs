@@ -1,10 +1,7 @@
 //! Tauri runtime adapters for scheduler side effects.
 
-use std::sync::Arc;
+use tauri::Emitter;
 
-use tauri::{Emitter, Manager};
-
-use crate::campus::{CampusDataKind, CampusService};
 use crate::checker;
 use crate::interval_tasks::JobAction;
 use crate::state::{DailyPhase, TraySnapshot};
@@ -13,14 +10,12 @@ use crate::tray;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum JobOutcome {
     Executed,
-    NotEligible,
     Retry,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum RuntimeAction {
     CheckerSessionRefresh,
-    CampusRefresh(CampusDataKind),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -89,21 +84,6 @@ pub(crate) async fn run_action(app_handle: &tauri::AppHandle, scheduled: &Schedu
     match &scheduled.action {
         RuntimeAction::CheckerSessionRefresh => {
             outcome_from_bool(checker::refresh_webview(app_handle, scheduled.job.reason().label()))
-        }
-        RuntimeAction::CampusRefresh(kind) => {
-            let service: tauri::State<Arc<CampusService>> = app_handle.state();
-            match service.refresh_scheduled(app_handle, *kind).await {
-                Ok(true) => JobOutcome::Executed,
-                Ok(false) => JobOutcome::NotEligible,
-                Err(error) => {
-                    log::warn!(
-                        "[scheduler] campus job failed: id={} error={error}",
-                        scheduled.job.kind().name()
-                    );
-                    service.emit_error(app_handle, *kind, error);
-                    JobOutcome::Retry
-                }
-            }
         }
     }
 }

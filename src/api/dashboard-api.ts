@@ -1,4 +1,3 @@
-import {invoke as tauriInvoke} from '@tauri-apps/api/core';
 import {
     normalizeManualPairingCode,
 } from '@/domain/connections/manual-pairing-code';
@@ -19,6 +18,13 @@ import {
     createDashboardDesktopSettingsApi,
     type DashboardDesktopSettingsApi,
 } from './desktop-settings';
+import {createDesktopHttpSessionManager} from './desktop-http-session';
+import {
+    createHttpApiClient,
+    type CompanionApiPath,
+    type DesktopUiApiPath,
+} from './http-api-client';
+import {createNativeBridge, type NativeBridge} from './native-bridge';
 export type {
     AttendancePreferences,
     LaundryApplianceKind,
@@ -45,6 +51,7 @@ export interface DashboardApiOptions {
     platformApiBaseUrl?: string;
     fetcher?: DashboardFetch;
     invokeCommand?: DashboardInvoke;
+    nativeBridge?: NativeBridge;
     desktopRuntime?: boolean;
 }
 
@@ -177,34 +184,10 @@ export type AttendanceDashboard =
 
 export interface DesktopConnectionState {
     state: 'disconnected' | 'unknown' | 'connected' | 'reset-required';
-    desktopId: string | null;
     lastVerifiedAt: string | null;
     lastSeenAt: string | null;
     health: 'unknown' | 'online' | 'offline' | null;
     lmsSessionState: 'unknown' | 'connected' | 'login-required';
-}
-
-export type DashboardHomeStatus =
-    | 'loading'
-    | 'recovering'
-    | 'offline'
-    | 'needsLogin'
-    | 'active'
-    | 'complete'
-    | 'normal';
-
-export interface DashboardHomeOverview {
-    attendance: {
-        status: DashboardHomeStatus;
-        statusText: string;
-        ddayText: string | null;
-        ddayPeriod: {startDate: string; endDate: string} | null;
-        currentVersion: string;
-    };
-    lmsSessionState: 'unknown' | 'connected' | 'login-required';
-    unreadCount: number;
-    laundry: DashboardLaundrySnapshot | null;
-    meals: DashboardMealsSnapshot | null;
 }
 
 export interface MobilePairingCreated {
@@ -260,13 +243,11 @@ export interface DashboardApi extends DashboardPersonalApi, DashboardDesktopSett
     getPublicLaundry(): Promise<DashboardLaundrySnapshot>;
     getPublicMeals(): Promise<DashboardMealsSnapshot>;
     getPublicMealHistory(before: string | null, limit: number): Promise<DashboardMealHistoryPage>;
-    refreshCampusData(kind: 'laundry' | 'meals'): Promise<void>;
     getAttendance(surface: 'desktop' | 'companion'): Promise<AttendanceDashboard>;
     getDesktopConnectionState(): Promise<DesktopConnectionState>;
     resetDesktopIdentity(): Promise<DesktopConnectionState>;
     refreshPlatformSync(): Promise<void>;
     openLmsLogin(): Promise<void>;
-    getDashboardHomeOverview(): Promise<DashboardHomeOverview>;
     createMobilePairing(): Promise<MobilePairingCreated>;
     getMobilePairingStatus(pairingId: string): Promise<MobilePairingStatus>;
     approveMobilePairing(pairingId: string, claimId: string): Promise<void>;
@@ -317,8 +298,7 @@ const NOTIFICATION_KINDS = new Set([
 
 export function createDashboardApi(options: DashboardApiOptions = {}): DashboardApi {
     const fetcher = options.fetcher ?? window.fetch.bind(window);
-    const invokeCommand = options.invokeCommand
-        ?? ((command, args) => tauriInvoke(command, args));
+    const nativeBridge = options.nativeBridge ?? createNativeBridge(options.invokeCommand);
     const desktopRuntime = options.desktopRuntime
         ?? (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window);
     const configuredCampusBase = options.campusApiBaseUrl
@@ -334,59 +314,59 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
             ?? import.meta.env.VITE_PLATFORM_API_URL
             ?? configuredCampusBase,
     );
+    const desktopSession = desktopRuntime
+        ? createDesktopHttpSessionManager({nativeBridge})
+        : undefined;
+    const httpClient = createHttpApiClient({
+        fetcher,
+        publicBase: campusBase,
+        platformBase,
+        desktopSession,
+    });
 
-    const publicJson = async (path: string): Promise<unknown> => {
-        const response = await fetcher(apiUrl(campusBase, path), {
+    const publicJson = async (path: `/api/public/${string}`): Promise<unknown> => {
+        const response = await httpClient.publicResponse(path, {
             method: 'GET',
-            credentials: 'omit',
-            headers: {accept: 'application/json'},
         });
         return responseJson(response);
     };
 
-    const privateResponse = (path: string, init: RequestInit = {}): Promise<Response> => {
-        return fetcher(apiUrl(platformBase, path), {
-            ...init,
-            credentials: 'include',
-            cache: 'no-store',
-            headers: {
-                accept: 'application/json',
-                ...(init.body === undefined ? {} : {'content-type': 'application/json'}),
-                ...init.headers,
-            },
-        });
-    };
+    const privateResponse = (path: CompanionApiPath, init: RequestInit = {}): Promise<Response> =>
+        httpClient.companionResponse(path, init);
 
-    const privateJson = async (path: string, init: RequestInit = {}): Promise<unknown> =>
+    const desktopResponse = (path: DesktopUiApiPath, init: RequestInit = {}): Promise<Response> =>
+        httpClient.desktopResponse(path, init);
+
+    const privateJson = async (path: CompanionApiPath, init: RequestInit = {}): Promise<unknown> =>
         responseJson(await privateResponse(path, init));
 
-    const privateNoContent = async (path: string, init: RequestInit): Promise<void> => {
+    const privateNoContent = async (path: CompanionApiPath, init: RequestInit): Promise<void> => {
         const response = await privateResponse(path, init);
         if (!response.ok) throw await responseError(response);
         if (response.status !== 204) throw new Error('API_RESPONSE_INVALID');
     };
 
+    const desktopNoContent = async (path: DesktopUiApiPath, init: RequestInit): Promise<void> => {
+        const response = await desktopResponse(path, init);
+        if (!response.ok) throw await responseError(response);
+        if (response.status !== 204) throw new Error('API_RESPONSE_INVALID');
+    };
+
     const personalApi = createDashboardPersonalApi({
-        platformBase,
-        fetcher,
-        invokeCommand,
+        httpClient,
     });
-    const desktopSettingsApi = createDashboardDesktopSettingsApi(invokeCommand);
+    const desktopSettingsApi = createDashboardDesktopSettingsApi(nativeBridge);
 
     return {
         ...personalApi,
         ...desktopSettingsApi,
         async getPublicLaundry() {
-            const value = desktopRuntime
-                ? await invokeCommand('get_dashboard_campus_data', {kind: 'laundry'})
-                : await publicJson('/api/public/laundry');
+            const value = await publicJson('/api/public/laundry');
             return parseDashboardLaundrySnapshot(value);
         },
 
         async getPublicMeals() {
-            const value = desktopRuntime
-                ? await invokeCommand('get_dashboard_campus_data', {kind: 'meals'})
-                : await publicJson('/api/public/meals');
+            const value = await publicJson('/api/public/meals');
             return parseDashboardMealsSnapshot(value, mealAssetOrigin);
         },
 
@@ -397,25 +377,18 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
                 || limit > 100) {
                 throw new Error('API_CLIENT_INVALID_ARGUMENT');
             }
-            const value = desktopRuntime
-                ? await invokeCommand('get_dashboard_meal_history', {before, limit})
-                : await publicJson(mealHistoryPath(before, limit));
+            const value = await publicJson(mealHistoryPath(before, limit));
             return parseDashboardMealHistoryPage(value, mealAssetOrigin);
-        },
-
-        async refreshCampusData(kind) {
-            if (!desktopRuntime) throw new Error('TAURI_RUNTIME_REQUIRED');
-            await invokeCommand('refresh_campus_data', {kind});
         },
 
         async getAttendance(surface) {
             if (surface === 'desktop') {
+                const attendanceValue = await responseJson(
+                    await desktopResponse('/api/desktop-ui/attendance', {method: 'GET'}),
+                );
                 return {
                     state: 'loaded',
-                    attendance: parseAttendancePayload(
-                        await invokeCommand('get_remote_attendance_snapshot'),
-                        false,
-                    ),
+                    attendance: parseAttendancePayload(attendanceValue, false),
                     devices: [],
                 };
             }
@@ -431,48 +404,60 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
         },
 
         async getDesktopConnectionState() {
-            return parseDesktopConnection(await invokeCommand('get_connected_service_status'));
+            return parseDesktopConnection(await nativeBridge.getDesktopConnectionState());
         },
 
         async resetDesktopIdentity() {
-            return parseDesktopConnection(await invokeCommand('reset_desktop_identity', {confirmed: true}));
+            desktopSession?.clear();
+            return parseDesktopConnection(await nativeBridge.resetDesktopIdentity());
         },
 
         async refreshPlatformSync() {
-            await invokeCommand('refresh_platform_sync');
+            await nativeBridge.refreshPlatformSync();
         },
 
         async openLmsLogin() {
-            await invokeCommand('open_lms_login');
-        },
-
-        async getDashboardHomeOverview() {
-            return parseDashboardHomeOverview(await invokeCommand('get_dashboard_home_overview'));
+            await nativeBridge.openLmsLogin();
         },
 
         async createMobilePairing() {
-            return parsePairingCreated(await invokeCommand('create_mobile_pairing'));
+            return parsePairingCreated(await responseJson(
+                await desktopResponse('/api/desktop-ui/pairings', {
+                    method: 'POST',
+                    body: JSON.stringify({}),
+                }),
+            ));
         },
 
         async getMobilePairingStatus(pairingId) {
             assertIdentifier(pairingId, PAIRING_ID, true);
-            return parsePairingStatus(await invokeCommand('get_mobile_pairing_status', {pairingId}));
+            return parsePairingStatus(await responseJson(
+                await desktopResponse(`/api/desktop-ui/pairings/${encodeURIComponent(pairingId)}`, {method: 'GET'}),
+            ));
         },
 
         async approveMobilePairing(pairingId, claimId) {
             assertIdentifier(pairingId, PAIRING_ID, true);
             assertIdentifier(claimId, CLAIM_ID, true);
-            await invokeCommand('approve_mobile_pairing', {pairingId, claimId});
+            await desktopNoContent(`/api/desktop-ui/pairings/${encodeURIComponent(pairingId)}/approve`, {
+                method: 'POST',
+                body: JSON.stringify({claimId}),
+            });
         },
 
         async listMobileSessions() {
-            const value = await invokeCommand('list_mobile_sessions');
+            const value = await responseJson(
+                await desktopResponse('/api/desktop-ui/mobile-sessions', {method: 'GET'}),
+            );
             return parseMobileSessions(value);
         },
 
         async revokeMobileSession(deviceId) {
             assertIdentifier(deviceId, MOBILE_SESSION_ID, true);
-            await invokeCommand('revoke_mobile_session', {deviceId});
+            await desktopNoContent(
+                `/api/desktop-ui/mobile-sessions/${encodeURIComponent(deviceId)}`,
+                {method: 'DELETE'},
+            );
         },
 
         async claimManualPairing(input) {
@@ -536,7 +521,7 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
 
         async getDesktopNotificationInbox() {
             const snapshot = normalizeNotificationInboxSnapshot(
-                await invokeCommand('get_notification_inbox_snapshot'),
+                await nativeBridge.getNotificationInboxSnapshot(),
             );
             if (!snapshot) throw new Error('API_RESPONSE_INVALID');
             return snapshot;
@@ -545,7 +530,7 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
         async markDesktopNotificationRead(id) {
             if (!/^\d+$/u.test(id)) throw new Error('API_CLIENT_INVALID_ARGUMENT');
             const snapshot = normalizeNotificationInboxSnapshot(
-                await invokeCommand('mark_notification_read', {id}),
+                await nativeBridge.markNotificationRead(id),
             );
             if (!snapshot) throw new Error('API_RESPONSE_INVALID');
             return snapshot;
@@ -554,7 +539,7 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
         async activateDesktopNotification(id) {
             if (!/^\d+$/u.test(id)) throw new Error('API_CLIENT_INVALID_ARGUMENT');
             const snapshot = normalizeNotificationInboxSnapshot(
-                await invokeCommand('activate_notification', {id}),
+                await nativeBridge.activateNotification(id),
             );
             if (!snapshot) throw new Error('API_RESPONSE_INVALID');
             return snapshot;
@@ -562,7 +547,7 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
 
         async sendDesktopTestNotification() {
             const value = exactRecord(
-                await invokeCommand('send_test_notification'),
+                await nativeBridge.sendTestNotification(),
                 ['snapshot', 'systemDelivered', 'mobileQueued'],
             );
             const snapshot = normalizeNotificationInboxSnapshot(value.snapshot);
@@ -628,10 +613,6 @@ function normalizeBaseUrl(value: string): string {
         throw new Error('DASHBOARD_API_URL_INVALID');
     }
     return parsed.origin;
-}
-
-function apiUrl(base: string, path: string): string {
-    return base ? `${base}${path}` : path;
 }
 
 async function responseJson(response: Response): Promise<unknown> {
@@ -746,50 +727,6 @@ function calendarDate(value: unknown): string {
 
 function nullableCalendarDate(value: unknown): string | null {
     return value === null ? null : calendarDate(value);
-}
-
-function parseDashboardHomeOverview(value: unknown): DashboardHomeOverview {
-    const source = exactRecord(value, ['attendance', 'lmsSessionState', 'unreadCount', 'laundry', 'meals']);
-    const attendance = exactRecord(source.attendance, [
-        'status', 'statusText', 'ddayText', 'ddayPeriod', 'currentVersion',
-    ]);
-    const statuses = new Set<DashboardHomeStatus>([
-        'loading', 'recovering', 'offline', 'needsLogin', 'active', 'complete', 'normal',
-    ]);
-    if (typeof attendance.status !== 'string' || !statuses.has(attendance.status as DashboardHomeStatus)) {
-        throw new Error('API_RESPONSE_INVALID');
-    }
-    const lmsSessionState = source.lmsSessionState;
-    if (lmsSessionState !== 'unknown'
-        && lmsSessionState !== 'connected'
-        && lmsSessionState !== 'login-required') {
-        throw new Error('API_RESPONSE_INVALID');
-    }
-    const unreadCount = source.unreadCount;
-    if (typeof unreadCount !== 'number' || !Number.isSafeInteger(unreadCount) || unreadCount < 0) {
-        throw new Error('API_RESPONSE_INVALID');
-    }
-    const ddayPeriodSource = attendance.ddayPeriod === null
-        ? null
-        : exactRecord(attendance.ddayPeriod, ['startDate', 'endDate']);
-    const ddayPeriod = ddayPeriodSource === null ? null : {
-        startDate: calendarDate(ddayPeriodSource.startDate),
-        endDate: calendarDate(ddayPeriodSource.endDate),
-    };
-    if (ddayPeriod && ddayPeriod.endDate < ddayPeriod.startDate) throw new Error('API_RESPONSE_INVALID');
-    return {
-        attendance: {
-            status: attendance.status as DashboardHomeStatus,
-            statusText: text(attendance.statusText, 256),
-            ddayText: nullableText(attendance.ddayText, 128),
-            ddayPeriod,
-            currentVersion: text(attendance.currentVersion, 64),
-        },
-        lmsSessionState,
-        unreadCount,
-        laundry: source.laundry === null ? null : parseDashboardLaundrySnapshot(source.laundry),
-        meals: source.meals === null ? null : parseDashboardMealsSnapshot(source.meals),
-    };
 }
 
 function machineZone(id: string): DashboardLaundryMachine['zone'] {
@@ -1119,7 +1056,7 @@ function safeMealAssetUrl(
     }
 }
 
-function mealHistoryPath(before: string | null, limit: number): string {
+function mealHistoryPath(before: string | null, limit: number): `/api/public/${string}` {
     const params = new URLSearchParams();
     if (before !== null) params.set('before', before);
     params.set('limit', String(limit));
@@ -1271,7 +1208,7 @@ function parseDevices(value: unknown): DesktopDevice[] {
 
 function parseDesktopConnection(value: unknown): DesktopConnectionState {
     const source = exactRecord(value, [
-        'authenticated', 'installationId', 'credentialPersistent', 'identityResetRequired',
+        'authenticated', 'credentialPersistent', 'identityResetRequired',
         'lmsSessionState', 'lastServerContact', 'lastError',
     ]);
     const authenticated = boolean(source.authenticated);
@@ -1285,7 +1222,6 @@ function parseDesktopConnection(value: unknown): DesktopConnectionState {
     const lastContact = nullableIso(source.lastServerContact);
     return {
         state: identityResetRequired ? 'reset-required' : authenticated ? 'connected' : 'disconnected',
-        desktopId: nullableText(source.installationId, 128),
         lastVerifiedAt: lastContact,
         lastSeenAt: lastContact,
         health: authenticated ? (source.lastError === null ? 'online' : 'unknown') : null,

@@ -18,6 +18,18 @@ export interface AppSessionRecord {
   sourcePairingId: string | null;
 }
 
+export interface DesktopUiSessionRecord {
+  id: string;
+  parentSessionId: string;
+  userId: string;
+  installationId: string;
+  tokenSha256: string;
+  origin: string;
+  scope: string;
+  createdAtEpochMs: number;
+  expiresAtEpochMs: number;
+}
+
 export interface PairingRecord {
   id: string;
   userId: string;
@@ -205,6 +217,15 @@ export interface RenewalStore {
     sessionId: string;
     userId: string;
     installationId: string;
+    nowEpochMs?: number;
+  }): Promise<boolean>;
+  replaceDesktopUiSession(session: DesktopUiSessionRecord): Promise<boolean>;
+  findDesktopUiSessionByTokenHash(tokenSha256: string): Promise<DesktopUiSessionRecord | null>;
+  deleteDesktopUiSession(input: {
+    parentSessionId: string;
+    userId: string;
+    installationId: string;
+    origin: string;
   }): Promise<boolean>;
   touchSession(id: string, nowEpochMs: number): Promise<void>;
   recordDesktopHeartbeat(input: {

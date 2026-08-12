@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestHarness, unstable_splitSqlQuery, type TestHarness } from "wrangler";
 import { runLaundryLifecycle } from "../../jobs-runner/src/services/laundry-lifecycle-service";
 import { D1RenewalStore } from "../../../shared/persistence/d1-renewal-store";
+import { hashAppSessionToken } from "../../../shared/renewal/crypto";
 import type { ApiBindings } from "../src/controllers/types";
 
 const workerRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -40,6 +41,57 @@ describe("API Worker in the official Wrangler test harness", () => {
     const response = await worker.fetch("/api/health");
     expect(response.status).toBe(503);
     await expect(response.json()).resolves.toMatchObject({ status: "DEGRADED", sources: [] });
+  });
+
+  it("issues, authenticates, persists, and explicitly revokes an origin-bound desktop UI session", async () => {
+    const worker = harness.getWorker<ApiBindings>();
+    const environment = await worker.getEnv();
+    const now = Date.now();
+    const desktopToken = `jbd_${"a".repeat(64)}`;
+    await environment.DB.batch([
+      environment.DB.prepare("INSERT INTO app_user (id, created_at_epoch_ms) VALUES ('harness-ui-user', ?)")
+        .bind(now),
+      environment.DB.prepare(`INSERT INTO desktop_device (installation_id, user_id, created_at_epoch_ms,
+        last_seen_at_epoch_ms, lms_session_state, app_version)
+        VALUES ('harness-ui-desktop', 'harness-ui-user', ?, ?, 'connected', '0.5.0')`).bind(now, now),
+      environment.DB.prepare(`INSERT INTO app_session (id, user_id, installation_id, kind, label, token_sha256,
+        created_at_epoch_ms, expires_at_epoch_ms, last_seen_at_epoch_ms, revoked_at_epoch_ms, source_pairing_id)
+        VALUES ('harness-ui-parent', 'harness-ui-user', 'harness-ui-desktop', 'desktop', NULL, ?, ?, ?, ?, NULL, NULL)`)
+        .bind(await hashAppSessionToken(desktopToken), now, now + 60_000, now),
+    ]);
+
+    const bootstrap = await worker.fetch("/api/desktop/webview-sessions", {
+      method: "POST",
+      headers: { authorization: `Bearer ${desktopToken}`, "content-type": "application/json" },
+      body: JSON.stringify({ origin: "tauri://localhost" }),
+    });
+    expect(bootstrap.status).toBe(201);
+    const issued = await bootstrap.json() as { accessToken: string; expiresAt: string };
+    expect(issued).toEqual({
+      accessToken: expect.stringMatching(/^jbui_[a-f0-9]{64}$/u),
+      expiresAt: expect.stringMatching(/Z$/u),
+    });
+    await expect(environment.DB.prepare(`SELECT token_sha256, origin, scope FROM desktop_ui_session
+      WHERE parent_session_id = 'harness-ui-parent'`).first()).resolves.toEqual({
+      token_sha256: await hashAppSessionToken(issued.accessToken),
+      origin: "tauri://localhost",
+      scope: "desktop-ui-v1",
+    });
+
+    const attendance = await worker.fetch("/api/desktop-ui/attendance", {
+      headers: { authorization: `Bearer ${issued.accessToken}`, origin: "tauri://localhost" },
+    });
+    expect(attendance.status).toBe(200);
+
+    const revoke = await worker.fetch("/api/desktop/webview-sessions/current", {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${desktopToken}`, "content-type": "application/json" },
+      body: JSON.stringify({ origin: "tauri://localhost" }),
+    });
+    expect(revoke.status).toBe(204);
+    expect((await worker.fetch("/api/desktop-ui/attendance", {
+      headers: { authorization: `Bearer ${issued.accessToken}`, origin: "tauri://localhost" },
+    })).status).toBe(401);
   });
 
   it("atomically claims the FIFO turn, inserts its notification, and fans out to the active desktop", async () => {

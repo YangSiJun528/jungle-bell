@@ -5,7 +5,6 @@ import {
     RefreshCw,
     Utensils,
 } from 'lucide-react';
-import {useCampusDataIssue} from '@/app/dashboard-context';
 import {useCampusManualRefresh, useMealsQuery} from '@/app/use-dashboard-queries';
 import {EmptyState, ErrorState, LoadingState} from '@/components/dashboard/async-state';
 import {PageHeader} from '@/components/dashboard/page-header';
@@ -21,7 +20,6 @@ import {WeeklyMealMenu} from '../components/weekly-meal-menu';
 export function MealsPage() {
     const meals = useMealsQuery();
     const manualRefresh = useCampusManualRefresh('meals');
-    const campusIssue = useCampusDataIssue('meals');
     const todayMeals = useMemo(
         () => meals.data ? selectTodayMeals(meals.data) : [],
         [meals.data, meals.dataUpdatedAt],
@@ -29,7 +27,7 @@ export function MealsPage() {
     const currentWeekly = meals.data?.data.currentWeeklyMenu;
     const weeklyMeal = currentWeekly?.status === 'AVAILABLE' ? currentWeekly.post : null;
     const weeklyKey = currentWeekly?.targetWeekKey ?? null;
-    const refreshFailed = meals.isError || manualRefresh.isError || campusIssue !== null;
+    const refreshFailed = meals.isError || manualRefresh.isError;
     const refreshing = meals.isFetching || manualRefresh.isPending;
 
     return (

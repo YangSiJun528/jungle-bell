@@ -17,30 +17,39 @@ import type { ApiEnvironment } from "./types";
 
 type PrincipalLoader = (context: Context<ApiEnvironment>) => Promise<Principal>;
 
-export function createPersonalController(): Hono<ApiEnvironment> {
-  return new Hono<ApiEnvironment>()
-    .route("/api/desktop", personalRoutes(desktopPrincipal))
-    .route("/api/mobile", personalRoutes(mobilePrincipal));
+interface PersonalRouteOptions {
+  includeLegacyAttendancePreferences?: boolean;
 }
 
-function personalRoutes(principalFor: PrincipalLoader): Hono<ApiEnvironment> {
+export function createPersonalController(): Hono<ApiEnvironment> {
+  return new Hono<ApiEnvironment>()
+    .route("/api/desktop", createPersonalRoutes(desktopPrincipal))
+    .route("/api/mobile", createPersonalRoutes(mobilePrincipal));
+}
+
+export function createPersonalRoutes(
+  principalFor: PrincipalLoader,
+  options: PersonalRouteOptions = {},
+): Hono<ApiEnvironment> {
   const app = new Hono<ApiEnvironment>();
-  app.get("/attendance/preferences", async (context) => {
-    const principal = await principalFor(context);
-    return context.json(await context.var.services.personal.readLegacyAttendancePreferences(principal.userId));
-  });
-  app.put(
-    "/attendance/preferences",
-    zValidator("json", attendancePreferencesSchema, validationHook),
-    async (context) => {
+  if (options.includeLegacyAttendancePreferences !== false) {
+    app.get("/attendance/preferences", async (context) => {
       const principal = await principalFor(context);
-      return context.json(await context.var.services.personal.updateLegacyAttendancePreferences(
-        principal.userId,
-        context.req.valid("json"),
-        Date.now(),
-      ));
-    },
-  );
+      return context.json(await context.var.services.personal.readLegacyAttendancePreferences(principal.userId));
+    });
+    app.put(
+      "/attendance/preferences",
+      zValidator("json", attendancePreferencesSchema, validationHook),
+      async (context) => {
+        const principal = await principalFor(context);
+        return context.json(await context.var.services.personal.updateLegacyAttendancePreferences(
+          principal.userId,
+          context.req.valid("json"),
+          Date.now(),
+        ));
+      },
+    );
+  }
   app.get("/v2/attendance/preferences", async (context) => {
     const principal = await principalFor(context);
     return context.json(await context.var.services.personal.readAttendancePreferences(principal.userId));

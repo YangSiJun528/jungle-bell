@@ -16,7 +16,6 @@ use tauri::Manager;
 
 use crate::attendance;
 use crate::attendance_day;
-use crate::campus::CampusDataKind;
 use crate::interval_tasks::{self, JobAction, JobEvaluation, JobFailureDecision, JobId, JobSpec};
 use crate::runtime::{self, JobOutcome, RuntimeAction, ScheduledAction};
 use crate::state::{kst, AppState, DailyPhase, TraySnapshot};
@@ -32,19 +31,11 @@ const TICK_INTERVAL_IDLE: u64 = 300;
 /// 체커 WebView 세션 상태를 5분 간격으로 새로 확인한다.
 const RELOAD_INTERVAL_NORMAL: u64 = 5 * 60;
 const CHECKER_SESSION_REFRESH_ID: JobId = JobId::new("checker_session_refresh");
-const LAUNDRY_REFRESH_ID: JobId = JobId::new("laundry_refresh");
-const MEALS_REFRESH_ID: JobId = JobId::new("meals_refresh");
 
 const CHECKER_SESSION_REFRESH_JOB: JobSpec = JobSpec::new(CHECKER_SESSION_REFRESH_ID, RELOAD_INTERVAL_NORMAL)
     .initial_delay_secs(RELOAD_INTERVAL_NORMAL)
     .backoff_secs(30, 5 * 60)
     .max_failures(3);
-const LAUNDRY_REFRESH_JOB: JobSpec = JobSpec::new(LAUNDRY_REFRESH_ID, 30)
-    .initial_delay_secs(0)
-    .backoff_secs(30, 30);
-const MEALS_REFRESH_JOB: JobSpec = JobSpec::new(MEALS_REFRESH_ID, 60)
-    .initial_delay_secs(0)
-    .backoff_secs(60, 60);
 
 #[derive(Debug, Clone)]
 struct SchedulerContext {
@@ -67,14 +58,6 @@ fn fixed_checker_refresh_spec(_state: &AppState) -> JobSpec {
     CHECKER_SESSION_REFRESH_JOB
 }
 
-fn fixed_laundry_spec(_state: &AppState) -> JobSpec {
-    LAUNDRY_REFRESH_JOB
-}
-
-fn fixed_meals_spec(_state: &AppState) -> JobSpec {
-    MEALS_REFRESH_JOB
-}
-
 fn always_eligible(_state: &AppState, _context: &SchedulerContext) -> bool {
     true
 }
@@ -83,40 +66,14 @@ fn checker_refresh_action(_state: &AppState, _context: &SchedulerContext) -> Run
     RuntimeAction::CheckerSessionRefresh
 }
 
-fn laundry_action(_state: &AppState, _context: &SchedulerContext) -> RuntimeAction {
-    RuntimeAction::CampusRefresh(CampusDataKind::Laundry)
-}
-
-fn meals_action(_state: &AppState, _context: &SchedulerContext) -> RuntimeAction {
-    RuntimeAction::CampusRefresh(CampusDataKind::Meals)
-}
-
-const SCHEDULED_JOBS: [RegisteredJob; 3] = [
-    RegisteredJob {
-        id: CHECKER_SESSION_REFRESH_ID,
-        spec: fixed_checker_refresh_spec,
-        condition: always_eligible,
-        action: checker_refresh_action,
-        conflict_key: Some("checker-session"),
-        priority: 100,
-    },
-    RegisteredJob {
-        id: LAUNDRY_REFRESH_ID,
-        spec: fixed_laundry_spec,
-        condition: always_eligible,
-        action: laundry_action,
-        conflict_key: None,
-        priority: 10,
-    },
-    RegisteredJob {
-        id: MEALS_REFRESH_ID,
-        spec: fixed_meals_spec,
-        condition: always_eligible,
-        action: meals_action,
-        conflict_key: None,
-        priority: 10,
-    },
-];
+const SCHEDULED_JOBS: [RegisteredJob; 1] = [RegisteredJob {
+    id: CHECKER_SESSION_REFRESH_ID,
+    spec: fixed_checker_refresh_spec,
+    condition: always_eligible,
+    action: checker_refresh_action,
+    conflict_key: Some("checker-session"),
+    priority: 100,
+}];
 
 /// OS 절전/복귀 등으로 틱이 예상보다 크게 밀렸을 때 checker를 다시 깨운다.
 const TICK_DELAY_REFRESH_GRACE_SECS: u64 = 60;
@@ -144,9 +101,6 @@ fn record_job_result(state: &mut AppState, action: JobAction, outcome: JobOutcom
     match outcome {
         JobOutcome::Executed => {
             state.interval_jobs.mark_success_with_context(&spec, &evaluation);
-        }
-        JobOutcome::NotEligible => {
-            state.interval_jobs.mark_not_eligible_with_context(&spec, &evaluation);
         }
         JobOutcome::Retry => match state.interval_jobs.mark_failure(&spec, now) {
             JobFailureDecision::RetryAt(next_due_at) => log::warn!(
@@ -717,7 +671,7 @@ mod tests {
     // --- compute_tick (통합) ---
 
     #[test]
-    fn 데이터_미로드시_트레이는_없고_수집_job만_실행한다() {
+    fn 데이터_미로드시_트레이와_서버데이터_job은_실행하지_않는다() {
         // given
         let mut state = default_state();
 
@@ -728,13 +682,13 @@ mod tests {
         assert_eq!(result.tick_interval, 5);
         assert!(result.tray_update.is_none());
         assert!(!result.has_job_action(JobId::new("checker_session_refresh")));
-        assert!(result.has_job_action(JobId::new("laundry_refresh")));
-        assert!(result.has_job_action(JobId::new("meals_refresh")));
+        assert!(!result.has_job_action(JobId::new("laundry_refresh")));
+        assert!(!result.has_job_action(JobId::new("meals_refresh")));
     }
 
     #[test]
     fn 출석은_별도_on_tick_job없이_5분_checker_refresh로_수집한다() {
-        assert_eq!(SCHEDULED_JOBS.len(), 3);
+        assert_eq!(SCHEDULED_JOBS.len(), 1);
         assert!(SCHEDULED_JOBS
             .iter()
             .all(|job| job.id.name() != "attendance_status_check"));
@@ -743,26 +697,6 @@ mod tests {
             CHECKER_SESSION_REFRESH_JOB.trigger,
             interval_tasks::Trigger::Every { interval_secs: 5 * 60 }
         );
-    }
-
-    #[test]
-    fn 세탁_상태_job은_30초_간격으로_재실행된다() {
-        let mut state = default_state();
-        let started_at = kst_utc(9, 0, 0);
-        let first = compute_tick(&mut state, started_at, false);
-        let laundry_action = first
-            .job_actions
-            .iter()
-            .find(|action| action.job.kind() == JobId::new("laundry_refresh"))
-            .map(|action| action.job)
-            .unwrap();
-        record_job_result(&mut state, laundry_action, JobOutcome::Executed, started_at);
-
-        let before_due = compute_tick(&mut state, started_at + chrono::Duration::seconds(29), false);
-        let at_due = compute_tick(&mut state, started_at + chrono::Duration::seconds(30), false);
-
-        assert!(!before_due.has_job_action(JobId::new("laundry_refresh")));
-        assert!(at_due.has_job_action(JobId::new("laundry_refresh")));
     }
 
     #[test]
