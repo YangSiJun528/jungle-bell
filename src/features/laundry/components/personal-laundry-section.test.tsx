@@ -100,4 +100,15 @@ describe('PersonalLaundrySection', () => {
         expect(markup).toContain('설정된 세탁 알림이 없습니다.');
         expect(markup).toContain('참여 중인 자율 대기열이 없습니다.');
     });
+
+    test('알림 대상 선택 영역은 카드 폭 안에서 줄어들고 버튼은 침범하지 않는다', () => {
+        const markup = renderPersonalLaundry();
+        const controls = markup.match(/<div[^>]*data-laundry-watch-controls="true"[^>]*>/u)?.[0];
+        const addButton = markup.match(/<button[^>]*data-laundry-watch-add="true"[^>]*>/u)?.[0];
+
+        expect(controls).toContain('min-w-0');
+        expect(markup).toMatch(/data-slot="select-trigger"[^>]*class="[^"]*min-w-0/u);
+        expect(addButton).toContain('shrink-0');
+        expect(markup).toMatch(/data-slot="card"[^>]*class="[^"]*min-w-0/u);
+    });
 });

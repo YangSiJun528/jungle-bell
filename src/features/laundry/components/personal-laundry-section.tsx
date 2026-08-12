@@ -74,7 +74,7 @@ function LaundryWatchCard({
     onTargetChange,
 }: LaundryWatchCardProps) {
     return (
-        <Card className="gap-4">
+        <Card className="min-w-0 gap-4">
             <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                     <Bell className="size-4 text-primary"/>
@@ -82,18 +82,21 @@ function LaundryWatchCard({
                 </CardTitle>
                 <CardDescription>동작 종료 10분 전, 완료 또는 다음 사용 가능 시 알려드려요.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="min-w-0 space-y-4">
                 {loading ? (
                     <LoadingState label="세탁 알림을 불러오고 있습니다."/>
                 ) : (
                     <>
                         {targets.length > 0 ? (
-                            <div className="flex flex-col gap-2 sm:flex-row">
+                            <div
+                                data-laundry-watch-controls="true"
+                                className="flex min-w-0 flex-col gap-2 sm:flex-row"
+                            >
                                 <Select
                                     value={selectedTarget?.key ?? ''}
                                     onValueChange={onTargetChange}
                                 >
-                                    <SelectTrigger className="w-full sm:flex-1">
+                                    <SelectTrigger className="min-w-0 w-full sm:flex-1">
                                         <SelectValue placeholder="알림 대상을 선택하세요"/>
                                     </SelectTrigger>
                                     <SelectContent>
@@ -105,6 +108,8 @@ function LaundryWatchCard({
                                     </SelectContent>
                                 </Select>
                                 <Button
+                                    data-laundry-watch-add="true"
+                                    className="shrink-0"
                                     disabled={!selectedTarget
                                         || busy
                                         || hasDuplicateActiveWatch(activeWatches, selectedTarget)}
@@ -175,7 +180,7 @@ function LaundryQueueCard({
     const visibleEntries = entries.filter((entry) => entry.status !== 'cancelled');
 
     return (
-        <Card className="gap-4">
+        <Card className="min-w-0 gap-4">
             <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                     <Clock3 className="size-4 text-primary"/>
@@ -313,7 +318,7 @@ export function PersonalLaundrySection({
     }
 
     return (
-        <section className="grid gap-4 xl:grid-cols-2" aria-label="개인 세탁 기능">
+        <section className="grid min-w-0 gap-4 xl:grid-cols-2" aria-label="개인 세탁 기능">
             <LaundryWatchCard
                 activeWatches={activeWatches}
                 adding={addWatch.isPending}

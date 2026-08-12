@@ -354,6 +354,7 @@ export function DashboardShell({
     return (
         <Sheet open={notificationPanelOpen} onOpenChange={onNotificationPanelOpenChange}>
             <SidebarProvider
+                resizable
                 className="bg-muted/35 text-foreground"
                 data-dashboard-shell="renewal"
                 data-dashboard-surface={surface}

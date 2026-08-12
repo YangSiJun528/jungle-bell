@@ -104,7 +104,7 @@ describe('LaundryMachineList', () => {
         expect(markup).toContain('aria-label="3번 워시타워 건조기 상세 안내"');
     });
 
-    it('상세 목록은 가로 최소 너비를 강제하지 않고 반응형 열로 배치한다', () => {
+    it('상세 목록은 기본 앱 너비에서 워시타워 세 개를 한 행에 배치한다', () => {
         const markup = renderToStaticMarkup(
             <LaundryMachineList machines={machines} nowMs={NOW_MS}/>,
         );
@@ -115,6 +115,8 @@ describe('LaundryMachineList', () => {
         expect(markup).toContain('<h3 class="text-base font-semibold leading-none">1번 워시타워</h3>');
         expect(markup).toContain('auto-rows-fr');
         expect(markup).toContain('md:grid-cols-2');
+        expect(markup).toContain('lg:grid-cols-3');
+        expect(markup).not.toContain('2xl:grid-cols-3');
         expect(markup).toContain('grid flex-1 grid-rows-2');
         expect(markup).toContain('data-kind="dryer"');
         expect(markup).toContain('data-kind="washer"');

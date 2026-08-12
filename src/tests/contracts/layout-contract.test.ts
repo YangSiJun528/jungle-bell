@@ -28,8 +28,8 @@ test('모든 기능 경로는 하나의 DashboardShell과 main 콘텐츠 영역�
     assert.equal((shell.match(/id="dashboard-content"/g) ?? []).length, 1);
 });
 
-test('사이드바는 shadcn 표준 접기와 모바일 Sheet 동작을 사용한다', () => {
-    assert.match(shell, /<SidebarProvider\b/);
+test('사이드바는 shadcn 접기·모바일 Sheet와 데스크톱 Rail 크기 조절을 사용한다', () => {
+    assert.match(shell, /<SidebarProvider[\s\S]{0,160}\bresizable/);
     assert.match(shell, /<Sidebar[\s\S]{0,120}collapsible="icon"/);
     assert.match(shell, /<SidebarTrigger[\s\S]{0,100}aria-label="사이드바 메뉴 열기"/);
     assert.match(shell, /<SidebarCollapseControl\s*\/>/);
