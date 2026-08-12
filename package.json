@@ -20,13 +20,12 @@
     "tauri": "tauri"
   },
   "dependencies": {
-    "@hono/zod-validator": "^0.9.0",
+    "@jungle-bell/backend-common": "file:server/shared",
     "@tanstack/react-query": "^5.101.4",
     "@tauri-apps/api": "^2.11.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
-    "hono": "^4.13.1",
     "lucide-react": "^1.31.0",
     "qrcode-generator": "^2.0.4",
     "radix-ui": "^1.6.7",

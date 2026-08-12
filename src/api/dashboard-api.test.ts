@@ -993,19 +993,21 @@ test('PWA 개인 생활 설정은 mobile canonical API와 HttpOnly cookie만 사
         path: new URL(url).pathname,
         method: init?.method,
         credentials: init?.credentials,
+        cache: init?.cache,
         authorization: new Headers(init?.headers).has('authorization'),
+        accept: new Headers(init?.headers).get('accept'),
         contentType: new Headers(init?.headers).get('content-type'),
     })), [
-        {path: '/api/mobile/attendance/preferences', method: 'GET', credentials: 'include', authorization: false, contentType: null},
-        {path: '/api/mobile/attendance/preferences', method: 'PUT', credentials: 'include', authorization: false, contentType: 'application/json'},
-        {path: '/api/mobile/meal-preferences', method: 'GET', credentials: 'include', authorization: false, contentType: null},
-        {path: '/api/mobile/meal-preferences', method: 'PUT', credentials: 'include', authorization: false, contentType: 'application/json'},
-        {path: '/api/mobile/laundry-watches', method: 'GET', credentials: 'include', authorization: false, contentType: null},
-        {path: '/api/mobile/laundry-watches', method: 'POST', credentials: 'include', authorization: false, contentType: 'application/json'},
-        {path: `/api/mobile/laundry-watches/${laundryWatch.id}`, method: 'DELETE', credentials: 'include', authorization: false, contentType: null},
-        {path: '/api/mobile/laundry-queue', method: 'GET', credentials: 'include', authorization: false, contentType: null},
-        {path: '/api/mobile/laundry-queue', method: 'POST', credentials: 'include', authorization: false, contentType: 'application/json'},
-        {path: `/api/mobile/laundry-queue/${laundryQueueEntry.id}`, method: 'DELETE', credentials: 'include', authorization: false, contentType: null},
+        {path: '/api/mobile/attendance/preferences', method: 'GET', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: null},
+        {path: '/api/mobile/attendance/preferences', method: 'PUT', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: 'application/json'},
+        {path: '/api/mobile/meal-preferences', method: 'GET', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: null},
+        {path: '/api/mobile/meal-preferences', method: 'PUT', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: 'application/json'},
+        {path: '/api/mobile/laundry-watches', method: 'GET', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: null},
+        {path: '/api/mobile/laundry-watches', method: 'POST', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: 'application/json'},
+        {path: `/api/mobile/laundry-watches/${laundryWatch.id}`, method: 'DELETE', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: null},
+        {path: '/api/mobile/laundry-queue', method: 'GET', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: null},
+        {path: '/api/mobile/laundry-queue', method: 'POST', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: 'application/json'},
+        {path: `/api/mobile/laundry-queue/${laundryQueueEntry.id}`, method: 'DELETE', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: null},
     ]);
     assert.deepEqual(JSON.parse(String(calls[1]?.init?.body)), {
         morning: true, evening: false, skipSunday: true, skipAttendanceDate: null,
@@ -1042,6 +1044,21 @@ test('개인 생활 설정 DTO는 unknown field와 깨진 상태 불변식을 �
             /API_RESPONSE_INVALID/,
         );
     }
+});
+
+test('개인 생활 설정 API는 손상된 JSON 응답을 안정된 오류 코드로 변환한다', async () => {
+    const api = createDashboardApi({
+        fetcher: async () => new Response('{', {
+            status: 200,
+            headers: {'content-type': 'application/json'},
+        }),
+        invokeCommand: async () => undefined,
+    });
+
+    await assert.rejects(
+        api.getMealPreferences('companion'),
+        /API_RESPONSE_INVALID/,
+    );
 });
 
 test('pairing complete는 receipt를 JSON에 노출하지 않고 HttpOnly pending cookie만 사용한다', async () => {

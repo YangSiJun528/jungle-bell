@@ -1,4 +1,3 @@
-import {hc} from 'hono/client';
 import {z, type ZodType} from 'zod';
 import {
     attendancePreferencesSchema,
@@ -20,8 +19,7 @@ import {
     type LaundryWatchInput,
     type MealPreferences,
     type MealPreferencesInput,
-} from '../../server/src/http/contracts/personal-schemas';
-import type {PersonalRoutes} from '../../server/src/http/contracts/personal';
+} from '@jungle-bell/backend-common/contracts/personal';
 
 export type {
     AttendancePreferences,
@@ -71,17 +69,23 @@ export function createDashboardPersonalApi(options: {
     fetcher: PersonalFetch;
     invokeCommand: PersonalInvoke;
 }): DashboardPersonalApi {
-    const rpcFetch: typeof fetch = (input, init) => {
-        const headers = new Headers(init?.headers);
+    const mobileBase = `${options.platformBase.replace(/\/+$/u, '')}/api/mobile`;
+    const mobileRequest = (
+        method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+        path: string,
+        body?: unknown,
+    ): Promise<Response> => {
+        const headers = new Headers();
         headers.set('accept', 'application/json');
-        return options.fetcher(input, {
-            ...init,
+        if (body !== undefined) headers.set('content-type', 'application/json');
+        return options.fetcher(`${mobileBase}${path}`, {
+            method,
             credentials: 'include',
             cache: 'no-store',
             headers,
+            ...(body === undefined ? {} : {body: JSON.stringify(body)}),
         });
     };
-    const mobile = hc<PersonalRoutes>(`${options.platformBase}/api/mobile`, {fetch: rpcFetch});
 
     const value = async <T>(
         surface: PersonalSurface,
@@ -115,7 +119,7 @@ export function createDashboardPersonalApi(options: {
                 surface,
                 'get_attendance_preferences',
                 attendancePreferencesSchema,
-                () => mobile.attendance.preferences.$get(),
+                () => mobileRequest('GET', '/attendance/preferences'),
             );
         },
         async updateAttendancePreferences(surface, input) {
@@ -124,7 +128,7 @@ export function createDashboardPersonalApi(options: {
                 surface,
                 'update_attendance_preferences',
                 attendancePreferencesSchema,
-                () => mobile.attendance.preferences.$put({json: body}),
+                () => mobileRequest('PUT', '/attendance/preferences', body),
                 {input: body},
             );
         },
@@ -133,7 +137,7 @@ export function createDashboardPersonalApi(options: {
                 surface,
                 'get_meal_preferences',
                 mealPreferencesSchema,
-                () => mobile['meal-preferences'].$get(),
+                () => mobileRequest('GET', '/meal-preferences'),
             );
         },
         async updateMealPreferences(surface, input) {
@@ -142,7 +146,7 @@ export function createDashboardPersonalApi(options: {
                 surface,
                 'update_meal_preferences',
                 mealPreferencesSchema,
-                () => mobile['meal-preferences'].$put({json: body}),
+                () => mobileRequest('PUT', '/meal-preferences', body),
                 {input: body},
             );
         },
@@ -151,7 +155,7 @@ export function createDashboardPersonalApi(options: {
                 surface,
                 'list_laundry_watches',
                 laundryWatchListSchema,
-                () => mobile['laundry-watches'].$get(),
+                () => mobileRequest('GET', '/laundry-watches'),
             );
             return result.watches;
         },
@@ -161,7 +165,7 @@ export function createDashboardPersonalApi(options: {
                 surface,
                 'create_laundry_watch',
                 laundryWatchSchema,
-                () => mobile['laundry-watches'].$post({json: body}),
+                () => mobileRequest('POST', '/laundry-watches', body),
                 {input: body},
             );
         },
@@ -170,7 +174,7 @@ export function createDashboardPersonalApi(options: {
             await noContent(
                 surface,
                 'delete_laundry_watch',
-                () => mobile['laundry-watches'][':id'].$delete({param: {id: watchId}}),
+                () => mobileRequest('DELETE', `/laundry-watches/${encodeURIComponent(watchId)}`),
                 {watchId},
             );
         },
@@ -179,7 +183,7 @@ export function createDashboardPersonalApi(options: {
                 surface,
                 'list_laundry_queue',
                 laundryQueueListSchema,
-                () => mobile['laundry-queue'].$get(),
+                () => mobileRequest('GET', '/laundry-queue'),
             );
             return result.entries;
         },
@@ -189,7 +193,7 @@ export function createDashboardPersonalApi(options: {
                 surface,
                 'join_laundry_queue',
                 laundryQueueEntrySchema,
-                () => mobile['laundry-queue'].$post({json: body}),
+                () => mobileRequest('POST', '/laundry-queue', body),
                 {input: body},
             );
         },
@@ -198,7 +202,7 @@ export function createDashboardPersonalApi(options: {
             await noContent(
                 surface,
                 'leave_laundry_queue',
-                () => mobile['laundry-queue'][':id'].$delete({param: {id: entryId}}),
+                () => mobileRequest('DELETE', `/laundry-queue/${encodeURIComponent(entryId)}`),
                 {entryId},
             );
         },
@@ -221,7 +225,12 @@ async function responseValue<T>(schema: ZodType<T>, response: Response): Promise
     if (!response.ok) throw await responseError(response);
     const type = response.headers.get('content-type')?.toLowerCase() ?? '';
     if (!type.includes('application/json')) throw invalidResponse();
-    return parseResponse(schema, await response.json());
+    try {
+        return parseResponse(schema, await response.json());
+    } catch (error) {
+        if (error instanceof Error && error.message === 'API_RESPONSE_INVALID') throw error;
+        throw invalidResponse();
+    }
 }
 
 async function responseError(response: Response): Promise<Error> {

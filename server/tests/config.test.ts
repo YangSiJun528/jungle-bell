@@ -1,11 +1,16 @@
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { collectorOptionsFromEnv, DEFAULT_COLLECTOR_URLS } from "../src/workers/collector-config";
+import { collectorOptionsFromEnv, DEFAULT_COLLECTOR_URLS } from "../apps/jobs-runner/src/configuration/collector-configuration";
 import {
   DESKTOP_ENROLLMENT_POLICY,
   MANUAL_PAIRING_CLAIM_POLICY,
   PAIRING_CREATION_POLICY,
-} from "../src/domain/enrollment-policy";
+} from "../shared/domain/enrollment-policy";
+
+const apiDeployRoot = "../apps/api-worker/deploy/";
+const jobsDeployRoot = "../apps/jobs-runner/deploy/";
+const apiPackageUrl = new URL("../apps/api-worker/package.json", import.meta.url);
+const jobsPackageUrl = new URL("../apps/jobs-runner/package.json", import.meta.url);
 
 describe("collectorOptionsFromEnv", () => {
   const laundryUrl = "https://laundry.example.com/api/status";
@@ -51,7 +56,7 @@ describe("collectorOptionsFromEnv", () => {
 
 describe("test Worker resource isolation", () => {
   it("requires a new blue/green production D1 and R2 instead of the existing collector resources", () => {
-    const productionConfig = JSON.parse(readFileSync(new URL("../wrangler.api.jsonc", import.meta.url), "utf8")) as {
+    const productionConfig = JSON.parse(readFileSync(new URL(`${apiDeployRoot}wrangler.api.jsonc`, import.meta.url), "utf8")) as {
       d1_databases: Array<{ binding: string; database_name: string; database_id: string }>;
       r2_buckets: Array<{ binding: string; bucket_name: string }>;
     };
@@ -66,13 +71,16 @@ describe("test Worker resource isolation", () => {
   });
 
   it("uses deployable test-only D1/R2 resources without touching the legacy production database", () => {
-    const testConfig = JSON.parse(readFileSync(new URL("../wrangler.api-test.jsonc", import.meta.url), "utf8")) as {
+    const testConfig = JSON.parse(readFileSync(new URL(`${apiDeployRoot}wrangler.api-test.jsonc`, import.meta.url), "utf8")) as {
       d1_databases: Array<{ database_name: string; database_id: string }>;
       r2_buckets: Array<{ bucket_name: string }>;
       services?: unknown;
       triggers?: unknown;
     };
-    const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+    const serverPackage = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+      scripts: Record<string, string>;
+    };
+    const apiPackage = JSON.parse(readFileSync(apiPackageUrl, "utf8")) as {
       scripts: Record<string, string>;
     };
     expect(testConfig.d1_databases[0]).toEqual({
@@ -83,28 +91,31 @@ describe("test Worker resource isolation", () => {
     expect(testConfig.r2_buckets[0]).toEqual({ binding: "DATA_BUCKET", bucket_name: "jungle-bell-v2-test" });
     expect(testConfig).not.toHaveProperty("services");
     expect(testConfig).not.toHaveProperty("triggers");
-    expect(packageJson.scripts["deploy:api:test"]).toContain("wrangler.api-test.jsonc");
-    expect(packageJson.scripts["predeploy:api"]).toBe(
-      "cross-env JUNGLE_BELL_PUBLIC_ORIGIN=https://jungle-bell-api.yangsijun5528.workers.dev npm --prefix .. run build",
+    expect(serverPackage.scripts["deploy:api:test"]).toContain("@jungle-bell/api-worker");
+    expect(apiPackage.scripts["deploy:test"]).toContain("wrangler.api-test.jsonc");
+    expect(apiPackage.scripts.predeploy).toBe(
+      "cross-env JUNGLE_BELL_PUBLIC_ORIGIN=https://jungle-bell-api.yangsijun5528.workers.dev npm --prefix ../../.. run build",
     );
-    expect(packageJson.scripts["predeploy:api:test"]).toBe(
-      "cross-env JUNGLE_BELL_PUBLIC_ORIGIN=https://jungle-bell-api-test.yangsijun5528.workers.dev npm --prefix .. run build",
+    expect(apiPackage.scripts["predeploy:test"]).toBe(
+      "cross-env JUNGLE_BELL_PUBLIC_ORIGIN=https://jungle-bell-api-test.yangsijun5528.workers.dev npm --prefix ../../.. run build",
     );
   });
 
   it("keeps both App Workers HTTP-only and removes the relay deployment surface", () => {
-    const apiConfig = JSON.parse(readFileSync(new URL("../wrangler.api.jsonc", import.meta.url), "utf8")) as {
+    const apiConfig = JSON.parse(readFileSync(new URL(`${apiDeployRoot}wrangler.api.jsonc`, import.meta.url), "utf8")) as {
       main: string;
+      assets: { directory: string };
       services?: unknown;
       triggers?: unknown;
     };
-    const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+    const apiPackage = JSON.parse(readFileSync(apiPackageUrl, "utf8")) as {
       scripts: Record<string, string>;
     };
-    const pushSender = readFileSync(new URL("../src/renewal/push-sender.ts", import.meta.url), "utf8");
-    const localWorkerEnvironment = readFileSync(new URL("../.dev.vars.example", import.meta.url), "utf8");
+    const pushSender = readFileSync(new URL("../shared/renewal/push-sender.ts", import.meta.url), "utf8");
+    const localWorkerEnvironment = readFileSync(new URL(`${apiDeployRoot}.dev.vars.example`, import.meta.url), "utf8");
 
-    expect(apiConfig.main).toBe("src/workers/api.ts");
+    expect(apiConfig.main).toBe("../src/index.ts");
+    expect(apiConfig.assets.directory).toBe("../../../../dist");
     expect(apiConfig).not.toHaveProperty("services");
     expect(apiConfig).not.toHaveProperty("triggers");
     expect(apiConfig).toMatchObject({
@@ -114,17 +125,26 @@ describe("test Worker resource isolation", () => {
       },
     });
     expect(JSON.stringify(apiConfig)).not.toContain("WEB_PUSH_RELAY");
-    expect(packageJson.scripts).not.toHaveProperty("deploy:push-relay");
-    expect(packageJson.scripts).not.toHaveProperty("deploy:push-relay:test");
-    expect(existsSync(new URL("../wrangler.push-relay.jsonc", import.meta.url))).toBe(false);
-    expect(existsSync(new URL("../wrangler.push-relay-test.jsonc", import.meta.url))).toBe(false);
-    expect(existsSync(new URL("../src/workers/web-push-relay.ts", import.meta.url))).toBe(false);
+    expect(apiPackage.scripts).not.toHaveProperty("deploy:push-relay");
+    expect(apiPackage.scripts).not.toHaveProperty("deploy:push-relay:test");
+    expect(existsSync(new URL(`${apiDeployRoot}wrangler.push-relay.jsonc`, import.meta.url))).toBe(false);
+    expect(existsSync(new URL(`${apiDeployRoot}wrangler.push-relay-test.jsonc`, import.meta.url))).toBe(false);
+    expect(existsSync(new URL("../apps/api-worker/src/web-push-relay.ts", import.meta.url))).toBe(false);
     expect(pushSender).not.toMatch(/RelaySender|WEB_PUSH_RELAY/u);
     expect(localWorkerEnvironment).not.toMatch(/WEB_PUSH_RELAY|VAPID_PRIVATE_KEY/u);
   });
 
+  it("keeps local Wrangler data at the server-root persistence path", () => {
+    const apiPackage = JSON.parse(readFileSync(apiPackageUrl, "utf8")) as {
+      scripts: Record<string, string>;
+    };
+
+    expect(apiPackage.scripts.dev).toContain("--persist-to ../../.wrangler/state");
+    expect(apiPackage.scripts["db:reset:local"]).toContain("--persist-to ../../.wrangler/state");
+  });
+
   it("keeps one current schema with no LMS credential or legacy delivery tables", () => {
-    const schema = readFileSync(new URL("../schema.sql", import.meta.url), "utf8");
+    const schema = readFileSync(new URL("../database/schema.sql", import.meta.url), "utf8");
     expect(schema).toContain("CREATE TABLE notification_delivery");
     expect(schema).toContain("CREATE TABLE desktop_enrollment_attempt");
     expect(schema).toContain("CREATE TABLE pairing_claim_attempt");
@@ -138,11 +158,11 @@ describe("test Worker resource isolation", () => {
   });
 
   it("keeps collection writes in the OCI storage adapter only", () => {
-    const apiStorage = readFileSync(new URL("../src/workers/cloudflare-storage.ts", import.meta.url), "utf8");
-    const jobsStorage = readFileSync(new URL("../src/node/cloudflare-rest-storage.ts", import.meta.url), "utf8");
+    const apiStorage = readFileSync(new URL("../apps/api-worker/src/storage/cloudflare/cloudflare-storage.ts", import.meta.url), "utf8");
+    const jobsStorage = readFileSync(new URL("../apps/jobs-runner/src/storage/cloudflare-rest-storage.ts", import.meta.url), "utf8");
 
     expect(apiStorage).not.toMatch(/\bapplyCommit\s*\(/u);
-    expect(jobsStorage).toContain('import { buildD1CommitQueries, type D1Query } from "../storage/d1-commit";');
+    expect(jobsStorage).toContain('import { buildD1CommitQueries, type D1Query } from "./d1-commit-queries";');
     expect(jobsStorage).toMatch(/async commit\(commit: CollectionCommit\): Promise<void> \{\s+const queries = await buildD1CommitQueries\(commit\);/u);
   });
 
@@ -170,24 +190,55 @@ describe("test Worker resource isolation", () => {
 });
 
 describe("v2-test OCI Jobs isolation", () => {
+  it("builds both Jobs deployments from the server package boundary", () => {
+    const productionCompose = readFileSync(new URL(`${jobsDeployRoot}docker-compose.oci.yml`, import.meta.url), "utf8");
+    const testCompose = readFileSync(new URL(`${jobsDeployRoot}docker-compose.oci-v2-test.yml`, import.meta.url), "utf8");
+    const dockerfile = readFileSync(new URL(`${jobsDeployRoot}Dockerfile`, import.meta.url), "utf8");
+
+    for (const compose of [productionCompose, testCompose]) {
+      expect(compose).toContain("context: ../../..");
+      expect(compose).toContain("dockerfile: apps/jobs-runner/deploy/Dockerfile");
+    }
+    expect(productionCompose).toContain("name: server");
+    expect(dockerfile).toContain("COPY shared/package.json ./shared/package.json");
+    expect(dockerfile).toContain("COPY apps/api-worker/package.json ./apps/api-worker/package.json");
+    expect(dockerfile).toContain("COPY apps/jobs-runner/package.json ./apps/jobs-runner/package.json");
+    expect(dockerfile).toContain("COPY apps/jobs-runner ./apps/jobs-runner");
+    expect(dockerfile).toContain("COPY shared ./shared");
+    expect(dockerfile).toContain(
+      "npm ci --omit=dev --workspace @jungle-bell/jobs-runner --include-workspace-root=false",
+    );
+    expect(dockerfile).not.toMatch(/^COPY src\b/mu);
+  });
+
   it("builds and schedules only the monolithic OCI Jobs entrypoint", () => {
-    const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+    const serverPackage = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
       scripts: Record<string, string>;
     };
-    const crontab = readFileSync(new URL("../docker/crontab", import.meta.url), "utf8");
+    const jobsPackage = JSON.parse(readFileSync(jobsPackageUrl, "utf8")) as {
+      scripts: Record<string, string>;
+    };
+    const jobsBuildConfig = readFileSync(new URL("../apps/jobs-runner/tsup.config.ts", import.meta.url), "utf8");
+    const crontab = readFileSync(new URL(`${jobsDeployRoot}crontab`, import.meta.url), "utf8");
 
-    expect(packageJson.scripts.build).toContain("src/node/jobs.ts");
-    expect(packageJson.scripts["jobs:run"]).toContain("dist/jobs/jobs.js run");
-    expect(packageJson.scripts).not.toHaveProperty("collector:collect");
-    expect(existsSync(new URL("../src/node/collector.ts", import.meta.url))).toBe(false);
+    expect(serverPackage.scripts.build).toContain("@jungle-bell/jobs-runner");
+    expect(serverPackage.scripts["jobs:run"]).toContain("@jungle-bell/jobs-runner");
+    expect(serverPackage.scripts).not.toHaveProperty("collector:collect");
+    expect(jobsPackage.scripts.build).toBe("tsup --config tsup.config.ts");
+    expect(jobsPackage.scripts.start).toBe("node ../../dist/jobs/jobs.js run");
+    expect(jobsBuildConfig).toContain('entry: { jobs: "src/jobs.ts" }');
+    expect(jobsBuildConfig).toContain('tsconfig: "../../tsconfig.jobs-runner.json"');
+    expect(jobsBuildConfig).toContain("@jungle-bell\\/backend-common");
+    expect(jobsBuildConfig).toContain('external: ["web-push"]');
+    expect(existsSync(new URL("../apps/jobs-runner/src/collector.ts", import.meta.url))).toBe(false);
     expect(crontab).toBe(
       '* * * * * flock --nonblock --conflict-exit-code 75 /tmp/jungle-bell-jobs.lock node /app/dist/jobs/jobs.js run || test "$?" -eq 75\n',
     );
   });
 
   it("uses only the fixed v2-test resources and distinct runtime identities", () => {
-    const compose = readFileSync(new URL("../docker-compose.oci-v2-test.yml", import.meta.url), "utf8");
-    const environment = readFileSync(new URL("../.env.oci-v2-test.example", import.meta.url), "utf8");
+    const compose = readFileSync(new URL(`${jobsDeployRoot}docker-compose.oci-v2-test.yml`, import.meta.url), "utf8");
+    const environment = readFileSync(new URL(`${jobsDeployRoot}.env.oci-v2-test.example`, import.meta.url), "utf8");
 
     expect(compose).toContain("name: jungle-bell-v2-test");
     expect(compose).toMatch(/^  jobs-v2-test:\s*$/mu);
