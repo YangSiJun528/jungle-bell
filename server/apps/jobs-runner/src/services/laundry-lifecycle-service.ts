@@ -2,7 +2,7 @@ import type { LaundryEvent } from "@jungle-bell/backend-common/collection/types"
 import type { LaundryVersion } from "@jungle-bell/backend-common/collection/laundry";
 import { projectLaundry, type ProjectedAppliance } from "@jungle-bell/backend-common/collection/projection";
 import {
-  completedLaundryWatchIds, LAUNDRY_QUEUE_AVAILABILITY_TTL_MS, planLaundryTransition,
+  completedLaundryWatchIds, planLaundryTransition,
   type LaundryLifecycleState, type LaundryTransitionEvent, type PlannedLaundryNotification,
 } from "@jungle-bell/backend-common/domain/laundry-notifications";
 import type {
@@ -13,12 +13,9 @@ import type {
 import type { CollectorStorage } from "@jungle-bell/backend-common/ports/collector-storage";
 import { randomOpaqueToken } from "@jungle-bell/backend-common/renewal/crypto";
 
-export const LAUNDRY_QUEUE_CLAIM_TTL_MS = LAUNDRY_QUEUE_AVAILABILITY_TTL_MS;
-
 type LaundryStorage = Pick<CollectorStorage, "readJson" | "readState">;
 
 export interface LaundryLifecycleStore {
-  expireLaundryQueueClaims(nowEpochMs: number): Promise<number>;
   listPendingLaundryEvents(limit: number): Promise<LaundryEvent[]>;
   listActiveLaundryWatches(input: {
     machineId: string;
@@ -31,21 +28,12 @@ export interface LaundryLifecycleStore {
       appliance: LaundryAppliance;
       sessionId: string | null;
     }>;
-    nowEpochMs: number;
   }): Promise<LaundryAvailabilityTargetRecord[]>;
   applyLaundryLifecycleEvent(input: {
     eventId: string;
     processingToken: string;
     notifications: PlannedLaundryNotification[];
     completedWatchIds: string[];
-    queueClaim: {
-      entryId: string;
-      userId: string;
-      machineId: string;
-      appliance: LaundryAppliance;
-      claimToken: string;
-      expiresAtEpochMs: number;
-    } | null;
     nowEpochMs: number;
   }): Promise<boolean>;
 }
@@ -55,22 +43,20 @@ export async function runLaundryLifecycle(
   store: LaundryLifecycleStore,
   storage: LaundryStorage,
   nowEpochMs: number,
-): Promise<{ processedEvents: number; notifications: number; queueClaims: number }> {
-  await store.expireLaundryQueueClaims(nowEpochMs);
+): Promise<{ processedEvents: number; notifications: number }> {
   let processedEvents = 0;
   let notifications = 0;
-  let queueClaims = 0;
   for (const source of await store.listPendingLaundryEvents(100)) {
     const event = transitionEvent(source, nowEpochMs);
     const watches = await store.listActiveLaundryWatches({
       machineId: event.machineId, appliance: event.appliance, sessionId: event.sessionId,
     });
     // Collector events may contain vendor-specific raw state labels. They can drive
-    // session completion/attention/countdown rules, but never availability claims.
-    const planned = planLaundryTransition(event, watches, null);
+    // session completion/attention/countdown rules, but never prove current availability.
+    const planned = planLaundryTransition(event, watches);
     if (await store.applyLaundryLifecycleEvent({
       eventId: source.id, processingToken: randomOpaqueToken("jblp_"), notifications: planned,
-      completedWatchIds: completedLaundryWatchIds(event, watches), queueClaim: null, nowEpochMs,
+      completedWatchIds: completedLaundryWatchIds(event, watches), nowEpochMs,
     })) {
       processedEvents += 1;
       notifications += planned.length;
@@ -78,12 +64,12 @@ export async function runLaundryLifecycle(
   }
 
   const state = await storage.readState("laundry");
-  if (!state?.lastNormalizedKey) return { processedEvents, notifications, queueClaims };
+  if (!state?.lastNormalizedKey) return { processedEvents, notifications };
   const version = await storage.readJson<LaundryVersion>(state.lastNormalizedKey);
-  if (!version) return { processedEvents, notifications, queueClaims };
+  if (!version) return { processedEvents, notifications };
   const projected = projectLaundry(version, state, new Date(nowEpochMs), false);
   if (projected.quality.collection !== "SUCCESS") {
-    return { processedEvents, notifications, queueClaims };
+    return { processedEvents, notifications };
   }
   const available = projected.machines.flatMap((machine) => [machine.washer, machine.dryer])
     .filter((appliance): appliance is NonNullable<typeof appliance> =>
@@ -93,7 +79,6 @@ export async function runLaundryLifecycle(
     appliances: available.map((appliance) => ({
       machineId: appliance.machineId, appliance: appliance.appliance, sessionId: appliance.sessionId,
     })),
-    nowEpochMs,
   });
   const targetByAppliance = new Map(availabilityTargets.map((target) => [
     `${target.machineId}:${target.appliance}`,
@@ -102,36 +87,25 @@ export async function runLaundryLifecycle(
   for (const appliance of available) {
     const target = targetByAppliance.get(`${appliance.machineId}:${appliance.appliance}`);
     const watches = target?.watches ?? [];
-    const entry = target?.queueEntry ?? null;
-    if (!entry && watches.length === 0) continue;
-    const targetKey = [
-      entry?.id ?? "no-queue",
-      ...watches.map((watch) => watch.id).sort(),
-    ].join(":");
+    if (watches.length === 0) continue;
+    const targetKey = watches.map((watch) => watch.id).sort().join(":");
     const event: LaundryTransitionEvent = {
       sourceEventId: `laundry-projection:${projected.sourceVersionSha}:${appliance.machineId}:${appliance.appliance}:${targetKey}`,
       machineId: appliance.machineId, appliance: appliance.appliance, sessionId: appliance.sessionId,
       previousState: "UNKNOWN", currentState: "AVAILABLE", remainingMinutes: 0, occurredAtEpochMs: nowEpochMs,
     };
-    const planned = planLaundryTransition(event, watches, entry);
-    const queueClaim = entry ? {
-      entryId: entry.id, userId: entry.userId, machineId: appliance.machineId,
-      appliance: appliance.appliance, claimToken: randomOpaqueToken("jblc_"),
-      expiresAtEpochMs: nowEpochMs + LAUNDRY_QUEUE_CLAIM_TTL_MS,
-    } : null;
+    const planned = planLaundryTransition(event, watches);
     if (await store.applyLaundryLifecycleEvent({
       eventId: event.sourceEventId,
       processingToken: randomOpaqueToken("jblp_"),
       notifications: planned,
       completedWatchIds: completedLaundryWatchIds(event, watches),
-      queueClaim,
       nowEpochMs,
     })) {
       notifications += planned.length;
-      if (queueClaim) queueClaims += 1;
     }
   }
-  return { processedEvents, notifications, queueClaims };
+  return { processedEvents, notifications };
 }
 
 export function isAvailableProjectedAppliance(

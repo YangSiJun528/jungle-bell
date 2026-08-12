@@ -131,7 +131,9 @@ PWA에서는 같은 Sidebar의 Sheet와 safe area를 반영한 하단 navigation
 트레이 아이콘은 별도 목록 창을 만들지 않고 홈을 엽니다. 일반 웹에서는 개인
 출석·알림 동작 대신 PC 앱 또는 PWA 설치 안내를 표시합니다. Jungle Campus는
 웹·PWA에서는 외부 바로가기이고, PC에서는 전용 LMS WebView의 연결 상태와 함께
-표시합니다. 댓글 없는 Markdown 블로그는 App Worker의 정적 자산으로 함께
+표시합니다. macOS의 정상·출석 완료 트레이 상태는 시스템 template 아이콘으로
+표시해 메뉴 막대 테마가 대비색을 정하고, 로그인·연결·출석 조치가 필요한 상태만
+고유 상태색을 사용합니다. 댓글 없는 Markdown 블로그는 App Worker의 정적 자산으로 함께
 배포하며 대시보드 실행 코드나 사용자 session에 의존하지 않습니다.
 
 `display-mode: standalone`과 iOS standalone 신호는 화면 기능을 나누고 일반

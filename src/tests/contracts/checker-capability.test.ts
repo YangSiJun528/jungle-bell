@@ -138,6 +138,17 @@ test('LMS WebView는 외부 페이지 실행을 깨뜨리는 전역 옵션을 �
     assert.match(checkerRuntimeSource, /CheckerRefreshAction::Navigate\s*=>[\s\S]*?checker\.navigate\(target\)/);
 });
 
+test('LMS 로그인 창을 닫으면 숨긴 채로 복귀하고 인증 상태를 즉시 재확인한다', () => {
+    const closeHandler = checkerRuntimeSource.match(
+        /tauri::WindowEvent::CloseRequested \{ api, \.\. \} => \{([\s\S]*?)\n\s*\}/,
+    )?.[1];
+
+    assert.ok(closeHandler, 'checker CloseRequested handler를 찾을 수 없습니다.');
+    assert.match(closeHandler, /api\.prevent_close\(\)/);
+    assert.match(closeHandler, /window\.hide\(\)/);
+    assert.match(closeHandler, /refresh_webview\(&app_handle, "LMS window closed"\)/);
+});
+
 test('구형 출석 WebView injection과 capability는 제거한다', () => {
     assert.equal(existsSync(new URL('./injected/attendance.ts', srcRoot)), false);
     assert.equal(existsSync(new URL('./injected/attendance-decision.ts', srcRoot)), false);

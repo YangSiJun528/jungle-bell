@@ -710,13 +710,13 @@ describe("D1RenewalStore laundry lifecycle", () => {
       const watches = await new D1RenewalStore(sqliteD1(database)).listActiveLaundryWatches({
         machineId: "tower-3", appliance: "washer", sessionId: null,
       });
-      const planned = planLaundryTransition(event, watches, null);
+      const planned = planLaundryTransition(event, watches);
       let largestBatch = 0;
       const store = new D1RenewalStore(sqliteD1(database, (count) => { largestBatch = Math.max(largestBatch, count); }));
 
       await expect(store.applyLaundryLifecycleEvent({
         eventId: event.sourceEventId, processingToken: "processing-64", notifications: planned,
-        completedWatchIds: [], queueClaim: null, nowEpochMs: now,
+        completedWatchIds: [], nowEpochMs: now,
       })).resolves.toBe(true);
 
       expect(planned).toHaveLength(64);
@@ -827,11 +827,6 @@ describe("D1RenewalStore housekeeping", () => {
         VALUES ('watch-active', 'user-1', 'tower-3', 'washer', NULL, 5, 1, 'active', ?, ?),
         ('watch-old', 'user-1', 'tower-4', 'washer', NULL, 5, 1, 'completed', ?, ?)`)
         .run(old30, now, old30, old30);
-      database.prepare(`INSERT INTO laundry_queue_entry
-        (id, user_id, machine_id, appliance, status, joined_at_epoch_ms, left_at_epoch_ms)
-        VALUES ('queue-active', 'user-1', NULL, 'washer', 'waiting', ?, NULL),
-        ('queue-old', 'user-1', NULL, 'dryer', 'expired', ?, ?)`)
-        .run(now, old30, old30);
       for (const [id, observedAt] of [["event-active", now], ["event-old", old30]] as const) {
         database.prepare(`INSERT INTO laundry_event (id, machine_id, appliance, session_id, type,
           previous_observed_at, observed_at, eta_delta_minutes, previous_state, current_state, detail_json)
@@ -858,7 +853,6 @@ describe("D1RenewalStore housekeeping", () => {
       expect(database.prepare("SELECT id FROM push_subscription ORDER BY id").all()).toEqual([{ id: "push-active" }]);
       expect(database.prepare("SELECT id FROM pairing_challenge").all()).toEqual([]);
       expect(database.prepare("SELECT id FROM laundry_watch").all()).toEqual([{ id: "watch-active" }]);
-      expect(database.prepare("SELECT id FROM laundry_queue_entry").all()).toEqual([{ id: "queue-active" }]);
       expect(database.prepare("SELECT id FROM laundry_event").all()).toEqual([{ id: "event-active" }]);
       expect(database.prepare("SELECT source_id FROM laundry_lifecycle_processing").all())
         .toEqual([{ source_id: "event-active" }]);

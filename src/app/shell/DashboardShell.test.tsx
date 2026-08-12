@@ -114,8 +114,9 @@ describe('DashboardShell', () => {
         expect(html).toContain('aria-label="설정"');
         expect(html).toContain('href="#connections"');
         expect(html).toContain('data-unread="true"');
-        expect(html).not.toContain('99+');
-        expect(html).not.toContain('data-slot="badge"');
+        expect(html).toContain('data-slot="sidebar-menu-badge"');
+        expect(html).toMatch(/data-slot="sidebar-menu-badge"[^>]*aria-hidden="true"[^>]*>120<\/div>/u);
+        expect(html).toMatch(/data-slot="sidebar-menu-badge"[^>]*class="[^"]*top-1\/2![^"]*-translate-y-1\/2!/u);
         expect(html).toContain('grid-template-columns:repeat(4, minmax(0, 1fr))');
         expect(html).toContain('사이드바 접기');
         expect(html).not.toContain('사이드바 펼치기');
@@ -123,6 +124,32 @@ describe('DashboardShell', () => {
         expect(html).toContain('data-sidebar="rail"');
         expect(html).toContain('data-shell-top-spacer="true"');
         expect(html).toContain('border-t border-sidebar-border');
+    });
+
+    test('shows the exact unread count in the sidebar and omits the badge at zero', () => {
+        const unreadHtml = renderToStaticMarkup(
+            <DashboardShell
+                surface="desktop"
+                activeRoute="home"
+                navigate={vi.fn()}
+                unreadCount={7}
+            >
+                <section>홈</section>
+            </DashboardShell>,
+        );
+        const readHtml = renderToStaticMarkup(
+            <DashboardShell
+                surface="desktop"
+                activeRoute="home"
+                navigate={vi.fn()}
+                unreadCount={0}
+            >
+                <section>홈</section>
+            </DashboardShell>,
+        );
+
+        expect(unreadHtml).toMatch(/data-slot="sidebar-menu-badge"[^>]*>7<\/div>/u);
+        expect(readHtml).not.toContain('data-slot="sidebar-menu-badge"');
     });
 
     test('uses the canonical compass image for the Jungle Bell brand', () => {
@@ -139,6 +166,8 @@ describe('DashboardShell', () => {
 
         expect(html).toContain('<img');
         expect(html).toContain('logo.png');
+        expect(html).toContain('hover:bg-transparent!');
+        expect(html).toContain('active:bg-transparent!');
         expect(html).not.toContain('Jungle Bell 홈</span>');
     });
 

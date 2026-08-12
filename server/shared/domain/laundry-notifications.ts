@@ -1,5 +1,5 @@
 import type {
-  LaundryAppliance, LaundryQueueEntryRecord, LaundryWatchRecord, NotificationRecord,
+  LaundryAppliance, LaundryWatchRecord, NotificationRecord,
 } from "../ports/account-storage";
 
 export type LaundryLifecycleState = "AVAILABLE" | "BUSY" | "PAUSED" | "ERROR" | "COMPLETED" | "UNKNOWN";
@@ -15,27 +15,20 @@ export interface LaundryTransitionEvent {
   occurredAtEpochMs: number;
 }
 
-export type LaundryNotificationOrigin =
-  | { kind: "watch"; id: string }
-  | { kind: "queue"; id: string };
+export interface LaundryNotificationOrigin { kind: "watch"; id: string }
 
 export interface PlannedLaundryNotification {
   notification: NotificationRecord;
   origins: LaundryNotificationOrigin[];
 }
 
-export const LAUNDRY_QUEUE_AVAILABILITY_TTL_MS = 5 * 60_000;
 const LAUNDRY_WATCH_AVAILABILITY_TTL_MS = 6 * 60 * 60_000;
 
 export function planLaundryTransition(
   event: LaundryTransitionEvent,
   watches: readonly LaundryWatchRecord[],
-  queueEntry: LaundryQueueEntryRecord | null,
 ): PlannedLaundryNotification[] {
   const planned = watches.flatMap((watch) => watchNotification(event, watch));
-  if (becameAvailable(event) && queueEntry) {
-    planned.push(availableNotification(event, queueEntry.userId, { kind: "queue", id: queueEntry.id }));
-  }
   const unique = new Map<string, PlannedLaundryNotification>();
   for (const candidate of planned) {
     const key = `${candidate.notification.userId}:${candidate.notification.sourceEventId}`;
@@ -43,7 +36,7 @@ export function planLaundryTransition(
     if (current) current.origins.push(...candidate.origins);
     else unique.set(key, candidate);
   }
-  return [...unique.values()].map((candidate) => clampQueueAvailabilityExpiry(event, candidate));
+  return [...unique.values()];
 }
 
 export function completedLaundryWatchIds(
@@ -83,27 +76,8 @@ function availableNotification(
   const title = `${deviceLabel(event.appliance)} 사용 가능`;
   const body = `${machineLabel(event.machineId)} ${deviceLabel(event.appliance)}를 사용할 수 있습니다.`;
   return plannedNotification(event, userId, "laundry-available", `laundry-available:${event.sourceEventId}`,
-    title, body, origin.kind === "queue" ? LAUNDRY_QUEUE_AVAILABILITY_TTL_MS : LAUNDRY_WATCH_AVAILABILITY_TTL_MS,
+    title, body, LAUNDRY_WATCH_AVAILABILITY_TTL_MS,
     [origin]);
-}
-
-function clampQueueAvailabilityExpiry(
-  event: LaundryTransitionEvent,
-  candidate: PlannedLaundryNotification,
-): PlannedLaundryNotification {
-  if (candidate.notification.kind !== "laundry-available"
-    || !candidate.origins.some((origin) => origin.kind === "queue")) return candidate;
-  const expiresAtEpochMs = event.occurredAtEpochMs + LAUNDRY_QUEUE_AVAILABILITY_TTL_MS;
-  if (candidate.notification.expiresAtEpochMs === expiresAtEpochMs) return candidate;
-  const payload = JSON.parse(candidate.notification.payloadJson) as Record<string, unknown>;
-  return {
-    ...candidate,
-    notification: {
-      ...candidate.notification,
-      expiresAtEpochMs,
-      payloadJson: JSON.stringify({ ...payload, expiresAtEpochMs }),
-    },
-  };
 }
 
 function watchEventNotification(

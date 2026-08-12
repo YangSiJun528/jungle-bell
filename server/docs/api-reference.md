@@ -198,12 +198,10 @@ R2에 보관된 식단 이미지를 반환합니다. 콘텐츠 SHA 주소이므�
 | `GET`, `PUT /api/{desktop\|mobile}/v2/attendance/preferences` | 역할별 인증 | 계정 전체·시간 구간·간격을 포함한 출석 알림 설정 조회·수정 |
 | `GET`, `PUT /api/{desktop\|mobile}/meal-preferences` | 역할별 인증 | 급식 알림 설정 조회·수정 |
 | `GET`, `POST`, `DELETE /api/{desktop\|mobile}/laundry-watches` | 역할별 인증 | 세탁 상태 watch 조회·추가·취소 |
-| `GET`, `POST`, `DELETE /api/{desktop\|mobile}/laundry-queue` | 역할별 인증 | 세탁 차례 알림 조회·추가·취소 |
 | `GET /api/desktop-ui/attendance` | Desktop UI bearer + bound Origin | 최신 출석 조회 |
 | `GET`, `PUT /api/desktop-ui/v2/attendance/preferences` | Desktop UI bearer + bound Origin | v2 출석 알림 설정 조회·수정 |
 | `GET`, `PUT /api/desktop-ui/meal-preferences` | Desktop UI bearer + bound Origin | 급식 알림 설정 조회·수정 |
 | `GET`, `POST`, `DELETE /api/desktop-ui/laundry-watches` | Desktop UI bearer + bound Origin | 세탁 watch 조회·추가·취소 |
-| `GET`, `POST`, `DELETE /api/desktop-ui/laundry-queue` | Desktop UI bearer + bound Origin | 세탁 차례 알림 조회·추가·취소 |
 | `POST /api/desktop-ui/pairings`, `GET /api/desktop-ui/pairings/:id` | Desktop UI bearer + bound Origin | 모바일 연결 생성·상태 조회 |
 | `POST /api/desktop-ui/pairings/:id/approve` | Desktop UI bearer + bound Origin | strict `{ claimId }`로 모바일 연결 승인 |
 | `GET /api/desktop-ui/mobile-sessions` | Desktop UI bearer + bound Origin | 연결된 모바일 목록 조회 |
@@ -330,30 +328,27 @@ Desktop 자격 증명은 90일 절대 만료이며 만료 전에
 유실된 자격 증명은 installation ID만으로 재발급하지 않습니다. 이 경우 새 installation
 identity로 등록하고 모바일을 다시 페어링해야 합니다.
 
-## 개인 설정과 세탁 차례 알림
+## 개인 설정과 세탁 알림
 
 출석 설정 응답은 `{ "morning": true, "evening": true, "skipSunday": false,
 "skipAttendanceDate": null }`입니다. heartbeat는 이 값을 쓰지 않으며 명시적인
 preferences endpoint만 설정의 기준 저장소를 변경합니다.
 
-급식 설정 응답은 `enabled`, `breakfast`, `lunch`, `dinner`, `updatedAtEpochMs`를
+급식 설정 응답은 `enabled`, `lunch`, `dinner`, `updatedAtEpochMs`를
 포함합니다. 설정을 켜기 전에 수집된 과거 게시물은 재알림하지 않습니다. 새
-`DAILY_MENU`의 `firstSeenAt`과 content 변경 감지 시각을 기준으로 조·중·석식
+`DAILY_MENU`의 `firstSeenAt`과 content 변경 감지 시각을 기준으로 중·석식
 구독자를 선택하며, 12시간이 지난 이벤트는 처리 기준선만 기록합니다. 알림
 dedupe는 `serviceDate`, meal period, `contentSha`로 결정됩니다.
 
-세탁 watch ID는 `jbw_`와 64자리 소문자 hex, 차례 알림 ID는 `jbq_`와 64자리
-소문자 hex입니다. 차례 알림은 외부 세탁기를 예약하거나 제어하지 않습니다.
-최신 정규화 projection이 명시적으로 `IDLE`일 때 FIFO 선두 한 명에게만
-best-effort 안내를 보내고 5분 동안 다음 안내를 막습니다. 5분 안에 실제 사용을
-확인하거나 예약을 보장하지 않으며, 시간이 지나면 다음 대기자에게 안내할 수
-있습니다. raw LG state 문자열이나 세탁 이벤트만으로 사용 가능을 판정하지 않습니다.
+세탁 watch ID는 `jbw_`와 64자리 소문자 hex입니다. 동작 종료·완료 알림은 정규화된
+세탁 이벤트를 사용하고, 사용 가능 알림은 최신 정규화 projection이 명시적으로
+`IDLE`일 때만 보냅니다. raw LG state 문자열만으로 사용 가능을 판정하지 않습니다.
 
 OCI Jobs는 D1 작업을 위 gateway로 실행하고, collector, 출석, 급식, 세탁,
 housekeeping, Push 단계를 서로 격리합니다. 한 단계가 실패해도 이후 단계와 마지막
 Push 전송은 계속 시도합니다.
 housekeeping은 시간당 최대 한 번 실행하며 notification·세탁 기록과 만료·폐기된
 desktop/mobile 세션은 30일, pairing artifact와 rate row는 7일 기준으로
-정리합니다. 활성 세션, 최신 출석 상태, 활성 watch와 대기·진행 중 queue는 삭제하지
+정리합니다. 활성 세션, 최신 출석 상태와 활성 watch는 삭제하지
 않습니다. 급식 처리 marker는 30일이 지난 과거 content version만 지우고 현재
 `meal_post.contentSha` marker는 보존해 과거 게시물 재알림을 막습니다.

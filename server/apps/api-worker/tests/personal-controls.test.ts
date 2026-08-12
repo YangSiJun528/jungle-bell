@@ -46,6 +46,17 @@ async function setupAccount() {
 }
 
 describe("shared personal controls", () => {
+  it("rejects the removed breakfast notification option", async () => {
+    const fixture = await setupAccount();
+    const response = await app.request("https://app.test/api/desktop/meal-preferences", {
+      method: "PUT",
+      headers: { ...fixture.desktopHeaders, "content-type": "application/json" },
+      body: JSON.stringify({ enabled: true, breakfast: true, lunch: true, dinner: true }),
+    }, fixture.env);
+
+    expect(response.status).toBe(400);
+  });
+
   it("shares canonical meal and attendance preferences across desktop and mobile", async () => {
     const fixture = await setupAccount();
     const get = (role: "desktop" | "mobile", resource: string) => app.request(
@@ -53,7 +64,7 @@ describe("shared personal controls", () => {
       { headers: role === "desktop" ? fixture.desktopHeaders : fixture.mobileHeaders }, fixture.env,
     );
     await expect((await get("desktop", "meal-preferences")).json()).resolves.toEqual({
-      enabled: false, breakfast: false, lunch: false, dinner: false, updatedAtEpochMs: 0,
+      enabled: false, lunch: false, dinner: false, updatedAtEpochMs: 0,
     });
     await expect((await get("mobile", "v2/attendance/preferences")).json()).resolves.toEqual({
       enabled: true, morning: true, evening: true,
@@ -64,14 +75,14 @@ describe("shared personal controls", () => {
 
     const meal = await app.request("https://app.test/api/desktop/meal-preferences", {
       method: "PUT", headers: { ...fixture.desktopHeaders, "content-type": "application/json" },
-      body: JSON.stringify({ enabled: true, breakfast: false, lunch: true, dinner: true }),
+      body: JSON.stringify({ enabled: true, lunch: true, dinner: true }),
     }, fixture.env);
     expect(meal.status).toBe(200);
     await expect(meal.json()).resolves.toEqual({
-      enabled: true, breakfast: false, lunch: true, dinner: true, updatedAtEpochMs: NOW,
+      enabled: true, lunch: true, dinner: true, updatedAtEpochMs: NOW,
     });
     await expect((await get("mobile", "meal-preferences")).json()).resolves.toEqual({
-      enabled: true, breakfast: false, lunch: true, dinner: true, updatedAtEpochMs: NOW,
+      enabled: true, lunch: true, dinner: true, updatedAtEpochMs: NOW,
     });
 
     const attendance = await app.request("https://app.test/api/mobile/v2/attendance/preferences", {
@@ -216,32 +227,4 @@ describe("shared personal controls", () => {
     }, fixture.env)).status).toBe(404);
   });
 
-  it("shares a best-effort FIFO laundry queue without exposing reservation claims", async () => {
-    const fixture = await setupAccount();
-    const create = (payload: unknown) => app.request("https://app.test/api/mobile/laundry-queue", {
-      method: "POST", headers: { ...fixture.mobileHeaders, "content-type": "application/json" },
-      body: JSON.stringify(payload),
-    }, fixture.env);
-    const created = await create({ machineId: null, appliance: "dryer" });
-    expect(created.status).toBe(201);
-    const entry = await created.json<{ id: string }>();
-    expect(entry.id).toMatch(/^jbq_[a-f0-9]{64}$/u);
-    expect(entry).toEqual({
-      id: entry.id, machineId: null, appliance: "dryer", status: "waiting",
-      joinedAtEpochMs: NOW, leftAtEpochMs: null, position: 1,
-    });
-    expect((await create({ machineId: null, appliance: "dryer" })).status).toBe(409);
-    expect((await create({ machineId: null, appliance: "dryer", reserve: true })).status).toBe(400);
-
-    const desktopList = await app.request("https://app.test/api/desktop/laundry-queue", {
-      headers: fixture.desktopHeaders,
-    }, fixture.env);
-    const body = await desktopList.json<Record<string, unknown>>();
-    expect(body).toEqual({ entries: [entry] });
-    expect(JSON.stringify(body)).not.toContain("claimExpiresAt");
-    expect(JSON.stringify(body)).not.toContain("reservation");
-    expect((await app.request(`https://app.test/api/desktop/laundry-queue/${entry.id}`, {
-      method: "DELETE", headers: fixture.desktopHeaders,
-    }, fixture.env)).status).toBe(204);
-  });
 });

@@ -205,15 +205,13 @@ describe("desktop UI HTTP boundary", () => {
       }), 200],
       ["/api/desktop-ui/meal-preferences", {}, 200],
       ["/api/desktop-ui/meal-preferences", json("PUT", {
-        enabled: true, breakfast: false, lunch: true, dinner: true,
+        enabled: true, lunch: true, dinner: true,
       }), 200],
       ["/api/desktop-ui/laundry-watches", {}, 200],
       ["/api/desktop-ui/laundry-watches", json("POST", {
         machineId: "tower-3", appliance: "washer", sessionId: null,
         notifyBeforeMinutes: 5, notifyWhenAvailable: true,
       }), 201],
-      ["/api/desktop-ui/laundry-queue", {}, 200],
-      ["/api/desktop-ui/laundry-queue", json("POST", { machineId: null, appliance: "dryer" }), 201],
       ["/api/desktop-ui/mobile-sessions", {}, 200],
       ["/api/desktop-ui/pairings", json("POST", {}), 201],
     ];
@@ -225,11 +223,6 @@ describe("desktop UI HTTP boundary", () => {
     expect((await uiRequest(store, `/api/desktop-ui/laundry-watches/${watchId}`, issued.accessToken, {
       method: "DELETE",
     })).status).toBe(204);
-    const queueId = [...store.laundryQueue.keys()][0]!;
-    expect((await uiRequest(store, `/api/desktop-ui/laundry-queue/${queueId}`, issued.accessToken, {
-      method: "DELETE",
-    })).status).toBe(204);
-
     const pairingId = [...store.pairings.keys()][0]!;
     expect((await uiRequest(store, `/api/desktop-ui/pairings/${pairingId}`, issued.accessToken)).status).toBe(200);
     expect((await uiRequest(store, `/api/desktop-ui/pairings/${pairingId}/approve`, issued.accessToken,

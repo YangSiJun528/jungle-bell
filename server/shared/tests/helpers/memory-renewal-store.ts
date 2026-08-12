@@ -4,7 +4,6 @@ import type {
   AttendancePreferenceRecord,
   DesktopRecord,
   DesktopUiSessionRecord,
-  LaundryQueueEntryRecord,
   LaundryAvailabilityTargetRecord,
   LaundryWatchRecord,
   LmsSessionState,
@@ -38,13 +37,8 @@ export class MemoryRenewalStore implements RenewalStore {
   readonly mealPosts = new Map<string, MealPublicationRecord>();
   readonly processedMealVersions = new Map<string, number>();
   readonly laundryWatches = new Map<string, LaundryWatchRecord>();
-  readonly laundryQueue = new Map<string, LaundryQueueEntryRecord>();
   readonly laundryEvents = new Map<string, LaundryEvent>();
   readonly processedLaundryEvents = new Map<string, string>();
-  readonly laundryClaims = new Map<string, {
-    entryId: string; machineId: string; appliance: "washer" | "dryer";
-    claimToken: string; claimedAtEpochMs: number; expiresAtEpochMs: number;
-  }>();
   readonly notifications = new Map<string, NotificationRecord & { nextAttempt: number; displayedAt: number | null }>();
   readonly subscriptions = new Map<string, PushSubscriptionRecord>();
   readonly deliveries = new Map<string, {
@@ -393,41 +387,6 @@ export class MemoryRenewalStore implements RenewalStore {
     return true;
   }
 
-  async enqueueLaundry(value: Omit<LaundryQueueEntryRecord, "position">): Promise<LaundryQueueEntryRecord | null> {
-    const duplicate = [...this.laundryQueue.values()].some((entry) => entry.userId === value.userId
-      && entry.appliance === value.appliance && entry.machineId === value.machineId
-      && (entry.status === "waiting" || (entry.status === "claimed"
-        && (this.laundryClaims.get(entry.id)?.expiresAtEpochMs ?? 0) > value.joinedAtEpochMs)));
-    if (duplicate) return null;
-    const position = [...this.laundryQueue.values()].filter((entry) => entry.status === "waiting"
-      && entry.appliance === value.appliance && entry.machineId === value.machineId).length + 1;
-    const entry = { ...structuredClone(value), position };
-    this.laundryQueue.set(entry.id, entry);
-    return entry;
-  }
-
-  async listLaundryQueue(userId: string, now: number): Promise<LaundryQueueEntryRecord[]> {
-    const terminalSince = now - 24 * 60 * 60_000;
-    const entries = [...this.laundryQueue.values()];
-    const waiting = entries.filter((entry) => entry.userId === userId && entry.status === "waiting")
-      .map((entry) => ({ ...entry, position: entries.filter((candidate) => candidate.status === "waiting"
-        && candidate.appliance === entry.appliance && candidate.machineId === entry.machineId
-        && (candidate.joinedAtEpochMs < entry.joinedAtEpochMs
-          || (candidate.joinedAtEpochMs === entry.joinedAtEpochMs && candidate.id <= entry.id))).length }));
-    const terminal = entries.filter((entry) => entry.userId === userId && ["claimed", "expired"].includes(entry.status)
-      && entry.leftAtEpochMs !== null && entry.leftAtEpochMs >= terminalSince && entry.leftAtEpochMs <= now)
-      .sort((left, right) => right.leftAtEpochMs! - left.leftAtEpochMs! || right.id.localeCompare(left.id)).slice(0, 8)
-      .map((entry) => ({ ...entry, position: 0 }));
-    return [...waiting, ...terminal];
-  }
-
-  async cancelLaundryQueueEntry(userId: string, id: string, now: number): Promise<boolean> {
-    const entry = this.laundryQueue.get(id);
-    if (!entry || entry.userId !== userId || entry.status !== "waiting" || entry.joinedAtEpochMs > now) return false;
-    this.laundryQueue.set(id, { ...entry, status: "cancelled", leftAtEpochMs: now, position: 0 });
-    return true;
-  }
-
   async listPendingLaundryEvents(limit: number): Promise<LaundryEvent[]> {
     return [...this.laundryEvents.values()].filter((event) => !this.processedLaundryEvents.has(event.id))
       .sort((left, right) => left.observedAt.localeCompare(right.observedAt) || left.id.localeCompare(right.id))
@@ -442,71 +401,29 @@ export class MemoryRenewalStore implements RenewalStore {
       && (watch.sessionId === null || watch.sessionId === input.sessionId));
   }
 
-  async findWaitingLaundryQueueHead(input: {
-    machineId: string; appliance: "washer" | "dryer"; nowEpochMs: number;
-  }): Promise<LaundryQueueEntryRecord | null> {
-    const activeClaim = [...this.laundryClaims.values()].some((claim) => claim.machineId === input.machineId
-      && claim.appliance === input.appliance && claim.expiresAtEpochMs > input.nowEpochMs
-      && this.laundryQueue.get(claim.entryId)?.status === "claimed");
-    if (activeClaim) return null;
-    return [...this.laundryQueue.values()].filter((entry) => entry.status === "waiting"
-      && entry.appliance === input.appliance && (entry.machineId === null || entry.machineId === input.machineId))
-      .sort((left, right) => left.joinedAtEpochMs - right.joinedAtEpochMs || left.id.localeCompare(right.id))[0] ?? null;
-  }
-
   async listLaundryAvailabilityTargets(input: {
     appliances: ReadonlyArray<{ machineId: string; appliance: "washer" | "dryer"; sessionId: string | null }>;
-    nowEpochMs: number;
   }): Promise<LaundryAvailabilityTargetRecord[]> {
-    const assignedQueueEntries = new Set<string>();
     const result: LaundryAvailabilityTargetRecord[] = [];
     for (const appliance of input.appliances) {
-      const activeClaim = [...this.laundryClaims.values()].some((claim) => claim.machineId === appliance.machineId
-        && claim.appliance === appliance.appliance && claim.expiresAtEpochMs > input.nowEpochMs
-        && this.laundryQueue.get(claim.entryId)?.status === "claimed");
-      const queueEntry = activeClaim ? null : [...this.laundryQueue.values()]
-        .filter((entry) => entry.status === "waiting" && entry.appliance === appliance.appliance
-          && (entry.machineId === null || entry.machineId === appliance.machineId)
-          && !assignedQueueEntries.has(entry.id))
-        .sort((left, right) => left.joinedAtEpochMs - right.joinedAtEpochMs || left.id.localeCompare(right.id))[0] ?? null;
-      if (queueEntry) assignedQueueEntries.add(queueEntry.id);
       result.push({
-        ...appliance, watches: await this.listActiveLaundryWatches(appliance), queueEntry,
+        ...appliance, watches: await this.listActiveLaundryWatches(appliance),
       });
     }
     return result;
   }
 
-  async expireLaundryQueueClaims(now: number): Promise<number> {
-    let expired = 0;
-    for (const claim of this.laundryClaims.values()) {
-      const entry = this.laundryQueue.get(claim.entryId);
-      if (entry?.status === "claimed" && claim.expiresAtEpochMs <= now) {
-        this.laundryQueue.set(entry.id, { ...entry, status: "expired", position: 0 });
-        expired += 1;
-      }
-    }
-    return expired;
-  }
-
   async applyLaundryLifecycleEvent(input: {
     eventId: string; processingToken: string; notifications: PlannedLaundryNotification[];
     completedWatchIds: string[];
-    queueClaim: {
-      entryId: string; userId: string; machineId: string; appliance: "washer" | "dryer";
-      claimToken: string; expiresAtEpochMs: number;
-    } | null;
     nowEpochMs: number;
   }): Promise<boolean> {
     if (this.processedLaundryEvents.has(input.eventId)) return false;
     this.processedLaundryEvents.set(input.eventId, input.processingToken);
-    const queueClaimed = input.queueClaim ? this.claimQueue({ ...input.queueClaim, nowEpochMs: input.nowEpochMs }) : false;
     for (const planned of input.notifications) {
       const activeWatch = planned.origins.some((origin) => origin.kind === "watch"
         && this.laundryWatches.get(origin.id)?.status === "active");
-      const claimedQueue = queueClaimed && planned.origins.some((origin) => origin.kind === "queue"
-        && origin.id === input.queueClaim?.entryId);
-      if (activeWatch || claimedQueue) await this.insertNotification(planned.notification);
+      if (activeWatch) await this.insertNotification(planned.notification);
     }
     for (const id of input.completedWatchIds) {
       const watch = this.laundryWatches.get(id);
@@ -514,25 +431,6 @@ export class MemoryRenewalStore implements RenewalStore {
         this.laundryWatches.set(id, { ...watch, status: "completed", updatedAtEpochMs: input.nowEpochMs });
       }
     }
-    return true;
-  }
-
-  private claimQueue(input: {
-    entryId: string; userId: string; machineId: string; appliance: "washer" | "dryer"; claimToken: string;
-    nowEpochMs: number; expiresAtEpochMs: number;
-  }): boolean {
-    const activeClaim = [...this.laundryClaims.values()].some((claim) => claim.machineId === input.machineId
-      && claim.appliance === input.appliance && claim.expiresAtEpochMs > input.nowEpochMs
-      && this.laundryQueue.get(claim.entryId)?.status === "claimed");
-    const head = [...this.laundryQueue.values()].filter((entry) => entry.status === "waiting"
-      && entry.appliance === input.appliance && (entry.machineId === null || entry.machineId === input.machineId))
-      .sort((left, right) => left.joinedAtEpochMs - right.joinedAtEpochMs || left.id.localeCompare(right.id))[0];
-    if (activeClaim || head?.id !== input.entryId || head.userId !== input.userId) return false;
-    this.laundryQueue.set(head.id, { ...head, status: "claimed", leftAtEpochMs: input.nowEpochMs, position: 0 });
-    this.laundryClaims.set(head.id, {
-      entryId: head.id, machineId: input.machineId, appliance: input.appliance,
-      claimToken: input.claimToken, claimedAtEpochMs: input.nowEpochMs, expiresAtEpochMs: input.expiresAtEpochMs,
-    });
     return true;
   }
 

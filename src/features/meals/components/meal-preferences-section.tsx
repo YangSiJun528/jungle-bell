@@ -14,14 +14,12 @@ import {companionAuthenticationRequired} from '@/app/surface';
 
 const asInput = (preferences: MealPreferences): MealPreferencesInput => ({
     enabled: preferences.enabled,
-    breakfast: preferences.breakfast,
     lunch: preferences.lunch,
     dinner: preferences.dinner,
 });
 
 function preferencesEqual(left: MealPreferencesInput, right: MealPreferences): boolean {
     return left.enabled === right.enabled
-        && left.breakfast === right.breakfast
         && left.lunch === right.lunch
         && left.dinner === right.dinner;
 }
@@ -80,13 +78,6 @@ function MealPreferencesEditor({
             />
             <Separator/>
             <div className="pl-4">
-                <PreferenceRow
-                    checked={draft.breakfast}
-                    disabled={!draft.enabled || saving}
-                    label="조식"
-                    onCheckedChange={(checked) => updateDraft('breakfast', checked)}
-                />
-                <Separator/>
                 <PreferenceRow
                     checked={draft.lunch}
                     disabled={!draft.enabled || saving}

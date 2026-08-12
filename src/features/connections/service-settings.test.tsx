@@ -4,6 +4,8 @@ import {describe, expect, test, vi} from 'vitest';
 import type {DesktopSettings} from '@/api/desktop-settings';
 import {ServiceSettings} from './service-settings';
 
+const source = readFileSync(new URL('./service-settings.tsx', import.meta.url), 'utf8');
+
 const {api, environment, queryKeys} = vi.hoisted(() => ({
     api: {
         getDesktopSettings: vi.fn(),
@@ -44,6 +46,10 @@ describe('ServiceSettings', () => {
         }
         expect(markup).toContain('로그 폴더');
         expect(markup).toContain('설치 식별자의 일방향 해시');
+        expect(source).toContain('디버그 모드를 켤까요?');
+        expect(source).toContain('특별한 목적이 없다면 켜지 마세요.');
+        expect(source).toContain('네, 디버그 모드 켜기');
+        expect(source).toContain("if (checked) setConfirmDebugOn(true)");
         expect(markup).toContain('출석·식단 내용과 LMS 계정 정보는 전송하지 않습니다.');
         expect(markup).toContain('개발자 도구나 외부 명령 실행 권한은 열지 않습니다.');
     });
@@ -59,3 +65,4 @@ describe('ServiceSettings', () => {
         }
     });
 });
+import {readFileSync} from 'node:fs';

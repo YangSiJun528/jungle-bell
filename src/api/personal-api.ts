@@ -1,10 +1,6 @@
 import {z, type ZodType} from 'zod';
 import {
     attendancePreferencesV2Schema,
-    laundryQueueEntrySchema,
-    laundryQueueIdSchema,
-    laundryQueueInputSchema,
-    laundryQueueListSchema,
     laundryWatchIdSchema,
     laundryWatchInputSchema,
     laundryWatchListSchema,
@@ -13,8 +9,6 @@ import {
     mealPreferencesSchema,
     type AttendancePreferencesV2,
     type LaundryApplianceKind,
-    type LaundryQueueEntry,
-    type LaundryQueueInput,
     type LaundryWatch,
     type LaundryWatchInput,
     type MealPreferences,
@@ -26,8 +20,6 @@ export type AttendancePreferences = AttendancePreferencesV2;
 
 export type {
     LaundryApplianceKind,
-    LaundryQueueEntry,
-    LaundryQueueInput,
     LaundryWatch,
     LaundryWatchInput,
     MealPreferences,
@@ -47,9 +39,6 @@ export interface DashboardPersonalApi {
     listLaundryWatches(surface: PersonalSurface): Promise<LaundryWatch[]>;
     createLaundryWatch(surface: PersonalSurface, input: LaundryWatchInput): Promise<LaundryWatch>;
     deleteLaundryWatch(surface: PersonalSurface, id: string): Promise<void>;
-    listLaundryQueue(surface: PersonalSurface): Promise<LaundryQueueEntry[]>;
-    joinLaundryQueue(surface: PersonalSurface, input: LaundryQueueInput): Promise<LaundryQueueEntry>;
-    leaveLaundryQueue(surface: PersonalSurface, id: string): Promise<void>;
 }
 
 const errorResponseSchema = z.looseObject({
@@ -145,28 +134,6 @@ export function createDashboardPersonalApi(options: {
             const watchId = parseInput(laundryWatchIdSchema, id);
             await noContent(
                 () => request(surface, 'DELETE', `/laundry-watches/${encodeURIComponent(watchId)}`),
-            );
-        },
-        async listLaundryQueue(surface) {
-            const result = await value(
-                surface,
-                laundryQueueListSchema,
-                () => request(surface, 'GET', '/laundry-queue'),
-            );
-            return result.entries;
-        },
-        async joinLaundryQueue(surface, input) {
-            const body = parseInput(laundryQueueInputSchema, input);
-            return value(
-                surface,
-                laundryQueueEntrySchema,
-                () => request(surface, 'POST', '/laundry-queue', body),
-            );
-        },
-        async leaveLaundryQueue(surface, id) {
-            const entryId = parseInput(laundryQueueIdSchema, id);
-            await noContent(
-                () => request(surface, 'DELETE', `/laundry-queue/${encodeURIComponent(entryId)}`),
             );
         },
     };

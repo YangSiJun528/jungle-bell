@@ -69,7 +69,7 @@ function mealNotification(
   event: MealPublicationEvent,
   nowEpochMs: number,
 ): NotificationRecord {
-  const label = { breakfast: "조식", lunch: "중식", dinner: "석식" }[event.meal];
+  const label = { lunch: "중식", dinner: "석식" }[event.meal];
   const title = `오늘 ${label}이 올라왔어요`;
   const id = crypto.randomUUID();
   const path = "/dashboard.html#meals";
@@ -102,7 +102,6 @@ function mealNotification(
 
 function mealPeriod(title: string | null): MealPeriod | null {
   const value = title ?? "";
-  if (/(조식|아침)/u.test(value)) return "breakfast";
   if (/(중식|점심)/u.test(value)) return "lunch";
   if (/(석식|저녁)/u.test(value)) return "dinner";
   return null;

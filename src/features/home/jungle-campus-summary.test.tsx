@@ -17,6 +17,8 @@ describe('JungleCampusSummary', () => {
         expect(source).toContain('AttendanceChecks');
         expect(source).toContain('homeAttendanceForToday(attendance.data)');
         expect(source).toContain('useRefreshAttendanceMutation()');
+        expect(source).toContain('useDashboardAccount()');
+        expect(source).toContain("account.status.lmsAuthentication === 'required'");
         expect(source).toContain('refreshAttendance.mutate()');
         expect(source).toContain('오늘 출석 상태를 다시 확인해야 합니다.');
         expect(source).toContain('href="#attendance"');

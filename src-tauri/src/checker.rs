@@ -310,6 +310,9 @@ pub(crate) fn build_webview(app: &tauri::AppHandle) -> tauri::Result<tauri::Webv
                 let _ = window.set_skip_taskbar(true);
                 let _ = window.hide();
                 crate::tray::sync_foreground_app_visibility(&app_handle);
+                if !refresh_webview(&app_handle, "LMS window closed") {
+                    log::warn!("[checker] LMS session recheck failed after window close");
+                }
             }
         }
         tauri::WindowEvent::ThemeChanged(theme) => {

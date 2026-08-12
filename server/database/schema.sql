@@ -2,8 +2,6 @@
 DROP TABLE IF EXISTS notification_delivery;
 DROP TABLE IF EXISTS push_subscription;
 DROP TABLE IF EXISTS notification;
-DROP TABLE IF EXISTS laundry_queue_claim;
-DROP TABLE IF EXISTS laundry_queue_entry;
 DROP TABLE IF EXISTS laundry_watch;
 DROP TABLE IF EXISTS meal_preference;
 DROP TABLE IF EXISTS attendance_preference;
@@ -294,7 +292,6 @@ CREATE INDEX attendance_preference_evening_subscriber
 CREATE TABLE meal_preference (
   user_id TEXT PRIMARY KEY,
   enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
-  breakfast INTEGER NOT NULL CHECK (breakfast IN (0, 1)),
   lunch INTEGER NOT NULL CHECK (lunch IN (0, 1)),
   dinner INTEGER NOT NULL CHECK (dinner IN (0, 1)),
   updated_at_epoch_ms INTEGER NOT NULL,
@@ -321,36 +318,6 @@ CREATE INDEX laundry_watch_active_target ON laundry_watch (machine_id, appliance
 CREATE UNIQUE INDEX laundry_watch_active_dedupe ON laundry_watch
   (user_id, machine_id, appliance, ifnull(session_id, ''), notify_when_available)
   WHERE status = 'active';
-
-CREATE TABLE laundry_queue_entry (
-  id TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL,
-  machine_id TEXT CHECK (machine_id IS NULL OR length(machine_id) BETWEEN 1 AND 128),
-  appliance TEXT NOT NULL CHECK (appliance IN ('washer', 'dryer')),
-  status TEXT NOT NULL CHECK (status IN ('waiting', 'claimed', 'cancelled', 'expired')),
-  joined_at_epoch_ms INTEGER NOT NULL,
-  left_at_epoch_ms INTEGER,
-  CHECK ((status = 'waiting' AND left_at_epoch_ms IS NULL) OR (status <> 'waiting' AND left_at_epoch_ms IS NOT NULL)),
-  FOREIGN KEY (user_id) REFERENCES app_user(id) ON DELETE CASCADE
-);
-
-CREATE INDEX laundry_queue_order ON laundry_queue_entry
-  (appliance, machine_id, status, joined_at_epoch_ms, id);
-CREATE UNIQUE INDEX laundry_queue_one_waiting_per_user ON laundry_queue_entry
-  (user_id, appliance, ifnull(machine_id, '')) WHERE status = 'waiting';
-
-CREATE TABLE laundry_queue_claim (
-  queue_entry_id TEXT PRIMARY KEY,
-  machine_id TEXT NOT NULL CHECK (length(machine_id) BETWEEN 1 AND 128),
-  appliance TEXT NOT NULL CHECK (appliance IN ('washer', 'dryer')),
-  claim_token TEXT NOT NULL UNIQUE,
-  claimed_at_epoch_ms INTEGER NOT NULL,
-  expires_at_epoch_ms INTEGER NOT NULL CHECK (expires_at_epoch_ms > claimed_at_epoch_ms),
-  FOREIGN KEY (queue_entry_id) REFERENCES laundry_queue_entry(id) ON DELETE CASCADE
-);
-
-CREATE INDEX laundry_queue_claim_active ON laundry_queue_claim
-  (machine_id, appliance, expires_at_epoch_ms, queue_entry_id);
 
 CREATE TABLE notification (
   id TEXT PRIMARY KEY,

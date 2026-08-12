@@ -31,5 +31,6 @@ function authenticationFailure(error: unknown): boolean {
         'CONNECTED_SERVICE_RESPONSE_INVALID',
         'CONNECTED_SERVICE_REQUEST_REJECTED',
         'CONNECTED_SERVICE_CREDENTIAL_STORAGE_FAILED',
+        'LMS_AUTH_REQUIRED',
     ].includes(error.message);
 }

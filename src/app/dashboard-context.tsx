@@ -21,7 +21,6 @@ export const queryKeys = {
     attendancePreferences: ['personal', 'attendance-preferences'] as const,
     mealPreferences: ['personal', 'meal-preferences'] as const,
     laundryWatches: ['personal', 'laundry-watches'] as const,
-    laundryQueue: ['personal', 'laundry-queue'] as const,
     mobileSessions: ['mobile-sessions'] as const,
 };
 

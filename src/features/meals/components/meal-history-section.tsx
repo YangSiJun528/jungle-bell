@@ -104,6 +104,7 @@ export function MealHistorySection({meals}: {meals: DashboardMealsSnapshot}) {
                         {activeWeeklyMenu ? (
                             <WeeklyMealMenu
                                 meal={activeWeeklyMenu.post}
+                                showSourceLink={false}
                                 weekKey={activeWeeklyMenu.weekKey}
                             />
                         ) : (

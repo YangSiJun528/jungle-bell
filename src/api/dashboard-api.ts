@@ -28,8 +28,6 @@ import {createNativeBridge, type NativeBridge} from './native-bridge';
 export type {
     AttendancePreferences,
     LaundryApplianceKind,
-    LaundryQueueEntry,
-    LaundryQueueInput,
     LaundryWatch,
     LaundryWatchInput,
     MealPreferences,
@@ -184,6 +182,7 @@ export type AttendanceDashboard =
 
 export interface DesktopConnectionState {
     state: 'disconnected' | 'unknown' | 'connected' | 'reset-required';
+    credentialPersistent: boolean;
     lastVerifiedAt: string | null;
     lastSeenAt: string | null;
     health: 'unknown' | 'online' | 'offline' | null;
@@ -1217,11 +1216,12 @@ function parseDesktopConnection(value: unknown): DesktopConnectionState {
     if (lmsSessionState !== 'unknown' && lmsSessionState !== 'connected' && lmsSessionState !== 'login-required') {
         throw new Error('API_RESPONSE_INVALID');
     }
-    boolean(source.credentialPersistent);
+    const credentialPersistent = boolean(source.credentialPersistent);
     nullableText(source.lastError, 128);
     const lastContact = nullableIso(source.lastServerContact);
     return {
         state: identityResetRequired ? 'reset-required' : authenticated ? 'connected' : 'disconnected',
+        credentialPersistent,
         lastVerifiedAt: lastContact,
         lastSeenAt: lastContact,
         health: authenticated ? (source.lastError === null ? 'online' : 'unknown') : null,

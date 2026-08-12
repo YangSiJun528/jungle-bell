@@ -9,6 +9,7 @@ const html = source('./dashboard.html');
 const main = source('./app/main.tsx');
 const app = source('./app/dashboard-app.tsx');
 const context = source('./app/dashboard-context.tsx');
+const personalAccountGate = source('./app/personal-account-gate.tsx');
 const providers = source('./app/dashboard-providers.tsx');
 const queries = source('./app/use-dashboard-queries.ts');
 const campusQueryOptions = source('./app/campus-query-options.ts');
@@ -137,13 +138,13 @@ test('세탁 화면은 기존 워시타워 상태표를 유지하고 개인 기�
     assert.doesNotMatch(laundry, /as PersonalSurface/);
 
     assert.match(personalLaundry, /api\.listLaundryWatches\(surface\)/);
-    assert.match(personalLaundry, /api\.listLaundryQueue\(surface\)/);
     assert.match(personalLaundry, /api\.createLaundryWatch\(surface,/);
     assert.match(personalLaundry, /api\.deleteLaundryWatch\(surface, id\)/);
-    assert.match(personalLaundry, /api\.joinLaundryQueue\([\s\S]*surface,[\s\S]*\{machineId: null, appliance\}/);
-    assert.match(personalLaundry, /api\.leaveLaundryQueue\(surface, id\)/);
     assert.doesNotMatch(personalLaundry, /as PersonalSurface/);
-    assert.match(personalLaundry, /기기 예약이 아닌 사용자 간 순서 안내 기능/);
+    assert.match(personalLaundry, /enabled: attendanceReady/);
+    assert.match(personalLaundry, /<PersonalAccountGate>/);
+    assert.match(personalAccountGate, /LMS 로그인이 필요합니다/);
+    assert.match(personalAccountGate, /계정 연결이 필요합니다/);
 });
 
 test('설정 알림 탭은 연결된 기기의 출석·급식 설정을 함께 제공한다', () => {
@@ -165,7 +166,7 @@ test('설정 알림 탭은 연결된 기기의 출석·급식 설정을 함께 �
 
     assert.match(mealPreferences, /api\.getMealPreferences\(surface\)/);
     assert.match(mealPreferences, /api\.updateMealPreferences\(surface,/);
-    for (const label of ['급식 알림 설정', '조식', '중식', '석식']) {
+    for (const label of ['급식 알림 설정', '중식', '석식']) {
         assert.match(mealPreferences, new RegExp(label));
     }
 

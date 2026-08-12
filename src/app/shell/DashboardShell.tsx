@@ -23,6 +23,7 @@ import {
     SidebarHeader,
     SidebarInset,
     SidebarMenu,
+    SidebarMenuBadge,
     SidebarMenuButton,
     SidebarMenuItem,
     SidebarProvider,
@@ -52,6 +53,7 @@ export interface DashboardShellProps {
     activeRoute: DashboardRoute;
     navigate: (route: DashboardRoute) => void;
     unreadCount: number;
+    accountNotice?: ReactNode;
     notificationPanel?: {
         open: boolean;
         onOpenChange: (open: boolean) => void;
@@ -126,6 +128,7 @@ function SidebarNotificationItem({
     const hasUnread = unread > 0;
     const Icon = hasUnread ? BellRing : Bell;
     const label = hasUnread ? `알림, 읽지 않은 알림 ${unread}개` : '알림';
+    const badgeLabel = String(unread);
 
     return (
         <SidebarMenuItem>
@@ -145,6 +148,7 @@ function SidebarNotificationItem({
                     }}
                     className={cn(
                         'h-10 gap-3 rounded-lg px-3',
+                        hasUnread ? 'pr-10' : undefined,
                         hasUnread && !open ? 'text-primary hover:text-primary' : 'text-sidebar-foreground/70',
                     )}
                 >
@@ -152,6 +156,14 @@ function SidebarNotificationItem({
                     <span>알림</span>
                 </SidebarMenuButton>
             </SheetTrigger>
+            {hasUnread ? (
+                <SidebarMenuBadge
+                    aria-hidden="true"
+                    className="top-1/2! -translate-y-1/2! rounded-full bg-primary text-primary-foreground peer-hover/menu-button:text-primary-foreground peer-data-[active=true]/menu-button:text-primary-foreground"
+                >
+                    {badgeLabel}
+                </SidebarMenuBadge>
+            ) : null}
         </SidebarMenuItem>
     );
 }
@@ -196,7 +208,12 @@ function Brand({navigate}: Pick<DashboardShellProps, 'navigate'>) {
     return (
         <SidebarMenu>
             <SidebarMenuItem>
-                <SidebarMenuButton asChild size="lg" tooltip="Jungle Bell 홈" className="p-0!">
+                <SidebarMenuButton
+                    asChild
+                    className="p-0! hover:bg-transparent! active:bg-transparent! data-[active=true]:bg-transparent!"
+                    size="lg"
+                    tooltip="Jungle Bell 홈"
+                >
                     <a
                         href={dashboardRouteHref('home')}
                         aria-label="Jungle Bell 홈"
@@ -329,6 +346,7 @@ export function DashboardShell({
     activeRoute,
     navigate,
     unreadCount,
+    accountNotice,
     notificationPanel,
     children,
 }: DashboardShellProps) {
@@ -437,6 +455,7 @@ export function DashboardShell({
                     notificationAriaLabel={notificationAriaLabel}
                 />
                 <div className="mx-auto w-full max-w-6xl p-3 sm:p-4 md:p-5 lg:p-6">
+                    {accountNotice}
                     {children}
                 </div>
                 <DashboardFooter/>

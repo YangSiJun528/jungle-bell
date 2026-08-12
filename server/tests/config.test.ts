@@ -152,7 +152,6 @@ describe("test Worker resource isolation", () => {
     expect(schema).toContain("activated_at_epoch_ms INTEGER");
     expect(schema).toContain("CREATE TABLE meal_preference");
     expect(schema).toContain("CREATE TABLE laundry_watch");
-    expect(schema).toContain("CREATE TABLE laundry_queue_entry");
     expect(schema).toContain("CREATE TABLE laundry_lifecycle_processing");
     expect(schema).not.toMatch(/lms_subject|access_token|refresh_token|CREATE TABLE push_delivery|source_version/u);
   });

@@ -5,6 +5,7 @@ import {desktopConnectionUiState} from './desktop-connection-state';
 
 const connection = (state: DesktopConnectionState['state']): DesktopConnectionState => ({
     state,
+    credentialPersistent: state === 'connected',
     lastVerifiedAt: null,
     lastSeenAt: null,
     health: state === 'connected' ? 'online' : null,
@@ -50,5 +51,8 @@ describe('desktop connection state UI', () => {
         expect(source).toMatch(/api\.resetDesktopIdentity\(\)/u);
         expect(source).toMatch(/invalidateQueries\(\{queryKey: queryKeys\.desktopConnection\}\)/u);
         expect(source).toContain('PC 연결 정보 복구');
+        expect(source).toContain('서버 인증 정보');
+        expect(source).toContain('LMS 계정');
+        expect(source).toContain('useDashboardAccount()');
     });
 });

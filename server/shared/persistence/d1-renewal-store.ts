@@ -2,7 +2,7 @@ import type {
   AppSessionRecord, AttendancePreferenceRecord, AttendanceSnapshotRecord, DesktopRecord,
   DesktopUiSessionRecord,
   LegacyAttendancePreferenceRecord,
-  LaundryAppliance, LaundryAvailabilityTargetRecord, LaundryQueueEntryRecord, LaundryWatchRecord,
+  LaundryAppliance, LaundryAvailabilityTargetRecord, LaundryWatchRecord,
   LmsSessionState, MealPeriod, MealPreferenceRecord, MealPublicationRecord, NotificationRecord,
   PairingRecord, PushDeliveryRecord, PushDeliveryResult, PushSubscriptionRecord, RenewalStore,
 } from "../ports/account-storage";
@@ -199,18 +199,6 @@ export class D1RenewalStore implements RenewalStore {
     return this.personal.cancelWatch(userId, id, now);
   }
 
-  async enqueueLaundry(value: Omit<LaundryQueueEntryRecord, "position">): Promise<LaundryQueueEntryRecord | null> {
-    return this.personal.enqueue(value);
-  }
-
-  async listLaundryQueue(userId: string, now: number): Promise<LaundryQueueEntryRecord[]> {
-    return this.personal.listQueue(userId, now);
-  }
-
-  async cancelLaundryQueueEntry(userId: string, id: string, now: number): Promise<boolean> {
-    return this.personal.cancelQueueEntry(userId, id, now);
-  }
-
   async listPendingLaundryEvents(limit: number): Promise<LaundryEvent[]> {
     return this.personal.listPendingEvents(limit);
   }
@@ -221,30 +209,15 @@ export class D1RenewalStore implements RenewalStore {
     return this.personal.listActiveWatches(input);
   }
 
-  async findWaitingLaundryQueueHead(input: {
-    machineId: string; appliance: LaundryAppliance; nowEpochMs: number;
-  }): Promise<LaundryQueueEntryRecord | null> {
-    return this.personal.findWaitingQueueHead(input);
-  }
-
   async listLaundryAvailabilityTargets(input: {
     appliances: ReadonlyArray<{ machineId: string; appliance: LaundryAppliance; sessionId: string | null }>;
-    nowEpochMs: number;
   }): Promise<LaundryAvailabilityTargetRecord[]> {
     return this.personal.listAvailabilityTargets(input);
-  }
-
-  async expireLaundryQueueClaims(now: number): Promise<number> {
-    return this.personal.expireQueueClaims(now);
   }
 
   async applyLaundryLifecycleEvent(input: {
     eventId: string; processingToken: string; notifications: PlannedLaundryNotification[];
     completedWatchIds: string[];
-    queueClaim: {
-      entryId: string; userId: string; machineId: string; appliance: LaundryAppliance;
-      claimToken: string; expiresAtEpochMs: number;
-    } | null;
     nowEpochMs: number;
   }): Promise<boolean> {
     return this.personal.applyLifecycleEvent(input);

@@ -19,6 +19,7 @@ describe('query retry policy', () => {
         'CONNECTED_SERVICE_RESPONSE_INVALID',
         'CONNECTED_SERVICE_REQUEST_REJECTED',
         'CONNECTED_SERVICE_CREDENTIAL_STORAGE_FAILED',
+        'LMS_AUTH_REQUIRED',
     ])('does not retry terminal session error %s', async (code) => {
         const queryFn = vi.fn(async () => { throw new Error(code); });
         const client = createJungleBellQueryClient();

@@ -10,7 +10,11 @@ import {
 import type {DashboardMealPost} from '@/api/dashboard-api';
 import {weekRangeLabel} from '../lib/meal-view';
 
-export function WeeklyMealMenu({meal, weekKey}: {meal: DashboardMealPost; weekKey: string}) {
+export function WeeklyMealMenu({meal, weekKey, showSourceLink = true}: {
+    meal: DashboardMealPost;
+    weekKey: string;
+    showSourceLink?: boolean;
+}) {
     const images = meal.images ?? [];
     const title = meal.title ?? '이번 주 급식표';
     const range = weekRangeLabel(weekKey);
@@ -57,7 +61,7 @@ export function WeeklyMealMenu({meal, weekKey}: {meal: DashboardMealPost; weekKe
                             급식표 이미지와 텍스트 내용이 아직 등록되지 않았습니다.
                         </p>
                     ) : null}
-                    {meal.permalink ? (
+                    {showSourceLink && meal.permalink ? (
                         <Button asChild className="justify-self-start" variant="outline">
                             <a href={meal.permalink} rel="noreferrer" target="_blank">
                                 <ExternalLink/>

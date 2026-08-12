@@ -47,6 +47,7 @@ function DesktopServiceSettings() {
     const {api} = useDashboardEnvironment();
     const client = useQueryClient();
     const [confirmAutoUpdateOff, setConfirmAutoUpdateOff] = useState(false);
+    const [confirmDebugOn, setConfirmDebugOn] = useState(false);
     const settings = useQuery({
         queryKey: queryKeys.desktopSettings,
         queryFn: () => api.getDesktopSettings(),
@@ -129,7 +130,10 @@ function DesktopServiceSettings() {
                         description="상세 진단 로그를 기록합니다. 개발자 도구나 외부 명령 실행 권한은 열지 않습니다."
                         checked={value.debugMode}
                         disabled={save.isPending}
-                        onCheckedChange={(checked) => update('debugMode', checked)}
+                        onCheckedChange={(checked) => {
+                            if (checked) setConfirmDebugOn(true);
+                            else update('debugMode', false);
+                        }}
                     />
                     <Separator/>
                     <div className="flex items-center justify-between gap-4 py-4">
@@ -164,6 +168,23 @@ function DesktopServiceSettings() {
                     <AlertDialogFooter>
                         <AlertDialogCancel>취소</AlertDialogCancel>
                         <AlertDialogAction onClick={() => update('autoUpdate', false)}>그래도 끄기</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            <AlertDialog open={confirmDebugOn} onOpenChange={setConfirmDebugOn}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>디버그 모드를 켤까요?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            평소보다 많은 진단 로그가 저장됩니다. 문제 분석 같은 특별한 목적이 없다면 켜지 마세요.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>아니요</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => update('debugMode', true)}>
+                            네, 디버그 모드 켜기
+                        </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>

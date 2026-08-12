@@ -1021,7 +1021,7 @@ describe("renewal API", () => {
       lmsSessionState: "connected", appVersion: "0.5.0",
     });
     store.mealPreferences.set("user-1", {
-      enabled: true, breakfast: false, lunch: true, dinner: false, updatedAtEpochMs: NOW - 60_000,
+      enabled: true, lunch: true, dinner: false, updatedAtEpochMs: NOW - 60_000,
     });
     store.mealPosts.set("meal-post", {
       id: "meal-post", contentSha: "f".repeat(64), title: "2026년 8월 3일 중식",
