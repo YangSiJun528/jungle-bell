@@ -1,0 +1,23 @@
+{
+  "name": "@jungle-bell/jobs-runner",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsup --config tsup.config.ts",
+    "start": "node ../../dist/jobs/jobs.js run"
+  },
+  "dependencies": {
+    "@jungle-bell/backend-common": "0.1.0",
+    "@logtape/logtape": "^2.0.11",
+    "commander": "^15.0.0",
+    "ky": "^2.0.2",
+    "web-push": "^3.6.7",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/web-push": "^3.6.4",
+    "tsup": "^8.5.1"
+  }
+}

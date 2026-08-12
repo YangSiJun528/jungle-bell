@@ -1,0 +1,33 @@
+import { describe, expect, it, vi } from "vitest";
+import { hashAppSessionToken, normalizeManualPairingCode, randomManualPairingCode, sha256Hex } from "../renewal/crypto";
+import { attendanceReminderWindowAt } from "../renewal/attendance-policy";
+
+describe("renewal security primitives", () => {
+  it("domain-separates desktop and mobile credential hashes", async () => {
+    const suffix = "a".repeat(64);
+    expect(await hashAppSessionToken(`jbd_${suffix}`)).not.toBe(await sha256Hex(`jbd_${suffix}`));
+    expect(await hashAppSessionToken(`jbd_${suffix}`)).not.toBe(await hashAppSessionToken(`jbs_${suffix}`));
+  });
+
+  it("creates and normalizes an exact ten-character Crockford code", () => {
+    const code = randomManualPairingCode();
+    expect(code).toMatch(/^[0-9A-HJKMNP-TV-Z]{10}$/);
+    expect(normalizeManualPairingCode("0o1i-l abcde")).toBe("00111ABCDE");
+    expect(normalizeManualPairingCode("too-short")).toBeNull();
+  });
+});
+
+describe("attendance reminder windows", () => {
+  it.each([
+    ["2026-08-03T00:50:00.000Z", "2026-08-03", "morning", "before-10"],
+    ["2026-08-03T01:00:00.000Z", "2026-08-03", "morning", "deadline"],
+    ["2026-08-03T18:50:00.000Z", "2026-08-03", "evening", "before-10"],
+    ["2026-08-03T19:00:00.000Z", "2026-08-03", "evening", "deadline"],
+  ])("maps %s into a deduplicated KST attendance slot", (time, attendanceDate, phase, slot) => {
+    expect(attendanceReminderWindowAt(Date.parse(time))).toMatchObject({ attendanceDate, phase, slot });
+  });
+
+  it("does not plan outside a ten-minute reminder window", () => {
+    expect(attendanceReminderWindowAt(Date.parse("2026-08-03T00:49:59.000Z"))).toBeNull();
+  });
+});

@@ -93,6 +93,14 @@ Private key는 OCI secret 파일에만 저장하며 Worker secret, D1, R2, 저�
 
 Secret 디렉터리는 `0700`, 각 파일은 `0600`으로 관리합니다. `.env.oci`와 `.env.oci-v2-test`에는 secret 원문을 넣지 않습니다.
 
-Wrangler 로컬 개발은 `server/.dev.vars.example`을 `.dev.vars`로 복사해 `PAIRING_SECRET`, `VAPID_PUBLIC_KEY`, `JOBS_D1_GATEWAY_SECRET`을 설정합니다. `.dev.vars`는 Git, OCI rsync, Docker build context에서 제외합니다. 실제 secret 값은 명령 인자, 테스트 fixture, 로그에 기록하지 않습니다.
+Wrangler 로컬 개발은 `server/apps/api-worker/deploy/.dev.vars.example`을 같은
+디렉터리의 `.dev.vars`로 복사해 `PAIRING_SECRET`, `VAPID_PUBLIC_KEY`,
+`JOBS_D1_GATEWAY_SECRET`을 설정합니다. `.dev.vars`는 Git, OCI rsync, Docker build
+context에서 제외합니다. 실제 secret 값은 명령 인자, 테스트 fixture, 로그에 기록하지
+않습니다.
+
+구조 변경 전 `server/.dev.vars`가 있으면
+`server/apps/api-worker/deploy/.dev.vars`로 권한을 유지해 복사합니다. 새 경로에서
+로컬 Worker가 정상 기동하는 것을 확인하기 전에는 기존 파일을 삭제하지 않습니다.
 
 API Worker는 LMS ID, access token, refresh token, cookie를 입력으로 받거나 저장하지 않습니다.

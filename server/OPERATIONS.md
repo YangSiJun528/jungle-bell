@@ -38,17 +38,17 @@ npm --prefix .. run verify:server
 
 다음 조건을 확인합니다.
 
-- `wrangler.api.jsonc`의 D1 ID가 영(0) UUID나 기존 `jungle-bell-data` ID가 아님
+- `apps/api-worker/deploy/wrangler.api.jsonc`의 D1 ID가 영(0) UUID나 기존 `jungle-bell-data` ID가 아님
 - production/test App Worker의 `DB`·`DATA_BUCKET` binding이 서로 격리됨
 - OCI Jobs의 gateway URL과 R2 bucket이 대상 환경의 고정값과 일치함
 - App Worker와 OCI Jobs의 `JOBS_D1_GATEWAY_SECRET` 값이 같고 32자 이상임
 - App Worker와 OCI Jobs의 VAPID public key가 같음
 - OCI Jobs에만 VAPID private key가 있음
-- `schema.sql`을 기존 또는 사용 중인 D1에 실행하지 않음
+- `database/schema.sql`을 기존 또는 사용 중인 D1에 실행하지 않음
 - Cloudflare edge에서 mutating `/api/*`, 특히 desktop 등록과 페어링 경로의 rate
   rule이 활성화되어 있고 경보·로그를 확인할 수 있음
 
-`schema.sql`은 모든 앱 테이블을 다시 만드는 신규 D1 전용 bootstrap입니다. 작은
+`database/schema.sql`은 모든 앱 테이블을 다시 만드는 신규 D1 전용 bootstrap입니다. 작은
 운영 변경은 별도로 검토한 비파괴 SQL을 먼저 준비합니다.
 
 ### Edge abuse control
@@ -69,13 +69,13 @@ Edge 임계치는 코드의 정상 NAT 계약인 desktop 등록 IP당 240회/10�
 App Worker secret을 config를 명시해 설정합니다.
 
 ```bash
-npx wrangler secret put PAIRING_SECRET --config wrangler.api.jsonc
-npx wrangler secret put VAPID_PUBLIC_KEY --config wrangler.api.jsonc
-npx wrangler secret put JOBS_D1_GATEWAY_SECRET --config wrangler.api.jsonc
+npx wrangler secret put PAIRING_SECRET --config apps/api-worker/deploy/wrangler.api.jsonc
+npx wrangler secret put VAPID_PUBLIC_KEY --config apps/api-worker/deploy/wrangler.api.jsonc
+npx wrangler secret put JOBS_D1_GATEWAY_SECRET --config apps/api-worker/deploy/wrangler.api.jsonc
 npm run deploy:api
 ```
 
-v2-test에는 별도 값으로 같은 세 secret을 `wrangler.api-test.jsonc`에 설정하고
+v2-test에는 별도 값으로 같은 세 secret을 `apps/api-worker/deploy/wrangler.api-test.jsonc`에 설정하고
 `npm run deploy:api:test`를 사용합니다. Production secret을 복사하지 않습니다.
 
 배포 스크립트의 predeploy 단계는 production/test에 맞는
@@ -84,7 +84,7 @@ v2-test에는 별도 값으로 같은 세 secret을 `wrangler.api-test.jsonc`에
 RSS도 대상 Worker origin을 사용합니다. 별도 블로그 Worker를 배포하지 않습니다.
 
 ```bash
-npx wrangler deployments list --config wrangler.api.jsonc
+npx wrangler deployments list --config apps/api-worker/deploy/wrangler.api.jsonc
 curl --fail --silent --show-error \
   https://jungle-bell-api.yangsijun5528.workers.dev/api/public/status
 curl --fail --silent --show-error \
@@ -104,7 +104,19 @@ OCI 경로는 다음을 기준으로 합니다.
 
 - 소스: `/home/ubuntu/jungle-bell/server`
 - production secrets: `/home/ubuntu/.config/jungle-bell-jobs`
-- production 환경: `/home/ubuntu/jungle-bell/server/.env.oci`
+- production 환경: `/home/ubuntu/jungle-bell/server/apps/jobs-runner/deploy/.env.oci`
+
+구조 변경 전 루트 환경 파일이 남아 있는 기존 호스트는 최초 1회 새 위치로 복사합니다.
+새 Compose 설정과 컨테이너를 검증하기 전에는 기존 파일을 삭제하지 않습니다.
+
+```bash
+cd /home/ubuntu/jungle-bell/server
+install -d -m 700 apps/jobs-runner/deploy
+test ! -f .env.oci || test -f apps/jobs-runner/deploy/.env.oci || \
+  install -m 600 .env.oci apps/jobs-runner/deploy/.env.oci
+test ! -f .env.oci-v2-test || test -f apps/jobs-runner/deploy/.env.oci-v2-test || \
+  install -m 600 .env.oci-v2-test apps/jobs-runner/deploy/.env.oci-v2-test
+```
 
 신규 v2 D1/R2 binding과 runtime secret을 먼저 준비합니다.
 
@@ -137,8 +149,9 @@ Secret 원문은 환경 파일에 넣지 않습니다.
 
 ```bash
 cd /home/ubuntu/jungle-bell/server
-cp .env.oci.example .env.oci
-chmod 600 .env.oci
+test -f apps/jobs-runner/deploy/.env.oci || \
+  cp apps/jobs-runner/deploy/.env.oci.example apps/jobs-runner/deploy/.env.oci
+chmod 600 apps/jobs-runner/deploy/.env.oci
 ```
 
 ## OCI Jobs 배포
@@ -152,6 +165,8 @@ COPYFILE_DISABLE=1 rsync -az --delete \
   --exclude '.dev.vars' \
   --exclude '.env.oci' \
   --exclude '.env.oci-v2-test' \
+  --exclude 'apps/jobs-runner/deploy/.env.oci' \
+  --exclude 'apps/jobs-runner/deploy/.env.oci-v2-test' \
   --exclude '.wrangler/' \
   --exclude 'data/' \
   --exclude 'dist/' \
@@ -160,9 +175,9 @@ COPYFILE_DISABLE=1 rsync -az --delete \
   ./ ubuntu@oci-server:/home/ubuntu/jungle-bell/server/
 ```
 
-`server/.dockerignore`는 `.dev.vars`, `.env`, `.env.*`를 build context에서 제외하고
-비밀값이 없는 `.env.oci.example`만 template 예외로 둡니다. 실제 Wrangler secret
-파일을 OCI로 전송하거나 Docker image layer에 포함하지 않습니다.
+`server/.dockerignore`는 `.dev.vars`, `.env`, `.env.*`를 build context에서 모두
+제외합니다. 환경 예시는 배포 설정용이며 Dockerfile이 복사하지 않습니다. 실제
+Wrangler secret 파일을 OCI로 전송하거나 Docker image layer에 포함하지 않습니다.
 
 현재 이미지를 보존한 뒤 Jobs service만 교체합니다.
 
@@ -173,10 +188,14 @@ ssh -i ~/.ssh/oci_a1_flex ubuntu@oci-server '
   docker image inspect jungle-bell-jobs:latest >/dev/null 2>&1 \
     && docker tag jungle-bell-jobs:latest jungle-bell-jobs:rollback \
     || true
-  docker compose --env-file .env.oci -f docker-compose.oci.yml config --quiet
-  docker compose --env-file .env.oci -f docker-compose.oci.yml build jobs
-  docker compose --env-file .env.oci -f docker-compose.oci.yml up -d jobs
-  docker compose --env-file .env.oci -f docker-compose.oci.yml ps jobs
+  docker compose --env-file apps/jobs-runner/deploy/.env.oci \
+    -f apps/jobs-runner/deploy/docker-compose.oci.yml config --quiet
+  docker compose --env-file apps/jobs-runner/deploy/.env.oci \
+    -f apps/jobs-runner/deploy/docker-compose.oci.yml build jobs
+  docker compose --env-file apps/jobs-runner/deploy/.env.oci \
+    -f apps/jobs-runner/deploy/docker-compose.oci.yml up -d jobs
+  docker compose --env-file apps/jobs-runner/deploy/.env.oci \
+    -f apps/jobs-runner/deploy/docker-compose.oci.yml ps jobs
 '
 ```
 
@@ -205,33 +224,35 @@ curl --fail --silent --show-error \
 
 ## v2-test 병렬 실행
 
-테스트는 `docker-compose.oci-v2-test.yml`과 `.env.oci-v2-test`만 사용합니다. Runtime
+테스트는 `apps/jobs-runner/deploy/docker-compose.oci-v2-test.yml`과
+`apps/jobs-runner/deploy/.env.oci-v2-test`만 사용합니다. Runtime
 검증은 gateway를
 `https://jungle-bell-api-test.yangsijun5528.workers.dev/internal/jobs/d1`로 고정하고
 같은 test Worker의 `DATA_BUCKET` binding만 사용합니다. 별도 image/container와 secret 디렉터리를
 사용하며 production secret을 복사하거나 mount하지 않습니다.
 
 ```bash
-cp .env.oci-v2-test.example .env.oci-v2-test
-chmod 600 .env.oci-v2-test
+test -f apps/jobs-runner/deploy/.env.oci-v2-test || \
+  cp apps/jobs-runner/deploy/.env.oci-v2-test.example apps/jobs-runner/deploy/.env.oci-v2-test
+chmod 600 apps/jobs-runner/deploy/.env.oci-v2-test
 
 docker compose --project-name jungle-bell-v2-test \
-  --env-file .env.oci-v2-test \
-  -f docker-compose.oci-v2-test.yml config --quiet
+  --env-file apps/jobs-runner/deploy/.env.oci-v2-test \
+  -f apps/jobs-runner/deploy/docker-compose.oci-v2-test.yml config --quiet
 docker compose --project-name jungle-bell-v2-test \
-  --env-file .env.oci-v2-test \
-  -f docker-compose.oci-v2-test.yml build jobs-v2-test
+  --env-file apps/jobs-runner/deploy/.env.oci-v2-test \
+  -f apps/jobs-runner/deploy/docker-compose.oci-v2-test.yml build jobs-v2-test
 docker compose --project-name jungle-bell-v2-test \
-  --env-file .env.oci-v2-test \
-  -f docker-compose.oci-v2-test.yml up -d jobs-v2-test
+  --env-file apps/jobs-runner/deploy/.env.oci-v2-test \
+  -f apps/jobs-runner/deploy/docker-compose.oci-v2-test.yml up -d jobs-v2-test
 ```
 
 중지할 때도 project와 service를 명시합니다.
 
 ```bash
 docker compose --project-name jungle-bell-v2-test \
-  --env-file .env.oci-v2-test \
-  -f docker-compose.oci-v2-test.yml stop jobs-v2-test
+  --env-file apps/jobs-runner/deploy/.env.oci-v2-test \
+  -f apps/jobs-runner/deploy/docker-compose.oci-v2-test.yml stop jobs-v2-test
 ```
 
 테스트 Worker의 2026-08-04 이전 deployment는 운영 D1/R2 binding을 포함합니다.
@@ -242,7 +263,7 @@ docker compose --project-name jungle-bell-v2-test \
 현재 HTTP-only App Worker 버전끼리는 Wrangler deployment 이력으로 롤백합니다.
 
 ```bash
-npx wrangler deployments list --config wrangler.api.jsonc
+npx wrangler deployments list --config apps/api-worker/deploy/wrangler.api.jsonc
 npx wrangler rollback <VERSION_ID> --name jungle-bell-api --yes
 ```
 
@@ -257,7 +278,8 @@ ssh -i ~/.ssh/oci_a1_flex ubuntu@oci-server '
   set -eu
   cd /home/ubuntu/jungle-bell/server
   docker tag jungle-bell-jobs:rollback jungle-bell-jobs:latest
-  docker compose --env-file .env.oci -f docker-compose.oci.yml \
+  docker compose --env-file apps/jobs-runner/deploy/.env.oci \
+    -f apps/jobs-runner/deploy/docker-compose.oci.yml \
     up -d --no-build --force-recreate jobs
 '
 ```

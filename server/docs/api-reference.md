@@ -198,7 +198,7 @@ R2에 보관된 식단 이미지를 반환합니다. 콘텐츠 SHA 주소이므�
 | `GET`, `POST`, `DELETE /api/{desktop\|mobile}/laundry-queue` | 역할별 인증 | 세탁 차례 알림 조회·추가·취소 |
 
 Rate limit의 단일 기준은
-[`DESKTOP_ENROLLMENT_POLICY`, `MANUAL_PAIRING_CLAIM_POLICY`, `PAIRING_CREATION_POLICY`](../src/domain/enrollment-policy.ts)입니다.
+[`DESKTOP_ENROLLMENT_POLICY`, `MANUAL_PAIRING_CLAIM_POLICY`, `PAIRING_CREATION_POLICY`](../shared/domain/enrollment-policy.ts)입니다.
 현재 고정 window 계약은 다음과 같습니다.
 
 - Desktop 등록은 IP당 10분에 240회이고, 같은 IP와 installation 조합은 10분에

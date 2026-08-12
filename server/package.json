@@ -3,40 +3,30 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "workspaces": [
+    "shared",
+    "apps/api-worker",
+    "apps/jobs-runner"
+  ],
   "scripts": {
-    "build": "tsup src/node/jobs.ts --format esm --platform node --target node22 --out-dir dist/jobs --clean",
+    "build": "npm run build --workspace @jungle-bell/jobs-runner",
     "check": "npm run typecheck && npm test",
-    "jobs:run": "node dist/jobs/jobs.js run",
-    "predev:api": "npm --prefix .. run build",
-    "dev:api": "wrangler dev --config wrangler.api.jsonc",
-    "predeploy:api": "cross-env JUNGLE_BELL_PUBLIC_ORIGIN=https://jungle-bell-api.yangsijun5528.workers.dev npm --prefix .. run build",
-    "deploy:api": "wrangler deploy --config wrangler.api.jsonc",
-    "predeploy:api:test": "cross-env JUNGLE_BELL_PUBLIC_ORIGIN=https://jungle-bell-api-test.yangsijun5528.workers.dev npm --prefix .. run build",
-    "deploy:api:test": "wrangler deploy --config wrangler.api-test.jsonc",
-    "db:reset:local": "wrangler d1 execute jungle-bell-v2 --local --file=schema.sql --config wrangler.api.jsonc",
+    "jobs:run": "npm run start --workspace @jungle-bell/jobs-runner",
+    "dev:api": "npm run dev --workspace @jungle-bell/api-worker",
+    "deploy:api": "npm run deploy --workspace @jungle-bell/api-worker",
+    "deploy:api:test": "npm run deploy:test --workspace @jungle-bell/api-worker",
+    "db:reset:local": "npm run db:reset:local --workspace @jungle-bell/api-worker",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@hono/zod-validator": "^0.9.0",
-    "@logtape/logtape": "^2.0.11",
-    "commander": "^15.0.0",
-    "hono": "^4.13.1",
-    "json-canonicalize": "^2.0.0",
-    "ky": "^2.0.2",
-    "web-push": "^3.6.7",
-    "zod": "^4.3.5"
+    "typecheck": "npm run typecheck:shared && npm run typecheck:api && npm run typecheck:jobs && npm run typecheck:tests",
+    "typecheck:shared": "tsc --noEmit -p tsconfig.shared.json",
+    "typecheck:api": "tsc --noEmit -p tsconfig.api-worker.json",
+    "typecheck:jobs": "tsc --noEmit -p tsconfig.jobs-runner.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.tests.json"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20260717.1",
-    "@types/node": "^24.10.1",
-    "@types/web-push": "^3.6.4",
-    "cross-env": "^10.1.0",
-    "tsup": "^8.5.1",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.10",
-    "wrangler": "^4.120.1"
+    "vitest": "^4.1.10"
   },
   "engines": {
     "node": ">=22.18.0"

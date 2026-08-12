@@ -55,15 +55,15 @@ jobs:
       - run: npm run verify:server
       - name: Bundle test App Worker
         working-directory: server
-        run: npx wrangler deploy --dry-run --config wrangler.api-test.jsonc --outdir /tmp/jungle-bell-app-worker
+        run: npx wrangler deploy --dry-run --config apps/api-worker/deploy/wrangler.api-test.jsonc --outdir /tmp/jungle-bell-app-worker
       - name: Validate production OCI Compose
         working-directory: server
-        run: docker compose --env-file .env.oci.example -f docker-compose.oci.yml config --quiet
+        run: docker compose --env-file apps/jobs-runner/deploy/.env.oci.example -f apps/jobs-runner/deploy/docker-compose.oci.yml config --quiet
       - name: Validate v2-test OCI Compose
         working-directory: server
-        run: docker compose --env-file .env.oci-v2-test.example -f docker-compose.oci-v2-test.yml config --quiet
+        run: docker compose --env-file apps/jobs-runner/deploy/.env.oci-v2-test.example -f apps/jobs-runner/deploy/docker-compose.oci-v2-test.yml config --quiet
       - name: Build OCI Jobs image
-        run: docker build --file server/docker/Dockerfile server
+        run: docker build --file server/apps/jobs-runner/deploy/Dockerfile server
 
   desktop:
     runs-on: ubuntu-24.04

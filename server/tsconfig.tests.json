@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "WebWorker", "DOM.Iterable"],
+    "types": ["@cloudflare/workers-types", "node", "vitest/globals"]
+  },
+  "include": [
+    "apps/**/*.ts",
+    "shared/**/*.ts",
+    "tests/**/*.ts",
+    "vitest.config.ts"
+  ]
+}
