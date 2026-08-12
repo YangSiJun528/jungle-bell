@@ -219,7 +219,22 @@ export class CloudflareApiStorage {
           ORDER BY COALESCE(published_at, first_seen_at) DESC, id DESC
           LIMIT ?
         `).bind(limit);
-    const posts = (await statement.all<MealPostRow>()).results;
+    return this.hydrateMealPosts((await statement.all<MealPostRow>()).results);
+  }
+
+  async listMealPostsForRange(fromInclusive: string, toExclusive: string): Promise<ArchivedMealPost[]> {
+    const result = await this.db.prepare(`
+      SELECT * FROM meal_post
+      WHERE kind = 'DAILY_MENU'
+        AND COALESCE(published_at, first_seen_at) >= ?
+        AND COALESCE(published_at, first_seen_at) < ?
+      ORDER BY COALESCE(published_at, first_seen_at) DESC, id DESC
+      LIMIT 100
+    `).bind(fromInclusive, toExclusive).all<MealPostRow>();
+    return this.hydrateMealPosts(result.results);
+  }
+
+  private async hydrateMealPosts(posts: MealPostRow[]): Promise<ArchivedMealPost[]> {
     if (posts.length === 0) return [];
 
     const placeholders = posts.map(() => "?").join(", ");

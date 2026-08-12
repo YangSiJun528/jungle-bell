@@ -236,21 +236,21 @@ function AuthenticatedPersonalLaundrySection({
                 <Smartphone/>
                 <AlertTitle>PC 연결이 필요합니다.</AlertTitle>
                 <AlertDescription>
-                    연결 메뉴에서 이 PWA를 PC 앱과 연결한 뒤 개인 세탁 기능을 사용할 수 있어요.
+                    PC 앱 연결 후 개인 세탁 기능 사용 가능
                 </AlertDescription>
             </Alert>
         );
     }
 
     if (attendance.isPending) {
-        return <LoadingState label="개인 세탁 기능을 준비하고 있습니다."/>;
+        return <LoadingState label="개인 세탁 기능 준비 중"/>;
     }
 
     if (attendance.isError) {
         return (
             <Alert variant="destructive">
                 <CircleAlert aria-hidden="true"/>
-                <AlertTitle>계정 상태를 확인하지 못했습니다.</AlertTitle>
+                <AlertTitle>계정 상태 확인 실패</AlertTitle>
                 <AlertDescription>
                     <Button size="sm" variant="outline" onClick={() => void attendance.refetch()}>
                         새로고침
@@ -297,9 +297,9 @@ function AuthenticatedPersonalLaundrySection({
             {personalError ? (
                 <Alert variant="destructive">
                     <CircleAlert/>
-                    <AlertTitle>세탁 알림을 처리하지 못했습니다.</AlertTitle>
+                    <AlertTitle>세탁 알림 처리 실패</AlertTitle>
                     <AlertDescription className="gap-3">
-                        <p>잠시 후 다시 시도해 주세요.</p>
+                        <p>잠시 후 새로고침하세요.</p>
                         <Button
                             size="sm"
                             variant="outline"

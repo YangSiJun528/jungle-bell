@@ -26,21 +26,26 @@ const KOREAN_WEEKDAY_FORMATTER = new Intl.DateTimeFormat('ko-KR', {
 
 export function MealHistoryCalendar({
     availableDates,
+    month,
+    onMonthChange,
     onSelect,
     selectedDate,
 }: {
     availableDates: ReadonlySet<string>;
+    month: string;
+    onMonthChange: (month: string) => void;
     onSelect: (date: string) => void;
     selectedDate: string;
 }) {
     const selected = parseDateKey(selectedDate);
+    const visibleMonth = parseMonthKey(month);
     const hasMeal = (date: Date): boolean => availableDates.has(dateKey(date));
 
     return (
         <Calendar
             aria-label={`${formatMonth(selected)} 급식 기록 달력`}
             className="w-full p-0 [--cell-size:2.25rem] sm:[--cell-size:2.5rem]"
-            defaultMonth={selected}
+            month={visibleMonth}
             disabled={(date) => !hasMeal(date)}
             fixedWeeks
             formatters={{
@@ -71,8 +76,18 @@ export function MealHistoryCalendar({
             showOutsideDays={false}
             timeZone={KST_TIME_ZONE}
             onSelect={(date) => onSelect(dateKey(date))}
+            onMonthChange={(value) => onMonthChange(monthKey(value))}
         />
     );
+}
+
+function parseMonthKey(value: string): Date {
+    if (!/^\d{4}-(?:0[1-9]|1[0-2])$/u.test(value)) throw new Error('INVALID_MONTH');
+    return new Date(`${value}-01T12:00:00+09:00`);
+}
+
+function monthKey(value: Date): string {
+    return dateKey(value).slice(0, 7);
 }
 
 function parseDateKey(value: string): Date {

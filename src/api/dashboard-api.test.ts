@@ -32,6 +32,7 @@ test('공개 생활 정보는 인증 없이 공개 API만 호출한다', async (
                     collection: 'SUCCESS',
                     sourceFreshness: 'REFRESH_OBSERVED',
                     lastCheckedAt: '2026-08-03T09:00:00.000Z',
+                    expectedRefreshIntervalSeconds: 300,
                 },
                 machines: [],
             });
@@ -80,6 +81,7 @@ test('세탁 가능 횟수는 서버 authoritative capacity 계약을 엄격히 
                 collection: 'SUCCESS',
                 sourceFreshness: 'REFRESH_OBSERVED',
                 lastCheckedAt: '2026-08-03T09:00:00.000Z',
+                expectedRefreshIntervalSeconds: 300,
             },
             machines: [],
             capacity,
@@ -112,7 +114,12 @@ test('서버 capacity가 내부 불변식을 어기면 응답 전체를 거부�
                 schemaVersion: 1,
                 asOf: '2026-08-03T09:00:00.000Z',
                 final: false,
-                quality: {collection: 'SUCCESS', sourceFreshness: 'REFRESH_OBSERVED', lastCheckedAt: null},
+                quality: {
+                    collection: 'SUCCESS',
+                    sourceFreshness: 'REFRESH_OBSERVED',
+                    lastCheckedAt: null,
+                    expectedRefreshIntervalSeconds: 300,
+                },
                 machines: [],
                 capacity: {
                     basis: 'WASHER_AND_DRYER_HEADROOM_60_MIN',
@@ -318,6 +325,28 @@ test('과거 급식 페이지는 웹에서 검증된 커서로 공개 API를 호
     await assert.rejects(api.getPublicMealHistory('2026-08-01T02:03:04.000Z', 30), /API_CLIENT_INVALID_ARGUMENT/);
     await assert.rejects(api.getPublicMealHistory('not-a-date', 30), /API_CLIENT_INVALID_ARGUMENT/);
     await assert.rejects(api.getPublicMealHistory(null, 0), /API_CLIENT_INVALID_ARGUMENT/);
+});
+
+test('달력 월 이동은 해당 KST 월의 급식 기록만 공개 API로 요청한다', async () => {
+    const calls: string[] = [];
+    const api = createDashboardApi({
+        campusApiBaseUrl: 'https://campus.example.com',
+        fetcher: async (input) => {
+            calls.push(String(input));
+            return jsonResponse({posts: [], nextBefore: null});
+        },
+        invokeCommand: async () => undefined,
+    });
+
+    assert.deepEqual(await api.getPublicMealHistoryMonth('2026-07'), {
+        posts: [],
+        nextBefore: null,
+    });
+    assert.deepEqual(calls, [
+        'https://campus.example.com/api/public/meals/history?month=2026-07',
+    ]);
+    await assert.rejects(api.getPublicMealHistoryMonth('2026-7'), /API_CLIENT_INVALID_ARGUMENT/);
+    await assert.rejects(api.getPublicMealHistoryMonth('2026-13'), /API_CLIENT_INVALID_ARGUMENT/);
 });
 
 test('데스크톱 과거 급식 페이지도 인증 없는 공개 HTTP API를 사용한다', async () => {
@@ -598,7 +627,12 @@ test('데스크톱 생활 정보도 공개 HTTP API를 직접 사용한다', asy
                     schemaVersion: 1,
                     asOf: '2026-08-03T09:00:00.000Z',
                     final: false,
-                    quality: {collection: 'SUCCESS', sourceFreshness: 'REFRESH_OBSERVED', lastCheckedAt: '2026-08-03T09:00:00.000Z'},
+                    quality: {
+                        collection: 'SUCCESS',
+                        sourceFreshness: 'REFRESH_OBSERVED',
+                        lastCheckedAt: '2026-08-03T09:00:00.000Z',
+                        expectedRefreshIntervalSeconds: 300,
+                    },
                     machines: [],
                 }
                 : {
@@ -667,7 +701,7 @@ test('데스크톱 페어링 승인은 actual claimId를 strict desktop-ui body�
     assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {claimId});
 });
 
-test('데스크톱 모바일 session 목록은 current 배열 DTO만 허용한다', async () => {
+test('데스크톱 모바일 session 목록은 devices envelope와 빈 목록을 정상 처리한다', async () => {
     const device = {
         deviceId: 'jbsi_01234567-89ab-4def-8123-456789abcdef',
         deviceLabel: 'Jungle Bell 모바일',
@@ -680,14 +714,22 @@ test('데스크톱 모바일 session 목록은 current 배열 DTO만 허용한�
     };
     const validApi = createDashboardApi({
         desktopRuntime: true,
-        fetcher: async () => jsonResponse([device]),
+        fetcher: async () => jsonResponse({devices: [device]}),
         invokeCommand: async () => desktopHttpSession(),
     });
     assert.deepEqual(await validApi.listMobileSessions(), [device]);
 
+    const emptyApi = createDashboardApi({
+        desktopRuntime: true,
+        fetcher: async () => jsonResponse({devices: []}),
+        invokeCommand: async () => desktopHttpSession(),
+    });
+    assert.deepEqual(await emptyApi.listMobileSessions(), []);
+
     for (const response of [
+        [device],
         {sessions: [device]},
-        [{...device, sessionId: device.deviceId}],
+        {devices: [{...device, sessionId: device.deviceId}]},
     ]) {
         const api = createDashboardApi({
             desktopRuntime: true,
@@ -851,6 +893,12 @@ test('데스크톱 서비스 설정은 canonical current-only commands와 exact 
         autoUpdate: true,
         usageAnalytics: true,
         debugMode: false,
+        selectedCohortId: null,
+        effectiveCohortId: 'cohort-1',
+        cohortOptions: [{
+            id: 'cohort-1', label: '정글 10기', startDate: '2026-07-01',
+            endDate: '2026-08-31', isActive: true,
+        }],
     };
     const updated = {...initial, autoStart: true};
     const api = createDashboardApi({
@@ -867,16 +915,31 @@ test('데스크톱 서비스 설정은 canonical current-only commands와 exact 
     await api.openLogFolder();
     assert.deepEqual(calls, [
         {command: 'get_desktop_settings', args: undefined},
-        {command: 'update_desktop_settings', args: {input: updated}},
+        {command: 'update_desktop_settings', args: {input: {
+            autoStart: true,
+            autoUpdate: true,
+            usageAnalytics: true,
+            debugMode: false,
+            selectedCohortId: null,
+        }}},
         {command: 'open_log_folder', args: undefined},
     ]);
 });
 
 test('데스크톱 서비스 설정은 unknown field와 non-boolean을 거부한다', async () => {
     for (const response of [
-        {autoStart: false, autoUpdate: true, usageAnalytics: true, debugMode: false, unknown: true},
-        {autoStart: 'true', autoUpdate: true, usageAnalytics: true, debugMode: false},
-        {autoStart: false, autoUpdate: true, usageAnalytics: true},
+        {
+            autoStart: false, autoUpdate: true, usageAnalytics: true, debugMode: false,
+            selectedCohortId: null, effectiveCohortId: null, cohortOptions: [], unknown: true,
+        },
+        {
+            autoStart: 'true', autoUpdate: true, usageAnalytics: true, debugMode: false,
+            selectedCohortId: null, effectiveCohortId: null, cohortOptions: [],
+        },
+        {
+            autoStart: false, autoUpdate: true, usageAnalytics: true, debugMode: false,
+            selectedCohortId: '\nforged', effectiveCohortId: null, cohortOptions: [],
+        },
     ]) {
         const api = createDashboardApi({
             fetcher: async () => { throw new Error('unexpected fetch'); },

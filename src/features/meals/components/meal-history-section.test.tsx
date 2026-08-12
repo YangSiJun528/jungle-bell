@@ -9,6 +9,7 @@ const source = readFileSync(new URL('./meal-history-section.tsx', import.meta.ur
 
 const api = vi.hoisted(() => ({
     getPublicMealHistory: vi.fn(),
+    getPublicMealHistoryMonth: vi.fn(),
 }));
 
 vi.mock('@/app/dashboard-context', () => ({
@@ -56,7 +57,7 @@ function renderHistory(snapshot = meals): string {
 }
 
 describe('MealHistorySection', () => {
-    test('날짜 선택 달력, 선택 날짜 식단, 이전 기록 로드를 한 섹션에서 제공한다', () => {
+    test('날짜 선택 달력과 선택 날짜 식단을 한 섹션에서 제공한다', () => {
         const markup = renderHistory();
 
         expect(markup).toContain('aria-labelledby="meal-history-title"');
@@ -65,7 +66,7 @@ describe('MealHistorySection', () => {
         expect(markup).toContain('잡곡밥, 육개장');
         expect(markup).toContain('선택한 주 급식표');
         expect(markup).toContain('2019년 12월 30일 주차 급식표');
-        expect(markup).toContain('이전 기록 더 불러오기');
+        expect(markup).not.toContain('이전 기록 더 불러오기');
         expect(markup).toContain('data-meal-history-overview="true"');
         expect(markup).toContain('data-meal-history-weekly="true"');
         expect(source).toContain('lg:grid-cols-[minmax(17rem,20rem)_minmax(0,1fr)]');
@@ -87,5 +88,14 @@ describe('MealHistorySection', () => {
     test('달력에서 선택한 날짜를 주간 급식표 선택에도 사용한다', () => {
         expect(source).toContain('onSelect={setSelectedHistoryDate}');
         expect(source).toMatch(/weeklyMenuForDate\([\s\S]*activeHistoryDate/u);
+    });
+
+    test('달을 이동하면 해당 달 기록을 캐시 가능한 월 단위 쿼리로 가져온다', () => {
+        expect(source).toContain("queryKey: ['campus', 'meals', 'history', visibleMonthKey]");
+        expect(source).toContain('api.getPublicMealHistoryMonth(visibleMonthKey)');
+        expect(source).toContain('onMonthChange={(month) => {');
+        expect(source).toContain('setVisibleMonthKey(month)');
+        expect(source).not.toContain('useInfiniteQuery');
+        expect(source).not.toContain('MealHistoryLoadMore');
     });
 });

@@ -10,8 +10,8 @@ import {
     CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import {Progress} from '@/components/ui/progress';
-import type {DdayPeriod, DdayProgress} from '@/features/home/lib/dday-progress';
-import type {HomeDdayView} from '@/features/home/lib/home-dday';
+import type {DdayPeriod, DdayProgress} from '@/domain/attendance/dday-progress';
+import type {DdayView} from '@/domain/attendance/dday-view';
 import {cn} from '@/lib/utils';
 
 const DAYS = Array.from({length: 31}, (_, index) => index + 1);
@@ -85,23 +85,23 @@ function DdayMatrix({progress}: {progress: DdayProgress}) {
     );
 }
 
-export interface HomeDdayCardProps {
-    view: HomeDdayView;
+export interface DdayCardProps {
+    view: DdayView;
     defaultOpen?: boolean;
 }
 
-export function HomeDdayCard({view, defaultOpen = false}: HomeDdayCardProps) {
+export function DdayCard({view, defaultOpen = false}: DdayCardProps) {
     const [open, setOpen] = useState(defaultOpen);
     const {period, progress} = view;
     const canExpand = progress !== null && period !== null;
 
     return (
         <Collapsible asChild open={canExpand && open} onOpenChange={setOpen}>
-            <Card className="w-full gap-0 overflow-hidden border-primary/20 py-0" data-home-dday-card="true">
+            <Card className="w-full gap-0 overflow-hidden border-primary/20 py-0" data-dday-card="true">
                 <CollapsibleTrigger
                     className="group/dday flex min-h-20 w-full items-center gap-3 px-5 py-4 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset disabled:cursor-default disabled:hover:bg-transparent sm:px-6"
                     disabled={!canExpand}
-                    aria-controls="home-dday-calendar"
+                    aria-controls="dday-calendar"
                     aria-label={canExpand
                         ? `${view.text}, 과정 달력 ${open ? '접기' : '펼치기'}`
                         : view.text}
@@ -145,7 +145,7 @@ export function HomeDdayCard({view, defaultOpen = false}: HomeDdayCardProps) {
                 </CardContent>
 
                 {canExpand && progress ? (
-                    <CollapsibleContent id="home-dday-calendar">
+                    <CollapsibleContent id="dday-calendar">
                         <div className="border-t px-5 py-4 sm:px-6">
                             <DdayMatrix progress={progress}/>
                         </div>

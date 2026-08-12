@@ -88,7 +88,7 @@ describe('React renewal architecture', () => {
         const warningBadge = read('src/features/laundry/components/laundry-warning-badge.tsx');
         expect(warningBadge).toMatch(/components\/ui\/badge/u);
         expect(warningBadge).toMatch(/<Badge\b/u);
-        expect(warningBadge).toMatch(/TriangleAlert/u);
+        expect(warningBadge).not.toMatch(/TriangleAlert/u);
 
         const shell = read('src/app/shell/DashboardShell.tsx');
         expect(shell).toMatch(/SidebarMenuBadge/u);

@@ -2,11 +2,13 @@ export interface LaundrySituationDataState {
     hasData: boolean;
     error: unknown;
     sourceFreshness?: string;
+    expectedRefreshIntervalSeconds?: number;
     snapshotSavedAt: number | null;
     nowMs: number;
 }
 
-const MAX_SNAPSHOT_AGE_MS = 120_000;
+const DEFAULT_EXPECTED_REFRESH_INTERVAL_SECONDS = 300;
+const REFRESH_GRACE_MULTIPLIER = 2;
 const RELIABLE_SOURCE_FRESHNESS = new Set([
     'REFRESH_OBSERVED',
     'WITHIN_REFRESH_WINDOW',
@@ -24,5 +26,11 @@ export function laundrySituationDataIsReliable(state: LaundrySituationDataState)
     }
 
     const ageMs = state.nowMs - (state.snapshotSavedAt as number);
-    return ageMs >= 0 && ageMs <= MAX_SNAPSHOT_AGE_MS;
+    const expectedRefreshIntervalSeconds = state.expectedRefreshIntervalSeconds
+        ?? DEFAULT_EXPECTED_REFRESH_INTERVAL_SECONDS;
+    if (!Number.isFinite(expectedRefreshIntervalSeconds) || expectedRefreshIntervalSeconds <= 0) {
+        return false;
+    }
+    return ageMs >= 0
+        && ageMs <= expectedRefreshIntervalSeconds * 1_000 * REFRESH_GRACE_MULTIPLIER;
 }

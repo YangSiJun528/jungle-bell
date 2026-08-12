@@ -48,6 +48,7 @@ export function LaundryPage() {
             hasData: snapshot.machines.length > 0,
             error: laundry.error,
             sourceFreshness: snapshot.quality.sourceFreshness,
+            expectedRefreshIntervalSeconds: snapshot.quality.expectedRefreshIntervalSeconds,
             snapshotSavedAt: Date.parse(snapshot.asOf),
             nowMs: Date.now(),
         })
@@ -73,10 +74,10 @@ export function LaundryPage() {
             />
 
             {laundry.isPending && !snapshot ? (
-                <LoadingState label="세탁실 기기 상태를 확인하고 있습니다."/>
+                <LoadingState label="세탁실 기기 상태 확인 중"/>
             ) : laundry.isError && !snapshot ? (
                 <ErrorState
-                    description="잠시 후 다시 시도해 주세요."
+                    description="잠시 후 새로고침하세요."
                     retry={() => manualRefresh.mutate()}
                 />
             ) : snapshot ? (
@@ -84,7 +85,7 @@ export function LaundryPage() {
                     {refreshFailed ? (
                         <Alert variant="destructive">
                             <CircleAlert/>
-                            <AlertTitle>최신 상태로 갱신하지 못했습니다.</AlertTitle>
+                            <AlertTitle>최신 기기 상태를 불러오지 못했습니다.</AlertTitle>
                             <AlertDescription>마지막으로 확인한 기기 상태를 표시합니다.</AlertDescription>
                         </Alert>
                     ) : null}

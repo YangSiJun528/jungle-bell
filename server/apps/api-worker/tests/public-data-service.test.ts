@@ -14,6 +14,7 @@ function storageStub(overrides: Partial<PublicDataStorage> = {}): PublicDataStor
     readObservation: async () => null,
     listLaundryEvents: async () => [],
     listMealPosts: async () => [],
+    listMealPostsForRange: async () => [],
     listWeeklyMealMenus: async () => [],
     readObject: async () => null,
     ...overrides,
@@ -91,5 +92,22 @@ describe("PublicDataService", () => {
         },
       },
     });
+  });
+
+  it("loads one requested KST meal month without exposing a pagination cursor", async () => {
+    const calls: Array<{ from: string; to: string }> = [];
+    const service = new PublicDataService(storageStub({
+      listMealPostsForRange: async (from, to) => {
+        calls.push({ from, to });
+        return [];
+      },
+    }));
+
+    await expect(service.mealHistory(undefined, 30, "https://api.test/api/public/meals/history", "2026-07"))
+      .resolves.toEqual({ posts: [], nextBefore: null });
+    expect(calls).toEqual([{
+      from: "2026-06-30T15:00:00.000Z",
+      to: "2026-07-31T15:00:00.000Z",
+    }]);
   });
 });

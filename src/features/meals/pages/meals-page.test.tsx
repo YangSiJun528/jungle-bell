@@ -16,7 +16,7 @@ describe('MealsPage information architecture', () => {
         expect(source).toContain('<MealHistorySection meals={meals.data}/>');
         expect(historySource).toContain('aria-labelledby="meal-history-title"');
         expect(historySource).toContain('<MealHistoryCalendar');
-        expect(historySource.match(/<MealHistoryLoadMore/g)).toHaveLength(2);
+        expect(historySource).not.toContain('MealHistoryLoadMore');
     });
 
     it('오늘 급식에 주간 pinned fallback을 쓰지 않고 Badge나 그라데이션을 사용하지 않는다', () => {
@@ -28,6 +28,6 @@ describe('MealsPage information architecture', () => {
         expect(source).not.toContain('MealPreferencesSection');
         expect(source).not.toMatch(/useInfiniteQuery|useMutation|useQueryClient/u);
         expect(source).not.toContain('PersonalSurface');
-        expect(historySource).toContain('key={activeHistoryDate.slice(0, 7)}');
+        expect(historySource).toContain('setVisibleMonthKey(month)');
     });
 });

@@ -25,10 +25,10 @@ describe('JungleCampusSummary', () => {
         expect(source).toContain('overflow-y-auto');
         expect(source).toContain('min-h-full');
         expect(source).toContain('tabIndex={0}');
-        expect(source).toContain('selectHomeDday({');
-        expect(source).toContain('<HomeDdayCard view={dday}/>');
+        expect(source).toContain('selectDdayView({');
+        expect(source).toContain('<DdayCard view={dday}/>');
         expect(source.indexOf('</CampusCardFrame>'))
-            .toBeLessThan(source.indexOf('<HomeDdayCard view={dday}/>'));
+            .toBeLessThan(source.indexOf('<DdayCard view={dday}/>'));
         expect(source).not.toContain('dashboardDdayPeriod');
     });
 

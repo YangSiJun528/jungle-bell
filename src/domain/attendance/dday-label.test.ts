@@ -3,7 +3,7 @@ import {test} from 'vitest';
 import {
     dashboardDdayLabel,
     dashboardDdayPeriod,
-} from './home-overview';
+} from './dday-label';
 
 const attendance = {
     attendanceDate: '2026-08-10',

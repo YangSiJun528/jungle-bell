@@ -44,6 +44,7 @@ export interface PublicDataStorage {
   readObservation(source: SourceName, minute: number): Promise<MinuteObservation | null>;
   listLaundryEvents(since: string | null, limit: number): Promise<LaundryEvent[]>;
   listMealPosts(before: MealHistoryCursor | null, limit: number): Promise<ArchivedMealPost[]>;
+  listMealPostsForRange(fromInclusive: string, toExclusive: string): Promise<ArchivedMealPost[]>;
   listWeeklyMealMenus(limit: number): Promise<WeeklyMealMenu[]>;
   readObject(key: string): Promise<R2ObjectBody | null>;
 }
@@ -150,9 +151,11 @@ export class PublicDataService {
     const stored = await this.storage.readJson<MealsVersion>(state.lastNormalizedKey)
       ?? await this.storage.readJson<MealsVersion>("latest/meals.json");
     if (!stored) return { ok: false, error: "DATA_OBJECT_MISSING" };
-    const version = await withContentShas(stored);
-    const recentMenus = await this.storage.listMealPosts(null, MEAL_HISTORY_PAGE_SIZE);
-    const archived = await this.storage.listWeeklyMealMenus(100);
+    const [version, recentMenus, archived] = await Promise.all([
+      withContentShas(stored),
+      this.storage.listMealPosts(null, MEAL_HISTORY_PAGE_SIZE),
+      this.storage.listWeeklyMealMenus(100),
+    ]);
     const current = (await Promise.all(version.pinnedMenus.map((post) => weeklyMealMenu(post, version.observedAt))))
       .filter((menu): menu is WeeklyMealMenu => menu !== null);
     const weeklyMenus = [...new Map([...archived, ...current].map((menu) => [menu.weekKey, menu])).values()]
@@ -180,7 +183,15 @@ export class PublicDataService {
     };
   }
 
-  async mealHistory(encodedBefore: string | undefined, limit: number, requestUrl: string) {
+  async mealHistory(encodedBefore: string | undefined, limit: number, requestUrl: string, month?: string) {
+    if (month) {
+      const range = kstMonthRange(month);
+      const posts = await this.storage.listMealPostsForRange(range.fromInclusive, range.toExclusive);
+      return {
+        posts: posts.map((post) => withPostAssetUrls(post, requestUrl)),
+        nextBefore: null,
+      };
+    }
     const before = encodedBefore ? decodeMealHistoryCursor(encodedBefore) : null;
     if (encodedBefore && !before) throw new Error("Validated meal history cursor could not be decoded");
     const posts = await this.storage.listMealPosts(before, limit);
@@ -199,6 +210,16 @@ export class PublicDataService {
       ? { ok: true, value: { sha: match[1], extension: match[2], object } }
       : { ok: false, error: "ASSET_NOT_FOUND" };
   }
+}
+
+function kstMonthRange(month: string): { fromInclusive: string; toExclusive: string } {
+  const match = /^(\d{4})-(0[1-9]|1[0-2])$/u.exec(month);
+  if (!match?.[1] || !match[2]) throw new Error("Validated meal history month did not match");
+  const year = Number(match[1]);
+  const monthIndex = Number(match[2]) - 1;
+  const fromInclusive = new Date(Date.UTC(year, monthIndex, 1) - 9 * 60 * 60_000).toISOString();
+  const toExclusive = new Date(Date.UTC(year, monthIndex + 1, 1) - 9 * 60 * 60_000).toISOString();
+  return { fromInclusive, toExclusive };
 }
 
 function currentCacheSlice(reference: Date): Date {

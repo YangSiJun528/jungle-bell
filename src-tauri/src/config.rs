@@ -1,12 +1,12 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
 const CURRENT_CONFIG_FILE_NAME: &str = "desktop-settings.json";
 const CONFIG_SCHEMA: &str = "jungle-bell.desktop-settings";
-const CONFIG_SCHEMA_VERSION: u32 = 2;
-const MIN_SUPPORTED_CONFIG_SCHEMA_VERSION: u32 = 1;
+const CONFIG_SCHEMA_VERSION: u32 = 3;
+const MIN_SUPPORTED_CONFIG_SCHEMA_VERSION: u32 = 3;
 
 pub const MORNING_START_HOUR: u32 = 4;
 pub const MORNING_START_MINUTE: u32 = 0;
@@ -36,14 +36,12 @@ struct ConfigDocument {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Config {
-    #[serde(default)]
     pub auto_start: bool,
-    #[serde(default = "default_true")]
     pub auto_update: bool,
-    #[serde(default = "default_true")]
     pub usage_analytics: bool,
-    #[serde(default)]
     pub debug_mode: bool,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    pub selected_cohort_id: Option<String>,
 }
 
 impl Default for Config {
@@ -53,12 +51,16 @@ impl Default for Config {
             auto_update: true,
             usage_analytics: true,
             debug_mode: false,
+            selected_cohort_id: None,
         }
     }
 }
 
-const fn default_true() -> bool {
-    true
+fn deserialize_required_nullable<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Option::<String>::deserialize(deserializer)
 }
 
 pub(crate) fn config_path() -> Option<PathBuf> {
@@ -127,7 +129,17 @@ fn parse_config_document(data: &str) -> Result<Config, String> {
     {
         return Err("지원하지 않는 설정 스키마입니다.".into());
     }
+    validate_selected_cohort_id(document.settings.selected_cohort_id.as_deref())?;
     Ok(document.settings)
+}
+
+pub(crate) fn validate_selected_cohort_id(value: Option<&str>) -> Result<(), String> {
+    if value.is_some_and(|value| {
+        value.is_empty() || value.trim() != value || value.chars().count() > 128 || value.chars().any(char::is_control)
+    }) {
+        return Err("잘못된 기수 ID입니다.".into());
+    }
+    Ok(())
 }
 
 pub(crate) fn write_file_atomically(path: &Path, data: &[u8]) -> std::io::Result<()> {
@@ -226,41 +238,34 @@ mod tests {
     }
 
     #[test]
-    fn 현재_설정은_데스크톱_서비스_항목만_직렬화한다() {
+    fn 현재_설정은_데스크톱_서비스와_lms_기수_선택을_직렬화한다() {
         let value: serde_json::Value =
             serde_json::from_str(&serialize_config_document(&Config::default()).unwrap()).unwrap();
         assert_eq!(
             value,
             serde_json::json!({
                 "schema": "jungle-bell.desktop-settings",
-                "schemaVersion": 2,
+                "schemaVersion": 3,
                 "settings": {
                     "autoStart": false,
                     "autoUpdate": true,
                     "usageAnalytics": true,
-                    "debugMode": false
+                    "debugMode": false,
+                    "selectedCohortId": null
                 }
             })
         );
     }
 
     #[test]
-    fn 버전1_자동시작_설정은_새_기본값을_보충해_읽는다() {
-        assert_eq!(
-            parse_config_document(
-                &serde_json::json!({
-                    "schema": "jungle-bell.desktop-settings",
-                    "schemaVersion": 1,
-                    "settings": { "autoStart": true }
-                })
-                .to_string()
-            )
-            .unwrap(),
-            Config {
-                auto_start: true,
-                ..Config::default()
-            },
-        );
+    fn 현재_설정은_선택한_기수_id를_함께_저장한다() {
+        let config = Config {
+            selected_cohort_id: Some("cohort-10".into()),
+            ..Config::default()
+        };
+        let serialized = serialize_config_document(&config).unwrap();
+        assert_eq!(parse_config_document(&serialized).unwrap(), config);
+        assert!(serialized.contains("selectedCohortId"));
     }
 
     #[test]
@@ -268,17 +273,28 @@ mod tests {
         for invalid in [
             serde_json::json!({
                 "schema": "jungle-bell.desktop-settings",
-                "schemaVersion": 3,
+                "schemaVersion": 2,
                 "settings": { "autoStart": true }
             }),
             serde_json::json!({
                 "schema": "jungle-bell.desktop-settings",
-                "schemaVersion": 2,
+                "schemaVersion": 3,
+                "settings": {
+                    "autoStart": true,
+                    "autoUpdate": true,
+                    "usageAnalytics": true,
+                    "debugMode": false
+                }
+            }),
+            serde_json::json!({
+                "schema": "jungle-bell.desktop-settings",
+                "schemaVersion": 3,
                 "settings": {
                     "autoStart": true,
                     "autoUpdate": true,
                     "usageAnalytics": true,
                     "debugMode": false,
+                    "selectedCohortId": null,
                     "unknown": true
                 }
             }),

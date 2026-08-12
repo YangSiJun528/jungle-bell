@@ -10,4 +10,10 @@ describe('AttendancePage LMS gate', () => {
         expect(source).toContain("refreshAttendance.error.message === 'LMS_AUTH_REQUIRED'");
         expect(source).toContain('LMS 로그인');
     });
+
+    test('출석 상세에서도 현재 기수 D-Day 카드를 표시한다', () => {
+        expect(source).toContain("import {DdayCard} from '@/components/dashboard/dday-card'");
+        expect(source).toContain("import {selectDdayView} from '@/domain/attendance/dday-view'");
+        expect(source).toContain('<DdayCard view={dday}/>');
+    });
 });

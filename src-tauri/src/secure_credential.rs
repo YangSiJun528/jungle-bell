@@ -1,9 +1,9 @@
 //! 설치 식별자와 Jungle Bell 데스크톱 세션을 위한 로컬 저장소 경계.
 //!
 //! LMS cookie/token은 이 모듈에 전달하거나 저장하지 않는다. 서버가 발급한
-//! 불투명한 Jungle Bell 세션은 macOS Keychain 또는 Windows Credential Manager에
-//! 저장한다. 설치 식별자는 앱 전용 데이터 디렉터리의 mode 0600 파일에 유지한다.
-//! 과거 세션 파일은 keyring 저장 성공 뒤 한 번만 제거한다.
+//! 불투명한 Jungle Bell 세션은 Windows Credential Manager 또는 앱 전용 mode 0600
+//! 파일에 저장한다. Apple 서명이 없는 macOS 빌드에서 Keychain이 바이너리 변경마다
+//! 반복 인증을 요구하므로 macOS와 Linux는 검증된 private file store를 사용한다.
 
 use std::{
     fs::{self, OpenOptions},
@@ -19,7 +19,9 @@ const MAX_INSTALLATION_ID_BYTES: u64 = 64;
 const DESKTOP_SESSION_FILE: &str = "desktop-app-session-v1";
 const DESKTOP_SESSION_TEMP_PREFIX: &str = ".desktop-app-session-v1.";
 const MAX_DESKTOP_SESSION_BYTES: u64 = 512;
+#[cfg(target_os = "windows")]
 const KEYRING_SERVICE: &str = "dev.sijun-yang.jungle-bell";
+#[cfg(target_os = "windows")]
 const KEYRING_ACCOUNT: &str = "desktop-app-session";
 
 pub(crate) trait CredentialStore: Send + Sync {
@@ -37,22 +39,49 @@ pub(crate) trait CredentialStore: Send + Sync {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PlatformCredentialStoreKind {
+    PrivateFile,
+    OperatingSystemVault,
+}
+
+pub(crate) const fn platform_credential_store_kind() -> PlatformCredentialStoreKind {
+    if cfg!(target_os = "windows") {
+        PlatformCredentialStoreKind::OperatingSystemVault
+    } else {
+        PlatformCredentialStoreKind::PrivateFile
+    }
+}
+
+pub(crate) fn platform_credential_store(app_data_dir: &Path) -> Result<Arc<dyn CredentialStore>, &'static str> {
+    #[cfg(target_os = "windows")]
+    {
+        Ok(Arc::new(KeyringCredentialStore::new(app_data_dir)?))
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Ok(Arc::new(FileCredentialStore::new(app_data_dir)?))
+    }
+}
+
+#[cfg(any(target_os = "windows", test))]
 trait SecretBackend: Send + Sync {
     fn load(&self) -> Result<Option<Zeroizing<String>>, &'static str>;
     fn store(&self, value: &str) -> Result<(), &'static str>;
     fn clear(&self) -> Result<(), &'static str>;
 }
 
+#[cfg(target_os = "windows")]
 struct SystemSecretBackend;
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(target_os = "windows")]
 impl SystemSecretBackend {
     fn entry() -> Result<keyring::Entry, &'static str> {
         keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT).map_err(|_| "CREDENTIAL_STORAGE_FAILED")
     }
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(target_os = "windows")]
 impl SecretBackend for SystemSecretBackend {
     fn load(&self) -> Result<Option<Zeroizing<String>>, &'static str> {
         match Self::entry()?.get_password() {
@@ -76,31 +105,19 @@ impl SecretBackend for SystemSecretBackend {
     }
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
-impl SecretBackend for SystemSecretBackend {
-    fn load(&self) -> Result<Option<Zeroizing<String>>, &'static str> {
-        Err("CREDENTIAL_STORAGE_UNAVAILABLE")
-    }
-
-    fn store(&self, _value: &str) -> Result<(), &'static str> {
-        Err("CREDENTIAL_STORAGE_UNAVAILABLE")
-    }
-
-    fn clear(&self) -> Result<(), &'static str> {
-        Err("CREDENTIAL_STORAGE_UNAVAILABLE")
-    }
-}
-
 /// Stores the desktop session in the operating system credential vault.
 ///
 /// The file store is retained only as a one-time reader/remover for releases
 /// that predate the keyring migration. New credentials are never written there.
+#[cfg(any(target_os = "windows", test))]
 pub(crate) struct KeyringCredentialStore {
     backend: Arc<dyn SecretBackend>,
     legacy: FileCredentialStore,
 }
 
+#[cfg(any(target_os = "windows", test))]
 impl KeyringCredentialStore {
+    #[cfg(target_os = "windows")]
     pub(crate) fn new(app_data_dir: &Path) -> Result<Self, &'static str> {
         Self::with_backend(app_data_dir, Arc::new(SystemSecretBackend))
     }
@@ -142,6 +159,7 @@ impl KeyringCredentialStore {
     }
 }
 
+#[cfg(any(target_os = "windows", test))]
 impl CredentialStore for KeyringCredentialStore {
     fn load(&self) -> Result<Option<Zeroizing<String>>, &'static str> {
         let loaded = match self.backend.load()? {
@@ -226,13 +244,13 @@ impl CredentialStore for KeyringCredentialStore {
     }
 }
 
-struct FileCredentialStore {
+pub(crate) struct FileCredentialStore {
     directory: PathBuf,
     path: PathBuf,
 }
 
 impl FileCredentialStore {
-    fn new(app_data_dir: &Path) -> Result<Self, &'static str> {
+    pub(crate) fn new(app_data_dir: &Path) -> Result<Self, &'static str> {
         fs::create_dir_all(app_data_dir).map_err(|_| "CREDENTIAL_STORAGE_FAILED")?;
         let metadata = fs::symlink_metadata(app_data_dir).map_err(|_| "CREDENTIAL_STORAGE_FAILED")?;
         if !metadata.file_type().is_dir() {
@@ -267,6 +285,7 @@ impl FileCredentialStore {
 
 impl CredentialStore for FileCredentialStore {
     fn load(&self) -> Result<Option<Zeroizing<String>>, &'static str> {
+        self.clear_orphaned_temps().map_err(|_| "CREDENTIAL_LOAD_FAILED")?;
         let metadata = match fs::symlink_metadata(&self.path) {
             Ok(metadata) => metadata,
             Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
@@ -284,6 +303,7 @@ impl CredentialStore for FileCredentialStore {
 
     fn store(&self, value: &str) -> Result<(), &'static str> {
         validate_stored_value(value)?;
+        self.clear_orphaned_temps().map_err(|_| "CREDENTIAL_STORE_FAILED")?;
         if let Ok(metadata) = fs::symlink_metadata(&self.path) {
             validate_private_session_file(&metadata)?;
         }
@@ -303,7 +323,7 @@ impl CredentialStore for FileCredentialStore {
     }
 
     fn clear(&self) -> Result<(), &'static str> {
-        match fs::symlink_metadata(&self.path) {
+        let credential_result = match fs::symlink_metadata(&self.path) {
             Ok(metadata) => {
                 validate_private_session_file(&metadata)?;
                 fs::remove_file(&self.path).map_err(|_| "CREDENTIAL_CLEAR_FAILED")?;
@@ -311,6 +331,12 @@ impl CredentialStore for FileCredentialStore {
             }
             Err(error) if error.kind() == ErrorKind::NotFound => Ok(()),
             Err(_) => Err("CREDENTIAL_CLEAR_FAILED"),
+        };
+        let temp_result = self.clear_orphaned_temps();
+        if credential_result.is_err() || temp_result.is_err() {
+            Err("CREDENTIAL_CLEAR_FAILED")
+        } else {
+            Ok(())
         }
     }
 }
@@ -594,6 +620,21 @@ mod tests {
 
     fn session_value() -> &'static str {
         r#"{"schema":"jungle-bell.desktop-session","schemaVersion":1,"accessToken":"jbd_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","expiresAt":"2099-01-01T00:00:00Z"}"#
+    }
+
+    #[test]
+    fn macos는_반복_keychain_인증이_없는_private_file_store를_사용한다() {
+        if cfg!(target_os = "macos") {
+            assert_eq!(
+                platform_credential_store_kind(),
+                PlatformCredentialStoreKind::PrivateFile
+            );
+            let directory = tempfile::tempdir().unwrap();
+            let store = platform_credential_store(directory.path()).unwrap();
+            store.store(session_value()).unwrap();
+            assert_eq!(store.load().unwrap().unwrap().as_str(), session_value());
+            assert!(directory.path().join(DESKTOP_SESSION_FILE).exists());
+        }
     }
 
     fn is_test_session(value: &str) -> bool {

@@ -1,7 +1,7 @@
 import {useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {CircleAlert, FolderOpen, Laptop, RefreshCw} from 'lucide-react';
-import type {DesktopSettings} from '@/api/desktop-settings';
+import type {DesktopSettingsUpdate} from '@/api/desktop-settings';
 import {queryKeys, useDashboardEnvironment} from '@/app/dashboard-context';
 import {ErrorState, LoadingState} from '@/components/dashboard/async-state';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
@@ -18,6 +18,7 @@ import {
 import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@/components/ui/card';
 import {Separator} from '@/components/ui/separator';
+import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@/components/ui/select';
 import {Switch} from '@/components/ui/switch';
 
 function ServiceSettingRow({title, description, checked, disabled, onCheckedChange}: {
@@ -51,9 +52,10 @@ function DesktopServiceSettings() {
     const settings = useQuery({
         queryKey: queryKeys.desktopSettings,
         queryFn: () => api.getDesktopSettings(),
+        refetchInterval: 30_000,
     });
     const save = useMutation({
-        mutationFn: (input: DesktopSettings) => api.updateDesktopSettings(input),
+        mutationFn: (input: DesktopSettingsUpdate) => api.updateDesktopSettings(input),
         onSuccess: async (value) => {
             client.setQueryData(queryKeys.desktopSettings, value);
             await client.invalidateQueries({queryKey: queryKeys.desktopSettings});
@@ -61,9 +63,13 @@ function DesktopServiceSettings() {
     });
     const openLogs = useMutation({mutationFn: () => api.openLogFolder()});
     const value = settings.data;
-    const update = (key: keyof DesktopSettings, checked: boolean) => {
+    const update = (key: 'autoStart' | 'autoUpdate' | 'usageAnalytics' | 'debugMode', checked: boolean) => {
         if (!value) return;
         save.mutate({...value, [key]: checked});
+    };
+    const updateSelectedCohort = (selectedCohortId: string | null) => {
+        if (!value) return;
+        save.mutate({...value, selectedCohortId});
     };
 
     if (settings.isPending && !value) {
@@ -76,6 +82,44 @@ function DesktopServiceSettings() {
 
     return (
         <div className="space-y-4">
+            <Card>
+                <CardHeader>
+                    <CardTitle>정글 LMS</CardTitle>
+                    <CardDescription>출석과 D-Day를 확인할 기수를 선택합니다.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                    <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                        <div>
+                            <p className="text-sm font-medium">출석 확인 기수</p>
+                            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                                자동 선택은 현재 날짜에 맞는 활성 기수를 사용합니다.
+                            </p>
+                        </div>
+                        <Select
+                            disabled={save.isPending || value.cohortOptions.length === 0}
+                            value={value.selectedCohortId
+                                && value.cohortOptions.some(({id}) => id === value.selectedCohortId)
+                                ? value.selectedCohortId
+                                : 'automatic'}
+                            onValueChange={(value) => updateSelectedCohort(value === 'automatic' ? null : value)}
+                        >
+                            <SelectTrigger aria-label="출석 확인 기수" className="w-full sm:w-64">
+                                <SelectValue placeholder="기수를 선택하세요"/>
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="automatic">자동 선택</SelectItem>
+                                {value.cohortOptions.map((cohort) => (
+                                    <SelectItem key={cohort.id} value={cohort.id}>{cohort.label}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    {value.cohortOptions.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">LMS 로그인 후 기수 목록이 표시됩니다.</p>
+                    ) : null}
+                </CardContent>
+            </Card>
+
             <Card>
                 <CardHeader>
                     <CardTitle>앱 실행</CardTitle>

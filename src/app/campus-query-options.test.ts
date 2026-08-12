@@ -18,6 +18,7 @@ const laundrySnapshot: DashboardLaundrySnapshot = {
         collection: 'SUCCESS',
         sourceFreshness: 'REFRESH_OBSERVED',
         lastCheckedAt: '2026-08-11T00:00:00.000Z',
+        expectedRefreshIntervalSeconds: 300,
     },
     machines: [],
     capacity: null,

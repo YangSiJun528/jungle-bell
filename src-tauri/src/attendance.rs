@@ -206,6 +206,17 @@ pub(crate) fn resolve_current_cohort(options: &[CohortOption], today: NaiveDate)
     }
 }
 
+pub(crate) fn resolve_cohort(
+    options: &[CohortOption],
+    selected_cohort_id: Option<&str>,
+    today: NaiveDate,
+) -> CohortResolution {
+    if let Some(selected) = selected_cohort_id.and_then(|id| options.iter().find(|option| option.id == id)) {
+        return cohort_resolution(selected, today);
+    }
+    resolve_current_cohort(options, today)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct AttendanceUpdate {
     pub(crate) phase: DailyPhase,

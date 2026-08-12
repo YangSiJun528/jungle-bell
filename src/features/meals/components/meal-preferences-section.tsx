@@ -136,7 +136,7 @@ export function MealPreferencesSection({surface}: {surface: PersonalSurface}) {
                 <Smartphone/>
                 <AlertTitle>PC 연결이 필요합니다.</AlertTitle>
                 <AlertDescription>
-                    연결 메뉴에서 이 PWA를 PC 앱과 연결한 뒤 급식 알림을 설정할 수 있어요.
+                    PC 앱 연결 후 급식 알림 설정 가능
                 </AlertDescription>
             </Alert>
         );
@@ -150,14 +150,14 @@ export function MealPreferencesSection({surface}: {surface: PersonalSurface}) {
                         <BellRing className="size-4 text-primary"/>
                         급식 알림
                     </CardTitle>
-                    <CardDescription>새 식단 게시물이 확인되면 선택한 식사 시간대만 알려드려요.</CardDescription>
+                    <CardDescription>새 식단 게시물 중 선택한 식사 시간대만 알림</CardDescription>
                 </CardHeader>
                 <CardContent>
                     {preferences.isPending && !preferences.data ? (
-                        <LoadingState label="급식 알림 설정을 불러오고 있습니다."/>
+                        <LoadingState label="급식 알림 설정 불러오는 중"/>
                     ) : preferences.isError && !preferences.data ? (
                         <ErrorState
-                            description="PC 연결 상태를 확인해 주세요."
+                            description="PC 연결 상태를 확인하세요."
                             retry={() => void preferences.refetch()}
                         />
                     ) : preferences.data ? (
@@ -176,8 +176,8 @@ export function MealPreferencesSection({surface}: {surface: PersonalSurface}) {
             {error ? (
                 <Alert variant="destructive">
                     <CircleAlert/>
-                    <AlertTitle>급식 알림 설정을 처리하지 못했습니다.</AlertTitle>
-                    <AlertDescription>연결 상태를 확인한 뒤 다시 시도해 주세요.</AlertDescription>
+                    <AlertTitle>급식 알림 설정 저장 실패</AlertTitle>
+                    <AlertDescription>연결 상태를 확인하고 새로고침하세요.</AlertDescription>
                 </Alert>
             ) : null}
         </>

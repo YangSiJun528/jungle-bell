@@ -1,34 +1,45 @@
-import type {AttendanceDashboard} from '@/api/dashboard-api';
 import {
     buildDdayProgress,
     kstDateString,
     type DdayPeriod,
     type DdayProgress,
 } from './dday-progress';
-import {dashboardDdayLabel, dashboardDdayPeriod} from './home-overview';
+import {
+    dashboardDdayLabel,
+    dashboardDdayPeriod,
+    type DdayAttendanceSnapshot,
+} from './dday-label';
 
-export interface HomeDdayView {
+export interface DdayView {
     text: string;
     period: DdayPeriod | null;
     progress: DdayProgress | null;
 }
 
-export interface HomeDdayInput {
+export interface DdayViewInput {
     surface: 'public' | 'desktop' | 'companion';
-    attendance?: AttendanceDashboard;
+    attendance?: DdayAttendanceDashboard;
     today?: string;
 }
 
-function personalAttendanceSnapshot(attendance?: AttendanceDashboard) {
-    if (attendance?.state !== 'loaded' || attendance.attendance.status !== 'available') return null;
+export interface DdayAttendanceDashboard {
+    state: string;
+    attendance?: {
+        status: string;
+        snapshot: DdayAttendanceSnapshot | null;
+    };
+}
+
+function personalAttendanceSnapshot(attendance?: DdayAttendanceDashboard) {
+    if (attendance?.state !== 'loaded' || attendance.attendance?.status !== 'available') return null;
     return attendance.attendance.snapshot;
 }
 
-export function selectHomeDday({
+export function selectDdayView({
     surface,
     attendance,
     today = kstDateString(),
-}: HomeDdayInput): HomeDdayView | null {
+}: DdayViewInput): DdayView | null {
     if (surface === 'public') return null;
 
     const snapshot = personalAttendanceSnapshot(attendance);

@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use serde::Serialize;
+use serde::{Deserialize, Deserializer, Serialize};
 use tauri::{Emitter, Manager};
 use tokio::sync::Mutex;
 
@@ -291,31 +291,46 @@ pub async fn report_checker_event(
     }
 }
 
-#[derive(Debug, Clone, Copy, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct DesktopSettingsInput {
     auto_start: bool,
     auto_update: bool,
     usage_analytics: bool,
     debug_mode: bool,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    selected_cohort_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize)]
+fn deserialize_required_nullable<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Option::<String>::deserialize(deserializer)
+}
+
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DesktopSettings {
     auto_start: bool,
     auto_update: bool,
     usage_analytics: bool,
     debug_mode: bool,
+    selected_cohort_id: Option<String>,
+    effective_cohort_id: Option<String>,
+    cohort_options: Vec<attendance::CohortOption>,
 }
 
-impl From<crate::config::Config> for DesktopSettings {
-    fn from(value: crate::config::Config) -> Self {
+impl From<crate::desktop_settings::DesktopSettingsSnapshot> for DesktopSettings {
+    fn from(value: crate::desktop_settings::DesktopSettingsSnapshot) -> Self {
         Self {
-            auto_start: value.auto_start,
-            auto_update: value.auto_update,
-            usage_analytics: value.usage_analytics,
-            debug_mode: value.debug_mode,
+            auto_start: value.config.auto_start,
+            auto_update: value.config.auto_update,
+            usage_analytics: value.config.usage_analytics,
+            debug_mode: value.config.debug_mode,
+            selected_cohort_id: value.config.selected_cohort_id,
+            effective_cohort_id: value.effective_cohort_id,
+            cohort_options: value.cohort_options,
         }
     }
 }
@@ -326,7 +341,7 @@ pub async fn get_desktop_settings(
     settings: tauri::State<'_, Arc<DesktopSettingsService>>,
 ) -> Result<DesktopSettings, String> {
     remote_sync::ensure_dashboard_window(&window)?;
-    Ok(settings.settings().await.into())
+    Ok(settings.snapshot().await.into())
 }
 
 #[tauri::command]
@@ -343,6 +358,7 @@ pub async fn update_desktop_settings(
         auto_update: input.auto_update,
         usage_analytics: input.usage_analytics,
         debug_mode: input.debug_mode,
+        selected_cohort_id: input.selected_cohort_id,
     };
     log::info!(
         "[settings] 데스크톱 서비스 설정 변경: auto_start={} auto_update={} analytics={} debug={}",
@@ -392,7 +408,10 @@ pub async fn update_desktop_settings(
             crate::updater::auto_install_update(app).await;
         });
     }
-    Ok(saved.into())
+    if previous.selected_cohort_id != saved.selected_cohort_id {
+        checker::refresh_webview(&app, "cohort selection changed");
+    }
+    Ok(settings.snapshot().await.into())
 }
 
 /// 대시보드가 사용자 경로를 전달하지 못하게 하고, 앱 전용 로그 디렉터리만 연다.
@@ -487,7 +506,7 @@ pub async fn send_test_notification(
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_js_log_payload, CheckerEventInput, CheckerEventResponse};
+    use super::{validate_js_log_payload, CheckerEventInput, CheckerEventResponse, DesktopSettingsInput};
 
     #[test]
     fn 원격_js_로그_payload는_레벨_크기_제어문자를_검증한다() {
@@ -526,6 +545,36 @@ mod tests {
             serde_json::to_value(CheckerEventResponse::Acknowledged).unwrap(),
             serde_json::json!({"type": "acknowledged"})
         );
+    }
+
+    #[test]
+    fn 데스크톱_설정은_nullable_기수_선택을_필수로_받는다() {
+        let current = serde_json::json!({
+            "autoStart": false,
+            "autoUpdate": true,
+            "usageAnalytics": true,
+            "debugMode": false,
+            "selectedCohortId": null
+        });
+        assert!(serde_json::from_value::<DesktopSettingsInput>(current).is_ok());
+        for invalid in [
+            serde_json::json!({
+                "autoStart": false,
+                "autoUpdate": true,
+                "usageAnalytics": true,
+                "debugMode": false
+            }),
+            serde_json::json!({
+                "autoStart": false,
+                "autoUpdate": true,
+                "usageAnalytics": true,
+                "debugMode": false,
+                "selectedCohortId": null,
+                "legacy": true
+            }),
+        ] {
+            assert!(serde_json::from_value::<DesktopSettingsInput>(invalid).is_err());
+        }
     }
 
     #[test]

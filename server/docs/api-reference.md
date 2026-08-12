@@ -161,9 +161,18 @@ pinned 주간 식단표, 현재 중식·석식 게시물, 기타 게시물을 �
 
 `data.recentMenus`에는 카카오 최신 목록에서 제거된 게시물도 포함한 최근 식단 최대 30개가 들어갑니다. 각 이미지에는 원본 카카오 URL, 콘텐츠 SHA, 보관 객체 키, API 이미지 URL이 포함됩니다.
 
-### `GET /api/public/meals/history?before=<RFC3339>&limit=30`
+### `GET /api/public/meals/history?before=<cursor>&limit=30`
 
-D1에 누적된 과거 식단을 최신순으로 반환합니다. `limit` 범위는 1부터 100이며 `nextBefore`가 있으면 다음 요청의 `before`로 사용합니다. 카카오에서 게시물이 제거되어도 수집된 본문과 이미지 메타데이터는 이 엔드포인트에서 계속 조회할 수 있습니다.
+D1에 누적된 과거 식단을 최신순으로 반환합니다. `limit` 범위는 1부터 100이며
+`nextBefore`가 있으면 불투명 cursor 그대로 다음 요청의 `before`로 사용합니다.
+카카오에서 게시물이 제거되어도 수집된 본문과 이미지 메타데이터는 이
+엔드포인트에서 계속 조회할 수 있습니다.
+
+### `GET /api/public/meals/history?month=YYYY-MM`
+
+한국 표준시 기준 한 달의 과거 식단을 한 번에 반환하며 `nextBefore`는 `null`입니다.
+대시보드 달력은 사용자가 월을 이동할 때 이 형식으로 해당 월만 조회합니다.
+`month`는 `before`와 함께 보낼 수 없고 `YYYY-MM` 정규형만 허용합니다.
 
 ### `GET /api/public/assets/:sha.:extension`
 

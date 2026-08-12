@@ -79,6 +79,7 @@ export interface DashboardLaundrySnapshot {
         collection: string;
         sourceFreshness: string;
         lastCheckedAt: string | null;
+        expectedRefreshIntervalSeconds: number;
     };
     machines: DashboardLaundryMachine[];
     capacity: LaundryCapacitySnapshot | null;
@@ -242,6 +243,7 @@ export interface DashboardApi extends DashboardPersonalApi, DashboardDesktopSett
     getPublicLaundry(): Promise<DashboardLaundrySnapshot>;
     getPublicMeals(): Promise<DashboardMealsSnapshot>;
     getPublicMealHistory(before: string | null, limit: number): Promise<DashboardMealHistoryPage>;
+    getPublicMealHistoryMonth(month: string): Promise<DashboardMealHistoryPage>;
     getAttendance(surface: 'desktop' | 'companion'): Promise<AttendanceDashboard>;
     getDesktopConnectionState(): Promise<DesktopConnectionState>;
     resetDesktopIdentity(): Promise<DesktopConnectionState>;
@@ -377,6 +379,14 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
                 throw new Error('API_CLIENT_INVALID_ARGUMENT');
             }
             const value = await publicJson(mealHistoryPath(before, limit));
+            return parseDashboardMealHistoryPage(value, mealAssetOrigin);
+        },
+
+        async getPublicMealHistoryMonth(month) {
+            if (!/^\d{4}-(?:0[1-9]|1[0-2])$/u.test(month)) {
+                throw new Error('API_CLIENT_INVALID_ARGUMENT');
+            }
+            const value = await publicJson(`/api/public/meals/history?month=${month}`);
             return parseDashboardMealHistoryPage(value, mealAssetOrigin);
         },
 
@@ -679,6 +689,16 @@ function finiteNumber(value: unknown): number {
     return value;
 }
 
+function refreshIntervalSeconds(value: unknown): number {
+    if (typeof value !== 'number'
+        || !Number.isSafeInteger(value)
+        || value < 1
+        || value > 3_600) {
+        throw new Error('API_RESPONSE_INVALID');
+    }
+    return value;
+}
+
 function safeEpochMillis(value: unknown): number {
     if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
         throw new Error('API_RESPONSE_INVALID');
@@ -759,6 +779,7 @@ export function parseDashboardLaundrySnapshot(value: unknown): DashboardLaundryS
             collection: text(quality.collection, 64),
             sourceFreshness: text(quality.sourceFreshness, 64),
             lastCheckedAt: nullableIso(quality.lastCheckedAt),
+            expectedRefreshIntervalSeconds: refreshIntervalSeconds(quality.expectedRefreshIntervalSeconds),
         },
         machines: array(source.machines, 64).map((entry) => {
             const machine = record(entry);
@@ -1280,7 +1301,8 @@ function parsePairingStatus(value: unknown): MobilePairingStatus {
 }
 
 function parseMobileSessions(value: unknown): MobileSession[] {
-    return array(value).map((entry) => {
+    const source = exactRecord(value, ['devices']);
+    return array(source.devices).map((entry) => {
         const session = exactRecord(entry, [
             'deviceId', 'deviceLabel', 'installationId', 'createdAt', 'expiresAt',
             'lastSeenAt', 'pushEnabled', 'status',

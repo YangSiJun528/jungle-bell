@@ -1,11 +1,16 @@
-import type {AttendanceSnapshot} from '@/api/dashboard-api';
 import type {DdayPeriod} from './dday-progress';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CALENDAR_DATE = /^(\d{4})-(\d{2})-(\d{2})$/u;
 
+export interface DdayAttendanceSnapshot {
+    cohortStatus: string;
+    cohortStartDate: string | null;
+    cohortEndDate: string | null;
+}
+
 export function dashboardDdayPeriod(
-    snapshot: Pick<AttendanceSnapshot, 'cohortStartDate' | 'cohortEndDate'>,
+    snapshot: Pick<DdayAttendanceSnapshot, 'cohortStartDate' | 'cohortEndDate'>,
 ): DdayPeriod | null {
     const start = calendarTimestamp(snapshot.cohortStartDate);
     const end = calendarTimestamp(snapshot.cohortEndDate);
@@ -17,7 +22,7 @@ export function dashboardDdayPeriod(
 }
 
 export function dashboardDdayLabel(
-    snapshot: Pick<AttendanceSnapshot, 'cohortStartDate' | 'cohortEndDate' | 'cohortStatus'>,
+    snapshot: DdayAttendanceSnapshot,
     today: string,
 ): string | null {
     const period = dashboardDdayPeriod(snapshot);

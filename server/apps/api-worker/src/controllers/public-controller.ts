@@ -83,9 +83,9 @@ export function createPublicController(): Hono<ApiEnvironment> {
     return context.json(result.value);
   });
   app.get("/api/public/meals/history", zValidator("query", mealHistoryQuerySchema, validationHook), async (context) => {
-    const { before, limit } = context.req.valid("query");
+    const { before, limit, month } = context.req.valid("query");
     context.header("Cache-Control", LATEST_CACHE);
-    return context.json(await context.var.services.publicData.mealHistory(before, limit, context.req.url));
+    return context.json(await context.var.services.publicData.mealHistory(before, limit, context.req.url, month));
   });
   app.get("/api/public/assets/:asset", zValidator("param", assetParamSchema, validationHook), async (context) => {
     const result = await context.var.services.publicData.asset(context.req.valid("param").asset);

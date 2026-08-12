@@ -44,6 +44,7 @@ function DesktopEventBridge({enabled}: {enabled: boolean}) {
                 () => listen<unknown>('lms-session-state-updated', ({payload}) => {
                     const state = normalizeLmsSessionStateEvent(payload);
                     if (!state) return;
+                    void client.invalidateQueries({queryKey: queryKeys.desktopSettings});
                     const current = client.getQueryData<DesktopConnectionState>(queryKeys.desktopConnection);
                     if (current) {
                         client.setQueryData(
