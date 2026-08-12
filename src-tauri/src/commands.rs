@@ -7,8 +7,10 @@
 use std::sync::Arc;
 
 use serde::Serialize;
+use tauri::Manager;
 use tokio::sync::Mutex;
 
+use crate::analytics::{self, Event};
 use crate::attendance;
 use crate::campus::{CampusDataKind, CampusService};
 use crate::checker;
@@ -464,12 +466,29 @@ pub async fn get_dashboard_meal_history(
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct DesktopSettingsInput {
     auto_start: bool,
+    auto_update: bool,
+    usage_analytics: bool,
+    debug_mode: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DesktopSettings {
     auto_start: bool,
+    auto_update: bool,
+    usage_analytics: bool,
+    debug_mode: bool,
+}
+
+impl From<crate::config::Config> for DesktopSettings {
+    fn from(value: crate::config::Config) -> Self {
+        Self {
+            auto_start: value.auto_start,
+            auto_update: value.auto_update,
+            usage_analytics: value.usage_analytics,
+            debug_mode: value.debug_mode,
+        }
+    }
 }
 
 #[tauri::command]
@@ -478,9 +497,7 @@ pub async fn get_desktop_settings(
     settings: tauri::State<'_, Arc<DesktopSettingsService>>,
 ) -> Result<DesktopSettings, String> {
     remote_sync::ensure_dashboard_window(&window)?;
-    Ok(DesktopSettings {
-        auto_start: settings.auto_start().await,
-    })
+    Ok(settings.settings().await.into())
 }
 
 #[tauri::command]
@@ -491,9 +508,71 @@ pub async fn update_desktop_settings(
     input: DesktopSettingsInput,
 ) -> Result<DesktopSettings, String> {
     remote_sync::ensure_dashboard_window(&window)?;
-    log::info!("[settings] 자동 시작 설정 변경: {}", input.auto_start);
-    let auto_start = settings.update_auto_start(&app, input.auto_start).await?;
-    Ok(DesktopSettings { auto_start })
+    let previous = settings.settings().await;
+    let next = crate::config::Config {
+        auto_start: input.auto_start,
+        auto_update: input.auto_update,
+        usage_analytics: input.usage_analytics,
+        debug_mode: input.debug_mode,
+    };
+    log::info!(
+        "[settings] 데스크톱 서비스 설정 변경: auto_start={} auto_update={} analytics={} debug={}",
+        next.auto_start,
+        next.auto_update,
+        next.usage_analytics,
+        next.debug_mode,
+    );
+    let saved = settings.update(&app, next).await?;
+
+    if previous.debug_mode != saved.debug_mode {
+        log::set_max_level(if saved.debug_mode {
+            log::LevelFilter::Debug
+        } else {
+            log::LevelFilter::Info
+        });
+    }
+    if previous.usage_analytics != saved.usage_analytics {
+        if saved.usage_analytics {
+            analytics::set_user_enabled(true);
+            analytics::track(Event::UsageAnalyticsToggled(true));
+            analytics::track(Event::AppOpened);
+        } else {
+            analytics::track(Event::UsageAnalyticsToggled(false));
+            analytics::set_user_enabled(false);
+        }
+    }
+    for (changed, name, value) in [
+        (previous.auto_start != saved.auto_start, "auto_start", saved.auto_start),
+        (
+            previous.auto_update != saved.auto_update,
+            "auto_update",
+            saved.auto_update,
+        ),
+        (previous.debug_mode != saved.debug_mode, "debug_mode", saved.debug_mode),
+    ] {
+        if changed {
+            analytics::track(Event::DesktopSettingChanged {
+                setting: name,
+                enabled: value,
+            });
+        }
+    }
+    if !previous.auto_update && saved.auto_update {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            crate::updater::auto_install_update(app).await;
+        });
+    }
+    Ok(saved.into())
+}
+
+/// 대시보드가 사용자 경로를 전달하지 못하게 하고, 앱 전용 로그 디렉터리만 연다.
+#[tauri::command]
+pub fn open_log_folder(window: tauri::WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
+    remote_sync::ensure_dashboard_window(&window)?;
+    let log_dir = app.path().app_log_dir().map_err(|error| error.to_string())?;
+    log::info!("[settings] 로그 폴더 열기: {}", log_dir.display());
+    tauri_plugin_opener::open_path(log_dir, None::<&str>).map_err(|error| error.to_string())
 }
 
 /// 대시보드 홈에 표시할 로컬 출석·알림·캠퍼스 캐시를 반환한다.

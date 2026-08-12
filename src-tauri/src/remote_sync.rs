@@ -34,7 +34,7 @@ const DASHBOARD_WINDOW_LABEL: &str = "dashboard";
 const INSTALLATIONS_PATH: &str = "/api/desktop/installations";
 const ROTATE_INSTALLATION_PATH: &str = "/api/desktop/installations/rotate";
 const ATTENDANCE_SNAPSHOT_PATH: &str = "/api/desktop/attendance";
-const ATTENDANCE_PREFERENCES_PATH: &str = "/api/desktop/attendance/preferences";
+const ATTENDANCE_PREFERENCES_PATH: &str = "/api/desktop/v2/attendance/preferences";
 const HEARTBEAT_PATH: &str = "/api/desktop/heartbeat";
 const NOTIFICATIONS_PATH: &str = "/api/desktop/notifications";
 const MOBILE_SESSIONS_PATH: &str = "/api/desktop/mobile-sessions";
@@ -665,7 +665,7 @@ mod tests {
             "/api/desktop/installations/rotate",
             "/api/desktop/heartbeat",
             "/api/desktop/attendance",
-            "/api/desktop/attendance/preferences",
+            "/api/desktop/v2/attendance/preferences",
             "/api/desktop/notifications",
             "/api/desktop/notifications/test",
             "/api/desktop/mobile-sessions",
@@ -676,6 +676,7 @@ mod tests {
         ] {
             assert_eq!(api.endpoint(path).unwrap().path(), path);
         }
+        assert!(api.endpoint("/api/desktop/attendance/preferences").is_err());
         assert!(api.endpoint("/v1/attendance/snapshot").is_err());
         assert!(api.endpoint("/api/desktop/automatic-attendance").is_err());
         assert!(api.endpoint("/api/desktop/notifications/notification_1/ack").is_ok());
@@ -832,8 +833,13 @@ mod tests {
     #[test]
     fn attendance_preferences_are_a_strict_standalone_contract() {
         let input = AttendancePreferences {
+            enabled: true,
             morning: true,
             evening: false,
+            morning_start_hour: 6,
+            evening_end_hour: 2,
+            morning_interval_minutes: 5,
+            evening_interval_minutes: 10,
             skip_sunday: true,
             skip_attendance_date: Some("2026-08-10".into()),
         };
@@ -841,19 +847,39 @@ mod tests {
         assert_eq!(
             serde_json::to_value(&input).unwrap(),
             serde_json::json!({
+                "enabled": true,
                 "morning": true,
                 "evening": false,
+                "morningStartHour": 6,
+                "eveningEndHour": 2,
+                "morningIntervalMinutes": 5,
+                "eveningIntervalMinutes": 10,
                 "skipSunday": true,
                 "skipAttendanceDate": "2026-08-10"
             })
         );
         assert!(serde_json::from_value::<AttendancePreferences>(serde_json::json!({
+            "enabled": true,
             "morning": true,
             "evening": true,
+            "morningStartHour": 9,
+            "eveningEndHour": 4,
+            "morningIntervalMinutes": 15,
+            "eveningIntervalMinutes": 15,
             "skipSunday": false,
             "skipAttendanceDate": null,
             "legacy": true
         }))
+        .is_err());
+        assert!(validate_attendance_preferences(&AttendancePreferences {
+            morning_start_hour: 3,
+            ..input.clone()
+        })
+        .is_err());
+        assert!(validate_attendance_preferences(&AttendancePreferences {
+            evening_interval_minutes: 2,
+            ..input.clone()
+        })
         .is_err());
         assert!(validate_attendance_preferences(&AttendancePreferences {
             skip_attendance_date: Some("10-08-2026".into()),

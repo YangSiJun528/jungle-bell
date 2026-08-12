@@ -1,6 +1,6 @@
 import {z, type ZodType} from 'zod';
 import {
-    attendancePreferencesSchema,
+    attendancePreferencesV2Schema,
     laundryQueueEntrySchema,
     laundryQueueIdSchema,
     laundryQueueInputSchema,
@@ -11,7 +11,7 @@ import {
     laundryWatchSchema,
     mealPreferencesInputSchema,
     mealPreferencesSchema,
-    type AttendancePreferences,
+    type AttendancePreferencesV2,
     type LaundryApplianceKind,
     type LaundryQueueEntry,
     type LaundryQueueInput,
@@ -21,8 +21,9 @@ import {
     type MealPreferencesInput,
 } from '@jungle-bell/backend-common/contracts/personal';
 
+export type AttendancePreferences = AttendancePreferencesV2;
+
 export type {
-    AttendancePreferences,
     LaundryApplianceKind,
     LaundryQueueEntry,
     LaundryQueueInput,
@@ -118,17 +119,17 @@ export function createDashboardPersonalApi(options: {
             return value(
                 surface,
                 'get_attendance_preferences',
-                attendancePreferencesSchema,
-                () => mobileRequest('GET', '/attendance/preferences'),
+                attendancePreferencesV2Schema,
+                () => mobileRequest('GET', '/v2/attendance/preferences'),
             );
         },
         async updateAttendancePreferences(surface, input) {
-            const body = parseInput(attendancePreferencesSchema, input);
+            const body = parseInput(attendancePreferencesV2Schema, input);
             return value(
                 surface,
                 'update_attendance_preferences',
-                attendancePreferencesSchema,
-                () => mobileRequest('PUT', '/attendance/preferences', body),
+                attendancePreferencesV2Schema,
+                () => mobileRequest('PUT', '/v2/attendance/preferences', body),
                 {input: body},
             );
         },

@@ -23,9 +23,9 @@ import {
 } from '@/components/ui/card';
 import {Skeleton} from '@/components/ui/skeleton';
 import type {AttendanceSnapshot} from '@/api/dashboard-api';
-import {dashboardDdayLabel, dashboardDdayPeriod} from '@/features/home/lib/home-overview';
-import {buildDdayProgress, kstDateString} from '@/features/home/lib/dday-progress';
 import {dateTimeLabel} from '@/lib/format';
+import {HomeDdayCard} from './components/home-dday-card';
+import {selectHomeDday} from './lib/home-dday';
 import {homeAttendanceForToday} from './home-view-model';
 
 const CAMPUS_URL = 'https://jungle-lms.krafton.com/check-in';
@@ -128,17 +128,15 @@ export function JungleCampusSummary({onRequestInstall}: JungleCampusSummaryProps
         return <PublicCampusContent onRequestInstall={onRequestInstall}/>;
     }
 
+    const dday = selectHomeDday({
+        surface: surface.kind,
+        overview: overview.data,
+        attendance: attendance.data,
+    });
     const availableAttendance = homeAttendanceForToday(attendance.data);
     const attendanceNeedsRefresh = attendance.data?.state === 'loaded'
         && attendance.data.attendance.status === 'available'
         && availableAttendance === null;
-    const ddayPeriod = overview.data?.attendance.ddayPeriod
-        ?? (availableAttendance ? dashboardDdayPeriod(availableAttendance.snapshot) : null);
-    const ddayProgress = ddayPeriod ? buildDdayProgress(ddayPeriod) : null;
-    const ddayText = overview.data?.attendance.ddayText
-        ?? (availableAttendance
-            ? dashboardDdayLabel(availableAttendance.snapshot, kstDateString())
-            : null);
 
     let content: React.ReactNode;
     if (attendance.isPending && !attendance.data) {
@@ -201,44 +199,34 @@ export function JungleCampusSummary({onRequestInstall}: JungleCampusSummaryProps
                         </span>
                     ) : null}
                 </div>
-                {ddayText ? (
-                    <div className="rounded-lg border bg-muted/30 p-3">
-                        <div className="flex items-center justify-between gap-3 text-sm">
-                            <strong>{ddayText}</strong>
-                            {ddayProgress ? <span className="text-muted-foreground">{ddayProgress.percent}%</span> : null}
-                        </div>
-                        {ddayProgress ? (
-                            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-primary/15">
-                                <div className="h-full rounded-full bg-primary" style={{width: `${ddayProgress.percent}%`}}/>
-                            </div>
-                        ) : null}
-                    </div>
-                ) : null}
             </>
         );
     }
 
     return (
-        <CampusCardFrame
-            footer={(
-                <>
-                    {surface.kind === 'desktop' ? (
-                        <Button size="sm" disabled={openCampus.isPending} onClick={() => openCampus.mutate()}>
-                            {openCampus.isPending ? '여는 중' : '정글캠퍼스 열기'} <ExternalLink/>
+        <div className="space-y-4" data-home-campus-section="true">
+            <CampusCardFrame
+                footer={(
+                    <>
+                        {surface.kind === 'desktop' ? (
+                            <Button size="sm" disabled={openCampus.isPending} onClick={() => openCampus.mutate()}>
+                                {openCampus.isPending ? '여는 중' : '정글캠퍼스 열기'} <ExternalLink/>
+                            </Button>
+                        ) : (
+                            <Button asChild size="sm">
+                                <a href={CAMPUS_URL} target="_blank" rel="noopener noreferrer">정글캠퍼스 열기 <ExternalLink/></a>
+                            </Button>
+                        )}
+                        <Button asChild size="sm" variant="link" className="px-1">
+                            <a href="#attendance">출석 상세 보기 <ArrowRight/></a>
                         </Button>
-                    ) : (
-                        <Button asChild size="sm">
-                            <a href={CAMPUS_URL} target="_blank" rel="noopener noreferrer">정글캠퍼스 열기 <ExternalLink/></a>
-                        </Button>
-                    )}
-                    <Button asChild size="sm" variant="link" className="px-1">
-                        <a href="#attendance">출석 상세 보기 <ArrowRight/></a>
-                    </Button>
-                    {openCampus.isError ? <span className="text-xs text-destructive">정글캠퍼스를 열지 못했습니다.</span> : null}
-                </>
-            )}
-        >
-            {content}
-        </CampusCardFrame>
+                        {openCampus.isError ? <span className="text-xs text-destructive">정글캠퍼스를 열지 못했습니다.</span> : null}
+                    </>
+                )}
+            >
+                {content}
+            </CampusCardFrame>
+            {dday ? <HomeDdayCard view={dday}/> : null}
+        </div>
     );
 }

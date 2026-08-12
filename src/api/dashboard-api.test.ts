@@ -830,8 +830,13 @@ const mealPreferences = {
 };
 
 const attendancePreferences = {
+    enabled: true,
     morning: true,
     evening: true,
+    morningStartHour: 9,
+    eveningEndHour: 4,
+    morningIntervalMinutes: 15 as const,
+    eveningIntervalMinutes: 15 as const,
     skipSunday: false,
     skipAttendanceDate: null,
 };
@@ -858,28 +863,39 @@ const laundryQueueEntry = {
     position: 2,
 };
 
-test('데스크톱 최소 설정은 canonical current-only commands와 exact DTO를 사용한다', async () => {
+test('데스크톱 서비스 설정은 canonical current-only commands와 exact DTO를 사용한다', async () => {
     const calls: Array<{command: string; args?: Record<string, unknown>}> = [];
+    const initial = {
+        autoStart: false,
+        autoUpdate: true,
+        usageAnalytics: true,
+        debugMode: false,
+    };
+    const updated = {...initial, autoStart: true};
     const api = createDashboardApi({
         fetcher: async () => { throw new Error('unexpected fetch'); },
         invokeCommand: async (command, args) => {
             calls.push({command, args});
-            return {autoStart: command === 'update_desktop_settings'};
+            if (command === 'open_log_folder') return undefined;
+            return command === 'update_desktop_settings' ? updated : initial;
         },
     });
 
-    assert.deepEqual(await api.getDesktopSettings(), {autoStart: false});
-    assert.deepEqual(await api.updateDesktopSettings({autoStart: true}), {autoStart: true});
+    assert.deepEqual(await api.getDesktopSettings(), initial);
+    assert.deepEqual(await api.updateDesktopSettings(updated), updated);
+    await api.openLogFolder();
     assert.deepEqual(calls, [
         {command: 'get_desktop_settings', args: undefined},
-        {command: 'update_desktop_settings', args: {input: {autoStart: true}}},
+        {command: 'update_desktop_settings', args: {input: updated}},
+        {command: 'open_log_folder', args: undefined},
     ]);
 });
 
-test('데스크톱 최소 설정은 unknown field와 non-boolean을 거부한다', async () => {
+test('데스크톱 서비스 설정은 unknown field와 non-boolean을 거부한다', async () => {
     for (const response of [
-        {autoStart: false, analytics: true},
-        {autoStart: 'true'},
+        {autoStart: false, autoUpdate: true, usageAnalytics: true, debugMode: false, unknown: true},
+        {autoStart: 'true', autoUpdate: true, usageAnalytics: true, debugMode: false},
+        {autoStart: false, autoUpdate: true, usageAnalytics: true},
     ]) {
         const api = createDashboardApi({
             fetcher: async () => { throw new Error('unexpected fetch'); },
@@ -911,7 +927,7 @@ test('데스크톱 개인 생활 설정은 canonical Tauri commands와 strict DT
 
     assert.deepEqual(await api.getAttendancePreferences('desktop'), attendancePreferences);
     assert.deepEqual(await api.updateAttendancePreferences('desktop', {
-        morning: false, evening: true, skipSunday: true, skipAttendanceDate: '2026-08-10',
+        ...attendancePreferences, morning: false, skipSunday: true, skipAttendanceDate: '2026-08-10',
     }), attendancePreferences);
     assert.deepEqual(await api.getMealPreferences('desktop'), mealPreferences);
     assert.deepEqual(await api.updateMealPreferences('desktop', {
@@ -932,7 +948,7 @@ test('데스크톱 개인 생활 설정은 canonical Tauri commands와 strict DT
     assert.deepEqual(calls, [
         {command: 'get_attendance_preferences', args: undefined},
         {command: 'update_attendance_preferences', args: {input: {
-            morning: false, evening: true, skipSunday: true, skipAttendanceDate: '2026-08-10',
+            ...attendancePreferences, morning: false, skipSunday: true, skipAttendanceDate: '2026-08-10',
         }}},
         {command: 'get_meal_preferences', args: undefined},
         {command: 'update_meal_preferences', args: {input: {
@@ -957,7 +973,7 @@ test('PWA 개인 생활 설정은 mobile canonical API와 HttpOnly cookie만 사
         fetcher: async (input, init) => {
             const url = String(input);
             calls.push({url, init});
-            if (url.endsWith('/attendance/preferences')) return jsonResponse(attendancePreferences);
+            if (url.endsWith('/v2/attendance/preferences')) return jsonResponse(attendancePreferences);
             if (url.endsWith('/meal-preferences')) return jsonResponse(mealPreferences);
             if (url.endsWith('/laundry-watches') && init?.method === 'GET') {
                 return jsonResponse({watches: [laundryWatch]});
@@ -976,7 +992,7 @@ test('PWA 개인 생활 설정은 mobile canonical API와 HttpOnly cookie만 사
 
     await api.getAttendancePreferences('companion');
     await api.updateAttendancePreferences('companion', {
-        morning: true, evening: false, skipSunday: true, skipAttendanceDate: null,
+        ...attendancePreferences, evening: false, skipSunday: true,
     });
     await api.getMealPreferences('companion');
     await api.updateMealPreferences('companion', {
@@ -1001,8 +1017,8 @@ test('PWA 개인 생활 설정은 mobile canonical API와 HttpOnly cookie만 사
         accept: new Headers(init?.headers).get('accept'),
         contentType: new Headers(init?.headers).get('content-type'),
     })), [
-        {path: '/api/mobile/attendance/preferences', method: 'GET', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: null},
-        {path: '/api/mobile/attendance/preferences', method: 'PUT', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: 'application/json'},
+        {path: '/api/mobile/v2/attendance/preferences', method: 'GET', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: null},
+        {path: '/api/mobile/v2/attendance/preferences', method: 'PUT', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: 'application/json'},
         {path: '/api/mobile/meal-preferences', method: 'GET', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: null},
         {path: '/api/mobile/meal-preferences', method: 'PUT', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: 'application/json'},
         {path: '/api/mobile/laundry-watches', method: 'GET', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: null},
@@ -1013,7 +1029,7 @@ test('PWA 개인 생활 설정은 mobile canonical API와 HttpOnly cookie만 사
         {path: `/api/mobile/laundry-queue/${laundryQueueEntry.id}`, method: 'DELETE', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: null},
     ]);
     assert.deepEqual(JSON.parse(String(calls[1]?.init?.body)), {
-        morning: true, evening: false, skipSunday: true, skipAttendanceDate: null,
+        ...attendancePreferences, evening: false, skipSunday: true,
     });
     assert.deepEqual(JSON.parse(String(calls[3]?.init?.body)), {
         enabled: false, breakfast: false, lunch: true, dinner: false,

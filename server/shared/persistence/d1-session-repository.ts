@@ -56,8 +56,9 @@ export class D1SessionRepository {
         .bind(input.sessionId, input.installationId, input.tokenSha256, input.nowEpochMs,
           input.expiresAtEpochMs, input.nowEpochMs, input.installationId, input.candidateUserId),
       this.db.prepare(`INSERT INTO attendance_preference
-        (user_id, morning_enabled, evening_enabled, skip_sunday, skip_attendance_date, updated_at_epoch_ms)
-        SELECT id, 1, 1, 0, NULL, ? FROM app_user WHERE id = ?`)
+        (user_id, enabled, morning_enabled, evening_enabled, morning_start_hour, evening_end_hour,
+        morning_interval_minutes, evening_interval_minutes, skip_sunday, skip_attendance_date, updated_at_epoch_ms)
+        SELECT id, 1, 1, 1, 9, 4, 15, 15, 0, NULL, ? FROM app_user WHERE id = ?`)
         .bind(input.nowEpochMs, input.candidateUserId),
     ]);
     return results[0]?.meta.changes === 1 && results[1]?.meta.changes === 1 && results[2]?.meta.changes === 1;

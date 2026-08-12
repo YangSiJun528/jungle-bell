@@ -9,10 +9,10 @@ export interface DashboardRouteMeta {
 export type DashboardNavigationPlacement = 'sidebar' | 'bottom';
 
 export const DASHBOARD_ROUTE_META: Readonly<Record<DashboardRoute, DashboardRouteMeta>> = {
-    home: {label: '오늘', shortLabel: '홈'},
+    home: {label: '홈', shortLabel: '홈'},
     attendance: {label: '출석', shortLabel: '출석'},
     laundry: {label: '세탁실', shortLabel: '세탁'},
-    meals: {label: '오늘의 급식', shortLabel: '급식'},
+    meals: {label: '식단', shortLabel: '식단'},
     notifications: {label: '알림', shortLabel: '알림'},
     connections: {label: '설정', shortLabel: '설정'},
 };

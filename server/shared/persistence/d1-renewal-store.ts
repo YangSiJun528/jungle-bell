@@ -1,5 +1,6 @@
 import type {
   AppSessionRecord, AttendancePreferenceRecord, AttendanceSnapshotRecord, DesktopRecord,
+  LegacyAttendancePreferenceRecord,
   LaundryAppliance, LaundryAvailabilityTargetRecord, LaundryQueueEntryRecord, LaundryWatchRecord,
   LmsSessionState, MealPeriod, MealPreferenceRecord, MealPublicationRecord, NotificationRecord,
   PairingRecord, PushDeliveryRecord, PushDeliveryResult, PushSubscriptionRecord, RenewalStore,
@@ -139,6 +140,14 @@ export class D1RenewalStore implements RenewalStore {
 
   async setAttendancePreference(userId: string, preference: AttendancePreferenceRecord, now: number): Promise<void> {
     return this.attendance.setPreference(userId, preference, now);
+  }
+
+  async setLegacyAttendancePreference(
+    userId: string,
+    preference: LegacyAttendancePreferenceRecord,
+    now: number,
+  ): Promise<void> {
+    return this.attendance.setLegacyPreference(userId, preference, now);
   }
 
   async getMealPreference(userId: string): Promise<MealPreferenceRecord | null> {

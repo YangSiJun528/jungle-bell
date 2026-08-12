@@ -6,10 +6,6 @@ const historySource = readFileSync(
     new URL('../components/meal-history-section.tsx', import.meta.url),
     'utf8',
 );
-const preferencesSource = readFileSync(
-    new URL('../components/meal-preferences-section.tsx', import.meta.url),
-    'utf8',
-);
 
 describe('MealsPage information architecture', () => {
     it('오늘 사진, 주간 급식표, 날짜별 과거 기록을 독립 섹션으로 둔다', () => {
@@ -28,12 +24,10 @@ describe('MealsPage information architecture', () => {
         expect(source).not.toMatch(/\bBadge\b|gradient/u);
     });
 
-    it('과거 기록과 개인 알림 상태를 페이지에서 독립된 기능 컴포넌트로 위임한다', () => {
-        expect(source).toContain('<MealPreferencesSection surface={personal}/>');
+    it('과거 기록만 기능 컴포넌트로 위임하고 알림 설정은 중복하지 않는다', () => {
+        expect(source).not.toContain('MealPreferencesSection');
         expect(source).not.toMatch(/useInfiniteQuery|useMutation|useQueryClient/u);
-        expect(source).not.toContain('as PersonalSurface');
+        expect(source).not.toContain('PersonalSurface');
         expect(historySource).toContain('key={activeHistoryDate.slice(0, 7)}');
-        expect(preferencesSource).toContain('{surface: PersonalSurface}');
-        expect(preferencesSource).not.toContain('as PersonalSurface');
     });
 });

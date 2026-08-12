@@ -14,6 +14,22 @@ export const attendancePreferencesSchema = z.strictObject({
     skipAttendanceDate: z.iso.date().nullable(),
 });
 
+export const attendancePreferencesV2Schema = z.strictObject({
+    enabled: z.boolean(),
+    morning: z.boolean(),
+    evening: z.boolean(),
+    morningStartHour: z.number().int().min(4).max(9),
+    eveningEndHour: z.number().int().min(0).max(4),
+    morningIntervalMinutes: z.union([
+        z.literal(1), z.literal(3), z.literal(5), z.literal(10), z.literal(15), z.literal(30),
+    ]),
+    eveningIntervalMinutes: z.union([
+        z.literal(1), z.literal(3), z.literal(5), z.literal(10), z.literal(15), z.literal(30),
+    ]),
+    skipSunday: z.boolean(),
+    skipAttendanceDate: z.iso.date().nullable(),
+});
+
 export const mealPreferencesInputSchema = z.strictObject({
     enabled: z.boolean(),
     breakfast: z.boolean(),
@@ -78,6 +94,7 @@ export const laundryQueueListSchema = z.strictObject({
 });
 
 export type AttendancePreferences = z.infer<typeof attendancePreferencesSchema>;
+export type AttendancePreferencesV2 = z.infer<typeof attendancePreferencesV2Schema>;
 export type MealPreferencesInput = z.infer<typeof mealPreferencesInputSchema>;
 export type MealPreferences = z.infer<typeof mealPreferencesSchema>;
 export type LaundryApplianceKind = z.infer<typeof laundryApplianceSchema>;

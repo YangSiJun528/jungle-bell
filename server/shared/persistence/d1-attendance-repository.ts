@@ -1,5 +1,6 @@
 import type {
-  AttendancePreferenceRecord, AttendanceSnapshotRecord, DesktopRecord, LmsSessionState,
+  AttendanceIntervalMinutes, AttendancePreferenceRecord, AttendanceSnapshotRecord, DesktopRecord,
+  LegacyAttendancePreferenceRecord, LmsSessionState,
 } from "../ports/account-storage";
 import type { SqlDatabase } from "../ports/sql-database";
 
@@ -41,28 +42,56 @@ export class D1AttendanceRepository {
 
   async listSubscriberUserIds(phase: "morning" | "evening"): Promise<string[]> {
     const column = phase === "morning" ? "morning_enabled" : "evening_enabled";
-    const result = await this.db.prepare(`SELECT user_id FROM attendance_preference WHERE ${column} = 1`)
-      .all<{ user_id: string }>();
+    const result = await this.db.prepare(`SELECT user_id FROM attendance_preference WHERE enabled = 1 AND ${column} = 1`)
+      .bind().all<{ user_id: string }>();
     return result.results.map((row) => row.user_id);
   }
 
   async getPreference(userId: string): Promise<AttendancePreferenceRecord | null> {
-    const row = await this.db.prepare(`SELECT morning_enabled, evening_enabled, skip_sunday, skip_attendance_date
+    const row = await this.db.prepare(`SELECT enabled, morning_enabled, evening_enabled, morning_start_hour,
+      evening_end_hour, morning_interval_minutes, evening_interval_minutes, skip_sunday, skip_attendance_date
       FROM attendance_preference WHERE user_id = ?`).bind(userId).first<{
-        morning_enabled: number; evening_enabled: number; skip_sunday: number; skip_attendance_date: string | null;
+        enabled: number; morning_enabled: number; evening_enabled: number;
+        morning_start_hour: number; evening_end_hour: number;
+        morning_interval_minutes: number; evening_interval_minutes: number;
+        skip_sunday: number; skip_attendance_date: string | null;
       }>();
     return row ? {
+      enabled: row.enabled === 1,
       morning: row.morning_enabled === 1, evening: row.evening_enabled === 1,
+      morningStartHour: row.morning_start_hour, eveningEndHour: row.evening_end_hour,
+      morningIntervalMinutes: attendanceIntervalMinutes(row.morning_interval_minutes),
+      eveningIntervalMinutes: attendanceIntervalMinutes(row.evening_interval_minutes),
       skipSunday: row.skip_sunday === 1, skipAttendanceDate: row.skip_attendance_date,
     } : null;
   }
 
   async setPreference(userId: string, preference: AttendancePreferenceRecord, now: number): Promise<void> {
     await this.db.prepare(`INSERT INTO attendance_preference
-      (user_id, morning_enabled, evening_enabled, skip_sunday, skip_attendance_date, updated_at_epoch_ms)
-      VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET morning_enabled = excluded.morning_enabled,
-      evening_enabled = excluded.evening_enabled, skip_sunday = excluded.skip_sunday,
+      (user_id, enabled, morning_enabled, evening_enabled, morning_start_hour, evening_end_hour,
+      morning_interval_minutes, evening_interval_minutes, skip_sunday, skip_attendance_date, updated_at_epoch_ms)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET enabled = excluded.enabled,
+      morning_enabled = excluded.morning_enabled, evening_enabled = excluded.evening_enabled,
+      morning_start_hour = excluded.morning_start_hour, evening_end_hour = excluded.evening_end_hour,
+      morning_interval_minutes = excluded.morning_interval_minutes,
+      evening_interval_minutes = excluded.evening_interval_minutes, skip_sunday = excluded.skip_sunday,
       skip_attendance_date = excluded.skip_attendance_date, updated_at_epoch_ms = excluded.updated_at_epoch_ms`)
+      .bind(userId, preference.enabled ? 1 : 0, preference.morning ? 1 : 0, preference.evening ? 1 : 0,
+        preference.morningStartHour, preference.eveningEndHour, preference.morningIntervalMinutes,
+        preference.eveningIntervalMinutes, preference.skipSunday ? 1 : 0, preference.skipAttendanceDate, now).run();
+  }
+
+  async setLegacyPreference(
+    userId: string,
+    preference: LegacyAttendancePreferenceRecord,
+    now: number,
+  ): Promise<void> {
+    await this.db.prepare(`INSERT INTO attendance_preference
+      (user_id, morning_enabled, evening_enabled, skip_sunday, skip_attendance_date, updated_at_epoch_ms)
+      VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET
+      morning_enabled = excluded.morning_enabled, evening_enabled = excluded.evening_enabled,
+      skip_sunday = excluded.skip_sunday, skip_attendance_date = excluded.skip_attendance_date,
+      updated_at_epoch_ms = excluded.updated_at_epoch_ms`)
       .bind(userId, preference.morning ? 1 : 0, preference.evening ? 1 : 0,
         preference.skipSunday ? 1 : 0, preference.skipAttendanceDate, now).run();
   }
@@ -75,6 +104,11 @@ export class D1AttendanceRepository {
       lmsSessionState: row.lms_session_state, appVersion: row.app_version,
     }));
   }
+}
+
+function attendanceIntervalMinutes(value: number): AttendanceIntervalMinutes {
+  if ([1, 3, 5, 10, 15, 30].includes(value)) return value as AttendanceIntervalMinutes;
+  throw new TypeError("Invalid attendance interval persisted in D1");
 }
 
 function snapshot(row: SnapshotRow): AttendanceSnapshotRecord {

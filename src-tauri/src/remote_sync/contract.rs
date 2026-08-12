@@ -378,8 +378,13 @@ pub(crate) struct Heartbeat<'a> {
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct AttendancePreferences {
+    pub enabled: bool,
     pub morning: bool,
     pub evening: bool,
+    pub morning_start_hour: u8,
+    pub evening_end_hour: u8,
+    pub morning_interval_minutes: u8,
+    pub evening_interval_minutes: u8,
     pub skip_sunday: bool,
     pub skip_attendance_date: Option<String>,
 }

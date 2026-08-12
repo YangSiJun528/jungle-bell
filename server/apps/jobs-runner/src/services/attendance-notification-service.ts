@@ -1,6 +1,7 @@
 import {
   ATTENDANCE_SNAPSHOT_FRESH_MS,
   DESKTOP_ONLINE_WINDOW_MS,
+  attendancePlanningPhasesAt,
   attendanceReminderWindowAt,
   type AttendanceFallbackReason,
   type AttendanceReminderWindow,
@@ -20,25 +21,56 @@ export interface AttendanceNotificationStore {
   insertNotification(notification: NotificationRecord): Promise<boolean>;
 }
 
+const ATTENDANCE_PLANNING_CONCURRENCY = 8;
+
 /** Plans attendance notifications for the active reminder window. */
 export async function planAttendanceNotifications(
   store: AttendanceNotificationStore,
   nowEpochMs: number,
 ): Promise<number> {
-  const window = attendanceReminderWindowAt(nowEpochMs);
-  if (!window) return 0;
-  const userIds = [...new Set(await store.listAttendanceSubscriberUserIds(window.phase))];
+  const phases = attendancePlanningPhasesAt(nowEpochMs);
   let created = 0;
-  for (const userId of userIds) {
-    const preference = await store.getAttendancePreference(userId);
-    if (!preference
-      || preference.skipAttendanceDate === window.attendanceDate
-      || (preference.skipSunday && isSunday(window.attendanceDate))) continue;
-    const candidate = await notificationForUser(store, userId, window, nowEpochMs);
-    if (!candidate || !(await store.insertNotification(candidate))) continue;
-    created += 1;
-  }
+  const planPhaseAt = async (phaseIndex: number): Promise<void> => {
+    const phase = phases[phaseIndex];
+    if (!phase) return;
+    const userIds = [...new Set(await store.listAttendanceSubscriberUserIds(phase))];
+    await mapWithConcurrency(userIds, ATTENDANCE_PLANNING_CONCURRENCY, async (userId) => {
+      const preference = await store.getAttendancePreference(userId);
+      if (!preference || !preference.enabled || !preference[phase]) return;
+      const window = attendanceReminderWindowAt(nowEpochMs, preference, phase);
+      if (!window
+        || preference.skipAttendanceDate === window.attendanceDate
+        || (preference.skipSunday && isSunday(window.attendanceDate))) return;
+      const candidate = await notificationForUser(store, userId, window, nowEpochMs);
+      if (candidate !== null && await store.insertNotification(candidate)) created += 1;
+    });
+    await planPhaseAt(phaseIndex + 1);
+  };
+  await planPhaseAt(0);
   return created;
+}
+
+async function mapWithConcurrency<T>(
+  values: readonly T[],
+  concurrency: number,
+  task: (value: T) => Promise<void>,
+): Promise<void> {
+  let cursor = 0;
+  let failed = false;
+  let firstError: unknown;
+  await Promise.all(Array.from({ length: Math.min(concurrency, values.length) }, async () => {
+    while (!failed) {
+      const index = cursor++;
+      if (index >= values.length) return;
+      try {
+        await task(values[index]!);
+      } catch (error) {
+        failed = true;
+        firstError = error;
+      }
+    }
+  }));
+  if (failed) throw firstError;
 }
 
 function isSunday(isoDate: string): boolean {
@@ -69,7 +101,7 @@ async function notificationForUser(
 
 function buildNotification(userId: string, window: AttendanceReminderWindow, reason: AttendanceFallbackReason | null, now: number): NotificationRecord {
   const phaseLabel = window.phase === "morning" ? "입실" : "퇴실";
-  const title = window.slot === "before-10" ? `${phaseLabel} 체크 마감 10분 전` : `${phaseLabel} 체크가 필요합니다`;
+  const title = window.isDeadline ? `${phaseLabel} 체크 마감` : `${phaseLabel} 체크가 필요합니다`;
   const body = reason === "desktop-offline"
     ? "PC가 연결되지 않아 출석 상태를 확인할 수 없습니다. LMS에서 직접 확인해 주세요."
     : reason === "login-required"

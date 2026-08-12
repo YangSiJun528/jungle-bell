@@ -1,4 +1,4 @@
-import {useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode} from 'react';
+import {useRef, type ReactNode} from 'react';
 import type {LucideIcon} from 'lucide-react';
 import {
     Bell,
@@ -26,6 +26,9 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
     SidebarProvider,
+    SidebarRail,
+    SidebarTrigger,
+    useSidebar,
 } from '../../components/ui/sidebar';
 import {
     Sheet,
@@ -43,16 +46,6 @@ import {
     dashboardUtilityRoutes,
 } from '../routes';
 import {DashboardFooter} from './DashboardFooter';
-import {
-    MAX_SIDEBAR_WIDTH,
-    MIN_SIDEBAR_WIDTH,
-    normalizeSidebarWidth,
-    readSidebarWidth,
-    SIDEBAR_WIDTH_STEP,
-    sidebarWidthFromKey,
-    sidebarWidthFromPointer,
-    writeSidebarWidth,
-} from '../sidebar-width';
 
 export interface DashboardShellProps {
     surface: DashboardSurfaceKind;
@@ -87,6 +80,7 @@ function SidebarNavigationItem({
     activeRoute,
     navigate,
 }: NavigationItemProps) {
+    const {setOpenMobile} = useSidebar();
     const meta = DASHBOARD_ROUTE_META[route];
     const active = route === activeRoute;
     const Icon = ROUTE_ICONS[route];
@@ -96,6 +90,7 @@ function SidebarNavigationItem({
             <SidebarMenuButton
                 asChild
                 isActive={active}
+                tooltip={meta.label}
                 className="h-10 gap-3 rounded-lg px-3 text-sidebar-foreground/70"
             >
                 <a
@@ -105,6 +100,7 @@ function SidebarNavigationItem({
                     data-dashboard-route={route}
                     onClick={(event) => {
                         event.preventDefault();
+                        setOpenMobile(false);
                         navigate(route);
                     }}
                 >
@@ -125,6 +121,7 @@ function SidebarNotificationItem({
     onTriggerClick: (trigger: HTMLButtonElement) => void;
     unreadCount: number;
 }) {
+    const {setOpenMobile} = useSidebar();
     const unread = Math.max(0, unreadCount);
     const hasUnread = unread > 0;
     const Icon = hasUnread ? BellRing : Bell;
@@ -136,12 +133,16 @@ function SidebarNotificationItem({
                 <SidebarMenuButton
                     type="button"
                     isActive={open}
+                    tooltip={label}
                     aria-label={label}
                     aria-haspopup="dialog"
                     aria-expanded={open}
                     data-dashboard-route="notifications"
                     data-unread={hasUnread || undefined}
-                    onClick={(event) => onTriggerClick(event.currentTarget)}
+                    onClick={(event) => {
+                        onTriggerClick(event.currentTarget);
+                        setOpenMobile(false);
+                    }}
                     className={cn(
                         'h-10 gap-3 rounded-lg px-3',
                         hasUnread && !open ? 'text-primary hover:text-primary' : 'text-sidebar-foreground/70',
@@ -190,20 +191,23 @@ function BottomNavigationItem({
 }
 
 function Brand({navigate}: Pick<DashboardShellProps, 'navigate'>) {
+    const {setOpenMobile} = useSidebar();
+
     return (
         <SidebarMenu>
             <SidebarMenuItem>
-                <SidebarMenuButton asChild size="lg" className="p-0!">
+                <SidebarMenuButton asChild size="lg" tooltip="Jungle Bell 홈" className="p-0!">
                     <a
                         href={dashboardRouteHref('home')}
                         aria-label="Jungle Bell 홈"
                         onClick={(event) => {
                             event.preventDefault();
+                            setOpenMobile(false);
                             navigate('home');
                         }}
                     >
                         <img src={jungleBellLogo} alt="" className="size-8 shrink-0" aria-hidden="true"/>
-                        <span className="min-w-0 truncate text-sm font-semibold tracking-[-0.01em]">
+                        <span className="min-w-0 truncate text-sm font-semibold tracking-[-0.01em] group-data-[collapsible=icon]:hidden">
                             Jungle Bell
                         </span>
                     </a>
@@ -213,47 +217,13 @@ function Brand({navigate}: Pick<DashboardShellProps, 'navigate'>) {
     );
 }
 
-function SidebarWidthControl({
-    value,
-    onChange,
-}: {
-    value: number;
-    onChange: (value: number) => void;
-}) {
-    const updateFromPointer = (event: ReactPointerEvent<HTMLInputElement>): void => {
-        const bounds = event.currentTarget.getBoundingClientRect();
-        const next = sidebarWidthFromPointer(event.clientX, bounds.left, bounds.width);
-        if (next !== null) onChange(next);
-    };
+function SidebarCollapseControl() {
+    const {isMobile, openMobile, state} = useSidebar();
+    const label = isMobile
+        ? (openMobile ? '사이드바 닫기' : '사이드바 열기')
+        : (state === 'expanded' ? '사이드바 접기' : '사이드바 펼치기');
 
-    return (
-        <label className="flex items-center gap-2 px-1 text-xs text-sidebar-foreground/70">
-            <span className="shrink-0">너비</span>
-            <input
-                type="range"
-                aria-label="사이드바 너비"
-                min={MIN_SIDEBAR_WIDTH}
-                max={MAX_SIDEBAR_WIDTH}
-                step={SIDEBAR_WIDTH_STEP}
-                value={value}
-                onInput={(event) => onChange(normalizeSidebarWidth(event.currentTarget.valueAsNumber))}
-                onPointerDown={(event) => {
-                    event.currentTarget.setPointerCapture(event.pointerId);
-                    updateFromPointer(event);
-                }}
-                onPointerMove={(event) => {
-                    if (event.currentTarget.hasPointerCapture(event.pointerId)) updateFromPointer(event);
-                }}
-                onKeyDown={(event) => {
-                    const next = sidebarWidthFromKey(value, event.key);
-                    if (next === null) return;
-                    event.preventDefault();
-                    onChange(next);
-                }}
-                className="min-w-0 flex-1 cursor-ew-resize accent-primary"
-            />
-        </label>
-    );
+    return <SidebarTrigger aria-label={label} title={label}/>;
 }
 
 function ShellTopSpacer({
@@ -277,12 +247,16 @@ function ShellTopSpacer({
 
     return (
         <div
-            className="flex h-14 shrink-0 items-center justify-end gap-2 px-3 sm:h-16 sm:px-4 md:px-5 lg:px-6"
+            className="flex h-14 shrink-0 items-center gap-2 px-3 sm:h-16 sm:px-4 md:px-5 lg:px-6"
             data-shell-top-spacer="true"
-            aria-hidden={personal ? undefined : true}
         >
+            <SidebarTrigger
+                aria-label="사이드바 메뉴 열기"
+                title="사이드바 메뉴 열기"
+                className="bg-background md:hidden"
+            />
             {personal ? (
-                <div className="flex items-center gap-2 md:hidden">
+                <div className="ml-auto flex items-center gap-2 md:hidden">
                     <SheetTrigger asChild>
                         <Button
                             variant={notificationPanelOpen ? 'secondary' : 'outline'}
@@ -372,20 +346,14 @@ export function DashboardShell({
         if (open) navigate('notifications');
     });
     const notificationTriggerRef = useRef<HTMLButtonElement | null>(null);
-    const [sidebarWidth, setSidebarWidth] = useState(readSidebarWidth);
     const rememberNotificationTrigger = (trigger: HTMLButtonElement): void => {
         notificationTriggerRef.current = trigger;
-    };
-    const updateSidebarWidth = (next: number): void => {
-        setSidebarWidth(next);
-        writeSidebarWidth(window.localStorage, next);
+        onNotificationPanelOpenChange(true);
     };
 
     return (
         <Sheet open={notificationPanelOpen} onOpenChange={onNotificationPanelOpenChange}>
             <SidebarProvider
-                sidebarWidth={`${sidebarWidth}px`}
-                keyboardShortcut={null}
                 className="bg-muted/35 text-foreground"
                 data-dashboard-shell="renewal"
                 data-dashboard-surface={surface}
@@ -398,10 +366,7 @@ export function DashboardShell({
                 본문 바로가기
             </button>
 
-            <Sidebar
-                collapsible="none"
-                className="sticky top-0 hidden h-svh shrink-0 border-r border-sidebar-border md:flex"
-            >
+            <Sidebar collapsible="icon">
                 <SidebarHeader className="h-16 justify-center">
                     <Brand navigate={navigate}/>
                 </SidebarHeader>
@@ -449,8 +414,11 @@ export function DashboardShell({
                             </SidebarMenu>
                         </nav>
                     ) : null}
-                    <SidebarWidthControl value={sidebarWidth} onChange={updateSidebarWidth}/>
+                    <div className="flex justify-end group-data-[collapsible=icon]:justify-center">
+                        <SidebarCollapseControl/>
+                    </div>
                 </SidebarFooter>
+                <SidebarRail/>
             </Sidebar>
 
             <SidebarInset

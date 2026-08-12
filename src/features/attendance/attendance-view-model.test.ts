@@ -50,11 +50,28 @@ describe('attendanceDetailModel', () => {
 });
 
 describe('attendance preference helpers', () => {
-    const preferences = {morning: true, evening: false, skipSunday: true, skipAttendanceDate: null};
+    const preferences = {
+        enabled: true, morning: true, evening: false,
+        morningStartHour: 9, eveningEndHour: 4,
+        morningIntervalMinutes: 15 as const, eveningIntervalMinutes: 15 as const,
+        skipSunday: true, skipAttendanceDate: null,
+    };
 
     it('compares every server-backed setting', () => {
         expect(attendancePreferencesEqual(preferences, {...preferences})).toBe(true);
-        expect(attendancePreferencesEqual(preferences, {...preferences, evening: true})).toBe(false);
+        for (const changed of [
+            {...preferences, enabled: false},
+            {...preferences, morning: false},
+            {...preferences, evening: true},
+            {...preferences, morningStartHour: 8},
+            {...preferences, eveningEndHour: 3},
+            {...preferences, morningIntervalMinutes: 10 as const},
+            {...preferences, eveningIntervalMinutes: 30 as const},
+            {...preferences, skipSunday: false},
+            {...preferences, skipAttendanceDate: '2026-08-12'},
+        ]) {
+            expect(attendancePreferencesEqual(preferences, changed)).toBe(false);
+        }
         expect(attendancePreferencesEqual(null, preferences)).toBe(false);
     });
 

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {existsSync, readFileSync} from 'node:fs';
 import {test} from 'vitest';
 
 const srcRoot = new URL('../../', import.meta.url);
@@ -28,16 +28,16 @@ test('모든 기능 경로는 하나의 DashboardShell과 main 콘텐츠 영역�
     assert.equal((shell.match(/id="dashboard-content"/g) ?? []).length, 1);
 });
 
-test('데스크톱 사이드바는 저장 가능한 폭 조절과 글로벌 헤더 없는 레이아웃을 제공한다', () => {
-    assert.match(shell, /<SidebarProvider[\s\S]{0,180}sidebarWidth=\{`\$\{sidebarWidth\}px`\}[\s\S]{0,180}keyboardShortcut=\{null\}/);
-    assert.match(shell, /<Sidebar[\s\S]{0,120}collapsible="none"/);
-    assert.match(shell, /type="range"/);
-    assert.match(shell, /aria-label="사이드바 너비"/);
-    assert.match(shell, /min=\{MIN_SIDEBAR_WIDTH\}[\s\S]*max=\{MAX_SIDEBAR_WIDTH\}[\s\S]*step=\{SIDEBAR_WIDTH_STEP\}/);
-    assert.match(shell, /writeSidebarWidth\(window\.localStorage, next\)/);
-    assert.doesNotMatch(shell, /sidebarWidthIcon=|<SidebarTrigger|<SidebarRail/);
+test('사이드바는 shadcn 표준 접기와 모바일 Sheet 동작을 사용한다', () => {
+    assert.match(shell, /<SidebarProvider\b/);
+    assert.match(shell, /<Sidebar[\s\S]{0,120}collapsible="icon"/);
+    assert.match(shell, /<SidebarTrigger[\s\S]{0,100}aria-label="사이드바 메뉴 열기"/);
+    assert.match(shell, /<SidebarCollapseControl\s*\/>/);
+    assert.match(shell, /<SidebarRail\b/);
+    assert.doesNotMatch(shell, /type="range"|aria-label="사이드바 너비"|localStorage|sidebarWidth=/);
+    assert.equal(existsSync(new URL('./app/sidebar-width.ts', srcRoot)), false);
+    assert.equal(existsSync(new URL('./app/sidebar-width.test.ts', srcRoot)), false);
     assert.doesNotMatch(shell, /<header\b/);
-    assert.match(shell, /sticky top-0/);
     assert.match(shell, /data-shell-top-spacer="true"/);
     assert.match(shell, /h-14[\s\S]{0,120}sm:h-16/);
     assert.match(shell, /max-w-6xl/);
@@ -71,6 +71,8 @@ test('공개 화면은 3개, 개인 화면은 4개 주요 메뉴를 유지하고
     assert.match(routes, /PUBLIC_NAVIGATION_ROUTES\s*=\s*\[[\s\S]*'home'[\s\S]*'laundry'[\s\S]*'meals'[\s\S]*\]/);
     assert.match(routes, /PERSONAL_NAVIGATION_ROUTES\s*=\s*\[[\s\S]*'home'[\s\S]*'attendance'[\s\S]*'laundry'[\s\S]*'meals'[\s\S]*\]/);
     assert.match(routes, /PERSONAL_UTILITY_ROUTES\s*=\s*\[[\s\S]*'notifications'[\s\S]*'connections'[\s\S]*\]/);
+    assert.match(routes, /home:\s*\{label:\s*'홈',\s*shortLabel:\s*'홈'\}/);
+    assert.match(routes, /meals:\s*\{label:\s*'식단',\s*shortLabel:\s*'식단'\}/);
     assert.match(shell, /aria-label="개인 도구"/);
     assert.match(shell, /className=\{personal \? 'border-t border-sidebar-border' : undefined\}/);
     assert.match(shell, /aria-label=\{notificationAriaLabel/);

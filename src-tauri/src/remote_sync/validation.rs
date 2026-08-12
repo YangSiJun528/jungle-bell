@@ -203,10 +203,15 @@ pub(crate) fn validate_meal_preferences(preferences: &MealPreferences) -> Result
 }
 
 pub(crate) fn validate_attendance_preferences(preferences: &AttendancePreferences) -> Result<(), ServiceError> {
-    if preferences
-        .skip_attendance_date
-        .as_deref()
-        .is_some_and(|value| chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d").is_err())
+    const ALLOWED_INTERVALS: [u8; 6] = [1, 3, 5, 10, 15, 30];
+    if !(4..=9).contains(&preferences.morning_start_hour)
+        || preferences.evening_end_hour > 4
+        || !ALLOWED_INTERVALS.contains(&preferences.morning_interval_minutes)
+        || !ALLOWED_INTERVALS.contains(&preferences.evening_interval_minutes)
+        || preferences
+            .skip_attendance_date
+            .as_deref()
+            .is_some_and(|value| chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d").is_err())
     {
         return Err(ServiceError::Rejected);
     }

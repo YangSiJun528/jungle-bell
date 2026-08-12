@@ -42,6 +42,8 @@ describe('dashboard routes', () => {
         expect(dashboardRouteFromHash('#notifications', 'companion')).toBe('notifications');
         expect(dashboardRouteHref('notifications')).toBe('#notifications');
         expect(dashboardRouteHref('connections')).toBe('#connections');
+        expect(DASHBOARD_ROUTE_META.home).toEqual({label: '홈', shortLabel: '홈'});
+        expect(DASHBOARD_ROUTE_META.meals).toEqual({label: '식단', shortLabel: '식단'});
         expect(DASHBOARD_ROUTE_META.notifications.label).toBe('알림');
         expect(DASHBOARD_ROUTE_META.connections.label).toBe('설정');
     });
@@ -67,15 +69,13 @@ describe('DashboardShell', () => {
         expect(html).not.toContain('data-dashboard-route="notifications"');
         expect(html).not.toContain('기기 연결 관리');
         expect(html).toContain('data-slot="sidebar"');
-        expect(html).toContain('--sidebar-width:232px');
-        expect(html).toContain('type="range"');
-        expect(html).toContain('aria-label="사이드바 너비"');
-        expect(html).toContain('min="192"');
-        expect(html).toContain('max="320"');
-        expect(html).toContain('step="8"');
+        expect(html).toContain('--sidebar-width:16rem');
+        expect(html).not.toContain('type="range"');
+        expect(html).not.toContain('aria-label="사이드바 너비"');
         expect(html).not.toContain('border-t border-sidebar-border');
-        expect(html).not.toContain('data-sidebar="trigger"');
-        expect(html).not.toContain('data-sidebar="rail"');
+        expect((html.match(/data-sidebar="trigger"/g) ?? [])).toHaveLength(2);
+        expect(html).toContain('aria-label="사이드바 메뉴 열기"');
+        expect(html).toContain('data-sidebar="rail"');
         expect(html).toContain('data-shell-top-spacer="true"');
         expect((html.match(/max-w-6xl/g) ?? []).length).toBe(2);
         expect(html).not.toContain('<header');
@@ -87,7 +87,7 @@ describe('DashboardShell', () => {
         expect(html).toContain('공개 홈');
     });
 
-    test('renders notification panel trigger and settings at the bottom without a collapse control', () => {
+    test('renders notification panel trigger, settings, and the standard sidebar controls', () => {
         const html = renderToStaticMarkup(
             <DashboardShell
                 surface="companion"
@@ -114,10 +114,10 @@ describe('DashboardShell', () => {
         expect(html).not.toContain('99+');
         expect(html).not.toContain('data-slot="badge"');
         expect(html).toContain('grid-template-columns:repeat(4, minmax(0, 1fr))');
-        expect(html).not.toContain('사이드바 접기');
+        expect(html).toContain('사이드바 접기');
         expect(html).not.toContain('사이드바 펼치기');
-        expect(html).not.toContain('data-sidebar="trigger"');
-        expect(html).not.toContain('data-sidebar="rail"');
+        expect((html.match(/data-sidebar="trigger"/g) ?? [])).toHaveLength(2);
+        expect(html).toContain('data-sidebar="rail"');
         expect(html).toContain('data-shell-top-spacer="true"');
         expect(html).toContain('border-t border-sidebar-border');
     });
@@ -144,6 +144,7 @@ describe('DashboardShell', () => {
         expect((shellSource.match(/<SheetTrigger asChild>/gu) ?? [])).toHaveLength(2);
         expect(shellSource).toContain('const notificationTriggerRef = useRef<HTMLButtonElement | null>(null);');
         expect(shellSource).toContain('notificationTriggerRef.current = trigger;');
+        expect(shellSource).toContain('onNotificationPanelOpenChange(true);');
         expect(shellSource).toContain('onTriggerClick={rememberNotificationTrigger}');
         expect(shellSource).toContain('onClick={(event) => rememberNotificationTrigger(event.currentTarget)}');
         expect(shellSource).toContain('onCloseAutoFocus={(event) => {');
@@ -153,6 +154,6 @@ describe('DashboardShell', () => {
         expect(shellSource).toContain('overlayClassName="backdrop-blur-sm"');
         expect(shellSource).toContain('data-notification-panel="true"');
         expect(shellSource).toContain('<SheetTitle>알림</SheetTitle>');
-        expect(shellSource).toContain('keyboardShortcut={null}');
+        expect(shellSource).not.toContain('keyboardShortcut={null}');
     });
 });

@@ -45,8 +45,13 @@ export function attendancePreferencesEqual(
 ): boolean {
     return left !== null
         && right !== null
+        && left.enabled === right.enabled
         && left.morning === right.morning
         && left.evening === right.evening
+        && left.morningStartHour === right.morningStartHour
+        && left.eveningEndHour === right.eveningEndHour
+        && left.morningIntervalMinutes === right.morningIntervalMinutes
+        && left.eveningIntervalMinutes === right.eveningIntervalMinutes
         && left.skipSunday === right.skipSunday
         && left.skipAttendanceDate === right.skipAttendanceDate;
 }

@@ -47,12 +47,23 @@ export interface AttendanceSnapshotRecord {
   receivedAtEpochMs: number;
 }
 
+export type AttendanceIntervalMinutes = 1 | 3 | 5 | 10 | 15 | 30;
+
 export interface AttendancePreferenceRecord {
+  enabled: boolean;
   morning: boolean;
   evening: boolean;
+  morningStartHour: number;
+  eveningEndHour: number;
+  morningIntervalMinutes: AttendanceIntervalMinutes;
+  eveningIntervalMinutes: AttendanceIntervalMinutes;
   skipSunday: boolean;
   skipAttendanceDate: string | null;
 }
+
+export type LegacyAttendancePreferenceRecord = Pick<AttendancePreferenceRecord,
+  "morning" | "evening" | "skipSunday" | "skipAttendanceDate"
+>;
 
 export interface MealPreferenceRecord {
   enabled: boolean;
@@ -234,6 +245,11 @@ export interface RenewalStore {
   listAttendanceSubscriberUserIds(phase: "morning" | "evening"): Promise<string[]>;
   getAttendancePreference(userId: string): Promise<AttendancePreferenceRecord | null>;
   setAttendancePreference(userId: string, preference: AttendancePreferenceRecord, nowEpochMs: number): Promise<void>;
+  setLegacyAttendancePreference(
+    userId: string,
+    preference: LegacyAttendancePreferenceRecord,
+    nowEpochMs: number,
+  ): Promise<void>;
   getMealPreference(userId: string): Promise<MealPreferenceRecord | null>;
   setMealPreference(userId: string, preference: MealPreferenceRecord): Promise<void>;
   listUnprocessedMealPosts(limit: number): Promise<MealPublicationRecord[]>;

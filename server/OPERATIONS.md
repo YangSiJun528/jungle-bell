@@ -51,6 +51,61 @@ npm --prefix .. run verify:server
 `database/schema.sql`은 모든 앱 테이블을 다시 만드는 신규 D1 전용 bootstrap입니다. 작은
 운영 변경은 별도로 검토한 비파괴 SQL을 먼저 준비합니다.
 
+### 출석 알림 설정 D1 마이그레이션
+
+`database/migrations/2026-08-12-attendance-notification-preferences.sql`은 기존
+`attendance_preference` 행을 유지하면서 전체 알림 스위치, 오전 시작·오후 종료 시각,
+반복 간격을 추가하는 1회성 비파괴 변경입니다. 기존 사용자는 현재 동작과 호환되는
+`enabled=1`, 오전 `09:00`, 오후 `04:00`, 각 `15분`을 기본값으로 받습니다.
+
+신규 코드가 새 열을 즉시 읽으므로 **v2-test 복구 지점 → v2-test 마이그레이션 → v2-test
+배포·검증 → production 복구 지점 → production 마이그레이션 → production 배포** 순서를
+지킵니다. 구 버전은 새 열을 무시하고 기존 행 생성 시 D1 기본값을 받으므로 DB 변경을
+먼저 적용해도 됩니다. SQL은 이미 추가된 열을 자동 판별하지 않으므로 같은 DB에 두 번
+실행하지 않습니다.
+
+마이그레이션 뒤에는 **OCI Jobs를 먼저 갱신한 다음** v2 경로와 신규 PWA 자산을 함께
+제공하는 App Worker를 배포합니다. 새 Tauri 배포는 그 다음입니다. App Worker를 먼저
+배포하면 신규 PWA가 `enabled`·시간·간격을 저장한 직후에도 구 Jobs가 이를 무시하는
+짧은 구간이 생기므로 순서를 바꾸지 않습니다. 기존 PC/PWA는 계속
+`/attendance/preferences`의 4필드 계약을 사용하고, 신규 클라이언트만
+`/v2/attendance/preferences`를 사용하므로 이 순서에서 구·신 클라이언트가 함께
+동작합니다. 기존 경로의 PUT은 v2 전용 열을 SQL에서 갱신하지 않습니다.
+
+아래 명령은 `server/apps/api-worker/`에서 실행합니다.
+
+```bash
+# v2-test
+npx wrangler d1 time-travel info jungle-bell-v2-test --json
+npx wrangler d1 execute jungle-bell-v2-test --remote \
+  --file=../../database/migrations/2026-08-12-attendance-notification-preferences.sql
+npx wrangler d1 execute jungle-bell-v2-test --remote \
+  --command="SELECT enabled, morning_start_hour, evening_end_hour, morning_interval_minutes, evening_interval_minutes FROM attendance_preference LIMIT 5"
+
+# production: production D1 ID 설정과 v2-test 검증이 끝난 뒤 실행
+npx wrangler d1 time-travel info jungle-bell-v2 --json
+npx wrangler d1 execute jungle-bell-v2 --remote \
+  --file=../../database/migrations/2026-08-12-attendance-notification-preferences.sql
+npx wrangler d1 execute jungle-bell-v2 --remote \
+  --command="SELECT enabled, morning_start_hour, evening_end_hour, morning_interval_minutes, evening_interval_minutes FROM attendance_preference LIMIT 5"
+```
+
+`time-travel info`가 반환한 bookmark를 배포 기록에 남깁니다. 이 방식은 사용자·알림
+데이터를 로컬 파일로 복제하지 않으면서 마이그레이션 직전 D1 상태를 지정합니다. 전체
+SQL export에는 개인 데이터가 포함될 수 있으므로 기본 절차로 실행하지 않습니다. 별도
+보관이 꼭 필요할 때만 접근 제한된 저장 위치와 담당 승인을 먼저 확정합니다.
+
+검증 쿼리가 새 열을 반환하고 기존 행 수·`morning_enabled`·`evening_enabled`·건너뛰기
+값이 유지됐는지 확인한 뒤 App Worker와 OCI Jobs를 배포합니다. 코드 롤백 시 구 버전은
+추가 열을 무시하므로 열을 제거하지 않습니다. 데이터 자체를 복구해야 하는 사고에서만
+영향 범위와 bookmark 이후 쓰기 손실을 확인한 뒤 다음 명령을 사용합니다.
+
+```bash
+npx wrangler d1 time-travel restore jungle-bell-v2-test --bookmark <RECOVERY_BOOKMARK>
+```
+
+사용 중인 D1에 bootstrap을 실행하지 않습니다.
+
 ### Edge abuse control
 
 무인 desktop 등록과 200대 campus NAT 계약 때문에 App Worker의 D1 fixed-window
