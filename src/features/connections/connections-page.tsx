@@ -135,7 +135,7 @@ function DesktopConnections() {
     const activeSessions = sessions.data?.filter((item) => item.status === 'active') ?? [];
     return (
         <div className="space-y-6">
-            <PageHeader title="기기 연결"/>
+            <PageHeader title="설정"/>
             {connection.isPending ? <LoadingState/> : connection.isError ? <ErrorState retry={() => void connection.refetch()}/> : (
                 <Card>
                     <CardHeader>
@@ -357,7 +357,7 @@ function CompanionConnections() {
 
     return (
         <div className="space-y-6">
-            <PageHeader title="PC 연결"/>
+            <PageHeader title="설정"/>
             <Card className="mx-auto max-w-xl">
                 <CardHeader><CardTitle className="flex items-center gap-2"><MonitorCheck className="size-5"/>{connected ? '이 기기는 연결됨' : '연결 코드 입력'}</CardTitle><CardDescription>{connected ? 'PC 앱이 출석 상태를 주기적으로 갱신합니다.' : 'PC 앱의 기기 연결 화면에 표시된 코드를 입력하세요.'}</CardDescription></CardHeader>
                 <CardContent className="space-y-4">

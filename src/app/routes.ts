@@ -13,8 +13,8 @@ export const DASHBOARD_ROUTE_META: Readonly<Record<DashboardRoute, DashboardRout
     attendance: {label: '출석', shortLabel: '출석'},
     laundry: {label: '세탁실', shortLabel: '세탁'},
     meals: {label: '오늘의 급식', shortLabel: '급식'},
-    notifications: {label: '알림 센터', shortLabel: '알림'},
-    connections: {label: '기기 연결', shortLabel: '기기'},
+    notifications: {label: '알림', shortLabel: '알림'},
+    connections: {label: '설정', shortLabel: '설정'},
 };
 
 const PUBLIC_NAVIGATION_ROUTES = [

@@ -141,7 +141,7 @@ describe('WashTowerGrid', () => {
         expect(markup).toContain('title="워시타워_1 건조기 1시간 5분"');
     });
 
-    it('추정 잔여 시간은 요약에서도 예상값으로 표시한다', () => {
+    it('추정 잔여 시간은 기호 없이 표시하고 접근성 설명에서 예상값임을 알린다', () => {
         const estimatedMachines = machines.map((machine) => machine.id === '워시타워_1'
             ? {
                 ...machine,
@@ -155,7 +155,8 @@ describe('WashTowerGrid', () => {
             <WashTowerGrid machines={estimatedMachines} nowMs={NOW_MS}/>,
         );
 
-        expect(markup).toContain('>≈01:05</span>');
+        expect(markup).toContain('>01:05</span>');
+        expect(markup).not.toContain('≈');
         expect(markup).toContain('aria-label="워시타워_1 건조기 예상 1시간 5분"');
         expect(markup).toContain('title="워시타워_1 건조기 예상 1시간 5분"');
     });

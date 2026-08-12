@@ -1,15 +1,17 @@
-import type {ReactNode} from 'react';
+import {useRef, type ReactNode} from 'react';
 import type {LucideIcon} from 'lucide-react';
 import {
     Bell,
     BellRing,
     CalendarCheck,
     House,
-    Monitor,
+    Settings,
     UtensilsCrossed,
     WashingMachine,
+    X,
 } from 'lucide-react';
 
+import jungleBellLogo from '../../assets/logo.png';
 import type {DashboardRoute, DashboardSurfaceKind} from '../surface';
 import {Button} from '../../components/ui/button';
 import {
@@ -24,16 +26,15 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
     SidebarProvider,
-    SidebarRail,
-    SidebarSeparator,
-    SidebarTrigger,
-    useSidebar,
 } from '../../components/ui/sidebar';
 import {
-    Tooltip,
-    TooltipContent,
-    TooltipTrigger,
-} from '../../components/ui/tooltip';
+    Sheet,
+    SheetClose,
+    SheetContent,
+    SheetHeader,
+    SheetTitle,
+    SheetTrigger,
+} from '../../components/ui/sheet';
 import {cn} from '../../lib/utils';
 import {
     DASHBOARD_ROUTE_META,
@@ -48,6 +49,11 @@ export interface DashboardShellProps {
     activeRoute: DashboardRoute;
     navigate: (route: DashboardRoute) => void;
     unreadCount: number;
+    notificationPanel?: {
+        open: boolean;
+        onOpenChange: (open: boolean) => void;
+        content: ReactNode;
+    };
     children: ReactNode;
 }
 
@@ -57,46 +63,36 @@ const ROUTE_ICONS: Readonly<Record<DashboardRoute, LucideIcon>> = {
     laundry: WashingMachine,
     meals: UtensilsCrossed,
     notifications: Bell,
-    connections: Monitor,
+    connections: Settings,
 };
 
 interface NavigationItemProps {
     route: DashboardRoute;
     activeRoute: DashboardRoute;
     navigate: (route: DashboardRoute) => void;
-    unreadCount: number;
 }
 
 function SidebarNavigationItem({
     route,
     activeRoute,
     navigate,
-    unreadCount,
 }: NavigationItemProps) {
     const meta = DASHBOARD_ROUTE_META[route];
     const active = route === activeRoute;
-    const unread = route === 'notifications' ? Math.max(0, unreadCount) : 0;
-    const hasUnread = unread > 0;
-    const Icon = route === 'notifications' && hasUnread ? BellRing : ROUTE_ICONS[route];
-    const ariaLabel = hasUnread ? `${meta.label}, 읽지 않은 알림 ${unread}개` : meta.label;
+    const Icon = ROUTE_ICONS[route];
 
     return (
         <SidebarMenuItem>
             <SidebarMenuButton
                 asChild
                 isActive={active}
-                tooltip={ariaLabel}
-                className={cn(
-                    'h-10 gap-3 rounded-lg px-3 group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:p-2!',
-                    hasUnread && !active ? 'text-primary hover:text-primary' : 'text-sidebar-foreground/70',
-                )}
+                className="h-10 gap-3 rounded-lg px-3 text-sidebar-foreground/70"
             >
                 <a
                     href={dashboardRouteHref(route)}
                     aria-current={active ? 'page' : undefined}
-                    aria-label={ariaLabel}
+                    aria-label={meta.label}
                     data-dashboard-route={route}
-                    data-unread={hasUnread || undefined}
                     onClick={(event) => {
                         event.preventDefault();
                         navigate(route);
@@ -110,11 +106,50 @@ function SidebarNavigationItem({
     );
 }
 
+function SidebarNotificationItem({
+    open,
+    onTriggerClick,
+    unreadCount,
+}: {
+    open: boolean;
+    onTriggerClick: (trigger: HTMLButtonElement) => void;
+    unreadCount: number;
+}) {
+    const unread = Math.max(0, unreadCount);
+    const hasUnread = unread > 0;
+    const Icon = hasUnread ? BellRing : Bell;
+    const label = hasUnread ? `알림, 읽지 않은 알림 ${unread}개` : '알림';
+
+    return (
+        <SidebarMenuItem>
+            <SheetTrigger asChild>
+                <SidebarMenuButton
+                    type="button"
+                    isActive={open}
+                    aria-label={label}
+                    aria-haspopup="dialog"
+                    aria-expanded={open}
+                    data-dashboard-route="notifications"
+                    data-unread={hasUnread || undefined}
+                    onClick={(event) => onTriggerClick(event.currentTarget)}
+                    className={cn(
+                        'h-10 gap-3 rounded-lg px-3',
+                        hasUnread && !open ? 'text-primary hover:text-primary' : 'text-sidebar-foreground/70',
+                    )}
+                >
+                    <Icon className="size-[1.125rem]" aria-hidden="true" strokeWidth={open ? 2.25 : 1.9}/>
+                    <span>알림</span>
+                </SidebarMenuButton>
+            </SheetTrigger>
+        </SidebarMenuItem>
+    );
+}
+
 function BottomNavigationItem({
     route,
     activeRoute,
     navigate,
-}: Omit<NavigationItemProps, 'unreadCount'>) {
+}: NavigationItemProps) {
     const meta = DASHBOARD_ROUTE_META[route];
     const active = route === activeRoute;
     const Icon = ROUTE_ICONS[route];
@@ -148,7 +183,7 @@ function Brand({navigate}: Pick<DashboardShellProps, 'navigate'>) {
     return (
         <SidebarMenu>
             <SidebarMenuItem>
-                <SidebarMenuButton asChild size="lg" tooltip="Jungle Bell 홈" className="p-0!">
+                <SidebarMenuButton asChild size="lg" className="p-0!">
                     <a
                         href={dashboardRouteHref('home')}
                         aria-label="Jungle Bell 홈"
@@ -157,10 +192,8 @@ function Brand({navigate}: Pick<DashboardShellProps, 'navigate'>) {
                             navigate('home');
                         }}
                     >
-                        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground shadow-xs">
-                            <BellRing className="size-[1.125rem]" aria-hidden="true" strokeWidth={2}/>
-                        </span>
-                        <span className="min-w-0 truncate text-sm font-semibold tracking-[-0.01em] group-data-[collapsible=icon]:hidden">
+                        <img src={jungleBellLogo} alt="" className="size-8 shrink-0" aria-hidden="true"/>
+                        <span className="min-w-0 truncate text-sm font-semibold tracking-[-0.01em]">
                             Jungle Bell
                         </span>
                     </a>
@@ -170,30 +203,20 @@ function Brand({navigate}: Pick<DashboardShellProps, 'navigate'>) {
     );
 }
 
-function SidebarCollapseControl() {
-    const {state} = useSidebar();
-    const label = state === 'expanded' ? '사이드바 접기' : '사이드바 펼치기';
-
-    return (
-        <Tooltip>
-            <TooltipTrigger asChild>
-                <SidebarTrigger aria-label={label} title={label}/>
-            </TooltipTrigger>
-            <TooltipContent side="right" align="center">{label}</TooltipContent>
-        </Tooltip>
-    );
-}
-
 function ShellTopSpacer({
     personal,
     activeRoute,
     navigate,
+    notificationPanelOpen,
+    rememberNotificationTrigger,
     hasUnreadNotifications,
     notificationAriaLabel,
 }: {
     personal: boolean;
     activeRoute: DashboardRoute;
     navigate: (route: DashboardRoute) => void;
+    notificationPanelOpen: boolean;
+    rememberNotificationTrigger: (trigger: HTMLButtonElement) => void;
     hasUnreadNotifications: boolean;
     notificationAriaLabel: string;
 }) {
@@ -207,31 +230,34 @@ function ShellTopSpacer({
         >
             {personal ? (
                 <div className="flex items-center gap-2 md:hidden">
-                    <Button
-                        variant={activeRoute === 'notifications' ? 'secondary' : 'outline'}
-                        size="icon-sm"
-                        className={cn(
-                            'bg-background',
-                            hasUnreadNotifications && activeRoute !== 'notifications' ? 'text-primary' : undefined,
-                        )}
-                        aria-label={notificationAriaLabel}
-                        aria-current={activeRoute === 'notifications' ? 'page' : undefined}
-                        data-dashboard-route="notifications"
-                        data-unread={hasUnreadNotifications || undefined}
-                        onClick={() => navigate('notifications')}
-                    >
-                        <NotificationIcon className="size-4" aria-hidden="true"/>
-                    </Button>
+                    <SheetTrigger asChild>
+                        <Button
+                            variant={notificationPanelOpen ? 'secondary' : 'outline'}
+                            size="icon-sm"
+                            className={cn(
+                                'bg-background',
+                                hasUnreadNotifications && !notificationPanelOpen ? 'text-primary' : undefined,
+                            )}
+                            aria-label={notificationAriaLabel}
+                            aria-haspopup="dialog"
+                            aria-expanded={notificationPanelOpen}
+                            data-dashboard-route="notifications"
+                            data-unread={hasUnreadNotifications || undefined}
+                            onClick={(event) => rememberNotificationTrigger(event.currentTarget)}
+                        >
+                            <NotificationIcon className="size-4" aria-hidden="true"/>
+                        </Button>
+                    </SheetTrigger>
                     <Button
                         variant={activeRoute === 'connections' ? 'secondary' : 'outline'}
                         size="icon-sm"
                         className="bg-background"
-                        aria-label="기기 연결 관리"
+                        aria-label="설정"
                         aria-current={activeRoute === 'connections' ? 'page' : undefined}
                         data-dashboard-route="connections"
                         onClick={() => navigate('connections')}
                     >
-                        <Monitor className="size-4" aria-hidden="true"/>
+                        <Settings className="size-4" aria-hidden="true"/>
                     </Button>
                 </div>
             ) : null}
@@ -276,6 +302,7 @@ export function DashboardShell({
     activeRoute,
     navigate,
     unreadCount,
+    notificationPanel,
     children,
 }: DashboardShellProps) {
     const sidebarRoutes = dashboardNavigationRoutes(surface, 'sidebar');
@@ -287,15 +314,24 @@ export function DashboardShell({
     const notificationAriaLabel = hasUnreadNotifications
         ? `${DASHBOARD_ROUTE_META.notifications.label}, 읽지 않은 알림 ${normalizedUnreadCount}개`
         : DASHBOARD_ROUTE_META.notifications.label;
+    const notificationPanelOpen = notificationPanel?.open ?? activeRoute === 'notifications';
+    const onNotificationPanelOpenChange = notificationPanel?.onOpenChange ?? ((open: boolean) => {
+        if (open) navigate('notifications');
+    });
+    const notificationTriggerRef = useRef<HTMLButtonElement | null>(null);
+    const rememberNotificationTrigger = (trigger: HTMLButtonElement): void => {
+        notificationTriggerRef.current = trigger;
+    };
 
     return (
-        <SidebarProvider
-            sidebarWidth="14.5rem"
-            sidebarWidthIcon="3rem"
-            className="bg-muted/35 text-foreground"
-            data-dashboard-shell="renewal"
-            data-dashboard-surface={surface}
-        >
+        <Sheet open={notificationPanelOpen} onOpenChange={onNotificationPanelOpenChange}>
+            <SidebarProvider
+                sidebarWidth="14.5rem"
+                keyboardShortcut={null}
+                className="bg-muted/35 text-foreground"
+                data-dashboard-shell="renewal"
+                data-dashboard-surface={surface}
+            >
             <button
                 type="button"
                 className="sr-only fixed left-3 top-3 z-[100] rounded-md bg-background px-3 py-2 text-sm font-medium shadow-lg focus:not-sr-only"
@@ -304,7 +340,10 @@ export function DashboardShell({
                 본문 바로가기
             </button>
 
-            <Sidebar collapsible="icon">
+            <Sidebar
+                collapsible="none"
+                className="sticky top-0 hidden h-svh shrink-0 border-r border-sidebar-border md:flex"
+            >
                 <SidebarHeader className="h-16 justify-center">
                     <Brand navigate={navigate}/>
                 </SidebarHeader>
@@ -320,7 +359,6 @@ export function DashboardShell({
                                             route={route}
                                             activeRoute={activeRoute}
                                             navigate={navigate}
-                                            unreadCount={unreadCount}
                                         />
                                     ))}
                                 </SidebarMenu>
@@ -334,23 +372,26 @@ export function DashboardShell({
                         <nav aria-label="개인 도구" data-navigation-group="utilities">
                             <SidebarMenu>
                                 {utilityRoutes.map((route) => (
-                                    <SidebarNavigationItem
-                                        key={route}
-                                        route={route}
-                                        activeRoute={activeRoute}
-                                        navigate={navigate}
-                                        unreadCount={unreadCount}
-                                    />
+                                    route === 'notifications' ? (
+                                        <SidebarNotificationItem
+                                            key={route}
+                                            open={notificationPanelOpen}
+                                            onTriggerClick={rememberNotificationTrigger}
+                                            unreadCount={unreadCount}
+                                        />
+                                    ) : (
+                                        <SidebarNavigationItem
+                                            key={route}
+                                            route={route}
+                                            activeRoute={activeRoute}
+                                            navigate={navigate}
+                                        />
+                                    )
                                 ))}
                             </SidebarMenu>
                         </nav>
                     ) : null}
-                    <SidebarSeparator className="mx-0"/>
-                    <div className="flex justify-end group-data-[collapsible=icon]:justify-center">
-                        <SidebarCollapseControl/>
-                    </div>
                 </SidebarFooter>
-                <SidebarRail aria-label="사이드바 크기 전환" title="사이드바 크기 전환"/>
             </Sidebar>
 
             <SidebarInset
@@ -362,6 +403,8 @@ export function DashboardShell({
                     personal={personal}
                     activeRoute={activeRoute}
                     navigate={navigate}
+                    notificationPanelOpen={notificationPanelOpen}
+                    rememberNotificationTrigger={rememberNotificationTrigger}
                     hasUnreadNotifications={hasUnreadNotifications}
                     notificationAriaLabel={notificationAriaLabel}
                 />
@@ -376,6 +419,39 @@ export function DashboardShell({
                 activeRoute={activeRoute}
                 navigate={navigate}
             />
-        </SidebarProvider>
+
+            {personal && notificationPanel ? (
+                <SheetContent
+                    side="right"
+                    showCloseButton={false}
+                    overlayClassName="backdrop-blur-sm"
+                    className="w-full gap-0 sm:max-w-xl"
+                    aria-describedby={undefined}
+                    data-notification-panel="true"
+                    onCloseAutoFocus={(event) => {
+                        event.preventDefault();
+                        if (notificationTriggerRef.current?.isConnected) {
+                            notificationTriggerRef.current?.focus();
+                        } else {
+                            document.getElementById('dashboard-content')?.focus();
+                        }
+                        notificationTriggerRef.current = null;
+                    }}
+                >
+                    <SheetHeader className="flex-row items-center justify-between border-b px-5 py-4">
+                        <SheetTitle>알림</SheetTitle>
+                        <SheetClose asChild>
+                            <Button variant="ghost" size="icon-sm" aria-label="알림 패널 닫기">
+                                <X className="size-4" aria-hidden="true"/>
+                            </Button>
+                        </SheetClose>
+                    </SheetHeader>
+                    <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
+                        {notificationPanel.content}
+                    </div>
+                </SheetContent>
+            ) : null}
+            </SidebarProvider>
+        </Sheet>
     );
 }

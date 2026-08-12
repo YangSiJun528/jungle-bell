@@ -1,46 +1,28 @@
-import {useMemo, useState} from 'react';
-import {ChevronLeft, ChevronRight} from 'lucide-react';
-import {Button} from '@/components/ui/button';
-import {cn} from '@/lib/utils';
-import {
-    calendarMonthCells,
-    type CalendarMonthCell,
-    monthLabel,
-    shiftMonth,
-} from '../lib/meal-view';
+import {ko} from 'react-day-picker/locale/ko';
+import {Calendar} from '@/components/ui/calendar';
 
-const WEEKDAYS = ['\uC77C', '\uC6D4', '\uD654', '\uC218', '\uBAA9', '\uAE08', '\uD1A0'] as const;
-
-export function MealHistoryDayButton({
-    cell,
-    hasMeal,
-    onSelect,
-    selected,
-}: {
-    cell: CalendarMonthCell;
-    hasMeal: boolean;
-    onSelect: (date: string) => void;
-    selected: boolean;
-}) {
-    return (
-        <button
-            aria-label={`${cell.date}${hasMeal ? ' \uAE09\uC2DD \uAE30\uB85D \uC788\uC74C' : ' \uAE09\uC2DD \uAE30\uB85D \uC5C6\uC74C'}`}
-            aria-pressed={selected}
-            className={cn(
-                'aspect-square rounded-md text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                hasMeal && 'font-semibold text-primary hover:bg-accent',
-                selected && 'bg-primary text-primary-foreground hover:bg-primary',
-                !hasMeal && 'cursor-default text-muted-foreground/45',
-            )}
-            data-has-meal={hasMeal}
-            disabled={!hasMeal}
-            type="button"
-            onClick={() => onSelect(cell.date)}
-        >
-            {cell.day}
-        </button>
-    );
-}
+const KST_TIME_ZONE = 'Asia/Seoul';
+const KST_DATE_FORMATTER = new Intl.DateTimeFormat('en-CA', {
+    day: '2-digit',
+    month: '2-digit',
+    timeZone: KST_TIME_ZONE,
+    year: 'numeric',
+});
+const KOREAN_DATE_FORMATTER = new Intl.DateTimeFormat('ko-KR', {
+    day: 'numeric',
+    month: 'long',
+    timeZone: KST_TIME_ZONE,
+    year: 'numeric',
+});
+const KOREAN_MONTH_FORMATTER = new Intl.DateTimeFormat('ko-KR', {
+    month: 'long',
+    timeZone: KST_TIME_ZONE,
+    year: 'numeric',
+});
+const KOREAN_WEEKDAY_FORMATTER = new Intl.DateTimeFormat('ko-KR', {
+    timeZone: KST_TIME_ZONE,
+    weekday: 'narrow',
+});
 
 export function MealHistoryCalendar({
     availableDates,
@@ -51,49 +33,67 @@ export function MealHistoryCalendar({
     onSelect: (date: string) => void;
     selectedDate: string;
 }) {
-    const [visibleMonth, setVisibleMonth] = useState(() => selectedDate.slice(0, 7));
+    const selected = parseDateKey(selectedDate);
+    const hasMeal = (date: Date): boolean => availableDates.has(dateKey(date));
 
-    const cells = useMemo(() => calendarMonthCells(visibleMonth), [visibleMonth]);
     return (
-        <div aria-label={`${monthLabel(visibleMonth)} \uAE09\uC2DD \uAE30\uB85D \uB2EC\uB825`} role="group">
-            <div className="mb-3 flex items-center justify-between gap-2">
-                <Button
-                    aria-label="이전 달"
-                    size="icon-sm"
-                    variant="ghost"
-                    onClick={() => setVisibleMonth((month) => shiftMonth(month, -1))}
-                >
-                    <ChevronLeft/>
-                </Button>
-                <strong className="text-sm">{monthLabel(visibleMonth)}</strong>
-                <Button
-                    aria-label="다음 달"
-                    size="icon-sm"
-                    variant="ghost"
-                    onClick={() => setVisibleMonth((month) => shiftMonth(month, 1))}
-                >
-                    <ChevronRight/>
-                </Button>
-            </div>
-            <div className="grid grid-cols-7 text-center text-xs text-muted-foreground" aria-hidden="true">
-                {WEEKDAYS.map((day) => <span className="py-2" key={day}>{day}</span>)}
-            </div>
-            <div className="grid grid-cols-7 gap-1">
-                {cells.map((cell, index) => {
-                    if (!cell) return <span aria-hidden="true" key={`empty-${index}`} className="aspect-square"/>;
-                    const hasMeal = availableDates.has(cell.date);
-                    const selected = selectedDate === cell.date;
-                    return (
-                        <MealHistoryDayButton
-                            cell={cell}
-                            hasMeal={hasMeal}
-                            key={cell.date}
-                            selected={selected}
-                            onSelect={onSelect}
-                        />
-                    );
-                })}
-            </div>
-        </div>
+        <Calendar
+            aria-label={`${formatMonth(selected)} 급식 기록 달력`}
+            className="w-full p-0 [--cell-size:2.25rem] sm:[--cell-size:2.5rem]"
+            defaultMonth={selected}
+            disabled={(date) => !hasMeal(date)}
+            fixedWeeks
+            formatters={{
+                formatCaption: formatMonth,
+                formatWeekdayName: (date) => KOREAN_WEEKDAY_FORMATTER.format(date),
+            }}
+            labels={{
+                labelDayButton: (date, modifiers) => [
+                    KOREAN_DATE_FORMATTER.format(date),
+                    modifiers.hasMeal ? '급식 기록 있음' : '급식 기록 없음',
+                    modifiers.today ? '오늘' : null,
+                    modifiers.selected ? '선택됨' : null,
+                ].filter(Boolean).join(', '),
+                labelGrid: (month) => `${formatMonth(month)} 급식 기록 달력`,
+                labelNav: () => '달력 월 이동',
+                labelNext: () => '다음 달',
+                labelPrevious: () => '이전 달',
+            }}
+            locale={ko}
+            mode="single"
+            modifiers={{hasMeal}}
+            modifiersClassNames={{
+                hasMeal: '[&_button]:bg-primary/10 [&_button]:font-semibold [&_button]:text-primary [&_button]:hover:bg-primary/15',
+            }}
+            navLayout="around"
+            noonSafe
+            required
+            selected={selected}
+            showOutsideDays={false}
+            timeZone={KST_TIME_ZONE}
+            onSelect={(date) => onSelect(dateKey(date))}
+        />
     );
+}
+
+function parseDateKey(value: string): Date {
+    if (!/^\d{4}-\d{2}-\d{2}$/u.test(value)) throw new Error('INVALID_DATE');
+    const result = new Date(`${value}T12:00:00+09:00`);
+    if (dateKey(result) !== value) throw new Error('INVALID_DATE');
+    return result;
+}
+
+function dateKey(value: Date): string {
+    const parts = new Map(
+        KST_DATE_FORMATTER.formatToParts(value).map((part) => [part.type, part.value]),
+    );
+    const year = parts.get('year');
+    const month = parts.get('month');
+    const day = parts.get('day');
+    if (!year || !month || !day) throw new Error('INVALID_DATE');
+    return `${year}-${month}-${day}`;
+}
+
+function formatMonth(value: Date): string {
+    return KOREAN_MONTH_FORMATTER.format(value);
 }

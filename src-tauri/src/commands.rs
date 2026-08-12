@@ -638,4 +638,46 @@ mod tests {
             serde_json::json!({"type": "acknowledged"})
         );
     }
+
+    #[test]
+    fn checker_attendance_snapshot은_현재_필드가_모두_필수다() {
+        let current = serde_json::json!({
+            "type": "attendanceSnapshot",
+            "status": {
+                "generation": 1,
+                "needs_login": false,
+                "morning_done": true,
+                "evening_done": false,
+                "api_error": false,
+                "cohort_status": "active",
+                "cohort_start_date": "2026-08-01",
+                "cohort_end_date": "2026-08-31"
+            }
+        });
+        assert!(serde_json::from_value::<CheckerEventInput>(current.clone()).is_ok());
+        let mut nullable_dates = current.clone();
+        nullable_dates["status"]["cohort_start_date"] = serde_json::Value::Null;
+        nullable_dates["status"]["cohort_end_date"] = serde_json::Value::Null;
+        assert!(serde_json::from_value::<CheckerEventInput>(nullable_dates).is_ok());
+
+        for field in [
+            "morning_done",
+            "evening_done",
+            "api_error",
+            "cohort_status",
+            "cohort_start_date",
+            "cohort_end_date",
+        ] {
+            let mut missing = current.clone();
+            missing
+                .get_mut("status")
+                .and_then(serde_json::Value::as_object_mut)
+                .unwrap()
+                .remove(field);
+            assert!(
+                serde_json::from_value::<CheckerEventInput>(missing).is_err(),
+                "missing {field} must be rejected"
+            );
+        }
+    }
 }

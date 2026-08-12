@@ -6,7 +6,7 @@
 use std::collections::BTreeSet;
 
 use chrono::{DateTime, NaiveDate, Utc};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::state::{self, AppState, CheckerRuntimeStatus, CohortPeriod, DailyPhase, DdayStatus, TraySnapshot};
 
@@ -20,23 +20,27 @@ pub struct AttendanceReport {
     /// 로그인이 필요한 상태 (401 또는 로그인 페이지)
     pub needs_login: bool,
     /// 출석(체크인) 완료 여부
-    #[serde(default)]
     pub morning_done: bool,
     /// 퇴실(체크아웃) 완료 여부
-    #[serde(default)]
     pub evening_done: bool,
     /// API 호출 실패 여부 (true이면 출석 상태 갱신 건너뜀)
-    #[serde(default)]
     pub api_error: bool,
     /// /api/v2/me/cohorts 기준 현재 코호트 상태.
-    #[serde(default)]
     pub cohort_status: CohortReportStatus,
     /// 현재 코호트 시작일 (YYYY-MM-DD).
-    #[serde(default)]
+    #[serde(deserialize_with = "deserialize_required_nullable")]
     pub cohort_start_date: Option<String>,
     /// 현재 코호트 종료일 (YYYY-MM-DD).
-    #[serde(default)]
+    #[serde(deserialize_with = "deserialize_required_nullable")]
     pub cohort_end_date: Option<String>,
+}
+
+fn deserialize_required_nullable<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::<T>::deserialize(deserializer)
 }
 
 #[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]

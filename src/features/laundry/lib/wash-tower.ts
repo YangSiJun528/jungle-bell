@@ -58,13 +58,12 @@ export function washTowerCellView(
         : state === 'error'
             ? '경고'
             : laundryOverviewText(appliance, nowMs);
-    const text = estimated ? `≈${baseText}` : baseText;
     const applianceLabel = kind === 'washer' ? '세탁기' : '건조기';
 
     return {
         estimated,
         label: `${machine.id} ${applianceLabel} ${estimated ? '예상 ' : ''}${laundryRemainingText(appliance, nowMs)}`,
         state,
-        text,
+        text: baseText,
     };
 }

@@ -22,13 +22,13 @@ const sqlSchema = z.string().trim().min(1)
   .refine((value) => encoder.encode(value).byteLength <= MAX_SQL_BYTES)
   .refine((value) => /^(?:SELECT|INSERT|UPDATE|DELETE|WITH)\b/iu.test(value), "SQL operation is not allowed")
   .refine((value) => !value.includes(";"), "Multiple SQL statements are not allowed");
-const querySchema = z.object({
+const querySchema = z.strictObject({
   sql: sqlSchema,
   params: z.array(bindingSchema).max(MAX_PARAMS),
-}).strict();
+});
 const requestSchema = z.union([
   querySchema,
-  z.object({ batch: z.array(querySchema).min(1).max(MAX_STATEMENTS) }).strict(),
+  z.strictObject({ batch: z.array(querySchema).min(1).max(MAX_STATEMENTS) }),
 ]);
 
 function json(status: number, value: unknown, headers: HeadersInit = {}): Response {

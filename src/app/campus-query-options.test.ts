@@ -26,7 +26,15 @@ const laundrySnapshot: DashboardLaundrySnapshot = {
 const mealsSnapshot: DashboardMealsSnapshot = {
     asOf: '2026-08-11T00:00:00.000Z',
     lastCheckedAt: '2026-08-11T00:00:00.000Z',
-    data: {dailyMenus: [], pinnedMenus: [], recentMenus: []},
+    data: {
+        schemaVersion: 2,
+        dailyMenus: [],
+        pinnedMenus: [],
+        recentMenus: [],
+        currentWeeklyMenu: null,
+        weeklyMenus: [],
+        historyNextBefore: null,
+    },
 };
 
 describe('campus query options', () => {

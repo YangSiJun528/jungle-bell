@@ -25,8 +25,13 @@ describe('HomeMealSlotsList', () => {
             .toBeLessThan(html.indexOf('data-meal-period="석식"'));
         expect(html).toContain('data-meal-empty="false"');
         expect(html).toContain('data-meal-empty="true"');
+        expect(html).toContain('data-meal-state="published"');
+        expect(html).toContain('data-meal-state="empty"');
         expect(html).toContain('비빔밥');
         expect(html).toContain('아직 올라오지 않았습니다');
+        expect(html).toMatch(/data-meal-state="published"[^>]*class="[^"]*text-foreground/);
+        expect(html).toMatch(/data-meal-state="empty"[^>]*class="[^"]*bg-muted\/40/);
+        expect(html).toMatch(/아직 올라오지 않았습니다<\/span>/);
         expect(html).not.toContain('data-slot="skeleton"');
         expect(html).not.toContain('메뉴 준비 중');
     });
@@ -52,6 +57,7 @@ describe('HomeMealSlotsList', () => {
         const html = renderToStaticMarkup(<HomeMealSlotsList slots={slots}/>);
 
         expect(html).not.toContain('data-slot="skeleton"');
+        expect(html).not.toContain('data-meal-state="empty"');
         expect(html).not.toContain('아직 올라오지 않았습니다');
     });
 });

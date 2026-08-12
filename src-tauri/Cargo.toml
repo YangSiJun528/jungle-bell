@@ -39,8 +39,12 @@ notify-rust = { version = "4.18", features = ["preview-macos-un"] }
 tauri-plugin-updater = "2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "4.1.6", default-features = false, features = ["v1"] }
 objc2-app-kit = { version = "0.3", features = ["NSApplication", "NSRunningApplication"] }
 objc2-foundation = "0.3"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { version = "4.1.6", default-features = false, features = ["v1"] }
 
 [dev-dependencies]
 tempfile = "3"

@@ -24,7 +24,7 @@ use crate::{
     attendance::{AttendanceReport, CohortReportStatus},
     attendance_day,
     notification_service::{NotificationAction, NotificationRequest, NotificationService},
-    secure_credential::{self, CredentialStore, FileCredentialStore},
+    secure_credential::{self, CredentialStore, KeyringCredentialStore},
     state::AppState,
 };
 

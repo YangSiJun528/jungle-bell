@@ -19,6 +19,7 @@ const meals: DashboardMealsSnapshot = {
     asOf: '2020-01-03T00:00:00.000Z',
     lastCheckedAt: '2020-01-03T00:00:00.000Z',
     data: {
+        schemaVersion: 2,
         dailyMenus: [],
         pinnedMenus: [],
         recentMenus: [{
@@ -29,6 +30,7 @@ const meals: DashboardMealsSnapshot = {
             permalink: null,
             images: [],
         }],
+        currentWeeklyMenu: null,
         weeklyMenus: [{
             weekKey: '2019-12-30',
             contentSha: 'weekly-sha',

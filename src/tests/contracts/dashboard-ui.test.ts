@@ -50,7 +50,7 @@ test('기능 화면은 공통 셸 아래에서 경로별 지연 로딩된다', (
     ]) {
         assert.match(app, new RegExp(`lazy\\(\\(\\) => import\\(['"]@/features/${feature}['"]\\)`));
     }
-    assert.match(app, /<DashboardShell[\s\S]*<Suspense[\s\S]*<RouteContent[\s\S]*route=\{route\}[\s\S]*onRequestInstall=\{openInstallPrompt\}[\s\S]*seenMobileIds=\{seenMobileIds\}[\s\S]*\/>[\s\S]*<InstallPrompt open=\{installPromptOpen\} onOpenChange=\{setInstallPromptVisibility\}\/>[\s\S]*<\/DashboardShell>/);
+    assert.match(app, /<DashboardShell[\s\S]*notificationPanel=\{\{[\s\S]*open: notificationPanelOpen[\s\S]*setNotificationPanelRequestedOpen\(open\)[\s\S]*route === 'notifications'\) replace\(contentRoute\)[\s\S]*<NotificationPanelContent seenMobileIds=\{seenMobileIds\}\/>[\s\S]*<RouteContent[\s\S]*route=\{contentRoute\}[\s\S]*onRequestInstall=\{openInstallPrompt\}[\s\S]*\/>[\s\S]*<InstallPrompt open=\{installPromptOpen\} onOpenChange=\{setInstallPromptVisibility\}\/>[\s\S]*<\/DashboardShell>/);
     assert.match(app, /useHashRoute\(surface\.kind\)/);
     assert.match(app, /window\.scrollTo\(\{top: 0, left: 0, behavior: 'auto'\}\)/);
     assert.match(shell, /data-dashboard-shell="renewal"/);
@@ -69,7 +69,9 @@ test('공개 웹과 개인 앱은 하나의 경로 정책에서 노출 기능을
     assert.match(shell, /aria-label="개인 도구"/);
     assert.match(shell, /data-navigation-group="utilities"/);
     assert.match(shell, /md:hidden[\s\S]*aria-label=\{notificationAriaLabel/);
-    assert.match(shell, /aria-label="기기 연결 관리"/);
+    assert.match(shell, /aria-label="설정"/);
+    assert.match(shell, /aria-haspopup="dialog"/);
+    assert.match(shell, /overlayClassName="backdrop-blur-sm"/);
     assert.match(shell, /<DashboardBottomNavigation[\s\S]*routes=\{bottomRoutes\}/);
     assert.match(shell, /routes\.map/);
 });
@@ -104,7 +106,8 @@ test('출석 화면은 조회 상태와 개인 알림 설정을 React Query muta
     assert.match(attendance, /오전[\s\S]*오후[\s\S]*마지막 동기화/);
     assert.match(attendance, /detail\.freshness === 'stale'/);
     assert.match(attendance, /PC 마지막 확인/);
-    assert.match(attendance, /jungleCompassIcon/);
+    assert.match(attendance, /<CalendarCheck2 aria-hidden="true" className="size-5"\/>/);
+    assert.doesNotMatch(attendance, /jungleCompassIcon|@\/assets\/logo\.png/);
     assert.match(attendance, /surface\.kind === 'desktop'[\s\S]*openCampus\.mutate\(\)/);
 
     assert.match(attendance, /api\.getAttendancePreferences\(personalSurface\)/);
@@ -238,13 +241,16 @@ test('PWA 메타데이터·서비스 워커·설치 프롬프트는 React 진입
         '열린 안내만 모바일 하단 메뉴 및 safe area 위에 있어야 합니다.',
     );
     assert.doesNotMatch(installPrompt, /className="fixed (?:inset-x-3 )?bottom-3/);
-    assert.match(app, /<RouteContent[\s\S]*route=\{route\}[\s\S]*onRequestInstall=\{openInstallPrompt\}[\s\S]*seenMobileIds=\{seenMobileIds\}/);
+    assert.match(app, /<RouteContent[\s\S]*route=\{contentRoute\}[\s\S]*onRequestInstall=\{openInstallPrompt\}/);
+    assert.match(app, /<NotificationPanelContent seenMobileIds=\{seenMobileIds\}\/>/);
     assert.match(app, /<InstallPrompt open=\{installPromptOpen\} onOpenChange=\{setInstallPromptVisibility\}\/>/);
     assert.doesNotMatch(home, /홈 화면 추가·PC 앱 안내/);
     assert.match(home, /이 QR은 설치한 모바일 PWA에서 열어야 합니다/);
     assert.doesNotMatch(home, /PWA 설치 안내 열기/);
     assert.match(jungleCampusSummary, /앱 설치 안내/);
-    assert.match(jungleCampusSummary, /jungleCompassIcon/);
+    assert.match(jungleCampusSummary, /data-home-campus-status-icon="true"/);
+    assert.doesNotMatch(jungleCampusSummary, /jungleCompassIcon|@\/assets\/logo\.png/);
+    assert.match(shell, /import jungleBellLogo from ['"]\.\.\/\.\.\/assets\/logo\.png['"]/);
     assert.doesNotMatch(jungleCampusSummary, /일반 웹에서는 출석 정보를/);
     assert.doesNotMatch(home, /세탁을 시작하고 60분 안에 건조까지/);
 });

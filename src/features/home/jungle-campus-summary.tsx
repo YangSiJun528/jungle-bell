@@ -1,6 +1,7 @@
 import {useMutation} from '@tanstack/react-query';
 import {
     ArrowRight,
+    CalendarCheck,
     Check,
     ExternalLink,
     RefreshCw,
@@ -25,7 +26,6 @@ import type {AttendanceSnapshot} from '@/api/dashboard-api';
 import {dashboardDdayLabel, dashboardDdayPeriod} from '@/features/home/lib/home-overview';
 import {buildDdayProgress, kstDateString} from '@/features/home/lib/dday-progress';
 import {dateTimeLabel} from '@/lib/format';
-import jungleCompassIcon from '@/assets/logo.png';
 import {homeAttendanceForToday} from './home-view-model';
 
 const CAMPUS_URL = 'https://jungle-lms.krafton.com/check-in';
@@ -60,15 +60,11 @@ function CampusCardFrame({children, footer}: {
         <Card className="h-[20rem] gap-0 overflow-hidden border-primary/20 py-0" data-home-campus-card="true">
             <CardHeader className="min-h-20 shrink-0 px-5 py-4 sm:px-6">
                 <div className="flex items-center gap-3">
-                    <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10">
-                        <img
-                            alt=""
-                            aria-hidden="true"
-                            className="size-6"
-                            height={24}
-                            src={jungleCompassIcon}
-                            width={24}
-                        />
+                    <span
+                        className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary"
+                        data-home-campus-status-icon="true"
+                    >
+                        <CalendarCheck aria-hidden="true" className="size-5"/>
                     </span>
                     <div className="min-w-0">
                         <h2 className="font-semibold leading-none">정글캠퍼스</h2>

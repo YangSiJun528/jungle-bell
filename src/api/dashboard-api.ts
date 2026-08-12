@@ -127,12 +127,13 @@ export interface DashboardMealsSnapshot {
     asOf: string;
     lastCheckedAt: string | null;
     data: {
+        schemaVersion: 2;
         dailyMenus: DashboardMealPost[];
         pinnedMenus: DashboardMealPost[];
         recentMenus: DashboardMealPost[];
-        currentWeeklyMenu?: DashboardCurrentWeeklyMealMenu;
-        weeklyMenus?: DashboardWeeklyMealMenu[];
-        historyNextBefore?: string | null;
+        currentWeeklyMenu: DashboardCurrentWeeklyMealMenu | null;
+        weeklyMenus: DashboardWeeklyMealMenu[];
+        historyNextBefore: string | null;
     };
 }
 
@@ -909,25 +910,23 @@ export function parseDashboardMealsSnapshot(
 ): DashboardMealsSnapshot {
     const source = record(value);
     const data = record(source.data);
-    const currentWeeklyMenu = data.currentWeeklyMenu === undefined
-        ? undefined
+    if (data.schemaVersion !== 2) {
+        throw new Error('API_RESPONSE_INVALID');
+    }
+    const currentWeeklyMenu = data.currentWeeklyMenu === null
+        ? null
         : parseCurrentWeeklyMealMenu(data.currentWeeklyMenu, expectedAssetOrigin);
-    const weeklyMenus = data.weeklyMenus === undefined
-        ? undefined
-        : parseWeeklyMealMenus(data.weeklyMenus, expectedAssetOrigin);
-    const historyNextBefore = data.historyNextBefore === undefined
-        ? undefined
-        : nullableMealHistoryCursor(data.historyNextBefore);
     return {
         asOf: iso(source.asOf),
         lastCheckedAt: nullableIso(source.lastCheckedAt),
         data: {
+            schemaVersion: 2,
             dailyMenus: parseMealPosts(data.dailyMenus, 128, expectedAssetOrigin),
             pinnedMenus: parseMealPosts(data.pinnedMenus, 128, expectedAssetOrigin),
             recentMenus: parseMealPosts(data.recentMenus, 128, expectedAssetOrigin),
-            ...(currentWeeklyMenu === undefined ? {} : {currentWeeklyMenu}),
-            ...(weeklyMenus === undefined ? {} : {weeklyMenus}),
-            ...(historyNextBefore === undefined ? {} : {historyNextBefore}),
+            currentWeeklyMenu,
+            weeklyMenus: parseWeeklyMealMenus(data.weeklyMenus, expectedAssetOrigin),
+            historyNextBefore: nullableMealHistoryCursor(data.historyNextBefore),
         },
     };
 }

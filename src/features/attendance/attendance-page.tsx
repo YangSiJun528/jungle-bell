@@ -32,7 +32,6 @@ import {
 import type {AttendancePreferences} from '@/api/personal-api';
 import {companionAuthenticationRequired} from '@/app/surface';
 import {dateTimeLabel, relativeTimeLabel} from '@/lib/format';
-import jungleCompassIcon from '@/assets/logo.png';
 import {
     attendanceDetailModel,
     attendancePreferencesEqual,
@@ -205,15 +204,8 @@ export function AttendancePage() {
                 <Card className="border-primary/20 bg-primary/5">
                     <CardHeader>
                         <div className="flex items-center gap-3">
-                            <span className="grid size-10 place-items-center rounded-xl bg-primary/10">
-                                <img
-                                    alt=""
-                                    aria-hidden="true"
-                                    className="size-6"
-                                    height={24}
-                                    src={jungleCompassIcon}
-                                    width={24}
-                                />
+                            <span className="grid size-10 place-items-center rounded-xl bg-primary/10 text-primary">
+                                <CalendarCheck2 aria-hidden="true" className="size-5"/>
                             </span>
                             <div>
                                 <p className="text-xs font-medium text-muted-foreground">공식 서비스</p>

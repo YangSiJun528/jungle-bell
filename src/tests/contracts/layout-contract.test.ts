@@ -20,7 +20,7 @@ test('HTML 문서는 레이아웃을 복제하지 않고 React 셸을 위한 단
 test('모든 기능 경로는 하나의 DashboardShell과 main 콘텐츠 영역을 재사용한다', () => {
     assert.equal((app.match(/<DashboardShell\b/g) ?? []).length, 1);
     assert.equal((app.match(/<RouteContent\b/g) ?? []).length, 1);
-    assert.match(app, /<DashboardShell[\s\S]*<RouteContent[\s\S]*route=\{route\}[\s\S]*onRequestInstall=\{openInstallPrompt\}[\s\S]*seenMobileIds=\{seenMobileIds\}[\s\S]*\/>[\s\S]*<\/DashboardShell>/);
+    assert.match(app, /<DashboardShell[\s\S]*notificationPanel=\{\{[\s\S]*<NotificationPanelContent seenMobileIds=\{seenMobileIds\}\/?>[\s\S]*<RouteContent[\s\S]*route=\{contentRoute\}[\s\S]*onRequestInstall=\{openInstallPrompt\}[\s\S]*\/>[\s\S]*<\/DashboardShell>/);
 
     assert.equal((shell.match(/<Sidebar\b/g) ?? []).length, 1);
     assert.equal((shell.match(/<header\b/g) ?? []).length, 0);
@@ -28,14 +28,13 @@ test('모든 기능 경로는 하나의 DashboardShell과 main 콘텐츠 영역�
     assert.equal((shell.match(/id="dashboard-content"/g) ?? []).length, 1);
 });
 
-test('데스크톱 사이드바는 14.5rem과 3rem 아이콘 모드를 전환하고 글로벌 헤더를 두지 않는다', () => {
-    assert.match(shell, /<Sidebar\s+collapsible="icon"/);
+test('데스크톱 사이드바는 고정 폭을 유지하고 접기 기능과 글로벌 헤더를 두지 않는다', () => {
+    assert.match(shell, /<SidebarProvider[\s\S]{0,180}sidebarWidth="14\.5rem"[\s\S]{0,180}keyboardShortcut=\{null\}/);
+    assert.match(shell, /<Sidebar[\s\S]{0,120}collapsible="none"/);
     assert.match(shell, /sidebarWidth="14\.5rem"/);
-    assert.match(shell, /sidebarWidthIcon="3rem"/);
-    assert.match(shell, /<SidebarTrigger[\s\S]{0,220}aria-label=/);
-    assert.match(shell, /tooltip=\{ariaLabel\}/);
+    assert.doesNotMatch(shell, /sidebarWidthIcon=|<SidebarTrigger|<SidebarRail/);
     assert.doesNotMatch(shell, /<header\b/);
-    assert.doesNotMatch(shell, /sticky top-0/);
+    assert.match(shell, /sticky top-0/);
     assert.match(shell, /data-shell-top-spacer="true"/);
     assert.match(shell, /h-14[\s\S]{0,120}sm:h-16/);
     assert.match(shell, /max-w-6xl/);
@@ -72,7 +71,9 @@ test('공개 화면은 3개, 개인 화면은 4개 주요 메뉴를 유지하고
     assert.match(shell, /aria-label="개인 도구"/);
     assert.match(shell, /border-t border-sidebar-border/);
     assert.match(shell, /aria-label=\{notificationAriaLabel/);
-    assert.match(shell, /aria-label="기기 연결 관리"/);
+    assert.match(shell, /aria-label="설정"/);
+    assert.match(shell, /aria-haspopup="dialog"/);
+    assert.match(shell, /overlayClassName="backdrop-blur-sm"/);
     assert.match(shell, /md:hidden/);
     assert.match(shell, /onClick=\{\(\) => navigate\('connections'\)\}/);
 });
@@ -83,7 +84,6 @@ test('각 기능 화면은 공통 PageHeader를 사용하고 페이지 내부 �
         './features/attendance/attendance-page.tsx',
         './features/laundry/pages/laundry-page.tsx',
         './features/meals/pages/meals-page.tsx',
-        './features/notifications/notifications-page.tsx',
         './features/connections/connections-page.tsx',
     ];
     for (const page of featurePages) {
@@ -92,4 +92,9 @@ test('각 기능 화면은 공통 PageHeader를 사용하고 페이지 내부 �
         assert.match(pageSource, /<PageHeader\b/, `${page}에 PageHeader 렌더링이 없습니다.`);
         assert.doesNotMatch(pageSource, /<DashboardShell\b/, `${page}가 앱 셸을 중복 렌더링합니다.`);
     }
+
+    const notificationPanel = source('./features/notifications/notifications-page.tsx');
+    assert.match(notificationPanel, /export function NotificationPanelContent/);
+    assert.match(notificationPanel, /id="notification-inbox-title">받은 알림<\/h2>/);
+    assert.doesNotMatch(notificationPanel, /<PageHeader\b|<DashboardShell\b/);
 });

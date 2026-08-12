@@ -1,22 +1,16 @@
-import { getLogger } from "@logtape/logtape";
 import type {
-  CollectionCommit,
   LaundryEvent,
   MinuteObservation,
   SourceName,
   SourceState,
 } from "../collector/types";
 import {
-  weeklyMealMenu,
-  withMealPostContentSha,
   type ArchivedMealPost,
   type MealImageAsset,
   type MealPost,
   type WeeklyMealMenu,
 } from "../collector/meals";
 import type { MealHistoryCursor } from "../domain/meal-history";
-
-const storageLogger = getLogger(["jungle-bell", "api-storage"]);
 
 interface SourceStateRow {
   source: SourceName;
@@ -267,191 +261,5 @@ export class CloudflareApiStorage {
       contentSha: row.content_sha,
       post: JSON.parse(row.post_json) as MealPost,
     }));
-  }
-
-  async applyCommit(commit: CollectionCommit): Promise<void> {
-    const {
-      state,
-      observation,
-      laundryEvents = [],
-      mealPosts = [],
-      mealObservedAt = observation.collectedAt,
-    } = commit;
-    const statements: D1PreparedStatement[] = [
-      this.db
-        .prepare(`
-          INSERT INTO minute_observation (
-            source, minute_epoch, scheduled_at, collected_at, status, version_sha,
-            raw_key, normalized_key, version_first_seen_at, changed, duration_ms,
-            http_status, error
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(source, minute_epoch) DO NOTHING
-        `)
-        .bind(
-          observation.source,
-          observation.minuteEpoch,
-          observation.scheduledAt,
-          observation.collectedAt,
-          observation.status,
-          observation.versionSha,
-          observation.rawKey,
-          observation.normalizedKey,
-          observation.versionFirstSeenAt,
-          observation.changed ? 1 : 0,
-          observation.durationMs,
-          observation.httpStatus,
-          observation.error,
-        ),
-      this.db
-        .prepare(`
-          INSERT INTO source_state (
-            source, last_attempt_at, last_success_at, last_response_sha, last_raw_key,
-            last_normalized_key, version_first_seen_at, consecutive_failures, last_error
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(source) DO UPDATE SET
-            last_attempt_at = excluded.last_attempt_at,
-            last_success_at = excluded.last_success_at,
-            last_response_sha = excluded.last_response_sha,
-            last_raw_key = excluded.last_raw_key,
-            last_normalized_key = excluded.last_normalized_key,
-            version_first_seen_at = excluded.version_first_seen_at,
-            consecutive_failures = excluded.consecutive_failures,
-            last_error = excluded.last_error
-          WHERE excluded.last_attempt_at >= source_state.last_attempt_at
-        `)
-        .bind(
-          state.source,
-          state.lastAttemptAt,
-          state.lastSuccessAt,
-          state.lastResponseSha,
-          state.lastRawKey,
-          state.lastNormalizedKey,
-          state.versionFirstSeenAt,
-          state.consecutiveFailures,
-          state.lastError,
-        ),
-    ];
-
-    for (const event of laundryEvents) {
-      statements.push(this.db
-        .prepare(`
-          INSERT INTO laundry_event (
-            id, machine_id, appliance, session_id, type, previous_observed_at,
-            observed_at, eta_delta_minutes, previous_state, current_state, detail_json
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(id) DO NOTHING
-        `)
-        .bind(
-          event.id,
-          event.machineId,
-          event.appliance,
-          event.sessionId,
-          event.type,
-          event.previousObservedAt,
-          event.observedAt,
-          event.etaDeltaMinutes,
-          event.previousState,
-          event.currentState,
-          JSON.stringify(event.detail),
-        ));
-    }
-
-    for (const rawPost of mealPosts) {
-      const post = await withMealPostContentSha(rawPost);
-      if (post.kind === "PINNED_MENU") {
-        const weekly = await weeklyMealMenu(post, mealObservedAt);
-        if (weekly) {
-          statements.push(this.db
-            .prepare(`
-              INSERT INTO meal_weekly_menu (week_key, content_sha, post_json, updated_at, observed_at)
-              VALUES (?, ?, ?, ?, ?)
-              ON CONFLICT(week_key) DO UPDATE SET
-                content_sha = excluded.content_sha,
-                post_json = excluded.post_json,
-                updated_at = excluded.updated_at,
-                observed_at = excluded.observed_at
-              WHERE excluded.content_sha <> meal_weekly_menu.content_sha
-                AND excluded.observed_at >= meal_weekly_menu.observed_at
-            `)
-            .bind(
-              weekly.weekKey,
-              weekly.contentSha,
-              JSON.stringify(weekly.post),
-              post.updatedAt,
-              mealObservedAt,
-            ));
-        } else {
-          storageLogger.warn("Pinned meal title could not be assigned to a week", {
-            postId: post.id,
-            title: post.title,
-            contentSha: post.contentSha,
-            observedAt: mealObservedAt,
-          });
-        }
-      }
-      statements.push(this.db
-        .prepare(`
-          INSERT INTO meal_post (
-            id, kind, content_sha, title, text, pinned, published_at, updated_at,
-            permalink, status, first_seen_at, last_seen_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(id) DO UPDATE SET
-            kind = CASE
-              WHEN meal_post.kind = 'PINNED_MENU' THEN meal_post.kind
-              ELSE excluded.kind
-            END,
-            content_sha = excluded.content_sha,
-            title = excluded.title,
-            text = excluded.text,
-            pinned = excluded.pinned,
-            published_at = excluded.published_at,
-            updated_at = excluded.updated_at,
-            permalink = excluded.permalink,
-            status = excluded.status,
-            last_seen_at = excluded.last_seen_at
-        `)
-        .bind(
-          post.id,
-          post.kind,
-          post.contentSha,
-          post.title,
-          post.text,
-          post.pinned ? 1 : 0,
-          post.publishedAt,
-          post.updatedAt,
-          post.permalink,
-          post.status,
-          mealObservedAt,
-          mealObservedAt,
-        ));
-      statements.push(this.db.prepare("DELETE FROM meal_image WHERE post_id = ?").bind(post.id));
-      for (const [position, image] of post.images.entries()) {
-        statements.push(this.db
-          .prepare(`
-            INSERT INTO meal_image (
-              post_id, media_id, position, source_url, declared_content_type,
-              filename, width, height, sha, object_key, content_type, extension,
-              byte_length
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `)
-          .bind(
-            post.id,
-            image.mediaId,
-            position,
-            image.sourceUrl,
-            image.declaredContentType,
-            image.filename,
-            image.width,
-            image.height,
-            image.sha,
-            image.objectKey,
-            image.contentType,
-            image.extension,
-            image.byteLength,
-          ));
-      }
-    }
-
-    await this.db.batch(statements);
   }
 }

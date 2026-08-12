@@ -4,7 +4,6 @@ import {ExternalLink, Send, Smartphone} from 'lucide-react';
 import {queryKeys, useDashboardEnvironment} from '@/app/dashboard-context';
 import {useNotificationsQuery} from '@/app/use-dashboard-queries';
 import {EmptyState, ErrorState, LoadingState} from '@/components/dashboard/async-state';
-import {PageHeader} from '@/components/dashboard/page-header';
 import {Button} from '@/components/ui/button';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Card} from '@/components/ui/card';
@@ -64,7 +63,7 @@ export function NotificationRow({item, unread, onOpen, href}: {
     );
 }
 
-export function NotificationsPage({seenMobileIds}: {seenMobileIds: ReadonlySet<string>}) {
+export function NotificationPanelContent({seenMobileIds}: {seenMobileIds: ReadonlySet<string>}) {
     const {api, surface} = useDashboardEnvironment();
     const client = useQueryClient();
     const notifications = useNotificationsQuery();
@@ -162,8 +161,6 @@ export function NotificationsPage({seenMobileIds}: {seenMobileIds: ReadonlySet<s
 
     return (
         <div className="space-y-6">
-            <PageHeader title="알림 센터"/>
-
             <section className="space-y-3" aria-labelledby="notification-inbox-title">
                 <h2 className="text-base font-semibold" id="notification-inbox-title">받은 알림</h2>
                 {backgroundRefreshFailed ? (
