@@ -4,6 +4,7 @@ const APP_COMMANDS: &[&str] = &[
     "report_checker_event",
     "get_desktop_settings",
     "update_desktop_settings",
+    "open_log_folder",
     "report_campus_ready",
     "refresh_campus_data",
     "get_dashboard_campus_data",

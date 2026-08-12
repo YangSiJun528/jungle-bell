@@ -1,5 +1,4 @@
-import {useEffect, useState} from 'react';
-import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
+import {useMutation} from '@tanstack/react-query';
 import {
     CalendarCheck2,
     Check,
@@ -19,23 +18,17 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
-import {Separator} from '@/components/ui/separator';
-import {Switch} from '@/components/ui/switch';
 import {EmptyState, ErrorState, LoadingState} from '@/components/dashboard/async-state';
 import {PageHeader} from '@/components/dashboard/page-header';
-import {queryKeys, useDashboardEnvironment} from '@/app/dashboard-context';
+import {useDashboardEnvironment} from '@/app/dashboard-context';
 import {
     useAttendanceQuery,
     useHomeOverviewQuery,
     useRefreshAllMutation,
 } from '@/app/use-dashboard-queries';
-import type {AttendancePreferences} from '@/api/personal-api';
-import {companionAuthenticationRequired} from '@/app/surface';
 import {dateTimeLabel, relativeTimeLabel} from '@/lib/format';
 import {
     attendanceDetailModel,
-    attendancePreferencesEqual,
-    attendanceSkipDate,
     deviceStatus,
 } from './attendance-view-model';
 
@@ -60,71 +53,23 @@ function AttendanceCheck({label, checked}: {label: string; checked: boolean}) {
     );
 }
 
-function PreferenceRow({title, description, checked, disabled, onCheckedChange}: {
-    title: string;
-    description: string;
-    checked: boolean;
-    disabled: boolean;
-    onCheckedChange: (checked: boolean) => void;
-}) {
-    return (
-        <div className="flex items-center justify-between gap-4 py-4">
-            <div className="min-w-0">
-                <p className="text-sm font-medium">{title}</p>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p>
-            </div>
-            <Switch
-                aria-label={title}
-                checked={checked}
-                disabled={disabled}
-                onCheckedChange={onCheckedChange}
-            />
-        </div>
-    );
-}
-
 export function AttendancePage() {
     const {api, surface} = useDashboardEnvironment();
-    const queryClient = useQueryClient();
     const attendance = useAttendanceQuery();
     const overview = useHomeOverviewQuery();
     const refreshAll = useRefreshAllMutation();
     const openCampus = useMutation({mutationFn: () => api.openLmsLogin()});
-    const personalSurface = surface.kind === 'desktop' ? 'desktop' : 'companion';
-    const preferences = useQuery({
-        queryKey: queryKeys.attendancePreferences,
-        queryFn: () => api.getAttendancePreferences(personalSurface),
-        enabled: surface.canViewAttendance,
-    });
-    const [draft, setDraft] = useState<AttendancePreferences | null>(null);
-
-    useEffect(() => {
-        if (preferences.data) setDraft(preferences.data);
-    }, [preferences.data]);
-
-    const savePreferences = useMutation({
-        mutationFn: (input: AttendancePreferences) => api.updateAttendancePreferences(personalSurface, input),
-        onSuccess: (saved) => {
-            queryClient.setQueryData(queryKeys.attendancePreferences, saved);
-            setDraft(saved);
-        },
-        onSettled: () => queryClient.invalidateQueries({queryKey: queryKeys.attendancePreferences}),
-    });
     const detail = attendanceDetailModel({
         isPending: attendance.isPending,
         isError: attendance.isError,
         data: attendance.data,
     });
-    const attendanceDate = detail.kind === 'available' ? detail.snapshot.attendanceDate : null;
-    const dirty = !attendancePreferencesEqual(draft, preferences.data ?? null);
     const devices = attendance.data?.state === 'loaded' ? attendance.data.devices : [];
     const primaryDevice = devices[0];
     const lmsState = surface.kind === 'desktop'
         ? overview.data?.lmsSessionState
         : primaryDevice?.lmsSessionState;
     const campusNotice = lmsState === 'login-required' ? 'LMS 로그인이 필요합니다.' : null;
-    const preferencesAuthRequired = preferences.isError
-        && companionAuthenticationRequired(preferences.error);
 
     if (surface.kind === 'public') {
         return (
@@ -269,81 +214,6 @@ export function AttendancePage() {
                 </Card>
             ) : null}
 
-            <Card>
-                <CardHeader>
-                    <div>
-                        <p className="text-xs font-medium text-muted-foreground">연결된 모든 기기</p>
-                        <CardTitle className="mt-1">출석 알림 설정</CardTitle>
-                        <CardDescription className="mt-2 leading-6">
-                            PC가 동기화한 출석 상태를 기준으로 선택한 시간대의 알림을 보냅니다.
-                        </CardDescription>
-                    </div>
-                </CardHeader>
-                <CardContent>
-                    {preferences.isPending || draft === null && !preferences.isError ? (
-                        <LoadingState label="출석 알림 설정을 불러오고 있습니다."/>
-                    ) : preferencesAuthRequired ? (
-                        <EmptyState title="PC 연결이 필요합니다." description="PC와 연결한 뒤 출석 알림을 설정할 수 있습니다."/>
-                    ) : preferences.isError || draft === null ? (
-                        <ErrorState
-                            title="출석 알림 설정을 불러오지 못했습니다."
-                            retry={() => void preferences.refetch()}
-                        />
-                    ) : (
-                        <div>
-                            <PreferenceRow
-                                title="오전 알림"
-                                description="오전 출석 확인이 필요할 때 알려드립니다."
-                                checked={draft.morning}
-                                disabled={savePreferences.isPending}
-                                onCheckedChange={(morning) => setDraft({...draft, morning})}
-                            />
-                            <Separator/>
-                            <PreferenceRow
-                                title="오후 알림"
-                                description="오후 출석 확인이 필요할 때 알려드립니다."
-                                checked={draft.evening}
-                                disabled={savePreferences.isPending}
-                                onCheckedChange={(evening) => setDraft({...draft, evening})}
-                            />
-                            <Separator/>
-                            <PreferenceRow
-                                title="일요일 제외"
-                                description="일요일에는 출석 알림을 계획하지 않습니다."
-                                checked={draft.skipSunday}
-                                disabled={savePreferences.isPending}
-                                onCheckedChange={(skipSunday) => setDraft({...draft, skipSunday})}
-                            />
-                            <Separator/>
-                            <PreferenceRow
-                                title="이번 출석일 건너뛰기"
-                                description={attendanceDate
-                                    ? `${attendanceDate} 하루만 알림을 쉽니다.`
-                                    : '출석 기준일이 확인되면 선택할 수 있습니다.'}
-                                checked={attendanceDate !== null && draft.skipAttendanceDate === attendanceDate}
-                                disabled={savePreferences.isPending || attendanceDate === null}
-                                onCheckedChange={(checked) => setDraft({
-                                    ...draft,
-                                    skipAttendanceDate: attendanceSkipDate(checked, attendanceDate),
-                                })}
-                            />
-                        </div>
-                    )}
-                </CardContent>
-                {draft ? (
-                    <CardFooter className="flex-wrap gap-3 border-t">
-                        <Button
-                            disabled={savePreferences.isPending || !dirty}
-                            onClick={() => savePreferences.mutate(draft)}
-                        >
-                            {savePreferences.isPending ? '저장 중' : '출석 알림 저장'}
-                        </Button>
-                        {dirty ? <p className="text-xs text-amber-700 dark:text-amber-300">저장하지 않은 변경이 있습니다.</p> : null}
-                        {savePreferences.isSuccess && !dirty ? <p className="text-xs text-emerald-700 dark:text-emerald-300">설정을 저장했습니다.</p> : null}
-                        {savePreferences.isError ? <p className="text-xs text-destructive">설정을 저장하지 못했습니다.</p> : null}
-                    </CardFooter>
-                ) : null}
-            </Card>
         </div>
     );
 }

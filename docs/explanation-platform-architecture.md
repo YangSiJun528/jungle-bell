@@ -60,6 +60,17 @@ credential을 앱 전용 데이터 디렉터리의 일반 파일에 보관합니
 서버는 PC를 원격 조작하지 않습니다. 데스크톱 inbox에는 표시할 알림 delivery만
 들어가며 LMS 요청이나 세탁 조작 같은 명령을 넣지 않습니다.
 
+서비스 설정은 소유권에 따라 나눕니다. 출석·급식 알림과 시간대는 D1의 계정 설정으로
+저장해 연결된 PC와 PWA가 공유합니다. 자동 시작·자동 업데이트·사용 통계·디버그와
+로그 폴더는 해당 PC의 실행 환경에만 영향을 주므로 로컬 설정과 제한된 Tauri IPC가
+소유합니다. 로그 폴더 command는 사용자 경로를 받지 않고 앱 전용 로그 디렉터리만
+엽니다.
+
+사용 통계는 release 빌드에서 명시된 로컬 설정이 켜진 동안만 보냅니다. 설치 ID는
+WebView에 노출하지 않고 Rust 안에서 SHA-256 해시로 가명 처리하며, 앱 실행·설정
+변경·앱 버전·운영체제 외의 LMS 계정, 출석·식단·세탁 내용은 수집하지 않습니다.
+PostHog person profile도 만들지 않습니다.
+
 App Worker는 HTTP 요청만 처리하며 Cron Trigger나 VAPID private key를 갖지
 않습니다. 오래 걸리거나 주기적인 작업은 OCI Jobs가 매분 한 번 실행하고 `flock`으로
 중복 실행을 막습니다. 한 저장소와 한 서버 패키지에서 두 실행 진입점을 관리하지만,
@@ -99,9 +110,14 @@ Web Push는 PWA가 백그라운드에서 LMS를 조회하는 수단이 아닙니
 
 공통 UI는 기존 Rust 로컬 앱의 Pretendard 글꼴, 4px 간격 체계, 밝은 fog 배경,
 border 없는 paper 카드, leaf 강조색과 상태별 soft 배경을 유지합니다. 넓은
-화면에서는 왼쪽 navigation rail, 모바일 PWA에서는 safe area를 반영한 하단
-navigation을 사용합니다. 오늘·출석·세탁실·급식만 주요 navigation에 두고,
-알림 센터와 기기 연결은 별도의 개인 도구 영역으로 분리합니다.
+화면에서는 shadcn/ui의 접을 수 있는 왼쪽 navigation rail을 사용합니다. 모바일
+PWA에서는 같은 Sidebar의 Sheet와 safe area를 반영한 하단 navigation을 함께
+사용합니다. 홈·출석·세탁실·식단만 주요 navigation에 두고, 알림 센터와 기기
+연결은 별도의 개인 도구 영역으로 분리합니다.
+
+급식 기록 Calendar는 shadcn/ui가 제공하는 React DayPicker 기반 구현을 유지합니다.
+월 이동과 날짜 선택뿐 아니라 비활성 날짜, 한국어 locale, 키보드 포커스와 접근성
+계약까지 이 계층이 담당하므로 수동 달력으로 중복 구현하지 않습니다.
 
 홈 화면은 오늘의 출석, 과정 D-Day, Jungle Campus 연결, 세탁과 급식을
 요약합니다. 알림 기록과 수신 상태는 전역 알림 센터에서 확인합니다. 시스템

@@ -1,3 +1,4 @@
+mod analytics;
 mod attendance;
 mod attendance_day;
 mod autostart;
@@ -57,20 +58,32 @@ fn notify_startup_status(app: &tauri::AppHandle, notifications: &NotificationSer
     );
 }
 
-fn spawn_startup_update_check(app: tauri::AppHandle) {
+fn spawn_startup_update_check(app: tauri::AppHandle, state: Arc<Mutex<AppState>>) {
     tauri::async_runtime::spawn(async move {
-        updater::auto_install_update(app).await;
+        if state.lock().await.config.auto_update {
+            updater::auto_install_update(app).await;
+        }
     });
 }
 
-fn spawn_periodic_update_check(app: tauri::AppHandle) {
+fn spawn_periodic_update_check(app: tauri::AppHandle, state: Arc<Mutex<AppState>>) {
     tauri::async_runtime::spawn(async move {
         const INTERVAL_SECS: u64 = 60 * 60; // 1시간마다 체크
         loop {
             tokio::time::sleep(tokio::time::Duration::from_secs(INTERVAL_SECS)).await;
-            updater::auto_install_update(app.clone()).await;
+            if state.lock().await.config.auto_update {
+                updater::auto_install_update(app.clone()).await;
+            }
         }
     });
+}
+
+const fn configured_log_level(debug_mode: bool) -> log::LevelFilter {
+    if debug_mode {
+        log::LevelFilter::Debug
+    } else {
+        log::LevelFilter::Info
+    }
 }
 
 /// 앱 진입점.
@@ -81,7 +94,8 @@ fn spawn_periodic_update_check(app: tauri::AppHandle) {
 pub fn run() {
     let launched_from_autostart = std::env::args().any(|argument| argument == AUTOSTART_ARGUMENT);
     let config = Config::load();
-    let log_level = log::LevelFilter::Info;
+    let log_level = configured_log_level(config.debug_mode);
+    analytics::init(config.usage_analytics);
     let shared_state = Arc::new(Mutex::new(AppState::new(config)));
     let notification_inbox_service = Arc::new(NotificationInboxService::load());
     let notification_service = Arc::new(NotificationService::new(notification_inbox_service.clone()));
@@ -101,7 +115,9 @@ pub fn run() {
         //            Windows %APPDATA%\dev.sijun-yang.jungle-bell\logs\
         .plugin(
             tauri_plugin_log::Builder::new()
-                .level(log_level)
+                // 런타임에서 디버그 모드를 켤 수 있도록 백엔드는 Debug까지 받는다.
+                // 실제 출력 상한은 setup과 설정 command에서 set_max_level로 제어한다.
+                .level(log::LevelFilter::Debug)
                 .max_file_size(MAX_LOG_FILE_SIZE)
                 .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepOne)
                 .format(|callback, message, record| {
@@ -139,6 +155,7 @@ pub fn run() {
             commands::report_checker_event,
             commands::get_desktop_settings,
             commands::update_desktop_settings,
+            commands::open_log_folder,
             commands::report_campus_ready,
             commands::refresh_campus_data,
             commands::get_dashboard_campus_data,
@@ -171,6 +188,7 @@ pub fn run() {
         ])
         // setup(): 앱 초기화 후 이벤트 루프 시작 전에 한 번 실행.
         .setup(move |app| {
+            log::set_max_level(log_level);
             log::info!(
                 "[app] starting v{} (log_level={}, log_max_size={}KB)",
                 app.package_info().version,
@@ -182,6 +200,9 @@ pub fn run() {
             let remote_sync_service = Arc::new(tauri::async_runtime::block_on(
                 remote_sync::RemoteSyncService::configured(app.handle()),
             )?);
+            let analytics_installation_id =
+                tauri::async_runtime::block_on(remote_sync_service.installation_id_for_analytics());
+            analytics::set_identity(&analytics_installation_id);
             app.manage(remote_sync_service.clone());
             tray::setup_tray(app)?;
             if let Err(error) = notification_service.initialize_system_backend() {
@@ -203,8 +224,8 @@ pub fn run() {
             if should_open_dashboard_on_start(launched_from_autostart) {
                 tray::open_dashboard_window(app.handle());
             }
-            spawn_startup_update_check(app.handle().clone());
-            spawn_periodic_update_check(app.handle().clone());
+            spawn_startup_update_check(app.handle().clone(), shared_state.clone());
+            spawn_periodic_update_check(app.handle().clone(), shared_state.clone());
 
             // 백그라운드 루프: 상태 계산, 트레이 갱신, 체커 주기적 리로드.
             let app_handle = app.handle().clone();
@@ -230,5 +251,11 @@ mod tests {
     fn 자동시작은_대시보드를_열지_않고_수동실행은_연다() {
         assert!(should_open_dashboard_on_start(false));
         assert!(!should_open_dashboard_on_start(true));
+    }
+
+    #[test]
+    fn 디버그_모드는_런타임_로그_상한을_전환한다() {
+        assert_eq!(configured_log_level(false), log::LevelFilter::Info);
+        assert_eq!(configured_log_level(true), log::LevelFilter::Debug);
     }
 }

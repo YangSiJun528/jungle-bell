@@ -184,6 +184,61 @@ describe("D1RenewalStore pairing approval", () => {
   });
 });
 
+describe("attendance preference D1 migration", () => {
+  it("preserves existing rows and applies legacy-compatible schedule defaults", () => {
+    const database = new DatabaseSync(":memory:");
+    try {
+      database.exec(`CREATE TABLE attendance_preference (
+        user_id TEXT PRIMARY KEY,
+        morning_enabled INTEGER NOT NULL,
+        evening_enabled INTEGER NOT NULL,
+        skip_sunday INTEGER NOT NULL DEFAULT 0,
+        skip_attendance_date TEXT,
+        updated_at_epoch_ms INTEGER NOT NULL
+      );
+      INSERT INTO attendance_preference
+        (user_id, morning_enabled, evening_enabled, skip_sunday, skip_attendance_date, updated_at_epoch_ms)
+      VALUES ('user-existing', 0, 1, 1, '2026-08-03', 1234);`);
+
+      const migration = readFileSync(
+        new URL("../../database/migrations/2026-08-12-attendance-notification-preferences.sql", import.meta.url),
+        "utf8",
+      );
+      expect(migration).not.toMatch(/\b(?:DROP|DELETE|UPDATE)\b/iu);
+      database.exec(migration);
+
+      expect(database.prepare("SELECT * FROM attendance_preference WHERE user_id = ?").get("user-existing"))
+        .toEqual({
+          user_id: "user-existing",
+          morning_enabled: 0,
+          evening_enabled: 1,
+          skip_sunday: 1,
+          skip_attendance_date: "2026-08-03",
+          updated_at_epoch_ms: 1234,
+          enabled: 1,
+          morning_start_hour: 9,
+          evening_end_hour: 4,
+          morning_interval_minutes: 15,
+          evening_interval_minutes: 15,
+        });
+      database.prepare(`INSERT INTO attendance_preference
+        (user_id, morning_enabled, evening_enabled, skip_sunday, skip_attendance_date, updated_at_epoch_ms)
+        VALUES ('user-created-by-old-server', 1, 0, 0, NULL, 5678)`).run();
+      expect(database.prepare(`SELECT enabled, morning_start_hour, evening_end_hour,
+        morning_interval_minutes, evening_interval_minutes FROM attendance_preference WHERE user_id = ?`)
+        .get("user-created-by-old-server")).toEqual({
+          enabled: 1,
+          morning_start_hour: 9,
+          evening_end_hour: 4,
+          morning_interval_minutes: 15,
+          evening_interval_minutes: 15,
+        });
+    } finally {
+      database.close();
+    }
+  });
+});
+
 describe("D1RenewalStore pairing creation", () => {
   it("persists bounded manual-claim and pairing-creation windows", async () => {
     const database = new DatabaseSync(":memory:");
@@ -337,8 +392,13 @@ describe("D1RenewalStore desktop enrollment", () => {
           WHERE kind = 'desktop' AND revoked_at_epoch_ms IS NULL;
         CREATE TABLE attendance_preference (
           user_id TEXT PRIMARY KEY,
+          enabled INTEGER NOT NULL DEFAULT 1,
           morning_enabled INTEGER NOT NULL,
           evening_enabled INTEGER NOT NULL,
+          morning_start_hour INTEGER NOT NULL DEFAULT 9,
+          evening_end_hour INTEGER NOT NULL DEFAULT 4,
+          morning_interval_minutes INTEGER NOT NULL DEFAULT 15,
+          evening_interval_minutes INTEGER NOT NULL DEFAULT 15,
           skip_sunday INTEGER NOT NULL,
           skip_attendance_date TEXT,
           updated_at_epoch_ms INTEGER NOT NULL
@@ -364,6 +424,54 @@ describe("D1RenewalStore desktop enrollment", () => {
           nowEpochMs: secondAt,
           expiresAtEpochMs: secondAt + 60_000,
         })).toBe(false);
+
+      await expect(store.getAttendancePreference("user-a")).resolves.toEqual({
+        enabled: true,
+        morning: true,
+        evening: true,
+        morningStartHour: 9,
+        eveningEndHour: 4,
+        morningIntervalMinutes: 15,
+        eveningIntervalMinutes: 15,
+        skipSunday: false,
+        skipAttendanceDate: null,
+      });
+      await store.setAttendancePreference("user-a", {
+        enabled: false,
+        morning: true,
+        evening: false,
+        morningStartHour: 4,
+        eveningEndHour: 0,
+        morningIntervalMinutes: 3,
+        eveningIntervalMinutes: 30,
+        skipSunday: true,
+        skipAttendanceDate: "2026-08-03",
+      }, secondAt);
+      await expect(store.getAttendancePreference("user-a")).resolves.toMatchObject({
+        enabled: false,
+        morningStartHour: 4,
+        eveningEndHour: 0,
+        morningIntervalMinutes: 3,
+        eveningIntervalMinutes: 30,
+      });
+      await store.setLegacyAttendancePreference("user-a", {
+        morning: false,
+        evening: true,
+        skipSunday: false,
+        skipAttendanceDate: null,
+      }, secondAt + 1);
+      await expect(store.getAttendancePreference("user-a")).resolves.toEqual({
+        enabled: false,
+        morning: false,
+        evening: true,
+        morningStartHour: 4,
+        eveningEndHour: 0,
+        morningIntervalMinutes: 3,
+        eveningIntervalMinutes: 30,
+        skipSunday: false,
+        skipAttendanceDate: null,
+      });
+      await expect(store.listAttendanceSubscriberUserIds("morning")).resolves.toEqual([]);
 
       expect(database.prepare(`SELECT user_id FROM desktop_device WHERE installation_id = ?`)
         .get("shared-desktop")).toEqual({ user_id: "user-a" });

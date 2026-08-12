@@ -88,8 +88,13 @@ export class MemoryRenewalStore implements RenewalStore {
     this.desktopEnrolledAt.set(input.installationId, input.nowEpochMs);
     if (!this.preferences.has(userId)) {
       this.preferences.set(userId, {
+        enabled: true,
         morning: true,
         evening: true,
+        morningStartHour: 9,
+        eveningEndHour: 4,
+        morningIntervalMinutes: 15,
+        eveningIntervalMinutes: 15,
         skipSunday: false,
         skipAttendanceDate: null,
       });
@@ -271,7 +276,9 @@ export class MemoryRenewalStore implements RenewalStore {
   }
 
   async listAttendanceSubscriberUserIds(phase: "morning" | "evening"): Promise<string[]> {
-    return [...this.preferences].filter(([, value]) => value[phase]).map(([userId]) => userId);
+    return [...this.preferences]
+      .filter(([, value]) => value.enabled && value[phase])
+      .map(([userId]) => userId);
   }
 
   async getAttendancePreference(userId: string): Promise<AttendancePreferenceRecord | null> {
@@ -280,6 +287,25 @@ export class MemoryRenewalStore implements RenewalStore {
 
   async setAttendancePreference(userId: string, preference: AttendancePreferenceRecord, _nowEpochMs: number): Promise<void> {
     this.preferences.set(userId, structuredClone(preference));
+  }
+
+  async setLegacyAttendancePreference(
+    userId: string,
+    preference: Pick<AttendancePreferenceRecord, "morning" | "evening" | "skipSunday" | "skipAttendanceDate">,
+    _nowEpochMs: number,
+  ): Promise<void> {
+    const current = this.preferences.get(userId) ?? {
+      enabled: true,
+      morning: true,
+      evening: true,
+      morningStartHour: 9,
+      eveningEndHour: 4,
+      morningIntervalMinutes: 15,
+      eveningIntervalMinutes: 15,
+      skipSunday: false,
+      skipAttendanceDate: null,
+    };
+    this.preferences.set(userId, { ...current, ...structuredClone(preference) });
   }
 
   async getMealPreference(userId: string): Promise<MealPreferenceRecord | null> {

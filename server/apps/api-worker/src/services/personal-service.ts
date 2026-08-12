@@ -5,6 +5,7 @@ import type {
 } from "@jungle-bell/backend-common/ports/account-storage";
 import type {
   AttendancePreferences,
+  AttendancePreferencesV2,
   LaundryQueueInput,
   LaundryWatchInput,
   MealPreferencesInput,
@@ -22,6 +23,7 @@ export type PersonalControlsStore = Pick<RenewalStore,
   | "listLaundryQueue"
   | "listLaundryWatches"
   | "setAttendancePreference"
+  | "setLegacyAttendancePreference"
   | "setMealPreference"
 >;
 
@@ -90,9 +92,14 @@ export function publicLaundryQueueEntry(entry: LaundryQueueEntryRecord) {
   };
 }
 
-const DEFAULT_ATTENDANCE_PREFERENCE: AttendancePreferences = {
+const DEFAULT_ATTENDANCE_PREFERENCE: AttendancePreferencesV2 = {
+  enabled: true,
   morning: true,
   evening: true,
+  morningStartHour: 9,
+  eveningEndHour: 4,
+  morningIntervalMinutes: 15,
+  eveningIntervalMinutes: 15,
   skipSunday: false,
   skipAttendanceDate: null,
 };
@@ -101,16 +108,29 @@ const DEFAULT_ATTENDANCE_PREFERENCE: AttendancePreferences = {
 export class PersonalService {
   constructor(private readonly store: PersonalControlsStore) {}
 
-  async readAttendancePreferences(userId: string): Promise<AttendancePreferences> {
+  async readAttendancePreferences(userId: string): Promise<AttendancePreferencesV2> {
     return await this.store.getAttendancePreference(userId) ?? DEFAULT_ATTENDANCE_PREFERENCE;
+  }
+
+  async readLegacyAttendancePreferences(userId: string): Promise<AttendancePreferences> {
+    return legacyAttendancePreferences(await this.readAttendancePreferences(userId));
   }
 
   async updateAttendancePreferences(
     userId: string,
+    preference: AttendancePreferencesV2,
+    nowEpochMs: number,
+  ): Promise<AttendancePreferencesV2> {
+    await this.store.setAttendancePreference(userId, preference, nowEpochMs);
+    return preference;
+  }
+
+  async updateLegacyAttendancePreferences(
+    userId: string,
     preference: AttendancePreferences,
     nowEpochMs: number,
   ): Promise<AttendancePreferences> {
-    await this.store.setAttendancePreference(userId, preference, nowEpochMs);
+    await this.store.setLegacyAttendancePreference(userId, preference, nowEpochMs);
     return preference;
   }
 
@@ -145,4 +165,13 @@ export class PersonalService {
   leaveLaundryQueue(userId: string, entryId: string, nowEpochMs: number) {
     return this.store.cancelLaundryQueueEntry(userId, entryId, nowEpochMs);
   }
+}
+
+function legacyAttendancePreferences(preference: AttendancePreferencesV2): AttendancePreferences {
+  return {
+    morning: preference.morning,
+    evening: preference.evening,
+    skipSunday: preference.skipSunday,
+    skipAttendanceDate: preference.skipAttendanceDate,
+  };
 }

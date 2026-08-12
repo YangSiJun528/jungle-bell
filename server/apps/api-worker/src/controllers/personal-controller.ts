@@ -1,6 +1,7 @@
 import { zValidator } from "@hono/zod-validator";
 import {
   attendancePreferencesSchema,
+  attendancePreferencesV2Schema,
   laundryQueueIdSchema,
   laundryQueueInputSchema,
   laundryWatchIdSchema,
@@ -26,11 +27,27 @@ function personalRoutes(principalFor: PrincipalLoader): Hono<ApiEnvironment> {
   const app = new Hono<ApiEnvironment>();
   app.get("/attendance/preferences", async (context) => {
     const principal = await principalFor(context);
-    return context.json(await context.var.services.personal.readAttendancePreferences(principal.userId));
+    return context.json(await context.var.services.personal.readLegacyAttendancePreferences(principal.userId));
   });
   app.put(
     "/attendance/preferences",
     zValidator("json", attendancePreferencesSchema, validationHook),
+    async (context) => {
+      const principal = await principalFor(context);
+      return context.json(await context.var.services.personal.updateLegacyAttendancePreferences(
+        principal.userId,
+        context.req.valid("json"),
+        Date.now(),
+      ));
+    },
+  );
+  app.get("/v2/attendance/preferences", async (context) => {
+    const principal = await principalFor(context);
+    return context.json(await context.var.services.personal.readAttendancePreferences(principal.userId));
+  });
+  app.put(
+    "/v2/attendance/preferences",
+    zValidator("json", attendancePreferencesV2Schema, validationHook),
     async (context) => {
       const principal = await principalFor(context);
       return context.json(await context.var.services.personal.updateAttendancePreferences(

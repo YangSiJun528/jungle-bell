@@ -7,6 +7,10 @@ import {MealHistoryCalendar} from './meal-history-calendar';
 import {WeeklyMealMenu} from './weekly-meal-menu';
 
 const source = readFileSync(new URL('./meal-history-calendar.tsx', import.meta.url), 'utf8');
+const calendarSource = readFileSync(
+    new URL('../../../components/ui/calendar.tsx', import.meta.url),
+    'utf8',
+);
 
 describe('MealHistoryCalendar', () => {
     it('급식이 있는 날짜와 선택한 날짜를 구분한다', () => {
@@ -36,6 +40,10 @@ describe('MealHistoryCalendar', () => {
         expect(source).not.toContain('navLayout="around"');
         expect(source).not.toContain('calendarMonthCells');
         expect(source).not.toContain('useEffect');
+        expect(calendarSource).toContain('import { Button, buttonVariants }');
+        expect(calendarSource.match(/buttonVariants\(\{ variant: buttonVariant \}\)/gu)).toHaveLength(2);
+        expect(calendarSource).not.toContain('PreviousMonthButton:');
+        expect(calendarSource).not.toContain('NextMonthButton:');
     });
 
     it('날짜 버튼을 클릭하면 선택 날짜에 맞는 다른 주차 급식표로 전환한다', () => {

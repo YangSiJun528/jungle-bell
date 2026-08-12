@@ -7,7 +7,7 @@ use crate::attendance::{self, CohortOption, CohortResolution};
 use crate::config::{self, Config};
 use crate::state::AppState;
 
-/// `autoStart` 한 항목만 소유하는 현재형 데스크톱 설정 서비스.
+/// 이 PC에만 적용되는 서비스 설정을 원자적으로 저장한다.
 pub struct DesktopSettingsService {
     state: Arc<Mutex<AppState>>,
     path: Option<PathBuf>,
@@ -27,8 +27,8 @@ impl DesktopSettingsService {
         }
     }
 
-    pub async fn auto_start(&self) -> bool {
-        self.state.lock().await.config.auto_start
+    pub async fn settings(&self) -> Config {
+        self.state.lock().await.config.clone()
     }
 
     async fn persist(&self, config: Config) -> Result<(), String> {
@@ -43,28 +43,32 @@ impl DesktopSettingsService {
 
     /// OS 자동 시작 상태와 설정 파일을 함께 변경한다. 저장 실패 시 OS 상태를
     /// 원래 값으로 되돌리고 메모리 상태는 변경하지 않는다.
-    pub async fn update_auto_start(&self, app: &tauri::AppHandle, enabled: bool) -> Result<bool, String> {
+    pub async fn update(&self, app: &tauri::AppHandle, next: Config) -> Result<Config, String> {
         let _write_guard = self.writes.lock().await;
         let current = self.state.lock().await.config.clone();
-        if current.auto_start == enabled {
-            return Ok(enabled);
+        if current == next {
+            return Ok(next);
         }
 
-        crate::autostart::sync_auto_start(app, enabled)?;
-        let next = Config { auto_start: enabled };
+        if current.auto_start != next.auto_start {
+            crate::autostart::sync_auto_start(app, next.auto_start)?;
+        }
         if let Err(save_error) = self.persist(next.clone()).await {
-            return match crate::autostart::sync_auto_start(app, current.auto_start) {
-                Ok(()) => Err(save_error),
-                Err(rollback_error) => Err(format!(
-                    "{save_error}; 자동 시작 상태 복구도 실패했습니다: {rollback_error}"
-                )),
-            };
+            if current.auto_start != next.auto_start {
+                return match crate::autostart::sync_auto_start(app, current.auto_start) {
+                    Ok(()) => Err(save_error),
+                    Err(rollback_error) => Err(format!(
+                        "{save_error}; 자동 시작 상태 복구도 실패했습니다: {rollback_error}"
+                    )),
+                };
+            }
+            return Err(save_error);
         }
 
         let mut state = self.state.lock().await;
-        state.config = next;
+        state.config = next.clone();
         state.notify_scheduler();
-        Ok(enabled)
+        Ok(next)
     }
 
     /// checker가 보고한 기수 중 현재 날짜에 맞는 기수를 자동으로 선택한다.
@@ -107,10 +111,16 @@ mod tests {
     }
 
     #[test]
-    fn 설정_읽기는_auto_start만_노출한다() {
-        let state = Arc::new(Mutex::new(AppState::new(Config { auto_start: true })));
+    fn 설정_읽기는_데스크톱_서비스_항목을_노출한다() {
+        let expected = Config {
+            auto_start: true,
+            auto_update: false,
+            usage_analytics: false,
+            debug_mode: true,
+        };
+        let state = Arc::new(Mutex::new(AppState::new(expected.clone())));
         let service = DesktopSettingsService::with_path(state, None);
-        assert!(tauri::async_runtime::block_on(service.auto_start()));
+        assert_eq!(tauri::async_runtime::block_on(service.settings()), expected);
     }
 
     #[test]
@@ -122,7 +132,10 @@ mod tests {
         let state = Arc::new(Mutex::new(AppState::new(Config::default())));
         let service = DesktopSettingsService::with_path(state.clone(), Some(blocked_parent.join("settings.json")));
 
-        let next = Config { auto_start: true };
+        let next = Config {
+            auto_start: true,
+            ..Config::default()
+        };
         assert!(tauri::async_runtime::block_on(service.persist(next)).is_err());
         assert!(!state.try_lock().unwrap().config.auto_start);
         fs::remove_dir_all(root).unwrap();

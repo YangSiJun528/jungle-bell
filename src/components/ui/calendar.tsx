@@ -13,7 +13,7 @@ import {
 } from "react-day-picker"
 
 import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 
 function Calendar({
   className,
@@ -56,10 +56,12 @@ function Calendar({
           defaultClassNames.nav
         ),
         button_previous: cn(
+          buttonVariants({ variant: buttonVariant }),
           "size-(--cell-size) p-0 select-none aria-disabled:opacity-50",
           defaultClassNames.button_previous
         ),
         button_next: cn(
+          buttonVariants({ variant: buttonVariant }),
           "size-(--cell-size) p-0 select-none aria-disabled:opacity-50",
           defaultClassNames.button_next
         ),
@@ -161,22 +163,6 @@ function Calendar({
           )
         },
         DayButton: CalendarDayButton,
-        PreviousMonthButton: ({ className, ...props }) => (
-          <Button
-            className={cn("size-(--cell-size) p-0", className)}
-            size="icon"
-            variant={buttonVariant}
-            {...props}
-          />
-        ),
-        NextMonthButton: ({ className, ...props }) => (
-          <Button
-            className={cn("size-(--cell-size) p-0", className)}
-            size="icon"
-            variant={buttonVariant}
-            {...props}
-          />
-        ),
         WeekNumber: ({ children, ...props }) => {
           return (
             <td {...props}>

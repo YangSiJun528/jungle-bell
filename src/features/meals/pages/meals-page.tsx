@@ -5,30 +5,23 @@ import {
     RefreshCw,
     Utensils,
 } from 'lucide-react';
-import {useCampusDataIssue, useDashboardEnvironment} from '@/app/dashboard-context';
+import {useCampusDataIssue} from '@/app/dashboard-context';
 import {useCampusManualRefresh, useMealsQuery} from '@/app/use-dashboard-queries';
 import {EmptyState, ErrorState, LoadingState} from '@/components/dashboard/async-state';
 import {PageHeader} from '@/components/dashboard/page-header';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Button} from '@/components/ui/button';
-import type {PersonalSurface} from '@/api/personal-api';
 import {selectTodayMeals} from '@/domain/meals/today';
 import {relativeTimeLabel} from '@/lib/format';
 import {cn} from '@/lib/utils';
 import {MealHistorySection} from '../components/meal-history-section';
-import {MealPreferencesSection} from '../components/meal-preferences-section';
 import {TodayMealGrid} from '../components/today-meal-grid';
 import {WeeklyMealMenu} from '../components/weekly-meal-menu';
 
-const personalSurface = (kind: string): PersonalSurface | null =>
-    kind === 'desktop' || kind === 'companion' ? kind : null;
-
 export function MealsPage() {
-    const {surface} = useDashboardEnvironment();
     const meals = useMealsQuery();
     const manualRefresh = useCampusManualRefresh('meals');
     const campusIssue = useCampusDataIssue('meals');
-    const personal = personalSurface(surface.kind);
     const todayMeals = useMemo(
         () => meals.data ? selectTodayMeals(meals.data) : [],
         [meals.data, meals.dataUpdatedAt],
@@ -103,8 +96,6 @@ export function MealsPage() {
                     <MealHistorySection meals={meals.data}/>
                 </>
             ) : null}
-
-            {personal ? <MealPreferencesSection surface={personal}/> : null}
         </div>
     );
 }

@@ -20,8 +20,12 @@ export function ErrorState({title = '정보를 불러오지 못했습니다.', d
         <Alert variant="destructive">
             <AlertCircle aria-hidden="true"/>
             <AlertTitle>{title}</AlertTitle>
-            {description ? <AlertDescription>{description}</AlertDescription> : null}
-            {retry ? <Button className="mt-3" size="sm" variant="outline" onClick={retry}>다시 시도</Button> : null}
+            {description || retry ? (
+                <AlertDescription>
+                    {description ? <p>{description}</p> : null}
+                    {retry ? <Button className="mt-2" size="sm" variant="outline" onClick={retry}>다시 시도</Button> : null}
+                </AlertDescription>
+            ) : null}
         </Alert>
     );
 }

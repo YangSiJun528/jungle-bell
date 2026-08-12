@@ -55,8 +55,11 @@ describe("shared personal controls", () => {
     await expect((await get("desktop", "meal-preferences")).json()).resolves.toEqual({
       enabled: false, breakfast: false, lunch: false, dinner: false, updatedAtEpochMs: 0,
     });
-    await expect((await get("mobile", "attendance/preferences")).json()).resolves.toEqual({
-      morning: true, evening: true, skipSunday: false, skipAttendanceDate: null,
+    await expect((await get("mobile", "v2/attendance/preferences")).json()).resolves.toEqual({
+      enabled: true, morning: true, evening: true,
+      morningStartHour: 9, eveningEndHour: 4,
+      morningIntervalMinutes: 15, eveningIntervalMinutes: 15,
+      skipSunday: false, skipAttendanceDate: null,
     });
 
     const meal = await app.request("https://app.test/api/desktop/meal-preferences", {
@@ -71,17 +74,115 @@ describe("shared personal controls", () => {
       enabled: true, breakfast: false, lunch: true, dinner: true, updatedAtEpochMs: NOW,
     });
 
-    const attendance = await app.request("https://app.test/api/mobile/attendance/preferences", {
+    const attendance = await app.request("https://app.test/api/mobile/v2/attendance/preferences", {
       method: "PUT", headers: { ...fixture.mobileHeaders, "content-type": "application/json" },
-      body: JSON.stringify({ morning: false, evening: true, skipSunday: true, skipAttendanceDate: "2026-08-03" }),
+      body: JSON.stringify({
+        enabled: true, morning: false, evening: true,
+        morningStartHour: 6, eveningEndHour: 2,
+        morningIntervalMinutes: 5, eveningIntervalMinutes: 10,
+        skipSunday: true, skipAttendanceDate: "2026-08-03",
+      }),
     }, fixture.env);
     expect(attendance.status).toBe(200);
     await expect(attendance.json()).resolves.toEqual({
-      morning: false, evening: true, skipSunday: true, skipAttendanceDate: "2026-08-03",
+      enabled: true, morning: false, evening: true,
+      morningStartHour: 6, eveningEndHour: 2,
+      morningIntervalMinutes: 5, eveningIntervalMinutes: 10,
+      skipSunday: true, skipAttendanceDate: "2026-08-03",
     });
-    await expect((await get("desktop", "attendance/preferences")).json()).resolves.toEqual({
-      morning: false, evening: true, skipSunday: true, skipAttendanceDate: "2026-08-03",
+    await expect((await get("desktop", "v2/attendance/preferences")).json()).resolves.toEqual({
+      enabled: true, morning: false, evening: true,
+      morningStartHour: 6, eveningEndHour: 2,
+      morningIntervalMinutes: 5, eveningIntervalMinutes: 10,
+      skipSunday: true, skipAttendanceDate: "2026-08-03",
     });
+  });
+
+  it("keeps the legacy four-field attendance endpoint exact while preserving v2-only fields", async () => {
+    const fixture = await setupAccount();
+    const request = (role: "desktop" | "mobile", method: "GET" | "PUT", body?: unknown) => app.request(
+      `https://app.test/api/${role}/attendance/preferences`,
+      {
+        method,
+        headers: {
+          ...(role === "desktop" ? fixture.desktopHeaders : fixture.mobileHeaders),
+          ...(body === undefined ? {} : { "content-type": "application/json" }),
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      },
+      fixture.env,
+    );
+
+    await expect((await request("desktop", "GET")).json()).resolves.toEqual({
+      morning: true, evening: true, skipSunday: false, skipAttendanceDate: null,
+    });
+    const legacyUpdate = {
+      morning: false, evening: true, skipSunday: true, skipAttendanceDate: "2026-08-03",
+    };
+    await expect((await request("mobile", "PUT", legacyUpdate)).json()).resolves.toEqual(legacyUpdate);
+    await expect((await app.request("https://app.test/api/desktop/v2/attendance/preferences", {
+      headers: fixture.desktopHeaders,
+    }, fixture.env)).json()).resolves.toEqual({
+      enabled: true, ...legacyUpdate,
+      morningStartHour: 9, eveningEndHour: 4,
+      morningIntervalMinutes: 15, eveningIntervalMinutes: 15,
+    });
+
+    const v2Update = {
+      enabled: false, morning: true, evening: false,
+      morningStartHour: 4, eveningEndHour: 0,
+      morningIntervalMinutes: 3, eveningIntervalMinutes: 30,
+      skipSunday: false, skipAttendanceDate: null,
+    };
+    const v2Response = await app.request("https://app.test/api/desktop/v2/attendance/preferences", {
+      method: "PUT",
+      headers: { ...fixture.desktopHeaders, "content-type": "application/json" },
+      body: JSON.stringify(v2Update),
+    }, fixture.env);
+    expect(v2Response.status).toBe(200);
+    await expect((await request("mobile", "GET")).json()).resolves.toEqual({
+      morning: true, evening: false, skipSunday: false, skipAttendanceDate: null,
+    });
+    await expect((await request("desktop", "PUT", legacyUpdate)).json()).resolves.toEqual(legacyUpdate);
+    await expect((await app.request("https://app.test/api/mobile/v2/attendance/preferences", {
+      headers: fixture.mobileHeaders,
+    }, fixture.env)).json()).resolves.toEqual({
+      ...v2Update,
+      morning: false,
+      evening: true,
+      skipSunday: true,
+      skipAttendanceDate: "2026-08-03",
+    });
+
+    expect((await request("desktop", "PUT", { ...legacyUpdate, enabled: true })).status).toBe(400);
+    expect((await app.request("https://app.test/api/desktop/v2/attendance/preferences", {
+      method: "PUT",
+      headers: { ...fixture.desktopHeaders, "content-type": "application/json" },
+      body: JSON.stringify(legacyUpdate),
+    }, fixture.env)).status).toBe(400);
+  });
+
+  it.each([
+    { morningStartHour: 3 },
+    { morningStartHour: 10 },
+    { eveningEndHour: -1 },
+    { eveningEndHour: 5 },
+    { morningIntervalMinutes: 2 },
+    { eveningIntervalMinutes: 60 },
+  ])("rejects an invalid attendance schedule: $morningStartHour/$eveningEndHour/$morningIntervalMinutes/$eveningIntervalMinutes", async (override) => {
+    const fixture = await setupAccount();
+    const response = await app.request("https://app.test/api/desktop/v2/attendance/preferences", {
+      method: "PUT",
+      headers: { ...fixture.desktopHeaders, "content-type": "application/json" },
+      body: JSON.stringify({
+        enabled: true, morning: true, evening: true,
+        morningStartHour: 9, eveningEndHour: 4,
+        morningIntervalMinutes: 15, eveningIntervalMinutes: 15,
+        skipSunday: false, skipAttendanceDate: null,
+        ...override,
+      }),
+    }, fixture.env);
+    expect(response.status).toBe(400);
   });
 
   it("shares strict laundry watches and rejects deterministic active duplicates", async () => {

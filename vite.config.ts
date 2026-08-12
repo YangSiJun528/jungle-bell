@@ -28,6 +28,11 @@ export function normalizeDevApiOrigin(value: string): string {
     return parsed.origin;
 }
 
+export function bypassDevApiModuleRequest(url: string | undefined): string | undefined {
+    if (url && /^\/api\/[^/]+\.[cm]?[jt]sx?(?:\?|$)/u.test(url)) return url;
+    return undefined;
+}
+
 interface InjectionScript {
     name: string;
     sources: string[];
@@ -142,6 +147,7 @@ export default defineConfig(({command}) => {
                     changeOrigin: true,
                     secure: true,
                     headers: {origin: devApiOrigin},
+                    bypass: (request) => bypassDevApiModuleRequest(request.url),
                 },
             },
         },

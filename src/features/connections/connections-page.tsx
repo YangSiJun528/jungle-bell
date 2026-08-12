@@ -9,8 +9,9 @@ import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@/components/ui/card';
 import {Input} from '@/components/ui/input';
 import {Label} from '@/components/ui/label';
-import {Switch} from '@/components/ui/switch';
+import {Tabs, TabsContent, TabsList, TabsTrigger} from '@/components/ui/tabs';
 import type {MobilePairingCreated} from '@/api/dashboard-api';
+import {NotificationSettings} from '@/app/settings/notification-settings';
 import {
     formatManualPairingCode,
     validManualPairingCode,
@@ -34,6 +35,7 @@ import {
     tryReservePairingStart,
     waitForPairingCompletion,
 } from './pairing-flow';
+import {ServiceSettings} from './service-settings';
 
 interface PairingClaimStart {
     mode: 'manual' | 'qr' | 'resume';
@@ -62,10 +64,6 @@ function DesktopConnections() {
         queryKey: queryKeys.mobileSessions,
         queryFn: () => api.listMobileSessions(),
         refetchInterval: 60_000,
-    });
-    const settings = useQuery({
-        queryKey: queryKeys.desktopSettings,
-        queryFn: () => api.getDesktopSettings(),
     });
     const pairingStatus = useQuery({
         queryKey: ['pairing-status', pairing?.pairingId],
@@ -114,10 +112,6 @@ function DesktopConnections() {
         mutationFn: (id: string) => api.revokeMobileSession(id),
         onSuccess: () => void client.invalidateQueries({queryKey: queryKeys.mobileSessions}),
     });
-    const updateSettings = useMutation({
-        mutationFn: (autoStart: boolean) => api.updateDesktopSettings({autoStart}),
-        onSuccess: (value) => client.setQueryData(queryKeys.desktopSettings, value),
-    });
     const reset = useMutation({
         mutationFn: () => api.resetDesktopIdentity(),
         onSuccess: async (value) => {
@@ -135,7 +129,6 @@ function DesktopConnections() {
     const activeSessions = sessions.data?.filter((item) => item.status === 'active') ?? [];
     return (
         <div className="space-y-6">
-            <PageHeader title="설정"/>
             {connection.isPending ? <LoadingState/> : connection.isError ? <ErrorState retry={() => void connection.refetch()}/> : (
                 <Card>
                     <CardHeader>
@@ -143,15 +136,8 @@ function DesktopConnections() {
                     </CardHeader>
                     <CardContent className="grid gap-4 sm:grid-cols-2">
                         <div className="rounded-lg bg-muted/55 p-4 text-sm"><strong>마지막 확인</strong><p className="mt-1 text-muted-foreground">{relativeTimeLabel(connection.data?.lastSeenAt)}</p></div>
-                        <label className="flex items-center justify-between rounded-lg border p-4 text-sm">
-                            <span><strong>로그인 시 자동 시작</strong><span className="mt-1 block text-xs text-muted-foreground">백그라운드 상태 갱신을 유지합니다.</span></span>
-                            <Switch checked={settings.data?.autoStart ?? false} disabled={!settings.data || updateSettings.isPending} onCheckedChange={(checked) => updateSettings.mutate(checked)}/>
-                        </label>
                         {connection.data?.state === 'connected' ? (
                             <p className="text-sm text-muted-foreground sm:col-span-2">연결 상태 · {connectionUi.label}</p>
-                        ) : null}
-                        {(settings.isError || updateSettings.isError) ? (
-                            <p className="text-sm text-destructive sm:col-span-2">자동 시작 설정을 불러오거나 저장하지 못했습니다.</p>
                         ) : null}
                         {connectionUi.needsIdentityRecovery ? (
                             <Alert className="sm:col-span-2" variant="destructive">
@@ -357,7 +343,6 @@ function CompanionConnections() {
 
     return (
         <div className="space-y-6">
-            <PageHeader title="설정"/>
             <Card className="mx-auto max-w-xl">
                 <CardHeader><CardTitle className="flex items-center gap-2"><MonitorCheck className="size-5"/>{connected ? '이 기기는 연결됨' : '연결 코드 입력'}</CardTitle><CardDescription>{connected ? 'PC 앱이 출석 상태를 주기적으로 갱신합니다.' : 'PC 앱의 기기 연결 화면에 표시된 코드를 입력하세요.'}</CardDescription></CardHeader>
                 <CardContent className="space-y-4">
@@ -385,5 +370,27 @@ function CompanionConnections() {
 
 export function ConnectionsPage() {
     const {surface} = useDashboardEnvironment();
-    return surface.kind === 'desktop' ? <DesktopConnections/> : <CompanionConnections/>;
+    const personalSurface = surface.kind === 'desktop' ? 'desktop' : 'companion';
+
+    return (
+        <div className="space-y-6">
+            <PageHeader title="설정"/>
+            <Tabs defaultValue="notifications" className="gap-5">
+                <TabsList aria-label="설정 구분" className="grid h-auto w-full grid-cols-3 sm:w-fit">
+                    <TabsTrigger value="notifications">알림</TabsTrigger>
+                    <TabsTrigger value="services">서비스</TabsTrigger>
+                    <TabsTrigger value="devices">기기 연결</TabsTrigger>
+                </TabsList>
+                <TabsContent value="notifications">
+                    <NotificationSettings surface={personalSurface}/>
+                </TabsContent>
+                <TabsContent value="services">
+                    <ServiceSettings/>
+                </TabsContent>
+                <TabsContent value="devices">
+                    {surface.kind === 'desktop' ? <DesktopConnections/> : <CompanionConnections/>}
+                </TabsContent>
+            </Tabs>
+        </div>
+    );
 }

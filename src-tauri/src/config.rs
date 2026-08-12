@@ -5,7 +5,8 @@ use std::path::{Path, PathBuf};
 
 const CURRENT_CONFIG_FILE_NAME: &str = "desktop-settings.json";
 const CONFIG_SCHEMA: &str = "jungle-bell.desktop-settings";
-const CONFIG_SCHEMA_VERSION: u32 = 1;
+const CONFIG_SCHEMA_VERSION: u32 = 2;
+const MIN_SUPPORTED_CONFIG_SCHEMA_VERSION: u32 = 1;
 
 pub const MORNING_START_HOUR: u32 = 4;
 pub const MORNING_START_MINUTE: u32 = 0;
@@ -30,12 +31,34 @@ struct ConfigDocument {
 
 /// 데스크톱에 영속하는 현재형 사용자 설정.
 ///
-/// 출석 알림, 식단, 세탁 설정은 서버가 소유한다. LMS 시간 경계와 업데이트
-/// 정책은 앱 상수다. 로컬 설정 파일에는 자동 시작 한 항목만 저장한다.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+/// 출석 알림, 식단, 세탁 설정은 서버가 소유한다. 이 파일에는 이 PC의
+/// 프로세스·업데이트·진단 동작에만 적용되는 설정을 저장한다.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Config {
+    #[serde(default)]
     pub auto_start: bool,
+    #[serde(default = "default_true")]
+    pub auto_update: bool,
+    #[serde(default = "default_true")]
+    pub usage_analytics: bool,
+    #[serde(default)]
+    pub debug_mode: bool,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            auto_start: false,
+            auto_update: true,
+            usage_analytics: true,
+            debug_mode: false,
+        }
+    }
+}
+
+const fn default_true() -> bool {
+    true
 }
 
 pub(crate) fn config_path() -> Option<PathBuf> {
@@ -99,7 +122,9 @@ fn serialize_config_document(config: &Config) -> Result<String, String> {
 
 fn parse_config_document(data: &str) -> Result<Config, String> {
     let document: ConfigDocument = serde_json::from_str(data).map_err(|error| format!("설정 파싱 실패: {error}"))?;
-    if document.schema != CONFIG_SCHEMA || document.schema_version != CONFIG_SCHEMA_VERSION {
+    if document.schema != CONFIG_SCHEMA
+        || !(MIN_SUPPORTED_CONFIG_SCHEMA_VERSION..=CONFIG_SCHEMA_VERSION).contains(&document.schema_version)
+    {
         return Err("지원하지 않는 설정 스키마입니다.".into());
     }
     Ok(document.settings)
@@ -201,31 +226,61 @@ mod tests {
     }
 
     #[test]
-    fn 현재_설정은_auto_start만_직렬화한다() {
+    fn 현재_설정은_데스크톱_서비스_항목만_직렬화한다() {
         let value: serde_json::Value =
             serde_json::from_str(&serialize_config_document(&Config::default()).unwrap()).unwrap();
         assert_eq!(
             value,
             serde_json::json!({
                 "schema": "jungle-bell.desktop-settings",
-                "schemaVersion": 1,
-                "settings": { "autoStart": false }
+                "schemaVersion": 2,
+                "settings": {
+                    "autoStart": false,
+                    "autoUpdate": true,
+                    "usageAnalytics": true,
+                    "debugMode": false
+                }
             })
         );
     }
 
     #[test]
-    fn 이전_설정과_알_수_없는_필드는_거부한다() {
+    fn 버전1_자동시작_설정은_새_기본값을_보충해_읽는다() {
+        assert_eq!(
+            parse_config_document(
+                &serde_json::json!({
+                    "schema": "jungle-bell.desktop-settings",
+                    "schemaVersion": 1,
+                    "settings": { "autoStart": true }
+                })
+                .to_string()
+            )
+            .unwrap(),
+            Config {
+                auto_start: true,
+                ..Config::default()
+            },
+        );
+    }
+
+    #[test]
+    fn 지원하지_않는_버전과_알_수_없는_필드는_거부한다() {
         for invalid in [
             serde_json::json!({
                 "schema": "jungle-bell.desktop-settings",
-                "schemaVersion": 2,
+                "schemaVersion": 3,
                 "settings": { "autoStart": true }
             }),
             serde_json::json!({
                 "schema": "jungle-bell.desktop-settings",
-                "schemaVersion": 1,
-                "settings": { "autoStart": true, "autoUpdate": true }
+                "schemaVersion": 2,
+                "settings": {
+                    "autoStart": true,
+                    "autoUpdate": true,
+                    "usageAnalytics": true,
+                    "debugMode": false,
+                    "unknown": true
+                }
             }),
             serde_json::json!({ "autoStart": true }),
         ] {

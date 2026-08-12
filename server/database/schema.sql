@@ -249,13 +249,23 @@ CREATE TABLE attendance_snapshot (
 
 CREATE TABLE attendance_preference (
   user_id TEXT PRIMARY KEY,
+  enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
   morning_enabled INTEGER NOT NULL CHECK (morning_enabled IN (0, 1)),
   evening_enabled INTEGER NOT NULL CHECK (evening_enabled IN (0, 1)),
+  morning_start_hour INTEGER NOT NULL DEFAULT 9 CHECK (morning_start_hour BETWEEN 4 AND 9),
+  evening_end_hour INTEGER NOT NULL DEFAULT 4 CHECK (evening_end_hour BETWEEN 0 AND 4),
+  morning_interval_minutes INTEGER NOT NULL DEFAULT 15 CHECK (morning_interval_minutes IN (1, 3, 5, 10, 15, 30)),
+  evening_interval_minutes INTEGER NOT NULL DEFAULT 15 CHECK (evening_interval_minutes IN (1, 3, 5, 10, 15, 30)),
   skip_sunday INTEGER NOT NULL DEFAULT 0 CHECK (skip_sunday IN (0, 1)),
   skip_attendance_date TEXT CHECK (skip_attendance_date IS NULL OR skip_attendance_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
   updated_at_epoch_ms INTEGER NOT NULL,
   FOREIGN KEY (user_id) REFERENCES app_user(id) ON DELETE CASCADE
 );
+
+CREATE INDEX attendance_preference_morning_subscriber
+  ON attendance_preference(enabled, morning_enabled, user_id);
+CREATE INDEX attendance_preference_evening_subscriber
+  ON attendance_preference(enabled, evening_enabled, user_id);
 
 CREATE TABLE meal_preference (
   user_id TEXT PRIMARY KEY,

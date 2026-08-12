@@ -4,6 +4,7 @@ import {fileURLToPath} from 'node:url';
 import {test} from 'vitest';
 import {resolveConfig, type ProxyOptions, type ResolvedConfig} from 'vite';
 import {
+    bypassDevApiModuleRequest,
     defaultDevApiOrigin,
     normalizeDevApiOrigin,
 } from '../../../vite.config';
@@ -78,4 +79,17 @@ test('개발 API origin은 안전한 origin 형태만 허용한다', () => {
             invalid,
         );
     }
+});
+
+test('개발 API proxy는 src/api 모듈 요청을 Vite 변환기로 넘긴다', () => {
+    assert.equal(
+        bypassDevApiModuleRequest('/api/dashboard-api.ts'),
+        '/api/dashboard-api.ts',
+    );
+    assert.equal(
+        bypassDevApiModuleRequest('/api/desktop-settings.ts?import'),
+        '/api/desktop-settings.ts?import',
+    );
+    assert.equal(bypassDevApiModuleRequest('/api/public/status'), undefined);
+    assert.equal(bypassDevApiModuleRequest('/api/v2/files/example.ts'), undefined);
 });

@@ -18,6 +18,7 @@ const installPrompt = source('./app/install-prompt.tsx');
 const home = source('./features/home/home-page.tsx');
 const jungleCampusSummary = source('./features/home/jungle-campus-summary.tsx');
 const attendance = source('./features/attendance/attendance-page.tsx');
+const attendancePreferences = source('./features/attendance/attendance-preferences-section.tsx');
 const laundry = source('./features/laundry/pages/laundry-page.tsx');
 const personalLaundry = source('./features/laundry/components/personal-laundry-section.tsx');
 const washTower = source('./features/laundry/components/wash-tower-grid.tsx');
@@ -25,6 +26,7 @@ const meals = source('./features/meals/pages/meals-page.tsx');
 const mealPreferences = source('./features/meals/components/meal-preferences-section.tsx');
 const notifications = source('./features/notifications/notifications-page.tsx');
 const connections = source('./features/connections/connections-page.tsx');
+const notificationSettings = source('./app/settings/notification-settings.tsx');
 
 test('대시보드는 Alpine 템플릿 대신 React root에서 시작한다', () => {
     assert.match(html, /<div id="root"><\/div>/);
@@ -100,7 +102,7 @@ test('홈은 정글캠퍼스·오늘 세탁·오늘 급식을 요약하고 알�
     assert.match(home, /전체 정보를 갱신하지 못했습니다/);
 });
 
-test('출석 화면은 조회 상태와 개인 알림 설정을 React Query mutation으로 관리한다', () => {
+test('출석 화면은 조회 상태만 관리하고 공유 알림 설정을 중복하지 않는다', () => {
     assert.match(attendance, /if \(surface\.kind === 'public'\)/);
     assert.match(attendance, /웹사이트에는 출석 정보를 표시하지 않습니다/);
     assert.match(attendance, /오전[\s\S]*오후[\s\S]*마지막 동기화/);
@@ -110,12 +112,7 @@ test('출석 화면은 조회 상태와 개인 알림 설정을 React Query muta
     assert.doesNotMatch(attendance, /jungleCompassIcon|@\/assets\/logo\.png/);
     assert.match(attendance, /surface\.kind === 'desktop'[\s\S]*openCampus\.mutate\(\)/);
 
-    assert.match(attendance, /api\.getAttendancePreferences\(personalSurface\)/);
-    assert.match(attendance, /api\.updateAttendancePreferences\(personalSurface, input\)/);
-    assert.match(attendance, /<Switch[\s\S]*onCheckedChange=\{onCheckedChange\}/);
-    for (const label of ['출석 알림 설정', '오전 알림', '오후 알림', '일요일 제외', '이번 출석일 건너뛰기']) {
-        assert.match(attendance, new RegExp(label));
-    }
+    assert.doesNotMatch(attendance, /AttendancePreferencesSection|getAttendancePreferences|updateAttendancePreferences/);
 });
 
 test('세탁 화면은 기존 워시타워 상태표를 유지하고 개인 기능만 앱에 제공한다', () => {
@@ -149,9 +146,23 @@ test('세탁 화면은 기존 워시타워 상태표를 유지하고 개인 기�
     assert.match(personalLaundry, /기기 예약이 아닌 사용자 간 순서 안내 기능/);
 });
 
-test('급식과 알림 화면은 연결된 기기의 개인 설정과 전달 상태를 제공한다', () => {
-    assert.match(meals, /<MealPreferencesSection surface=\{personal\}\/>/);
+test('설정 알림 탭은 연결된 기기의 출석·급식 설정을 함께 제공한다', () => {
+    assert.doesNotMatch(meals, /MealPreferencesSection/);
     assert.doesNotMatch(meals, /as PersonalSurface/);
+    assert.match(connections, /<TabsTrigger value="notifications">알림<\/TabsTrigger>/);
+    assert.match(connections, /<NotificationSettings surface=\{personalSurface\}\/>/);
+    assert.match(notificationSettings, /<AttendancePreferencesSection surface=\{surface\}\/>/);
+    assert.match(notificationSettings, /<MealPreferencesSection surface=\{surface\}\/>/);
+
+    assert.match(attendancePreferences, /api\.getAttendancePreferences\(surface\)/);
+    assert.match(attendancePreferences, /api\.updateAttendancePreferences\(surface, input\)/);
+    for (const label of [
+        '출석 알림 사용', '오전 알림', '오전 확인 시작 시각', '오전 확인 간격',
+        '오후 알림', '오후 확인 종료 시각', '오후 확인 간격', '일요일 제외',
+    ]) {
+        assert.match(attendancePreferences, new RegExp(label));
+    }
+
     assert.match(mealPreferences, /api\.getMealPreferences\(surface\)/);
     assert.match(mealPreferences, /api\.updateMealPreferences\(surface,/);
     for (const label of ['급식 알림 설정', '조식', '중식', '석식']) {

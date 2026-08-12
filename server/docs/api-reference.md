@@ -192,10 +192,20 @@ R2에 보관된 식단 이미지를 반환합니다. 콘텐츠 SHA 주소이므�
 | `GET /api/push/vapid-public-key` | Mobile HttpOnly cookie | 현재 Web Push 공개키 조회 |
 | `PUT /api/push/subscriptions` | Mobile HttpOnly cookie | 현재 모바일 세션의 Web Push 구독 등록·갱신 |
 | `DELETE /api/push/subscriptions/:id` | Mobile HttpOnly cookie | Web Push 구독과 남은 delivery 폐기 |
-| `GET`, `PUT /api/{desktop\|mobile}/attendance/preferences` | 역할별 인증 | 출석 알림 설정 조회·수정 |
+| `GET`, `PUT /api/{desktop\|mobile}/attendance/preferences` | 역할별 인증 | 기존 4필드 출석 알림 설정 조회·수정 |
+| `GET`, `PUT /api/{desktop\|mobile}/v2/attendance/preferences` | 역할별 인증 | 계정 전체·시간 구간·간격을 포함한 출석 알림 설정 조회·수정 |
 | `GET`, `PUT /api/{desktop\|mobile}/meal-preferences` | 역할별 인증 | 급식 알림 설정 조회·수정 |
 | `GET`, `POST`, `DELETE /api/{desktop\|mobile}/laundry-watches` | 역할별 인증 | 세탁 상태 watch 조회·추가·취소 |
 | `GET`, `POST`, `DELETE /api/{desktop\|mobile}/laundry-queue` | 역할별 인증 | 세탁 차례 알림 조회·추가·취소 |
+
+v2 출석 알림 설정은 계정 단위의 strict DTO입니다. `enabled`는 전체 출석 알림,
+`morning`·`evening`은 단계별 알림, `morningStartHour`는 `4..9`,
+`eveningEndHour`는 `0..4`입니다. 오전·오후 `IntervalMinutes`는 각각
+`1 | 3 | 5 | 10 | 15 | 30`만 허용합니다. PC와 연결된 PWA가 같은 값을 읽고 쓰며,
+Jobs는 해당 시간 구간을 선택한 간격의 고유 슬롯으로 나눠 알림을 dedupe합니다.
+롤링 배포 중 기존 클라이언트는 기존 경로의 `morning`, `evening`, `skipSunday`,
+`skipAttendanceDate` 4필드 계약을 계속 사용합니다. 기존 PUT은 v2 전용 필드를 보존하며,
+신규 클라이언트만 `/v2/attendance/preferences`를 사용합니다.
 
 Rate limit의 단일 기준은
 [`DESKTOP_ENROLLMENT_POLICY`, `MANUAL_PAIRING_CLAIM_POLICY`, `PAIRING_CREATION_POLICY`](../shared/domain/enrollment-policy.ts)입니다.

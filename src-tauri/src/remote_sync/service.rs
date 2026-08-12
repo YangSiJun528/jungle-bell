@@ -30,6 +30,12 @@ pub(crate) struct RemoteSyncService {
 }
 
 impl RemoteSyncService {
+    /// 분석 모듈이 원문을 외부에 노출하지 않고 해시하기 위한 로컬 설치 식별자다.
+    /// WebView/IPC 응답에는 포함하지 않는다.
+    pub(crate) async fn installation_id_for_analytics(&self) -> String {
+        self.installation_id.read().await.clone()
+    }
+
     pub(crate) async fn configured(app: &tauri::AppHandle) -> Result<Self, String> {
         let app_data_dir = app
             .path()

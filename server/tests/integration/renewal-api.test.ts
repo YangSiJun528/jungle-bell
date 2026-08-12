@@ -96,8 +96,13 @@ describe("renewal API", () => {
     expect(heartbeat.status).toBe(200);
     const firstUserId = store.desktops.get("desktop-installation-1")!.userId;
     expect(store.preferences.get(firstUserId)).toEqual({
+      enabled: true,
       morning: true,
       evening: true,
+      morningStartHour: 9,
+      eveningEndHour: 4,
+      morningIntervalMinutes: 15,
+      eveningIntervalMinutes: 15,
       skipSunday: false,
       skipAttendanceDate: null,
     });
@@ -712,7 +717,7 @@ describe("renewal API", () => {
     expect(await planAttendanceNotifications(store, now)).toBe(1);
     expect(await planAttendanceNotifications(store, now + 60_000)).toBe(0);
     const notification = [...store.notifications.values()][0]!;
-    expect(notification.sourceEventId).toBe("attendance:2026-08-03:morning:before-10");
+    expect(notification.sourceEventId).toBe("attendance:2026-08-03:morning:0945");
     expect(JSON.parse(notification.payloadJson)).toMatchObject({
       status: "unverified",
       reason: "desktop-offline",
@@ -720,6 +725,41 @@ describe("renewal API", () => {
     });
     expect(notification.path).toBe("/dashboard.html#attendance");
     expect(notification.userId).toBe(userId);
+  });
+
+  it("uses account schedules and creates a unique source event for every interval slot", async () => {
+    const store = new MemoryRenewalStore();
+    const firstSlot = Date.parse("2026-08-03T00:00:00.000Z");
+    const userId = await seedDesktop(store, {
+      installationId: "desktop-installation-1", nowEpochMs: firstSlot - 10 * 60_000,
+    });
+    await store.setAttendancePreference(userId, {
+      enabled: true, morning: true, evening: true,
+      morningStartHour: 9, eveningEndHour: 4,
+      morningIntervalMinutes: 15, eveningIntervalMinutes: 15,
+      skipSunday: false, skipAttendanceDate: null,
+    }, firstSlot);
+
+    expect(await planAttendanceNotifications(store, firstSlot)).toBe(1);
+    expect(await planAttendanceNotifications(store, firstSlot + 14 * 60_000)).toBe(0);
+    expect(await planAttendanceNotifications(store, firstSlot + 15 * 60_000)).toBe(1);
+    expect([...store.notifications.values()].map(({ sourceEventId }) => sourceEventId).sort()).toEqual([
+      "attendance:2026-08-03:morning:0900",
+      "attendance:2026-08-03:morning:0915",
+    ]);
+  });
+
+  it("does not plan attendance notifications when the account master switch is off", async () => {
+    const store = new MemoryRenewalStore();
+    const now = Date.parse("2026-08-03T00:00:00.000Z");
+    const userId = await seedDesktop(store, { installationId: "desktop-installation-1", nowEpochMs: now });
+    await store.setAttendancePreference(userId, {
+      enabled: false, morning: true, evening: true,
+      morningStartHour: 9, eveningEndHour: 4,
+      morningIntervalMinutes: 15, eveningIntervalMinutes: 15,
+      skipSunday: false, skipAttendanceDate: null,
+    }, now);
+    expect(await planAttendanceNotifications(store, now)).toBe(0);
   });
 
   it("honors one-day and Sunday attendance notification skips on the server", async () => {
@@ -733,8 +773,13 @@ describe("renewal API", () => {
         nowEpochMs: scenario.now,
       });
       await store.setAttendancePreference(userId, {
+        enabled: true,
         morning: true,
         evening: true,
+        morningStartHour: 9,
+        eveningEndHour: 4,
+        morningIntervalMinutes: 15,
+        eveningIntervalMinutes: 15,
         skipSunday: scenario.skipSunday,
         skipAttendanceDate: scenario.skipAttendanceDate,
       }, scenario.now);

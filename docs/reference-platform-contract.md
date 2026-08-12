@@ -11,6 +11,7 @@
 | 알림 | 설치 안내 | Web Push | 운영체제 알림 |
 | 모바일 연결 | 아니요 | 수동 코드·해제 | QR·코드 생성, 승인·해제 |
 | Jungle Campus | 외부 바로가기 | 외부 바로가기 | 전용 WebView와 상태 |
+| 서비스 설정 | 아니요 | PC에서 설정 안내 | 자동 시작·업데이트, 사용 통계, 디버그, 로그 폴더 |
 
 App Worker는 HTTP API와 대시보드·PWA·Markdown 블로그 정적 자산만 제공합니다.
 주기 실행, 공개 데이터 수집, 알림 계획, housekeeping, Web Push 전송은 OCI Jobs가
@@ -64,7 +65,7 @@ browser session이 반드시 설치 PWA에서만 사용됐다고 서버가 보�
 | pairing | `POST /api/pairings`, `GET /api/pairings/:id`, claim·approve·complete 하위 endpoint |
 | 모바일 session | `GET\|DELETE /api/mobile/session` |
 | 모바일 개인 정보 | `GET /api/mobile/attendance`, `GET /api/mobile/notifications`, `POST /api/mobile/notifications/test` |
-| 공통 개인 설정 | desktop/mobile 각각 `GET\|PUT attendance/preferences`, `GET\|PUT meal-preferences` |
+| 공통 개인 설정 | desktop/mobile 각각 기존 `GET\|PUT attendance/preferences`, 확장 `GET\|PUT v2/attendance/preferences`, `GET\|PUT meal-preferences` |
 | 세탁 개인 기능 | desktop/mobile 각각 laundry watch·queue `GET\|POST\|DELETE` |
 | Push | `GET /api/push/vapid-public-key`, `PUT /api/push/subscriptions`, `DELETE /api/push/subscriptions/:id` |
 | OCI 내부 | `POST /internal/jobs/d1`, `GET\|HEAD\|PUT /internal/jobs/r2?key=...` |
@@ -98,7 +99,9 @@ claim과 complete JSON에는 access token, bearer, LMS cookie, claim receipt가 
 - 생활 정보: `get_dashboard_campus_data`, `refresh_campus_data`
 - 홈: `get_dashboard_home_overview`
 - 알림: 알림함 snapshot·활성화·테스트
-- PC 설정: `get_desktop_settings`, `update_desktop_settings`의 `autoStart` 한 필드
+- PC 설정: `get_desktop_settings`, `update_desktop_settings`의 `autoStart`,
+  `autoUpdate`, `usageAnalytics`, `debugMode`와 경로 입력을 받지 않는
+  `open_log_folder`
 
 원격 checker WebView는 tagged `report_checker_event` 하나만 호출할 수 있습니다.
 일반 대시보드 IPC와 임의 명령 실행 권한은 갖지 않습니다.
@@ -116,9 +119,20 @@ claim과 complete JSON에는 access token, bearer, LMS cookie, claim receipt가 
 상태와 알림 본문·delivery 이력을 저장합니다. LMS cookie·token과 LMS 페이지 원문은
 저장하지 않습니다.
 
+Tauri의 사용 통계는 release 빌드에서 사용자가 켠 경우에만 PostHog capture endpoint로
+전송합니다. 로컬 설치 ID 원문 대신 SHA-256 해시를 stable distinct ID로 사용하고,
+person profile 생성을 끕니다. 허용 항목은 앱 실행, 서비스 설정 변경 이벤트, 앱 버전,
+운영체제뿐입니다. LMS 계정·출석 snapshot·식단·세탁 내용은 포함하지 않습니다.
+사용자가 통계를 끄면 opt-out 변경 이벤트를 마지막으로 전송한 뒤 이후 capture를
+중단합니다. 이 설정은 서버 계정이 아니라 각 PC의 `desktop-settings.json`에
+저장합니다.
+
 ## 호환성과 초기화
 
-- 현재 D1 schema만 유지하며 과거 schema migration을 제공하지 않습니다.
+- `database/schema.sql`은 신규 D1 bootstrap에만 사용합니다. 기존 D1 변경은
+  `database/migrations/`의 검토된 비파괴 SQL을 백업 후 한 번만 적용합니다.
+- 출석 알림 확장 배포 중 기존 클라이언트는 4필드 attendance preference 경로를
+  계속 사용하고, 신규 클라이언트만 명시적인 v2 경로를 사용합니다.
 - 과거 desktop credential, 모바일 cookie, pairing은 재사용하지 않습니다.
 - 과거 로컬 설정 파일을 읽거나 자동 변환하지 않습니다.
 - 과거 `/pair`, `/app`, `/v1` URL entry와 alias를 제공하지 않습니다.
