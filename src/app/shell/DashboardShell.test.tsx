@@ -70,6 +70,9 @@ describe('DashboardShell', () => {
         expect(html).not.toContain('기기 연결 관리');
         expect(html).toContain('data-slot="sidebar"');
         expect(html).toContain('--sidebar-width:16rem');
+        expect(html).toContain('data-sidebar-resizable="true"');
+        expect(html).toContain('data-resizable="true"');
+        expect(html).toContain('aria-label="사이드바 크기 조절"');
         expect(html).not.toContain('type="range"');
         expect(html).not.toContain('aria-label="사이드바 너비"');
         expect(html).not.toContain('border-t border-sidebar-border');

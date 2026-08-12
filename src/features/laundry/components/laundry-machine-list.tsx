@@ -150,7 +150,7 @@ export function LaundryMachineList({machines, nowMs = Date.now()}: LaundryMachin
         <section className="space-y-3" aria-labelledby={titleId} data-laundry-detail-list="true">
             <h2 className="font-semibold" id={titleId}>기기별 상세 상태</h2>
             <TooltipProvider delayDuration={200}>
-                <div className="grid auto-rows-fr gap-3 md:grid-cols-2 2xl:grid-cols-3">
+                <div className="grid auto-rows-fr gap-3 md:grid-cols-2 lg:grid-cols-3">
                     {views.map((machine, machineIndex) => (
                         <Card className="h-full gap-0 overflow-hidden py-0 shadow-none" data-laundry-machine-card="true" key={machine.id}>
                             <CardHeader className="flex flex-row items-center justify-between gap-3 border-b px-4 py-3 [.border-b]:pb-3">

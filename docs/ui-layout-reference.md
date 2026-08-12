@@ -22,10 +22,11 @@
 
 ## 대시보드 셸
 
-- `md` 이상에서는 shadcn/ui의 기본 16rem 사이드바를 사용한다. `SidebarTrigger`와
-  `SidebarRail`로 3rem 아이콘 모드까지 접고 펼치며, `Cmd+B` 또는 `Ctrl+B` 단축키도
-  공통 `SidebarProvider`가 처리한다. 임의 폭 조절이나 별도 브라우저 저장값은 두지
-  않는다.
+- `md` 이상에서는 shadcn/ui의 기본 16rem 사이드바를 사용한다. `SidebarRail`을
+  좌우로 드래그하거나 방향키·Home·End를 눌러 12–24rem 범위에서 폭을 조절한다.
+  조절값은 현재 화면에만 적용하고 별도 브라우저 저장값은 두지 않는다.
+  `SidebarTrigger`와 `SidebarRail` 클릭으로 3rem 아이콘 모드까지 접고 펼치며,
+  `Cmd+B` 또는 `Ctrl+B` 단축키도 공통 `SidebarProvider`가 처리한다.
 - 작은 화면에서는 상단 `SidebarTrigger`가 shadcn/ui의 모바일 `Sheet`를 열고, 하단
   고정 내비게이션도 유지한다.
 - 공개 웹은 `home`, `laundry`, `meals`만 노출한다.
