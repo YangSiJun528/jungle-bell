@@ -87,8 +87,8 @@ test('Tauri production build만 명시적인 원격 API origin을 주입한다',
     }), null);
     assert.equal(tauriBuildApiOrigin('build', {
         TAURI_ENV_PLATFORM: 'darwin',
-        JUNGLE_BELL_DATA_API_URL: 'https://jungle-bell-api.yangsijun5528.workers.dev/',
-    }), 'https://jungle-bell-api.yangsijun5528.workers.dev');
+        JUNGLE_BELL_DATA_API_URL: `${defaultDevApiOrigin}/`,
+    }), defaultDevApiOrigin);
     assert.throws(
         () => tauriBuildApiOrigin('build', {TAURI_ENV_PLATFORM: 'windows'}),
         /JUNGLE_BELL_DATA_API_URL_REQUIRED/,
@@ -112,15 +112,15 @@ test('Tauri production build만 명시적인 원격 API origin을 주입한다',
 test('해석된 Tauri production config는 public/private origin을 함께 고정한다', async () => {
     const config = await interpretedConfig('build', {
         TAURI_ENV_PLATFORM: 'darwin',
-        JUNGLE_BELL_DATA_API_URL: 'https://jungle-bell-api.yangsijun5528.workers.dev',
+        JUNGLE_BELL_DATA_API_URL: defaultDevApiOrigin,
     });
     assert.equal(
         config.define?.['import.meta.env.VITE_CAMPUS_API_URL'],
-        JSON.stringify('https://jungle-bell-api.yangsijun5528.workers.dev'),
+        JSON.stringify(defaultDevApiOrigin),
     );
     assert.equal(
         config.define?.['import.meta.env.VITE_PLATFORM_API_URL'],
-        JSON.stringify('https://jungle-bell-api.yangsijun5528.workers.dev'),
+        JSON.stringify(defaultDevApiOrigin),
     );
 });
 

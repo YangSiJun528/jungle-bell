@@ -11,20 +11,16 @@ function memoryStorage(initial: Record<string, string> = {}) {
     return {
         getItem: (key: string) => values.get(key) ?? null,
         setItem: (key: string, value: string) => { values.set(key, value); },
-        removeItem: (key: string) => { values.delete(key); },
         values,
     };
 }
 
-test('seen notification storage reads the legacy key and writes the versioned minimal schema', () => {
-    const storage = memoryStorage({
-        'jungle-bell:seen-mobile-notifications': JSON.stringify(['one', 2, 'two']),
-    });
+test('seen notification storage reads and writes the bounded current schema', () => {
+    const storage = memoryStorage();
+    writeSeenMobileNotificationIds(storage, new Set(['one', 'two']));
     const seen = readSeenMobileNotificationIds(storage);
     assert.deepEqual([...seen], ['one', 'two']);
 
-    writeSeenMobileNotificationIds(storage, seen);
-    assert.equal(storage.values.has('jungle-bell:seen-mobile-notifications'), false);
     assert.equal(
         storage.values.get('jungle-bell:seen-mobile-notifications:v1'),
         JSON.stringify(['one', 'two']),

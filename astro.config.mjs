@@ -5,7 +5,7 @@ export default defineConfig({
     outDir: './.build/site',
     output: 'static',
     site: process.env.JUNGLE_BELL_PUBLIC_ORIGIN
-        ?? 'https://jungle-bell-api.yangsijun5528.workers.dev',
+        ?? 'http://127.0.0.1:8080',
     trailingSlash: 'never',
     build: {
         assets: 'blog-assets',

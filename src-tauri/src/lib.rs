@@ -237,11 +237,11 @@ mod tests {
     }
 
     #[test]
-    fn dashboard_csp는_정확한_api_worker만_연결하고_wildcard를_허용하지_않는다() {
+    fn dashboard_csp는_정확한_oci_api만_연결하고_wildcard를_허용하지_않는다() {
         let config: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
         let csp = config["app"]["security"]["csp"].as_str().unwrap();
-        assert!(csp.contains("https://jungle-bell-api.yangsijun5528.workers.dev"));
-        assert!(csp.contains("https://jungle-bell-api-test.yangsijun5528.workers.dev"));
+        assert!(csp.contains("https://amp-leu-controversy-des.trycloudflare.com"));
+        assert!(!csp.contains("workers.dev"));
         assert!(!csp.contains("*.workers.dev"));
         assert!(!csp.contains("connect-src *"));
     }

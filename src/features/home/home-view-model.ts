@@ -13,8 +13,6 @@ import {
 } from '@/domain/meals/today';
 import {kstDateString} from '@/domain/attendance/dday-progress';
 
-export type HomeQueryState = 'pending' | 'error' | 'ready';
-
 export interface LaundryHomeSummary {
     men: number | null;
     women: number | null;
@@ -43,17 +41,9 @@ export function homeAttendanceForToday(
 }
 
 export function homeLaundrySummary(input: {
-    queryState: HomeQueryState;
-    snapshot?: DashboardLaundrySnapshot;
+    snapshot: DashboardLaundrySnapshot;
     nowMs?: number;
 }): LaundryHomeSummary {
-    if (input.queryState === 'pending') {
-        return {men: null, women: null};
-    }
-    if (input.queryState === 'error' || !input.snapshot) {
-        return {men: null, women: null};
-    }
-
     const snapshot = input.snapshot;
     const savedAt = Date.parse(snapshot.asOf);
     const locallyReliable = snapshot.quality.collection === 'SUCCESS'

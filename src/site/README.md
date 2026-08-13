@@ -17,7 +17,7 @@ npm run build
 운영 canonical URL과 RSS origin은 기본값을 사용합니다. 테스트 Worker용 자산을 빌드할 때만 공개 origin을 명시합니다.
 
 ```sh
-JUNGLE_BELL_PUBLIC_ORIGIN=https://jungle-bell-api-test.example.workers.dev npm run build
+JUNGLE_BELL_PUBLIC_ORIGIN=https://api.example.com npm run build
 ```
 
 `JUNGLE_BELL_PUBLIC_ORIGIN`에는 경로가 없는 HTTPS origin을 입력합니다. 이 값은 빌드 결과에 포함되므로 환경별 CI에서 해당 환경의 공개 주소를 설정해야 합니다.

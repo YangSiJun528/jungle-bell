@@ -1,4 +1,5 @@
-import {ExternalLink, ImageOff} from 'lucide-react';
+import {useState} from 'react';
+import {Clock3, ExternalLink, ImageOff} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {
     Card,
@@ -11,6 +12,59 @@ import type {DashboardMealPost} from '@/api/dashboard-api';
 import {dateTimeLabel} from '@/lib/format';
 import {cn} from '@/lib/utils';
 import type {TodayMealPeriod} from '../lib/meal-view';
+
+function MealImage({
+    compact,
+    eager,
+    image,
+    label,
+}: {
+    compact: boolean;
+    eager: boolean;
+    image: NonNullable<DashboardMealPost['images']>[number];
+    label: string;
+}) {
+    const [failed, setFailed] = useState(false);
+
+    if (failed) {
+        return (
+            <div
+                aria-label={`${label} 이미지 불러오기 실패`}
+                className={cn(
+                    'flex aspect-[4/3] size-full items-center justify-center bg-muted text-muted-foreground',
+                    compact && 'max-h-64',
+                )}
+                role="img"
+            >
+                <ImageOff aria-hidden="true" className="size-6"/>
+            </div>
+        );
+    }
+
+    return (
+        <a
+            aria-label={`${label} 새 탭에서 열기`}
+            className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+            href={image.url}
+            rel="noopener noreferrer"
+            target="_blank"
+        >
+            <img
+                alt={label}
+                className={cn(
+                    'aspect-[4/3] size-full bg-muted object-cover',
+                    compact && 'max-h-64',
+                )}
+                decoding="async"
+                height={image.height ?? undefined}
+                loading={eager ? 'eager' : 'lazy'}
+                src={image.url}
+                width={image.width ?? undefined}
+                onError={() => setFailed(true)}
+            />
+        </a>
+    );
+}
 
 export function MealPostCard({
     compact = false,
@@ -32,27 +86,13 @@ export function MealPostCard({
             {images.length > 0 ? (
                 <div className={cn('grid gap-px bg-border', images.length > 1 && 'grid-cols-2')}>
                     {images.map((image, index) => (
-                        <a
-                            aria-label={`${title} 사진${images.length > 1 ? ` ${index + 1}` : ''} 새 탭에서 열기`}
-                            className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-                            href={image.url}
+                        <MealImage
+                            compact={compact}
+                            eager={eagerImage && index === 0}
+                            image={image}
                             key={image.sha}
-                            rel="noopener noreferrer"
-                            target="_blank"
-                        >
-                            <img
-                                alt={`${title} \uC0AC\uC9C4${images.length > 1 ? ` ${index + 1}` : ''}`}
-                                className={cn(
-                                    'aspect-[4/3] size-full bg-muted object-cover',
-                                    compact && 'max-h-64',
-                                )}
-                                decoding="async"
-                                height={image.height ?? undefined}
-                                loading={eagerImage && index === 0 ? 'eager' : 'lazy'}
-                                src={image.url}
-                                width={image.width ?? undefined}
-                            />
-                        </a>
+                            label={`${title} \uC0AC\uC9C4${images.length > 1 ? ` ${index + 1}` : ''}`}
+                        />
                     ))}
                 </div>
             ) : (
@@ -106,11 +146,11 @@ export function MissingMealPostCard({period}: {period: TodayMealPeriod}) {
     return (
         <Card className="gap-0 overflow-hidden py-0 shadow-none" data-meal-state="missing">
             <div
-                aria-label={`${period} \uC0AC\uC9C4 \uC5C6\uC74C`}
+                aria-label={`${period} \uC2DD\uB2E8 \uAC8C\uC2DC \uB300\uAE30`}
                 className="flex aspect-[4/3] items-center justify-center border-b bg-muted/60 text-muted-foreground"
                 role="img"
             >
-                <ImageOff aria-hidden="true" className="size-6"/>
+                <Clock3 aria-hidden="true" className="size-6"/>
             </div>
             <CardHeader className="p-5">
                 <CardTitle className="text-base leading-6">{period}</CardTitle>

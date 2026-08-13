@@ -34,7 +34,6 @@ const mealsSnapshot: DashboardMealsSnapshot = {
         recentMenus: [],
         currentWeeklyMenu: null,
         weeklyMenus: [],
-        historyNextBefore: null,
     },
 };
 

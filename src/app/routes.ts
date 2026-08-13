@@ -57,7 +57,7 @@ export function dashboardRouteHref(route: DashboardRoute): `#${DashboardRoute}` 
     return `#${route}`;
 }
 
-/** Reuses the legacy model's allow-list while the React UI is rolled out. */
+/** Resolves a hash through the surface-specific route allow-list. */
 export function dashboardRouteFromHash(
     hash: string,
     surface: DashboardSurfaceKind,

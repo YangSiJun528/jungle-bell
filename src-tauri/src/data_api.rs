@@ -1,4 +1,4 @@
-const DEFAULT_DEV_API_ORIGIN: &str = "https://jungle-bell-api-test.yangsijun5528.workers.dev";
+const DEFAULT_DEV_API_ORIGIN: &str = "https://amp-leu-controversy-des.trycloudflare.com";
 
 pub(crate) fn normalize_base_url(value: &str, allow_local_http: bool) -> Result<String, String> {
     let value = value.trim().trim_end_matches('/');
@@ -90,10 +90,10 @@ mod tests {
     }
 
     #[test]
-    fn debug_builds_default_to_the_v2_test_worker() {
+    fn debug_builds_default_to_the_v2_test_server() {
         assert_eq!(
             DEFAULT_DEV_API_ORIGIN,
-            "https://jungle-bell-api-test.yangsijun5528.workers.dev"
+            "https://amp-leu-controversy-des.trycloudflare.com"
         );
     }
 }

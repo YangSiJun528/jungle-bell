@@ -41,8 +41,11 @@ describe('home feature boundaries', () => {
         expect(source).not.toContain('href="#notifications"');
         expect(source).not.toContain('title="알림"');
         expect(source).not.toContain('useCampusDataIssue');
-        expect(source).toContain('laundryRefreshFailed && !laundry.data');
-        expect(source).toContain('mealsRefreshFailed && !meals.data');
+        expect(source).toContain('useSuspenseCampusQueries');
+        expect(source).toContain('const laundryRefreshFailed = laundry.isError');
+        expect(source).toContain('const mealsRefreshFailed = meals.isError');
+        expect(source).not.toContain('CardLoading');
+        expect(source).not.toContain('CompactError');
     });
 
     it('places the fixed Jungle Campus attendance surface before living information', () => {
@@ -99,7 +102,6 @@ describe('home meal summaries', () => {
                 recentMenus: [],
                 currentWeeklyMenu: null,
                 weeklyMenus: [],
-                historyNextBefore: null,
             },
         } satisfies DashboardMealsSnapshot;
         const today = homeTodayMeals(snapshot, new Date('2026-08-11T03:00:00.000Z'));
@@ -131,7 +133,6 @@ describe('home meal summaries', () => {
                 recentMenus: [],
                 currentWeeklyMenu: null,
                 weeklyMenus: [],
-                historyNextBefore: null,
             },
         } satisfies DashboardMealsSnapshot;
 
@@ -198,7 +199,6 @@ function mealsSnapshot(dailyMenus: DashboardMealsSnapshot['data']['dailyMenus'])
             recentMenus: [],
             currentWeeklyMenu: null,
             weeklyMenus: [],
-            historyNextBefore: null,
         },
     };
 }
