@@ -197,7 +197,7 @@ class AccountRepository(private val jdbc: JdbcClient) {
     ).param("userId", userId).query { row, _ ->
         StoredDesktopDevice(
             row.getString("installation_id"),
-            row.getObject("last_seen_at_epoch_ms", java.lang.Long::class.java)?.toLong(),
+            row.getObject("last_seen_at_epoch_ms", Long::class.javaObjectType),
             row.getString("lms_session_state"),
             row.getString("app_version"),
         )
@@ -221,7 +221,7 @@ class AccountRepository(private val jdbc: JdbcClient) {
             row.getLong("created_at_epoch_ms"),
             row.getLong("expires_at_epoch_ms"),
             row.getLong("last_seen_at_epoch_ms"),
-            row.getObject("revoked_at_epoch_ms", java.lang.Long::class.java)?.toLong(),
+            row.getObject("revoked_at_epoch_ms", Long::class.javaObjectType),
             row.getBoolean("push_enabled"),
         )
     }.list()

@@ -10,10 +10,9 @@ import {
     X,
 } from 'lucide-react';
 import {
-    assertLmsAuthenticated,
-    assertServerSessionReady,
     useDashboardAccount,
 } from '@/app/dashboard-account';
+import {assertLmsAuthenticated, assertServerSessionReady} from '@/app/dashboard-account-state';
 import {queryKeys, useDashboardEnvironment} from '@/app/dashboard-context';
 import {PersonalAccountGate} from '@/app/personal-account-gate';
 import {useAttendanceQuery, useRefreshAttendanceMutation} from '@/app/use-dashboard-queries';
@@ -38,8 +37,7 @@ import type {
     DashboardLaundrySnapshot,
     LaundryWatch,
 } from '@/api/dashboard-api';
-import {companionAuthenticationRequired} from '@/app/surface';
-import type {PersonalSurface} from '@/api/personal-api';
+import {accountAuthenticationRequired} from '@/api/account-authentication';
 import {
     applianceLabel,
     hasDuplicateActiveWatch,
@@ -50,7 +48,6 @@ import {
 } from '@/features/laundry/lib/personal-laundry';
 
 interface PersonalLaundrySectionProps {
-    surface: PersonalSurface;
     machines: DashboardLaundrySnapshot['machines'];
 }
 
@@ -167,10 +164,9 @@ function LaundryWatchCard({
 }
 
 function AuthenticatedPersonalLaundrySection({
-    surface,
     machines,
 }: PersonalLaundrySectionProps) {
-    const {api} = useDashboardEnvironment();
+    const {api, platform} = useDashboardEnvironment();
     const account = useDashboardAccount();
     const attendance = useAttendanceQuery();
     const refreshAttendance = useRefreshAttendanceMutation();
@@ -181,13 +177,13 @@ function AuthenticatedPersonalLaundrySection({
 
     const watches = useQuery({
         queryKey: queryKeys.laundryWatches,
-        queryFn: () => api.listLaundryWatches(surface),
+        queryFn: () => api.listLaundryWatches(),
         enabled: attendanceReady,
     });
 
     const invalidateWatches = () => client.invalidateQueries({queryKey: queryKeys.laundryWatches});
     const assertPersonalAccess = () => {
-        if (surface === 'desktop') {
+        if (platform.capabilities.desktopAccount) {
             assertLmsAuthenticated(account.status);
             assertServerSessionReady(account.status);
         }
@@ -196,7 +192,7 @@ function AuthenticatedPersonalLaundrySection({
     const addWatch = useMutation({
         mutationFn: (target: LaundryTarget) => {
             assertPersonalAccess();
-            return api.createLaundryWatch(surface, {
+            return api.createLaundryWatch({
                 machineId: target.machineId,
                 appliance: target.appliance,
                 sessionId: target.sessionId,
@@ -209,7 +205,7 @@ function AuthenticatedPersonalLaundrySection({
     const removeWatch = useMutation({
         mutationFn: (id: string) => {
             assertPersonalAccess();
-            return api.deleteLaundryWatch(surface, id);
+            return api.deleteLaundryWatch(id);
         },
         onSuccess: invalidateWatches,
     });
@@ -227,8 +223,8 @@ function AuthenticatedPersonalLaundrySection({
     const personalError = watches.error
         ?? addWatch.error
         ?? removeWatch.error;
-    const authRequired = surface === 'companion'
-        && (attendance.data?.state === 'auth-required' || companionAuthenticationRequired(personalError));
+    const authRequired = attendance.data?.state === 'auth-required'
+        || accountAuthenticationRequired(personalError);
 
     if (authRequired) {
         return (
@@ -315,9 +311,11 @@ function AuthenticatedPersonalLaundrySection({
 }
 
 export function PersonalLaundrySection(props: PersonalLaundrySectionProps) {
+    const {platform} = useDashboardEnvironment();
     const account = useDashboardAccount();
 
-    if (props.surface === 'desktop' && account.status.lmsAuthentication !== 'authenticated') {
+    if (platform.capabilities.desktopAccount
+        && account.status.lmsAuthentication !== 'authenticated') {
         return null;
     }
 

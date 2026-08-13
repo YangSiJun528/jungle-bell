@@ -3,11 +3,13 @@ import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {CircleAlert, KeyRound, Link2, MonitorCheck, QrCode, RotateCcw, Smartphone, Trash2} from 'lucide-react';
 import {queryKeys, removeDesktopIdentityQueries, useDashboardEnvironment} from '@/app/dashboard-context';
 import {
+    useDashboardAccount,
+} from '@/app/dashboard-account';
+import {
     assertLmsAuthenticated,
     assertServerSessionReady,
     serverSessionReady,
-    useDashboardAccount,
-} from '@/app/dashboard-account';
+} from '@/app/dashboard-account-state';
 import {useDesktopConnectionQuery, useRefreshAttendanceMutation} from '@/app/use-dashboard-queries';
 import {EmptyState, ErrorState, LoadingState} from '@/components/dashboard/async-state';
 import {PageHeader} from '@/components/dashboard/page-header';
@@ -328,7 +330,7 @@ function CompanionConnections() {
         const storage = pairingSessionStorage();
         return storage ? readPendingMobilePairing(storage, Date.now()) : null;
     });
-    const attendance = useQuery({queryKey: queryKeys.attendance('companion'), queryFn: () => api.getAttendance('companion')});
+    const attendance = useQuery({queryKey: queryKeys.attendance('browser'), queryFn: () => api.getAttendance()});
 
     const claim = useMutation({
         mutationFn: async ({mode, resumePairingId}: PairingClaimStart) => {
@@ -449,8 +451,7 @@ function CompanionConnections() {
 }
 
 export function ConnectionsPage() {
-    const {surface} = useDashboardEnvironment();
-    const personalSurface = surface.kind === 'desktop' ? 'desktop' : 'companion';
+    const {platform} = useDashboardEnvironment();
 
     return (
         <div className="space-y-6">
@@ -463,14 +464,16 @@ export function ConnectionsPage() {
                 </TabsList>
                 <TabsContent value="notifications">
                     <PersonalAccountGate>
-                        <NotificationSettings surface={personalSurface}/>
+                        <NotificationSettings/>
                     </PersonalAccountGate>
                 </TabsContent>
                 <TabsContent value="services">
                     <ServiceSettings/>
                 </TabsContent>
                 <TabsContent value="devices">
-                    {surface.kind === 'desktop' ? <DesktopConnections/> : <CompanionConnections/>}
+                    {platform.capabilities.mobilePairingManagement
+                        ? <DesktopConnections/>
+                        : <CompanionConnections/>}
                 </TabsContent>
             </Tabs>
         </div>

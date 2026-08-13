@@ -9,8 +9,7 @@ import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@/compo
 import {Separator} from '@/components/ui/separator';
 import {Switch} from '@/components/ui/switch';
 import type {MealPreferences, MealPreferencesInput} from '@/api/dashboard-api';
-import type {PersonalSurface} from '@/api/personal-api';
-import {companionAuthenticationRequired} from '@/app/surface';
+import {accountAuthenticationRequired} from '@/api/account-authentication';
 
 const asInput = (preferences: MealPreferences): MealPreferencesInput => ({
     enabled: preferences.enabled,
@@ -103,17 +102,17 @@ function MealPreferencesEditor({
     );
 }
 
-export function MealPreferencesSection({surface}: {surface: PersonalSurface}) {
+export function MealPreferencesSection() {
     const {api} = useDashboardEnvironment();
     const client = useQueryClient();
     const [saved, setSaved] = useState(false);
     const [editorRevision, setEditorRevision] = useState(0);
     const preferences = useQuery({
         queryKey: queryKeys.mealPreferences,
-        queryFn: () => api.getMealPreferences(surface),
+        queryFn: () => api.getMealPreferences(),
     });
     const savePreferences = useMutation({
-        mutationFn: (input: MealPreferencesInput) => api.updateMealPreferences(surface, input),
+        mutationFn: (input: MealPreferencesInput) => api.updateMealPreferences(input),
         onSuccess: async (value) => {
             client.setQueryData(queryKeys.mealPreferences, value);
             setEditorRevision((revision) => revision + 1);
@@ -129,7 +128,7 @@ export function MealPreferencesSection({surface}: {surface: PersonalSurface}) {
     }, [saved]);
 
     const error = preferences.error ?? savePreferences.error;
-    const authRequired = surface === 'companion' && companionAuthenticationRequired(error);
+    const authRequired = accountAuthenticationRequired(error);
     if (authRequired) {
         return (
             <Alert>

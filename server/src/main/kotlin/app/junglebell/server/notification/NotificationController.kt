@@ -27,8 +27,8 @@ class NotificationController(private val service: NotificationService) {
         @RequestParam(defaultValue = "20") @Min(1) @Max(20) limit: Int,
     ) = service.desktop(principal, limit)
 
-    @GetMapping("/api/mobile/notifications")
-    fun mobile(
+    @GetMapping("/api/me/notifications")
+    fun accountNotifications(
         @AuthenticationPrincipal principal: SessionPrincipal,
         @RequestParam(defaultValue = "20") @Min(1) @Max(20) limit: Int,
     ) = service.mobile(principal, limit)
@@ -40,7 +40,7 @@ class NotificationController(private val service: NotificationService) {
         @RequestBody request: TestNotificationRequest,
     ) = service.sendTest(principal, request)
 
-    @PostMapping("/api/mobile/notifications/test")
+    @PostMapping("/api/me/notifications/test")
     @ResponseStatus(HttpStatus.ACCEPTED)
     fun mobileTest(
         @AuthenticationPrincipal principal: SessionPrincipal,
@@ -58,18 +58,18 @@ class NotificationController(private val service: NotificationService) {
         @Valid @RequestBody request: NotificationAckRequest,
     ) = service.acknowledge(principal, id, request)
 
-    @GetMapping("/api/push/vapid-public-key")
+    @GetMapping("/api/me/push/vapid-public-key")
     fun vapidPublicKey(@AuthenticationPrincipal principal: SessionPrincipal) =
         mapOf("publicKey" to service.vapidPublicKey())
 
-    @PutMapping("/api/push/subscriptions")
+    @PutMapping("/api/me/push/subscriptions")
     @ResponseStatus(HttpStatus.CREATED)
     fun subscribe(
         @AuthenticationPrincipal principal: SessionPrincipal,
         @Valid @RequestBody request: PushSubscriptionRequest,
     ) = service.subscribe(principal, request)
 
-    @DeleteMapping("/api/push/subscriptions/{id}")
+    @DeleteMapping("/api/me/push/subscriptions/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     fun unsubscribe(@AuthenticationPrincipal principal: SessionPrincipal, @PathVariable id: String) =
         service.unsubscribe(principal, id)

@@ -67,14 +67,13 @@ test('공통 푸터는 외부 링크와 모바일 하단 메뉴 여백만 제공
     assert.match(footer, /pb-28[\s\S]{0,160}md:pb-8/);
 });
 
-test('공개 화면은 3개, 개인 화면은 4개 주요 메뉴를 유지하고 보조 기능을 분리한다', () => {
-    assert.match(routes, /PUBLIC_NAVIGATION_ROUTES\s*=\s*\[[\s\S]*'home'[\s\S]*'laundry'[\s\S]*'meals'[\s\S]*\]/);
-    assert.match(routes, /PERSONAL_NAVIGATION_ROUTES\s*=\s*\[[\s\S]*'home'[\s\S]*'attendance'[\s\S]*'laundry'[\s\S]*'meals'[\s\S]*\]/);
+test('브라우저와 데스크톱은 4개 주요 메뉴와 보조 기능을 공유한다', () => {
+    assert.match(routes, /NAVIGATION_ROUTES\s*=\s*\[[\s\S]*'home'[\s\S]*'attendance'[\s\S]*'laundry'[\s\S]*'meals'[\s\S]*\]/);
     assert.match(routes, /PERSONAL_UTILITY_ROUTES\s*=\s*\[[\s\S]*'notifications'[\s\S]*'connections'[\s\S]*\]/);
     assert.match(routes, /home:\s*\{label:\s*'홈',\s*shortLabel:\s*'홈'\}/);
     assert.match(routes, /meals:\s*\{label:\s*'식단',\s*shortLabel:\s*'식단'\}/);
     assert.match(shell, /aria-label="개인 도구"/);
-    assert.match(shell, /className=\{personal \? 'border-t border-sidebar-border' : undefined\}/);
+    assert.match(shell, /<SidebarFooter className="border-t border-sidebar-border">/);
     assert.match(shell, /aria-label=\{notificationAriaLabel/);
     assert.match(shell, /aria-label="설정"/);
     assert.match(shell, /aria-haspopup="dialog"/);

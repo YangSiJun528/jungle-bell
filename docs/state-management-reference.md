@@ -7,11 +7,11 @@
 | LMS cookie·SSO session | 전용 `checker` WebView profile | PC의 LMS 연결 상태 | same-origin collector → tagged checker IPC |
 | checker·출석 runtime | Rust `AppState` | 트레이 아이콘·서버 출석 snapshot | checker IPC·desktop HTTP API |
 | 서버용 PC credential | Windows Credential Manager 또는 mode 0600 앱 파일 + `RemoteSyncService` | PC 연결 상태 | 장기 desktop HTTP API |
-| WebView HTTP session | React 메모리 + PostgreSQL session hash | PC의 서버 소유 개인 화면 | bootstrap IPC → `/api/desktop-ui` |
+| WebView HTTP session | React 메모리 + PostgreSQL session hash | PC의 서버 소유 개인 화면 | bootstrap IPC → `/api/me` |
 | PC 서비스 설정 | Rust `DesktopSettingsService` | LMS 기수 선택·자동 시작·업데이트·사용 통계·디버그 | exact get/update IPC |
-| 공개 세탁·급식 cache | React Query | 대시보드 생활 정보 | public HTTP API |
+| 공개 세탁·급식 cache | React Query | 공통 SPA 생활 정보 | public HTTP API |
 | PC 알림함 | `NotificationInboxService` | 대시보드 unread projection | snapshot command + inbox event |
-| 연결·개인 설정·알림 delivery | PostgreSQL | PC/PWA 개인 화면 | short desktop-ui bearer 또는 mobile HttpOnly cookie |
+| 연결·개인 설정·알림 delivery | PostgreSQL | 공통 SPA 개인 화면 | short WebView bearer 또는 HttpOnly cookie로 `/api/me` 호출 |
 | 공개 수집 기록·자산 | PostgreSQL | 공개 웹·PC·PWA 생활 정보 | public `/api` |
 | PWA Push subscription | 브라우저 PushManager + PostgreSQL | PWA 운영체제 알림 | service worker push event |
 
@@ -34,18 +34,12 @@ cache에 기록하지 않고 한 API client 인스턴스의 메모리에서만 �
 
 ## 런타임별 상태
 
-### 일반 웹
+### 브라우저와 설치 PWA
 
-- 공개 세탁·급식 snapshot만 조회합니다.
-- 출석, 개인 설정, 알림함, Push API를 조회하거나 변경하지 않습니다.
-- 설치 안내를 닫았는지만 현재 browser session에 남깁니다.
-
-### 설치 PWA
-
-- `display-mode: standalone` 또는 iOS standalone 신호로만 판정합니다.
-- 서버 출석 snapshot과 개인 설정을 읽고 변경합니다.
+- 설치 여부와 관계없이 같은 SPA, route, 계정 API를 사용합니다.
+- HttpOnly session cookie로 서버 출석 snapshot과 개인 설정을 읽고 변경합니다.
 - LMS를 직접 조회하거나 주기적 background fetch로 PC 역할을 대신하지 않습니다.
-- Push payload는 만료 시각과 허용된 대시보드 경로를 검증한 뒤 표시합니다.
+- 설치 PWA의 Push payload는 만료 시각과 허용된 대시보드 경로를 검증한 뒤 표시합니다.
 
 ### Tauri PC
 
@@ -75,9 +69,9 @@ cache에 기록하지 않고 한 API client 인스턴스의 메모리에서만 �
 
 | 계약 | 구현 |
 | --- | --- |
-| 런타임 판정 | [`runtime.ts`](../src/app/runtime.ts), [`surface.ts`](../src/app/surface.ts) |
+| 런타임 판정과 기능 어댑터 | [`runtime.ts`](../src/app/runtime.ts), [`platform-adapter.ts`](../src/platform/platform-adapter.ts) |
 | 브라우저 HTTP·native adapter | [`dashboard-api.ts`](../src/api/dashboard-api.ts), [`personal-api.ts`](../src/api/personal-api.ts) |
-| 대시보드 홈 projection | [`home-overview.ts`](../src/features/home/lib/home-overview.ts), [`dday-progress.ts`](../src/features/home/lib/dday-progress.ts) |
+| 대시보드 홈 projection | [`home-view-model.ts`](../src/features/home/home-view-model.ts), [`dday-progress.ts`](../src/domain/attendance/dday-progress.ts) |
 | pairing 임시 상태 | [`pending-pairing.ts`](../src/features/connections/lib/pending-pairing.ts) |
 | PWA cache·Push | [`sw.js`](../src/service-worker/sw.js) |
 | 데스크톱 연결 service | [`remote_sync.rs`](../src-tauri/src/remote_sync.rs) |

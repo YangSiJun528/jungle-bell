@@ -1,6 +1,5 @@
 import {useCallback, useSyncExternalStore} from 'react';
-import type {DashboardRoute, DashboardSurfaceKind} from '@/app/surface';
-import {dashboardRouteFromHash, dashboardRouteHref} from './routes';
+import {dashboardRouteFromHash, dashboardRouteHref, type DashboardRoute} from './routes';
 
 const DASHBOARD_ROUTE_REPLACED_EVENT = 'jungle-bell:dashboard-route-replaced';
 
@@ -30,13 +29,13 @@ export function replaceDashboardRouteHash(
     target.dispatchEvent(new Event(DASHBOARD_ROUTE_REPLACED_EVENT));
 }
 
-export function useHashRoute(surface: DashboardSurfaceKind): {
+export function useHashRoute(): {
     route: DashboardRoute;
     navigate: (route: DashboardRoute) => void;
     replace: (route: DashboardRoute) => void;
 } {
     const hash = useSyncExternalStore(subscribe, currentHash, () => '#home');
-    const route = dashboardRouteFromHash(hash, surface);
+    const route = dashboardRouteFromHash(hash);
     const navigate = useCallback((next: DashboardRoute) => {
         const nextHash = dashboardRouteHref(next);
         if (window.location.hash === nextHash) {

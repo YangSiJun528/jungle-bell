@@ -2,13 +2,12 @@ import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import {DashboardApp} from './dashboard-app';
 import {DashboardProviders} from './dashboard-providers';
-import {resolveDashboardSurface} from '@/app/surface';
 import {detectDashboardRuntime} from '@/app/runtime';
 import {captureInitialPairingFromWindow} from '@/app/pairing-bootstrap';
 import './styles/globals.css';
 
 const initialRuntime = detectDashboardRuntime();
-captureInitialPairingFromWindow(resolveDashboardSurface(initialRuntime).kind);
+captureInitialPairingFromWindow(initialRuntime.runningInTauri ? 'desktop' : 'browser');
 
 const theme = window.matchMedia('(prefers-color-scheme: dark)');
 const syncTheme = () => document.documentElement.classList.toggle('dark', theme.matches);

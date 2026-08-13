@@ -128,7 +128,7 @@ describe('desktop HTTP session', () => {
 });
 
 describe('HTTP API boundaries', () => {
-    test('separates public omit, companion cookies, and desktop bearer namespaces', async () => {
+    test('separates public omit, browser cookies, and desktop bearer namespaces', async () => {
         const calls: Array<[RequestInfo | URL, RequestInit | undefined]> = [];
         const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
             calls.push([input, init]);
@@ -141,25 +141,31 @@ describe('HTTP API boundaries', () => {
             })},
             now: () => 0,
         });
-        const client = createHttpApiClient({
+        const desktopClient = createHttpApiClient({
             fetcher,
             publicBase: 'https://data.example',
             platformBase: 'https://platform.example',
-            desktopSession: manager,
+            accountAuthentication: {kind: 'desktop-session', session: manager},
+        });
+        const browserClient = createHttpApiClient({
+            fetcher,
+            publicBase: 'https://data.example',
+            platformBase: 'https://platform.example',
+            accountAuthentication: {kind: 'cookie'},
         });
 
         const attemptedHeaders = {authorization: 'Bearer should-not-cross', cookie: 'manual=unsafe'};
-        await client.publicResponse('/api/public/laundry', {headers: attemptedHeaders});
-        await client.companionResponse('/api/mobile/attendance', {headers: attemptedHeaders});
-        await client.desktopResponse('/api/desktop-ui/attendance', {headers: attemptedHeaders});
+        await browserClient.publicResponse('/api/public/laundry', {headers: attemptedHeaders});
+        await browserClient.accountResponse('/api/me/attendance', {headers: attemptedHeaders});
+        await desktopClient.accountResponse('/api/me/attendance', {headers: attemptedHeaders});
 
         const publicInit = calls[0]?.[1] as RequestInit;
         const companionInit = calls[1]?.[1] as RequestInit;
         const desktopInit = calls[2]?.[1] as RequestInit;
         expect(calls.map(([url]) => url)).toEqual([
             'https://data.example/api/public/laundry',
-            'https://platform.example/api/mobile/attendance',
-            'https://platform.example/api/desktop-ui/attendance',
+            'https://platform.example/api/me/attendance',
+            'https://platform.example/api/me/attendance',
         ]);
         expect(publicInit.credentials).toBe('omit');
         expect(companionInit.credentials).toBe('include');
@@ -187,16 +193,16 @@ describe('HTTP API boundaries', () => {
             fetcher: async () => upstream,
             publicBase: '',
             platformBase: '',
-            desktopSession: createDesktopHttpSessionManager({
+            accountAuthentication: {kind: 'desktop-session', session: createDesktopHttpSessionManager({
                 nativeBridge: {bootstrapDesktopHttpSession: async () => ({
                     accessToken: token('a'),
                     expiresAt: new Date(420_000).toISOString(),
                 })},
                 now: () => 0,
-            }),
+            })},
         });
 
-        const response = await client.desktopResponse('/api/desktop-ui/attendance');
+        const response = await client.accountResponse('/api/me/attendance');
 
         expect(response).not.toBe(upstream);
         expect(upstream.bodyUsed).toBe(true);
@@ -228,17 +234,17 @@ describe('HTTP API boundaries', () => {
             fetcher,
             publicBase: '',
             platformBase: '',
-            desktopSession: createDesktopHttpSessionManager({
+            accountAuthentication: {kind: 'desktop-session', session: createDesktopHttpSessionManager({
                 nativeBridge: {bootstrapDesktopHttpSession: async () => ({
                     accessToken: token('a'),
                     expiresAt: new Date(420_000).toISOString(),
                 })},
                 now: () => 0,
-            }),
+            })},
         });
 
-        const verifiedNullBody = await client.desktopResponse('/api/desktop-ui/mobile-sessions');
-        const verifiedZeroLengthBody = await client.desktopResponse('/api/desktop-ui/attendance');
+        const verifiedNullBody = await client.accountResponse('/api/me/mobile-sessions');
+        const verifiedZeroLengthBody = await client.accountResponse('/api/me/attendance');
 
         expect(verifiedNullBody.status).toBe(204);
         expect(verifiedNullBody.statusText).toBe('No Content');
@@ -264,15 +270,15 @@ describe('HTTP API boundaries', () => {
             fetcher,
             publicBase: '',
             platformBase: '',
-            desktopSession: createDesktopHttpSessionManager({
+            accountAuthentication: {kind: 'desktop-session', session: createDesktopHttpSessionManager({
                 nativeBridge: {bootstrapDesktopHttpSession},
                 now: () => 0,
-            }),
+            })},
         });
 
-        await expect(client.desktopResponse('/api/desktop-ui/../desktop' as never))
-            .rejects.toThrow('API_CLIENT_INVALID_ARGUMENT');
-        expect(() => client.companionResponse('/api/mobile-evil/attendance' as never))
+        expect(() => client.accountResponse('/api/me/../desktop' as never))
+            .toThrow('API_CLIENT_INVALID_ARGUMENT');
+        expect(() => client.accountResponse('/api/me-evil/attendance' as never))
             .toThrow('API_CLIENT_INVALID_ARGUMENT');
         expect(fetcher).not.toHaveBeenCalled();
         expect(bootstrapDesktopHttpSession).not.toHaveBeenCalled();
@@ -295,15 +301,15 @@ describe('HTTP API boundaries', () => {
             fetcher,
             publicBase: '',
             platformBase: '',
-            desktopSession: createDesktopHttpSessionManager({
+            accountAuthentication: {kind: 'desktop-session', session: createDesktopHttpSessionManager({
                 nativeBridge: {bootstrapDesktopHttpSession},
                 now: () => 0,
-            }),
+            })},
         });
 
         const responses = await Promise.all(Array.from(
             {length: 50},
-            () => client.desktopResponse('/api/desktop-ui/attendance'),
+            () => client.accountResponse('/api/me/attendance'),
         ));
         expect(responses.every((response) => response.status === 200)).toBe(true);
         expect(bootstrapDesktopHttpSession).toHaveBeenCalledTimes(2);
@@ -324,10 +330,10 @@ describe('HTTP API boundaries', () => {
             fetcher,
             publicBase: '',
             platformBase: '',
-            desktopSession: manager,
+            accountAuthentication: {kind: 'desktop-session', session: manager},
         });
 
-        const pending = client.desktopResponse('/api/desktop-ui/attendance', {method: 'GET'});
+        const pending = client.accountResponse('/api/me/attendance', {method: 'GET'});
         await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
         await vi.waitFor(() => expect(delayed.response.bodyUsed).toBe(true));
         manager.clear();
@@ -352,10 +358,10 @@ describe('HTTP API boundaries', () => {
             fetcher,
             publicBase: '',
             platformBase: '',
-            desktopSession: manager,
+            accountAuthentication: {kind: 'desktop-session', session: manager},
         });
 
-        const pending = client.desktopResponse('/api/desktop-ui/meal-preferences', {
+        const pending = client.accountResponse('/api/me/meal-preferences', {
             method: 'PUT',
             body: JSON.stringify({enabled: true}),
         });
@@ -390,10 +396,10 @@ describe('HTTP API boundaries', () => {
             fetcher,
             publicBase: '',
             platformBase: '',
-            desktopSession: manager,
+            accountAuthentication: {kind: 'desktop-session', session: manager},
         });
 
-        const pending = client.desktopResponse('/api/desktop-ui/meal-preferences', {
+        const pending = client.accountResponse('/api/me/meal-preferences', {
             method: 'PUT',
             body: JSON.stringify({enabled: true}),
         });
@@ -425,13 +431,13 @@ describe('HTTP API boundaries', () => {
             fetcher,
             publicBase: '',
             platformBase: '',
-            desktopSession: createDesktopHttpSessionManager({
+            accountAuthentication: {kind: 'desktop-session', session: createDesktopHttpSessionManager({
                 nativeBridge: {bootstrapDesktopHttpSession},
                 now: () => 0,
-            }),
+            })},
         });
 
-        await expect(client.desktopResponse('/api/desktop-ui/attendance'))
+        await expect(client.accountResponse('/api/me/attendance'))
             .resolves.toMatchObject({status});
         expect(fetcher).toHaveBeenCalledTimes(1);
         expect(bootstrapDesktopHttpSession).toHaveBeenCalledTimes(1);
@@ -447,13 +453,13 @@ describe('HTTP API boundaries', () => {
             fetcher,
             publicBase: '',
             platformBase: '',
-            desktopSession: createDesktopHttpSessionManager({
+            accountAuthentication: {kind: 'desktop-session', session: createDesktopHttpSessionManager({
                 nativeBridge: {bootstrapDesktopHttpSession},
                 now: () => 0,
-            }),
+            })},
         });
 
-        await expect(client.desktopResponse('/api/desktop-ui/attendance')).rejects.toThrow('offline');
+        await expect(client.accountResponse('/api/me/attendance')).rejects.toThrow('offline');
         expect(fetcher).toHaveBeenCalledTimes(1);
         expect(bootstrapDesktopHttpSession).toHaveBeenCalledTimes(1);
     });

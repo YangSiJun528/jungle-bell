@@ -36,21 +36,21 @@ export function useInstallPromptVisibility(): {
 }
 
 export function InstallPrompt({open, onOpenChange}: InstallPromptProps) {
-    const {surface} = useDashboardEnvironment();
+    const {platform} = useDashboardEnvironment();
     const [prompt, setPrompt] = useState<InstallPromptEvent | null>(null);
     const [mobile] = useState(() => isMobileInstallClient(navigator));
 
     useEffect(() => {
-        if (surface.kind !== 'public') return;
+        if (platform.kind !== 'browser') return;
         const listener = (event: Event) => {
             event.preventDefault();
             setPrompt(event as InstallPromptEvent);
         };
         window.addEventListener('beforeinstallprompt', listener);
         return () => window.removeEventListener('beforeinstallprompt', listener);
-    }, [surface.kind]);
+    }, [platform.kind]);
 
-    if (surface.kind !== 'public') return null;
+    if (platform.kind !== 'browser') return null;
     if (!open) return null;
 
     const title = mobile ? '홈 화면에 Jungle Bell 추가' : 'PC 앱으로 개인 기능 사용';

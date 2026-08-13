@@ -1,6 +1,7 @@
 package app.junglebell.server.account
 
 import app.junglebell.server.security.SessionPrincipal
+import app.junglebell.server.security.requireDesktop
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
@@ -52,7 +53,7 @@ class AccountController(private val service: AccountService) {
         @Valid @RequestBody request: DesktopHeartbeatRequest,
     ) = service.heartbeat(principal, request)
 
-    @GetMapping("/api/desktop/attendance", "/api/desktop-ui/attendance")
+    @GetMapping("/api/desktop/attendance")
     fun desktopAttendance(@AuthenticationPrincipal principal: SessionPrincipal) = service.attendance(principal.userId)
 
     @PutMapping("/api/desktop/attendance")
@@ -61,27 +62,25 @@ class AccountController(private val service: AccountService) {
         @Valid @RequestBody request: AttendanceSnapshotRequest,
     ) = service.publishAttendance(principal, request)
 
-    @GetMapping("/api/mobile/attendance")
-    fun mobileAttendance(@AuthenticationPrincipal principal: SessionPrincipal) = service.mobileAttendance(principal.userId)
+    @GetMapping("/api/me/attendance")
+    fun attendance(@AuthenticationPrincipal principal: SessionPrincipal) = service.mobileAttendance(principal.userId)
 
-    @GetMapping("/api/desktop/mobile-sessions", "/api/desktop-ui/mobile-sessions")
-    fun mobileSessions(@AuthenticationPrincipal principal: SessionPrincipal) = service.mobileSessions(principal.userId)
+    @GetMapping("/api/me/mobile-sessions")
+    fun mobileSessions(@AuthenticationPrincipal principal: SessionPrincipal) =
+        service.mobileSessions(principal.requireDesktop().userId)
 
-    @DeleteMapping(
-        "/api/desktop/mobile-sessions/{id}",
-        "/api/desktop-ui/mobile-sessions/{id}",
-    )
+    @DeleteMapping("/api/me/mobile-sessions/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     fun revokeMobile(
         @AuthenticationPrincipal principal: SessionPrincipal,
         @PathVariable id: String,
-    ) = service.revokeMobile(principal.userId, id)
+    ) = service.revokeMobile(principal.requireDesktop().userId, id)
 
-    @DeleteMapping("/api/mobile/session")
+    @DeleteMapping("/api/me/session")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     fun disconnectMobile(@AuthenticationPrincipal principal: SessionPrincipal) = service.disconnectMobile(principal)
 
-    @GetMapping("/api/mobile/session")
+    @GetMapping("/api/me/session")
     fun mobileSession(@AuthenticationPrincipal principal: SessionPrincipal) = service.mobileSession(principal)
 
     private fun clientAddress(request: HttpServletRequest): String =

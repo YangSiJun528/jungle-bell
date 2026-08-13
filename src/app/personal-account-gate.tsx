@@ -9,12 +9,12 @@ import {useDashboardEnvironment} from './dashboard-context';
 import {useRefreshAttendanceMutation} from './use-dashboard-queries';
 
 export function PersonalAccountGate({children}: PropsWithChildren) {
-    const {api, surface} = useDashboardEnvironment();
+    const {api, platform} = useDashboardEnvironment();
     const account = useDashboardAccount();
     const refresh = useRefreshAttendanceMutation();
     const login = useMutation({mutationFn: () => api.openLmsLogin()});
 
-    if (surface.kind !== 'desktop') return children;
+    if (!platform.capabilities.desktopAccount) return children;
 
     if (account.status.lmsAuthentication === 'checking') {
         return <LoadingState label="LMS 로그인 상태를 확인하고 있습니다."/>;

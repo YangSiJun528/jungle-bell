@@ -43,7 +43,7 @@ class SecurityConfig {
             allowCredentials = false
             maxAge = 600
         }
-        source.registerCorsConfiguration("/api/desktop-ui/**", configuration)
+        source.registerCorsConfiguration("/api/me/**", configuration)
         return source
     }
 }

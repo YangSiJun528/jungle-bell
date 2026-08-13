@@ -6,11 +6,11 @@ import {useDashboardAccount} from './dashboard-account';
 import {useDashboardEnvironment} from './dashboard-context';
 
 export function DashboardAccountNotice() {
-    const {api, surface} = useDashboardEnvironment();
+    const {api, platform} = useDashboardEnvironment();
     const {status} = useDashboardAccount();
     const login = useMutation({mutationFn: () => api.openLmsLogin()});
 
-    if (surface.kind !== 'desktop' || status.lmsAuthentication !== 'required') {
+    if (!platform.capabilities.lmsWindow || status.lmsAuthentication !== 'required') {
         return null;
     }
 

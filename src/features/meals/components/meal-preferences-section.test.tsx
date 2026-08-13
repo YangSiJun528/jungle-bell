@@ -31,7 +31,7 @@ function renderPreferences(): string {
     client.setQueryData(queryKeys.mealPreferences, preferences);
     return renderToStaticMarkup(
         <QueryClientProvider client={client}>
-            <MealPreferencesSection surface="desktop"/>
+            <MealPreferencesSection/>
         </QueryClientProvider>,
     );
 }

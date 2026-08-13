@@ -126,7 +126,7 @@ class PublicDataRepository(
             row.getTimestamp("version_first_seen_at")?.toInstant()?.toString(),
             row.getBoolean("changed"),
             row.getLong("duration_ms"),
-            row.getObject("http_status", Integer::class.java)?.toInt(),
+            row.getObject("http_status", Int::class.javaObjectType),
             row.getString("error"),
         )
     }.optional().orElse(null)
@@ -171,7 +171,7 @@ class PublicDataRepository(
             row.getString("type"),
             row.getTimestamp("previous_observed_at")?.toInstant()?.toString(),
             row.getTimestamp("observed_at").toInstant().toString(),
-            row.getObject("eta_delta_minutes", java.lang.Double::class.java)?.toDouble(),
+            row.getObject("eta_delta_minutes", Double::class.javaObjectType),
             row.getString("previous_state"),
             row.getString("current_state"),
             objectMapper.readValue(row.getString("detail"), Map::class.java) as Map<String, Any?>,
@@ -234,8 +234,8 @@ class PublicDataRepository(
         StoredMealImage(
             row.getString("media_id"), row.getString("source_url"),
             row.getString("declared_content_type"), row.getString("filename"),
-            row.getObject("width", Integer::class.java)?.toInt(),
-            row.getObject("height", Integer::class.java)?.toInt(), row.getString("sha"),
+            row.getObject("width", Int::class.javaObjectType),
+            row.getObject("height", Int::class.javaObjectType), row.getString("sha"),
             row.getString("content_type"), row.getString("extension"), row.getBytes("content"),
         )
     }.optional().orElse(null)
@@ -300,10 +300,10 @@ class PublicDataRepository(
                 row.getString("status"), row.getTimestamp("first_seen_at").toInstant().toString(),
                 row.getTimestamp("last_seen_at").toInstant().toString(), row.getString("media_id"),
                 row.getString("source_url"), row.getString("declared_content_type"), row.getString("filename"),
-                row.getObject("width", Integer::class.java)?.toInt(),
-                row.getObject("height", Integer::class.java)?.toInt(), row.getString("sha"),
+                row.getObject("width", Int::class.javaObjectType),
+                row.getObject("height", Int::class.javaObjectType), row.getString("sha"),
                 row.getString("content_type"), row.getString("extension"),
-                row.getObject("byte_length", java.lang.Long::class.java)?.toLong(),
+                row.getObject("byte_length", Long::class.javaObjectType),
             )
         }.list()
         return rows.groupBy { it.id }.values.take(limit).map { group -> group.first().toPost(group) }

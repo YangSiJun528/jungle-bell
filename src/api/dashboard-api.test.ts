@@ -1,7 +1,31 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {test} from 'vitest';
-import {createDashboardApi} from './dashboard-api';
+import {
+    createDashboardApi as createDashboardApiImplementation,
+    type DashboardApiOptions,
+} from './dashboard-api';
+import {createNativeBridge, type NativeInvoke} from './native-bridge';
+import {createPlatformAdapter} from '@/platform/platform-adapter';
+
+type TestDashboardApiOptions = DashboardApiOptions & {
+    desktopRuntime?: boolean;
+    invokeCommand?: NativeInvoke;
+};
+
+function createDashboardApi(options: TestDashboardApiOptions = {}) {
+    const {desktopRuntime = false, invokeCommand, ...implementationOptions} = options;
+    const nativeBridge = desktopRuntime
+        ? createNativeBridge(invokeCommand)
+        : undefined;
+    return createDashboardApiImplementation({
+        ...implementationOptions,
+        platformAdapter: createPlatformAdapter({
+            runningInTauri: desktopRuntime,
+            nativeBridge,
+        }),
+    });
+}
 
 function jsonResponse(value: unknown, status = 200): Response {
     return new Response(JSON.stringify(value), {
@@ -366,7 +390,7 @@ test('모바일 알림 내역은 서버의 epoch 응답 필드를 그대로 검�
 
     const notifications = await api.getNotifications();
 
-    assert.equal(calls[0]?.url, 'https://platform.example.com/api/mobile/notifications?limit=20');
+    assert.equal(calls[0]?.url, 'https://platform.example.com/api/me/notifications?limit=20');
     assert.deepEqual(notifications, [{
         id: '13fdbe73-d8d0-46a4-9fb5-85026f7162fe',
         kind: 'attendance-action-required',
@@ -415,9 +439,9 @@ test('개인 API는 HttpOnly 쿠키·no-store를 강제하고 Authorization을 �
         invokeCommand: async () => undefined,
     });
 
-    await api.getAttendance('companion');
+    await api.getAttendance();
 
-    assert.equal(calls[0]?.url, 'https://platform.example.com/api/mobile/attendance');
+    assert.equal(calls[0]?.url, 'https://platform.example.com/api/me/attendance');
     assert.equal(calls[0]?.init?.credentials, 'include');
     assert.equal(calls[0]?.init?.cache, 'no-store');
     assert.equal(new Headers(calls[0]?.init?.headers).has('authorization'), false);
@@ -442,7 +466,7 @@ test('출석 envelope의 stale freshness를 snapshot과 함께 보존한다', as
         invokeCommand: async () => undefined,
     });
 
-    const result = await api.getAttendance('companion');
+    const result = await api.getAttendance();
 
     assert.equal(result.state, 'loaded');
     if (result.state !== 'loaded') return;
@@ -475,7 +499,7 @@ test('출석 snapshot에 freshness가 없거나 invalid이면 fresh로 추측하
             fetcher: async () => jsonResponse(envelope),
             invokeCommand: async () => undefined,
         });
-        await assert.rejects(api.getAttendance('companion'), /API_RESPONSE_INVALID/);
+        await assert.rejects(api.getAttendance(), /API_RESPONSE_INVALID/);
     }
 });
 
@@ -490,7 +514,7 @@ test('개인 출석 envelope는 current-only 필드 외의 호환 필드를 거�
         invokeCommand: async () => undefined,
     });
 
-    await assert.rejects(api.getAttendance('companion'), /API_RESPONSE_INVALID/);
+    await assert.rejects(api.getAttendance(), /API_RESPONSE_INVALID/);
 });
 
 test('데스크톱 서버 데이터는 단기 세션 HTTP, 네이티브 기능은 제한된 command를 쓴다', async () => {
@@ -501,7 +525,7 @@ test('데스크톱 서버 데이터는 단기 세션 HTTP, 네이티브 기능�
         platformApiBaseUrl: 'https://platform.example.com',
         fetcher: async (input, init) => {
             requests.push({url: String(input), init});
-            return jsonResponse({attendance: null, freshness: 'missing'});
+            return jsonResponse({attendance: null, freshness: 'missing', devices: []});
         },
         invokeCommand: async (command, args) => {
             calls.push({command, args});
@@ -518,7 +542,7 @@ test('데스크톱 서버 데이터는 단기 세션 HTTP, 네이티브 기능�
     });
 
     assert.equal((await api.getDesktopConnectionState()).credentialPersistent, true);
-    await api.getAttendance('desktop');
+    await api.getAttendance();
     await api.refreshPlatformSync();
 
     assert.deepEqual(calls.map(({command}) => command), [
@@ -526,7 +550,7 @@ test('데스크톱 서버 데이터는 단기 세션 HTTP, 네이티브 기능�
         'bootstrap_desktop_http_session',
         'refresh_platform_sync',
     ]);
-    assert.equal(requests[0]?.url, 'https://platform.example.com/api/desktop-ui/attendance');
+    assert.equal(requests[0]?.url, 'https://platform.example.com/api/me/attendance');
     assert.equal(requests[0]?.init?.credentials, 'omit');
     assert.equal(
         new Headers(requests[0]?.init?.headers).get('authorization'),
@@ -537,6 +561,7 @@ test('데스크톱 서버 데이터는 단기 세션 HTTP, 네이티브 기능�
 test('데스크톱 credential 복구는 명시적 확인이 포함된 새 identity command만 사용한다', async () => {
     const calls: Array<{command: string; args?: Record<string, unknown>}> = [];
     const api = createDashboardApi({
+        desktopRuntime: true,
         fetcher: async () => { throw new Error('unexpected fetch'); },
         invokeCommand: async (command, args) => {
             calls.push({command, args});
@@ -665,7 +690,7 @@ test('데스크톱 페어링 승인은 actual claimId를 strict desktop-ui body�
 
     assert.equal(
         requests[0]?.url,
-        `https://platform.example.com/api/desktop-ui/pairings/${pairingId}/approve`,
+        `https://platform.example.com/api/me/pairings/${pairingId}/approve`,
     );
     assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {claimId});
 });
@@ -774,6 +799,7 @@ test('데스크톱 알림함은 Tauri IPC snapshot을 검증하고 읽음 처리
         }],
     };
     const api = createDashboardApi({
+        desktopRuntime: true,
         fetcher: async () => { throw new Error('unexpected fetch'); },
         invokeCommand: async (command, args) => {
             calls.push({command, args});
@@ -805,6 +831,7 @@ test('테스트 알림은 PC에서는 OS 알림 IPC, 모바일에서는 인증�
         }],
     };
     const api = createDashboardApi({
+        desktopRuntime: true,
         platformApiBaseUrl: 'https://platform.example.com',
         fetcher: async (input, init) => {
             fetches.push({url: String(input), init});
@@ -812,16 +839,24 @@ test('테스트 알림은 PC에서는 OS 알림 IPC, 모바일에서는 인증�
         },
         invokeCommand: async (command, args) => {
             invokes.push({command, args});
+            if (command === 'bootstrap_desktop_http_session') return desktopHttpSession();
             return {snapshot, systemDelivered: true, mobileQueued: 2};
         },
     });
 
     assert.deepEqual(await api.sendDesktopTestNotification(), {snapshot, systemDelivered: true, mobileQueued: 2});
     await api.sendMobileTestNotification();
-    assert.deepEqual(invokes, [{command: 'send_test_notification', args: undefined}]);
-    assert.equal(fetches[0]?.url, 'https://platform.example.com/api/mobile/notifications/test');
+    assert.deepEqual(invokes, [
+        {command: 'send_test_notification', args: undefined},
+        {command: 'bootstrap_desktop_http_session', args: undefined},
+    ]);
+    assert.equal(fetches[0]?.url, 'https://platform.example.com/api/me/notifications/test');
     assert.equal(fetches[0]?.init?.method, 'POST');
-    assert.equal(fetches[0]?.init?.credentials, 'include');
+    assert.equal(fetches[0]?.init?.credentials, 'omit');
+    assert.equal(
+        new Headers(fetches[0]?.init?.headers).get('authorization'),
+        `Bearer ${desktopHttpSession().accessToken}`,
+    );
 });
 
 const mealPreferences = {
@@ -871,6 +906,7 @@ test('데스크톱 서비스 설정은 canonical current-only commands와 exact 
     };
     const updated = {...initial, autoStart: true};
     const api = createDashboardApi({
+        desktopRuntime: true,
         fetcher: async () => { throw new Error('unexpected fetch'); },
         invokeCommand: async (command, args) => {
             calls.push({command, args});
@@ -911,6 +947,7 @@ test('데스크톱 서비스 설정은 unknown field와 non-boolean을 거부한
         },
     ]) {
         const api = createDashboardApi({
+            desktopRuntime: true,
             fetcher: async () => { throw new Error('unexpected fetch'); },
             invokeCommand: async () => response,
         });
@@ -942,29 +979,29 @@ test('데스크톱 개인 생활 설정은 desktop-ui HTTP namespace와 단기 b
         },
     });
 
-    assert.deepEqual(await api.getAttendancePreferences('desktop'), attendancePreferences);
-    assert.deepEqual(await api.updateAttendancePreferences('desktop', {
+    assert.deepEqual(await api.getAttendancePreferences(), attendancePreferences);
+    assert.deepEqual(await api.updateAttendancePreferences({
         ...attendancePreferences, morning: false, skipSunday: true, skipAttendanceDate: '2026-08-10',
     }), attendancePreferences);
-    assert.deepEqual(await api.getMealPreferences('desktop'), mealPreferences);
-    assert.deepEqual(await api.updateMealPreferences('desktop', {
+    assert.deepEqual(await api.getMealPreferences(), mealPreferences);
+    assert.deepEqual(await api.updateMealPreferences({
         enabled: true, lunch: true, dinner: true,
     }), mealPreferences);
-    assert.deepEqual(await api.listLaundryWatches('desktop'), [laundryWatch]);
-    assert.deepEqual(await api.createLaundryWatch('desktop', {
+    assert.deepEqual(await api.listLaundryWatches(), [laundryWatch]);
+    assert.deepEqual(await api.createLaundryWatch({
         machineId: '워시타워_1', appliance: 'washer', sessionId: 'session-1',
         notifyBeforeMinutes: 10, notifyWhenAvailable: true,
     }), laundryWatch);
-    await api.deleteLaundryWatch('desktop', laundryWatch.id);
+    await api.deleteLaundryWatch(laundryWatch.id);
     assert.deepEqual(commands, ['bootstrap_desktop_http_session']);
     assert.deepEqual(requests.map(({url}) => new URL(url).pathname), [
-        '/api/desktop-ui/attendance/preferences',
-        '/api/desktop-ui/attendance/preferences',
-        '/api/desktop-ui/meal-preferences',
-        '/api/desktop-ui/meal-preferences',
-        '/api/desktop-ui/laundry-watches',
-        '/api/desktop-ui/laundry-watches',
-        `/api/desktop-ui/laundry-watches/${laundryWatch.id}`,
+        '/api/me/attendance/preferences',
+        '/api/me/attendance/preferences',
+        '/api/me/meal-preferences',
+        '/api/me/meal-preferences',
+        '/api/me/laundry-watches',
+        '/api/me/laundry-watches',
+        `/api/me/laundry-watches/${laundryWatch.id}`,
     ]);
     for (const {init} of requests) {
         assert.equal(init?.credentials, 'omit');
@@ -991,20 +1028,20 @@ test('PWA 개인 생활 설정은 mobile canonical API와 HttpOnly cookie만 사
         invokeCommand: async () => { throw new Error('unexpected invoke'); },
     });
 
-    await api.getAttendancePreferences('companion');
-    await api.updateAttendancePreferences('companion', {
+    await api.getAttendancePreferences();
+    await api.updateAttendancePreferences({
         ...attendancePreferences, evening: false, skipSunday: true,
     });
-    await api.getMealPreferences('companion');
-    await api.updateMealPreferences('companion', {
+    await api.getMealPreferences();
+    await api.updateMealPreferences({
         enabled: false, lunch: true, dinner: false,
     });
-    await api.listLaundryWatches('companion');
-    await api.createLaundryWatch('companion', {
+    await api.listLaundryWatches();
+    await api.createLaundryWatch({
         machineId: '워시타워_1', appliance: 'washer', sessionId: null,
         notifyBeforeMinutes: 0, notifyWhenAvailable: true,
     });
-    await api.deleteLaundryWatch('companion', laundryWatch.id);
+    await api.deleteLaundryWatch(laundryWatch.id);
     assert.deepEqual(calls.map(({url, init}) => ({
         path: new URL(url).pathname,
         method: init?.method,
@@ -1014,13 +1051,13 @@ test('PWA 개인 생활 설정은 mobile canonical API와 HttpOnly cookie만 사
         accept: new Headers(init?.headers).get('accept'),
         contentType: new Headers(init?.headers).get('content-type'),
     })), [
-        {path: '/api/mobile/attendance/preferences', method: 'GET', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: null},
-        {path: '/api/mobile/attendance/preferences', method: 'PUT', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: 'application/json'},
-        {path: '/api/mobile/meal-preferences', method: 'GET', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: null},
-        {path: '/api/mobile/meal-preferences', method: 'PUT', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: 'application/json'},
-        {path: '/api/mobile/laundry-watches', method: 'GET', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: null},
-        {path: '/api/mobile/laundry-watches', method: 'POST', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: 'application/json'},
-        {path: `/api/mobile/laundry-watches/${laundryWatch.id}`, method: 'DELETE', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: null},
+        {path: '/api/me/attendance/preferences', method: 'GET', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: null},
+        {path: '/api/me/attendance/preferences', method: 'PUT', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: 'application/json'},
+        {path: '/api/me/meal-preferences', method: 'GET', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: null},
+        {path: '/api/me/meal-preferences', method: 'PUT', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: 'application/json'},
+        {path: '/api/me/laundry-watches', method: 'GET', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: null},
+        {path: '/api/me/laundry-watches', method: 'POST', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: 'application/json'},
+        {path: `/api/me/laundry-watches/${laundryWatch.id}`, method: 'DELETE', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: null},
     ]);
     assert.deepEqual(JSON.parse(String(calls[1]?.init?.body)), {
         ...attendancePreferences, evening: false, skipSunday: true,
@@ -1046,10 +1083,10 @@ test('개인 생활 설정 DTO는 unknown field와 깨진 상태 불변식을 �
         const operation = operations[index];
         await assert.rejects(
             operation === 'attendance'
-                ? api.getAttendancePreferences('companion')
+                ? api.getAttendancePreferences()
                 : operation === 'meal'
-                ? api.getMealPreferences('companion')
-                : api.listLaundryWatches('companion'),
+                ? api.getMealPreferences()
+                : api.listLaundryWatches(),
             /API_RESPONSE_INVALID/,
         );
     }
@@ -1065,7 +1102,7 @@ test('개인 생활 설정 API는 손상된 JSON 응답을 안정된 오류 코�
     });
 
     await assert.rejects(
-        api.getMealPreferences('companion'),
+        api.getMealPreferences(),
         /API_RESPONSE_INVALID/,
     );
 });

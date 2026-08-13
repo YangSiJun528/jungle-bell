@@ -31,13 +31,12 @@ export function normalizeDevApiOrigin(value: string): string {
     return parsed.origin;
 }
 
-export function tauriBuildApiOrigin(
+export function universalBuildApiOrigin(
     command: 'serve' | 'build',
     environment: Record<string, string | undefined>,
 ): string | null {
-    if (command !== 'build' || !environment.TAURI_ENV_PLATFORM) return null;
-    const value = environment.JUNGLE_BELL_DATA_API_URL;
-    if (!value) throw new Error('JUNGLE_BELL_DATA_API_URL_REQUIRED');
+    if (command !== 'build') return null;
+    const value = environment.JUNGLE_BELL_DATA_API_URL ?? defaultDevApiOrigin;
     const origin = normalizeDevApiOrigin(value);
     if (!tauriApiOrigins.has(origin)) throw new Error('JUNGLE_BELL_DATA_API_URL_INVALID');
     return origin;
@@ -115,7 +114,7 @@ export default defineConfig(({command}) => {
     const devApiOrigin = normalizeDevApiOrigin(
         process.env.JUNGLE_BELL_DEV_API_ORIGIN ?? defaultDevApiOrigin,
     );
-    const productionTauriApiOrigin = tauriBuildApiOrigin(command, process.env);
+    const productionApiOrigin = universalBuildApiOrigin(command, process.env);
     const developmentTauriOrigin = command === 'serve' ? tauriDevOrigin(process.env) : null;
 
     return {
@@ -155,13 +154,11 @@ export default defineConfig(({command}) => {
         publicDir: 'public',
         define: command === 'serve'
             ? {
-                'import.meta.env.VITE_CAMPUS_API_URL': JSON.stringify(devApiOrigin),
-                'import.meta.env.VITE_PLATFORM_API_URL': JSON.stringify(''),
+                'import.meta.env.VITE_PLATFORM_API_URL': JSON.stringify(devApiOrigin),
             }
-            : productionTauriApiOrigin
+            : productionApiOrigin
                 ? {
-                    'import.meta.env.VITE_CAMPUS_API_URL': JSON.stringify(productionTauriApiOrigin),
-                    'import.meta.env.VITE_PLATFORM_API_URL': JSON.stringify(productionTauriApiOrigin),
+                    'import.meta.env.VITE_PLATFORM_API_URL': JSON.stringify(productionApiOrigin),
                 }
                 : undefined,
         server: {
@@ -169,7 +166,7 @@ export default defineConfig(({command}) => {
             port: 5173,
             strictPort: true,
             proxy: {
-                '/api/desktop-ui': {
+                '/api/me': {
                     target: devApiOrigin,
                     changeOrigin: true,
                     secure: true,
@@ -189,7 +186,7 @@ export default defineConfig(({command}) => {
         // updater signing material in release environments.
         envPrefix: ['VITE_'],
         build: {
-            target: process.env.TAURI_ENV_PLATFORM === 'windows' ? 'chrome105' : 'safari13',
+            target: 'safari13',
             outDir: '../dist',
             emptyOutDir: true,
             sourcemap: process.env.TAURI_ENV_DEBUG === 'true',

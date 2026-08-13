@@ -237,8 +237,8 @@ function DesktopServiceSettings() {
 }
 
 export function ServiceSettings() {
-    const {surface} = useDashboardEnvironment();
-    if (surface.kind === 'desktop') return <DesktopServiceSettings/>;
+    const {platform} = useDashboardEnvironment();
+    if (platform.capabilities.desktopSettings) return <DesktopServiceSettings/>;
     return (
         <Alert>
             <Laptop/>

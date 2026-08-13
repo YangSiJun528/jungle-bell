@@ -11,6 +11,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.method.annotation.HandlerMethodValidationException
+import org.springframework.web.servlet.resource.NoResourceFoundException
 
 data class ValidationIssue(val path: String, val message: String)
 
@@ -42,6 +43,10 @@ class ApiErrorHandler {
     )
     fun invalidRequest(error: Exception): ResponseEntity<ApiErrorResponse> =
         ResponseEntity.badRequest().body(ApiErrorResponse("INVALID_REQUEST", validationIssues(error)))
+
+    @ExceptionHandler(NoResourceFoundException::class)
+    fun notFound(@Suppress("UNUSED_PARAMETER") error: NoResourceFoundException): ResponseEntity<ApiErrorResponse> =
+        ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiErrorResponse("NOT_FOUND"))
 
     @ExceptionHandler(Exception::class)
     fun internal(error: Exception, request: HttpServletRequest): ResponseEntity<ApiErrorResponse> {

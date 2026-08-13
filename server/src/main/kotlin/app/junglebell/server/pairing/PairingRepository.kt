@@ -81,7 +81,7 @@ class PairingRepository(private val jdbc: JdbcClient) {
             row.getString("mobile_label"),
             row.getLong("created_at_epoch_ms"),
             row.getLong("expires_at_epoch_ms"),
-            row.getObject("approved_at_epoch_ms", java.lang.Long::class.java)?.toLong(),
+            row.getObject("approved_at_epoch_ms", Long::class.javaObjectType),
         )
     }.optional().orElse(null)
 }
