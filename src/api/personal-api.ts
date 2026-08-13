@@ -25,19 +25,14 @@ export type {
     MealPreferencesInput,
 };
 
-export type PersonalSurface = 'desktop' | 'companion';
-
 export interface DashboardPersonalApi {
-    getAttendancePreferences(surface: PersonalSurface): Promise<AttendancePreferences>;
-    updateAttendancePreferences(
-        surface: PersonalSurface,
-        input: AttendancePreferences,
-    ): Promise<AttendancePreferences>;
-    getMealPreferences(surface: PersonalSurface): Promise<MealPreferences>;
-    updateMealPreferences(surface: PersonalSurface, input: MealPreferencesInput): Promise<MealPreferences>;
-    listLaundryWatches(surface: PersonalSurface): Promise<LaundryWatch[]>;
-    createLaundryWatch(surface: PersonalSurface, input: LaundryWatchInput): Promise<LaundryWatch>;
-    deleteLaundryWatch(surface: PersonalSurface, id: string): Promise<void>;
+    getAttendancePreferences(): Promise<AttendancePreferences>;
+    updateAttendancePreferences(input: AttendancePreferences): Promise<AttendancePreferences>;
+    getMealPreferences(): Promise<MealPreferences>;
+    updateMealPreferences(input: MealPreferencesInput): Promise<MealPreferences>;
+    listLaundryWatches(): Promise<LaundryWatch[]>;
+    createLaundryWatch(input: LaundryWatchInput): Promise<LaundryWatch>;
+    deleteLaundryWatch(id: string): Promise<void>;
 }
 
 const errorResponseSchema = z.looseObject({
@@ -48,7 +43,6 @@ export function createDashboardPersonalApi(options: {
     httpClient: HttpApiClient;
 }): DashboardPersonalApi {
     const request = (
-        surface: PersonalSurface,
         method: 'GET' | 'POST' | 'PUT' | 'DELETE',
         path: string,
         body?: unknown,
@@ -61,15 +55,11 @@ export function createDashboardPersonalApi(options: {
             headers,
             ...(body === undefined ? {} : {body: JSON.stringify(body)}),
         };
-        const desktopPath = `/api/desktop-ui/${path.replace(/^\/+/, '')}` as const;
-        const companionPath = `/api/mobile/${path.replace(/^\/+/, '')}` as const;
-        return surface === 'desktop'
-            ? options.httpClient.desktopResponse(desktopPath, init)
-            : options.httpClient.companionResponse(companionPath, init);
+        const accountPath = `/api/me/${path.replace(/^\/+/, '')}` as const;
+        return options.httpClient.accountResponse(accountPath, init);
     };
 
     const value = async <T>(
-        surface: PersonalSurface,
         schema: ZodType<T>,
         response: () => Promise<Response>,
     ): Promise<T> => responseValue(schema, await response());
@@ -83,56 +73,50 @@ export function createDashboardPersonalApi(options: {
     };
 
     return {
-        async getAttendancePreferences(surface) {
+        async getAttendancePreferences() {
             return value(
-                surface,
                 attendancePreferencesSchema,
-                () => request(surface, 'GET', '/attendance/preferences'),
+                () => request('GET', '/attendance/preferences'),
             );
         },
-        async updateAttendancePreferences(surface, input) {
+        async updateAttendancePreferences(input) {
             const body = parseInput(attendancePreferencesSchema, input);
             return value(
-                surface,
                 attendancePreferencesSchema,
-                () => request(surface, 'PUT', '/attendance/preferences', body),
+                () => request('PUT', '/attendance/preferences', body),
             );
         },
-        async getMealPreferences(surface) {
+        async getMealPreferences() {
             return value(
-                surface,
                 mealPreferencesSchema,
-                () => request(surface, 'GET', '/meal-preferences'),
+                () => request('GET', '/meal-preferences'),
             );
         },
-        async updateMealPreferences(surface, input) {
+        async updateMealPreferences(input) {
             const body = parseInput(mealPreferencesInputSchema, input);
             return value(
-                surface,
                 mealPreferencesSchema,
-                () => request(surface, 'PUT', '/meal-preferences', body),
+                () => request('PUT', '/meal-preferences', body),
             );
         },
-        async listLaundryWatches(surface) {
+        async listLaundryWatches() {
             const result = await value(
-                surface,
                 laundryWatchListSchema,
-                () => request(surface, 'GET', '/laundry-watches'),
+                () => request('GET', '/laundry-watches'),
             );
             return result.watches;
         },
-        async createLaundryWatch(surface, input) {
+        async createLaundryWatch(input) {
             const body = parseInput(laundryWatchInputSchema, input);
             return value(
-                surface,
                 laundryWatchSchema,
-                () => request(surface, 'POST', '/laundry-watches', body),
+                () => request('POST', '/laundry-watches', body),
             );
         },
-        async deleteLaundryWatch(surface, id) {
+        async deleteLaundryWatch(id) {
             const watchId = parseInput(laundryWatchIdSchema, id);
             await noContent(
-                () => request(surface, 'DELETE', `/laundry-watches/${encodeURIComponent(watchId)}`),
+                () => request('DELETE', `/laundry-watches/${encodeURIComponent(watchId)}`),
             );
         },
     };

@@ -42,7 +42,7 @@ describe('selectDdayView', () => {
         ['fresh', '2026-08-10'],
     ] as const)('uses valid cohort dates even when attendance is %s or from %s', (freshness, attendanceDate) => {
         const result = selectDdayView({
-            surface: 'companion',
+            platform: 'browser',
             attendance: attendanceDashboard({freshness, attendanceDate}),
             today: '2026-08-11',
         });
@@ -55,32 +55,27 @@ describe('selectDdayView', () => {
         expect(result?.progress?.current).toBe(1);
     });
 
-    it('keeps existing companion labels for upcoming and ended cohorts', () => {
+    it('keeps existing browser labels for upcoming and ended cohorts', () => {
         expect(selectDdayView({
-            surface: 'companion',
+            platform: 'browser',
             attendance: attendanceDashboard({cohortStatus: 'upcoming'}),
             today: '2026-07-28',
         })?.text).toBe('시작까지 D-4');
         expect(selectDdayView({
-            surface: 'companion',
+            platform: 'browser',
             attendance: attendanceDashboard({cohortStatus: 'ended'}),
             today: '2026-09-01',
         })?.text).toBe('과정 종료');
     });
 
-    it('hides public, unavailable, and invalid personal D-Day data', () => {
+    it('hides unavailable and invalid personal D-Day data', () => {
         expect(selectDdayView({
-            surface: 'public',
-            attendance: attendanceDashboard(),
-            today: '2026-08-11',
-        })).toBeNull();
-        expect(selectDdayView({
-            surface: 'companion',
+            platform: 'browser',
             attendance: {state: 'auth-required'},
             today: '2026-08-11',
         })).toBeNull();
         expect(selectDdayView({
-            surface: 'companion',
+            platform: 'browser',
             attendance: attendanceDashboard({startDate: '2026-08-31', endDate: '2026-08-01'}),
             today: '2026-08-11',
         })).toBeNull();

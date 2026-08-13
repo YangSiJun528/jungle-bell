@@ -5,7 +5,6 @@ import {
     Check,
     ExternalLink,
     RefreshCw,
-    ShieldCheck,
     X,
 } from 'lucide-react';
 import {useDashboardEnvironment} from '@/app/dashboard-context';
@@ -87,53 +86,19 @@ function CampusCardFrame({children, footer}: {
     );
 }
 
-function PublicCampusContent({onRequestInstall}: {onRequestInstall?: () => void}) {
-    return (
-        <CampusCardFrame
-            footer={(
-                <>
-                    {onRequestInstall ? (
-                        <Button size="sm" onClick={onRequestInstall}>앱 설치 안내</Button>
-                    ) : null}
-                    <Button asChild size="sm" variant="outline">
-                        <a href={CAMPUS_URL} target="_blank" rel="noopener noreferrer">
-                            공식 페이지 <ExternalLink/>
-                        </a>
-                    </Button>
-                </>
-            )}
-        >
-            <div className="flex items-start gap-3">
-                <ShieldCheck aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-primary"/>
-                <div>
-                    <p className="font-medium">앱을 설치하고 PC와 연결하면 오늘 출석 상태를 확인할 수 있습니다.</p>
-                </div>
-            </div>
-        </CampusCardFrame>
-    );
-}
-
-export interface JungleCampusSummaryProps {
-    onRequestInstall?: () => void;
-}
-
-export function JungleCampusSummary({onRequestInstall}: JungleCampusSummaryProps) {
-    const {api, surface} = useDashboardEnvironment();
+export function JungleCampusSummary() {
+    const {api, platform} = useDashboardEnvironment();
     const account = useDashboardAccount();
     const attendance = useAttendanceQuery();
     const refreshAttendance = useRefreshAttendanceMutation();
     const openCampus = useMutation({mutationFn: () => api.openLmsLogin()});
 
-    if (surface.kind === 'public') {
-        return <PublicCampusContent onRequestInstall={onRequestInstall}/>;
-    }
-
-    const desktopAccountReady = surface.kind !== 'desktop'
+    const desktopAccountReady = !platform.capabilities.desktopAccount
         || account.status.lmsAuthentication === 'authenticated'
             && (account.status.serverSession === 'stored' || account.status.serverSession === 'memory-only');
     const dday = desktopAccountReady
         ? selectDdayView({
-            surface: surface.kind,
+            platform: platform.kind,
             attendance: attendance.data,
         })
         : null;
@@ -145,20 +110,20 @@ export function JungleCampusSummary({onRequestInstall}: JungleCampusSummaryProps
         && availableAttendance === null;
 
     let content: React.ReactNode;
-    if (surface.kind === 'desktop' && account.status.lmsAuthentication === 'checking') {
+    if (platform.capabilities.desktopAccount && account.status.lmsAuthentication === 'checking') {
         content = (
             <div className="space-y-2" aria-label="LMS 로그인 상태 확인 중">
                 <Skeleton className="h-10 w-full"/>
                 <p className="text-sm text-muted-foreground">LMS 로그인 상태를 확인하고 있습니다.</p>
             </div>
         );
-    } else if (surface.kind === 'desktop' && account.status.lmsAuthentication === 'required') {
+    } else if (platform.capabilities.desktopAccount && account.status.lmsAuthentication === 'required') {
         content = (
             <div className="text-sm leading-6">
                 <p className="font-medium">LMS 로그인이 필요합니다.</p>
             </div>
         );
-    } else if (surface.kind === 'desktop' && account.status.lmsAuthentication === 'unavailable') {
+    } else if (platform.capabilities.desktopAccount && account.status.lmsAuthentication === 'unavailable') {
         content = (
             <div className="text-sm leading-6">
                 <p className="text-destructive">LMS 로그인 상태를 확인하지 못했습니다.</p>
@@ -173,14 +138,14 @@ export function JungleCampusSummary({onRequestInstall}: JungleCampusSummaryProps
                 </Button>
             </div>
         );
-    } else if (surface.kind === 'desktop' && account.status.serverSession === 'checking') {
+    } else if (platform.capabilities.desktopAccount && account.status.serverSession === 'checking') {
         content = (
             <div className="space-y-2" aria-label="계정 연결 상태 확인 중">
                 <Skeleton className="h-10 w-full"/>
                 <p className="text-sm text-muted-foreground">계정 연결 상태를 확인하고 있습니다.</p>
             </div>
         );
-    } else if (surface.kind === 'desktop' && account.status.serverSession === 'recovery-required') {
+    } else if (platform.capabilities.desktopAccount && account.status.serverSession === 'recovery-required') {
         content = (
             <div className="text-sm leading-6">
                 <p className="text-destructive">계정 복구가 필요합니다.</p>
@@ -189,7 +154,7 @@ export function JungleCampusSummary({onRequestInstall}: JungleCampusSummaryProps
                 </Button>
             </div>
         );
-    } else if (surface.kind === 'desktop' && account.status.serverSession === 'missing') {
+    } else if (platform.capabilities.desktopAccount && account.status.serverSession === 'missing') {
         content = (
             <div className="text-sm leading-6">
                 <p className="font-medium">계정 연결이 필요합니다.</p>
@@ -272,7 +237,7 @@ export function JungleCampusSummary({onRequestInstall}: JungleCampusSummaryProps
             <CampusCardFrame
                 footer={(
                     <>
-                        {surface.kind === 'desktop' ? (
+                        {platform.capabilities.lmsWindow ? (
                             <Button size="sm" disabled={openCampus.isPending} onClick={() => openCampus.mutate()}>
                                 {openCampus.isPending
                                     ? '여는 중'

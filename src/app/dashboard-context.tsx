@@ -4,8 +4,8 @@ import {
 } from 'react';
 import type {QueryClient} from '@tanstack/react-query';
 import {createDashboardApi, type DashboardApi} from '@/api/dashboard-api';
-import {resolveDashboardSurface, type DashboardSurface} from '@/app/surface';
 import {detectDashboardRuntime, type DashboardRuntime} from '@/app/runtime';
+import {createPlatformAdapter, type PlatformAdapter} from '@/platform/platform-adapter';
 import {
     laundryQueryContract,
     mealsQueryContract,
@@ -14,10 +14,10 @@ import {
 export const queryKeys = {
     laundry: laundryQueryContract.queryKey,
     meals: mealsQueryContract.queryKey,
-    attendance: (surface: 'desktop' | 'companion') => ['attendance', surface] as const,
+    attendance: (platform: 'browser' | 'desktop') => ['attendance', platform] as const,
     desktopConnection: ['desktop-connection'] as const,
     desktopSettings: ['desktop-settings'] as const,
-    notifications: (surface: 'desktop' | 'companion') => ['notifications', surface] as const,
+    notifications: (platform: 'browser' | 'desktop') => ['notifications', platform] as const,
     attendancePreferences: ['personal', 'attendance-preferences'] as const,
     mealPreferences: ['personal', 'meal-preferences'] as const,
     laundryWatches: ['personal', 'laundry-watches'] as const,
@@ -26,21 +26,19 @@ export const queryKeys = {
 
 export interface DashboardEnvironment {
     api: DashboardApi;
+    platform: PlatformAdapter;
     runtime: DashboardRuntime;
-    surface: DashboardSurface;
 }
 
 export const DashboardEnvironmentContext = createContext<DashboardEnvironment | null>(null);
 
 export function createEnvironment(): DashboardEnvironment {
     const runtime = detectDashboardRuntime();
+    const platform = createPlatformAdapter({runningInTauri: runtime.runningInTauri});
     return {
+        platform,
         runtime,
-        surface: resolveDashboardSurface({
-            runningInTauri: runtime.runningInTauri,
-            standalone: runtime.standalone,
-        }),
-        api: createDashboardApi({desktopRuntime: runtime.runningInTauri}),
+        api: createDashboardApi({platformAdapter: platform}),
     };
 }
 

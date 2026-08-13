@@ -8,7 +8,7 @@ import {
     dashboardAccountStatus,
     normalizeLmsSessionStateEvent,
     withLmsSessionState,
-} from './dashboard-account';
+} from './dashboard-account-state';
 
 const connected = (overrides: Partial<DesktopConnectionState> = {}): DesktopConnectionState => ({
     state: 'connected',
@@ -59,7 +59,7 @@ describe('dashboard account status', () => {
             {serverSession: 'unavailable', lmsAuthentication: 'unavailable'},
         );
         assert.deepEqual(
-            dashboardAccountStatus('companion', {data: undefined, isPending: false, isError: false}),
+            dashboardAccountStatus('browser', {data: undefined, isPending: false, isError: false}),
             {serverSession: 'not-applicable', lmsAuthentication: 'not-applicable'},
         );
     });
@@ -107,9 +107,9 @@ describe('dashboard account status', () => {
 
     test('출석 HTTP는 LMS와 서버 세션을, 동기화 command는 LMS 인증을 요구한다', () => {
         const source = readFileSync(new URL('./use-dashboard-queries.ts', import.meta.url), 'utf8');
-        assert.match(source, /enabled: surface\.canViewAttendance && lmsReady && sessionReady/u);
-        assert.match(source, /if \(surface\.kind === 'desktop'\) assertLmsAuthenticated\(account\.status\)/u);
+        assert.match(source, /enabled: lmsReady && sessionReady/u);
+        assert.match(source, /if \(platform\.capabilities\.desktopAccount\) assertLmsAuthenticated\(account\.status\)/u);
         assert.match(source, /refreshPlatform: refreshDesktopPlatform \?/u);
-        assert.match(source, /refreshAttendance: surface\.canViewAttendance && \(surface\.kind !== 'desktop' \|\| refreshDesktopAttendance\)/u);
+        assert.match(source, /refreshAttendance: !platform\.capabilities\.desktopAccount \|\| refreshDesktopAttendance/u);
     });
 });

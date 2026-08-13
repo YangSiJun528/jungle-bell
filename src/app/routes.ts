@@ -1,12 +1,15 @@
-import type {DashboardRoute, DashboardSurfaceKind} from './surface';
-import {dashboardRouteForSurface} from './surface';
+export type DashboardRoute =
+    | 'home'
+    | 'attendance'
+    | 'laundry'
+    | 'meals'
+    | 'notifications'
+    | 'connections';
 
 export interface DashboardRouteMeta {
     label: string;
     shortLabel: string;
 }
-
-export type DashboardNavigationPlacement = 'sidebar' | 'bottom';
 
 export const DASHBOARD_ROUTE_META: Readonly<Record<DashboardRoute, DashboardRouteMeta>> = {
     home: {label: '홈', shortLabel: '홈'},
@@ -17,13 +20,7 @@ export const DASHBOARD_ROUTE_META: Readonly<Record<DashboardRoute, DashboardRout
     connections: {label: '설정', shortLabel: '설정'},
 };
 
-const PUBLIC_NAVIGATION_ROUTES = [
-    'home',
-    'laundry',
-    'meals',
-] as const satisfies readonly DashboardRoute[];
-
-const PERSONAL_NAVIGATION_ROUTES = [
+const NAVIGATION_ROUTES = [
     'home',
     'attendance',
     'laundry',
@@ -39,28 +36,21 @@ const PERSONAL_UTILITY_ROUTES = [
  * Primary navigation stays limited to campus tasks. Notification and device
  * management routes are exposed separately through dashboardUtilityRoutes.
  */
-export function dashboardNavigationRoutes(
-    surface: DashboardSurfaceKind,
-    _placement: DashboardNavigationPlacement,
-): readonly DashboardRoute[] {
-    if (surface === 'public') return PUBLIC_NAVIGATION_ROUTES;
-    return PERSONAL_NAVIGATION_ROUTES;
+export function dashboardNavigationRoutes(): readonly DashboardRoute[] {
+    return NAVIGATION_ROUTES;
 }
 
-export function dashboardUtilityRoutes(
-    surface: DashboardSurfaceKind,
-): readonly DashboardRoute[] {
-    return surface === 'public' ? [] : PERSONAL_UTILITY_ROUTES;
+export function dashboardUtilityRoutes(): readonly DashboardRoute[] {
+    return PERSONAL_UTILITY_ROUTES;
 }
 
 export function dashboardRouteHref(route: DashboardRoute): `#${DashboardRoute}` {
     return `#${route}`;
 }
 
-/** Resolves a hash through the surface-specific route allow-list. */
-export function dashboardRouteFromHash(
-    hash: string,
-    surface: DashboardSurfaceKind,
-): DashboardRoute {
-    return dashboardRouteForSurface(hash, surface);
+export function dashboardRouteFromHash(hash: string): DashboardRoute {
+    const value = hash.trim().toLowerCase().replace(/^#/, '');
+    return [...NAVIGATION_ROUTES, ...PERSONAL_UTILITY_ROUTES].includes(value as DashboardRoute)
+        ? value as DashboardRoute
+        : 'home';
 }

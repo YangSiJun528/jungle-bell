@@ -6,7 +6,7 @@ test('identity reset removes all old personal, pairing, inbox, and session query
     const client = new QueryClient();
     client.setQueryData(queryKeys.attendance('desktop'), {private: true});
     client.setQueryData(queryKeys.desktopConnection, {state: 'connected'});
-    client.setQueryData(queryKeys.attendance('companion'), {companion: true});
+    client.setQueryData(queryKeys.attendance('browser'), {companion: true});
     client.setQueryData(queryKeys.notifications('desktop'), {private: true});
     client.setQueryData(queryKeys.mobileSessions, [{private: true}]);
     client.setQueryData(['personal', 'laundry-watches'], [{private: true}]);
@@ -21,7 +21,7 @@ test('identity reset removes all old personal, pairing, inbox, and session query
     expect(client.getQueryData(queryKeys.mobileSessions)).toBeUndefined();
     expect(client.getQueryData(['personal', 'laundry-watches'])).toBeUndefined();
     expect(client.getQueryData(['pairing-status', 'jbp_old'])).toBeUndefined();
-    expect(client.getQueryData(queryKeys.attendance('companion'))).toEqual({companion: true});
+    expect(client.getQueryData(queryKeys.attendance('browser'))).toEqual({companion: true});
     expect(client.getQueryData(queryKeys.laundry)).toEqual({public: true});
 });
 

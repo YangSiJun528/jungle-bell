@@ -1,9 +1,9 @@
 import {useEffect, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {BellRing} from 'lucide-react';
-import type {AttendancePreferences, PersonalSurface} from '@/api/personal-api';
+import type {AttendancePreferences} from '@/api/personal-api';
 import {queryKeys, useDashboardEnvironment} from '@/app/dashboard-context';
-import {companionAuthenticationRequired} from '@/app/surface';
+import {accountAuthenticationRequired} from '@/api/account-authentication';
 import {useAttendanceQuery} from '@/app/use-dashboard-queries';
 import {EmptyState, ErrorState, LoadingState} from '@/components/dashboard/async-state';
 import {Button} from '@/components/ui/button';
@@ -92,13 +92,13 @@ function hourLabel(hour: number): string {
     return `오전 ${hour}시`;
 }
 
-export function AttendancePreferencesSection({surface}: {surface: PersonalSurface}) {
+export function AttendancePreferencesSection() {
     const {api} = useDashboardEnvironment();
     const client = useQueryClient();
     const attendance = useAttendanceQuery();
     const preferences = useQuery({
         queryKey: queryKeys.attendancePreferences,
-        queryFn: () => api.getAttendancePreferences(surface),
+        queryFn: () => api.getAttendancePreferences(),
     });
     const [draft, setDraft] = useState<AttendancePreferences | null>(
         () => preferences.data ?? null,
@@ -109,7 +109,7 @@ export function AttendancePreferencesSection({surface}: {surface: PersonalSurfac
     }, [preferences.data]);
 
     const savePreferences = useMutation({
-        mutationFn: (input: AttendancePreferences) => api.updateAttendancePreferences(surface, input),
+        mutationFn: (input: AttendancePreferences) => api.updateAttendancePreferences(input),
         onSuccess: (saved) => {
             client.setQueryData(queryKeys.attendancePreferences, saved);
             setDraft(saved);
@@ -122,7 +122,7 @@ export function AttendancePreferencesSection({surface}: {surface: PersonalSurfac
         : null;
     const dirty = !attendancePreferencesEqual(draft, preferences.data ?? null);
     const authRequired = preferences.isError
-        && companionAuthenticationRequired(preferences.error);
+        && accountAuthenticationRequired(preferences.error);
     const updateDraft = <Key extends keyof AttendancePreferences>(
         key: Key,
         value: AttendancePreferences[Key],

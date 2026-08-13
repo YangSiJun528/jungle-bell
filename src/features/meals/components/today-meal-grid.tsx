@@ -6,7 +6,7 @@ export function TodayMealGrid({meals}: {meals: readonly DashboardMealPost[]}) {
     const slots = todayMealSlots(meals);
 
     return (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2">
             {slots.map(({period, meal}) => meal ? (
                 <MealPostCard eagerImage key={period} meal={meal}/>
             ) : (

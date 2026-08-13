@@ -3,9 +3,9 @@
 ## 설계 결론
 
 Jungle Bell은 PC가 Jungle LMS session과 출석 수집을 전담하고, OCI의 Spring 서버가
-기기 연결·출석 snapshot·생활 설정·공개 데이터·알림 전달 상태를 관리합니다. 일반
-웹, 설치 PWA, Tauri PC 앱은 같은 UI를 사용하지만 권한과 역할은 런타임별로
-분리합니다.
+기기 연결·출석 snapshot·생활 설정·공개 데이터·알림 전달 상태를 관리합니다.
+브라우저, 설치 PWA, Tauri PC 앱은 같은 SPA와 HTTP 계약을 사용하며 운영체제 기능만
+플랫폼 어댑터의 capability로 분리합니다.
 
 기존 서버 세션이나 연결 정보와 호환하지 않습니다. 새 버전에서는 PC 등록과 모바일
 연결을 다시 수행합니다. 이전 서버에서 옮기는 데이터는 공개 세탁·급식 기록뿐입니다.
@@ -17,9 +17,9 @@ Jungle LMS ─ checker WebView ─ Tauri PC
                                ├─ 알림 poll·ack
                                └─ 단기 WebView HTTP session bootstrap
                                            │
-일반 웹 ─ 공개 HTTP ───────────────┐         │
-Tauri UI ─ 공개·desktop-ui HTTP ───┼─ Spring Boot ─ PostgreSQL
-설치 PWA ─ mobile cookie·Web Push ─┘         │
+브라우저·PWA ─ cookie ─────────────┐         │
+공통 React SPA ─ 공개·계정 HTTP ───┼─ Spring Boot ─ PostgreSQL
+Tauri adapter ─ jbui·native IPC ───┘         │
                                              ├─ 세탁·급식 수집
                                              ├─ 알림 계획·전송
                                              └─ housekeeping
@@ -51,7 +51,7 @@ hash만 저장합니다. Windows는 원문을 Credential Manager에 보관하고
 
 React 대시보드는 장기 credential을 받지 않습니다. Rust가 7분짜리 `jbui_` session을
 발급받아 WebView 메모리에만 전달합니다. 이 session은 exact Tauri origin과 부모 PC
-session에 묶이고 `/api/desktop-ui/*`만 호출할 수 있습니다. 공개 세탁·급식도 Rust
+session에 묶이고 `/api/me/*`만 호출할 수 있습니다. 공개 세탁·급식도 Rust
 proxy 없이 React가 직접 HTTP로 조회합니다.
 
 모바일 PWA는 PC에서 명시적으로 승인한 pairing으로만 연결됩니다. pending claim과
@@ -63,8 +63,7 @@ proxy 없이 React가 직접 HTTP로 조회합니다.
 - Spring Boot: HTTP API, 정적 웹, 인증, pairing, 최신 출석 snapshot, 개인 설정,
   알림과 delivery, 공개 데이터 수집·정리·Web Push.
 - PostgreSQL: session hash, 설정, 공개 세탁·급식 기록과 이미지, 알림 상태.
-- 일반 웹: 공개 세탁·급식 조회와 설치 안내.
-- 설치 PWA: 동기화된 출석·D-Day, 생활 설정, 연결 관리와 Web Push.
+- 브라우저·PWA: 공개 생활 정보, 동기화된 출석·D-Day, 생활 설정, 연결 관리와 Web Push.
 
 서버는 PC를 원격 조작하지 않습니다. 데스크톱 inbox에는 표시할 알림 delivery만
 들어가며 LMS 요청이나 세탁 조작 명령을 넣지 않습니다.
@@ -103,9 +102,10 @@ PC, PWA, 일반 웹은 shadcn 기반 공통 component를 사용합니다. sideba
 drag resize를 모두 지원하고, Calendar는 React DayPicker를 감싼 shadcn Calendar를
 사용합니다. 남성·여성·공용 상태색은 중앙 zone metadata를 기준으로 통일합니다.
 
-라우팅은 hash 기반 허용 목록을 사용하고 runtime surface가 허용하지 않는 개인 화면은
-렌더하지 않습니다. 서버 응답 대기는 선언적인 Suspense와 Error Boundary를 우선해
-loading·error·empty 상태를 구분합니다.
+라우팅은 모든 플랫폼에서 같은 hash 기반 허용 목록을 사용합니다. 네이티브 기능은
+`PlatformAdapter.capabilities`로만 노출하며 브라우저 기본 어댑터가 실수로 호출되면
+명시적인 capability 오류를 반환합니다. 서버 응답 대기는 선언적인 Suspense와 Error
+Boundary를 우선해 loading·error·empty 상태를 구분합니다.
 
 ## 관련 문서
 

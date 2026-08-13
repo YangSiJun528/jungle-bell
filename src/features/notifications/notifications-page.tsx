@@ -9,7 +9,7 @@ import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Card} from '@/components/ui/card';
 import {Tabs, TabsContent, TabsList, TabsTrigger} from '@/components/ui/tabs';
 import type {DashboardNotification} from '@/api/dashboard-api';
-import {companionAuthenticationRequired} from '@/app/surface';
+import {accountAuthenticationRequired} from '@/api/account-authentication';
 import {dateTimeLabel} from '@/lib/format';
 import {
     markNotificationInboxItemRead,
@@ -84,13 +84,12 @@ export function NotificationPanelContent({seenMobileIds, onMobileNotificationSee
     seenMobileIds: ReadonlySet<string>;
     onMobileNotificationSeen: (id: string) => void;
 }) {
-    const {api, surface} = useDashboardEnvironment();
+    const {api, platform} = useDashboardEnvironment();
     const client = useQueryClient();
     const notifications = useNotificationsQuery();
-    const desktop = surface.kind === 'desktop';
+    const desktop = platform.capabilities.localNotifications;
     const authenticationRequired = notifications.isError
-        && surface.kind === 'companion'
-        && companionAuthenticationRequired(notifications.error);
+        && accountAuthenticationRequired(notifications.error);
     const [deliveryMessage, setDeliveryMessage] = useState('');
     const backgroundRefreshFailed = notifications.isError
         && !authenticationRequired
@@ -127,7 +126,7 @@ export function NotificationPanelContent({seenMobileIds, onMobileNotificationSee
                 setDeliveryMessage(desktopTestNotificationMessage(result));
             } else {
                 setDeliveryMessage(`연결된 모바일 ${String(result)}대에 테스트 푸시를 보냈습니다. PC 앱에도 잠시 후 표시됩니다.`);
-                await client.invalidateQueries({queryKey: queryKeys.notifications('companion')});
+                await client.invalidateQueries({queryKey: queryKeys.notifications('browser')});
             }
         },
     });

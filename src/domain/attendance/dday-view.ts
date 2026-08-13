@@ -17,7 +17,7 @@ export interface DdayView {
 }
 
 export interface DdayViewInput {
-    surface: 'public' | 'desktop' | 'companion';
+    platform: 'browser' | 'desktop';
     attendance?: DdayAttendanceDashboard;
     today?: string;
 }
@@ -36,12 +36,9 @@ function personalAttendanceSnapshot(attendance?: DdayAttendanceDashboard) {
 }
 
 export function selectDdayView({
-    surface,
     attendance,
     today = kstDateString(),
 }: DdayViewInput): DdayView | null {
-    if (surface === 'public') return null;
-
     const snapshot = personalAttendanceSnapshot(attendance);
     const candidatePeriod = snapshot ? dashboardDdayPeriod(snapshot) : null;
     const progress = candidatePeriod ? buildDdayProgress(candidatePeriod, today) : null;

@@ -5,7 +5,6 @@ import {
     ExternalLink,
     Laptop,
     RefreshCw,
-    ShieldCheck,
     X,
 } from 'lucide-react';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
@@ -57,7 +56,7 @@ function AttendanceCheck({label, checked}: {label: string; checked: boolean}) {
 }
 
 export function AttendancePage() {
-    const {api, surface} = useDashboardEnvironment();
+    const {api, platform} = useDashboardEnvironment();
     const account = useDashboardAccount();
     const attendance = useAttendanceQuery();
     const desktopConnection = useDesktopConnectionQuery();
@@ -70,43 +69,25 @@ export function AttendancePage() {
     });
     const devices = attendance.data?.state === 'loaded' ? attendance.data.devices : [];
     const primaryDevice = devices[0];
-    const lmsState = surface.kind === 'desktop'
+    const lmsState = platform.capabilities.desktopAccount
         ? desktopConnection.data?.lmsSessionState
         : primaryDevice?.lmsSessionState;
     const campusNotice = lmsState === 'login-required' ? 'LMS 로그인이 필요합니다.' : null;
-    const desktopLmsChecking = surface.kind === 'desktop'
+    const desktopLmsChecking = platform.capabilities.desktopAccount
         && account.status.lmsAuthentication === 'checking';
-    const desktopLmsRequired = surface.kind === 'desktop'
+    const desktopLmsRequired = platform.capabilities.desktopAccount
         && account.status.lmsAuthentication === 'required';
-    const desktopLmsUnavailable = surface.kind === 'desktop'
+    const desktopLmsUnavailable = platform.capabilities.desktopAccount
         && account.status.lmsAuthentication === 'unavailable';
-    const desktopSessionChecking = surface.kind === 'desktop'
+    const desktopSessionChecking = platform.capabilities.desktopAccount
         && account.status.serverSession === 'checking';
-    const desktopSessionMissing = surface.kind === 'desktop'
+    const desktopSessionMissing = platform.capabilities.desktopAccount
         && account.status.serverSession === 'missing';
-    const desktopSessionRecovery = surface.kind === 'desktop'
+    const desktopSessionRecovery = platform.capabilities.desktopAccount
         && account.status.serverSession === 'recovery-required';
 
-    if (surface.kind === 'public') {
-        return (
-            <div className="space-y-6">
-                <PageHeader title="출석"/>
-                <Alert className="border-primary/20 bg-primary/5">
-                    <ShieldCheck aria-hidden="true"/>
-                    <AlertTitle>웹사이트에는 출석 정보를 표시하지 않습니다.</AlertTitle>
-                    <AlertDescription>
-                        <p>설치한 앱을 사용하거나 공식 정글캠퍼스에서 원본 상태를 확인하세요.</p>
-                        <Button asChild className="mt-2" size="sm">
-                            <a href={CAMPUS_URL} target="_blank" rel="noopener noreferrer">정글캠퍼스 바로가기 <ExternalLink/></a>
-                        </Button>
-                    </AlertDescription>
-                </Alert>
-            </div>
-        );
-    }
-
     const dday = selectDdayView({
-        surface: surface.kind,
+        platform: platform.kind,
         attendance: attendance.data,
     });
 
@@ -222,7 +203,7 @@ export function AttendancePage() {
                     <CardContent className="space-y-3">
                         <CardDescription className="leading-6">
                             공식 정글캠퍼스에서 출석 원본 상태를 확인하거나 로그인하세요.
-                            {surface.kind === 'desktop' ? ' LMS 세션은 이 PC의 앱에만 저장됩니다.' : ''}
+                            {platform.capabilities.lmsWindow ? ' LMS 세션은 이 PC의 앱에만 저장됩니다.' : ''}
                         </CardDescription>
                         {primaryDevice?.lastSeenAt ? (
                             <p className="text-xs text-muted-foreground">PC 마지막 확인 · {relativeTimeLabel(primaryDevice.lastSeenAt)}</p>
@@ -231,7 +212,7 @@ export function AttendancePage() {
                         {openCampus.isError ? <p className="text-sm text-destructive">정글캠퍼스를 열지 못했습니다.</p> : null}
                     </CardContent>
                     <CardFooter className="border-t">
-                        {surface.kind === 'desktop' ? (
+                        {platform.capabilities.lmsWindow ? (
                             <Button disabled={openCampus.isPending} onClick={() => openCampus.mutate()}>
                                 {openCampus.isPending ? '여는 중' : '정글캠퍼스 열기'} <ExternalLink/>
                             </Button>

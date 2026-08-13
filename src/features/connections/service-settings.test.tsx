@@ -12,7 +12,7 @@ const {api, environment, queryKeys} = vi.hoisted(() => ({
         updateDesktopSettings: vi.fn(),
         openLogFolder: vi.fn(),
     },
-    environment: {surface: {kind: 'desktop'}},
+    environment: {platform: {capabilities: {desktopSettings: true}}},
     queryKeys: {desktopSettings: ['desktop-settings'] as const},
 }));
 
@@ -68,13 +68,13 @@ describe('ServiceSettings', () => {
     });
 
     test('모바일에서는 PC 로컬 설정을 편집하지 않는다', () => {
-        environment.surface = {kind: 'companion'};
+        environment.platform = {capabilities: {desktopSettings: false}};
         try {
             const markup = renderSettings();
             expect(markup).toContain('PC 앱에서 설정합니다.');
             expect(markup).not.toContain('aria-label="자동 시작"');
         } finally {
-            environment.surface = {kind: 'desktop'};
+            environment.platform = {capabilities: {desktopSettings: true}};
         }
     });
 });

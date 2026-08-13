@@ -21,10 +21,8 @@ class ApiAuthenticationFilter(
         val path = request.requestURI
         return request.method == "OPTIONS" || when {
             path == "/api/desktop/installations" && request.method == "POST" -> true
-            path.startsWith("/api/desktop-ui/") -> false
+            path.startsWith("/api/me/") -> false
             path.startsWith("/api/desktop/") -> false
-            path.startsWith("/api/mobile/") -> false
-            path.startsWith("/api/push/") -> false
             else -> true
         }
     }
@@ -36,10 +34,11 @@ class ApiAuthenticationFilter(
     ) {
         try {
             val principal = when {
-                request.requestURI.startsWith("/api/desktop-ui/") ->
+                request.requestURI.startsWith("/api/me/") && hasBearer(request) ->
                     auth.desktopUi(bearer(request), request.getHeader("Origin"))
+                request.requestURI.startsWith("/api/me/") -> auth.mobile(mobileCookie(request))
                 request.requestURI.startsWith("/api/desktop/") -> auth.desktop(bearer(request))
-                else -> auth.mobile(mobileCookie(request))
+                else -> throw IllegalStateException("Unexpected authenticated API path")
             }
             SecurityContextHolder.getContext().authentication =
                 UsernamePasswordAuthenticationToken(principal, null, emptyList())
@@ -56,6 +55,9 @@ class ApiAuthenticationFilter(
         return match?.groupValues?.get(1)
             ?: throw ApiException("AUTHENTICATION_REQUIRED", org.springframework.http.HttpStatus.UNAUTHORIZED)
     }
+
+    private fun hasBearer(request: HttpServletRequest): Boolean =
+        request.getHeader("Authorization")?.startsWith("Bearer ") == true
 
     private fun mobileCookie(request: HttpServletRequest): String {
         return request.cookies?.firstOrNull { it.name == "__Host-jb_device" || it.name == "jb_device" }?.value

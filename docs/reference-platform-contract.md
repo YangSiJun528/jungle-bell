@@ -52,9 +52,9 @@ Cloudflare Worker, D1, R2, Wrangler와 별도 TypeScript Jobs는 사용하지 �
 | PC 알림 | `GET /api/desktop/notifications`, ack, test |
 | 모바일 관리 | `GET /api/desktop/mobile-sessions`, `DELETE /api/desktop/mobile-sessions/:id` |
 | pairing | PC 생성·상태·승인과 모바일 claim·complete |
-| 모바일 session | `GET\|DELETE /api/mobile/session` |
-| PC 대시보드 개인 정보 | `/api/desktop-ui` 아래 출석, 설정, 세탁 watch, pairing, 모바일 관리 |
-| 모바일 개인 정보 | `/api/mobile` 아래 출석, 설정, 세탁 watch, 알림 |
+| 브라우저 session | `GET\|DELETE /api/me/session` |
+| 공통 계정 정보 | `/api/me` 아래 출석, 설정, 세탁 watch, 알림 |
+| PC 전용 계정 관리 | `/api/me` 아래 pairing 승인과 모바일 관리, WebView bearer만 허용 |
 | Push | VAPID 공개키, subscription 등록·해제 |
 
 자세한 경로와 인증 방식은 `server/docs/api-reference.md`를 기준으로 합니다.
@@ -74,7 +74,7 @@ Cloudflare Worker, D1, R2, Wrangler와 별도 TypeScript Jobs는 사용하지 �
 
 Rust background service는 보호 저장소의 장기 bearer로 `/api/desktop/*`만 호출합니다.
 WebView는 장기 credential을 받지 않고 Rust가 발급받은 단기 bearer로
-`/api/desktop-ui/*`를 직접 호출합니다. 모바일·PWA는 JavaScript가 읽을 수 없는
+`/api/me/*`를 직접 호출합니다. 브라우저·PWA는 JavaScript가 읽을 수 없는
 Strict HttpOnly cookie를 사용합니다.
 
 claim과 complete JSON에는 access token, LMS cookie, claim receipt를 포함하지

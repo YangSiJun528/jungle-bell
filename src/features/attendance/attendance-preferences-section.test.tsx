@@ -49,12 +49,12 @@ const preferences: AttendancePreferences = {
     skipAttendanceDate: null,
 };
 
-function renderPreferences(surface: 'desktop' | 'companion' = 'desktop'): string {
+function renderPreferences(): string {
     const client = new QueryClient();
     client.setQueryData(queryKeys.attendancePreferences, preferences);
     return renderToStaticMarkup(
         <QueryClientProvider client={client}>
-            <AttendancePreferencesSection surface={surface}/>
+            <AttendancePreferencesSection/>
         </QueryClientProvider>,
     );
 }
@@ -83,8 +83,8 @@ describe('AttendancePreferencesSection', () => {
         expect(source).toContain('const MORNING_START_HOURS = [4, 5, 6, 7, 8, 9] as const;');
         expect(source).toContain('const EVENING_END_HOURS = [0, 1, 2, 3, 4] as const;');
         expect(source).toContain('const INTERVAL_MINUTES = [1, 3, 5, 10, 15, 30] as const;');
-        expect(source).toContain('api.getAttendancePreferences(surface)');
-        expect(source).toContain('api.updateAttendancePreferences(surface, input)');
-        expect(renderPreferences('companion')).toContain('출석 알림 설정');
+        expect(source).toContain('api.getAttendancePreferences()');
+        expect(source).toContain('api.updateAttendancePreferences(input)');
+        expect(renderPreferences()).toContain('출석 알림 설정');
     });
 });

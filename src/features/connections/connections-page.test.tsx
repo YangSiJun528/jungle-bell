@@ -15,15 +15,15 @@ describe('ConnectionsPage settings information architecture', () => {
         expect(source).toContain('<TabsTrigger value="services">서비스</TabsTrigger>');
         expect(source).toContain('<TabsTrigger value="devices">기기 연결</TabsTrigger>');
         expect(source).toContain('<TabsContent value="notifications"');
-        expect(source).toContain('<NotificationSettings surface={personalSurface}/>');
-        expect(notificationSettingsSource).toContain('<AttendancePreferencesSection surface={surface}/>');
-        expect(notificationSettingsSource).toContain('<MealPreferencesSection surface={surface}/>');
+        expect(source).toContain('<NotificationSettings/>');
+        expect(notificationSettingsSource).toContain('<AttendancePreferencesSection/>');
+        expect(notificationSettingsSource).toContain('<MealPreferencesSection/>');
         expect(source).toContain('<TabsContent value="services"');
         expect(source).toContain('<ServiceSettings/>');
     });
 
     test('기기 연결 기능은 보존하고 데스크톱 로컬 설정은 서비스 탭에만 둔다', () => {
-        expect(source).toContain("surface.kind === 'desktop' ? <DesktopConnections/> : <CompanionConnections/>");
+        expect(source).toContain('platform.capabilities.mobilePairingManagement');
         expect(source).toContain('api.createMobilePairing()');
         expect(source).toContain('api.claimManualPairing');
         expect(source).toContain('api.disconnectMobileSession()');

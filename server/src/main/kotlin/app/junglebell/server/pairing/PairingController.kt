@@ -2,6 +2,7 @@ package app.junglebell.server.pairing
 
 import app.junglebell.server.common.ApiException
 import app.junglebell.server.security.SessionPrincipal
+import app.junglebell.server.security.requireDesktop
 import jakarta.servlet.http.Cookie
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
@@ -20,27 +21,27 @@ import java.time.Duration
 
 @RestController
 class PairingController(private val service: PairingService) {
-    @PostMapping("/api/desktop-ui/pairings")
+    @PostMapping("/api/me/pairings")
     @ResponseStatus(HttpStatus.CREATED)
     fun create(
         @AuthenticationPrincipal principal: SessionPrincipal,
         @RequestBody body: Map<String, Any?>,
     ): PairingCreated {
         require(body.isEmpty())
-        return service.create(principal)
+        return service.create(principal.requireDesktop())
     }
 
-    @GetMapping("/api/desktop-ui/pairings/{id}")
+    @GetMapping("/api/me/pairings/{id}")
     fun status(@AuthenticationPrincipal principal: SessionPrincipal, @PathVariable id: String) =
-        service.status(principal, id)
+        service.status(principal.requireDesktop(), id)
 
-    @PostMapping("/api/desktop-ui/pairings/{id}/approve")
+    @PostMapping("/api/me/pairings/{id}/approve")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     fun approve(
         @AuthenticationPrincipal principal: SessionPrincipal,
         @PathVariable id: String,
         @Valid @RequestBody body: PairingApprovalRequest,
-    ) = service.approve(principal, id, body)
+    ) = service.approve(principal.requireDesktop(), id, body)
 
     @PostMapping("/api/pairings/{id}/claims")
     @ResponseStatus(HttpStatus.CREATED)

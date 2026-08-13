@@ -14,32 +14,31 @@ import {DashboardShell} from './DashboardShell';
 const shellSource = readFileSync(new URL('./DashboardShell.tsx', import.meta.url), 'utf8');
 
 describe('dashboard routes', () => {
-    test('public surfaces only expose public information', () => {
-        expect(dashboardNavigationRoutes('public', 'sidebar')).toEqual(['home', 'laundry', 'meals']);
-        expect(dashboardNavigationRoutes('public', 'bottom')).toEqual(['home', 'laundry', 'meals']);
-        expect(dashboardRouteFromHash('#attendance', 'public')).toBe('home');
-        expect(dashboardRouteFromHash('#laundry', 'public')).toBe('laundry');
+    test('browser and desktop expose the same SPA navigation', () => {
+        expect(dashboardNavigationRoutes()).toEqual(['home', 'attendance', 'laundry', 'meals']);
+        expect(dashboardNavigationRoutes()).toEqual(['home', 'attendance', 'laundry', 'meals']);
+        expect(dashboardRouteFromHash('#attendance')).toBe('attendance');
+        expect(dashboardRouteFromHash('#laundry')).toBe('laundry');
     });
 
     test('personal primary navigation excludes notification and settings utilities', () => {
-        expect(dashboardNavigationRoutes('companion', 'bottom')).toEqual([
+        expect(dashboardNavigationRoutes()).toEqual([
             'home',
             'attendance',
             'laundry',
             'meals',
         ]);
-        expect(dashboardNavigationRoutes('desktop', 'sidebar')).toEqual([
+        expect(dashboardNavigationRoutes()).toEqual([
             'home',
             'attendance',
             'laundry',
             'meals',
         ]);
-        expect(dashboardUtilityRoutes('desktop')).toEqual(['notifications', 'connections']);
-        expect(dashboardUtilityRoutes('companion')).toEqual(['notifications', 'connections']);
-        expect(dashboardUtilityRoutes('public')).toEqual([]);
-        expect(dashboardNavigationRoutes('desktop', 'sidebar')).not.toContain('notifications');
-        expect(dashboardNavigationRoutes('desktop', 'bottom')).not.toContain('connections');
-        expect(dashboardRouteFromHash('#notifications', 'companion')).toBe('notifications');
+        expect(dashboardUtilityRoutes()).toEqual(['notifications', 'connections']);
+        expect(dashboardUtilityRoutes()).toEqual(['notifications', 'connections']);
+        expect(dashboardNavigationRoutes()).not.toContain('notifications');
+        expect(dashboardNavigationRoutes()).not.toContain('connections');
+        expect(dashboardRouteFromHash('#notifications')).toBe('notifications');
         expect(dashboardRouteHref('notifications')).toBe('#notifications');
         expect(dashboardRouteHref('connections')).toBe('#connections');
         expect(DASHBOARD_ROUTE_META.home).toEqual({label: '홈', shortLabel: '홈'});
@@ -50,10 +49,10 @@ describe('dashboard routes', () => {
 });
 
 describe('DashboardShell', () => {
-    test('renders a fixed public shell, top spacer, and shared project footer', () => {
+    test('renders the shared browser shell, top spacer, and project footer', () => {
         const html = renderToStaticMarkup(
             <DashboardShell
-                surface="public"
+                platform="browser"
                 activeRoute="home"
                 navigate={vi.fn()}
                 unreadCount={0}
@@ -63,11 +62,11 @@ describe('DashboardShell', () => {
         );
 
         expect(html).toContain('data-dashboard-shell="renewal"');
-        expect(html).toContain('data-dashboard-surface="public"');
+        expect(html).toContain('data-dashboard-platform="browser"');
         expect(html).toContain('data-dashboard-route="laundry"');
-        expect(html).not.toContain('data-dashboard-route="attendance"');
-        expect(html).not.toContain('data-dashboard-route="notifications"');
-        expect(html).not.toContain('기기 연결 관리');
+        expect(html).toContain('data-dashboard-route="attendance"');
+        expect(html).toContain('data-dashboard-route="notifications"');
+        expect(html).toContain('data-dashboard-route="connections"');
         expect(html).toContain('data-slot="sidebar"');
         expect(html).toContain('--sidebar-width:16rem');
         expect(html).toContain('data-sidebar-resizable="true"');
@@ -75,7 +74,7 @@ describe('DashboardShell', () => {
         expect(html).toContain('aria-label="사이드바 크기 조절"');
         expect(html).not.toContain('type="range"');
         expect(html).not.toContain('aria-label="사이드바 너비"');
-        expect(html).not.toContain('border-t border-sidebar-border');
+        expect(html).toContain('border-t border-sidebar-border');
         expect((html.match(/data-sidebar="trigger"/g) ?? [])).toHaveLength(2);
         expect(html).toContain('aria-label="사이드바 메뉴 열기"');
         expect(html).toContain('data-sidebar="rail"');
@@ -93,7 +92,7 @@ describe('DashboardShell', () => {
     test('renders notification panel trigger, settings, and the standard sidebar controls', () => {
         const html = renderToStaticMarkup(
             <DashboardShell
-                surface="companion"
+                platform="browser"
                 activeRoute="notifications"
                 navigate={vi.fn()}
                 unreadCount={120}
@@ -129,7 +128,7 @@ describe('DashboardShell', () => {
     test('shows the exact unread count in the sidebar and omits the badge at zero', () => {
         const unreadHtml = renderToStaticMarkup(
             <DashboardShell
-                surface="desktop"
+                platform="desktop"
                 activeRoute="home"
                 navigate={vi.fn()}
                 unreadCount={7}
@@ -139,7 +138,7 @@ describe('DashboardShell', () => {
         );
         const readHtml = renderToStaticMarkup(
             <DashboardShell
-                surface="desktop"
+                platform="desktop"
                 activeRoute="home"
                 navigate={vi.fn()}
                 unreadCount={0}
@@ -155,7 +154,7 @@ describe('DashboardShell', () => {
     test('uses the canonical compass image for the Jungle Bell brand', () => {
         const html = renderToStaticMarkup(
             <DashboardShell
-                surface="public"
+                platform="browser"
                 activeRoute="home"
                 navigate={vi.fn()}
                 unreadCount={0}

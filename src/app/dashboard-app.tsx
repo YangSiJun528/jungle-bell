@@ -41,8 +41,8 @@ function RouteContent({
 }
 
 export function DashboardApp() {
-    const {surface} = useDashboardEnvironment();
-    const {route, navigate, replace} = useHashRoute(surface.kind);
+    const {platform} = useDashboardEnvironment();
+    const {route, navigate, replace} = useHashRoute();
     const notifications = useNotificationsQuery();
     const [seenMobileIds, setSeenMobileIds] = useState(readSeenMobileNotificationIds);
     const [notificationPanelRequestedOpen, setNotificationPanelRequestedOpen] = useState(false);
@@ -84,7 +84,7 @@ export function DashboardApp() {
 
     return (
         <DashboardShell
-            surface={surface.kind}
+            platform={platform.kind}
             activeRoute={contentRoute}
             navigate={navigate}
             unreadCount={unreadCount}

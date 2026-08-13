@@ -13,7 +13,8 @@ import {
     mealsQueryContract,
     mealsQueryOptions,
 } from './campus-query-options';
-import {assertLmsAuthenticated, serverSessionReady, useDashboardAccount} from './dashboard-account';
+import {useDashboardAccount} from './dashboard-account';
+import {assertLmsAuthenticated, serverSessionReady} from './dashboard-account-state';
 import {queryKeys, useDashboardEnvironment} from './dashboard-context';
 import {runAttendanceRefresh, runDashboardRefresh} from './dashboard-refresh';
 
@@ -54,16 +55,15 @@ export function useCampusManualRefresh(kind: 'laundry' | 'meals') {
 }
 
 export function useAttendanceQuery() {
-    const {api, surface} = useDashboardEnvironment();
+    const {api, platform} = useDashboardEnvironment();
     const account = useDashboardAccount();
-    const personalSurface = surface.kind === 'desktop' ? 'desktop' : 'companion';
-    const lmsReady = surface.kind !== 'desktop'
+    const lmsReady = !platform.capabilities.desktopAccount
         || account.status.lmsAuthentication === 'authenticated';
-    const sessionReady = surface.kind !== 'desktop' || serverSessionReady(account.status);
+    const sessionReady = !platform.capabilities.desktopAccount || serverSessionReady(account.status);
     return useQuery({
-        queryKey: queryKeys.attendance(personalSurface),
-        queryFn: () => api.getAttendance(personalSurface),
-        enabled: surface.canViewAttendance && lmsReady && sessionReady,
+        queryKey: queryKeys.attendance(platform.kind),
+        queryFn: () => api.getAttendance(),
+        enabled: lmsReady && sessionReady,
         staleTime: DASHBOARD_REFRESH.personal,
         refetchInterval: DASHBOARD_REFRESH.personal,
     });
@@ -74,17 +74,16 @@ export function useDesktopConnectionQuery() {
 }
 
 export function useRefreshAttendanceMutation() {
-    const {api, surface} = useDashboardEnvironment();
+    const {api, platform} = useDashboardEnvironment();
     const account = useDashboardAccount();
     const client = useQueryClient();
-    const attendanceSurface = surface.kind === 'desktop' ? 'desktop' : 'companion';
     return useMutation({
         mutationKey: ['attendance', 'manual-refresh'],
         mutationFn: () => {
-            if (surface.kind === 'desktop') assertLmsAuthenticated(account.status);
-            const desktopSessionReady = surface.kind !== 'desktop' || serverSessionReady(account.status);
+            if (platform.capabilities.desktopAccount) assertLmsAuthenticated(account.status);
+            const desktopSessionReady = !platform.capabilities.desktopAccount || serverSessionReady(account.status);
             return runAttendanceRefresh({
-                refreshPlatform: surface.kind === 'desktop' ? async () => {
+                refreshPlatform: platform.capabilities.desktopAccount ? async () => {
                     try {
                         await api.refreshPlatformSync();
                     } finally {
@@ -93,7 +92,7 @@ export function useRefreshAttendanceMutation() {
                 } : undefined,
                 refreshAttendance: desktopSessionReady
                     ? () => client.refetchQueries(
-                        {queryKey: queryKeys.attendance(attendanceSurface), type: 'active'},
+                        {queryKey: queryKeys.attendance(platform.kind), type: 'active'},
                         {throwOnError: true},
                     )
                     : async () => undefined,
@@ -103,25 +102,22 @@ export function useRefreshAttendanceMutation() {
 }
 
 export function useNotificationsQuery() {
-    const {api, surface} = useDashboardEnvironment();
-    const personalSurface = surface.kind === 'desktop' ? 'desktop' : 'companion';
+    const {api, platform} = useDashboardEnvironment();
     return useQuery<DashboardNotification[] | NotificationInboxSnapshot>({
-        queryKey: queryKeys.notifications(personalSurface),
-        queryFn: () => surface.kind === 'desktop'
+        queryKey: queryKeys.notifications(platform.kind),
+        queryFn: () => platform.capabilities.localNotifications
             ? api.getDesktopNotificationInbox()
             : api.getNotifications(),
-        enabled: surface.canReceivePersonalNotifications,
         staleTime: DASHBOARD_REFRESH.personal,
         refetchInterval: DASHBOARD_REFRESH.personal,
     });
 }
 
 export function useRefreshHomeMutation() {
-    const {api, surface} = useDashboardEnvironment();
+    const {api, platform} = useDashboardEnvironment();
     const account = useDashboardAccount();
     const client = useQueryClient();
-    const attendanceSurface = surface.kind === 'desktop' ? 'desktop' : 'companion';
-    const refreshDesktopPlatform = surface.kind === 'desktop'
+    const refreshDesktopPlatform = platform.capabilities.desktopAccount
         && account.status.lmsAuthentication === 'authenticated';
     const refreshDesktopAttendance = refreshDesktopPlatform && serverSessionReady(account.status);
     return useMutation({
@@ -142,9 +138,9 @@ export function useRefreshHomeMutation() {
                     await client.invalidateQueries({queryKey: queryKeys.desktopConnection, exact: true});
                 }
             } : undefined,
-            refreshAttendance: surface.canViewAttendance && (surface.kind !== 'desktop' || refreshDesktopAttendance)
+            refreshAttendance: !platform.capabilities.desktopAccount || refreshDesktopAttendance
                 ? () => client.refetchQueries(
-                    {queryKey: queryKeys.attendance(attendanceSurface), type: 'active'},
+                    {queryKey: queryKeys.attendance(platform.kind), type: 'active'},
                     {throwOnError: true},
                 )
                 : undefined,
@@ -153,11 +149,10 @@ export function useRefreshHomeMutation() {
 }
 
 export function useRefreshAllMutation() {
-    const {api, surface} = useDashboardEnvironment();
+    const {api, platform} = useDashboardEnvironment();
     const account = useDashboardAccount();
     const client = useQueryClient();
-    const attendanceSurface = surface.kind === 'desktop' ? 'desktop' : 'companion';
-    const refreshDesktopPlatform = surface.kind === 'desktop'
+    const refreshDesktopPlatform = platform.capabilities.desktopAccount
         && account.status.lmsAuthentication === 'authenticated';
     const refreshDesktopAttendance = refreshDesktopPlatform && serverSessionReady(account.status);
     return useMutation({
@@ -172,8 +167,8 @@ export function useRefreshAllMutation() {
                         await client.invalidateQueries({queryKey: queryKeys.desktopConnection, exact: true});
                     }
                 } : undefined,
-                refreshAttendance: surface.canViewAttendance && (surface.kind !== 'desktop' || refreshDesktopAttendance)
-                    ? () => client.invalidateQueries({queryKey: queryKeys.attendance(attendanceSurface)})
+                refreshAttendance: !platform.capabilities.desktopAccount || refreshDesktopAttendance
+                    ? () => client.invalidateQueries({queryKey: queryKeys.attendance(platform.kind)})
                     : undefined,
             });
         },

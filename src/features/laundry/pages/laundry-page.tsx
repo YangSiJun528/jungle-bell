@@ -3,7 +3,6 @@ import {
     RefreshCw,
     WashingMachine,
 } from 'lucide-react';
-import {useDashboardEnvironment} from '@/app/dashboard-context';
 import {useCampusManualRefresh, useSuspenseLaundryQuery} from '@/app/use-dashboard-queries';
 import {PageHeader} from '@/components/dashboard/page-header';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
@@ -15,7 +14,6 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
-import type {PersonalSurface} from '@/api/personal-api';
 import {laundrySituationDataIsReliable} from '@/domain/laundry/freshness';
 import {relativeTimeLabel} from '@/lib/format';
 import {cn} from '@/lib/utils';
@@ -27,19 +25,14 @@ import {WashTowerGrid} from '../components/wash-tower-grid';
 import {laundryZoneMeta} from '../lib/laundry-zone';
 import {capacityCards, type CapacityCardView} from './laundry-page-view';
 
-const personalSurface = (kind: string): PersonalSurface | null =>
-    kind === 'desktop' || kind === 'companion' ? kind : null;
-
 function capacityTone(card: CapacityCardView): string {
     if (card.status === 'checking') return 'border-border bg-muted/30';
     return laundryZoneMeta(card.access).surfaceClassName;
 }
 
 export function LaundryPage() {
-    const {surface} = useDashboardEnvironment();
     const laundry = useSuspenseLaundryQuery();
     const manualRefresh = useCampusManualRefresh('laundry');
-    const personal = personalSurface(surface.kind);
 
     const snapshot = laundry.data;
     const reliable = snapshot.quality.collection === 'SUCCESS' && laundrySituationDataIsReliable({
@@ -146,12 +139,7 @@ export function LaundryPage() {
 
             <LaundryMachineList machines={snapshot.machines}/>
 
-            {personal === null ? null : (
-                <PersonalLaundrySection
-                    surface={personal}
-                    machines={snapshot.machines}
-                />
-            )}
+            <PersonalLaundrySection machines={snapshot.machines}/>
         </div>
     );
 }

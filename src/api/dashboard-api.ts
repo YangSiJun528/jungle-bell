@@ -21,10 +21,13 @@ import {
 import {createDesktopHttpSessionManager} from './desktop-http-session';
 import {
     createHttpApiClient,
-    type CompanionApiPath,
-    type DesktopUiApiPath,
+    type AccountApiPath,
+    type PairingApiPath,
 } from './http-api-client';
-import {createNativeBridge, type NativeBridge} from './native-bridge';
+import {
+    createPlatformAdapter,
+    type PlatformAdapter,
+} from '@/platform/platform-adapter';
 export type {
     AttendancePreferences,
     LaundryApplianceKind,
@@ -39,18 +42,11 @@ export type DashboardFetch = (
     init?: RequestInit,
 ) => Promise<Response>;
 
-export type DashboardInvoke = (
-    command: string,
-    args?: Record<string, unknown>,
-) => Promise<unknown>;
-
 export interface DashboardApiOptions {
     campusApiBaseUrl?: string;
     platformApiBaseUrl?: string;
     fetcher?: DashboardFetch;
-    invokeCommand?: DashboardInvoke;
-    nativeBridge?: NativeBridge;
-    desktopRuntime?: boolean;
+    platformAdapter?: PlatformAdapter;
 }
 
 export interface DashboardLaundryAppliance {
@@ -241,7 +237,7 @@ export interface DashboardApi extends DashboardPersonalApi, DashboardDesktopSett
     getPublicLaundry(): Promise<DashboardLaundrySnapshot>;
     getPublicMeals(): Promise<DashboardMealsSnapshot>;
     getPublicMealHistoryMonth(month: string): Promise<DashboardMealHistoryMonth>;
-    getAttendance(surface: 'desktop' | 'companion'): Promise<AttendanceDashboard>;
+    getAttendance(): Promise<AttendanceDashboard>;
     getDesktopConnectionState(): Promise<DesktopConnectionState>;
     resetDesktopIdentity(): Promise<DesktopConnectionState>;
     refreshPlatformSync(): Promise<void>;
@@ -296,30 +292,32 @@ const NOTIFICATION_KINDS = new Set([
 
 export function createDashboardApi(options: DashboardApiOptions = {}): DashboardApi {
     const fetcher = options.fetcher ?? window.fetch.bind(window);
-    const nativeBridge = options.nativeBridge ?? createNativeBridge(options.invokeCommand);
-    const desktopRuntime = options.desktopRuntime
-        ?? (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window);
-    const configuredCampusBase = options.campusApiBaseUrl
-        ?? import.meta.env.VITE_CAMPUS_API_URL
-        ?? '';
+    const platform = options.platformAdapter ?? createPlatformAdapter({
+        runningInTauri: typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window,
+    });
+    const nativeBridge = platform.native;
+    const adapterApiBase = platform.kind === 'desktop'
+        ? import.meta.env.VITE_PLATFORM_API_URL ?? ''
+        : '';
+    const configuredCampusBase = options.campusApiBaseUrl ?? adapterApiBase;
     const campusBase = normalizeBaseUrl(configuredCampusBase);
     const pageOrigin = typeof window !== 'undefined' && /^https?:$/u.test(window.location.protocol)
         ? window.location.origin
         : null;
-    const mealAssetOrigin = campusBase || (!desktopRuntime ? pageOrigin : null);
+    const mealAssetOrigin = campusBase || (platform.kind === 'browser' ? pageOrigin : null);
     const platformBase = normalizeBaseUrl(
-        options.platformApiBaseUrl
-            ?? import.meta.env.VITE_PLATFORM_API_URL
-            ?? configuredCampusBase,
+        options.platformApiBaseUrl ?? adapterApiBase,
     );
-    const desktopSession = desktopRuntime
+    const desktopSession = platform.accountAuthentication.kind === 'desktop-session'
         ? createDesktopHttpSessionManager({nativeBridge})
         : undefined;
     const httpClient = createHttpApiClient({
         fetcher,
         publicBase: campusBase,
         platformBase,
-        desktopSession,
+        accountAuthentication: desktopSession
+            ? {kind: 'desktop-session', session: desktopSession}
+            : {kind: 'cookie'},
     });
 
     const publicJson = async (path: `/api/public/${string}`): Promise<unknown> => {
@@ -329,23 +327,20 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
         return responseJson(response);
     };
 
-    const privateResponse = (path: CompanionApiPath, init: RequestInit = {}): Promise<Response> =>
-        httpClient.companionResponse(path, init);
+    const pairingResponse = (path: PairingApiPath, init: RequestInit = {}): Promise<Response> =>
+        httpClient.pairingResponse(path, init);
 
-    const desktopResponse = (path: DesktopUiApiPath, init: RequestInit = {}): Promise<Response> =>
-        httpClient.desktopResponse(path, init);
+    const accountResponse = (path: AccountApiPath, init: RequestInit = {}): Promise<Response> =>
+        httpClient.accountResponse(path, init);
 
-    const privateJson = async (path: CompanionApiPath, init: RequestInit = {}): Promise<unknown> =>
-        responseJson(await privateResponse(path, init));
+    const pairingJson = async (path: PairingApiPath, init: RequestInit = {}): Promise<unknown> =>
+        responseJson(await pairingResponse(path, init));
 
-    const privateNoContent = async (path: CompanionApiPath, init: RequestInit): Promise<void> => {
-        const response = await privateResponse(path, init);
-        if (!response.ok) throw await responseError(response);
-        if (response.status !== 204) throw new Error('API_RESPONSE_INVALID');
-    };
+    const accountJson = async (path: AccountApiPath, init: RequestInit = {}): Promise<unknown> =>
+        responseJson(await accountResponse(path, init));
 
-    const desktopNoContent = async (path: DesktopUiApiPath, init: RequestInit): Promise<void> => {
-        const response = await desktopResponse(path, init);
+    const accountNoContent = async (path: AccountApiPath, init: RequestInit): Promise<void> => {
+        const response = await accountResponse(path, init);
         if (!response.ok) throw await responseError(response);
         if (response.status !== 204) throw new Error('API_RESPONSE_INVALID');
     };
@@ -376,18 +371,8 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
             return parseDashboardMealHistoryMonth(value, mealAssetOrigin);
         },
 
-        async getAttendance(surface) {
-            if (surface === 'desktop') {
-                const attendanceValue = await responseJson(
-                    await desktopResponse('/api/desktop-ui/attendance', {method: 'GET'}),
-                );
-                return {
-                    state: 'loaded',
-                    attendance: parseAttendancePayload(attendanceValue, false),
-                    devices: [],
-                };
-            }
-            const response = await privateResponse('/api/mobile/attendance', {method: 'GET'});
+        async getAttendance() {
+            const response = await accountResponse('/api/me/attendance', {method: 'GET'});
             if (response.status === 401) return {state: 'auth-required'};
             const attendanceValue = await responseJson(response);
             const source = exactRecord(attendanceValue, ['attendance', 'freshness', 'devices']);
@@ -416,41 +401,38 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
         },
 
         async createMobilePairing() {
-            return parsePairingCreated(await responseJson(
-                await desktopResponse('/api/desktop-ui/pairings', {
-                    method: 'POST',
-                    body: JSON.stringify({}),
-                }),
-            ));
+            return parsePairingCreated(await accountJson('/api/me/pairings', {
+                method: 'POST',
+                body: JSON.stringify({}),
+            }));
         },
 
         async getMobilePairingStatus(pairingId) {
             assertIdentifier(pairingId, PAIRING_ID, true);
-            return parsePairingStatus(await responseJson(
-                await desktopResponse(`/api/desktop-ui/pairings/${encodeURIComponent(pairingId)}`, {method: 'GET'}),
+            return parsePairingStatus(await accountJson(
+                `/api/me/pairings/${encodeURIComponent(pairingId)}`,
+                {method: 'GET'},
             ));
         },
 
         async approveMobilePairing(pairingId, claimId) {
             assertIdentifier(pairingId, PAIRING_ID, true);
             assertIdentifier(claimId, CLAIM_ID, true);
-            await desktopNoContent(`/api/desktop-ui/pairings/${encodeURIComponent(pairingId)}/approve`, {
+            await accountNoContent(`/api/me/pairings/${encodeURIComponent(pairingId)}/approve`, {
                 method: 'POST',
                 body: JSON.stringify({claimId}),
             });
         },
 
         async listMobileSessions() {
-            const value = await responseJson(
-                await desktopResponse('/api/desktop-ui/mobile-sessions', {method: 'GET'}),
-            );
+            const value = await accountJson('/api/me/mobile-sessions', {method: 'GET'});
             return parseMobileSessions(value);
         },
 
         async revokeMobileSession(deviceId) {
             assertIdentifier(deviceId, MOBILE_SESSION_ID, true);
-            await desktopNoContent(
-                `/api/desktop-ui/mobile-sessions/${encodeURIComponent(deviceId)}`,
+            await accountNoContent(
+                `/api/me/mobile-sessions/${encodeURIComponent(deviceId)}`,
                 {method: 'DELETE'},
             );
         },
@@ -461,7 +443,7 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
                 || !validMobileClaimIdentity(input.deviceLabel, input.installationId)) {
                 throw new Error('API_CLIENT_INVALID_ARGUMENT');
             }
-            return parsePairingClaim(await privateJson('/api/pairings/claims', {
+            return parsePairingClaim(await pairingJson('/api/pairings/claims', {
                 method: 'POST',
                 body: JSON.stringify({
                     manualCode,
@@ -477,7 +459,7 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
                 || !validMobileClaimIdentity(input.deviceLabel, input.installationId)) {
                 throw new Error('API_CLIENT_INVALID_ARGUMENT');
             }
-            return parsePairingClaim(await privateJson(
+            return parsePairingClaim(await pairingJson(
                 `/api/pairings/${encodeURIComponent(input.pairingId)}/claims`,
                 {
                     method: 'POST',
@@ -492,7 +474,7 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
 
         async completePairing(pairingId) {
             assertIdentifier(pairingId, PAIRING_ID, true);
-            const response = await privateResponse(`/api/pairings/${encodeURIComponent(pairingId)}/complete`, {
+            const response = await pairingResponse(`/api/pairings/${encodeURIComponent(pairingId)}/complete`, {
                 method: 'POST',
                 body: JSON.stringify({}),
             });
@@ -506,11 +488,11 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
         },
 
         async disconnectMobileSession() {
-            await privateNoContent('/api/mobile/session', {method: 'DELETE'});
+            await accountNoContent('/api/me/session', {method: 'DELETE'});
         },
 
         async getNotifications() {
-            const value = await privateJson('/api/mobile/notifications?limit=20', {method: 'GET'});
+            const value = await accountJson('/api/me/notifications?limit=20', {method: 'GET'});
             return parseNotifications(exactRecord(value, ['notifications']).notifications);
         },
 
@@ -557,7 +539,7 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
         },
 
         async sendMobileTestNotification() {
-            const value = exactRecord(await privateJson('/api/mobile/notifications/test', {
+            const value = exactRecord(await accountJson('/api/me/notifications/test', {
                 method: 'POST',
                 body: JSON.stringify({}),
             }), ['notificationId', 'queued']);
@@ -570,7 +552,7 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
 
         async getPushPublicKey() {
             const value = exactRecord(
-                await privateJson('/api/push/vapid-public-key', {method: 'GET'}),
+                await accountJson('/api/me/push/vapid-public-key', {method: 'GET'}),
                 ['publicKey'],
             );
             const publicKey = text(value.publicKey, 87);
@@ -583,7 +565,7 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
             if (!subscription.endpoint || !keys?.p256dh || !keys.auth) {
                 throw new Error('API_CLIENT_INVALID_ARGUMENT');
             }
-            const value = exactRecord(await privateJson('/api/push/subscriptions', {
+            const value = exactRecord(await accountJson('/api/me/push/subscriptions', {
                 method: 'PUT',
                 body: JSON.stringify({
                     endpoint: subscription.endpoint,

@@ -4,23 +4,24 @@ import type {
 } from './desktop-http-session';
 
 export type HttpFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-export type CompanionApiPath =
-    | `/api/mobile${'' | `/${string}` | `?${string}`}`
-    | `/api/pairings${'' | `/${string}`}`
-    | `/api/push/${string}`;
-export type DesktopUiApiPath = `/api/desktop-ui/${string}`;
+export type AccountApiPath = `/api/me/${string}`;
+export type PairingApiPath = `/api/pairings${'' | `/${string}`}`;
+
+export type AccountAuthentication =
+    | {kind: 'cookie'}
+    | {kind: 'desktop-session'; session: DesktopHttpSessionManager};
 
 export interface HttpApiClient {
     publicResponse(path: `/api/public/${string}`, init?: RequestInit): Promise<Response>;
-    companionResponse(path: CompanionApiPath, init?: RequestInit): Promise<Response>;
-    desktopResponse(path: DesktopUiApiPath, init?: RequestInit): Promise<Response>;
+    pairingResponse(path: PairingApiPath, init?: RequestInit): Promise<Response>;
+    accountResponse(path: AccountApiPath, init?: RequestInit): Promise<Response>;
 }
 
 export function createHttpApiClient(options: {
     fetcher: HttpFetch;
     publicBase: string;
     platformBase: string;
-    desktopSession?: DesktopHttpSessionManager;
+    accountAuthentication: AccountAuthentication;
 }): HttpApiClient {
     const fetchPublic = (path: `/api/public/${string}`, init: RequestInit = {}) => {
         assertApiPath(path, ['/api/public/']);
@@ -29,21 +30,23 @@ export function createHttpApiClient(options: {
             unauthenticatedRequestInit(init, 'omit', false),
         );
     };
-    const fetchCompanion = (path: CompanionApiPath, init: RequestInit = {}) => {
-        assertApiPath(path, ['/api/mobile', '/api/pairings', '/api/push/']);
+    const fetchPairing = (path: PairingApiPath, init: RequestInit = {}) => {
+        assertApiPath(path, ['/api/pairings']);
         return options.fetcher(
             apiUrl(options.platformBase, path),
             unauthenticatedRequestInit(init, 'include', true),
         );
     };
 
-    const fetchDesktop = async (
-        path: DesktopUiApiPath,
+    const fetchDesktopAccount = async (
+        path: AccountApiPath,
         init: RequestInit = {},
     ): Promise<Response> => {
-        assertApiPath(path, ['/api/desktop-ui/']);
-        const session = options.desktopSession;
-        if (!session) throw new Error('DESKTOP_HTTP_SESSION_REQUIRED');
+        const authentication = options.accountAuthentication;
+        if (authentication.kind !== 'desktop-session') {
+            throw new Error('DESKTOP_HTTP_SESSION_REQUIRED');
+        }
+        const session = authentication.session;
         const firstLease = await session.getSessionLease();
         const firstResponse = await options.fetcher(
             apiUrl(options.platformBase, path),
@@ -62,10 +65,21 @@ export function createHttpApiClient(options: {
         return bufferedResponseWithinLease(refreshedResponse, session, refreshedLease);
     };
 
+    const fetchAccount = (path: AccountApiPath, init: RequestInit = {}): Promise<Response> => {
+        assertApiPath(path, ['/api/me/']);
+        if (options.accountAuthentication.kind === 'cookie') {
+            return options.fetcher(
+                apiUrl(options.platformBase, path),
+                unauthenticatedRequestInit(init, 'include', true),
+            );
+        }
+        return fetchDesktopAccount(path, init);
+    };
+
     return {
         publicResponse: fetchPublic,
-        companionResponse: fetchCompanion,
-        desktopResponse: fetchDesktop,
+        pairingResponse: fetchPairing,
+        accountResponse: fetchAccount,
     };
 }
 

@@ -1,7 +1,7 @@
 import {
     ArrowRight,
+    Download,
     RefreshCw,
-    Smartphone,
     Utensils,
     WashingMachine,
     type LucideIcon,
@@ -21,7 +21,6 @@ import {
     useRefreshHomeMutation,
     useSuspenseCampusQueries,
 } from '@/app/use-dashboard-queries';
-import {readInitialPairingEntry} from '@/app/pairing-bootstrap';
 import {cn} from '@/lib/utils';
 import {JungleCampusSummary} from './jungle-campus-summary';
 import {HomeMealSlotsList} from './home-meal-slots';
@@ -62,11 +61,9 @@ export interface HomePageProps {
 }
 
 export function HomePage({onRequestInstall}: HomePageProps = {}) {
-    const {surface} = useDashboardEnvironment();
+    const {platform} = useDashboardEnvironment();
     const {laundry, meals} = useSuspenseCampusQueries();
     const refreshHome = useRefreshHomeMutation();
-    const qrRequiresInstalledPwa = surface.kind === 'public'
-        && readInitialPairingEntry()?.kind === 'public-install-required';
 
     const laundrySummary = homeLaundrySummary({
         snapshot: laundry.data,
@@ -78,15 +75,22 @@ export function HomePage({onRequestInstall}: HomePageProps = {}) {
         <div className="space-y-6">
             <PageHeader
                 title="오늘 필요한 정보"
-                actions={surface.kind !== 'public' ? (
-                    <Button variant="outline" disabled={refreshHome.isPending} onClick={() => refreshHome.mutate()}>
-                        <RefreshCw aria-hidden="true" className={refreshHome.isPending ? 'animate-spin' : ''}/>
-                        {refreshHome.isPending ? '새로고침 중' : '새로고침'}
-                    </Button>
-                ) : undefined}
+                actions={(
+                    <div className="flex flex-wrap gap-2">
+                        {platform.kind === 'browser' && onRequestInstall ? (
+                            <Button variant="outline" onClick={onRequestInstall}>
+                                <Download aria-hidden="true"/>앱 설치 안내
+                            </Button>
+                        ) : null}
+                        <Button variant="outline" disabled={refreshHome.isPending} onClick={() => refreshHome.mutate()}>
+                            <RefreshCw aria-hidden="true" className={refreshHome.isPending ? 'animate-spin' : ''}/>
+                            {refreshHome.isPending ? '새로고침 중' : '새로고침'}
+                        </Button>
+                    </div>
+                )}
             />
 
-            <JungleCampusSummary onRequestInstall={onRequestInstall}/>
+            <JungleCampusSummary/>
 
             {refreshHome.isError ? (
                 <Alert variant="destructive">
@@ -102,16 +106,6 @@ export function HomePage({onRequestInstall}: HomePageProps = {}) {
                         >
                             새로고침
                         </Button>
-                    </AlertDescription>
-                </Alert>
-            ) : null}
-
-            {qrRequiresInstalledPwa ? (
-                <Alert className="border-primary/20 bg-primary/5">
-                    <Smartphone aria-hidden="true"/>
-                    <AlertTitle>이 QR은 설치한 모바일 PWA에서 열어야 합니다.</AlertTitle>
-                    <AlertDescription>
-                        <p>일반 브라우저에서는 일회용 연결 정보를 사용하지 않았습니다. Jungle Bell을 홈 화면에 추가한 뒤 PC 앱에서 새 QR을 만들어 다시 열어 주세요.</p>
                     </AlertDescription>
                 </Alert>
             ) : null}

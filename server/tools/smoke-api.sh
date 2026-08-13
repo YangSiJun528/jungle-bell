@@ -51,21 +51,21 @@ desktop_ui_headers=(
 )
 
 request 200 "$work_dir/attendance.json" \
-  "${desktop_ui_headers[@]}" "$base_url/api/desktop-ui/attendance"
+  "${desktop_ui_headers[@]}" "$base_url/api/me/attendance"
 [[ "$(jq -r '.freshness' "$work_dir/attendance.json")" == 'missing' ]]
 
 request 200 "$work_dir/meal-preferences.json" \
-  "${desktop_ui_headers[@]}" "$base_url/api/desktop-ui/meal-preferences"
+  "${desktop_ui_headers[@]}" "$base_url/api/me/meal-preferences"
 [[ "$(jq -r '.lunch' "$work_dir/meal-preferences.json")" == 'true' ]]
 [[ "$(jq -r '.dinner' "$work_dir/meal-preferences.json")" == 'true' ]]
 [[ "$(jq -r 'has("breakfast")' "$work_dir/meal-preferences.json")" == 'false' ]]
 
 request 200 "$work_dir/watches.json" \
-  "${desktop_ui_headers[@]}" "$base_url/api/desktop-ui/laundry-watches"
+  "${desktop_ui_headers[@]}" "$base_url/api/me/laundry-watches"
 [[ "$(jq -r '.watches | length' "$work_dir/watches.json")" == '0' ]]
 
 request 200 "$work_dir/mobile-sessions.json" \
-  "${desktop_ui_headers[@]}" "$base_url/api/desktop-ui/mobile-sessions"
+  "${desktop_ui_headers[@]}" "$base_url/api/me/mobile-sessions"
 [[ "$(jq -r '.devices | length' "$work_dir/mobile-sessions.json")" == '0' ]]
 
 request 200 "$work_dir/heartbeat.json" \
@@ -77,7 +77,7 @@ request 200 "$work_dir/heartbeat.json" \
 request 403 "$work_dir/evil-origin.json" \
   -H "authorization: Bearer $ui_token" \
   -H 'origin: https://evil.example' \
-  "$base_url/api/desktop-ui/attendance"
+  "$base_url/api/me/attendance"
 
 cleanup
 trap - EXIT

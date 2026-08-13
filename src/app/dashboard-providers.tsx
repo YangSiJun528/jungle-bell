@@ -12,10 +12,10 @@ import {
     queryKeys,
 } from './dashboard-context';
 import {
-    DashboardAccountProvider,
     normalizeLmsSessionStateEvent,
     withLmsSessionState,
-} from './dashboard-account';
+} from './dashboard-account-state';
+import {DashboardAccountProvider} from './dashboard-account';
 import {
     createDesktopSubscriptionRegistry,
     disposeDesktopSubscriptions,

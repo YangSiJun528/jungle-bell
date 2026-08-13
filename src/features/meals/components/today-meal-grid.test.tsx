@@ -13,6 +13,13 @@ const lunch: DashboardMealPost = {
 };
 
 describe('TodayMealGrid', () => {
+    it('중간 화면 크기부터 중식과 석식을 2열로 표시한다', () => {
+        const markup = renderToStaticMarkup(<TodayMealGrid meals={[]}/>);
+
+        expect(markup).toContain('md:grid-cols-2');
+        expect(markup).not.toContain('lg:grid-cols-2');
+    });
+
     it('게시물이 없어도 중식과 석식 두 자리를 빈 상태로 유지한다', () => {
         const markup = renderToStaticMarkup(<TodayMealGrid meals={[]}/>);
 

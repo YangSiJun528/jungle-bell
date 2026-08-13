@@ -23,10 +23,23 @@ const {api, queryKeys, state} = vi.hoisted(() => ({
 
 vi.mock('@/app/dashboard-context', () => ({
     queryKeys,
-    useDashboardEnvironment: () => ({api, surface: {kind: 'desktop'}}),
+    useDashboardEnvironment: () => ({
+        api,
+        platform: {kind: 'desktop', capabilities: {desktopAccount: true}},
+    }),
 }));
 
 vi.mock('@/app/dashboard-account', () => ({
+    useDashboardAccount: () => ({
+        status: {
+            serverSession: state.serverSession,
+            lmsAuthentication: state.lmsAuthentication,
+        },
+        connectionQuery: {refetch: vi.fn()},
+    }),
+}));
+
+vi.mock('@/app/dashboard-account-state', () => ({
     assertLmsAuthenticated: () => {
         if (state.lmsAuthentication !== 'authenticated') throw new Error('LMS_AUTH_REQUIRED');
     },
@@ -36,13 +49,6 @@ vi.mock('@/app/dashboard-account', () => ({
         }
     },
     serverSessionReady: () => state.serverSession === 'stored' || state.serverSession === 'memory-only',
-    useDashboardAccount: () => ({
-        status: {
-            serverSession: state.serverSession,
-            lmsAuthentication: state.lmsAuthentication,
-        },
-        connectionQuery: {refetch: vi.fn()},
-    }),
 }));
 
 vi.mock('@/app/use-dashboard-queries', () => ({
@@ -109,7 +115,6 @@ function renderPersonalLaundry(options: {
     return renderToStaticMarkup(
         <QueryClientProvider client={client}>
             <PersonalLaundrySection
-                surface="desktop"
                 machines={options.machines ?? machines}
             />
         </QueryClientProvider>,

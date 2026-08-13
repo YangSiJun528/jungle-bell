@@ -1,6 +1,7 @@
 package app.junglebell.server.publicapi
 
 import app.junglebell.server.common.ApiException
+import app.junglebell.server.config.JungleBellProperties
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -19,6 +20,7 @@ import kotlin.math.min
 class PublicDataService(
     private val repository: PublicDataRepository,
     private val clock: Clock,
+    private val properties: JungleBellProperties,
 ) {
     private val kst = ZoneId.of("Asia/Seoul")
 
@@ -70,9 +72,13 @@ class PublicDataService(
     fun meals(): PublicMealsSnapshot {
         val state = repository.sourceState("meals-include-pinned")
             ?: throw ApiException("NO_DATA", HttpStatus.SERVICE_UNAVAILABLE)
-        val posts = repository.mealPosts(100)
+        val posts = repository.mealPosts(100).map {
+            it.withPublicAssetUrls(properties.publicBaseUrl)
+        }
         if (posts.isEmpty()) throw ApiException("NO_DATA", HttpStatus.SERVICE_UNAVAILABLE)
-        val weekly = repository.weeklyMenus(100)
+        val weekly = repository.weeklyMenus(100).map {
+            it.withPublicAssetUrls(properties.publicBaseUrl)
+        }
         val target = targetWeek(clock.instant())
         val current = weekly.firstOrNull { it.weekKey == target }
         return PublicMealsSnapshot(
@@ -102,7 +108,11 @@ class PublicDataService(
         }
         val from = yearMonth.atDay(1).atStartOfDay(kst).toInstant()
         val to = yearMonth.plusMonths(1).atDay(1).atStartOfDay(kst).toInstant()
-        return MealHistoryResponse(repository.mealPostsForMonth(from, to))
+        return MealHistoryResponse(
+            repository.mealPostsForMonth(from, to).map {
+                it.withPublicAssetUrls(properties.publicBaseUrl)
+            },
+        )
     }
 
     @Transactional(readOnly = true)

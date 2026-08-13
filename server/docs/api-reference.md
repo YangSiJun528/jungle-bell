@@ -8,10 +8,10 @@
 
 | 대상 | 자격 증명 | 허용 경로 |
 | --- | --- | --- |
-| 공개 웹 | 없음 | `/api/public/*`, `/api/health`, 정적 자산 |
+| 공통 SPA 공개 기능 | 없음 | `/api/public/*`, `/api/health`, 정적 자산 |
 | Tauri background | `Authorization: Bearer jbd_…` | `/api/desktop/*` |
-| Tauri WebView | `Authorization: Bearer jbui_…`와 발급 시 등록한 exact `Origin` | `/api/desktop-ui/*` |
-| 설치 PWA | `__Host-jb_device` Strict HttpOnly cookie | `/api/mobile/*`, `/api/push/*` |
+| Tauri SPA | `Authorization: Bearer jbui_…`와 발급 시 등록한 exact `Origin` | `/api/me/*` |
+| 브라우저 SPA | `__Host-jb_device` Strict HttpOnly cookie | `/api/me/*` |
 
 PC 장기 credential은 90일 절대 만료이며 인증된 rotate만 허용합니다. WebView token은
 7분 절대 만료, 메모리 전용, 부모 PC session당 하나입니다. 부모 session을 rotate,
@@ -71,9 +71,11 @@ stale-while-revalidate를 사용합니다.
 등록 endpoint는 10분 창에서 IP당 240회, installation ID당 10회로 제한합니다. rate
 key에는 원문 IP나 installation ID를 저장하지 않고 SHA-256 hash만 저장합니다.
 
-## WebView 개인 API
+## 공통 계정 API
 
-다음 endpoint는 `/api/desktop-ui` 아래에 있습니다.
+다음 endpoint는 `/api/me` 아래에 있습니다. 같은 DTO와 경로를 브라우저와 Tauri가
+공유하며 인증 어댑터만 다릅니다. 모바일 관리와 pairing 승인은 Tauri session만
+허용합니다.
 
 | Method | 경로 | 설명 |
 | --- | --- | --- |
@@ -87,6 +89,12 @@ key에는 원문 IP나 installation ID를 저장하지 않고 SHA-256 hash만 �
 | `POST` | `/pairings/{id}/approve` | `{ "claimId": "…" }` 승인 |
 | `GET` | `/mobile-sessions` | 연결된 모바일 목록 |
 | `DELETE` | `/mobile-sessions/{id}` | 모바일 연결 해제 |
+| `GET`, `DELETE` | `/session` | 현재 브라우저 session 조회·해제 |
+| `GET` | `/notifications?limit=20` | 계정 알림 목록 |
+| `POST` | `/notifications/test` | Push 테스트 알림 계획 |
+| `GET` | `/push/vapid-public-key` | 현재 VAPID public key |
+| `PUT` | `/push/subscriptions` | 현재 브라우저 session의 구독 등록 |
+| `DELETE` | `/push/subscriptions/{id}` | 구독 해제 |
 
 WebView bearer는 다른 namespace에 사용할 수 없습니다. 허용 origin은
 `tauri://localhost`, `http://tauri.localhost`, `http://127.0.0.1:5173`뿐입니다.
@@ -98,21 +106,12 @@ WebView bearer는 다른 namespace에 사용할 수 없습니다. 허용 origin�
 | `POST` | `/api/pairings/{id}/claims` | QR proof로 pairing claim |
 | `POST` | `/api/pairings/claims` | 10자리 수동 코드로 pairing claim |
 | `POST` | `/api/pairings/{id}/complete` | PC 승인 후 모바일 session cookie 발급 |
-| `GET` | `/api/mobile/session` | 현재 모바일 session 상태 |
-| `DELETE` | `/api/mobile/session` | 현재 모바일 session 폐기 |
-| `GET` | `/api/mobile/attendance` | 출석 snapshot과 PC 상태 |
+| `GET` | `/api/me/session` | 현재 브라우저 session 상태 |
+| `DELETE` | `/api/me/session` | 현재 브라우저 session 폐기 |
+| `GET` | `/api/me/attendance` | 출석 snapshot과 PC 상태 |
 
 claim receipt는 JSON에 노출하지 않고 2분짜리 Strict HttpOnly pending cookie에만
 저장합니다. 승인 완료 시 최대 365일의 모바일 session cookie를 발급합니다.
-
-## 모바일 개인 API
-
-다음 기능은 `/api/mobile`에서도 PC WebView와 같은 DTO를 사용합니다.
-
-- `GET`, `PUT /attendance/preferences`
-- `GET`, `PUT /meal-preferences`
-- `GET`, `POST /laundry-watches`
-- `DELETE /laundry-watches/{id}`
 
 연결된 모바일이 0개인 상태는 오류가 아니라 정상적인 빈 목록입니다.
 
@@ -123,11 +122,11 @@ claim receipt는 JSON에 노출하지 않고 2분짜리 Strict HttpOnly pending 
 | `GET` | `/api/desktop/notifications?limit=20` | PC delivery polling |
 | `POST` | `/api/desktop/notifications/{id}/ack` | PC delivery 결과 반영 |
 | `POST` | `/api/desktop/notifications/test` | PC 테스트 알림 계획 |
-| `GET` | `/api/mobile/notifications?limit=20` | 모바일 알림 목록 |
-| `POST` | `/api/mobile/notifications/test` | Push 테스트 알림 계획 |
-| `GET` | `/api/push/vapid-public-key` | 현재 VAPID public key |
-| `PUT` | `/api/push/subscriptions` | 현재 모바일 session의 구독 등록 |
-| `DELETE` | `/api/push/subscriptions/{id}` | 구독 해제 |
+| `GET` | `/api/me/notifications?limit=20` | 계정 알림 목록 |
+| `POST` | `/api/me/notifications/test` | Push 테스트 알림 계획 |
+| `GET` | `/api/me/push/vapid-public-key` | 현재 VAPID public key |
+| `PUT` | `/api/me/push/subscriptions` | 현재 브라우저 session의 구독 등록 |
+| `DELETE` | `/api/me/push/subscriptions/{id}` | 구독 해제 |
 
 테스트 endpoint의 `202`는 notification과 delivery가 PostgreSQL에 생성됐다는 뜻입니다.
 운영체제 표시 또는 Push provider 전달 성공을 의미하지 않습니다. background scheduler가

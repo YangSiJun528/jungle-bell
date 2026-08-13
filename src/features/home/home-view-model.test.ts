@@ -51,7 +51,7 @@ describe('home feature boundaries', () => {
     it('places the fixed Jungle Campus attendance surface before living information', () => {
         const source = readFileSync(new URL('./home-page.tsx', import.meta.url), 'utf8');
 
-        expect(source).toContain('<JungleCampusSummary onRequestInstall={onRequestInstall}/>');
+        expect(source).toContain('<JungleCampusSummary/>');
         expect(source.indexOf('<JungleCampusSummary'))
             .toBeLessThan(source.indexOf('aria-label="오늘의 생활 정보"'));
         expect(source).not.toContain('title="출석"');
