@@ -4,8 +4,7 @@ import {
     WashingMachine,
 } from 'lucide-react';
 import {useDashboardEnvironment} from '@/app/dashboard-context';
-import {useCampusManualRefresh, useLaundryQuery} from '@/app/use-dashboard-queries';
-import {ErrorState, LoadingState} from '@/components/dashboard/async-state';
+import {useCampusManualRefresh, useSuspenseLaundryQuery} from '@/app/use-dashboard-queries';
 import {PageHeader} from '@/components/dashboard/page-header';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Button} from '@/components/ui/button';
@@ -38,22 +37,20 @@ function capacityTone(card: CapacityCardView): string {
 
 export function LaundryPage() {
     const {surface} = useDashboardEnvironment();
-    const laundry = useLaundryQuery();
+    const laundry = useSuspenseLaundryQuery();
     const manualRefresh = useCampusManualRefresh('laundry');
     const personal = personalSurface(surface.kind);
 
     const snapshot = laundry.data;
-    const reliable = snapshot
-        ? snapshot.quality.collection === 'SUCCESS' && laundrySituationDataIsReliable({
-            hasData: snapshot.machines.length > 0,
-            error: laundry.error,
-            sourceFreshness: snapshot.quality.sourceFreshness,
-            expectedRefreshIntervalSeconds: snapshot.quality.expectedRefreshIntervalSeconds,
-            snapshotSavedAt: Date.parse(snapshot.asOf),
-            nowMs: Date.now(),
-        })
-        : false;
-    const summaries = capacityCards(snapshot?.capacity ?? null, reliable);
+    const reliable = snapshot.quality.collection === 'SUCCESS' && laundrySituationDataIsReliable({
+        hasData: snapshot.machines.length > 0,
+        error: laundry.error,
+        sourceFreshness: snapshot.quality.sourceFreshness,
+        expectedRefreshIntervalSeconds: snapshot.quality.expectedRefreshIntervalSeconds,
+        snapshotSavedAt: Date.parse(snapshot.asOf),
+        nowMs: Date.now(),
+    });
+    const summaries = capacityCards(snapshot.capacity, reliable);
     const refreshFailed = laundry.isError || manualRefresh.isError;
     const refreshing = laundry.isFetching || manualRefresh.isPending;
 
@@ -73,16 +70,7 @@ export function LaundryPage() {
                 )}
             />
 
-            {laundry.isPending && !snapshot ? (
-                <LoadingState label="세탁실 기기 상태 확인 중"/>
-            ) : laundry.isError && !snapshot ? (
-                <ErrorState
-                    description="잠시 후 새로고침하세요."
-                    retry={() => manualRefresh.mutate()}
-                />
-            ) : snapshot ? (
-                <>
-                    {refreshFailed ? (
+            {refreshFailed ? (
                         <Alert variant="destructive">
                             <CircleAlert/>
                             <AlertTitle>최신 기기 상태를 불러오지 못했습니다.</AlertTitle>
@@ -156,14 +144,12 @@ export function LaundryPage() {
                         </CardContent>
                     </Card>
 
-                    <LaundryMachineList machines={snapshot.machines}/>
-                </>
-            ) : null}
+            <LaundryMachineList machines={snapshot.machines}/>
 
             {personal === null ? null : (
                 <PersonalLaundrySection
                     surface={personal}
-                    machines={snapshot?.machines ?? []}
+                    machines={snapshot.machines}
                 />
             )}
         </div>

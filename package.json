@@ -13,14 +13,13 @@
     "check:site": "cross-env ASTRO_TELEMETRY_DISABLED=1 astro sync && tsc --noEmit -p tsconfig.site.json",
     "typecheck": "tsc --noEmit",
     "verify:web": "npm run check:site && npm run build && npm test",
-    "verify:server": "npm --prefix server run check && npm --prefix server run build",
+    "verify:server": "cd server && ./gradlew --no-daemon check bootJar",
     "verify:desktop": "npm run build:app && cargo fmt --manifest-path src-tauri/Cargo.toml --check && cargo test --manifest-path src-tauri/Cargo.toml && cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
     "verify": "npm run verify:web && npm run verify:server && npm run verify:desktop",
     "preview": "vite preview",
     "tauri": "tauri"
   },
   "dependencies": {
-    "@jungle-bell/backend-common": "file:server/shared",
     "@tanstack/react-query": "^5.101.4",
     "@tauri-apps/api": "^2.11.1",
     "class-variance-authority": "^0.7.1",
@@ -32,6 +31,7 @@
     "react": "^19.2.8",
     "react-day-picker": "^10.0.1",
     "react-dom": "^19.2.8",
+    "react-error-boundary": "^6.1.2",
     "tailwind-merge": "^3.6.0",
     "zod": "^4.4.3"
   },

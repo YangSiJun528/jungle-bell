@@ -11,7 +11,7 @@ function escapeXml(value: string): string {
 }
 
 export const GET: APIRoute = async ({site}) => {
-    const origin = site ?? new URL('https://jungle-bell-api.yangsijun5528.workers.dev');
+    const origin = site ?? new URL('http://127.0.0.1:8080');
     const items = (await publishedPosts()).map((post) => {
         const link = new URL(postHref(post), origin).href;
         return `<item><title>${escapeXml(post.data.title)}</title><link>${escapeXml(link)}</link>`

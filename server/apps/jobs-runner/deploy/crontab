@@ -1,1 +1,0 @@
-* * * * * flock --nonblock --conflict-exit-code 75 /tmp/jungle-bell-jobs.lock node /app/dist/jobs/jobs.js run || test "$?" -eq 75

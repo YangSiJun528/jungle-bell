@@ -35,35 +35,24 @@ jobs:
           retention-days: 1
 
   server:
-    needs: web
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-java@v5
         with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: server/package-lock.json
-      - uses: actions/download-artifact@v4
-        with:
-          name: app-assets
-          path: dist
-      - run: npm ci --prefix server
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - run: chmod +x server/gradlew
       - run: npm run verify:server
-      - name: Bundle test App Worker
+      - name: Validate OCI Compose
         working-directory: server
-        run: npx wrangler deploy --dry-run --config apps/api-worker/deploy/wrangler.api-test.jsonc --outdir /tmp/jungle-bell-app-worker
-      - name: Validate production OCI Compose
-        working-directory: server
-        run: docker compose --env-file apps/jobs-runner/deploy/.env.oci.example -f apps/jobs-runner/deploy/docker-compose.oci.yml config --quiet
-      - name: Validate v2-test OCI Compose
-        working-directory: server
-        run: docker compose --env-file apps/jobs-runner/deploy/.env.oci-v2-test.example -f apps/jobs-runner/deploy/docker-compose.oci-v2-test.yml config --quiet
-      - name: Build OCI Jobs image
-        run: docker build --file server/apps/jobs-runner/deploy/Dockerfile server
+        run: docker compose --env-file deploy/.env.v2-test.example -f deploy/compose.v2-test.yml --profile quick-tunnel config --quiet
+      - name: Build OCI server image
+        run: docker build --file server/Dockerfile .
 
   desktop:
     runs-on: ubuntu-24.04

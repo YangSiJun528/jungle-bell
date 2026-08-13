@@ -1,4 +1,10 @@
-import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
+import {
+    useMutation,
+    useQuery,
+    useQueryClient,
+    useSuspenseQueries,
+    useSuspenseQuery,
+} from '@tanstack/react-query';
 import type {DashboardNotification} from '@/api/dashboard-api';
 import type {NotificationInboxSnapshot} from '@/domain/notifications/inbox';
 import {
@@ -15,14 +21,22 @@ export const DASHBOARD_REFRESH = {
     personal: 60_000,
 } as const;
 
-export function useLaundryQuery() {
+export function useSuspenseLaundryQuery() {
     const {api} = useDashboardEnvironment();
-    return useQuery(laundryQueryOptions(api));
+    return useSuspenseQuery(laundryQueryOptions(api));
 }
 
-export function useMealsQuery() {
+export function useSuspenseMealsQuery() {
     const {api} = useDashboardEnvironment();
-    return useQuery(mealsQueryOptions(api));
+    return useSuspenseQuery(mealsQueryOptions(api));
+}
+
+export function useSuspenseCampusQueries() {
+    const {api} = useDashboardEnvironment();
+    const [laundry, meals] = useSuspenseQueries({
+        queries: [laundryQueryOptions(api), mealsQueryOptions(api)],
+    });
+    return {laundry, meals};
 }
 
 export function useCampusManualRefresh(kind: 'laundry' | 'meals') {

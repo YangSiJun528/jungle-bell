@@ -18,7 +18,6 @@ const snapshot: DashboardMealsSnapshot = {
         ],
         currentWeeklyMenu: null,
         weeklyMenus: [],
-        historyNextBefore: null,
     },
 };
 
@@ -44,7 +43,6 @@ describe('selectTodayMeals', () => {
                 recentMenus: [],
                 currentWeeklyMenu: null,
                 weeklyMenus: [],
-                historyNextBefore: null,
             },
         };
 

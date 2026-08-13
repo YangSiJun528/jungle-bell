@@ -5,8 +5,8 @@ import {
     RefreshCw,
     Utensils,
 } from 'lucide-react';
-import {useCampusManualRefresh, useMealsQuery} from '@/app/use-dashboard-queries';
-import {EmptyState, ErrorState, LoadingState} from '@/components/dashboard/async-state';
+import {useCampusManualRefresh, useSuspenseMealsQuery} from '@/app/use-dashboard-queries';
+import {EmptyState} from '@/components/dashboard/async-state';
 import {PageHeader} from '@/components/dashboard/page-header';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Button} from '@/components/ui/button';
@@ -18,13 +18,13 @@ import {TodayMealGrid} from '../components/today-meal-grid';
 import {WeeklyMealMenu} from '../components/weekly-meal-menu';
 
 export function MealsPage() {
-    const meals = useMealsQuery();
+    const meals = useSuspenseMealsQuery();
     const manualRefresh = useCampusManualRefresh('meals');
     const todayMeals = useMemo(
-        () => meals.data ? selectTodayMeals(meals.data) : [],
+        () => selectTodayMeals(meals.data),
         [meals.data, meals.dataUpdatedAt],
     );
-    const currentWeekly = meals.data?.data.currentWeeklyMenu;
+    const currentWeekly = meals.data.data.currentWeeklyMenu;
     const weeklyMeal = currentWeekly?.status === 'AVAILABLE' ? currentWeekly.post : null;
     const weeklyKey = currentWeekly?.targetWeekKey ?? null;
     const refreshFailed = meals.isError || manualRefresh.isError;
@@ -46,13 +46,7 @@ export function MealsPage() {
                 )}
             />
 
-            {meals.isPending && !meals.data ? (
-                <LoadingState label="급식 정보 확인 중"/>
-            ) : meals.isError && !meals.data ? (
-                <ErrorState title="급식 정보를 불러오지 못했습니다." retry={() => manualRefresh.mutate()}/>
-            ) : meals.data ? (
-                <>
-                    {refreshFailed ? (
+            {refreshFailed ? (
                         <Alert variant="destructive">
                             <CircleAlert/>
                             <AlertTitle>최신 식단을 불러오지 못했습니다.</AlertTitle>
@@ -88,9 +82,7 @@ export function MealsPage() {
                         )}
                     </section>
 
-                    <MealHistorySection meals={meals.data}/>
-                </>
-            ) : null}
+            <MealHistorySection meals={meals.data}/>
         </div>
     );
 }

@@ -1,24 +1,23 @@
 import {z, type ZodType} from 'zod';
 import {
-    attendancePreferencesV2Schema,
+    attendancePreferencesSchema,
     laundryWatchIdSchema,
     laundryWatchInputSchema,
     laundryWatchListSchema,
     laundryWatchSchema,
     mealPreferencesInputSchema,
     mealPreferencesSchema,
-    type AttendancePreferencesV2,
+    type AttendancePreferences,
     type LaundryApplianceKind,
     type LaundryWatch,
     type LaundryWatchInput,
     type MealPreferences,
     type MealPreferencesInput,
-} from '@jungle-bell/backend-common/contracts/personal';
+} from './personal-contract';
 import type {HttpApiClient} from './http-api-client';
 
-export type AttendancePreferences = AttendancePreferencesV2;
-
 export type {
+    AttendancePreferences,
     LaundryApplianceKind,
     LaundryWatch,
     LaundryWatchInput,
@@ -87,16 +86,16 @@ export function createDashboardPersonalApi(options: {
         async getAttendancePreferences(surface) {
             return value(
                 surface,
-                attendancePreferencesV2Schema,
-                () => request(surface, 'GET', '/v2/attendance/preferences'),
+                attendancePreferencesSchema,
+                () => request(surface, 'GET', '/attendance/preferences'),
             );
         },
         async updateAttendancePreferences(surface, input) {
-            const body = parseInput(attendancePreferencesV2Schema, input);
+            const body = parseInput(attendancePreferencesSchema, input);
             return value(
                 surface,
-                attendancePreferencesV2Schema,
-                () => request(surface, 'PUT', '/v2/attendance/preferences', body),
+                attendancePreferencesSchema,
+                () => request(surface, 'PUT', '/attendance/preferences', body),
             );
         },
         async getMealPreferences(surface) {

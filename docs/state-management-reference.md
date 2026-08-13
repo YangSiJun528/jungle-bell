@@ -7,13 +7,13 @@
 | LMS cookie·SSO session | 전용 `checker` WebView profile | PC의 LMS 연결 상태 | same-origin collector → tagged checker IPC |
 | checker·출석 runtime | Rust `AppState` | 트레이 아이콘·서버 출석 snapshot | checker IPC·desktop HTTP API |
 | 서버용 PC credential | Windows Credential Manager 또는 mode 0600 앱 파일 + `RemoteSyncService` | PC 연결 상태 | 장기 desktop HTTP API |
-| WebView HTTP session | React 메모리 + 서버 D1 hash | PC의 서버 소유 개인 화면 | bootstrap IPC → `/api/desktop-ui` |
+| WebView HTTP session | React 메모리 + PostgreSQL session hash | PC의 서버 소유 개인 화면 | bootstrap IPC → `/api/desktop-ui` |
 | PC 서비스 설정 | Rust `DesktopSettingsService` | LMS 기수 선택·자동 시작·업데이트·사용 통계·디버그 | exact get/update IPC |
 | 공개 세탁·급식 cache | React Query | 대시보드 생활 정보 | public HTTP API |
 | PC 알림함 | `NotificationInboxService` | 대시보드 unread projection | snapshot command + inbox event |
-| 연결·개인 설정·알림 delivery | 서버 D1 | PC/PWA 개인 화면 | short desktop-ui bearer 또는 mobile HttpOnly cookie |
-| 공개 수집 원본·자산 | 서버 R2 | 공개 웹·PC·PWA 생활 정보 | public `/api` |
-| PWA Push subscription | 브라우저 PushManager + 서버 D1 | PWA 운영체제 알림 | service worker push event |
+| 연결·개인 설정·알림 delivery | PostgreSQL | PC/PWA 개인 화면 | short desktop-ui bearer 또는 mobile HttpOnly cookie |
+| 공개 수집 기록·자산 | PostgreSQL | 공개 웹·PC·PWA 생활 정보 | public `/api` |
+| PWA Push subscription | 브라우저 PushManager + PostgreSQL | PWA 운영체제 알림 | service worker push event |
 
 LMS credential은 첫 번째 행 밖으로 이동하지 않습니다. 서버와 일반 WebView에는
 정규화한 출석 snapshot과 Jungle Bell 자체 session만 전달합니다.

@@ -1,5 +1,5 @@
-import {lazy, Suspense, useCallback, useEffect, useMemo, useState} from 'react';
-import {LoadingState} from '@/components/dashboard/async-state';
+import {lazy, useCallback, useEffect, useMemo, useState} from 'react';
+import {AsyncBoundary} from '@/components/dashboard/async-boundary';
 import {useDashboardEnvironment} from './dashboard-context';
 import {InstallPrompt, useInstallPromptVisibility} from './install-prompt';
 import {DashboardShell} from './shell';
@@ -96,21 +96,24 @@ export function DashboardApp() {
                     if (!open && route === 'notifications') replace(contentRoute);
                 },
                 content: (
-                    <Suspense fallback={<LoadingState label="알림을 준비하고 있습니다."/>}>
+                    <AsyncBoundary
+                        errorTitle="알림함을 불러오지 못했습니다."
+                        resetKeys={[notificationPanelOpen]}
+                    >
                         <NotificationPanelContent
                             seenMobileIds={seenMobileIds}
                             onMobileNotificationSeen={markMobileNotificationSeen}
                         />
-                    </Suspense>
+                    </AsyncBoundary>
                 ),
             }}
         >
-            <Suspense fallback={<LoadingState label="화면을 준비하고 있습니다."/>}>
+            <AsyncBoundary resetKeys={[contentRoute]}>
                 <RouteContent
                     route={contentRoute}
                     onRequestInstall={openInstallPrompt}
                 />
-            </Suspense>
+            </AsyncBoundary>
             <InstallPrompt open={installPromptOpen} onOpenChange={setInstallPromptVisibility}/>
         </DashboardShell>
     );

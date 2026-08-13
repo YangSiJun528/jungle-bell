@@ -132,7 +132,7 @@ test('세탁 화면은 기존 워시타워 상태표를 유지하고 개인 기�
     assert.match(washTower, /data-zone=\{machine\.zone\}/);
     assert.match(washTower, /overflow-x-auto/);
 
-    assert.match(laundry, /personal === null \? null[\s\S]*<PersonalLaundrySection[\s\S]*surface=\{personal\}[\s\S]*machines=\{snapshot\?\.machines \?\? \[\]\}/);
+    assert.match(laundry, /personal === null \? null[\s\S]*<PersonalLaundrySection[\s\S]*surface=\{personal\}[\s\S]*machines=\{snapshot\.machines\}/);
     assert.doesNotMatch(laundry, /use(?:Query|Mutation|QueryClient)/);
     assert.doesNotMatch(laundry, /api\.(?:list|create|delete|join|leave)Laundry/);
     assert.doesNotMatch(laundry, /as PersonalSurface/);
@@ -203,8 +203,9 @@ test('TanStack Query는 공개 데이터와 개인 데이터를 서로 다른 �
     assert.match(queries, /enabled:\s*surface\.canReceivePersonalNotifications/);
     assert.match(campusQueryOptions, /queryOptions\(\{[\s\S]{0,180}queryKey: laundryQueryContract\.queryKey,[\s\S]{0,180}staleTime: laundryQueryContract\.freshnessMs/);
     assert.match(campusQueryOptions, /queryOptions\(\{[\s\S]{0,180}queryKey: mealsQueryContract\.queryKey,[\s\S]{0,180}staleTime: mealsQueryContract\.freshnessMs/);
-    assert.match(queries, /useQuery\(laundryQueryOptions\(api\)\)/);
-    assert.match(queries, /useQuery\(mealsQueryOptions\(api\)\)/);
+    assert.match(queries, /useSuspenseQuery\(laundryQueryOptions\(api\)\)/);
+    assert.match(queries, /useSuspenseQuery\(mealsQueryOptions\(api\)\)/);
+    assert.match(queries, /useSuspenseQueries\(\{[\s\S]*laundryQueryOptions\(api\)[\s\S]*mealsQueryOptions\(api\)/);
     assert.match(queries, /queryKey: queryKeys\.attendance\(personalSurface\),[\s\S]{0,220}staleTime: DASHBOARD_REFRESH\.personal/);
     assert.match(queries, /queryKey: queryKeys\.notifications\(personalSurface\),[\s\S]{0,260}staleTime: DASHBOARD_REFRESH\.personal/);
 

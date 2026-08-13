@@ -137,7 +137,7 @@ PC 대시보드에서 **공식 정글캠퍼스 열기**를 눌러 Jungle Campus�
 
 PC는 운영체제 알림 권한과 대시보드의 개인 알림 설정을 확인해 주세요. PWA는 설치형으로 실행했는지, PC와 연결되어 있는지, 브라우저 알림 권한과 Push 구독이 활성화되어 있는지 확인해 주세요.
 
-대시보드의 **테스트 알림 보내기**는 하나의 알림 event를 현재 PC와 연결된 모든 활성 PWA 대상으로 생성합니다. PC inbox는 다음 poll에서, PWA Push는 보통 다음 1분 Jobs 실행에서 전달됩니다.
+대시보드의 **테스트 알림 보내기**는 하나의 알림 event를 현재 PC와 연결된 모든 활성 PWA 대상으로 생성합니다. PC inbox는 다음 poll에서, PWA Push는 서버 background scheduler가 전달합니다.
 
 #### 설치 중 경고가 떠요.
 
@@ -150,7 +150,7 @@ PC 대시보드에서 **새로고침**을 누른 뒤 Jungle Campus 로그인 상
 
 ## 질문·제보하기
 
-- [공식 소식](https://jungle-bell-api.yangsijun5528.workers.dev/blog/index.html): 업데이트와 이용 안내
+- [공식 소식](https://amp-leu-controversy-des.trycloudflare.com/blog/index.html): 업데이트와 이용 안내
 - GitHub Discussions: [건의하기](https://github.com/YangSiJun528/jungle-bell/discussions/categories/건의하기), [궁금해요](https://github.com/YangSiJun528/jungle-bell/discussions/categories/궁금해요)
 - [GitHub Issues](https://github.com/YangSiJun528/jungle-bell/issues/new?template=bug.yml): 재현 가능한 버그 제보
 

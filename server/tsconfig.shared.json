@@ -1,9 +1,0 @@
-{
-  "extends": "./tsconfig.base.json",
-  "compilerOptions": {
-    "lib": ["ES2023", "WebWorker", "DOM.Iterable"],
-    "types": []
-  },
-  "include": ["shared/**/*.ts"],
-  "exclude": ["shared/tests/**/*.ts"]
-}

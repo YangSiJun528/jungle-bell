@@ -11,9 +11,8 @@ const {VitePWA} = require('vite-plugin-pwa') as {
 };
 
 const host = process.env.TAURI_DEV_HOST;
-export const defaultDevApiOrigin = 'https://jungle-bell-api-test.yangsijun5528.workers.dev';
+export const defaultDevApiOrigin = 'https://amp-leu-controversy-des.trycloudflare.com';
 export const tauriApiOrigins = new Set([
-    'https://jungle-bell-api.yangsijun5528.workers.dev',
     defaultDevApiOrigin,
 ]);
 

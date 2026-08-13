@@ -8,8 +8,7 @@ import {MealHistorySection} from './meal-history-section';
 const source = readFileSync(new URL('./meal-history-section.tsx', import.meta.url), 'utf8');
 
 const api = vi.hoisted(() => ({
-    getPublicMealHistory: vi.fn(),
-    getPublicMealHistoryMonth: vi.fn(),
+    getPublicMealHistoryMonth: vi.fn(async () => ({posts: []})),
 }));
 
 vi.mock('@/app/dashboard-context', () => ({
@@ -44,13 +43,14 @@ const meals: DashboardMealsSnapshot = {
                 images: [],
             },
         }],
-        historyNextBefore: '2020-01-02T03:00:00.000Z|past-lunch',
     },
 };
 
 function renderHistory(snapshot = meals): string {
+    const client = new QueryClient();
+    client.setQueryData(['campus', 'meals', 'history', '2020-01'], {posts: []});
     return renderToStaticMarkup(
-        <QueryClientProvider client={new QueryClient()}>
+        <QueryClientProvider client={client}>
             <MealHistorySection meals={snapshot}/>
         </QueryClientProvider>,
     );
@@ -93,8 +93,10 @@ describe('MealHistorySection', () => {
     test('달을 이동하면 해당 달 기록을 캐시 가능한 월 단위 쿼리로 가져온다', () => {
         expect(source).toContain("queryKey: ['campus', 'meals', 'history', visibleMonthKey]");
         expect(source).toContain('api.getPublicMealHistoryMonth(visibleMonthKey)');
-        expect(source).toContain('onMonthChange={(month) => {');
+        expect(source).toContain('const changeMonth = (month: string) => {');
         expect(source).toContain('setVisibleMonthKey(month)');
+        expect(source).toContain('useSuspenseQuery({');
+        expect(source).toContain('<AsyncBoundary');
         expect(source).not.toContain('useInfiniteQuery');
         expect(source).not.toContain('MealHistoryLoadMore');
     });

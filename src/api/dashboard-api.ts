@@ -124,9 +124,8 @@ export interface DashboardCurrentWeeklyMealMenu {
     post: DashboardMealPost | null;
 }
 
-export interface DashboardMealHistoryPage {
+export interface DashboardMealHistoryMonth {
     posts: DashboardMealPost[];
-    nextBefore: string | null;
 }
 
 export interface DashboardMealsSnapshot {
@@ -139,7 +138,6 @@ export interface DashboardMealsSnapshot {
         recentMenus: DashboardMealPost[];
         currentWeeklyMenu: DashboardCurrentWeeklyMealMenu | null;
         weeklyMenus: DashboardWeeklyMealMenu[];
-        historyNextBefore: string | null;
     };
 }
 
@@ -242,8 +240,7 @@ export interface DesktopTestNotificationResult {
 export interface DashboardApi extends DashboardPersonalApi, DashboardDesktopSettingsApi {
     getPublicLaundry(): Promise<DashboardLaundrySnapshot>;
     getPublicMeals(): Promise<DashboardMealsSnapshot>;
-    getPublicMealHistory(before: string | null, limit: number): Promise<DashboardMealHistoryPage>;
-    getPublicMealHistoryMonth(month: string): Promise<DashboardMealHistoryPage>;
+    getPublicMealHistoryMonth(month: string): Promise<DashboardMealHistoryMonth>;
     getAttendance(surface: 'desktop' | 'companion'): Promise<AttendanceDashboard>;
     getDesktopConnectionState(): Promise<DesktopConnectionState>;
     resetDesktopIdentity(): Promise<DesktopConnectionState>;
@@ -371,23 +368,12 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
             return parseDashboardMealsSnapshot(value, mealAssetOrigin);
         },
 
-        async getPublicMealHistory(before, limit) {
-            if ((before !== null && !isMealHistoryCursor(before))
-                || !Number.isSafeInteger(limit)
-                || limit < 1
-                || limit > 100) {
-                throw new Error('API_CLIENT_INVALID_ARGUMENT');
-            }
-            const value = await publicJson(mealHistoryPath(before, limit));
-            return parseDashboardMealHistoryPage(value, mealAssetOrigin);
-        },
-
         async getPublicMealHistoryMonth(month) {
             if (!/^\d{4}-(?:0[1-9]|1[0-2])$/u.test(month)) {
                 throw new Error('API_CLIENT_INVALID_ARGUMENT');
             }
             const value = await publicJson(`/api/public/meals/history?month=${month}`);
-            return parseDashboardMealHistoryPage(value, mealAssetOrigin);
+            return parseDashboardMealHistoryMonth(value, mealAssetOrigin);
         },
 
         async getAttendance(surface) {
@@ -893,19 +879,17 @@ export function parseDashboardMealsSnapshot(
             recentMenus: parseMealPosts(data.recentMenus, 128, expectedAssetOrigin),
             currentWeeklyMenu,
             weeklyMenus: parseWeeklyMealMenus(data.weeklyMenus, expectedAssetOrigin),
-            historyNextBefore: nullableMealHistoryCursor(data.historyNextBefore),
         },
     };
 }
 
-export function parseDashboardMealHistoryPage(
+export function parseDashboardMealHistoryMonth(
     value: unknown,
     expectedAssetOrigin: string | null = null,
-): DashboardMealHistoryPage {
-    const source = exactRecord(value, ['posts', 'nextBefore']);
+): DashboardMealHistoryMonth {
+    const source = exactRecord(value, ['posts']);
     return {
         posts: parseMealPosts(source.posts, 100, expectedAssetOrigin),
-        nextBefore: nullableMealHistoryCursor(source.nextBefore),
     };
 }
 
@@ -1074,46 +1058,6 @@ function safeMealAssetUrl(
     } catch {
         throw new Error('API_RESPONSE_INVALID');
     }
-}
-
-function mealHistoryPath(before: string | null, limit: number): `/api/public/${string}` {
-    const params = new URLSearchParams();
-    if (before !== null) params.set('before', before);
-    params.set('limit', String(limit));
-    return `/api/public/meals/history?${params.toString()}`;
-}
-
-const MEAL_HISTORY_CURSOR_MAX_LENGTH = 2_048;
-
-function isMealHistoryCursor(value: string): boolean {
-    if (value.length < 26 || value.length > MEAL_HISTORY_CURSOR_MAX_LENGTH || value[24] !== '~') {
-        return false;
-    }
-    const timestamp = value.slice(0, 24);
-    const encodedPostId = value.slice(25);
-    if (!isCanonicalIso(timestamp) || encodedPostId.length === 0) return false;
-    try {
-        const postId = decodeURIComponent(encodedPostId);
-        return postId.length >= 1
-            && postId.length <= 128
-            && encodeURIComponent(postId) === encodedPostId;
-    } catch {
-        return false;
-    }
-}
-
-function isCanonicalIso(value: string): boolean {
-    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u.test(value)) return false;
-    const parsed = new Date(value);
-    return Number.isFinite(parsed.getTime()) && parsed.toISOString() === value;
-}
-
-function nullableMealHistoryCursor(value: unknown): string | null {
-    if (value === null) return null;
-    if (typeof value !== 'string' || !isMealHistoryCursor(value)) {
-        throw new Error('API_RESPONSE_INVALID');
-    }
-    return value;
 }
 
 export function safeMealPermalink(value: unknown): string | null {
