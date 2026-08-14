@@ -6,7 +6,7 @@
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=()
   Cross-Origin-Opener-Policy: same-origin
 
-/dashboard.html
+/index.html
   Cache-Control: no-cache, no-store, must-revalidate
 
 /sw.js

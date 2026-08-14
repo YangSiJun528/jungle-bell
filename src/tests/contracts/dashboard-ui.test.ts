@@ -5,7 +5,7 @@ import {test} from 'vitest';
 const srcRoot = new URL('../../', import.meta.url);
 const source = (path: string) => readFileSync(new URL(path, srcRoot), 'utf8');
 
-const html = source('./dashboard.html');
+const html = source('./index.html');
 const main = source('./app/main.tsx');
 const app = source('./app/dashboard-app.tsx');
 const context = source('./app/dashboard-context.tsx');

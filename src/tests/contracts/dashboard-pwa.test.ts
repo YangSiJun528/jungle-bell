@@ -16,7 +16,8 @@ const vite = readFileSync(new URL('../vite.config.ts', srcRoot), 'utf8');
 test('manifest는 모바일 standalone 설치와 최소 아이콘을 선언한다', () => {
     assert.equal(manifest.name, 'Jungle Bell');
     assert.equal(manifest.display, 'standalone');
-    assert.equal(manifest.start_url, './dashboard.html#home');
+    assert.equal(manifest.id, './');
+    assert.equal(manifest.start_url, './#home');
     assert.equal(manifest.scope, './');
     assert.ok(Array.isArray(manifest.icons));
     assert.ok((manifest.icons as Array<{sizes?: string}>).some(({sizes}) => sizes === '192x192'));
@@ -36,7 +37,8 @@ test('service worker는 Workbox revision manifest를 선캐시하고 개인 API�
     assert.match(worker, /no-store/i);
     assert.doesNotMatch(worker, /\/api\/private\/[^'"`]*['"`]\s*,/);
     assert.doesNotMatch(worker, /endsWith\(['"]\/(?:pair|app)['"]\)/);
-    assert.match(worker, /url\.pathname\s*===\s*dashboardPath/);
+    assert.match(worker, /url\.pathname\s*===\s*appRootPath\s*\|\|\s*url\.pathname\s*===\s*indexPath/);
+    assert.match(worker, /matchPrecache\(['"]\.\/index\.html['"]\)/);
 });
 
 test('공개 상태·세탁·급식 API는 과거 급식 페이지까지 network-first 정책을 사용한다', () => {
@@ -79,11 +81,10 @@ test('프론트엔드 API와 PWA 계약에 기존 v1 경로가 남지 않는다'
     assert.equal(worker.includes('/v1'), false);
 });
 
-test('service worker는 블로그 HTML과 정적 JSON 요청을 가로채지 않는다', () => {
-    assert.match(worker, /function isBlogRequest\(url\)/);
-    assert.match(worker, /url\.pathname\s*===\s*['"]\/blog['"]/);
-    assert.match(worker, /url\.pathname\.startsWith\(['"]\/blog\/['"]\)/);
-    assert.match(worker, /if \(isBlogRequest\(url\)\) return false;/);
+test('service worker는 루트와 index.html만 오프라인 SPA 진입점으로 사용한다', () => {
+    assert.match(worker, /new URL\(['"]\.\/['"], self\.registration\.scope\)/);
+    assert.match(worker, /new URL\(['"]\.\/index\.html['"], self\.registration\.scope\)/);
+    assert.doesNotMatch(worker, /isBlogRequest|dashboard\.html/);
 });
 
 test('service worker는 만료되었거나 유효한 safe epoch가 없는 push를 표시하지 않는다', async () => {
@@ -147,19 +148,31 @@ test('service worker는 만료되었거나 유효한 safe epoch가 없는 push�
     await Promise.all(waits);
     assert.equal(shown.length, 1);
     assert.equal((shown[0] as [string, {tag?: string}])[1].tag, 'notification-1');
+    assert.equal((shown[0] as [string, {data?: {path?: string}}])[1].data?.path, '/#notifications');
+
+    const routeWaits: Promise<unknown>[] = [];
+    push({
+        data: {json: () => ({
+            title: '출석 알림',
+            path: '/#attendance',
+            expiresAtEpochMs: Date.now() + 60_000,
+        })},
+        waitUntil: (promise) => routeWaits.push(promise),
+    });
+    await Promise.all(routeWaits);
+    assert.equal((shown[1] as [string, {data?: {path?: string}}])[1].data?.path, '/#attendance');
 });
 
-test('Vite는 PWA public 디렉터리와 dashboard 멀티페이지 입력을 빌드한다', () => {
+test('Vite는 표준 index.html 엔트리와 PWA public 디렉터리를 빌드한다', () => {
     assert.match(vite, /publicDir:\s*['"]public['"]/);
-    assert.match(vite, /dashboard:\s*resolve\([^\n]*src\/dashboard\.html/);
-    assert.doesNotMatch(vite, /pair:\s*resolve\(/);
+    assert.doesNotMatch(vite, /rolldownOptions[\s\S]*input:/);
     assert.match(vite, /VitePWA\(\{/);
     assert.match(vite, /strategies:\s*['"]injectManifest['"]/);
     assert.match(vite, /srcDir:\s*['"]service-worker['"]/);
     assert.match(vite, /filename:\s*['"]sw\.js['"]/);
     assert.match(vite, /injectRegister:\s*false/);
     assert.match(vite, /manifest:\s*false/);
-    assert.match(vite, /globPatterns:[\s\S]*dashboard\.html/);
+    assert.match(vite, /globPatterns:[\s\S]*index\.html/);
     assert.doesNotMatch(vite, /serviceWorkerAssetsPlugin|sw-assets\.json|__BUILD_ID__/);
 });
 

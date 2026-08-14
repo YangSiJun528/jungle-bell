@@ -1,10 +1,10 @@
 {
-  "id": "./dashboard.html",
+  "id": "./",
   "name": "Jungle Bell",
   "short_name": "Jungle Bell",
   "description": "출석 상태와 정글 생활 정보를 확인하세요.",
   "lang": "ko-KR",
-  "start_url": "./dashboard.html#home",
+  "start_url": "./#home",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
@@ -32,8 +32,8 @@
     }
   ],
   "shortcuts": [
-    {"name": "출석 상태", "url": "./dashboard.html#attendance"},
-    {"name": "세탁", "url": "./dashboard.html#laundry"},
-    {"name": "급식", "url": "./dashboard.html#meals"}
+    {"name": "출석 상태", "url": "./#attendance"},
+    {"name": "세탁", "url": "./#laundry"},
+    {"name": "급식", "url": "./#meals"}
   ]
 }

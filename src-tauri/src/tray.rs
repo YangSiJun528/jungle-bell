@@ -507,7 +507,7 @@ fn sync_foreground_app_visibility_soon(app: tauri::AppHandle) {
 }
 
 fn dashboard_app_url(route: DashboardRoute) -> String {
-    format!("dashboard.html#{}", route.as_str())
+    format!("index.html#{}", route.as_str())
 }
 
 fn select_dashboard_route(window: &WebviewWindow<tauri::Wry>, route: DashboardRoute) {
@@ -1257,16 +1257,13 @@ mod tests {
 
     #[test]
     fn 대시보드_홈과_알림_이동은_고정된_hash_route를_사용한다() {
-        assert_eq!(dashboard_app_url(DashboardRoute::Home), "dashboard.html#home");
-        assert_eq!(
-            dashboard_app_url(DashboardRoute::Attendance),
-            "dashboard.html#attendance"
-        );
-        assert_eq!(dashboard_app_url(DashboardRoute::Laundry), "dashboard.html#laundry");
-        assert_eq!(dashboard_app_url(DashboardRoute::Meals), "dashboard.html#meals");
+        assert_eq!(dashboard_app_url(DashboardRoute::Home), "index.html#home");
+        assert_eq!(dashboard_app_url(DashboardRoute::Attendance), "index.html#attendance");
+        assert_eq!(dashboard_app_url(DashboardRoute::Laundry), "index.html#laundry");
+        assert_eq!(dashboard_app_url(DashboardRoute::Meals), "index.html#meals");
         assert_eq!(
             dashboard_app_url(DashboardRoute::Notifications),
-            "dashboard.html#notifications"
+            "index.html#notifications"
         );
     }
 

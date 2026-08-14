@@ -24,12 +24,6 @@ class PublicDataController(private val service: PublicDataService) {
     private val latestCache = "public, max-age=15, s-maxage=30, stale-while-revalidate=120"
     private val immutableCache = "public, max-age=31536000, immutable"
 
-    @GetMapping("/")
-    fun root(): ResponseEntity<Void> = ResponseEntity.status(308).location(URI.create("/dashboard.html")).build()
-
-    @GetMapping("/blog", "/blog/")
-    fun blog(): ResponseEntity<Void> = ResponseEntity.status(308).location(URI.create("/blog/index.html")).build()
-
     @GetMapping("/api/health")
     fun health(): ResponseEntity<PublicHealth> {
         val (body, status) = service.health()

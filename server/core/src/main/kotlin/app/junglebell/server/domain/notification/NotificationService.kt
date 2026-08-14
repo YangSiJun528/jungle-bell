@@ -38,7 +38,7 @@ class NotificationService(
                 "test",
                 "Jungle Bell 테스트 알림",
                 "알림이 정상적으로 연결되었습니다.",
-                "/dashboard.html#notifications",
+                "/#notifications",
                 mapOf("notificationId" to id.toString(), "tag" to "jungle-bell-test-${principal.sessionId}"),
                 now,
                 now,

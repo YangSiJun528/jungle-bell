@@ -9,7 +9,7 @@ Jungle Bell 서버는 Kotlin Spring Boot 기반의 세 Gradle 모듈로 구성�
 | 모듈 | 역할 | 실행 형태 |
 | --- | --- | --- |
 | `core` | 도메인 모델, use case, 저장소 port, JDBC adapter, PostgreSQL schema | 라이브러리 JAR |
-| `api` | Spring MVC controller, Spring Security opaque-token Resource Server, React/Astro 정적 자산 | Spring Boot JAR |
+| `api` | Spring MVC controller, Spring Security opaque-token Resource Server, React SPA 정적 자산 | Spring Boot JAR |
 | `worker` | 수집 scheduler, 알림 자동화 호출, Web Push adapter | Spring Boot JAR |
 
 의존 방향은 `api -> core <- worker`뿐입니다. `api`와 `worker`는 서로 참조하지

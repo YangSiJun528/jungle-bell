@@ -150,7 +150,6 @@ PC 대시보드에서 **새로고침**을 누른 뒤 Jungle Campus 로그인 상
 
 ## 질문·제보하기
 
-- [공식 소식](https://amp-leu-controversy-des.trycloudflare.com/blog/index.html): 업데이트와 이용 안내
 - GitHub Discussions: [건의하기](https://github.com/YangSiJun528/jungle-bell/discussions/categories/건의하기), [궁금해요](https://github.com/YangSiJun528/jungle-bell/discussions/categories/궁금해요)
 - [GitHub Issues](https://github.com/YangSiJun528/jungle-bell/issues/new?template=bug.yml): 재현 가능한 버그 제보
 

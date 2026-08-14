@@ -133,7 +133,7 @@ curl --fail --silent https://example.test/api/health
 curl --fail --silent https://example.test/api/public/status
 curl --fail --silent https://example.test/api/public/laundry
 curl --fail --silent https://example.test/api/public/meals
-curl --fail --silent https://example.test/dashboard.html >/dev/null
+curl --fail --silent https://example.test/ >/dev/null
 server/tools/smoke-api.sh https://example.test
 ```
 

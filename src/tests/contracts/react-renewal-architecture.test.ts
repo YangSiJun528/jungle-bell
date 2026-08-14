@@ -12,7 +12,7 @@ describe('React renewal architecture', () => {
             .map((entry) => entry.name)
             .sort();
 
-        expect(rootFiles).toEqual(['dashboard.html', 'env.d.ts']);
+        expect(rootFiles).toEqual(['env.d.ts', 'index.html']);
     });
 
     test('shared layers do not depend on features and features stay isolated', () => {
@@ -39,7 +39,7 @@ describe('React renewal architecture', () => {
     });
 
     test('the dashboard is a React entry backed by TanStack Query', () => {
-        const dashboard = read('src/dashboard.html');
+        const dashboard = read('src/index.html');
         const packageJson = JSON.parse(read('package.json')) as {
             dependencies?: Record<string, string>;
         };
@@ -67,7 +67,6 @@ describe('React renewal architecture', () => {
 
     test('the dashboard reserves generic badges for laundry identification and the sidebar unread count', () => {
         const dashboardFiles = globSync('src/{app,components/dashboard,features}/**/*.tsx', {cwd: root});
-        const siteStyles = read('src/site/styles/global.css');
         const badgeAllowedFiles = new Set([
             'src/features/laundry/components/laundry-zone-badge.tsx',
             'src/features/laundry/components/laundry-warning-badge.tsx',
@@ -96,24 +95,27 @@ describe('React renewal architecture', () => {
         expect(shell).not.toContain('SURFACE_LABELS');
         expect(shell).not.toContain('현재 접속 환경');
         expect(shell).not.toContain('compactCount');
-        expect(siteStyles).not.toMatch(/\.category\s*\{[^}]*(?:background|border-radius|padding)/u);
     });
 
     test('the frontend uses flat surfaces without gradients', () => {
-        const sourceFiles = globSync('src/**/*.{astro,css,html,tsx}', {cwd: root});
+        const sourceFiles = globSync('src/**/*.{css,html,tsx}', {cwd: root});
 
         for (const path of sourceFiles) {
             expect(read(path), path).not.toMatch(/(?:bg-gradient|linear-gradient|radial-gradient|conic-gradient)/u);
         }
     });
 
-    test('the static Astro blog lives below src and stays outside React hydration', () => {
-        const packageJson = JSON.parse(read('package.json')) as {workspaces?: string[]};
-        const layout = read('src/site/layouts/BaseLayout.astro');
+    test('the frontend has one React entry and no secondary site renderer', () => {
+        const packageJson = JSON.parse(read('package.json')) as {
+            scripts?: Record<string, string>;
+            devDependencies?: Record<string, string>;
+        };
 
-        expect(packageJson.workspaces ?? []).not.toContain('site');
-        expect(read('astro.config.mjs')).toContain("output: 'static'");
-        expect(layout).not.toMatch(/client:(?:load|idle|visible|media|only)/u);
-        expect(layout).not.toMatch(/from ['"]react['"]/u);
+        expect(existsSync(resolve(root, 'src/index.html'))).toBe(true);
+        expect(existsSync(resolve(root, 'src/dashboard.html'))).toBe(false);
+        expect(existsSync(resolve(root, 'src/site'))).toBe(false);
+        expect(existsSync(resolve(root, 'astro.config.mjs'))).toBe(false);
+        expect(packageJson.devDependencies).not.toHaveProperty('astro');
+        expect(Object.keys(packageJson.scripts ?? {})).not.toContain('build:site');
     });
 });

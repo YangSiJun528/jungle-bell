@@ -1286,7 +1286,7 @@ function parseNotifications(value: unknown): DashboardNotification[] {
             'expiresAtEpochMs', 'attempt',
         ]);
         const path = text(item.path, 128);
-        if (!/^\/dashboard\.html#(?:attendance|laundry|meals|notifications|connections)$/u.test(path)) {
+        if (!/^\/#(?:attendance|laundry|meals|notifications|connections)$/u.test(path)) {
             throw new Error('API_RESPONSE_INVALID');
         }
         const createdAtEpochMs = safeEpochMillis(item.createdAtEpochMs);

@@ -132,7 +132,7 @@ export default defineConfig(({command}) => {
                 injectManifest: {
                     rollupFormat: 'iife',
                     globPatterns: [
-                        'dashboard.html',
+                        'index.html',
                         'manifest.webmanifest',
                         'icons/**/*.{png,svg,ico}',
                         'assets/**/*.{js,css,png,woff2,txt}',
@@ -191,11 +191,6 @@ export default defineConfig(({command}) => {
             emptyOutDir: true,
             sourcemap: process.env.TAURI_ENV_DEBUG === 'true',
             minify: process.env.TAURI_ENV_DEBUG === 'true' ? false : 'oxc',
-            rolldownOptions: {
-                input: {
-                    dashboard: resolve(import.meta.dirname, 'src/dashboard.html'),
-                },
-            },
         },
     };
 });

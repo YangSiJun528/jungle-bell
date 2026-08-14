@@ -32,13 +32,8 @@ const noHttpCachePlugin = {
   },
 };
 
-function isBlogRequest(url) {
-  return url.pathname === '/blog' || url.pathname.startsWith('/blog/');
-}
-
 function isEligibleGetRequest({request, url, sameOrigin}) {
   if (!sameOrigin || request.method !== 'GET') return false;
-  if (isBlogRequest(url)) return false;
   return true;
 }
 
@@ -68,9 +63,10 @@ registerRoute(
     try {
       return await fetch(request);
     } catch {
-      const dashboardPath = new URL('./dashboard.html', self.registration.scope).pathname;
-      if (url.pathname === dashboardPath) {
-        return (await matchPrecache('./dashboard.html')) || Response.error();
+      const appRootPath = new URL('./', self.registration.scope).pathname;
+      const indexPath = new URL('./index.html', self.registration.scope).pathname;
+      if (url.pathname === appRootPath || url.pathname === indexPath) {
+        return (await matchPrecache('./index.html')) || Response.error();
       }
       return Response.error();
     }
@@ -156,9 +152,9 @@ self.addEventListener('push', (event) => {
   const title = typeof payload.title === 'string' ? payload.title.slice(0, 120) : 'Jungle Bell';
   const body = typeof payload.body === 'string' ? payload.body.slice(0, 500) : '';
   const path = typeof payload.path === 'string'
-    && /^\/dashboard\.html#(?:attendance|laundry|meals|notifications|connections)$/u.test(payload.path)
+    && /^\/#(?:attendance|laundry|meals|notifications|connections)$/u.test(payload.path)
     ? payload.path
-    : '/dashboard.html#notifications';
+    : '/#notifications';
   const notificationTag = typeof payload.tag === 'string'
     ? payload.tag.slice(0, 120)
     : typeof payload.notificationId === 'string'
@@ -175,7 +171,7 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const path = event.notification.data?.path || '/dashboard.html#notifications';
+  const path = event.notification.data?.path || '/#notifications';
   const target = new URL(path, self.location.origin).href;
   event.waitUntil(self.clients.matchAll({type: 'window', includeUncontrolled: true}).then(async (clients) => {
     for (const client of clients) {

@@ -14,7 +14,7 @@ const mobileNotification: DashboardNotification = {
     kind: 'laundry',
     title: '세탁 완료',
     body: '세탁물을 꺼내 주세요.',
-    path: '/dashboard.html#laundry',
+    path: '/#laundry',
     createdAtEpochMs: Date.parse('2026-08-11T02:00:00.000Z'),
     expiresAtEpochMs: Date.parse('2026-08-12T02:00:00.000Z'),
     attempt: 1,
@@ -42,7 +42,7 @@ describe('notification row navigation semantics', () => {
         );
 
         expect(markup).toContain('<a');
-        expect(markup).toContain('href="/dashboard.html#laundry"');
+        expect(markup).toContain('href="/#laundry"');
         expect(markup).toContain('data-unread="true"');
         expect(markup).toContain('읽지 않은 알림');
         expect(markup).not.toContain('rounded-full');

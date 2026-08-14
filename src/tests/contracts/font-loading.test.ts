@@ -6,7 +6,7 @@ const srcRoot = new URL('../../', import.meta.url);
 const source = (path: string) => readFileSync(new URL(path, srcRoot), 'utf8');
 const globals = source('./app/styles/globals.css');
 const main = source('./app/main.tsx');
-const dashboard = source('./dashboard.html');
+const dashboard = source('./index.html');
 
 test('Pretendard Variable은 저장소의 woff2 파일에서 한 번만 선언한다', () => {
     assert.equal(existsSync(new URL('./assets/fonts/PretendardVariable.woff2', srcRoot)), true);
