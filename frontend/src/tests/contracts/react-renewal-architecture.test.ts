@@ -1,0 +1,121 @@
+import {existsSync, globSync, readFileSync, readdirSync} from 'node:fs';
+import {resolve} from 'node:path';
+import {describe, expect, test} from 'vitest';
+
+const root = resolve(import.meta.dirname, '../../..');
+const read = (path: string): string => readFileSync(resolve(root, path), 'utf8');
+
+describe('React renewal architecture', () => {
+    test('src root contains only stable Vite entry files', () => {
+        const rootFiles = readdirSync(resolve(root, 'src'), {withFileTypes: true})
+            .filter((entry) => entry.isFile())
+            .map((entry) => entry.name)
+            .sort();
+
+        expect(rootFiles).toEqual(['env.d.ts', 'main.ts']);
+    });
+
+    test('shared layers do not depend on features and features stay isolated', () => {
+        const apiFiles = globSync('src/api/**/*.{ts,tsx}', {cwd: root});
+        for (const path of apiFiles) {
+            expect(read(path), path).not.toMatch(/['"]@\/features\//u);
+        }
+
+        const domainFiles = globSync('src/domain/**/*.{ts,tsx}', {cwd: root})
+            .filter((path) => !path.includes('.test.'));
+        for (const path of domainFiles) {
+            expect(read(path), path).not.toMatch(/['"]@\/(?:api|app|features)\//u);
+        }
+
+        const featureFiles = globSync('src/features/*/**/*.{ts,tsx}', {cwd: root});
+        for (const path of featureFiles) {
+            const owner = path.split('/')[2];
+            const importedFeatures = Array.from(
+                read(path).matchAll(/(?:from\s+|import\()\s*['"]@\/features\/([^/'"]+)/gu),
+                (match) => match[1],
+            );
+            expect(importedFeatures, path).toEqual(importedFeatures.filter((feature) => feature === owner));
+        }
+    });
+
+    test('the dashboard is a React entry backed by TanStack Query', () => {
+        const dashboard = read('index.html');
+        const packageJson = JSON.parse(read('package.json')) as {
+            dependencies?: Record<string, string>;
+        };
+
+        expect(dashboard).toContain('<div id="root"></div>');
+        expect(dashboard).toContain('type="module" src="/src/main.ts"');
+        expect(dashboard).not.toMatch(/\bx-(?:data|show|text|for|cloak)\b/u);
+        expect(packageJson.dependencies).toHaveProperty('react');
+        expect(packageJson.dependencies).toHaveProperty('react-dom');
+        expect(packageJson.dependencies).toHaveProperty('@tanstack/react-query');
+        expect(packageJson.dependencies).not.toHaveProperty('alpinejs');
+    });
+
+    test('shadcn components are vendored under the shared UI directory', () => {
+        const components = JSON.parse(read('components.json')) as {
+            aliases?: Record<string, string>;
+        };
+
+        expect(components.aliases?.ui).toBe('@/components/ui');
+        expect(read('src/components/ui/badge.tsx')).toContain('data-slot="badge"');
+        expect(read('src/components/ui/button.tsx')).toContain('data-slot="button"');
+        expect(read('src/components/ui/card.tsx')).toContain('data-slot="card"');
+        expect(read('src/components/ui/card.tsx')).toContain('data-slot="card-action"');
+    });
+
+    test('the dashboard reserves generic badges for laundry identification and the sidebar unread count', () => {
+        const dashboardFiles = globSync('src/{app,components/dashboard,features}/**/*.tsx', {cwd: root});
+        const badgeAllowedFiles = new Set([
+            'src/features/laundry/components/laundry-zone-badge.tsx',
+            'src/features/laundry/components/laundry-warning-badge.tsx',
+        ]);
+
+        expect(existsSync(resolve(root, 'src/components/ui/badge.tsx'))).toBe(true);
+        expect(existsSync(resolve(root, 'src/components/dashboard/status-badge.tsx'))).toBe(false);
+        for (const path of dashboardFiles) {
+            if (badgeAllowedFiles.has(path)) continue;
+            expect(read(path), path).not.toMatch(/components\/(?:ui\/badge|dashboard\/status-badge)/u);
+            expect(read(path), path).not.toMatch(/<(?:Badge|StatusBadge)\b/u);
+        }
+
+        const zoneBadge = read('src/features/laundry/components/laundry-zone-badge.tsx');
+        expect(zoneBadge).toMatch(/components\/ui\/badge/u);
+        expect(zoneBadge).toMatch(/<Badge\b/u);
+
+        const warningBadge = read('src/features/laundry/components/laundry-warning-badge.tsx');
+        expect(warningBadge).toMatch(/components\/ui\/badge/u);
+        expect(warningBadge).toMatch(/<Badge\b/u);
+        expect(warningBadge).not.toMatch(/TriangleAlert/u);
+
+        const shell = read('src/app/shell/DashboardShell.tsx');
+        expect(shell).toMatch(/SidebarMenuBadge/u);
+        expect(shell).toMatch(/badgeLabel = String\(unread\)/u);
+        expect(shell).not.toContain('SURFACE_LABELS');
+        expect(shell).not.toContain('현재 접속 환경');
+        expect(shell).not.toContain('compactCount');
+    });
+
+    test('the frontend uses flat surfaces without gradients', () => {
+        const sourceFiles = globSync('src/**/*.{css,html,tsx}', {cwd: root});
+
+        for (const path of sourceFiles) {
+            expect(read(path), path).not.toMatch(/(?:bg-gradient|linear-gradient|radial-gradient|conic-gradient)/u);
+        }
+    });
+
+    test('the frontend has one React entry and no secondary site renderer', () => {
+        const packageJson = JSON.parse(read('package.json')) as {
+            scripts?: Record<string, string>;
+            devDependencies?: Record<string, string>;
+        };
+
+        expect(existsSync(resolve(root, 'index.html'))).toBe(true);
+        expect(existsSync(resolve(root, 'src/dashboard.html'))).toBe(false);
+        expect(existsSync(resolve(root, 'src/site'))).toBe(false);
+        expect(existsSync(resolve(root, 'astro.config.mjs'))).toBe(false);
+        expect(packageJson.devDependencies).not.toHaveProperty('astro');
+        expect(Object.keys(packageJson.scripts ?? {})).not.toContain('build:site');
+    });
+});

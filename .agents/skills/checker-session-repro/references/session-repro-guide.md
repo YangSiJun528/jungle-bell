@@ -169,8 +169,8 @@ mv "$HOME/Library/Caches/dev.sijun-yang.jungle-bell" "$rollback_root/Library/Cac
 ## 앱 실행과 관찰
 
 ```bash
-cd src-tauri
-RUST_LOG=info cargo tauri dev
+cd frontend
+RUST_LOG=info npm run desktop:dev
 ```
 
 로그인 없음 상태에서 확인할 신호:
@@ -210,7 +210,7 @@ cohort ID, attendance ID 같은 내부 식별자를 포함하지 않는다.
 수정 후 최소 검증:
 
 ```bash
-cd src-tauri
+cd desktop
 cargo clippy --locked -- -D warnings
 cargo test --locked
 ```

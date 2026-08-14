@@ -51,6 +51,12 @@ services:
       - vapid-public-key
     ports:
       - "127.0.0.1:${API_PORT:-8080}:8080"
+    networks:
+      default:
+        aliases:
+          # Preserve the active Quick Tunnel endpoint while the legacy
+          # single app service is replaced by the split API/worker services.
+          - app
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/actuator/health/readiness"]
       interval: 15s

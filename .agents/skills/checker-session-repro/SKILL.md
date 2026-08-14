@@ -30,7 +30,7 @@ description: jungle-bell hidden checker WebView를 사용자 수동 로그인/�
 1. 상태 확인:
    - `git status --short`로 기존 변경사항을 기록한다.
    - `references/session-repro-guide.md`를 읽고, 필요할 때만 관련 reference를 추가로 읽는다.
-   - 현재 코드에서 checker/tray 관련 파일을 찾는다: `src-tauri/src/checker.rs`, `commands.rs`, `lib.rs`, `tray.rs`, `state.rs`, `src/injected/checker.ts`.
+   - 현재 코드에서 checker/tray 관련 파일을 찾는다: `desktop/src/checker.rs`, `commands.rs`, `lib.rs`, `tray.rs`, `state.rs`, `frontend/src/platform/tauri/checker/checker.ts`.
 
 2. 재현 root 생성:
    - 예: `/private/tmp/jungle-bell-session-repro-YYYYMMDD-HHMMSS`
@@ -50,7 +50,7 @@ description: jungle-bell hidden checker WebView를 사용자 수동 로그인/�
    - 각 케이스는 가능하면 2회 반복한다.
 
 5. 앱 실행:
-   - 기본 명령: `RUST_LOG=info cargo tauri dev`
+   - 기본 명령: `cd frontend && RUST_LOG=info npm run desktop:dev`
    - 실행 후 충분한 로그를 수집하고 종료한다.
    - 실행 중 다음 신호를 찾는다:
      - `app starting`
@@ -128,9 +128,8 @@ description: jungle-bell hidden checker WebView를 사용자 수동 로그인/�
 코드를 수정했다면 최소한 다음을 실행한다.
 
 ```bash
-cargo fmt --check
-cargo clippy --locked -- -D warnings
-cargo test --locked
+cd frontend
+npm run verify:desktop
 ```
 
 앱 실행 검증과 자동 검증은 구분해서 보고한다. `cargo test`가 통과해도 WebView/session 문제를 검증한 것은 아니다.

@@ -12,12 +12,13 @@
 
 | 역할 | 위치 |
 | --- | --- |
-| React 진입점과 provider | [`src/app`](../src/app) |
-| 화면 셸과 hash route | [`src/app/shell`](../src/app/shell), [`src/app/routes.ts`](../src/app/routes.ts) |
-| 화면별 기능 | [`src/features`](../src/features) |
-| 공유 화면 컴포넌트 | [`src/components/dashboard`](../src/components/dashboard) |
-| 저장소에 포함한 shadcn/ui | [`src/components/ui`](../src/components/ui) |
-| Tailwind·색상 토큰 | [`src/app/styles/globals.css`](../src/app/styles/globals.css) |
+| React 진입점과 provider | [`frontend/src/app`](../frontend/src/app) |
+| 화면 셸과 hash route | [`frontend/src/app/shell`](../frontend/src/app/shell), [`frontend/src/app/routes.ts`](../frontend/src/app/routes.ts) |
+| 화면별 기능 | [`frontend/src/features`](../frontend/src/features) |
+| 공유 화면 컴포넌트 | [`frontend/src/components/dashboard`](../frontend/src/components/dashboard) |
+| 저장소에 포함한 shadcn/ui | [`frontend/src/components/ui`](../frontend/src/components/ui) |
+| Tailwind·색상 토큰 | [`frontend/src/app/styles/globals.css`](../frontend/src/app/styles/globals.css) |
+| Web·PWA·Tauri 어댑터 | [`frontend/src/platform`](../frontend/src/platform) |
 
 ## 대시보드 셸
 
@@ -53,7 +54,7 @@ Calendar를 갱신할 때도 공식 DayPicker 기반 구조와 `buttonVariants` 
 
 ## 디자인 토큰
 
-색상과 radius는 [`globals.css`](../src/app/styles/globals.css)의 CSS 변수 한곳에서 관리한다. 기본 강조색은 Jungle Bell의 leaf green이며 카드·입력·상태 표시는 shadcn/ui 변형을 사용한다. 시스템 `prefers-color-scheme`에 따라 light/dark 토큰을 바꾸고, 개별 화면에서 별도 팔레트를 만들지 않는다.
+색상과 radius는 [`globals.css`](../frontend/src/app/styles/globals.css)의 CSS 변수 한곳에서 관리한다. 기본 강조색은 Jungle Bell의 leaf green이며 카드·입력·상태 표시는 shadcn/ui 변형을 사용한다. 시스템 `prefers-color-scheme`에 따라 light/dark 토큰을 바꾸고, 개별 화면에서 별도 팔레트를 만들지 않는다.
 
 폰트는 번들된 Pretendard Variable을 사용한다. 상태는 색만으로 구분하지 않고 본문 텍스트와 아이콘으로 전달하며, 조치가 필요한 경우에만 알림을 표시한다.
 
@@ -75,4 +76,4 @@ Calendar를 갱신할 때도 공식 DayPicker 기반 구조와 `buttonVariants` 
 - 서버 응답은 기존 strict parser를 통과한 뒤 React Query cache에 저장한다.
 - Tauri IPC는 기존 capability와 Rust 검증 경계를 넓히지 않는다.
 - 계정 API는 브라우저의 HttpOnly cookie 또는 Tauri의 메모리 전용 단기 token으로만 호출한다.
-- 공통 상태, 버튼, 카드, dialog는 `src/components`에서 재사용한다.
+- 공통 상태, 버튼, 카드, dialog는 `frontend/src/components`에서 재사용한다.

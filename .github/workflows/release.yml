@@ -60,9 +60,11 @@ jobs:
         with:
           node-version: lts/*
           cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install frontend dependencies
         run: npm ci
+        working-directory: frontend
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -72,7 +74,7 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: desktop
           prefix-key: "v${{ vars.CACHE_VERSION }}"
           cache-on-failure: false
 
@@ -87,7 +89,8 @@ jobs:
           releaseId: ${{ needs.get-release-info.outputs.release_id }}
           tagName: ${{ needs.get-release-info.outputs.tag }}
           args: ${{ matrix.args }}
-          projectPath: .
+          projectPath: desktop
+          tauriScript: npm --prefix ../frontend run tauri --
           updaterJsonPreferNsis: true
 
       - name: Archive .app as tar.gz (macOS only)
@@ -106,7 +109,7 @@ jobs:
             TRIPLE="x86_64-apple-darwin"
             ARCH="x64"
           fi
-          APP_DIR="src-tauri/target/${TRIPLE}/release/bundle/macos"
+          APP_DIR="desktop/target/${TRIPLE}/release/bundle/macos"
           ASSET="Jungle.Bell_${VER}_${ARCH}.tar.gz"
           tar -czf "$ASSET" -C "$APP_DIR" "Jungle Bell.app"
           gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber "$ASSET"

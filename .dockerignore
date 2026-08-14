@@ -4,14 +4,14 @@
 .idea
 .vscode
 node_modules
-dist
+frontend/node_modules
+frontend/dist
 target
-src-tauri/target
+desktop/target
 server/.gradle
 server/build
 server/*/build
 server/node_modules
-server/dist
 server/deploy/.env*
 *.log
 *.local

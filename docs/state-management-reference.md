@@ -69,11 +69,13 @@ cache에 기록하지 않고 한 API client 인스턴스의 메모리에서만 �
 
 | 계약 | 구현 |
 | --- | --- |
-| 런타임 판정과 기능 어댑터 | [`runtime.ts`](../src/app/runtime.ts), [`platform-adapter.ts`](../src/platform/platform-adapter.ts) |
-| 브라우저 HTTP·native adapter | [`dashboard-api.ts`](../src/api/dashboard-api.ts), [`personal-api.ts`](../src/api/personal-api.ts) |
-| 대시보드 홈 projection | [`home-view-model.ts`](../src/features/home/home-view-model.ts), [`dday-progress.ts`](../src/domain/attendance/dday-progress.ts) |
-| pairing 임시 상태 | [`pending-pairing.ts`](../src/features/connections/lib/pending-pairing.ts) |
-| PWA cache·Push | [`sw.js`](../src/service-worker/sw.js) |
-| 데스크톱 연결 service | [`remote_sync.rs`](../src-tauri/src/remote_sync.rs) |
-| checker WebView | [`checker.rs`](../src-tauri/src/checker.rs), [`checker.ts`](../src/injected/checker.ts) |
-| Rust 기준 상태 | [`state.rs`](../src-tauri/src/state.rs), [`desktop_settings.rs`](../src-tauri/src/desktop_settings.rs) |
+| 공통 플랫폼 계약 | [`contracts.ts`](../frontend/src/platform/contracts.ts) |
+| Web·PWA 어댑터 | [`web`](../frontend/src/platform/web), [`pwa`](../frontend/src/platform/pwa) |
+| Tauri UI 어댑터 | [`tauri`](../frontend/src/platform/tauri) |
+| 브라우저 HTTP adapter | [`dashboard-api.ts`](../frontend/src/api/dashboard-api.ts), [`personal-api.ts`](../frontend/src/api/personal-api.ts) |
+| 대시보드 홈 projection | [`home-view-model.ts`](../frontend/src/features/home/home-view-model.ts), [`dday-progress.ts`](../frontend/src/domain/attendance/dday-progress.ts) |
+| pairing 임시 상태 | [`pending-pairing.ts`](../frontend/src/features/connections/lib/pending-pairing.ts) |
+| PWA cache·Push | [`sw.js`](../frontend/src/platform/pwa/service-worker/sw.js) |
+| 데스크톱 연결 service | [`remote_sync.rs`](../desktop/src/remote_sync.rs) |
+| checker WebView | [`checker.rs`](../desktop/src/checker.rs), [`checker.ts`](../frontend/src/platform/tauri/checker/checker.ts) |
+| Rust 기준 상태 | [`state.rs`](../desktop/src/state.rs), [`desktop_settings.rs`](../desktop/src/desktop_settings.rs) |
