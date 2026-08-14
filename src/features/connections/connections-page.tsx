@@ -1,7 +1,13 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {CircleAlert, KeyRound, Link2, MonitorCheck, QrCode, RotateCcw, Smartphone, Trash2} from 'lucide-react';
-import {queryKeys, removeDesktopIdentityQueries, useDashboardEnvironment} from '@/app/dashboard-context';
+import {
+    queryKeys,
+    refreshBrowserPersonalQueries,
+    removeBrowserPersonalQueries,
+    removeDesktopIdentityQueries,
+    useDashboardEnvironment,
+} from '@/app/dashboard-context';
 import {
     useDashboardAccount,
 } from '@/app/dashboard-account';
@@ -320,6 +326,7 @@ function DesktopConnections() {
 
 function CompanionConnections() {
     const {api} = useDashboardEnvironment();
+    const account = useDashboardAccount();
     const client = useQueryClient();
     const [manualCode, setManualCode] = useState('');
     const [message, setMessage] = useState('');
@@ -330,8 +337,6 @@ function CompanionConnections() {
         const storage = pairingSessionStorage();
         return storage ? readPendingMobilePairing(storage, Date.now()) : null;
     });
-    const attendance = useQuery({queryKey: queryKeys.attendance('browser'), queryFn: () => api.getAttendance()});
-
     const claim = useMutation({
         mutationFn: async ({mode, resumePairingId}: PairingClaimStart) => {
             const installationId = mobileInstallationId();
@@ -374,7 +379,7 @@ function CompanionConnections() {
         onSuccess: async () => {
             setMessage('연결이 완료됐습니다.');
             window.location.hash = '#connections';
-            await client.invalidateQueries();
+            await refreshBrowserPersonalQueries(client);
         },
         onError: () => {
             const storage = pairingSessionStorage();
@@ -384,9 +389,13 @@ function CompanionConnections() {
     });
     const disconnect = useMutation({
         mutationFn: () => api.disconnectMobileSession(),
-        onSuccess: () => void client.invalidateQueries(),
+        onMutate: () => client.cancelQueries({queryKey: queryKeys.accountSession, exact: true}),
+        onSuccess: () => {
+            removeBrowserPersonalQueries(client);
+            setMessage('이 모바일 연결을 해제했습니다.');
+        },
     });
-    const connected = attendance.data?.state === 'loaded';
+    const connected = account.personalAccess.status === 'connected';
     const confirmationCode = mobileInstallationId().slice(-4).toUpperCase();
     const startClaim = useCallback((input: PairingClaimStart) => {
         if (!tryReservePairingStart(pairingStartGate.current)) return;
@@ -396,13 +405,8 @@ function CompanionConnections() {
     }, [claim]);
 
     useEffect(() => {
-        const attendanceState = attendance.isPending
-            ? 'pending'
-            : attendance.isError
-                ? 'error'
-                : attendance.data?.state ?? 'pending';
         const action = automaticPairingAction({
-            attendance: attendanceState,
+            account: account.personalAccess.status,
             alreadyHandled: pairingStartGate.current.automaticHandled,
             hasRestoredPairing: restoredPairing !== null,
             hasQrLink: pairingLink !== null,
@@ -421,7 +425,7 @@ function CompanionConnections() {
         if (action === 'qr') {
             startClaim({mode: 'qr'});
         }
-    }, [attendance.data?.state, attendance.isError, attendance.isPending, pairingLink, restoredPairing, startClaim]);
+    }, [account.personalAccess.status, pairingLink, restoredPairing, startClaim]);
 
     return (
         <div className="space-y-6">

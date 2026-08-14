@@ -57,13 +57,10 @@ export function useCampusManualRefresh(kind: 'laundry' | 'meals') {
 export function useAttendanceQuery() {
     const {api, platform} = useDashboardEnvironment();
     const account = useDashboardAccount();
-    const lmsReady = !platform.capabilities.desktopAccount
-        || account.status.lmsAuthentication === 'authenticated';
-    const sessionReady = !platform.capabilities.desktopAccount || serverSessionReady(account.status);
     return useQuery({
         queryKey: queryKeys.attendance(platform.kind),
         queryFn: () => api.getAttendance(),
-        enabled: lmsReady && sessionReady,
+        enabled: account.personalAccess.status === 'connected',
         staleTime: DASHBOARD_REFRESH.personal,
         refetchInterval: DASHBOARD_REFRESH.personal,
     });
@@ -103,11 +100,13 @@ export function useRefreshAttendanceMutation() {
 
 export function useNotificationsQuery() {
     const {api, platform} = useDashboardEnvironment();
+    const account = useDashboardAccount();
     return useQuery<DashboardNotification[] | NotificationInboxSnapshot>({
         queryKey: queryKeys.notifications(platform.kind),
         queryFn: () => platform.capabilities.localNotifications
             ? api.getDesktopNotificationInbox()
             : api.getNotifications(),
+        enabled: account.personalAccess.status === 'connected',
         staleTime: DASHBOARD_REFRESH.personal,
         refetchInterval: DASHBOARD_REFRESH.personal,
     });
@@ -138,7 +137,8 @@ export function useRefreshHomeMutation() {
                     await client.invalidateQueries({queryKey: queryKeys.desktopConnection, exact: true});
                 }
             } : undefined,
-            refreshAttendance: !platform.capabilities.desktopAccount || refreshDesktopAttendance
+            refreshAttendance: account.personalAccess.status === 'connected'
+                && (!platform.capabilities.desktopAccount || refreshDesktopAttendance)
                 ? () => client.refetchQueries(
                     {queryKey: queryKeys.attendance(platform.kind), type: 'active'},
                     {throwOnError: true},
@@ -167,7 +167,8 @@ export function useRefreshAllMutation() {
                         await client.invalidateQueries({queryKey: queryKeys.desktopConnection, exact: true});
                     }
                 } : undefined,
-                refreshAttendance: !platform.capabilities.desktopAccount || refreshDesktopAttendance
+                refreshAttendance: account.personalAccess.status === 'connected'
+                    && (!platform.capabilities.desktopAccount || refreshDesktopAttendance)
                     ? () => client.invalidateQueries({queryKey: queryKeys.attendance(platform.kind)})
                     : undefined,
             });

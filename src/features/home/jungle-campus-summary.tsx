@@ -93,16 +93,14 @@ export function JungleCampusSummary() {
     const refreshAttendance = useRefreshAttendanceMutation();
     const openCampus = useMutation({mutationFn: () => api.openLmsLogin()});
 
-    const desktopAccountReady = !platform.capabilities.desktopAccount
-        || account.status.lmsAuthentication === 'authenticated'
-            && (account.status.serverSession === 'stored' || account.status.serverSession === 'memory-only');
-    const dday = desktopAccountReady
+    const personalReady = account.personalAccess.status === 'connected';
+    const dday = personalReady
         ? selectDdayView({
             platform: platform.kind,
             attendance: attendance.data,
         })
         : null;
-    const availableAttendance = desktopAccountReady
+    const availableAttendance = personalReady
         ? homeAttendanceForToday(attendance.data)
         : null;
     const attendanceNeedsRefresh = attendance.data?.state === 'loaded'
@@ -110,7 +108,38 @@ export function JungleCampusSummary() {
         && availableAttendance === null;
 
     let content: React.ReactNode;
-    if (platform.capabilities.desktopAccount && account.status.lmsAuthentication === 'checking') {
+    if (platform.kind === 'browser' && account.personalAccess.status === 'checking') {
+        content = (
+            <div className="space-y-2" aria-label="PC 연결 상태 확인 중">
+                <Skeleton className="h-10 w-full"/>
+                <p className="text-sm text-muted-foreground">PC 연결 상태를 확인하고 있습니다.</p>
+            </div>
+        );
+    } else if (platform.kind === 'browser' && account.personalAccess.status === 'unconnected') {
+        content = (
+            <div className="text-sm leading-6">
+                <p className="font-medium">출석과 D-Day 확인을 위해 PC 연결이 필요합니다.</p>
+                <Button asChild className="mt-2" size="sm" variant="outline">
+                    <a href="#connections">기기 연결 열기</a>
+                </Button>
+            </div>
+        );
+    } else if (platform.kind === 'browser' && account.personalAccess.status === 'error') {
+        content = (
+            <div className="text-sm leading-6">
+                <p className="text-destructive">PC 연결 상태를 확인하지 못했습니다.</p>
+                <Button
+                    className="mt-2"
+                    disabled={account.browserSessionQuery.isFetching}
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void account.browserSessionQuery.refetch()}
+                >
+                    {account.browserSessionQuery.isFetching ? '새로고침 중' : '새로고침'}
+                </Button>
+            </div>
+        );
+    } else if (platform.capabilities.desktopAccount && account.status.lmsAuthentication === 'checking') {
         content = (
             <div className="space-y-2" aria-label="LMS 로그인 상태 확인 중">
                 <Skeleton className="h-10 w-full"/>

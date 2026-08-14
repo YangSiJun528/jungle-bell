@@ -7,6 +7,7 @@ import {
     assertServerSessionReady,
     dashboardAccountStatus,
     normalizeLmsSessionStateEvent,
+    personalAccessState,
     withLmsSessionState,
 } from './dashboard-account-state';
 
@@ -64,6 +65,48 @@ describe('dashboard account status', () => {
         );
     });
 
+    test('브라우저 세션과 desktop 계정 상태를 공통 개인 접근 상태로 정규화한다', () => {
+        const desktop = {serverSession: 'stored', lmsAuthentication: 'authenticated'} as const;
+        assert.deepEqual(personalAccessState('browser', desktop, {
+            data: undefined,
+            isPending: true,
+            isError: false,
+        }), {status: 'checking'});
+        assert.deepEqual(personalAccessState('browser', desktop, {
+            data: null,
+            isPending: false,
+            isError: false,
+        }), {status: 'unconnected'});
+        assert.deepEqual(personalAccessState('browser', desktop, {
+            data: {authenticated: true, expiresAt: '2026-08-14T00:00:00.000Z'},
+            isPending: false,
+            isError: false,
+        }), {status: 'connected'});
+        assert.deepEqual(personalAccessState('browser', desktop, {
+            data: undefined,
+            isPending: false,
+            isError: true,
+        }), {status: 'error'});
+        assert.deepEqual(personalAccessState('browser', desktop, {
+            data: null,
+            isPending: false,
+            isError: true,
+        }), {status: 'error'});
+        assert.deepEqual(personalAccessState('desktop', desktop, {
+            data: undefined,
+            isPending: false,
+            isError: false,
+        }), {status: 'connected'});
+        assert.deepEqual(personalAccessState('desktop', {
+            serverSession: 'stored',
+            lmsAuthentication: 'required',
+        }, {
+            data: undefined,
+            isPending: false,
+            isError: false,
+        }), {status: 'unconnected'});
+    });
+
     test('LMS 의존 작업은 인증 확인 전 호출하지 않는다', async () => {
         let calls = 0;
         const task = async () => { calls += 1; };
@@ -107,9 +150,12 @@ describe('dashboard account status', () => {
 
     test('출석 HTTP는 LMS와 서버 세션을, 동기화 command는 LMS 인증을 요구한다', () => {
         const source = readFileSync(new URL('./use-dashboard-queries.ts', import.meta.url), 'utf8');
-        assert.match(source, /enabled: lmsReady && sessionReady/u);
+        assert.match(source, /enabled: account\.personalAccess\.status === 'connected'/u);
         assert.match(source, /if \(platform\.capabilities\.desktopAccount\) assertLmsAuthenticated\(account\.status\)/u);
         assert.match(source, /refreshPlatform: refreshDesktopPlatform \?/u);
-        assert.match(source, /refreshAttendance: !platform\.capabilities\.desktopAccount \|\| refreshDesktopAttendance/u);
+        assert.match(
+            source,
+            /refreshAttendance: account\.personalAccess\.status === 'connected'[\s\S]{0,120}refreshDesktopAttendance/u,
+        );
     });
 });

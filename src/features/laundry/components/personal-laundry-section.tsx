@@ -14,7 +14,7 @@ import {
 } from '@/app/dashboard-account';
 import {assertLmsAuthenticated, assertServerSessionReady} from '@/app/dashboard-account-state';
 import {queryKeys, useDashboardEnvironment} from '@/app/dashboard-context';
-import {PersonalAccountGate} from '@/app/personal-account-gate';
+import {PersonalFeatureSlot} from '@/app/personal-feature-slot';
 import {useAttendanceQuery, useRefreshAttendanceMutation} from '@/app/use-dashboard-queries';
 import {LoadingState} from '@/components/dashboard/async-state';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
@@ -311,17 +311,9 @@ function AuthenticatedPersonalLaundrySection({
 }
 
 export function PersonalLaundrySection(props: PersonalLaundrySectionProps) {
-    const {platform} = useDashboardEnvironment();
-    const account = useDashboardAccount();
-
-    if (platform.capabilities.desktopAccount
-        && account.status.lmsAuthentication !== 'authenticated') {
-        return null;
-    }
-
     return (
-        <PersonalAccountGate>
+        <PersonalFeatureSlot>
             <AuthenticatedPersonalLaundrySection {...props}/>
-        </PersonalAccountGate>
+        </PersonalFeatureSlot>
     );
 }

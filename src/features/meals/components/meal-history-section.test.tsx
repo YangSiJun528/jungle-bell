@@ -3,6 +3,7 @@ import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, test, vi} from 'vitest';
 import type {DashboardMealsSnapshot} from '@/api/dashboard-api';
+import {kstDateKey} from '@/domain/meals/today';
 import {MealHistorySection} from './meal-history-section';
 
 const source = readFileSync(new URL('./meal-history-section.tsx', import.meta.url), 'utf8');
@@ -49,6 +50,10 @@ const meals: DashboardMealsSnapshot = {
 function renderHistory(snapshot = meals): string {
     const client = new QueryClient();
     client.setQueryData(['campus', 'meals', 'history', '2020-01'], {posts: []});
+    client.setQueryData(
+        ['campus', 'meals', 'history', kstDateKey(new Date()).slice(0, 7)],
+        {posts: []},
+    );
     return renderToStaticMarkup(
         <QueryClientProvider client={client}>
             <MealHistorySection meals={snapshot}/>
@@ -82,6 +87,25 @@ describe('MealHistorySection', () => {
         });
 
         expect(markup).toContain('선택한 주 급식표');
+        expect(markup).toContain('저장된 주간 급식표가 없습니다.');
+    });
+
+    test('기록이 없는 달에도 같은 overview grid와 주간 식단 영역을 유지한다', () => {
+        const markup = renderHistory({
+            ...meals,
+            data: {
+                ...meals.data,
+                dailyMenus: [],
+                recentMenus: [],
+                weeklyMenus: [],
+            },
+        });
+
+        expect(markup).toContain('data-meal-history-overview="true"');
+        expect(markup).toContain('data-meal-history-weekly="true"');
+        expect(markup).toContain('lg:grid-cols-[minmax(17rem,20rem)_minmax(0,1fr)]');
+        expect(markup).toContain('선택한 날짜 식단');
+        expect(markup).toContain('이 달에 저장된 급식 기록이 없습니다.');
         expect(markup).toContain('저장된 주간 급식표가 없습니다.');
     });
 

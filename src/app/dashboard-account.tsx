@@ -8,13 +8,20 @@ import {
     useQuery,
     type UseQueryResult,
 } from '@tanstack/react-query';
-import type {DesktopConnectionState} from '@/api/dashboard-api';
+import type {BrowserAccountSession, DesktopConnectionState} from '@/api/dashboard-api';
 import {queryKeys, useDashboardEnvironment} from './dashboard-context';
-import {dashboardAccountStatus, type DashboardAccountStatus} from './dashboard-account-state';
+import {
+    dashboardAccountStatus,
+    personalAccessState,
+    type DashboardAccountStatus,
+    type PersonalAccessState,
+} from './dashboard-account-state';
 
 interface DashboardAccountContextValue {
     status: DashboardAccountStatus;
+    personalAccess: PersonalAccessState;
     connectionQuery: UseQueryResult<DesktopConnectionState, Error>;
+    browserSessionQuery: UseQueryResult<BrowserAccountSession | null, Error>;
 }
 
 const DashboardAccountContext = createContext<DashboardAccountContextValue | null>(null);
@@ -28,10 +35,18 @@ export function DashboardAccountProvider({children}: PropsWithChildren) {
         staleTime: 60_000,
         refetchInterval: 60_000,
     });
+    const browserSessionQuery = useQuery({
+        queryKey: queryKeys.accountSession,
+        queryFn: () => api.getAccountSession(),
+        enabled: platform.kind === 'browser',
+        staleTime: 60_000,
+        refetchInterval: 60_000,
+    });
     const status = dashboardAccountStatus(platform.kind, connectionQuery);
+    const personalAccess = personalAccessState(platform.kind, status, browserSessionQuery);
     const value = useMemo<DashboardAccountContextValue>(
-        () => ({status, connectionQuery}),
-        [connectionQuery, status],
+        () => ({status, personalAccess, connectionQuery, browserSessionQuery}),
+        [browserSessionQuery, connectionQuery, personalAccess, status],
     );
 
     return (

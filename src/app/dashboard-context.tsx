@@ -15,6 +15,7 @@ export const queryKeys = {
     laundry: laundryQueryContract.queryKey,
     meals: mealsQueryContract.queryKey,
     attendance: (platform: 'browser' | 'desktop') => ['attendance', platform] as const,
+    accountSession: ['account-session'] as const,
     desktopConnection: ['desktop-connection'] as const,
     desktopSettings: ['desktop-settings'] as const,
     notifications: (platform: 'browser' | 'desktop') => ['notifications', platform] as const,
@@ -55,4 +56,22 @@ export function removeDesktopIdentityQueries(client: QueryClient): void {
     client.removeQueries({queryKey: queryKeys.notifications('desktop'), exact: true});
     client.removeQueries({queryKey: queryKeys.mobileSessions, exact: true});
     client.removeQueries({queryKey: ['pairing-status']});
+}
+
+export function removeBrowserPersonalQueries(client: QueryClient): void {
+    client.removeQueries({queryKey: ['personal']});
+    client.removeQueries({queryKey: queryKeys.attendance('browser'), exact: true});
+    client.removeQueries({queryKey: queryKeys.notifications('browser'), exact: true});
+    client.removeQueries({queryKey: queryKeys.mobileSessions, exact: true});
+    client.removeQueries({queryKey: ['pairing-status']});
+    client.setQueryData(queryKeys.accountSession, null);
+}
+
+export async function refreshBrowserPersonalQueries(client: QueryClient): Promise<void> {
+    await client.invalidateQueries({queryKey: queryKeys.accountSession, exact: true});
+    await Promise.all([
+        client.invalidateQueries({queryKey: ['personal']}),
+        client.invalidateQueries({queryKey: queryKeys.attendance('browser'), exact: true}),
+        client.invalidateQueries({queryKey: queryKeys.notifications('browser'), exact: true}),
+    ]);
 }

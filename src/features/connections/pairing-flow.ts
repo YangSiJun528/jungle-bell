@@ -5,7 +5,7 @@ export interface PairingCompletionOptions {
     maximumAttempts?: number;
 }
 
-export type AttendanceInitializationState = 'pending' | 'error' | 'auth-required' | 'loaded';
+export type AccountInitializationState = 'checking' | 'error' | 'unconnected' | 'connected';
 export type AutomaticPairingAction = 'wait' | 'none' | 'clear' | 'resume' | 'qr';
 
 export interface PairingStartGate {
@@ -25,14 +25,14 @@ export function releasePairingStart(gate: PairingStartGate): void {
 }
 
 export function automaticPairingAction(input: {
-    attendance: AttendanceInitializationState;
+    account: AccountInitializationState;
     alreadyHandled: boolean;
     hasRestoredPairing: boolean;
     hasQrLink: boolean;
 }): AutomaticPairingAction {
     if (input.alreadyHandled) return 'none';
-    if (input.attendance === 'loaded') return 'clear';
-    if (input.attendance !== 'auth-required') return 'wait';
+    if (input.account === 'connected') return 'clear';
+    if (input.account !== 'unconnected') return 'wait';
     if (input.hasRestoredPairing) return 'resume';
     return input.hasQrLink ? 'qr' : 'none';
 }
