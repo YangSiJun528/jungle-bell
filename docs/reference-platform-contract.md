@@ -19,18 +19,18 @@ session 또는 bearer와 사용자·기기 소유권 검사로 결정합니다.
 
 ## 서버 런타임
 
-HTTP API, 정적 대시보드·블로그, 공개 데이터 수집, 알림 계획, housekeeping와 Web
-Push 전송은 하나의 Kotlin Spring Boot 애플리케이션이 담당합니다. 애플리케이션과
-PostgreSQL은 OCI Docker Compose로 실행합니다.
+서버는 `core`, `api`, `worker`의 세 Gradle 모듈로 나뉩니다. API와 Worker는 별도
+Spring Boot 프로세스로 실행하고 PostgreSQL 접근과 도메인 로직은 Core를 공유합니다.
+세 프로세스는 OCI Docker Compose로 실행합니다.
 
 | 항목 | 계약 |
 | --- | --- |
 | API | Spring MVC |
-| 인증 | Spring Security stateless filter |
+| 인증 | Spring Security stateless opaque-token Resource Server |
 | 영속성 | Spring Data JDBC, PostgreSQL 17 |
-| 수집·알림 | Spring Scheduler, 같은 JVM 안에서 실행 |
+| 수집·알림 | Worker의 Spring Scheduler, API와 별도 JVM |
 | 급식 이미지 | PostgreSQL `BYTEA`, SHA-256 immutable URL |
-| 정적 자산 | React/Astro 빌드 결과를 Spring Boot JAR에 포함 |
+| 정적 자산 | React/Astro 빌드 결과를 API JAR에 포함 |
 | 외부 ingress | 선택적인 Cloudflare Tunnel. 실행·저장 계층이 아님 |
 
 Cloudflare Worker, D1, R2, Wrangler와 별도 TypeScript Jobs는 사용하지 않습니다.
@@ -76,6 +76,10 @@ Rust background service는 보호 저장소의 장기 bearer로 `/api/desktop/*`
 WebView는 장기 credential을 받지 않고 Rust가 발급받은 단기 bearer로
 `/api/me/*`를 직접 호출합니다. 브라우저·PWA는 JavaScript가 읽을 수 없는
 Strict HttpOnly cookie를 사용합니다.
+
+Spring Security의 Bearer filter와 opaque-token introspection이 세 인증 형식을 공통
+`Authentication`으로 변환합니다. 경로별 PC·모바일·WebView 권한과 WebView exact
+origin 검사는 `SecurityFilterChain`의 authorization policy에서 처리합니다.
 
 claim과 complete JSON에는 access token, LMS cookie, claim receipt를 포함하지
 않습니다. 연결된 모바일이 없는 상태는 정상적인 빈 목록입니다.

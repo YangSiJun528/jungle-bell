@@ -15,20 +15,29 @@ WORKDIR /workspace/server
 COPY server/gradlew server/gradlew.bat server/settings.gradle.kts server/build.gradle.kts server/gradle.properties ./
 COPY server/gradle ./gradle
 RUN chmod +x gradlew
-RUN ./gradlew --no-daemon dependencies --quiet >/dev/null
-COPY server/src ./src
-COPY --from=web-build /workspace/dist ./src/main/resources/static
-RUN ./gradlew --no-daemon clean test bootJar
+RUN mkdir -p core api worker \
+    && ./gradlew --no-daemon :core:dependencies :api:dependencies :worker:dependencies --quiet >/dev/null
+COPY server/core/src ./core/src
+COPY server/api/src ./api/src
+COPY server/worker/src ./worker/src
+COPY --from=web-build /workspace/dist ./api/src/main/resources/static
+RUN ./gradlew --no-daemon clean check :api:bootJar :worker:bootJar
 
-FROM eclipse-temurin:21-jre-noble
+FROM eclipse-temurin:21-jre-noble AS runtime-base
 RUN apt-get update \
     && apt-get install --no-install-recommends -y curl ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system jungle-bell \
     && useradd --system --gid jungle-bell --home-dir /app --shell /usr/sbin/nologin jungle-bell
 WORKDIR /app
-COPY --from=server-build /workspace/server/build/libs/*.jar /app/jungle-bell.jar
 USER jungle-bell
-EXPOSE 8080
 ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=70 -XX:+ExitOnOutOfMemoryError"
-ENTRYPOINT ["java", "-jar", "/app/jungle-bell.jar"]
+
+FROM runtime-base AS api-runtime
+COPY --from=server-build /workspace/server/api/build/libs/*-SNAPSHOT.jar /app/jungle-bell-api.jar
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "/app/jungle-bell-api.jar"]
+
+FROM runtime-base AS worker-runtime
+COPY --from=server-build /workspace/server/worker/build/libs/*-SNAPSHOT.jar /app/jungle-bell-worker.jar
+ENTRYPOINT ["java", "-jar", "/app/jungle-bell-worker.jar"]

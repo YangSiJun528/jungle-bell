@@ -15,6 +15,7 @@ dist-ssr
 *.local
 server/.gradle/
 server/build/
+server/*/build/
 server/.kotlin/
 server/src/main/resources/static/
 server/deploy/.env

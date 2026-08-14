@@ -17,6 +17,10 @@ PC 장기 credential은 90일 절대 만료이며 인증된 rotate만 허용합�
 7분 절대 만료, 메모리 전용, 부모 PC session당 하나입니다. 부모 session을 rotate,
 폐기 또는 만료하면 즉시 무효화됩니다.
 
+세 형식 모두 Spring Security의 opaque-token Resource Server에서 검증합니다. 모바일
+cookie는 token resolver에서 Bearer 인증으로 변환하고, 권한과 WebView exact origin은
+`SecurityFilterChain`에서 판정합니다.
+
 ## 상태와 정적 자산
 
 | Method | 경로 | 설명 |
@@ -65,8 +69,8 @@ stale-while-revalidate를 사용합니다.
 | `POST` | `/api/desktop/heartbeat` | LMS 상태와 앱 버전 갱신 |
 | `GET` | `/api/desktop/attendance` | 최근 출석 snapshot |
 | `PUT` | `/api/desktop/attendance` | checker가 정규화한 출석 snapshot 저장 |
-| `GET` | `/api/desktop/mobile-sessions` | 연결된 모바일 목록 |
-| `DELETE` | `/api/desktop/mobile-sessions/{id}` | 모바일 session 폐기 |
+| `GET` | `/api/me/mobile-sessions` | WebView token으로 연결된 모바일 목록 조회 |
+| `DELETE` | `/api/me/mobile-sessions/{id}` | WebView token으로 모바일 session 폐기 |
 
 등록 endpoint는 10분 창에서 IP당 240회, installation ID당 10회로 제한합니다. rate
 key에는 원문 IP나 installation ID를 저장하지 않고 SHA-256 hash만 저장합니다.

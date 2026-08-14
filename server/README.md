@@ -1,55 +1,57 @@
 # Jungle Bell Server
 
-Jungle Bell의 HTTP API, 정적 웹 자산, 공개 데이터 수집, 알림 계획과 Web Push 전송을
-하나의 Kotlin Spring Boot 애플리케이션으로 실행합니다. 운영 데이터는 PostgreSQL에
-저장하고 서버 전체를 OCI의 Docker Compose로 배포합니다.
+Jungle Bell 서버는 Kotlin Spring Boot 기반의 세 Gradle 모듈로 구성됩니다. HTTP와
+백그라운드 호출부는 독립 프로세스로 실행하고, PostgreSQL 접근과 도메인 로직은
+`core`에서 공유합니다.
 
-## 구성
+## 모듈
 
-- Kotlin 2.3, Java 21
-- Spring Boot 4.1
-- Spring MVC
-- Spring Security의 stateless bearer/cookie 인증 필터
-- Spring Data JDBC와 PostgreSQL 17
-- Spring Scheduler 기반 수집·알림·housekeeping
-- Gradle Wrapper
-- React/Astro 정적 자산을 포함한 단일 OCI 이미지
+| 모듈 | 역할 | 실행 형태 |
+| --- | --- | --- |
+| `core` | 도메인 모델, use case, 저장소 port, JDBC adapter, PostgreSQL schema | 라이브러리 JAR |
+| `api` | Spring MVC controller, Spring Security opaque-token Resource Server, React/Astro 정적 자산 | Spring Boot JAR |
+| `worker` | 수집 scheduler, 알림 자동화 호출, Web Push adapter | Spring Boot JAR |
 
-Cloudflare Worker, D1, R2, 별도 TypeScript Jobs 런타임은 사용하지 않습니다.
-외부 공개 URL이 필요하면 OCI 애플리케이션 앞에 Cloudflare Tunnel을 둘 수 있지만,
-Cloudflare는 실행·저장 계층이 아닙니다.
+의존 방향은 `api -> core <- worker`뿐입니다. `api`와 `worker`는 서로 참조하지
+않습니다. API 프로세스가 schema와 HTTP를 소유하고 Worker 프로세스는 schema를
+변경하지 않은 채 같은 PostgreSQL을 사용합니다.
+
+Cloudflare Worker, D1, R2와 별도 TypeScript Jobs 런타임은 사용하지 않습니다.
+Cloudflare Tunnel은 필요할 때 OCI API 앞에 두는 ingress입니다.
 
 ## 디렉터리
 
 ```text
 server/
-├── src/main/kotlin/app/junglebell/server/
-│   ├── account/       PC 등록, heartbeat, 출석 snapshot, 모바일 session
-│   ├── pairing/       PC-PWA 연결
-│   ├── personal/      출석·급식 설정, 세탁 watch
-│   ├── notification/  알림 inbox, ack, Push subscription
-│   ├── publicapi/     공개 세탁·급식·상태 API와 정적 자산
-│   ├── collector/     세탁·급식 수집과 정규화
-│   ├── automation/    알림 계획, Web Push, housekeeping
-│   └── security/      bearer/cookie 인증과 origin 검증
-├── src/main/resources/
-│   ├── application.yml
-│   └── schema.sql     현재 기준의 단일 PostgreSQL 스키마
-├── deploy/            OCI Docker Compose와 환경 예시
-├── tools/             배포 후 smoke test
-└── Dockerfile         웹과 서버를 함께 빌드하는 다단계 이미지
+├── core/
+│   └── src/main/
+│       ├── kotlin/app/junglebell/server/
+│       │   ├── domain/                    기능별 모델·서비스·저장소·JDBC adapter
+│       │   └── common/                    공통 설정과 오류 타입
+│       └── resources/schema.sql           현재 PostgreSQL schema
+├── api/
+│   └── src/main/
+│       ├── kotlin/app/junglebell/server/api/  MVC·Security 호출부
+│       └── resources/application.yml      API 설정과 정적 자산
+├── worker/
+│   └── src/main/
+│       ├── kotlin/app/junglebell/server/worker/  scheduler·외부 수집 adapter
+│       └── resources/application.yml      Worker 설정
+├── deploy/                                OCI Docker Compose와 환경 예시
+├── tools/                                 배포 후 smoke test
+└── Dockerfile                             SPA와 두 실행 JAR의 다단계 이미지
 ```
 
-## 로컬 실행
+## 로컬 검증
 
 필수 도구는 Java 21, Docker, Node.js 24입니다.
 
 ```bash
 cd server
-./gradlew test
+./gradlew check :api:bootJar :worker:bootJar
 ```
 
-PostgreSQL을 포함한 전체 런타임은 저장소 루트에서 실행합니다.
+PostgreSQL과 두 실행 프로세스는 저장소 루트에서 시작합니다.
 
 ```bash
 cp server/deploy/.env.v2-test.example /tmp/jungle-bell.env
@@ -57,30 +59,28 @@ cp server/deploy/.env.v2-test.example /tmp/jungle-bell.env
 docker compose \
   --env-file /tmp/jungle-bell.env \
   -f server/deploy/compose.v2-test.yml \
-  up --build -d postgres app
+  up --build -d postgres api worker
 ```
 
-애플리케이션은 기본적으로 `127.0.0.1:8080`에만 노출됩니다. 수집기를 실행하지 않는
-개발 환경에서는 `COLLECTORS_ENABLED=false`를 사용합니다.
+API는 기본적으로 `127.0.0.1:8080`에만 노출됩니다. Worker는 HTTP port를 열지
+않습니다. 개발 중 수집을 끄려면 `COLLECTORS_ENABLED=false`를 사용합니다.
 
-## 검증
+저장소 루트의 전체 검증 명령은 다음과 같습니다.
 
 ```bash
 npm run verify:server
-docker build -f server/Dockerfile .
+docker build --target api-runtime -f server/Dockerfile .
+docker build --target worker-runtime -f server/Dockerfile .
 ```
 
-배포된 환경의 인증 경계까지 확인하려면 OCI 호스트에서 다음을 실행합니다.
+배포된 인증 경계는 OCI 호스트에서 확인합니다.
 
 ```bash
 server/tools/smoke-api.sh https://example.test
 ```
 
-스크립트는 임시 PC 계정을 만든 뒤 출석·설정·세탁 watch·모바일 목록·origin 제한을
-검증하고 테스트 계정을 삭제합니다.
-
 ## 문서
 
 - 배포와 장애 대응: [OPERATIONS.md](./OPERATIONS.md)
 - HTTP endpoint: [docs/api-reference.md](./docs/api-reference.md)
-- 환경 변수와 secret: [docs/environment-reference.md](./docs/environment-reference.md)
+- 환경 변수: [docs/environment-reference.md](./docs/environment-reference.md)
