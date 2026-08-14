@@ -13,7 +13,7 @@
     "check:site": "cross-env ASTRO_TELEMETRY_DISABLED=1 astro sync && tsc --noEmit -p tsconfig.site.json",
     "typecheck": "tsc --noEmit",
     "verify:web": "npm run check:site && npm run build && npm test",
-    "verify:server": "cd server && ./gradlew --no-daemon check bootJar",
+    "verify:server": "cd server && ./gradlew --no-daemon check :api:bootJar :worker:bootJar",
     "verify:desktop": "npm run build:app && cargo fmt --manifest-path src-tauri/Cargo.toml --check && cargo test --manifest-path src-tauri/Cargo.toml && cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
     "verify": "npm run verify:web && npm run verify:server && npm run verify:desktop",
     "preview": "vite preview",

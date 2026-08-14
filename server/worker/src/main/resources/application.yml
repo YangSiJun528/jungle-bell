@@ -1,0 +1,45 @@
+spring:
+  application:
+    name: jungle-bell-worker
+  main:
+    web-application-type: none
+  config:
+    import: optional:configtree:/run/secrets/
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/jungle_bell}
+    username: ${DATABASE_USERNAME:jungle_bell}
+    password: ${DATABASE_PASSWORD:${database-password:jungle_bell}}
+    hikari:
+      maximum-pool-size: ${DATABASE_POOL_MAX:6}
+      minimum-idle: ${DATABASE_POOL_MIN:1}
+      connection-timeout: 5000
+      validation-timeout: 3000
+  sql:
+    init:
+      mode: never
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+jungle-bell:
+  public-base-url: ${PUBLIC_BASE_URL:http://127.0.0.1:8080}
+  allowed-desktop-origins:
+    - tauri://localhost
+    - http://tauri.localhost
+    - http://127.0.0.1:5173
+  pairing-secret: ${PAIRING_SECRET:${pairing-secret:local-development-pairing-secret}}
+  vapid-public-key: ${VAPID_PUBLIC_KEY:${vapid-public-key:}}
+  vapid-private-key: ${VAPID_PRIVATE_KEY:${vapid-private-key:}}
+  vapid-subject: ${VAPID_SUBJECT:}
+  collectors:
+    enabled: ${COLLECTORS_ENABLED:false}
+    laundry-url: ${LAUNDRY_SOURCE_URL:}
+    meals-default-url: ${MEALS_DEFAULT_SOURCE_URL:}
+    meals-pinned-url: ${MEALS_PINNED_SOURCE_URL:}
+
+logging:
+  level:
+    root: INFO
+    app.junglebell: ${JUNGLE_BELL_LOG_LEVEL:INFO}

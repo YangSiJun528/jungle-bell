@@ -18,23 +18,26 @@ Jungle LMS ─ checker WebView ─ Tauri PC
                                └─ 단기 WebView HTTP session bootstrap
                                            │
 브라우저·PWA ─ cookie ─────────────┐         │
-공통 React SPA ─ 공개·계정 HTTP ───┼─ Spring Boot ─ PostgreSQL
-Tauri adapter ─ jbui·native IPC ───┘         │
-                                             ├─ 세탁·급식 수집
-                                             ├─ 알림 계획·전송
-                                             └─ housekeeping
+공통 React SPA ─ 공개·계정 HTTP ───┼─ Spring API ────── PostgreSQL
+Tauri adapter ─ jbui·native IPC ───┘                        ▲
+                                                            │
+                                      Spring Worker ─────────┤
+                                      ├─ 세탁·급식 수집      │
+                                      ├─ 알림 계획·전송      │
+                                      └─ housekeeping        │
 ```
 
-## 서버를 하나로 합친 이유
+## 실행부를 분리하고 Core를 공유하는 이유
 
 이전 구조는 HTTP Worker, 원격 SQL/object gateway, 별도 Jobs 런타임에 같은 도메인
-규칙이 나뉘어 있었습니다. 새 구조는 Spring MVC controller, service, Spring Data
-JDBC repository와 PostgreSQL로 한 경계를 만듭니다.
+규칙이 나뉘어 있었습니다. 새 구조는 Spring MVC 호출부와 scheduler 호출부를 별도
+프로세스로 두고 Spring Data JDBC와 도메인 로직을 Core 모듈로 공유합니다.
 
-- API와 background 작업이 같은 domain model과 transaction 경계를 사용합니다.
+- API와 Worker가 같은 domain model, 저장소 port와 transaction 규칙을 사용합니다.
 - 세탁·급식 이미지도 PostgreSQL에 저장해 별도 object gateway를 제거합니다.
-- 정적 웹 자산도 같은 OCI 이미지에 포함해 배포 단위를 하나로 줄입니다.
-- 수집 실패가 HTTP server를 중단하지 않도록 scheduler 작업별로 실패를 격리합니다.
+- 정적 웹 자산은 API JAR에 포함하고 API와 Worker 이미지는 같은 Docker build에서
+  생성합니다.
+- 수집 실패가 HTTP server의 가용성에 영향을 주지 않도록 JVM 수준에서도 분리합니다.
 
 Cloudflare Tunnel은 필요할 때 OCI localhost 서비스를 외부에 노출하는 ingress일 뿐,
 애플리케이션 실행이나 데이터 저장을 담당하지 않습니다.
@@ -60,8 +63,10 @@ proxy 없이 React가 직접 HTTP로 조회합니다.
 ## 상태 소유권
 
 - Tauri PC: LMS session, LMS 로그인 상태, 출석 수집, 네이티브 알림, PC 로컬 설정.
-- Spring Boot: HTTP API, 정적 웹, 인증, pairing, 최신 출석 snapshot, 개인 설정,
-  알림과 delivery, 공개 데이터 수집·정리·Web Push.
+- Spring API: HTTP API, 정적 웹, 인증, pairing, 최신 출석 snapshot, 개인 설정,
+  알림과 delivery 조회.
+- Spring Worker: 공개 데이터 수집, 알림 계획·Web Push, housekeeping.
+- Spring Core: 두 실행 모듈이 공유하는 도메인 로직, 저장소 port와 JDBC adapter.
 - PostgreSQL: session hash, 설정, 공개 세탁·급식 기록과 이미지, 알림 상태.
 - 브라우저·PWA: 공개 생활 정보, 동기화된 출석·D-Day, 생활 설정, 연결 관리와 Web Push.
 

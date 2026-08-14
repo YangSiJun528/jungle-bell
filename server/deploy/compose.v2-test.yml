@@ -26,18 +26,57 @@ services:
         limits:
           memory: 512M
 
-  app:
+  api:
     build:
       context: ../..
       dockerfile: server/Dockerfile
+      target: api-runtime
       args:
         PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://127.0.0.1:8080}
-    image: ${APP_IMAGE:-jungle-bell-server:v2-test-local}
-    container_name: jungle-bell-server-v2-test
+    image: ${API_IMAGE:-jungle-bell-api:v2-test-local}
+    container_name: jungle-bell-api-v2-test
     restart: unless-stopped
     init: true
     depends_on:
       postgres:
+        condition: service_healthy
+    environment:
+      TZ: Asia/Seoul
+      DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-jungle_bell}
+      DATABASE_USERNAME: ${POSTGRES_USER:-jungle_bell}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://127.0.0.1:8080}
+    secrets:
+      - database-password
+      - pairing-secret
+      - vapid-public-key
+    ports:
+      - "127.0.0.1:${API_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/actuator/health/readiness"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: server/Dockerfile
+      target: worker-runtime
+      args:
+        PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://127.0.0.1:8080}
+    image: ${WORKER_IMAGE:-jungle-bell-worker:v2-test-local}
+    container_name: jungle-bell-worker-v2-test
+    restart: unless-stopped
+    init: true
+    depends_on:
+      api:
         condition: service_healthy
     environment:
       TZ: Asia/Seoul
@@ -54,14 +93,6 @@ services:
       - pairing-secret
       - vapid-public-key
       - vapid-private-key
-    ports:
-      - "127.0.0.1:${APP_PORT:-8080}:8080"
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/actuator/health/readiness"]
-      interval: 15s
-      timeout: 5s
-      retries: 12
-      start_period: 45s
     security_opt:
       - no-new-privileges:true
     deploy:
@@ -75,7 +106,7 @@ services:
     restart: unless-stopped
     profiles: ["tunnel"]
     depends_on:
-      app:
+      api:
         condition: service_healthy
     command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:-}
     security_opt:
@@ -91,9 +122,9 @@ services:
     restart: unless-stopped
     profiles: ["quick-tunnel"]
     depends_on:
-      app:
+      api:
         condition: service_healthy
-    command: tunnel --no-autoupdate --url http://app:8080
+    command: tunnel --no-autoupdate --url http://api:8080
     security_opt:
       - no-new-privileges:true
     deploy:

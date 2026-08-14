@@ -11,6 +11,7 @@ target
 src-tauri/target
 server/.gradle
 server/build
+server/*/build
 server/node_modules
 server/dist
 server/deploy/.env*
