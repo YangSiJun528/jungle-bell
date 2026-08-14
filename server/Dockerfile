@@ -1,13 +1,11 @@
 FROM node:24-bookworm-slim AS web-build
-WORKDIR /workspace
-COPY package.json package-lock.json ./
+WORKDIR /workspace/frontend
+COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --ignore-scripts
-COPY components.json tsconfig.json vite.config.ts ./
-COPY scripts ./scripts
-COPY src ./src
-ARG PUBLIC_BASE_URL=http://127.0.0.1:8080
-ENV JUNGLE_BELL_PUBLIC_ORIGIN=${PUBLIC_BASE_URL}
-RUN npm run build
+COPY frontend/components.json frontend/tsconfig.json frontend/vite.config.ts frontend/index.html ./
+COPY frontend/scripts ./scripts
+COPY frontend/src ./src
+RUN npm run build:web
 
 FROM eclipse-temurin:21-jdk-noble AS server-build
 WORKDIR /workspace/server
@@ -19,7 +17,7 @@ RUN mkdir -p core api worker \
 COPY server/core/src ./core/src
 COPY server/api/src ./api/src
 COPY server/worker/src ./worker/src
-COPY --from=web-build /workspace/dist ./api/src/main/resources/static
+COPY --from=web-build /workspace/frontend/dist/web ./api/src/main/resources/static
 RUN ./gradlew --no-daemon clean check :api:bootJar :worker:bootJar
 
 FROM eclipse-temurin:21-jre-noble AS runtime-base

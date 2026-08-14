@@ -25,13 +25,15 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: package-lock.json
+          cache-dependency-path: frontend/package-lock.json
       - run: npm ci
+        working-directory: frontend
       - run: npm run verify:web
+        working-directory: frontend
       - uses: actions/upload-artifact@v4
         with:
           name: app-assets
-          path: dist
+          path: frontend/dist/web
           retention-days: 1
 
   server:
@@ -47,7 +49,8 @@ jobs:
           java-version: 21
           cache: gradle
       - run: chmod +x server/gradlew
-      - run: npm run verify:server
+      - run: ./gradlew --no-daemon check :api:bootJar :worker:bootJar
+        working-directory: server
       - name: Validate OCI Compose
         working-directory: server
         run: docker compose --env-file deploy/.env.v2-test.example -f deploy/compose.v2-test.yml --profile quick-tunnel config --quiet
@@ -77,12 +80,15 @@ jobs:
         with:
           node-version: 24
           cache: npm
+          cache-dependency-path: frontend/package-lock.json
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy,rustfmt
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri -> target
+          workspaces: desktop -> target
           cache-on-failure: false
       - run: npm ci
+        working-directory: frontend
       - run: npm run verify:desktop
+        working-directory: frontend

@@ -1,6 +1,6 @@
 ---
 name: release
-description: Create a GitHub release with a tag from the current version in src-tauri/Cargo.toml. Use when the user asks to create a release, says "릴리즈 만들어줘", "release", "/release", or otherwise wants to publish a new version. Handles branch/state checks, changelog drafting (Korean), tag push, draft release creation, and CI workflow trigger.
+description: Create a GitHub release with a tag from the current version in desktop/Cargo.toml. Use when the user asks to create a release, says "릴리즈 만들어줘", "release", "/release", or otherwise wants to publish a new version. Handles branch/state checks, changelog drafting (Korean), tag push, draft release creation, and CI workflow trigger.
 ---
 
 # Release
@@ -26,7 +26,7 @@ If there are unpushed commits, ask whether to push them to the remote before pro
 
 ## Step 2: Check version and existing tags/releases
 
-1. Read the current version from `src-tauri/Cargo.toml`.
+1. Read the current version from `desktop/Cargo.toml`.
 2. The tag name follows the format `v{version}` (e.g., `v0.0.4-beta.2`).
 3. Check if the tag already exists on the remote (`git ls-remote --tags origin`).
 4. Check if a GitHub release already exists (`gh release view`).

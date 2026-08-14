@@ -155,6 +155,26 @@ PC 대시보드에서 **새로고침**을 누른 뒤 Jungle Campus 로그인 상
 
 버그를 제보할 때는 사용 중인 OS, 재현 조건, 가능하면 스크린샷을 함께 보내 주세요.
 
+## 개발 구조
+
+- `server/`: Spring Core·API·Worker 멀티모듈
+- `frontend/`: 공통 Vite·React SPA와 Web·PWA·Tauri 어댑터
+- `desktop/`: Tauri Rust 런타임과 capability·bundle 설정
+
+프론트엔드 명령은 `frontend/`, Gradle 명령은 `server/`, Cargo 명령은
+`desktop/`을 기준으로 실행합니다. 웹과 데스크톱은 같은 React 화면을 사용하며,
+웹 빌드는 `frontend/dist/web`, Tauri UI 빌드는 `frontend/dist/desktop`에 생성됩니다.
+
+```bash
+cd frontend
+npm ci
+npm run dev:web          # 브라우저·PWA
+npm run desktop:dev      # 같은 SPA + Tauri 어댑터
+
+cd ../server
+./gradlew check :api:bootJar :worker:bootJar
+```
+
 ## 주의사항
 
 #### 비공식 앱

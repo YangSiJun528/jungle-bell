@@ -101,7 +101,7 @@ class SecurityConfig {
     @Bean
     fun corsConfigurationSource(properties: JungleBellProperties): CorsConfigurationSource {
         val source = UrlBasedCorsConfigurationSource()
-        val configuration = CorsConfiguration().apply {
+        val personalApi = CorsConfiguration().apply {
             allowedOrigins = properties.allowedDesktopOrigins.toList()
             allowedMethods = listOf("GET", "POST", "PUT", "DELETE", "OPTIONS")
             allowedHeaders = listOf("Authorization", "Content-Type", "Accept", "Cache-Control")
@@ -109,7 +109,16 @@ class SecurityConfig {
             allowCredentials = false
             maxAge = 600
         }
-        source.registerCorsConfiguration("/api/me/**", configuration)
+        val publicApi = CorsConfiguration().apply {
+            allowedOrigins = properties.allowedDesktopOrigins.toList()
+            allowedMethods = listOf("GET", "HEAD", "OPTIONS")
+            allowedHeaders = listOf("Accept", "Cache-Control")
+            exposedHeaders = listOf("Cache-Control")
+            allowCredentials = false
+            maxAge = 600
+        }
+        source.registerCorsConfiguration("/api/me/**", personalApi)
+        source.registerCorsConfiguration("/api/public/**", publicApi)
         return source
     }
 

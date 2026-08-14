@@ -68,7 +68,8 @@ API는 기본적으로 `127.0.0.1:8080`에만 노출됩니다. Worker는 HTTP po
 저장소 루트의 전체 검증 명령은 다음과 같습니다.
 
 ```bash
-npm run verify:server
+cd server
+./gradlew --no-daemon check :api:bootJar :worker:bootJar
 docker build --target api-runtime -f server/Dockerfile .
 docker build --target worker-runtime -f server/Dockerfile .
 ```

@@ -7,6 +7,18 @@ Jungle Bell은 PC가 Jungle LMS session과 출석 수집을 전담하고, OCI의
 브라우저, 설치 PWA, Tauri PC 앱은 같은 SPA와 HTTP 계약을 사용하며 운영체제 기능만
 플랫폼 어댑터의 capability로 분리합니다.
 
+저장소도 실행 경계와 같은 세 개의 최상위 프로젝트로 나눕니다.
+
+```text
+server/    Spring Core·API·Worker
+frontend/  공통 Vite·React SPA와 Web·PWA·Tauri 어댑터
+desktop/   Tauri Rust 런타임, capability와 번들 설정
+```
+
+`frontend`는 독립 npm 프로젝트입니다. 웹 빌드는 `dist/web`, Tauri용 UI 빌드는
+`dist/desktop`에 생성합니다. PWA는 별도 React 앱이 아니라 Web 어댑터의 설치·Push
+capability이며, 두 빌드는 같은 `DashboardApp`에 서로 다른 어댑터를 주입합니다.
+
 기존 서버 세션이나 연결 정보와 호환하지 않습니다. 새 버전에서는 PC 등록과 모바일
 연결을 다시 수행합니다. 이전 서버에서 옮기는 데이터는 공개 세탁·급식 기록뿐입니다.
 
@@ -111,6 +123,10 @@ drag resize를 모두 지원하고, Calendar는 React DayPicker를 감싼 shadcn
 `PlatformAdapter.capabilities`로만 노출하며 브라우저 기본 어댑터가 실수로 호출되면
 명시적인 capability 오류를 반환합니다. 서버 응답 대기는 선언적인 Suspense와 Error
 Boundary를 우선해 loading·error·empty 상태를 구분합니다.
+
+공통 `app`, `api`, `domain`, `features` 계층은 `@tauri-apps`, 서비스 워커,
+`PushManager`를 직접 사용하지 않습니다. Web entry는 PWA 어댑터를, Desktop entry는
+단기 HTTP session·IPC·event 어댑터를 구성한 뒤 공통 bootstrap을 호출합니다.
 
 ## 관련 문서
 

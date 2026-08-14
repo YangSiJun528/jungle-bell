@@ -15,6 +15,7 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.forwardedUrl
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.testcontainers.junit.jupiter.Container
@@ -48,6 +49,15 @@ class SecurityFilterChainIntegrationTest(
         mockMvc.perform(get("/api/me/session"))
             .andExpect(status().isUnauthorized)
             .andExpect(jsonPath("$.error").value("AUTHENTICATION_REQUIRED"))
+    }
+
+    @Test
+    fun `desktop webview origin can read public API responses`() {
+        mockMvc.perform(
+            get("/api/public/status")
+                .header(HttpHeaders.ORIGIN, "tauri://localhost"),
+        ).andExpect(status().isOk)
+            .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "tauri://localhost"))
     }
 
     @Test
