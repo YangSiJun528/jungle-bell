@@ -11,7 +11,7 @@ describe('initial QR pairing bootstrap', () => {
         const entry = parseAndScrubInitialPairing({
             hash,
             platform: 'browser',
-            pathname: '/dashboard.html',
+            pathname: '/',
             search: '?source=qr',
             historyState: {navigation: 1},
             replaceState,
@@ -25,7 +25,7 @@ describe('initial QR pairing bootstrap', () => {
         expect(replaceState).toHaveBeenCalledWith(
             {navigation: 1},
             '',
-            '/dashboard.html?source=qr#connections',
+            '/?source=qr#connections',
         );
     });
 
@@ -35,7 +35,7 @@ describe('initial QR pairing bootstrap', () => {
         const entry = parseAndScrubInitialPairing({
             hash,
             platform: 'desktop',
-            pathname: '/dashboard.html',
+            pathname: '/',
             search: '',
             historyState: null,
             replaceState,
@@ -43,7 +43,7 @@ describe('initial QR pairing bootstrap', () => {
 
         expect(entry).toBeNull();
         expect(JSON.stringify(entry)).not.toContain('one-time-secret');
-        expect(replaceState).toHaveBeenCalledWith(null, '', '/dashboard.html#home');
+        expect(replaceState).toHaveBeenCalledWith(null, '', '/#home');
     });
 
     test('일반 경로는 history를 변경하지 않는다', () => {
@@ -51,7 +51,7 @@ describe('initial QR pairing bootstrap', () => {
         expect(parseAndScrubInitialPairing({
             hash: '#laundry',
             platform: 'browser',
-            pathname: '/dashboard.html',
+            pathname: '/',
             search: '',
             historyState: null,
             replaceState,

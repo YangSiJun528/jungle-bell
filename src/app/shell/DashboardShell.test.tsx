@@ -85,7 +85,6 @@ describe('DashboardShell', () => {
         expect(html).toContain('href="https://github.com/YangSiJun528/jungle-bell"');
         expect(html).toContain('href="https://github.com/YangSiJun528/jungle-bell/discussions/categories/');
         expect(html).toContain('href="https://github.com/YangSiJun528/jungle-bell/releases/latest"');
-        expect(html).toContain('href="./blog/index.html"');
         expect(html).toContain('공개 홈');
     });
 

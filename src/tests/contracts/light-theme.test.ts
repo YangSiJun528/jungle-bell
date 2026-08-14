@@ -4,7 +4,7 @@ import {test} from 'vitest';
 
 const srcRoot = new URL('../../', import.meta.url);
 const source = (path: string) => readFileSync(new URL(path, srcRoot), 'utf8');
-const dashboard = source('./dashboard.html');
+const dashboard = source('./index.html');
 const globals = source('./app/styles/globals.css');
 const main = source('./app/main.tsx');
 const checker = source('../src-tauri/src/checker.rs');

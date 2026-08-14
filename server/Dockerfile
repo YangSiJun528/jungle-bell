@@ -2,12 +2,11 @@ FROM node:24-bookworm-slim AS web-build
 WORKDIR /workspace
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts
-COPY astro.config.mjs components.json tsconfig*.json vite.config.ts ./
+COPY components.json tsconfig.json vite.config.ts ./
 COPY scripts ./scripts
 COPY src ./src
 ARG PUBLIC_BASE_URL=http://127.0.0.1:8080
 ENV JUNGLE_BELL_PUBLIC_ORIGIN=${PUBLIC_BASE_URL}
-ENV ASTRO_TELEMETRY_DISABLED=1
 RUN npm run build
 
 FROM eclipse-temurin:21-jdk-noble AS server-build

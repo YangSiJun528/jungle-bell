@@ -18,7 +18,6 @@
 | 공유 화면 컴포넌트 | [`src/components/dashboard`](../src/components/dashboard) |
 | 저장소에 포함한 shadcn/ui | [`src/components/ui`](../src/components/ui) |
 | Tailwind·색상 토큰 | [`src/app/styles/globals.css`](../src/app/styles/globals.css) |
-| 정적 Markdown 블로그 | [`src/site`](../src/site) |
 
 ## 대시보드 셸
 
@@ -71,14 +70,9 @@ Calendar를 갱신할 때도 공식 DayPicker 기반 구조와 `buttonVariants` 
   사용한다. 경고는 여성 구역색과 다른 저채도 빨간색을 사용한다.
 - 모바일에서는 표를 축소하지 않고 가로 스크롤로 전체 구조를 보존한다.
 
-## Astro 블로그 경계
-
-Markdown 블로그는 같은 루트 패키지와 `src/` 아래에서 관리하지만 React 앱에 포함하지 않는다. Astro가 정적 HTML을 `.build/site`에 만들고 조립 스크립트가 최종 `dist/blog`에 합친다. 블로그 소스에는 React import나 `client:*` hydration 지시어를 넣지 않는다.
-
 ## 불변 조건
 
 - 서버 응답은 기존 strict parser를 통과한 뒤 React Query cache에 저장한다.
 - Tauri IPC는 기존 capability와 Rust 검증 경계를 넓히지 않는다.
 - 계정 API는 브라우저의 HttpOnly cookie 또는 Tauri의 메모리 전용 단기 token으로만 호출한다.
 - 공통 상태, 버튼, 카드, dialog는 `src/components`에서 재사용한다.
-- 블로그 빌드는 React 번들을 로드하지 않는다.

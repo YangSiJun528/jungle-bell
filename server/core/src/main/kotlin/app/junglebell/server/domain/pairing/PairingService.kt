@@ -49,7 +49,7 @@ class PairingService(
         val fragment = "pairing=${encode(pairingId)}&challenge=${encode(challenge)}"
         return PairingCreated(
             pairingId,
-            properties.publicBaseUrl.resolve("/dashboard.html#$fragment").toString(),
+            properties.publicBaseUrl.resolve("/#$fragment").toString(),
             manualCode,
             Instant.ofEpochMilli(expiresAt).toString(),
         )

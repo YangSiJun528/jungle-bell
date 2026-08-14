@@ -10,8 +10,6 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
-.build
-.astro
 *.local
 server/.gradle/
 server/build/

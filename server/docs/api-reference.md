@@ -28,10 +28,9 @@ cookie는 token resolver에서 Bearer 인증으로 변환하고, 권한과 WebVi
 | `GET` | `/actuator/health/readiness` | OCI health check |
 | `GET` | `/api/health` | 수집 source를 포함한 서비스 health |
 | `GET` | `/api/public/status` | source별 최근 시도·성공·실패 상태 |
-| `GET` | `/` | `/dashboard.html`로 308 redirect |
-| `GET` | `/blog`, `/blog/` | `/blog/index.html`로 308 redirect |
+| `GET` | `/`, `/index.html` | 내장 React SPA HTML |
 
-React 대시보드와 Astro 블로그는 Spring Boot JAR의 정적 자산으로 함께 배포됩니다.
+Vite로 빌드한 React SPA는 Spring Boot JAR의 정적 자산으로 배포됩니다. 화면 이동은 `/#home`, `/#attendance`, `/#laundry`, `/#meals` hash 경로를 사용합니다.
 
 ## 공개 세탁 데이터
 

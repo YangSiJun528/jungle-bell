@@ -410,7 +410,7 @@ test('모바일 알림 내역은 서버의 epoch 응답 필드를 그대로 검�
                     kind: 'attendance-action-required',
                     title: '입실 체크가 필요합니다',
                     body: 'LMS에서 직접 확인해 주세요.',
-                    path: '/dashboard.html#attendance',
+                    path: '/#attendance',
                     createdAtEpochMs: 1_785_727_000_000,
                     expiresAtEpochMs: 1_785_727_600_000,
                     attempt: 1,
@@ -428,7 +428,7 @@ test('모바일 알림 내역은 서버의 epoch 응답 필드를 그대로 검�
         kind: 'attendance-action-required',
         title: '입실 체크가 필요합니다',
         body: 'LMS에서 직접 확인해 주세요.',
-        path: '/dashboard.html#attendance',
+        path: '/#attendance',
         createdAtEpochMs: 1_785_727_000_000,
         expiresAtEpochMs: 1_785_727_600_000,
         attempt: 1,
@@ -447,10 +447,10 @@ test('모바일 알림의 위조된 경로나 ISO 문자열 시간은 거부한�
     };
     for (const notification of [
         {...base, path: 'https://evil.example/'},
-        {...base, path: '/dashboard.html#unknown'},
-        {...base, path: '/dashboard.html#attendance', createdAtEpochMs: '2026-08-03T09:00:00.000Z'},
-        {...base, path: '/dashboard.html#attendance', expiresAtEpochMs: undefined},
-        {...base, path: '/dashboard.html#attendance', expiresAtEpochMs: Number.MAX_SAFE_INTEGER + 1},
+        {...base, path: '/#unknown'},
+        {...base, path: '/#attendance', createdAtEpochMs: '2026-08-03T09:00:00.000Z'},
+        {...base, path: '/#attendance', expiresAtEpochMs: undefined},
+        {...base, path: '/#attendance', expiresAtEpochMs: Number.MAX_SAFE_INTEGER + 1},
     ]) {
         const api = createDashboardApi({
             fetcher: async () => jsonResponse({notifications: [notification]}),

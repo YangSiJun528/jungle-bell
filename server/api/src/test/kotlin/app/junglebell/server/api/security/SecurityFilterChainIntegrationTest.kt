@@ -9,9 +9,12 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.http.HttpHeaders
+import org.springframework.http.MediaType
 import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.forwardedUrl
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.testcontainers.junit.jupiter.Container
@@ -26,6 +29,20 @@ class SecurityFilterChainIntegrationTest(
     @param:Autowired private val jdbc: JdbcClient,
     @param:Autowired private val tokens: TokenCodec,
 ) {
+    @Test
+    fun `React SPA is served at the root without legacy entry routes`() {
+        mockMvc.perform(get("/"))
+            .andExpect(status().isOk)
+            .andExpect(forwardedUrl("index.html"))
+        mockMvc.perform(get("/index.html"))
+            .andExpect(status().isOk)
+            .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML))
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("id=\"root\"")))
+        mockMvc.perform(get("/blog")).andExpect(status().isNotFound)
+        mockMvc.perform(get("/blog/")).andExpect(status().isNotFound)
+        mockMvc.perform(get("/dashboard.html")).andExpect(status().isNotFound)
+    }
+
     @Test
     fun `missing credentials return the API authentication error`() {
         mockMvc.perform(get("/api/me/session"))

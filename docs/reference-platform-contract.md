@@ -30,7 +30,7 @@ Spring Boot 프로세스로 실행하고 PostgreSQL 접근과 도메인 로직�
 | 영속성 | Spring Data JDBC, PostgreSQL 17 |
 | 수집·알림 | Worker의 Spring Scheduler, API와 별도 JVM |
 | 급식 이미지 | PostgreSQL `BYTEA`, SHA-256 immutable URL |
-| 정적 자산 | React/Astro 빌드 결과를 API JAR에 포함 |
+| 정적 자산 | Vite + React 빌드 결과를 API JAR에 포함 |
 | 외부 ingress | 선택적인 Cloudflare Tunnel. 실행·저장 계층이 아님 |
 
 Cloudflare Worker, D1, R2, Wrangler와 별도 TypeScript Jobs는 사용하지 않습니다.
