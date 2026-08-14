@@ -216,6 +216,11 @@ export interface MobileSession {
     status: 'active' | 'revoked' | 'expired';
 }
 
+export interface BrowserAccountSession {
+    authenticated: true;
+    expiresAt: string;
+}
+
 export interface DashboardNotification {
     id: string;
     kind: string;
@@ -259,6 +264,7 @@ export interface DashboardApi extends DashboardPersonalApi, DashboardDesktopSett
         installationId: string;
     }): Promise<PairingClaim>;
     completePairing(pairingId: string): Promise<'waiting' | 'completed'>;
+    getAccountSession(): Promise<BrowserAccountSession | null>;
     disconnectMobileSession(): Promise<void>;
     getNotifications(): Promise<DashboardNotification[]>;
     getDesktopNotificationInbox(): Promise<NotificationInboxSnapshot>;
@@ -485,6 +491,17 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
             if (!response.ok) throw await responseError(response);
             if (response.status !== 204) throw new Error('API_RESPONSE_INVALID');
             return 'completed';
+        },
+
+        async getAccountSession() {
+            const response = await accountResponse('/api/me/session', {method: 'GET'});
+            if (response.status === 401) return null;
+            const source = exactRecord(await responseJson(response), ['authenticated', 'expiresAt']);
+            if (source.authenticated !== true) throw new Error('API_RESPONSE_INVALID');
+            return {
+                authenticated: true,
+                expiresAt: iso(source.expiresAt),
+            };
         },
 
         async disconnectMobileSession() {

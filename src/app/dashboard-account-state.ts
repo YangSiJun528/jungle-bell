@@ -1,4 +1,4 @@
-import type {DesktopConnectionState} from '@/api/dashboard-api';
+import type {BrowserAccountSession, DesktopConnectionState} from '@/api/dashboard-api';
 import type {PlatformKind} from '@/platform/platform-adapter';
 
 export type ServerSessionStatus =
@@ -22,8 +22,20 @@ export interface DashboardAccountStatus {
     lmsAuthentication: LmsAuthenticationStatus;
 }
 
+export type PersonalAccessStatus = 'checking' | 'connected' | 'unconnected' | 'error';
+
+export interface PersonalAccessState {
+    status: PersonalAccessStatus;
+}
+
 interface AccountQueryState {
     data: DesktopConnectionState | undefined;
+    isPending: boolean;
+    isError: boolean;
+}
+
+interface BrowserSessionQueryState {
+    data: BrowserAccountSession | null | undefined;
     isPending: boolean;
     isError: boolean;
 }
@@ -60,6 +72,27 @@ export function dashboardAccountStatus(
             : 'checking';
 
     return {serverSession, lmsAuthentication};
+}
+
+export function personalAccessState(
+    platform: PlatformKind,
+    desktop: DashboardAccountStatus,
+    browser: BrowserSessionQueryState,
+): PersonalAccessState {
+    if (platform === 'browser') {
+        if (browser.isError) return {status: 'error'};
+        if (browser.isPending && browser.data === undefined) return {status: 'checking'};
+        return {status: browser.data ? 'connected' : 'unconnected'};
+    }
+    if (desktop.lmsAuthentication === 'checking' || desktop.serverSession === 'checking') {
+        return {status: 'checking'};
+    }
+    if (desktop.lmsAuthentication === 'unavailable' || desktop.serverSession === 'unavailable') {
+        return {status: 'error'};
+    }
+    return desktop.lmsAuthentication === 'authenticated' && serverSessionReady(desktop)
+        ? {status: 'connected'}
+        : {status: 'unconnected'};
 }
 
 export function assertLmsAuthenticated(status: DashboardAccountStatus): void {

@@ -85,6 +85,12 @@ export function AttendancePage() {
         && account.status.serverSession === 'missing';
     const desktopSessionRecovery = platform.capabilities.desktopAccount
         && account.status.serverSession === 'recovery-required';
+    const browserAccessChecking = platform.kind === 'browser'
+        && account.personalAccess.status === 'checking';
+    const browserAccessUnconnected = platform.kind === 'browser'
+        && account.personalAccess.status === 'unconnected';
+    const browserAccessError = platform.kind === 'browser'
+        && account.personalAccess.status === 'error';
 
     const dday = selectDdayView({
         platform: platform.kind,
@@ -105,6 +111,7 @@ export function AttendancePage() {
                         <Button
                             variant="outline"
                             disabled={refreshAttendance.isPending
+                                || account.personalAccess.status !== 'connected'
                                 || desktopLmsChecking
                                 || desktopLmsUnavailable
                                 || desktopSessionChecking
@@ -142,7 +149,19 @@ export function AttendancePage() {
                         <CardTitle>오늘 출석</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        {desktopLmsChecking ? (
+                        {browserAccessChecking ? (
+                            <LoadingState label="PC 연결 상태를 확인하고 있습니다."/>
+                        ) : browserAccessUnconnected ? (
+                            <EmptyState
+                                title="PC 연결이 필요합니다."
+                                description="PC 앱과 연결한 뒤 출석과 D-Day를 확인할 수 있습니다."
+                            />
+                        ) : browserAccessError ? (
+                            <ErrorState
+                                title="PC 연결 상태를 확인하지 못했습니다."
+                                retry={() => void account.browserSessionQuery.refetch()}
+                            />
+                        ) : desktopLmsChecking ? (
                             <LoadingState label="LMS 로그인 상태를 확인하고 있습니다."/>
                         ) : desktopLmsRequired ? (
                             <EmptyState title="LMS 로그인이 필요합니다."/>

@@ -41,6 +41,38 @@ function desktopHttpSession() {
     };
 }
 
+test('브라우저 계정 세션은 401을 정상적인 미연결 상태로 처리한다', async () => {
+    const calls: Array<{url: string; init?: RequestInit}> = [];
+    const api = createDashboardApi({
+        fetcher: async (input, init) => {
+            calls.push({url: String(input), init});
+            return new Response(null, {status: 401});
+        },
+    });
+
+    assert.equal(await api.getAccountSession(), null);
+    assert.equal(calls[0]?.url, '/api/me/session');
+    assert.equal(calls[0]?.init?.credentials, 'include');
+    assert.equal(calls[0]?.init?.cache, 'no-store');
+});
+
+test('브라우저 계정 세션은 연결 상태 응답을 엄격히 검증한다', async () => {
+    const expiresAt = '2026-08-14T10:00:00.000Z';
+    const valid = createDashboardApi({
+        fetcher: async () => jsonResponse({authenticated: true, expiresAt}),
+    });
+    assert.deepEqual(await valid.getAccountSession(), {authenticated: true, expiresAt});
+
+    for (const value of [
+        {authenticated: false, expiresAt},
+        {authenticated: true, expiresAt: 'invalid'},
+        {authenticated: true, expiresAt, userId: 'leak'},
+    ]) {
+        const invalid = createDashboardApi({fetcher: async () => jsonResponse(value)});
+        await assert.rejects(invalid.getAccountSession(), /API_RESPONSE_INVALID/u);
+    }
+});
+
 test('공개 생활 정보는 인증 없이 공개 API만 호출한다', async () => {
     const calls: Array<{url: string; init?: RequestInit}> = [];
     const api = createDashboardApi({

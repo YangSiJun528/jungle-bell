@@ -20,6 +20,10 @@ vi.mock('@/app/dashboard-context', () => ({
     useDashboardEnvironment: () => ({api}),
 }));
 
+vi.mock('@/app/dashboard-account', () => ({
+    useDashboardAccount: () => ({personalAccess: {status: 'connected'}}),
+}));
+
 vi.mock('@/app/use-dashboard-queries', () => ({
     useAttendanceQuery: () => ({
         data: {

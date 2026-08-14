@@ -5,6 +5,7 @@ import type {AttendancePreferences} from '@/api/personal-api';
 import {queryKeys, useDashboardEnvironment} from '@/app/dashboard-context';
 import {accountAuthenticationRequired} from '@/api/account-authentication';
 import {useAttendanceQuery} from '@/app/use-dashboard-queries';
+import {useDashboardAccount} from '@/app/dashboard-account';
 import {EmptyState, ErrorState, LoadingState} from '@/components/dashboard/async-state';
 import {Button} from '@/components/ui/button';
 import {
@@ -94,11 +95,13 @@ function hourLabel(hour: number): string {
 
 export function AttendancePreferencesSection() {
     const {api} = useDashboardEnvironment();
+    const account = useDashboardAccount();
     const client = useQueryClient();
     const attendance = useAttendanceQuery();
     const preferences = useQuery({
         queryKey: queryKeys.attendancePreferences,
         queryFn: () => api.getAttendancePreferences(),
+        enabled: account.personalAccess.status === 'connected',
     });
     const [draft, setDraft] = useState<AttendancePreferences | null>(
         () => preferences.data ?? null,

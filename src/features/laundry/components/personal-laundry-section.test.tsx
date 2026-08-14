@@ -17,6 +17,8 @@ const {api, queryKeys, state} = vi.hoisted(() => ({
     state: {
         lmsAuthentication: 'authenticated',
         attendanceStatus: 'available',
+        personalAccess: 'connected',
+        platformKind: 'desktop',
         serverSession: 'stored',
     },
 }));
@@ -25,7 +27,10 @@ vi.mock('@/app/dashboard-context', () => ({
     queryKeys,
     useDashboardEnvironment: () => ({
         api,
-        platform: {kind: 'desktop', capabilities: {desktopAccount: true}},
+        platform: {
+            kind: state.platformKind,
+            capabilities: {desktopAccount: state.platformKind === 'desktop'},
+        },
     }),
 }));
 
@@ -35,7 +40,9 @@ vi.mock('@/app/dashboard-account', () => ({
             serverSession: state.serverSession,
             lmsAuthentication: state.lmsAuthentication,
         },
+        personalAccess: {status: state.personalAccess},
         connectionQuery: {refetch: vi.fn()},
+        browserSessionQuery: {refetch: vi.fn()},
     }),
 }));
 
@@ -103,6 +110,8 @@ function renderPersonalLaundry(options: {
     watches?: LaundryWatch[];
     machines?: DashboardLaundrySnapshot['machines'];
     lmsAuthentication?: string;
+    personalAccess?: string;
+    platformKind?: string;
     attendanceStatus?: string;
     serverSession?: string;
 } = {}): string {
@@ -110,6 +119,12 @@ function renderPersonalLaundry(options: {
     state.lmsAuthentication = options.lmsAuthentication ?? 'authenticated';
     state.attendanceStatus = options.attendanceStatus ?? 'available';
     state.serverSession = options.serverSession ?? 'stored';
+    state.platformKind = options.platformKind ?? 'desktop';
+    state.personalAccess = options.personalAccess
+        ?? (state.lmsAuthentication === 'authenticated'
+            && (state.serverSession === 'stored' || state.serverSession === 'memory-only')
+            ? 'connected'
+            : 'unconnected');
     client.setQueryData(queryKeys.laundryWatches, options.watches ?? [activeWatch]);
 
     return renderToStaticMarkup(
@@ -144,6 +159,18 @@ describe('PersonalLaundrySection', () => {
         expect(markup).toBe('');
     });
 
+    test('미연결 웹에서는 개인 세탁 UI와 query subtree를 렌더링하지 않는다', () => {
+        api.listLaundryWatches.mockClear();
+        const markup = renderPersonalLaundry({
+            platformKind: 'browser',
+            personalAccess: 'unconnected',
+            watches: [],
+        });
+
+        expect(markup).toBe('');
+        expect(api.listLaundryWatches).not.toHaveBeenCalled();
+    });
+
     test('출석 snapshot이 없으면 개인 세탁 요청 전에 동기화를 안내한다', () => {
         const markup = renderPersonalLaundry({attendanceStatus: 'unavailable'});
 
@@ -152,12 +179,10 @@ describe('PersonalLaundrySection', () => {
         expect(markup).not.toContain('내 세탁 알림');
     });
 
-    test('서버 credential이 없으면 개인 API 대신 계정 연결을 안내한다', () => {
+    test('서버 credential이 없으면 화면에 끼워진 개인 영역을 숨긴다', () => {
         const markup = renderPersonalLaundry({serverSession: 'missing'});
 
-        expect(markup).toContain('계정 연결이 필요합니다.');
-        expect(markup).toContain('계정 연결');
-        expect(markup).not.toContain('내 세탁 알림');
+        expect(markup).toBe('');
     });
 
     test('알림 대상 선택 영역은 카드 폭 안에서 줄어들고 버튼은 침범하지 않는다', () => {

@@ -69,7 +69,7 @@ function MealHistoryMonth({
         setSelectedHistoryDate('');
     };
 
-    return activeHistoryDate ? (
+    return (
         <div className="space-y-6">
             <div
                 className="grid items-start gap-4 lg:grid-cols-[minmax(17rem,20rem)_minmax(0,1fr)]"
@@ -79,20 +79,24 @@ function MealHistoryMonth({
                     <MealHistoryCalendar
                         availableDates={availableDates}
                         month={visibleMonthKey}
-                        selectedDate={activeHistoryDate}
+                        selectedDate={activeHistoryDate || `${visibleMonthKey}-01`}
                         onMonthChange={changeMonth}
                         onSelect={setSelectedHistoryDate}
                     />
                 </Card>
                 <section aria-labelledby="selected-history-date-title" className="min-w-0">
                     <h3 className="mb-3 text-sm font-semibold" id="selected-history-date-title">
-                        {mealDateLabel(activeHistoryDate)}
+                        {activeHistoryDate ? mealDateLabel(activeHistoryDate) : '선택한 날짜 식단'}
                     </h3>
-                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-                        {activeHistoryMeals.map((meal) => (
-                            <MealPostCard compact key={meal.id} meal={meal}/>
-                        ))}
-                    </div>
+                    {activeHistoryMeals.length > 0 ? (
+                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                            {activeHistoryMeals.map((meal) => (
+                                <MealPostCard compact key={meal.id} meal={meal}/>
+                            ))}
+                        </div>
+                    ) : (
+                        <EmptyState title="이 달에 저장된 급식 기록이 없습니다."/>
+                    )}
                 </section>
             </div>
             <section
@@ -112,19 +116,6 @@ function MealHistoryMonth({
                     <EmptyState title="저장된 주간 급식표가 없습니다."/>
                 )}
             </section>
-        </div>
-    ) : (
-        <div className="space-y-4">
-            <Card className="mx-auto w-full max-w-80 gap-4 p-4 shadow-none">
-                <MealHistoryCalendar
-                    availableDates={availableDates}
-                    month={visibleMonthKey}
-                    selectedDate={`${visibleMonthKey}-01`}
-                    onMonthChange={changeMonth}
-                    onSelect={setSelectedHistoryDate}
-                />
-            </Card>
-            <EmptyState title="이 달에 저장된 급식 기록이 없습니다."/>
         </div>
     );
 }

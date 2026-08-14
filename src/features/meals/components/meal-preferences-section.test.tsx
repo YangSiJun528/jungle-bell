@@ -19,6 +19,10 @@ vi.mock('@/app/dashboard-context', () => ({
     useDashboardEnvironment: () => ({api}),
 }));
 
+vi.mock('@/app/dashboard-account', () => ({
+    useDashboardAccount: () => ({personalAccess: {status: 'connected'}}),
+}));
+
 const preferences: MealPreferences = {
     enabled: true,
     lunch: true,

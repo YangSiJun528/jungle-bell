@@ -2,6 +2,8 @@ import {useState} from 'react';
 import {useMutation, useQueryClient} from '@tanstack/react-query';
 import {Check, ExternalLink, Send, Smartphone} from 'lucide-react';
 import {queryKeys, useDashboardEnvironment} from '@/app/dashboard-context';
+import {useDashboardAccount} from '@/app/dashboard-account';
+import {PersonalAccountGate} from '@/app/personal-account-gate';
 import {useNotificationsQuery} from '@/app/use-dashboard-queries';
 import {EmptyState, ErrorState, LoadingState} from '@/components/dashboard/async-state';
 import {Button} from '@/components/ui/button';
@@ -85,6 +87,7 @@ export function NotificationPanelContent({seenMobileIds, onMobileNotificationSee
     onMobileNotificationSeen: (id: string) => void;
 }) {
     const {api, platform} = useDashboardEnvironment();
+    const account = useDashboardAccount();
     const client = useQueryClient();
     const notifications = useNotificationsQuery();
     const desktop = platform.capabilities.localNotifications;
@@ -229,10 +232,10 @@ export function NotificationPanelContent({seenMobileIds, onMobileNotificationSee
                         </AlertDescription>
                     </Alert>
                 ) : null}
-                {content}
+                <PersonalAccountGate>{content}</PersonalAccountGate>
             </section>
 
-            {!authenticationRequired ? (
+            {account.personalAccess.status === 'connected' && !authenticationRequired ? (
                 <section className="space-y-4 border-t pt-6" aria-labelledby="notification-delivery-title">
                     <div>
                         <h2 className="text-base font-semibold" id="notification-delivery-title">알림 수신</h2>

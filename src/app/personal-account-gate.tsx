@@ -1,6 +1,6 @@
 import {type PropsWithChildren} from 'react';
 import {useMutation} from '@tanstack/react-query';
-import {CircleAlert, LogIn, RefreshCw} from 'lucide-react';
+import {CircleAlert, LogIn, RefreshCw, Smartphone} from 'lucide-react';
 import {LoadingState} from '@/components/dashboard/async-state';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Button} from '@/components/ui/button';
@@ -14,7 +14,38 @@ export function PersonalAccountGate({children}: PropsWithChildren) {
     const refresh = useRefreshAttendanceMutation();
     const login = useMutation({mutationFn: () => api.openLmsLogin()});
 
-    if (!platform.capabilities.desktopAccount) return children;
+    if (!platform.capabilities.desktopAccount) {
+        if (account.personalAccess.status === 'checking') {
+            return <LoadingState label="PC 연결 상태를 확인하고 있습니다."/>;
+        }
+        if (account.personalAccess.status === 'error') {
+            return (
+                <Alert variant="destructive">
+                    <CircleAlert aria-hidden="true"/>
+                    <AlertTitle>PC 연결 상태를 확인하지 못했습니다.</AlertTitle>
+                    <AlertDescription>
+                        <Button size="sm" variant="outline" onClick={() => void account.browserSessionQuery.refetch()}>
+                            새로고침
+                        </Button>
+                    </AlertDescription>
+                </Alert>
+            );
+        }
+        if (account.personalAccess.status === 'unconnected') {
+            return (
+                <Alert>
+                    <Smartphone aria-hidden="true"/>
+                    <AlertTitle>PC 연결이 필요합니다.</AlertTitle>
+                    <AlertDescription>
+                        <Button asChild className="mt-2" size="sm" variant="outline">
+                            <a href="#connections">기기 연결 열기</a>
+                        </Button>
+                    </AlertDescription>
+                </Alert>
+            );
+        }
+        return children;
+    }
 
     if (account.status.lmsAuthentication === 'checking') {
         return <LoadingState label="LMS 로그인 상태를 확인하고 있습니다."/>;

@@ -39,42 +39,42 @@ describe('mobile pairing flow', () => {
         }
     });
 
-    test('출석 세션 초기화가 끝나기 전에는 복원·QR claim을 시작하지 않는다', () => {
+    test('계정 세션 확인이 끝나기 전에는 복원·QR claim을 시작하지 않는다', () => {
         expect(automaticPairingAction({
-            attendance: 'pending',
+            account: 'checking',
             alreadyHandled: false,
             hasRestoredPairing: true,
             hasQrLink: true,
         })).toBe('wait');
         expect(automaticPairingAction({
-            attendance: 'error',
+            account: 'error',
             alreadyHandled: false,
             hasRestoredPairing: true,
             hasQrLink: true,
         })).toBe('wait');
     });
 
-    test('auth-required에서만 pending 복원을 QR보다 우선하고, loaded면 pending을 제거한다', () => {
+    test('미연결 상태에서만 pending 복원을 QR보다 우선하고, 연결되면 pending을 제거한다', () => {
         expect(automaticPairingAction({
-            attendance: 'auth-required',
+            account: 'unconnected',
             alreadyHandled: false,
             hasRestoredPairing: true,
             hasQrLink: true,
         })).toBe('resume');
         expect(automaticPairingAction({
-            attendance: 'auth-required',
+            account: 'unconnected',
             alreadyHandled: false,
             hasRestoredPairing: false,
             hasQrLink: true,
         })).toBe('qr');
         expect(automaticPairingAction({
-            attendance: 'loaded',
+            account: 'connected',
             alreadyHandled: false,
             hasRestoredPairing: true,
             hasQrLink: true,
         })).toBe('clear');
         expect(automaticPairingAction({
-            attendance: 'auth-required',
+            account: 'unconnected',
             alreadyHandled: true,
             hasRestoredPairing: true,
             hasQrLink: true,
@@ -88,7 +88,7 @@ describe('mobile pairing flow', () => {
         expect(gate).toEqual({inFlight: true, automaticHandled: true});
         expect(tryReservePairingStart(gate)).toBe(false);
         expect(automaticPairingAction({
-            attendance: 'auth-required',
+            account: 'unconnected',
             alreadyHandled: gate.automaticHandled,
             hasRestoredPairing: false,
             hasQrLink: true,

@@ -2,6 +2,7 @@ import {useEffect, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {BellRing, CircleAlert, LoaderCircle, Smartphone} from 'lucide-react';
 import {queryKeys, useDashboardEnvironment} from '@/app/dashboard-context';
+import {useDashboardAccount} from '@/app/dashboard-account';
 import {ErrorState, LoadingState} from '@/components/dashboard/async-state';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Button} from '@/components/ui/button';
@@ -104,12 +105,14 @@ function MealPreferencesEditor({
 
 export function MealPreferencesSection() {
     const {api} = useDashboardEnvironment();
+    const account = useDashboardAccount();
     const client = useQueryClient();
     const [saved, setSaved] = useState(false);
     const [editorRevision, setEditorRevision] = useState(0);
     const preferences = useQuery({
         queryKey: queryKeys.mealPreferences,
         queryFn: () => api.getMealPreferences(),
+        enabled: account.personalAccess.status === 'connected',
     });
     const savePreferences = useMutation({
         mutationFn: (input: MealPreferencesInput) => api.updateMealPreferences(input),

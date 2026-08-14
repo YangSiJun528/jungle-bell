@@ -10,6 +10,7 @@ const main = source('./app/main.tsx');
 const app = source('./app/dashboard-app.tsx');
 const context = source('./app/dashboard-context.tsx');
 const personalAccountGate = source('./app/personal-account-gate.tsx');
+const personalFeatureSlot = source('./app/personal-feature-slot.tsx');
 const providers = source('./app/dashboard-providers.tsx');
 const queries = source('./app/use-dashboard-queries.ts');
 const campusQueryOptions = source('./app/campus-query-options.ts');
@@ -139,7 +140,8 @@ test('세탁 화면은 워시타워 상태표와 공통 계정 기능을 함께 
     assert.match(personalLaundry, /api\.deleteLaundryWatch\(id\)/);
     assert.doesNotMatch(personalLaundry, /as PersonalSurface/);
     assert.match(personalLaundry, /enabled: attendanceReady/);
-    assert.match(personalLaundry, /<PersonalAccountGate>/);
+    assert.match(personalLaundry, /<PersonalFeatureSlot>/);
+    assert.match(personalFeatureSlot, /personalAccess\.status === 'connected' \? children : null/);
     assert.match(personalAccountGate, /LMS 로그인이 필요합니다/);
     assert.match(personalAccountGate, /계정 연결이 필요합니다/);
 });
@@ -196,7 +198,7 @@ test('TanStack Query는 공개 데이터와 개인 데이터를 서로 다른 �
     assert.match(campusQueryOptions, /laundryQueryContract\s*=\s*\{[\s\S]{0,180}freshnessMs:\s*30_000/);
     assert.match(campusQueryOptions, /mealsQueryContract\s*=\s*\{[\s\S]{0,180}freshnessMs:\s*5 \* 60_000/);
     assert.match(queries, /personal:\s*60_000/);
-    assert.match(queries, /enabled:\s*lmsReady && sessionReady/);
+    assert.match(queries, /enabled:\s*account\.personalAccess\.status === 'connected'/);
     assert.match(campusQueryOptions, /queryOptions\(\{[\s\S]{0,180}queryKey: laundryQueryContract\.queryKey,[\s\S]{0,180}staleTime: laundryQueryContract\.freshnessMs/);
     assert.match(campusQueryOptions, /queryOptions\(\{[\s\S]{0,180}queryKey: mealsQueryContract\.queryKey,[\s\S]{0,180}staleTime: mealsQueryContract\.freshnessMs/);
     assert.match(queries, /useSuspenseQuery\(laundryQueryOptions\(api\)\)/);
