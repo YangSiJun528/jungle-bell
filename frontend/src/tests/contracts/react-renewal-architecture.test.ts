@@ -50,6 +50,7 @@ describe('React renewal architecture', () => {
         expect(packageJson.dependencies).toHaveProperty('react');
         expect(packageJson.dependencies).toHaveProperty('react-dom');
         expect(packageJson.dependencies).toHaveProperty('@tanstack/react-query');
+        expect(packageJson.dependencies).toHaveProperty('@tanstack/react-router');
         expect(packageJson.dependencies).not.toHaveProperty('alpinejs');
     });
 

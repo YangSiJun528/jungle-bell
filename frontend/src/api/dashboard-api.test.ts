@@ -436,7 +436,7 @@ test('모바일 알림 내역은 서버의 epoch 응답 필드를 그대로 검�
         kind: 'attendance-action-required',
         title: '입실 체크가 필요합니다',
         body: 'LMS에서 직접 확인해 주세요.',
-        path: '/#attendance',
+        path: '/#/attendance',
         createdAtEpochMs: 1_785_727_000_000,
         expiresAtEpochMs: 1_785_727_600_000,
         attempt: 1,

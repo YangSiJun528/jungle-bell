@@ -1,5 +1,6 @@
 import {type PropsWithChildren} from 'react';
 import {useMutation} from '@tanstack/react-query';
+import {Link} from '@tanstack/react-router';
 import {CircleAlert, LogIn, RefreshCw, Smartphone} from 'lucide-react';
 import {LoadingState} from '@/components/dashboard/async-state';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
@@ -38,7 +39,7 @@ export function PersonalAccountGate({children}: PropsWithChildren) {
                     <AlertTitle>PC 연결이 필요합니다.</AlertTitle>
                     <AlertDescription>
                         <Button asChild className="mt-2" size="sm" variant="outline">
-                            <a href="#connections">기기 연결 열기</a>
+                            <Link to="/connections">기기 연결 열기</Link>
                         </Button>
                     </AlertDescription>
                 </Alert>
@@ -86,7 +87,7 @@ export function PersonalAccountGate({children}: PropsWithChildren) {
                 <AlertTitle>계정 복구가 필요합니다.</AlertTitle>
                 <AlertDescription>
                     <Button asChild className="mt-2" size="sm" variant="outline">
-                        <a href="#connections">연결 설정</a>
+                        <Link to="/connections">연결 설정</Link>
                     </Button>
                 </AlertDescription>
             </Alert>

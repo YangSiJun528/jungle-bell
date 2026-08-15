@@ -155,10 +155,10 @@ self.addEventListener('push', (event) => {
     || Date.now() >= expiresAtEpochMs) return;
   const title = typeof payload.title === 'string' ? payload.title.slice(0, 120) : 'Jungle Bell';
   const body = typeof payload.body === 'string' ? payload.body.slice(0, 500) : '';
-  const path = typeof payload.path === 'string'
-    && /^\/#(?:attendance|laundry|meals|notifications|connections)$/u.test(payload.path)
-    ? payload.path
-    : '/#notifications';
+  const route = typeof payload.path === 'string'
+    ? payload.path.match(/^\/#\/?(attendance|laundry|meals|notifications|connections)$/u)?.[1]
+    : undefined;
+  const path = route ? `/#/${route}` : '/#/notifications';
   const notificationTag = typeof payload.tag === 'string'
     ? payload.tag.slice(0, 120)
     : typeof payload.notificationId === 'string'
@@ -175,7 +175,7 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const path = event.notification.data?.path || '/#notifications';
+  const path = event.notification.data?.path || '/#/notifications';
   const target = new URL(path, self.location.origin).href;
   event.waitUntil(self.clients.matchAll({type: 'window', includeUncontrolled: true}).then(async (clients) => {
     for (const client of clients) {

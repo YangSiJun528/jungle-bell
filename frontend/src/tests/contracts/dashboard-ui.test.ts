@@ -8,6 +8,8 @@ const source = (path: string) => readFileSync(new URL(path, srcRoot), 'utf8');
 const html = source('../index.html');
 const main = source('./app/bootstrap.tsx');
 const app = source('./app/dashboard-app.tsx');
+const dashboardRouter = source('./app/dashboard-router.tsx');
+const routePages = source('./app/dashboard-route-pages.tsx');
 const context = source('./app/dashboard-context.tsx');
 const personalAccountGate = source('./app/personal-account-gate.tsx');
 const personalFeatureSlot = source('./app/personal-feature-slot.tsx');
@@ -42,7 +44,7 @@ test('대시보드는 Alpine 템플릿 대신 React root에서 시작한다', ()
     assert.match(main, /createRoot\(root\)\.render\(/);
     assert.match(main, /<StrictMode>/);
     assert.match(main, /<DashboardProviders platform=\{platform\}>/);
-    assert.match(main, /<DashboardApp\/>/);
+    assert.match(main, /<RouterProvider router=\{router\}\/>/);
     assert.match(main, /import ['"]\.\/styles\/globals\.css['"]/);
 });
 
@@ -52,13 +54,16 @@ test('기능 화면은 공통 셸 아래에서 경로별 지연 로딩된다', (
         'attendance/attendance-page',
         'laundry/pages/laundry-page',
         'meals/pages/meals-page',
-        'notifications/notifications-page',
         'connections/connections-page',
     ]) {
-        assert.match(app, new RegExp(`lazy\\(\\(\\) => import\\(['"]@/features/${feature}['"]\\)`));
+        assert.match(routePages, new RegExp(`lazy\\(\\(\\) => import\\(['"]@/features/${feature}['"]\\)`));
     }
-    assert.match(app, /<DashboardShell[\s\S]*notificationPanel=\{\{[\s\S]*open: notificationPanelOpen[\s\S]*setNotificationPanelRequestedOpen\(open\)[\s\S]*route === 'notifications'\) replace\(contentRoute\)[\s\S]*<NotificationPanelContent[\s\S]*seenMobileIds=\{seenMobileIds\}[\s\S]*onMobileNotificationSeen=\{markMobileNotificationSeen\}[\s\S]*\/>[\s\S]*<RouteContent[\s\S]*route=\{contentRoute\}[\s\S]*onRequestInstall=\{openInstallPrompt\}[\s\S]*\/>[\s\S]*<InstallPrompt open=\{installPromptOpen\} onOpenChange=\{setInstallPromptVisibility\}\/>[\s\S]*<\/DashboardShell>/);
-    assert.match(app, /useHashRoute\(\)/);
+    assert.match(app, /lazy\(\(\) => import\(['"]@\/features\/notifications\/notifications-page['"]\)/);
+    assert.match(app, /<DashboardShell[\s\S]*notificationPanel=\{\{[\s\S]*open: notificationPanelOpen[\s\S]*setNotificationPanelRequestedOpen\(open\)[\s\S]*navigate\(contentRoute, true\)[\s\S]*<NotificationPanelContent[\s\S]*seenMobileIds=\{seenMobileIds\}[\s\S]*onMobileNotificationSeen=\{markMobileNotificationSeen\}[\s\S]*\/>[\s\S]*<DashboardRouteRuntimeProvider[\s\S]*<Outlet\/>[\s\S]*<InstallPrompt open=\{installPromptOpen\} onOpenChange=\{setInstallPromptVisibility\}\/>[\s\S]*<\/DashboardShell>/);
+    assert.match(dashboardRouter, /createHashHistory\(\)/);
+    assert.match(dashboardRouter, /createRouter\(\{[\s\S]*routeTree[\s\S]*history/);
+    assert.match(dashboardRouter, /path: 'home'[\s\S]*path: 'attendance'[\s\S]*path: 'laundry'[\s\S]*path: 'meals'[\s\S]*path: 'notifications'[\s\S]*path: 'connections'/);
+    assert.doesNotMatch(app, /useHashRoute\(\)/);
     assert.match(app, /window\.scrollTo\(\{top: 0, left: 0, behavior: 'auto'\}\)/);
     assert.match(shell, /data-dashboard-shell="renewal"/);
     assert.match(shell, /data-dashboard-platform=\{platform\}/);
@@ -94,9 +99,9 @@ test('홈은 정글캠퍼스·오늘 세탁·오늘 급식을 요약하고 알�
     assert.doesNotMatch(shell, /캠퍼스 생활 현황/);
     assert.doesNotMatch(jungleCampusSummary, /PublicCampusContent/);
     for (const route of ['laundry', 'meals']) {
-        assert.match(home, new RegExp(`href="#${route}"`));
+        assert.match(home, new RegExp(`to="/${route}"`));
     }
-    assert.match(jungleCampusSummary, /href="#attendance"/);
+    assert.match(jungleCampusSummary, /to="\/attendance"/);
     assert.doesNotMatch(home, /title="알림"|href="#notifications"/);
     assert.match(jungleCampusSummary, /platform\.capabilities\.lmsWindow[\s\S]*openCampus\.mutate\(\)/);
     assert.match(jungleCampusSummary, /href=\{CAMPUS_URL\}[\s\S]*target="_blank"[\s\S]*rel="noopener noreferrer"/);
@@ -249,7 +254,7 @@ test('PWA 메타데이터·서비스 워커·설치 프롬프트는 React 진입
         '열린 안내만 모바일 하단 메뉴 및 safe area 위에 있어야 합니다.',
     );
     assert.doesNotMatch(installPrompt, /className="fixed (?:inset-x-3 )?bottom-3/);
-    assert.match(app, /<RouteContent[\s\S]*route=\{contentRoute\}[\s\S]*onRequestInstall=\{openInstallPrompt\}/);
+    assert.match(app, /<DashboardRouteRuntimeProvider value=\{\{contentRoute, openInstallPrompt\}\}>[\s\S]*<Outlet\/>/);
     assert.match(app, /<NotificationPanelContent[\s\S]*seenMobileIds=\{seenMobileIds\}[\s\S]*onMobileNotificationSeen=\{markMobileNotificationSeen\}[\s\S]*\/>/);
     assert.match(app, /<InstallPrompt open=\{installPromptOpen\} onOpenChange=\{setInstallPromptVisibility\}\/>/);
     assert.doesNotMatch(home, /홈 화면 추가·PC 앱 안내/);

@@ -1,5 +1,6 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
+import {useNavigate} from '@tanstack/react-router';
 import {CircleAlert, KeyRound, Link2, MonitorCheck, QrCode, RotateCcw, Smartphone, Trash2} from 'lucide-react';
 import {
     queryKeys,
@@ -328,6 +329,7 @@ function CompanionConnections() {
     const {api} = useDashboardEnvironment();
     const account = useDashboardAccount();
     const client = useQueryClient();
+    const navigate = useNavigate();
     const [manualCode, setManualCode] = useState('');
     const [message, setMessage] = useState('');
     const pairingStartGate = useRef({inFlight: false, automaticHandled: false});
@@ -378,7 +380,7 @@ function CompanionConnections() {
         },
         onSuccess: async () => {
             setMessage('연결이 완료됐습니다.');
-            window.location.hash = '#connections';
+            await navigate({to: '/connections', replace: true});
             await refreshBrowserPersonalQueries(client);
         },
         onError: () => {

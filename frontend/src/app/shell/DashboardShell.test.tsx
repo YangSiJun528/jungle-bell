@@ -1,5 +1,6 @@
 import {readFileSync} from 'node:fs';
 import {renderToStaticMarkup} from 'react-dom/server';
+import {createMemoryHistory, RouterContextProvider} from '@tanstack/react-router';
 import {describe, expect, test, vi} from 'vitest';
 
 import {
@@ -7,18 +8,27 @@ import {
     dashboardNavigationRoutes,
     dashboardRouteFromHash,
     dashboardRouteHref,
+    dashboardRoutePath,
     dashboardUtilityRoutes,
 } from '../routes';
 import {DashboardShell} from './DashboardShell';
+import {createDashboardRouter} from '../dashboard-router';
 
 const shellSource = readFileSync(new URL('./DashboardShell.tsx', import.meta.url), 'utf8');
+
+function renderShell(shell: React.ReactNode): string {
+    const router = createDashboardRouter(createMemoryHistory({initialEntries: ['/home']}));
+    return renderToStaticMarkup(
+        <RouterContextProvider router={router}>{shell}</RouterContextProvider>,
+    );
+}
 
 describe('dashboard routes', () => {
     test('browser and desktop expose the same SPA navigation', () => {
         expect(dashboardNavigationRoutes()).toEqual(['home', 'attendance', 'laundry', 'meals']);
         expect(dashboardNavigationRoutes()).toEqual(['home', 'attendance', 'laundry', 'meals']);
-        expect(dashboardRouteFromHash('#attendance')).toBe('attendance');
-        expect(dashboardRouteFromHash('#laundry')).toBe('laundry');
+        expect(dashboardRouteFromHash('#/attendance')).toBe('attendance');
+        expect(dashboardRouteFromHash('#/laundry')).toBe('laundry');
     });
 
     test('personal primary navigation excludes notification and settings utilities', () => {
@@ -38,9 +48,10 @@ describe('dashboard routes', () => {
         expect(dashboardUtilityRoutes()).toEqual(['notifications', 'connections']);
         expect(dashboardNavigationRoutes()).not.toContain('notifications');
         expect(dashboardNavigationRoutes()).not.toContain('connections');
-        expect(dashboardRouteFromHash('#notifications')).toBe('notifications');
-        expect(dashboardRouteHref('notifications')).toBe('#notifications');
-        expect(dashboardRouteHref('connections')).toBe('#connections');
+        expect(dashboardRouteFromHash('#/notifications')).toBe('notifications');
+        expect(dashboardRouteHref('notifications')).toBe('#/notifications');
+        expect(dashboardRouteHref('connections')).toBe('#/connections');
+        expect(dashboardRoutePath('connections')).toBe('/connections');
         expect(DASHBOARD_ROUTE_META.home).toEqual({label: '홈', shortLabel: '홈'});
         expect(DASHBOARD_ROUTE_META.meals).toEqual({label: '식단', shortLabel: '식단'});
         expect(DASHBOARD_ROUTE_META.notifications.label).toBe('알림');
@@ -50,7 +61,7 @@ describe('dashboard routes', () => {
 
 describe('DashboardShell', () => {
     test('renders the shared browser shell, top spacer, and project footer', () => {
-        const html = renderToStaticMarkup(
+        const html = renderShell(
             <DashboardShell
                 platform="browser"
                 activeRoute="home"
@@ -89,7 +100,7 @@ describe('DashboardShell', () => {
     });
 
     test('renders notification panel trigger, settings, and the standard sidebar controls', () => {
-        const html = renderToStaticMarkup(
+        const html = renderShell(
             <DashboardShell
                 platform="browser"
                 activeRoute="notifications"
@@ -110,7 +121,7 @@ describe('DashboardShell', () => {
         expect(html).toContain('aria-expanded="true"');
         expect((html.match(/data-slot="sheet-trigger"/g) ?? [])).toHaveLength(2);
         expect(html).toContain('aria-label="설정"');
-        expect(html).toContain('href="#connections"');
+        expect(html).toContain('href="/connections"');
         expect(html).toContain('data-unread="true"');
         expect(html).toContain('data-slot="sidebar-menu-badge"');
         expect(html).toMatch(/data-slot="sidebar-menu-badge"[^>]*aria-hidden="true"[^>]*>120<\/div>/u);
@@ -125,7 +136,7 @@ describe('DashboardShell', () => {
     });
 
     test('shows the exact unread count in the sidebar and omits the badge at zero', () => {
-        const unreadHtml = renderToStaticMarkup(
+        const unreadHtml = renderShell(
             <DashboardShell
                 platform="desktop"
                 activeRoute="home"
@@ -135,7 +146,7 @@ describe('DashboardShell', () => {
                 <section>홈</section>
             </DashboardShell>,
         );
-        const readHtml = renderToStaticMarkup(
+        const readHtml = renderShell(
             <DashboardShell
                 platform="desktop"
                 activeRoute="home"
@@ -151,7 +162,7 @@ describe('DashboardShell', () => {
     });
 
     test('uses the canonical compass image for the Jungle Bell brand', () => {
-        const html = renderToStaticMarkup(
+        const html = renderShell(
             <DashboardShell
                 platform="browser"
                 activeRoute="home"

@@ -34,7 +34,7 @@ class NotificationServiceTest {
             TestNotificationRequest(),
         )
 
-        assertEquals("/#notifications", store.record?.path)
+        assertEquals("/#/notifications", store.record?.path)
     }
 
     private class CapturingNotificationStore : NotificationStore {

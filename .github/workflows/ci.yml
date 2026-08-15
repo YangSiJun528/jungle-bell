@@ -62,6 +62,8 @@ jobs:
   desktop:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    env:
+      JUNGLE_BELL_DATA_API_URL: https://amp-leu-controversy-des.trycloudflare.com
     steps:
       - uses: actions/checkout@v6
         with:

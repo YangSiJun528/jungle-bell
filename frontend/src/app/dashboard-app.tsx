@@ -1,11 +1,16 @@
 import {lazy, useCallback, useEffect, useMemo, useState} from 'react';
+import {Outlet, useNavigate, useRouterState} from '@tanstack/react-router';
 import {AsyncBoundary} from '@/components/dashboard/async-boundary';
 import {useDashboardEnvironment} from './dashboard-context';
 import {InstallPrompt, useInstallPromptVisibility} from '@/platform/pwa/install-prompt';
 import {DashboardShell} from './shell';
-import {useHashRoute} from './use-hash-route';
 import {useNotificationsQuery} from './use-dashboard-queries';
-import {DASHBOARD_ROUTE_META} from './routes';
+import {
+    DASHBOARD_ROUTE_META,
+    dashboardRouteFromPath,
+    dashboardRoutePath,
+    type DashboardRoute,
+} from './routes';
 import {DashboardAccountNotice} from './dashboard-account-notice';
 import {
     mergeSeenMobileNotificationIds,
@@ -16,33 +21,15 @@ import {
     notificationPanelBackgroundRoute,
     type DashboardContentRoute,
 } from './notification-panel-route';
+import {DashboardRouteRuntimeProvider} from './dashboard-route-runtime';
 
-const HomePage = lazy(() => import('@/features/home/home-page').then((module) => ({default: module.HomePage})));
-const AttendancePage = lazy(() => import('@/features/attendance/attendance-page').then((module) => ({default: module.AttendancePage})));
-const LaundryPage = lazy(() => import('@/features/laundry/pages/laundry-page').then((module) => ({default: module.LaundryPage})));
-const MealsPage = lazy(() => import('@/features/meals/pages/meals-page').then((module) => ({default: module.MealsPage})));
 const NotificationPanelContent = lazy(() => import('@/features/notifications/notifications-page').then((module) => ({default: module.NotificationPanelContent})));
-const ConnectionsPage = lazy(() => import('@/features/connections/connections-page').then((module) => ({default: module.ConnectionsPage})));
-
-function RouteContent({
-    route,
-    onRequestInstall,
-}: {
-    route: DashboardContentRoute;
-    onRequestInstall: () => void;
-}) {
-    switch (route) {
-        case 'attendance': return <AttendancePage/>;
-        case 'laundry': return <LaundryPage/>;
-        case 'meals': return <MealsPage/>;
-        case 'connections': return <ConnectionsPage/>;
-        default: return <HomePage onRequestInstall={onRequestInstall}/>;
-    }
-}
 
 export function DashboardApp() {
     const {platform} = useDashboardEnvironment();
-    const {route, navigate, replace} = useHashRoute();
+    const pathname = useRouterState({select: (state) => state.location.pathname});
+    const routerNavigate = useNavigate();
+    const route = dashboardRouteFromPath(pathname);
     const notifications = useNotificationsQuery();
     const [seenMobileIds, setSeenMobileIds] = useState(readSeenMobileNotificationIds);
     const [notificationPanelRequestedOpen, setNotificationPanelRequestedOpen] = useState(false);
@@ -52,6 +39,17 @@ export function DashboardApp() {
     const {installPromptOpen, openInstallPrompt, setInstallPromptVisibility} = useInstallPromptVisibility();
     const contentRoute = notificationPanelBackgroundRoute(notificationBackgroundRoute, route);
     const notificationPanelOpen = route === 'notifications' || notificationPanelRequestedOpen;
+
+    const navigate = useCallback((next: DashboardRoute, replace = false) => {
+        if (next === route && !replace) {
+            window.scrollTo({top: 0, behavior: 'smooth'});
+            return;
+        }
+        void routerNavigate({
+            to: dashboardRoutePath(next),
+            replace,
+        });
+    }, [route, routerNavigate]);
 
     useEffect(() => {
         document.title = `${DASHBOARD_ROUTE_META[route].label} · Jungle Bell`;
@@ -93,7 +91,7 @@ export function DashboardApp() {
                 open: notificationPanelOpen,
                 onOpenChange: (open) => {
                     setNotificationPanelRequestedOpen(open);
-                    if (!open && route === 'notifications') replace(contentRoute);
+                    if (!open && route === 'notifications') navigate(contentRoute, true);
                 },
                 content: (
                     <AsyncBoundary
@@ -108,12 +106,11 @@ export function DashboardApp() {
                 ),
             }}
         >
-            <AsyncBoundary resetKeys={[contentRoute]}>
-                <RouteContent
-                    route={contentRoute}
-                    onRequestInstall={openInstallPrompt}
-                />
-            </AsyncBoundary>
+            <DashboardRouteRuntimeProvider value={{contentRoute, openInstallPrompt}}>
+                <AsyncBoundary resetKeys={[contentRoute]}>
+                    <Outlet/>
+                </AsyncBoundary>
+            </DashboardRouteRuntimeProvider>
             <InstallPrompt open={installPromptOpen} onOpenChange={setInstallPromptVisibility}/>
         </DashboardShell>
     );

@@ -20,7 +20,7 @@ describe('JungleCampusSummary', () => {
         expect(source).toContain("account.status.lmsAuthentication === 'required'");
         expect(source).toContain('refreshAttendance.mutate()');
         expect(source).toContain('오늘 출석 상태를 다시 확인해야 합니다.');
-        expect(source).toContain('href="#attendance"');
+        expect(source).toContain('<Link to="/attendance">');
         expect(source).toContain('overflow-y-auto');
         expect(source).toContain('min-h-full');
         expect(source).toContain('tabIndex={0}');

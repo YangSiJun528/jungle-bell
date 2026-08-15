@@ -2,14 +2,17 @@ import {readFileSync} from 'node:fs';
 import {describe, expect, it} from 'vitest';
 
 const source = readFileSync(new URL('./laundry-page.tsx', import.meta.url), 'utf8');
-const zoneSource = readFileSync(new URL('../lib/laundry-zone.ts', import.meta.url), 'utf8');
+const zoneSource = readFileSync(
+    new URL('../../../components/dashboard/laundry-zone-presentation.ts', import.meta.url),
+    'utf8',
+);
 
 describe('LaundryPage capacity summary', () => {
     it('시작 가능 카드도 구역 뱃지와 같은 중앙 색상 토큰을 사용한다', () => {
-        expect(source).toContain('laundryZoneMeta(card.access).surfaceClassName');
-        expect(zoneSource).toContain('surfaceClassName: MEN_ZONE_SURFACE');
-        expect(zoneSource).toContain('surfaceClassName: WOMEN_ZONE_SURFACE');
-        expect(zoneSource).toContain('surfaceClassName: COMMON_ZONE_SURFACE');
+        expect(source).toContain('laundryZonePresentation(card.access).surfaceClassName');
+        expect(zoneSource).toContain("surfaceClassName: 'border-blue-400");
+        expect(zoneSource).toContain("surfaceClassName: 'border-rose-400");
+        expect(zoneSource).toContain("surfaceClassName: 'border-violet-400");
         expect(source).toContain("card.status === 'checking'");
     });
 

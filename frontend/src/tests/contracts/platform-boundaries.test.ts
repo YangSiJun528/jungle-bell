@@ -44,6 +44,20 @@ describe('repository platform boundaries', () => {
         expect(bootstrap).toMatch(/<DashboardProviders platform=\{platform\}>/u);
     });
 
+    test('desktop API origin은 fallback 없는 컴파일 타임 계약이다', () => {
+        const buildConfig = readFrontend('src/platform/build-config.ts');
+        const dashboardApi = readFrontend('src/api/dashboard-api.ts');
+        const nativeDataApi = readFileSync(resolve(repositoryRoot, 'desktop/src/data_api.rs'), 'utf8');
+
+        expect(buildConfig).toContain('__JUNGLE_BELL_BUILD_CONFIG__');
+        expect(buildConfig).toContain("buildConfig.target === 'desktop'");
+        expect(dashboardApi).toContain('platformApiBaseUrl');
+        expect(dashboardApi).not.toContain('VITE_PLATFORM_API_URL');
+        expect(nativeDataApi).toMatch(/env!\(\s*"JUNGLE_BELL_DATA_API_URL"/u);
+        expect(nativeDataApi).not.toContain('option_env!("JUNGLE_BELL_DATA_API_URL")');
+        expect(nativeDataApi).not.toContain('DEFAULT_DEV_API_ORIGIN');
+    });
+
     test('frontend scripts and Tauri hooks use separate web and desktop UI artifacts', () => {
         const packageJson = JSON.parse(readFrontend('package.json')) as {
             scripts: Record<string, string>;

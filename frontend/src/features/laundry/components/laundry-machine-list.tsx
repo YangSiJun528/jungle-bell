@@ -17,6 +17,10 @@ import {
     type LaundryApplianceTone,
 } from '../lib/laundry-machine-detail';
 import {sortWashTowers} from '../lib/wash-tower';
+import {
+    LAUNDRY_WARNING_PROGRESS_CLASS_NAME,
+    LAUNDRY_WARNING_TEXT_CLASS_NAME,
+} from '../lib/laundry-warning';
 import {LaundryStatusHint} from './laundry-status-hint';
 import {LaundryZoneBadge} from './laundry-zone-badge';
 
@@ -38,7 +42,7 @@ const statusClasses: Readonly<Record<LaundryApplianceTone, string>> = {
     confirming: 'text-primary',
     error: 'text-destructive',
     neutral: 'text-muted-foreground',
-    warning: 'text-red-700 dark:text-red-300',
+    warning: LAUNDRY_WARNING_TEXT_CLASS_NAME,
 };
 
 function clockLabel(value: string): string {
@@ -118,7 +122,7 @@ function ApplianceDetail({
                         aria-label={`${machineTitle} ${view.kind === 'washer' ? '세탁' : '건조'} 진행률`}
                         aria-valuetext={progressText ?? undefined}
                         className={cn(view.tone === 'warning'
-                            && '[&_[data-slot=progress-indicator]]:bg-red-400')}
+                            && LAUNDRY_WARNING_PROGRESS_CLASS_NAME)}
                         value={view.progress}
                     />
                 </div>

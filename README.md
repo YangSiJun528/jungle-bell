@@ -169,6 +169,7 @@ PC 대시보드에서 **새로고침**을 누른 뒤 Jungle Campus 로그인 상
 cd frontend
 npm ci
 npm run dev:web          # 브라우저·PWA
+export JUNGLE_BELL_DATA_API_URL=https://amp-leu-controversy-des.trycloudflare.com
 npm run desktop:dev      # 같은 SPA + Tauri 어댑터
 
 cd ../server

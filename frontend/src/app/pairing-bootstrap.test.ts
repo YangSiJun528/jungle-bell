@@ -25,7 +25,7 @@ describe('initial QR pairing bootstrap', () => {
         expect(replaceState).toHaveBeenCalledWith(
             {navigation: 1},
             '',
-            '/?source=qr#connections',
+            '/?source=qr#/connections',
         );
     });
 
@@ -43,7 +43,7 @@ describe('initial QR pairing bootstrap', () => {
 
         expect(entry).toBeNull();
         expect(JSON.stringify(entry)).not.toContain('one-time-secret');
-        expect(replaceState).toHaveBeenCalledWith(null, '', '/#home');
+        expect(replaceState).toHaveBeenCalledWith(null, '', '/#/home');
     });
 
     test('일반 경로는 history를 변경하지 않는다', () => {

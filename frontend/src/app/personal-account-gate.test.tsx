@@ -1,7 +1,9 @@
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
 import {renderToStaticMarkup} from 'react-dom/server';
+import {createMemoryHistory, RouterContextProvider} from '@tanstack/react-router';
 import {describe, expect, test, vi} from 'vitest';
 import {PersonalAccountGate} from './personal-account-gate';
+import {createDashboardRouter} from './dashboard-router';
 
 const {account, environment} = vi.hoisted(() => ({
     account: {
@@ -39,10 +41,13 @@ vi.mock('./use-dashboard-queries', () => ({
 function renderGate(status: string): string {
     account.personalAccess = status;
     const client = new QueryClient();
+    const router = createDashboardRouter(createMemoryHistory({initialEntries: ['/connections']}));
     return renderToStaticMarkup(
-        <QueryClientProvider client={client}>
-            <PersonalAccountGate><p>개인 설정</p></PersonalAccountGate>
-        </QueryClientProvider>,
+        <RouterContextProvider router={router}>
+            <QueryClientProvider client={client}>
+                <PersonalAccountGate><p>개인 설정</p></PersonalAccountGate>
+            </QueryClientProvider>
+        </RouterContextProvider>,
     );
 }
 
@@ -51,7 +56,7 @@ describe('PersonalAccountGate browser policy', () => {
         const markup = renderGate('unconnected');
 
         expect(markup).toContain('PC 연결이 필요합니다.');
-        expect(markup).toContain('href="#connections"');
+        expect(markup).toContain('href="/connections"');
         expect(markup).not.toContain('개인 설정');
     });
 

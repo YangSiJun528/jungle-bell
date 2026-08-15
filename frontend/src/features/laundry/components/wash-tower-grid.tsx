@@ -6,7 +6,7 @@ import {
     washTowerHeading,
     WASH_TOWER_ROWS,
 } from '../lib/wash-tower';
-import {laundryZoneMeta} from '../lib/laundry-zone';
+import {laundryZonePresentation} from '@/components/dashboard/laundry-zone-presentation';
 import {LAUNDRY_WARNING_CLASS_NAME} from '../lib/laundry-warning';
 
 export interface WashTowerGridProps {
@@ -37,7 +37,7 @@ export function WashTowerGrid({machines, nowMs = Date.now()}: WashTowerGridProps
                         </th>
                         {towers.map((machine) => {
                             const heading = washTowerHeading(machine);
-                            const zone = laundryZoneMeta(machine.zone);
+                            const zone = laundryZonePresentation(machine.zone);
 
                             return (
                                 <th
@@ -72,7 +72,7 @@ export function WashTowerGrid({machines, nowMs = Date.now()}: WashTowerGridProps
                             {towers.map((machine) => {
                                 const cell = washTowerCellView(machine, row.kind, nowMs);
                                 const tone = cell.state === 'available'
-                                    ? laundryZoneMeta(machine.zone).surfaceClassName
+                                    ? laundryZonePresentation(machine.zone).surfaceClassName
                                     : cell.state === 'error'
                                         ? LAUNDRY_WARNING_CLASS_NAME
                                         : 'bg-muted text-muted-foreground';

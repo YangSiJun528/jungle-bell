@@ -6,6 +6,7 @@ import {
     WashingMachine,
     type LucideIcon,
 } from 'lucide-react';
+import {Link} from '@tanstack/react-router';
 import type {ReactNode} from 'react';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Button} from '@/components/ui/button';
@@ -16,6 +17,7 @@ import {
     CardHeader,
 } from '@/components/ui/card';
 import {PageHeader} from '@/components/dashboard/page-header';
+import {laundryZonePresentation} from '@/components/dashboard/laundry-zone-presentation';
 import {useDashboardEnvironment} from '@/app/dashboard-context';
 import {
     useRefreshHomeMutation,
@@ -114,7 +116,7 @@ export function HomePage({onRequestInstall}: HomePageProps = {}) {
                 <SummaryCard
                     icon={WashingMachine}
                     title="세탁실"
-                    footer={<Button asChild size="sm" variant="link" className="px-0"><a href="#laundry">기기별 현황 보기 <ArrowRight/></a></Button>}
+                    footer={<Button asChild size="sm" variant="link" className="px-0"><Link to="/laundry">기기별 현황 보기 <ArrowRight/></Link></Button>}
                 >
                     {laundryRefreshFailed ? (
                         <p className="text-xs text-amber-700 dark:text-amber-300">최신 상태를 가져오지 못해 마지막 확인값을 표시합니다.</p>
@@ -127,19 +129,19 @@ export function HomePage({onRequestInstall}: HomePageProps = {}) {
                         </p>
                     ) : (
                         <div className="grid grid-cols-2 gap-2">
-                            <div className="rounded-lg bg-blue-500/10 p-3">
-                                <p className="text-xs font-medium text-blue-700 dark:text-blue-300">남성 가능</p>
+                            <div className={cn('rounded-lg border p-3', laundryZonePresentation('men').surfaceClassName)}>
+                                <p className="text-xs font-medium">남성 가능</p>
                                 <p className="mt-1 flex items-baseline gap-2">
-                                    <strong className="text-2xl">{laundrySummary.men === null ? '—' : `${laundrySummary.men}회`}</strong>
+                                    <strong className="text-2xl text-foreground">{laundrySummary.men === null ? '—' : `${laundrySummary.men}회`}</strong>
                                     {laundrySummary.men === null ? null : (
                                         <span className="text-xs text-muted-foreground">지금 시작 가능</span>
                                     )}
                                 </p>
                             </div>
-                            <div className="rounded-lg bg-rose-500/10 p-3">
-                                <p className="text-xs font-medium text-rose-700 dark:text-rose-300">여성 가능</p>
+                            <div className={cn('rounded-lg border p-3', laundryZonePresentation('women').surfaceClassName)}>
+                                <p className="text-xs font-medium">여성 가능</p>
                                 <p className="mt-1 flex items-baseline gap-2">
-                                    <strong className="text-2xl">{laundrySummary.women === null ? '—' : `${laundrySummary.women}회`}</strong>
+                                    <strong className="text-2xl text-foreground">{laundrySummary.women === null ? '—' : `${laundrySummary.women}회`}</strong>
                                     {laundrySummary.women === null ? null : (
                                         <span className="text-xs text-muted-foreground">지금 시작 가능</span>
                                     )}
@@ -152,7 +154,7 @@ export function HomePage({onRequestInstall}: HomePageProps = {}) {
                 <SummaryCard
                     icon={Utensils}
                     title="오늘 급식"
-                    footer={<Button asChild size="sm" variant="link" className="px-0"><a href="#meals">전체 식단 보기 <ArrowRight/></a></Button>}
+                    footer={<Button asChild size="sm" variant="link" className="px-0"><Link to="/meals">전체 식단 보기 <ArrowRight/></Link></Button>}
                 >
                     {mealsRefreshFailed ? (
                         <p className="text-xs text-amber-700 dark:text-amber-300">최신 식단을 가져오지 못해 마지막 확인값을 표시합니다.</p>

@@ -1,4 +1,5 @@
 import {useMutation} from '@tanstack/react-query';
+import {Link} from '@tanstack/react-router';
 import {
     ArrowRight,
     CalendarCheck,
@@ -120,7 +121,7 @@ export function JungleCampusSummary() {
             <div className="text-sm leading-6">
                 <p className="font-medium">출석과 D-Day 확인을 위해 PC 연결이 필요합니다.</p>
                 <Button asChild className="mt-2" size="sm" variant="outline">
-                    <a href="#connections">기기 연결 열기</a>
+                    <Link to="/connections">기기 연결 열기</Link>
                 </Button>
             </div>
         );
@@ -179,7 +180,7 @@ export function JungleCampusSummary() {
             <div className="text-sm leading-6">
                 <p className="text-destructive">계정 복구가 필요합니다.</p>
                 <Button asChild className="mt-2" size="sm" variant="outline">
-                    <a href="#connections">연결 설정</a>
+                    <Link to="/connections">연결 설정</Link>
                 </Button>
             </div>
         );
@@ -280,7 +281,7 @@ export function JungleCampusSummary() {
                             </Button>
                         )}
                         <Button asChild size="sm" variant="link" className="px-1">
-                            <a href="#attendance">출석 상세 보기 <ArrowRight/></a>
+                            <Link to="/attendance">출석 상세 보기 <ArrowRight/></Link>
                         </Button>
                         {openCampus.isError ? <span className="text-xs text-destructive">정글캠퍼스를 열지 못했습니다.</span> : null}
                     </>

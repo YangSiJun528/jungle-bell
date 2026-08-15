@@ -61,7 +61,7 @@ class JdbcStoreIntegrationTest {
         val mapper = JsonMapper.builder().addModule(KotlinModule.Builder().build()).build()
         val store = JdbcNotificationStore(jdbc, mapper)
         val notification = NotificationRecord(
-            UUID.randomUUID(), userId, "event-1", "test", "title", "body", "/#home",
+            UUID.randomUUID(), userId, "event-1", "test", "title", "body", "/#/home",
             mapOf("kind" to "test"), 1_000, 1_000, 10_000,
         )
 
@@ -168,7 +168,7 @@ class JdbcStoreIntegrationTest {
         val mapper = JsonMapper.builder().addModule(KotlinModule.Builder().build()).build()
         val notificationStore = JdbcNotificationStore(jdbc, mapper)
         val record = NotificationRecord(
-            UUID.randomUUID(), userId, "event-push", "test", "title", "body", "/#home",
+            UUID.randomUUID(), userId, "event-push", "test", "title", "body", "/#/home",
             emptyMap(), 1_000, 1_000, 10_000,
         )
         assertTrue(notificationStore.create(record))

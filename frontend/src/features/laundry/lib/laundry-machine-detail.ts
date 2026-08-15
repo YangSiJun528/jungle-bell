@@ -11,7 +11,10 @@ import {
     washTowerHeading,
     type WashTowerApplianceKind,
 } from './wash-tower';
-import {laundryZoneMeta, type LaundryZone} from './laundry-zone';
+import {
+    laundryZonePresentation,
+    type LaundryZone,
+} from '@/components/dashboard/laundry-zone-presentation';
 
 export type LaundryApplianceTone =
     | 'active'
@@ -206,7 +209,7 @@ export function laundryMachineDetail(
         id: machine.id,
         title: numericHeading ? `${heading}번 워시타워` : heading.replaceAll('_', ' '),
         zone: machine.zone,
-        zoneLabel: laundryZoneMeta(machine.zone).label,
+        zoneLabel: laundryZonePresentation(machine.zone).label,
         washer: laundryApplianceDetail(machine.washer, 'washer', nowMs),
         dryer: laundryApplianceDetail(machine.dryer, 'dryer', nowMs),
     };
