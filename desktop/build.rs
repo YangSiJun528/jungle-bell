@@ -46,9 +46,32 @@ fn prune_stale_command_permissions() {
     }
 }
 
+fn required_data_api_origin() -> String {
+    let value = std::env::var("JUNGLE_BELL_DATA_API_URL")
+        .unwrap_or_else(|_| panic!("JUNGLE_BELL_DATA_API_URL is required to compile jungle-bell"));
+    let origin = value.trim().trim_end_matches('/');
+    if origin.is_empty() || !origin.starts_with("https://") {
+        panic!("JUNGLE_BELL_DATA_API_URL must be a non-empty HTTPS origin");
+    }
+
+    let authority = &origin["https://".len()..];
+    if authority.is_empty() || authority.contains(['/', '?', '#', '@']) || authority.chars().any(char::is_whitespace) {
+        panic!("JUNGLE_BELL_DATA_API_URL must not contain credentials, a path, a query, or a fragment");
+    }
+
+    let tauri_config =
+        fs::read_to_string("tauri.conf.json").unwrap_or_else(|error| panic!("failed to read tauri.conf.json: {error}"));
+    if !tauri_config.contains(&format!(" {origin};")) {
+        panic!("JUNGLE_BELL_DATA_API_URL must be explicitly allowed by the Tauri CSP");
+    }
+    origin.to_owned()
+}
+
 fn main() {
     prune_stale_command_permissions();
     println!("cargo:rerun-if-env-changed=JUNGLE_BELL_DATA_API_URL");
+    let data_api_origin = required_data_api_origin();
+    println!("cargo:rustc-env=JUNGLE_BELL_DATA_API_URL={data_api_origin}");
     tauri_build::try_build(
         tauri_build::Attributes::new().app_manifest(tauri_build::AppManifest::new().commands(APP_COMMANDS)),
     )

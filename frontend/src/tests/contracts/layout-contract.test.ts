@@ -19,8 +19,8 @@ test('HTML 문서는 레이아웃을 복제하지 않고 React 셸을 위한 단
 
 test('모든 기능 경로는 하나의 DashboardShell과 main 콘텐츠 영역을 재사용한다', () => {
     assert.equal((app.match(/<DashboardShell\b/g) ?? []).length, 1);
-    assert.equal((app.match(/<RouteContent\b/g) ?? []).length, 1);
-    assert.match(app, /<DashboardShell[\s\S]*notificationPanel=\{\{[\s\S]*<NotificationPanelContent[\s\S]*seenMobileIds=\{seenMobileIds\}[\s\S]*onMobileNotificationSeen=\{markMobileNotificationSeen\}[\s\S]*\/>[\s\S]*<RouteContent[\s\S]*route=\{contentRoute\}[\s\S]*onRequestInstall=\{openInstallPrompt\}[\s\S]*\/>[\s\S]*<\/DashboardShell>/);
+    assert.equal((app.match(/<Outlet\b/g) ?? []).length, 1);
+    assert.match(app, /<DashboardShell[\s\S]*notificationPanel=\{\{[\s\S]*<NotificationPanelContent[\s\S]*seenMobileIds=\{seenMobileIds\}[\s\S]*onMobileNotificationSeen=\{markMobileNotificationSeen\}[\s\S]*\/>[\s\S]*<DashboardRouteRuntimeProvider[\s\S]*<Outlet\/>[\s\S]*<\/DashboardShell>/);
 
     assert.equal((shell.match(/<Sidebar\b/g) ?? []).length, 1);
     assert.equal((shell.match(/<header\b/g) ?? []).length, 0);
@@ -78,7 +78,7 @@ test('브라우저와 데스크톱은 4개 주요 메뉴와 보조 기능을 공
     assert.match(shell, /aria-haspopup="dialog"/);
     assert.match(shell, /overlayClassName="backdrop-blur-sm"/);
     assert.match(shell, /md:hidden/);
-    assert.match(shell, /onClick=\{\(\) => navigate\('connections'\)\}/);
+    assert.match(shell, /<Link to=\{dashboardRoutePath\('connections'\)\}>/);
 });
 
 test('각 기능 화면은 공통 PageHeader를 사용하고 페이지 내부 레이아웃만 소유한다', () => {

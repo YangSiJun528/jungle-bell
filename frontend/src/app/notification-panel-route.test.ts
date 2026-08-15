@@ -18,11 +18,11 @@ describe('notification panel routing', () => {
         expect(notificationPanelBackgroundRoute('home', 'laundry')).toBe('laundry');
     });
 
-    test('UI triggers use local panel state while deep-link closing replaces only the notification route', () => {
-        expect(dashboardAppSource).toContain('const {route, navigate, replace} = useHashRoute();');
+    test('UI triggers keep local panel state while TanStack handles deep-link closing', () => {
+        expect(dashboardAppSource).toContain('const routerNavigate = useNavigate();');
         expect(dashboardAppSource).toContain("const notificationPanelOpen = route === 'notifications' || notificationPanelRequestedOpen;");
         expect(dashboardAppSource).toContain('setNotificationPanelRequestedOpen(open);');
-        expect(dashboardAppSource).toContain("if (!open && route === 'notifications') replace(contentRoute);");
+        expect(dashboardAppSource).toContain("if (!open && route === 'notifications') navigate(contentRoute, true);");
         expect(dashboardAppSource).toContain('}, [contentRoute]);');
     });
 });

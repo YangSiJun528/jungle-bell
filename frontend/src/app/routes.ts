@@ -6,6 +6,8 @@ export type DashboardRoute =
     | 'notifications'
     | 'connections';
 
+export type DashboardRoutePath = `/${DashboardRoute}`;
+
 export interface DashboardRouteMeta {
     label: string;
     shortLabel: string;
@@ -44,13 +46,30 @@ export function dashboardUtilityRoutes(): readonly DashboardRoute[] {
     return PERSONAL_UTILITY_ROUTES;
 }
 
-export function dashboardRouteHref(route: DashboardRoute): `#${DashboardRoute}` {
-    return `#${route}`;
+export function dashboardRoutePath(route: DashboardRoute): DashboardRoutePath {
+    return `/${route}`;
 }
 
-export function dashboardRouteFromHash(hash: string): DashboardRoute {
-    const value = hash.trim().toLowerCase().replace(/^#/, '');
+export function dashboardRouteHref(route: DashboardRoute): `#${DashboardRoutePath}` {
+    return `#${dashboardRoutePath(route)}`;
+}
+
+export function dashboardRouteFromPath(pathname: string): DashboardRoute {
+    const value = pathname.trim().toLowerCase().replace(/^\/+|\/+$/gu, '');
     return [...NAVIGATION_ROUTES, ...PERSONAL_UTILITY_ROUTES].includes(value as DashboardRoute)
         ? value as DashboardRoute
         : 'home';
+}
+
+export function dashboardRouteFromHash(hash: string): DashboardRoute {
+    return dashboardRouteFromPath(hash.trim().replace(/^#/u, ''));
+}
+
+export function normalizeLegacyDashboardHash(hash: string): `#${DashboardRoutePath}` | null {
+    const value = hash.trim().toLowerCase().replace(/^#/u, '');
+    if (value.startsWith('/')) return null;
+    const route = [...NAVIGATION_ROUTES, ...PERSONAL_UTILITY_ROUTES].includes(value as DashboardRoute)
+        ? value as DashboardRoute
+        : null;
+    return route ? dashboardRouteHref(route) : null;
 }

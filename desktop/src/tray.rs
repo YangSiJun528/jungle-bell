@@ -507,17 +507,17 @@ fn sync_foreground_app_visibility_soon(app: tauri::AppHandle) {
 }
 
 fn dashboard_app_url(route: DashboardRoute) -> String {
-    format!("index.html#{}", route.as_str())
+    format!("index.html#/{}", route.as_str())
 }
 
 fn select_dashboard_route(window: &WebviewWindow<tauri::Wry>, route: DashboardRoute) {
     // route는 닫힌 Rust enum이므로 JS 문자열에 외부 입력이 들어가지 않는다.
     let script = match route {
-        DashboardRoute::Home => "window.location.hash = '#home'",
-        DashboardRoute::Attendance => "window.location.hash = '#attendance'",
-        DashboardRoute::Laundry => "window.location.hash = '#laundry'",
-        DashboardRoute::Meals => "window.location.hash = '#meals'",
-        DashboardRoute::Notifications => "window.location.hash = '#notifications'",
+        DashboardRoute::Home => "window.location.hash = '#/home'",
+        DashboardRoute::Attendance => "window.location.hash = '#/attendance'",
+        DashboardRoute::Laundry => "window.location.hash = '#/laundry'",
+        DashboardRoute::Meals => "window.location.hash = '#/meals'",
+        DashboardRoute::Notifications => "window.location.hash = '#/notifications'",
     };
     if let Err(error) = window.eval(script) {
         log::warn!("[dashboard] route selection failed: {error}");
@@ -1257,13 +1257,13 @@ mod tests {
 
     #[test]
     fn 대시보드_홈과_알림_이동은_고정된_hash_route를_사용한다() {
-        assert_eq!(dashboard_app_url(DashboardRoute::Home), "index.html#home");
-        assert_eq!(dashboard_app_url(DashboardRoute::Attendance), "index.html#attendance");
-        assert_eq!(dashboard_app_url(DashboardRoute::Laundry), "index.html#laundry");
-        assert_eq!(dashboard_app_url(DashboardRoute::Meals), "index.html#meals");
+        assert_eq!(dashboard_app_url(DashboardRoute::Home), "index.html#/home");
+        assert_eq!(dashboard_app_url(DashboardRoute::Attendance), "index.html#/attendance");
+        assert_eq!(dashboard_app_url(DashboardRoute::Laundry), "index.html#/laundry");
+        assert_eq!(dashboard_app_url(DashboardRoute::Meals), "index.html#/meals");
         assert_eq!(
             dashboard_app_url(DashboardRoute::Notifications),
-            "index.html#notifications"
+            "index.html#/notifications"
         );
     }
 

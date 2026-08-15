@@ -1,5 +1,6 @@
 import {useState} from 'react';
 import {useMutation, useQueryClient} from '@tanstack/react-query';
+import {Link} from '@tanstack/react-router';
 import {Check, ExternalLink, Send, Smartphone} from 'lucide-react';
 import {queryKeys, useDashboardEnvironment} from '@/app/dashboard-context';
 import {useDashboardAccount} from '@/app/dashboard-account';
@@ -150,7 +151,7 @@ export function NotificationPanelContent({seenMobileIds, onMobileNotificationSee
                     <AlertTitle>PC 연결이 필요합니다.</AlertTitle>
                     <AlertDescription className="gap-3">
                         <p>기기 연결 화면에서 이 PWA를 PC 앱과 연결하세요.</p>
-                        <Button asChild size="sm" variant="outline"><a href="#connections">기기 연결 열기</a></Button>
+                        <Button asChild size="sm" variant="outline"><Link to="/connections">기기 연결 열기</Link></Button>
                     </AlertDescription>
                 </Alert>
             );

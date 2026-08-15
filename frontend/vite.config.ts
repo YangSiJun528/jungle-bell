@@ -17,7 +17,9 @@ export const defaultDevApiOrigin = 'https://amp-leu-controversy-des.trycloudflar
 export const tauriApiOrigins = new Set([defaultDevApiOrigin]);
 
 export function frontendTarget(mode: string): FrontendTarget {
-    return mode === 'desktop' ? 'desktop' : 'web';
+    if (mode === 'desktop') return 'desktop';
+    if (mode === 'web' || mode === 'test') return 'web';
+    throw new Error('FRONTEND_TARGET_INVALID');
 }
 
 export function normalizeDevApiOrigin(value: string): string {
@@ -41,9 +43,8 @@ export function buildApiOrigin(
     environment: Record<string, string | undefined>,
 ): string | null {
     if (target === 'web') return null;
-    const value = command === 'serve'
-        ? environment.JUNGLE_BELL_DEV_API_ORIGIN ?? defaultDevApiOrigin
-        : environment.JUNGLE_BELL_DATA_API_URL ?? defaultDevApiOrigin;
+    const value = environment.JUNGLE_BELL_DATA_API_URL;
+    if (!value?.trim()) throw new Error('JUNGLE_BELL_DATA_API_URL_REQUIRED');
     const origin = normalizeDevApiOrigin(value);
     if (command === 'build' && !tauriApiOrigins.has(origin)) {
         throw new Error('JUNGLE_BELL_DATA_API_URL_INVALID');
@@ -115,17 +116,21 @@ function pwaHtmlPlugin(): Plugin {
 export default defineConfig(({command, mode}) => {
     const target = frontendTarget(mode);
     const outDir = `dist/${target}`;
-    const devApiOrigin = normalizeDevApiOrigin(
-        process.env.JUNGLE_BELL_DEV_API_ORIGIN ?? defaultDevApiOrigin,
-    );
     const platformApiOrigin = buildApiOrigin(command, target, process.env);
+    const devApiOrigin = command === 'serve'
+        ? target === 'desktop'
+            ? platformApiOrigin as string
+            : normalizeDevApiOrigin(
+                process.env.JUNGLE_BELL_DEV_API_ORIGIN ?? defaultDevApiOrigin,
+            )
+        : null;
     const developmentTauriOrigin = command === 'serve' ? tauriDevOrigin(target) : null;
     const define: Record<string, string> = {
         __JUNGLE_BELL_TARGET__: JSON.stringify(target),
+        __JUNGLE_BELL_BUILD_CONFIG__: JSON.stringify(target === 'desktop'
+            ? {target, platformApiUrl: platformApiOrigin as string}
+            : {target, platformApiUrl: null}),
     };
-    if (platformApiOrigin) {
-        define['import.meta.env.VITE_PLATFORM_API_URL'] = JSON.stringify(platformApiOrigin);
-    }
 
     return {
         plugins: [
@@ -167,26 +172,26 @@ export default defineConfig(({command, mode}) => {
             ? resolve(import.meta.dirname, 'src/platform/pwa/public')
             : false,
         define,
-        server: {
+        server: command === 'serve' ? {
             host: host ?? '127.0.0.1',
             port: 5173,
             strictPort: true,
             proxy: {
                 '/api/me': {
-                    target: devApiOrigin,
+                    target: devApiOrigin as string,
                     changeOrigin: true,
                     secure: true,
                     ...(developmentTauriOrigin ? {headers: {origin: developmentTauriOrigin}} : {}),
                 },
                 '/api': {
-                    target: devApiOrigin,
+                    target: devApiOrigin as string,
                     changeOrigin: true,
                     secure: true,
-                    headers: {origin: devApiOrigin},
+                    headers: {origin: devApiOrigin as string},
                     bypass: (request) => bypassDevApiModuleRequest(request.url),
                 },
             },
-        },
+        } : undefined,
         // Tauri signing variables are consumed by Node-side configuration only.
         envPrefix: ['VITE_'],
         build: {

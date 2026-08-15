@@ -96,14 +96,14 @@ describe('WashTowerGrid', () => {
         expect(markup).toContain('aria-label="6번, 공용 구역"');
         expect(markup).toContain('aria-label="9번, 여성 구역"');
         expect(markup).toContain('title="남성 구역"');
-        expect(markup).toContain('text-blue-700 dark:text-blue-300');
-        expect(markup).toContain('text-violet-700 dark:text-violet-300');
-        expect(markup).toContain('text-rose-700 dark:text-rose-300');
-        expect(availableMarkup).toContain('bg-blue-50/60');
-        expect(availableMarkup).toContain('bg-violet-50/60');
-        expect(availableMarkup).toContain('bg-rose-50/60');
-        expect(markup).toContain('bg-red-50/70');
-        expect(markup).toContain('text-red-700');
+        expect(markup).toContain('text-blue-800 dark:text-blue-200');
+        expect(markup).toContain('text-violet-800 dark:text-violet-200');
+        expect(markup).toContain('text-rose-800 dark:text-rose-200');
+        expect(availableMarkup).toContain('border-blue-400 bg-blue-100');
+        expect(availableMarkup).toContain('border-violet-400 bg-violet-100');
+        expect(availableMarkup).toContain('border-rose-400 bg-rose-100');
+        expect(markup).toContain('border-orange-400 bg-orange-100');
+        expect(markup).toContain('text-orange-800');
 
         const numberTags = markup.match(/<span[^>]*data-laundry-zone-number="true"[^>]*>/gu) ?? [];
         expect(numberTags).toHaveLength(3);

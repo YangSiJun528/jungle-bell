@@ -1,14 +1,25 @@
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
-import {DashboardApp} from './dashboard-app';
+import {RouterProvider} from '@tanstack/react-router';
 import {DashboardProviders} from './dashboard-providers';
 import {captureInitialPairingFromWindow} from '@/app/pairing-bootstrap';
 import type {PlatformAdapter} from '@/platform/contracts';
+import {createDashboardRouter} from './dashboard-router';
+import {normalizeLegacyDashboardHash} from './routes';
 import './styles/globals.css';
 
 export function bootstrapDashboard(platform: PlatformAdapter): void {
     captureInitialPairingFromWindow(platform.kind);
+    const normalizedHash = normalizeLegacyDashboardHash(window.location.hash);
+    if (normalizedHash) {
+        window.history.replaceState(
+            window.history.state,
+            '',
+            `${window.location.pathname}${window.location.search}${normalizedHash}`,
+        );
+    }
     platform.pwa.registerServiceWorker();
+    const router = createDashboardRouter();
 
     const theme = window.matchMedia('(prefers-color-scheme: dark)');
     const syncTheme = () => document.documentElement.classList.toggle('dark', theme.matches);
@@ -21,7 +32,7 @@ export function bootstrapDashboard(platform: PlatformAdapter): void {
     createRoot(root).render(
         <StrictMode>
             <DashboardProviders platform={platform}>
-                <DashboardApp/>
+                <RouterProvider router={router}/>
             </DashboardProviders>
         </StrictMode>,
     );

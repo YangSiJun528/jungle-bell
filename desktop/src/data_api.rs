@@ -1,4 +1,11 @@
-const DEFAULT_DEV_API_ORIGIN: &str = "https://amp-leu-controversy-des.trycloudflare.com";
+#[cfg(not(test))]
+const CONFIGURED_BASE_URL: &str = env!(
+    "JUNGLE_BELL_DATA_API_URL",
+    "JUNGLE_BELL_DATA_API_URL must be set when compiling jungle-bell"
+);
+
+#[cfg(test)]
+const CONFIGURED_BASE_URL: &str = "https://data-api.test";
 
 pub(crate) fn normalize_base_url(value: &str, allow_local_http: bool) -> Result<String, String> {
     let value = value.trim().trim_end_matches('/');
@@ -24,20 +31,8 @@ pub(crate) fn normalize_base_url(value: &str, allow_local_http: bool) -> Result<
     Ok(value.to_owned())
 }
 
-#[cfg(test)]
 fn configured_base_url() -> &'static str {
-    option_env!("JUNGLE_BELL_DATA_API_URL").unwrap_or("https://data-api.test")
-}
-
-#[cfg(all(not(test), debug_assertions))]
-fn configured_base_url() -> &'static str {
-    option_env!("JUNGLE_BELL_DATA_API_URL").unwrap_or(DEFAULT_DEV_API_ORIGIN)
-}
-
-#[cfg(all(not(test), not(debug_assertions)))]
-fn configured_base_url() -> &'static str {
-    option_env!("JUNGLE_BELL_DATA_API_URL")
-        .unwrap_or_else(|| panic!("JUNGLE_BELL_DATA_API_URL must be set when building jungle-bell"))
+    CONFIGURED_BASE_URL
 }
 
 pub(crate) fn base_url() -> String {
@@ -90,10 +85,7 @@ mod tests {
     }
 
     #[test]
-    fn debug_builds_default_to_the_v2_test_server() {
-        assert_eq!(
-            DEFAULT_DEV_API_ORIGIN,
-            "https://amp-leu-controversy-des.trycloudflare.com"
-        );
+    fn tests_use_the_explicit_test_origin() {
+        assert_eq!(configured_base_url(), "https://data-api.test");
     }
 }

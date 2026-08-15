@@ -1,4 +1,5 @@
 import {useRef, type ReactNode} from 'react';
+import {Link} from '@tanstack/react-router';
 import type {LucideIcon} from 'lucide-react';
 import {
     Bell,
@@ -44,7 +45,7 @@ import {cn} from '../../lib/utils';
 import {
     DASHBOARD_ROUTE_META,
     dashboardNavigationRoutes,
-    dashboardRouteHref,
+    dashboardRoutePath,
     dashboardUtilityRoutes,
 } from '../routes';
 import {DashboardFooter} from './DashboardFooter';
@@ -75,13 +76,11 @@ const ROUTE_ICONS: Readonly<Record<DashboardRoute, LucideIcon>> = {
 interface NavigationItemProps {
     route: DashboardRoute;
     activeRoute: DashboardRoute;
-    navigate: (route: DashboardRoute) => void;
 }
 
 function SidebarNavigationItem({
     route,
     activeRoute,
-    navigate,
 }: NavigationItemProps) {
     const {setOpenMobile} = useSidebar();
     const meta = DASHBOARD_ROUTE_META[route];
@@ -96,20 +95,18 @@ function SidebarNavigationItem({
                 tooltip={meta.label}
                 className="h-10 gap-3 rounded-lg px-3 text-sidebar-foreground/70"
             >
-                <a
-                    href={dashboardRouteHref(route)}
+                <Link
+                    to={dashboardRoutePath(route)}
                     aria-current={active ? 'page' : undefined}
                     aria-label={meta.label}
                     data-dashboard-route={route}
-                    onClick={(event) => {
-                        event.preventDefault();
+                    onClick={() => {
                         setOpenMobile(false);
-                        navigate(route);
                     }}
                 >
                     <Icon className="size-[1.125rem]" aria-hidden="true" strokeWidth={active ? 2.25 : 1.9}/>
                     <span>{meta.label}</span>
-                </a>
+                </Link>
             </SidebarMenuButton>
         </SidebarMenuItem>
     );
@@ -172,22 +169,17 @@ function SidebarNotificationItem({
 function BottomNavigationItem({
     route,
     activeRoute,
-    navigate,
 }: NavigationItemProps) {
     const meta = DASHBOARD_ROUTE_META[route];
     const active = route === activeRoute;
     const Icon = ROUTE_ICONS[route];
 
     return (
-        <a
-            href={dashboardRouteHref(route)}
+        <Link
+            to={dashboardRoutePath(route)}
             aria-current={active ? 'page' : undefined}
             aria-label={meta.label}
             data-dashboard-route={route}
-            onClick={(event) => {
-                event.preventDefault();
-                navigate(route);
-            }}
             className={cn(
                 'relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-1 py-1.5',
                 'text-xs font-medium leading-none transition-colors',
@@ -199,11 +191,11 @@ function BottomNavigationItem({
         >
             <Icon className="size-[1.125rem]" aria-hidden="true" strokeWidth={active ? 2.25 : 1.9}/>
             <span className="truncate">{meta.shortLabel}</span>
-        </a>
+        </Link>
     );
 }
 
-function Brand({navigate}: Pick<DashboardShellProps, 'navigate'>) {
+function Brand() {
     const {setOpenMobile} = useSidebar();
 
     return (
@@ -215,20 +207,18 @@ function Brand({navigate}: Pick<DashboardShellProps, 'navigate'>) {
                     size="lg"
                     tooltip="Jungle Bell 홈"
                 >
-                    <a
-                        href={dashboardRouteHref('home')}
+                    <Link
+                        to={dashboardRoutePath('home')}
                         aria-label="Jungle Bell 홈"
-                        onClick={(event) => {
-                            event.preventDefault();
+                        onClick={() => {
                             setOpenMobile(false);
-                            navigate('home');
                         }}
                     >
                         <img src={jungleBellLogo} alt="" className="size-8 shrink-0" aria-hidden="true"/>
                         <span className="min-w-0 truncate text-sm font-semibold tracking-[-0.01em] group-data-[collapsible=icon]:hidden">
                             Jungle Bell
                         </span>
-                    </a>
+                    </Link>
                 </SidebarMenuButton>
             </SidebarMenuItem>
         </SidebarMenu>
@@ -246,14 +236,12 @@ function SidebarCollapseControl() {
 
 function ShellTopSpacer({
     activeRoute,
-    navigate,
     notificationPanelOpen,
     rememberNotificationTrigger,
     hasUnreadNotifications,
     notificationAriaLabel,
 }: {
     activeRoute: DashboardRoute;
-    navigate: (route: DashboardRoute) => void;
     notificationPanelOpen: boolean;
     rememberNotificationTrigger: (trigger: HTMLButtonElement) => void;
     hasUnreadNotifications: boolean;
@@ -291,15 +279,17 @@ function ShellTopSpacer({
                     </Button>
                 </SheetTrigger>
                 <Button
+                    asChild
                     variant={activeRoute === 'connections' ? 'secondary' : 'outline'}
                     size="icon-sm"
                     className="bg-background"
                     aria-label="설정"
                     aria-current={activeRoute === 'connections' ? 'page' : undefined}
                     data-dashboard-route="connections"
-                    onClick={() => navigate('connections')}
                 >
-                    <Settings className="size-4" aria-hidden="true"/>
+                    <Link to={dashboardRoutePath('connections')}>
+                        <Settings className="size-4" aria-hidden="true"/>
+                    </Link>
                 </Button>
             </div>
         </div>
@@ -309,11 +299,9 @@ function ShellTopSpacer({
 function DashboardBottomNavigation({
     routes,
     activeRoute,
-    navigate,
 }: {
     routes: readonly DashboardRoute[];
     activeRoute: DashboardRoute;
-    navigate: (route: DashboardRoute) => void;
 }) {
     return (
         <nav
@@ -330,7 +318,6 @@ function DashboardBottomNavigation({
                         key={route}
                         route={route}
                         activeRoute={activeRoute}
-                        navigate={navigate}
                     />
                 ))}
             </div>
@@ -383,7 +370,7 @@ export function DashboardShell({
 
             <Sidebar collapsible="icon">
                 <SidebarHeader className="h-16 justify-center">
-                    <Brand navigate={navigate}/>
+                    <Brand/>
                 </SidebarHeader>
 
                 <SidebarContent>
@@ -396,7 +383,6 @@ export function DashboardShell({
                                             key={route}
                                             route={route}
                                             activeRoute={activeRoute}
-                                            navigate={navigate}
                                         />
                                     ))}
                                 </SidebarMenu>
@@ -421,7 +407,6 @@ export function DashboardShell({
                                         key={route}
                                         route={route}
                                         activeRoute={activeRoute}
-                                        navigate={navigate}
                                     />
                                 )
                             ))}
@@ -441,7 +426,6 @@ export function DashboardShell({
             >
                 <ShellTopSpacer
                     activeRoute={activeRoute}
-                    navigate={navigate}
                     notificationPanelOpen={notificationPanelOpen}
                     rememberNotificationTrigger={rememberNotificationTrigger}
                     hasUnreadNotifications={hasUnreadNotifications}
@@ -457,7 +441,6 @@ export function DashboardShell({
             <DashboardBottomNavigation
                 routes={bottomRoutes}
                 activeRoute={activeRoute}
-                navigate={navigate}
             />
 
             {notificationPanel ? (

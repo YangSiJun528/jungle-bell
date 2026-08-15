@@ -22,12 +22,12 @@ import {LaundryWarningBadge} from '../components/laundry-warning-badge';
 import {LaundryZoneBadge} from '../components/laundry-zone-badge';
 import {PersonalLaundrySection} from '../components/personal-laundry-section';
 import {WashTowerGrid} from '../components/wash-tower-grid';
-import {laundryZoneMeta} from '../lib/laundry-zone';
+import {laundryZonePresentation} from '@/components/dashboard/laundry-zone-presentation';
 import {capacityCards, type CapacityCardView} from './laundry-page-view';
 
 function capacityTone(card: CapacityCardView): string {
     if (card.status === 'checking') return 'border-border bg-muted/30';
-    return laundryZoneMeta(card.access).surfaceClassName;
+    return laundryZonePresentation(card.access).surfaceClassName;
 }
 
 export function LaundryPage() {

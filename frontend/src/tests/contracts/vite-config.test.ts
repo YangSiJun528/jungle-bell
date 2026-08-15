@@ -59,8 +59,11 @@ test('웹 개발 Vite 설정은 API proxy와 web build target을 사용한다', 
     const config = await interpretedConfig('serve');
     const proxy = apiProxy(config);
 
+    assert.equal(
+        config.define?.['__JUNGLE_BELL_BUILD_CONFIG__'],
+        JSON.stringify({target: 'web', platformApiUrl: null}),
+    );
     assert.equal(config.define?.['__JUNGLE_BELL_TARGET__'], JSON.stringify('web'));
-    assert.equal(config.define?.['import.meta.env.VITE_PLATFORM_API_URL'], undefined);
     assert.equal(proxy.target, defaultDevApiOrigin);
     assert.equal(proxy.changeOrigin, true);
     assert.equal(proxy.secure, true);
@@ -71,15 +74,21 @@ test('웹 개발 Vite 설정은 API proxy와 web build target을 사용한다', 
 test('웹 production 빌드는 same-origin API와 전용 산출물 경로를 사용한다', async () => {
     const config = await interpretedConfig('build');
 
+    assert.equal(
+        config.define?.['__JUNGLE_BELL_BUILD_CONFIG__'],
+        JSON.stringify({target: 'web', platformApiUrl: null}),
+    );
     assert.equal(config.define?.['__JUNGLE_BELL_TARGET__'], JSON.stringify('web'));
-    assert.equal(config.define?.['import.meta.env.VITE_PLATFORM_API_URL'], undefined);
     assert.equal(config.build.outDir, 'dist/web');
 });
 
 test('desktop build만 허용된 원격 API origin을 주입한다', () => {
     assert.equal(buildApiOrigin('build', 'web', {}), null);
+    assert.throws(
+        () => buildApiOrigin('build', 'desktop', {}),
+        /JUNGLE_BELL_DATA_API_URL_REQUIRED/,
+    );
     assert.equal(buildApiOrigin('serve', 'desktop', {
-        JUNGLE_BELL_DEV_API_ORIGIN: 'https://api.example.com',
         JUNGLE_BELL_DATA_API_URL: 'https://api.example.com',
     }), 'https://api.example.com');
     assert.equal(buildApiOrigin('build', 'desktop', {
@@ -104,9 +113,10 @@ test('해석된 Tauri production config는 public/private origin을 함께 고�
         JUNGLE_BELL_DATA_API_URL: defaultDevApiOrigin,
     });
     assert.equal(
-        config.define?.['import.meta.env.VITE_PLATFORM_API_URL'],
-        JSON.stringify(defaultDevApiOrigin),
+        config.define?.['__JUNGLE_BELL_BUILD_CONFIG__'],
+        JSON.stringify({target: 'desktop', platformApiUrl: defaultDevApiOrigin}),
     );
+    assert.equal(config.define?.['__JUNGLE_BELL_TARGET__'], JSON.stringify('desktop'));
 });
 
 test('Spring과 Tauri production build는 같은 React target과 분리된 API 설정을 사용한다', async () => {
@@ -117,13 +127,16 @@ test('Spring과 Tauri production build는 같은 React target과 분리된 API �
 
     assert.equal(spring.build.target, 'safari13');
     assert.equal(tauri.build.target, spring.build.target);
+    assert.equal(
+        spring.define?.['__JUNGLE_BELL_BUILD_CONFIG__'],
+        JSON.stringify({target: 'web', platformApiUrl: null}),
+    );
+    assert.equal(
+        tauri.define?.['__JUNGLE_BELL_BUILD_CONFIG__'],
+        JSON.stringify({target: 'desktop', platformApiUrl: defaultDevApiOrigin}),
+    );
     assert.equal(spring.define?.['__JUNGLE_BELL_TARGET__'], JSON.stringify('web'));
     assert.equal(tauri.define?.['__JUNGLE_BELL_TARGET__'], JSON.stringify('desktop'));
-    assert.equal(spring.define?.['import.meta.env.VITE_PLATFORM_API_URL'], undefined);
-    assert.equal(
-        tauri.define?.['import.meta.env.VITE_PLATFORM_API_URL'],
-        JSON.stringify(defaultDevApiOrigin),
-    );
 });
 
 test('account API 개발 proxy는 브라우저 Origin을 보존한다', async () => {
@@ -140,7 +153,9 @@ test('Tauri dev account proxy는 GET에도 exact WebView Origin을 보낸다', (
 });
 
 test('해석된 Tauri dev proxy에도 exact WebView Origin header가 설정된다', async () => {
-    const config = await interpretedConfig('serve', 'desktop');
+    const config = await interpretedConfig('serve', 'desktop', {
+        JUNGLE_BELL_DATA_API_URL: defaultDevApiOrigin,
+    });
     const proxy = config.server.proxy?.['/api/me'];
     assert.ok(proxy && typeof proxy !== 'string');
     assert.deepEqual(proxy.headers, {origin: 'http://127.0.0.1:5173'});

@@ -1,2 +1,8 @@
 export const LAUNDRY_WARNING_CLASS_NAME =
-    'border-red-200/70 bg-red-50/70 text-red-700 dark:border-red-900/70 dark:bg-red-950/30 dark:text-red-300';
+    'border-orange-400 bg-orange-100 text-orange-800 dark:border-orange-500 dark:bg-orange-950 dark:text-orange-200';
+
+export const LAUNDRY_WARNING_TEXT_CLASS_NAME =
+    'text-orange-800 dark:text-orange-200';
+
+export const LAUNDRY_WARNING_PROGRESS_CLASS_NAME =
+    '[&_[data-slot=progress-indicator]]:bg-orange-400 dark:[&_[data-slot=progress-indicator]]:bg-orange-500';

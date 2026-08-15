@@ -24,7 +24,7 @@ export function parseAndScrubInitialPairing(input: InitialPairingInput): Initial
     const link = mobilePairingLinkFromHash(input.hash);
     if (!link) return null;
 
-    const nextHash = input.platform === 'browser' ? '#connections' : '#home';
+    const nextHash = input.platform === 'browser' ? '#/connections' : '#/home';
     input.replaceState(input.historyState, '', `${input.pathname}${input.search}${nextHash}`);
 
     if (input.platform === 'browser') return {kind: 'companion', link};

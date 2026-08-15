@@ -30,7 +30,7 @@ cookie는 token resolver에서 Bearer 인증으로 변환하고, 권한과 WebVi
 | `GET` | `/api/public/status` | source별 최근 시도·성공·실패 상태 |
 | `GET` | `/`, `/index.html` | 내장 React SPA HTML |
 
-Vite로 빌드한 React SPA는 Spring Boot JAR의 정적 자산으로 배포됩니다. 화면 이동은 `/#home`, `/#attendance`, `/#laundry`, `/#meals` hash 경로를 사용합니다.
+Vite로 빌드한 React SPA는 Spring Boot JAR의 정적 자산으로 배포됩니다. 화면 이동은 `/#/home`, `/#/attendance`, `/#/laundry`, `/#/meals` hash 경로를 사용합니다.
 
 ## 공개 세탁 데이터
 

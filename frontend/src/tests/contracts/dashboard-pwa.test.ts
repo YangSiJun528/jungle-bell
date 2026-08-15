@@ -17,7 +17,7 @@ test('manifest는 모바일 standalone 설치와 최소 아이콘을 선언한�
     assert.equal(manifest.name, 'Jungle Bell');
     assert.equal(manifest.display, 'standalone');
     assert.equal(manifest.id, './');
-    assert.equal(manifest.start_url, './#home');
+    assert.equal(manifest.start_url, './#/home');
     assert.equal(manifest.scope, './');
     assert.ok(Array.isArray(manifest.icons));
     assert.ok((manifest.icons as Array<{sizes?: string}>).some(({sizes}) => sizes === '192x192'));
@@ -148,7 +148,7 @@ test('service worker는 만료되었거나 유효한 safe epoch가 없는 push�
     await Promise.all(waits);
     assert.equal(shown.length, 1);
     assert.equal((shown[0] as [string, {tag?: string}])[1].tag, 'notification-1');
-    assert.equal((shown[0] as [string, {data?: {path?: string}}])[1].data?.path, '/#notifications');
+    assert.equal((shown[0] as [string, {data?: {path?: string}}])[1].data?.path, '/#/notifications');
 
     const routeWaits: Promise<unknown>[] = [];
     push({
@@ -160,7 +160,7 @@ test('service worker는 만료되었거나 유효한 safe epoch가 없는 push�
         waitUntil: (promise) => routeWaits.push(promise),
     });
     await Promise.all(routeWaits);
-    assert.equal((shown[1] as [string, {data?: {path?: string}}])[1].data?.path, '/#attendance');
+    assert.equal((shown[1] as [string, {data?: {path?: string}}])[1].data?.path, '/#/attendance');
 });
 
 test('Vite는 표준 index.html 엔트리와 PWA public 디렉터리를 빌드한다', () => {

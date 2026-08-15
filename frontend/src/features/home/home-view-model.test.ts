@@ -72,6 +72,8 @@ describe('home feature boundaries', () => {
 
         expect(source).toContain('남성 가능');
         expect(source).toContain('여성 가능');
+        expect(source).toContain("laundryZonePresentation('men').surfaceClassName");
+        expect(source).toContain("laundryZonePresentation('women').surfaceClassName");
         expect(source.match(/지금 시작 가능/g)).toHaveLength(2);
         expect(source).not.toContain('남성 세탁실');
         expect(source).not.toContain('여성 세탁실');
