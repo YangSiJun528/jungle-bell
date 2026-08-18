@@ -153,10 +153,11 @@ PC 대시보드에서 **새로고침**을 누른 뒤 Jungle Campus 로그인 상
 
 ## 질문·제보하기
 
-- GitHub Discussions: [건의하기](https://github.com/YangSiJun528/jungle-bell/discussions/categories/건의하기), [궁금해요](https://github.com/YangSiJun528/jungle-bell/discussions/categories/궁금해요)
-- [GitHub Issues](https://github.com/YangSiJun528/jungle-bell/issues/new?template=bug.yml): 재현 가능한 버그 제보
+- [버그 제보](https://github.com/YangSiJun528/jungle-bell/issues/new?template=bug.yml)
+- [기능 개선 건의](https://github.com/YangSiJun528/jungle-bell/issues/new?template=feature_request.yml)
+- [질문](https://github.com/YangSiJun528/jungle-bell/issues/new?template=question.yml)
 
-버그를 제보할 때는 사용 중인 OS, 재현 조건, 가능하면 스크린샷을 함께 보내 주세요.
+이슈를 작성할 때는 사용 중인 OS, 재현 조건, 가능하면 스크린샷을 함께 보내 주세요.
 
 ## 개발 구조
 
@@ -193,7 +194,7 @@ SW-AI Lab 12기인 한 정글러가 관리하는 비공식 앱입니다.
 
 #### 문의
 
-새 기능·보완 요청은 Discussions의 **건의하기**에, 그 외 내용은 **궁금해요**에 남겨 주세요. 재현 가능한 버그 제보만 [버그 양식](https://github.com/YangSiJun528/jungle-bell/issues/new?template=bug.yml)을 사용합니다.
+새 기능·보완 요청, 질문, 재현 가능한 버그는 모두 [GitHub Issues](https://github.com/YangSiJun528/jungle-bell/issues/new/choose)의 해당 양식을 사용합니다.
 
 ## 라이선스
 

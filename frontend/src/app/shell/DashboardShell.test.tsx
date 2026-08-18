@@ -94,7 +94,7 @@ describe('DashboardShell', () => {
         expect(html).not.toContain('<header');
         expect(html).not.toContain('Jungle Bell은 정글 캠퍼스 생활 정보를 한곳에 모아 보여주는 오픈소스 프로젝트입니다.');
         expect(html).toContain('href="https://github.com/YangSiJun528/jungle-bell"');
-        expect(html).toContain('href="https://github.com/YangSiJun528/jungle-bell/discussions/categories/');
+        expect(html).toContain('href="https://github.com/YangSiJun528/jungle-bell/issues/new/choose"');
         expect(html).toContain('href="https://github.com/YangSiJun528/jungle-bell/releases/latest"');
         expect(html).toContain('공개 홈');
     });
