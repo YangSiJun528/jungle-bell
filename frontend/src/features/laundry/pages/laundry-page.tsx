@@ -1,3 +1,4 @@
+import {useId, useState} from 'react';
 import {
     CircleAlert,
     RefreshCw,
@@ -14,9 +15,12 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import {Label} from '@/components/ui/label';
+import {Switch} from '@/components/ui/switch';
 import {laundrySituationDataIsReliable} from '@/domain/laundry/freshness';
 import {relativeTimeLabel} from '@/lib/format';
 import {cn} from '@/lib/utils';
+import {useDashboardEnvironment} from '@/app/dashboard-context';
 import {LaundryMachineList} from '../components/laundry-machine-list';
 import {LaundryWarningBadge} from '../components/laundry-warning-badge';
 import {LaundryZoneBadge} from '../components/laundry-zone-badge';
@@ -31,8 +35,12 @@ function capacityTone(card: CapacityCardView): string {
 }
 
 export function LaundryPage() {
+    const {platform} = useDashboardEnvironment();
     const laundry = useSuspenseLaundryQuery();
     const manualRefresh = useCampusManualRefresh('laundry');
+    const riskToggleId = useId();
+    const riskIndicatorAvailable = platform.capabilities.laundryRiskIndicator;
+    const [showRisk, setShowRisk] = useState(riskIndicatorAvailable);
 
     const snapshot = laundry.data;
     const reliable = snapshot.quality.collection === 'SUCCESS' && laundrySituationDataIsReliable({
@@ -126,9 +134,23 @@ export function LaundryPage() {
                                 <LaundryWarningBadge/>
                             </div>
                         </CardHeader>
+                        {riskIndicatorAvailable ? (
+                            <div className="flex items-center justify-end gap-3 border-b px-4 py-3 sm:px-6">
+                                <Label htmlFor={riskToggleId}>최근 7일 에러 위험 표시</Label>
+                                <Switch
+                                    aria-label="최근 7일 에러 위험 표시"
+                                    checked={showRisk}
+                                    id={riskToggleId}
+                                    onCheckedChange={setShowRisk}
+                                />
+                            </div>
+                        ) : null}
                         <CardContent className="px-4 pb-3 pt-0 sm:px-6">
                             {snapshot.machines.length > 0 ? (
-                                <WashTowerGrid machines={snapshot.machines}/>
+                                <WashTowerGrid
+                                    machines={snapshot.machines}
+                                    showRiskIndicators={showRisk}
+                                />
                             ) : (
                                 <p className="py-5 text-center text-sm text-muted-foreground">
                                     표시할 워시타워가 없습니다.
@@ -137,7 +159,10 @@ export function LaundryPage() {
                         </CardContent>
                     </Card>
 
-            <LaundryMachineList machines={snapshot.machines}/>
+            <LaundryMachineList
+                machines={snapshot.machines}
+                showRiskWarnings={showRisk}
+            />
 
             <PersonalLaundrySection machines={snapshot.machines}/>
         </div>

@@ -147,7 +147,8 @@ test('출석 화면은 조회 상태만 관리하고 공유 알림 설정을 중
 });
 
 test('세탁 화면은 워시타워 상태표와 공통 계정 기능을 함께 제공한다', () => {
-    assert.match(laundry, /<WashTowerGrid machines=\{snapshot\.machines\}\/>/);
+    assert.match(laundry, /<WashTowerGrid[\s\S]*machines=\{snapshot\.machines\}/u);
+    assert.match(laundry, /showRiskIndicators=\{showRisk\}/u);
     assert.match(laundry, /워시타워 상태/);
     assert.match(laundry, /data-laundry-zone-legend="true"/);
     for (const zone of ['men', 'common', 'women']) {

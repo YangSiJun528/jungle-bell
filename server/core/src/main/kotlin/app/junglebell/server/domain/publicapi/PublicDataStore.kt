@@ -9,6 +9,7 @@ interface PublicDataStore {
     fun laundryVersion(sha: String): LaundryVersion?
     fun observation(minuteEpoch: Long): MinuteObservation?
     fun laundryEvents(since: Instant?, limit: Int): List<LaundryEvent>
+    fun laundryRisks(from: Instant, through: Instant): Map<LaundryRiskKey, LaundryRisk>
     fun mealImage(postId: String, mediaId: String): StoredMealImage?
     fun mealPosts(limit: Int = 100): List<MealPost>
     fun mealPostsForMonth(from: Instant, to: Instant): List<MealPost>

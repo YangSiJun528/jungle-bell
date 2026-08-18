@@ -42,7 +42,14 @@ class PublicDataService(
     fun laundry(): PublicLaundrySnapshot {
         val version = store.latestLaundryVersion()
             ?: throw ApiException("NO_DATA", HttpStatus.SERVICE_UNAVAILABLE)
-        return project(version, store.sourceState("laundry"), cacheSlice(clock.instant()), false)
+        val asOf = cacheSlice(clock.instant())
+        return project(
+            version,
+            store.sourceState("laundry"),
+            asOf,
+            false,
+            store.laundryRisks(asOf.minus(Duration.ofDays(7)), asOf),
+        )
     }
 
     fun laundryVersion(sha: String): LaundryVersion = store.laundryVersion(sha)
@@ -53,7 +60,13 @@ class PublicDataService(
         val observation = store.observation(instant.epochSecond / 60)
             ?: throw ApiException("OBSERVATION_NOT_FOUND", HttpStatus.NOT_FOUND)
         val data = observation.versionSha?.let(store::laundryVersion)?.let {
-            project(it, historicalState(observation), instant, true)
+            project(
+                it,
+                historicalState(observation),
+                instant,
+                true,
+                store.laundryRisks(instant.minus(Duration.ofDays(7)), instant),
+            )
         }
         return MinuteLaundryResponse(minute, observation, data)
     }
@@ -119,6 +132,7 @@ class PublicDataService(
         state: SourceState?,
         asOf: Instant,
         final: Boolean,
+        risks: Map<LaundryRiskKey, LaundryRisk>,
     ): PublicLaundrySnapshot {
         val versionAt = Instant.parse(version.observedAt)
         val ageSeconds = Duration.between(versionAt, asOf).seconds.coerceAtLeast(0)
@@ -136,8 +150,12 @@ class PublicDataService(
         val machines = version.machines.map { machine ->
             LaundryMachine(
                 machine.id,
-                machine.washer?.let { projectAppliance(it, asOf) },
-                machine.dryer?.let { projectAppliance(it, asOf) },
+                machine.washer?.let {
+                    projectAppliance(it, asOf, risks[LaundryRiskKey(machine.id, "washer")])
+                },
+                machine.dryer?.let {
+                    projectAppliance(it, asOf, risks[LaundryRiskKey(machine.id, "dryer")])
+                },
             )
         }
         val quality = LaundryQuality(
@@ -166,7 +184,11 @@ class PublicDataService(
         return provisional
     }
 
-    private fun projectAppliance(value: LaundryAppliance, asOf: Instant): LaundryAppliance {
+    private fun projectAppliance(
+        value: LaundryAppliance,
+        asOf: Instant,
+        risk: LaundryRisk?,
+    ): LaundryAppliance {
         var remaining: Int? = value.remainingMinutes
         var estimated = false
         val status = when (value.operationalStatus) {
@@ -183,7 +205,14 @@ class PublicDataService(
             "IDLE", "SCHEDULED" -> "IDLE"
             else -> { remaining = null; "UNKNOWN" }
         }
-        return value.copy(projection = LaundryProjection(asOf.toString(), remaining, status, estimated))
+        val recentRisk = risk ?: LaundryRisk.calculate(0, 0)
+        return value.copy(
+            projection = LaundryProjection(asOf.toString(), remaining, status, estimated),
+            attempts = recentRisk.attempts,
+            errors = recentRisk.errors,
+            rate = recentRisk.rate,
+            riskLevel = recentRisk.riskLevel,
+        )
     }
 
     private fun capacity(machines: List<LaundryMachine>, access: String, quality: LaundryQuality): LaundryCapacityEstimate {

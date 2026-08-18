@@ -40,9 +40,35 @@ data class LaundryAppliance(
     val sessionId: String?,
     val errorCode: String?,
     val projection: LaundryProjection? = null,
+    val attempts: Int = 0,
+    val errors: Int = 0,
+    val rate: Double = 0.0,
+    val riskLevel: String = "safe",
 )
 
 data class LaundryMachine(val id: String, val washer: LaundryAppliance?, val dryer: LaundryAppliance?)
+
+data class LaundryRiskKey(val machineId: String, val appliance: String)
+
+data class LaundryRisk(
+    val attempts: Int,
+    val errors: Int,
+    val rate: Double,
+    val riskLevel: String,
+) {
+    companion object {
+        fun calculate(attempts: Int, errors: Int): LaundryRisk {
+            require(attempts >= 0 && errors in 0..attempts)
+            val rate = if (attempts == 0) 0.0 else errors * 100.0 / attempts
+            val riskLevel = when {
+                rate > 40.0 -> "caution"
+                rate > 10.0 -> "slight"
+                else -> "safe"
+            }
+            return LaundryRisk(attempts, errors, rate, riskLevel)
+        }
+    }
+}
 
 data class UnknownEnumObservation(
     val machineId: String,

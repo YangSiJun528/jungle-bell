@@ -19,12 +19,20 @@ const machines: DashboardLaundryMachine[] = [
             appliance: 'washer',
             operationalStatus: 'IDLE',
             projection: {status: 'IDLE', remainingMinutes: 0},
+            attempts: 10,
+            errors: 1,
+            rate: 10,
+            riskLevel: 'safe',
         },
         dryer: {
             appliance: 'dryer',
             operationalStatus: 'RUNNING',
             estimatedFinishAt: '2026-08-11T04:05:00.000Z',
             projection: {status: 'ESTIMATED_RUNNING', remainingMinutes: 70},
+            attempts: 6,
+            errors: 1,
+            rate: 16.7,
+            riskLevel: 'slight',
         },
     },
     {
@@ -35,6 +43,10 @@ const machines: DashboardLaundryMachine[] = [
             operationalStatus: 'ERROR',
             errorCode: 'OE',
             projection: {status: 'ERROR', remainingMinutes: 12},
+            attempts: 5,
+            errors: 3,
+            rate: 60,
+            riskLevel: 'caution',
         },
         dryer: {
             appliance: 'dryer',
@@ -59,6 +71,42 @@ describe('WashTowerGrid', () => {
             .toBeLessThan(markup.indexOf('data-machine-id="워시타워_9"'));
         expect(markup.indexOf('data-kind="dryer"'))
             .toBeLessThan(markup.indexOf('data-kind="washer"'));
+    });
+
+    it('뒤섞인 입력에서도 1번부터 9번까지 물리적 배치를 유지한다', () => {
+        const allTowers = [9, 2, 7, 1, 5, 3, 8, 4, 6].map((number) => ({
+            id: `워시타워_${number}`,
+            zone: number <= 5 ? 'men' as const : number <= 7 ? 'common' as const : 'women' as const,
+            washer: null,
+            dryer: null,
+        }));
+        const markup = renderToStaticMarkup(<WashTowerGrid machines={allTowers}/>);
+        const positions = Array.from({length: 9}, (_, index) =>
+            markup.indexOf(`aria-label="${index + 1}번,`));
+
+        expect(positions.every((position) => position >= 0)).toBe(true);
+        expect(positions).toEqual([...positions].sort((left, right) => left - right));
+    });
+
+    it('risk visibility shows only slight and caution dots without changing current state', () => {
+        const visible = renderToStaticMarkup(
+            <WashTowerGrid machines={machines} nowMs={NOW_MS} showRiskIndicators/>,
+        );
+        const hidden = renderToStaticMarkup(
+            <WashTowerGrid machines={machines} nowMs={NOW_MS} showRiskIndicators={false}/>,
+        );
+
+        expect(visible.match(/data-laundry-risk-indicator="true"/gu)).toHaveLength(2);
+        expect(visible).toContain('data-risk-level="slight"');
+        expect(visible).toContain('data-risk-level="caution"');
+        expect(visible).not.toContain('data-risk-level="safe"');
+        expect(visible).toContain('absolute right-1 top-1');
+        expect(visible).toContain('bg-orange-500');
+        expect(visible).toContain('bg-destructive');
+        expect(hidden).not.toContain('data-laundry-risk-indicator="true"');
+        expect(hidden).toContain('data-state="error"');
+        expect(hidden).toContain('lucide-triangle-alert');
+        expect(hidden).toContain('>01:05</span>');
     });
 
     it('구역과 상태에 맞는 셀 표현 및 접근성 설명을 제공한다', () => {

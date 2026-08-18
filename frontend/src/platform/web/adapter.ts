@@ -11,6 +11,7 @@ import {
 const BASE_CAPABILITIES: PlatformCapabilities = {
     desktopAccount: false,
     desktopSettings: false,
+    laundryRiskIndicator: false,
     localNotifications: false,
     lmsWindow: false,
     mobilePairingManagement: false,
@@ -25,6 +26,7 @@ export function createWebPlatformAdapter(pwa: PwaCapabilityAdapter): PlatformAda
         kind: 'browser',
         capabilities: {
             ...BASE_CAPABILITIES,
+            laundryRiskIndicator: installedPwa,
             pwaInstall: pwa.available,
             webPush: installedPwa,
         },

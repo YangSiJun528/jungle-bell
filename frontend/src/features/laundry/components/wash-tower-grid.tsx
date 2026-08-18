@@ -8,13 +8,19 @@ import {
 } from '../lib/wash-tower';
 import {laundryZonePresentation} from '@/components/dashboard/laundry-zone-presentation';
 import {LAUNDRY_WARNING_CLASS_NAME} from '../lib/laundry-warning';
+import {visibleLaundryRiskLevel} from '../lib/laundry-risk';
 
 export interface WashTowerGridProps {
     machines: readonly DashboardLaundryMachine[];
     nowMs?: number;
+    showRiskIndicators?: boolean;
 }
 
-export function WashTowerGrid({machines, nowMs = Date.now()}: WashTowerGridProps) {
+export function WashTowerGrid({
+    machines,
+    nowMs = Date.now(),
+    showRiskIndicators = false,
+}: WashTowerGridProps) {
     const towers = sortWashTowers(machines);
     if (towers.length === 0) return null;
 
@@ -71,6 +77,9 @@ export function WashTowerGrid({machines, nowMs = Date.now()}: WashTowerGridProps
                             </th>
                             {towers.map((machine) => {
                                 const cell = washTowerCellView(machine, row.kind, nowMs);
+                                const riskLevel = showRiskIndicators
+                                    ? visibleLaundryRiskLevel(machine[row.kind])
+                                    : null;
                                 const tone = cell.state === 'available'
                                     ? laundryZonePresentation(machine.zone).surfaceClassName
                                     : cell.state === 'error'
@@ -81,7 +90,7 @@ export function WashTowerGrid({machines, nowMs = Date.now()}: WashTowerGridProps
                                     <td className="h-10 p-0" key={`${row.kind}-${machine.id}`}>
                                         <span
                                             aria-label={cell.label}
-                                            className={`grid h-10 w-full place-items-center rounded-md border text-xs font-bold tabular-nums ${tone}`}
+                                            className={`relative grid h-10 w-full place-items-center rounded-md border text-xs font-bold tabular-nums ${tone}`}
                                             data-wash-tower-cell="true"
                                             data-machine-id={machine.id}
                                             data-state={cell.state}
@@ -94,6 +103,21 @@ export function WashTowerGrid({machines, nowMs = Date.now()}: WashTowerGridProps
                                                     <span className="sr-only">경고</span>
                                                 </>
                                             ) : cell.text}
+                                            {riskLevel ? (
+                                                <>
+                                                    <span
+                                                        aria-hidden="true"
+                                                        className={`absolute right-1 top-1 size-2 rounded-full ${riskLevel === 'caution'
+                                                            ? 'bg-destructive'
+                                                            : 'bg-orange-500'}`}
+                                                        data-laundry-risk-indicator="true"
+                                                        data-risk-level={riskLevel}
+                                                    />
+                                                    <span className="sr-only">
+                                                        최근 7일 에러 {riskLevel === 'caution' ? '주의' : '약간 주의'}
+                                                    </span>
+                                                </>
+                                            ) : null}
                                         </span>
                                     </td>
                                 );

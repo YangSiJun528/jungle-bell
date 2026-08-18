@@ -1,5 +1,6 @@
 export type LaundryAvailabilityState = 'available' | 'error' | 'unavailable';
 export type LaundryMachineZone = 'men' | 'common' | 'women' | 'other';
+export type LaundryRiskLevel = 'safe' | 'slight' | 'caution';
 
 export interface LaundryStatusAppliance {
     appliance?: string;
@@ -10,6 +11,10 @@ export interface LaundryStatusAppliance {
     startedAt?: string | null;
     estimatedFinishAt?: string | null;
     errorCode?: string | null;
+    attempts?: number;
+    errors?: number;
+    rate?: number;
+    riskLevel?: LaundryRiskLevel;
 }
 
 const COUNTDOWN_PROJECTION_STATUSES = new Set([

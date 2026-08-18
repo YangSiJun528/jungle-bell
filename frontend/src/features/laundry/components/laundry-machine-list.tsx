@@ -27,6 +27,7 @@ import {LaundryZoneBadge} from './laundry-zone-badge';
 export interface LaundryMachineListProps {
     machines: readonly DashboardLaundryMachine[];
     nowMs?: number;
+    showRiskWarnings?: boolean;
 }
 
 const clockFormatter = new Intl.DateTimeFormat('ko-KR', {
@@ -59,12 +60,36 @@ function StatusIcon({tone}: {tone: LaundryApplianceTone}) {
     return <CircleDashed className={className}/>;
 }
 
+function RecentRiskNotice({view}: {view: LaundryApplianceDetailView}) {
+    const notice = view.riskNotice;
+    if (!notice || view.riskLevel === undefined || view.riskLevel === 'safe') return null;
+
+    return (
+        <div
+            className={cn(
+                'rounded-md border px-3 py-2 text-xs leading-5',
+                view.riskLevel === 'caution'
+                    ? 'border-destructive/40 bg-destructive/5 text-destructive'
+                    : 'border-orange-400/60 bg-orange-50 text-orange-900 dark:border-orange-500/60 dark:bg-orange-950/40 dark:text-orange-200',
+            )}
+            data-laundry-risk-notice="true"
+            data-risk-level={view.riskLevel}
+        >
+            <strong className="font-semibold">최근 7일 · {notice.label}</strong>
+            <p className="tabular-nums">{notice.summary}</p>
+            <p>{notice.description}</p>
+        </div>
+    );
+}
+
 function ApplianceDetail({
     machineTitle,
+    showRiskWarning,
     titleId,
     view,
 }: {
     machineTitle: string;
+    showRiskWarning: boolean;
     titleId: string;
     view: LaundryApplianceDetailView;
 }) {
@@ -141,11 +166,17 @@ function ApplianceDetail({
                 </p>
             ) : null}
 
+            {showRiskWarning ? <RecentRiskNotice view={view}/> : null}
+
         </section>
     );
 }
 
-export function LaundryMachineList({machines, nowMs = Date.now()}: LaundryMachineListProps) {
+export function LaundryMachineList({
+    machines,
+    nowMs = Date.now(),
+    showRiskWarnings = false,
+}: LaundryMachineListProps) {
     const titleId = useId();
     const views = sortWashTowers(machines).map((machine) => laundryMachineDetail(machine, nowMs));
     if (views.length === 0) return null;
@@ -164,11 +195,13 @@ export function LaundryMachineList({machines, nowMs = Date.now()}: LaundryMachin
                             <CardContent className="grid flex-1 grid-rows-2 p-0">
                                 <ApplianceDetail
                                     machineTitle={machine.title}
+                                    showRiskWarning={showRiskWarnings}
                                     titleId={`${titleId}-${machineIndex}-dryer`}
                                     view={machine.dryer}
                                 />
                                 <ApplianceDetail
                                     machineTitle={machine.title}
+                                    showRiskWarning={showRiskWarnings}
                                     titleId={`${titleId}-${machineIndex}-washer`}
                                     view={machine.washer}
                                 />
