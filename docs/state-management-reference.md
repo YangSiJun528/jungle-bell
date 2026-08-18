@@ -34,10 +34,11 @@ cache에 기록하지 않고 한 API client 인스턴스의 메모리에서만 �
 
 ## 런타임별 상태
 
-### 브라우저와 설치 PWA
+### 일반 웹과 설치 PWA
 
-- 설치 여부와 관계없이 같은 SPA, route, 계정 API를 사용합니다.
-- HttpOnly session cookie로 서버 출석 snapshot과 개인 설정을 읽고 변경합니다.
+- 같은 SPA와 route를 사용하되 일반 웹은 공개 API만 호출합니다.
+- `display-mode: standalone` 또는 iOS standalone으로 실행한 PWA만 HttpOnly session
+  cookie로 서버 출석 snapshot과 개인 설정을 읽고 변경합니다.
 - LMS를 직접 조회하거나 주기적 background fetch로 PC 역할을 대신하지 않습니다.
 - 설치 PWA의 Push payload는 만료 시각과 허용된 대시보드 경로를 검증한 뒤 표시합니다.
 

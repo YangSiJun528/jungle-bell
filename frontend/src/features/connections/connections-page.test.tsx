@@ -24,6 +24,8 @@ describe('ConnectionsPage settings information architecture', () => {
 
     test('기기 연결 기능은 보존하고 데스크톱 로컬 설정은 서비스 탭에만 둔다', () => {
         expect(source).toContain('platform.capabilities.mobilePairingManagement');
+        expect(source).toContain("platform.accountAuthentication.kind === 'cookie'");
+        expect(source).toContain('<WebConnections/>');
         expect(source).toContain('api.createMobilePairing()');
         expect(source).toContain('api.claimManualPairing');
         expect(source).toContain('api.disconnectMobileSession()');

@@ -185,9 +185,7 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
         fetcher,
         publicBase: campusBase,
         platformBase,
-        accountAuthentication: desktopSession
-            ? {kind: 'desktop-session', session: desktopSession}
-            : {kind: 'cookie'},
+        accountAuthentication: platform.accountAuthentication,
     });
 
     const publicJson = async (path: `/api/public/${string}`): Promise<unknown> =>

@@ -28,6 +28,7 @@ export interface AccountAuthProvider {
 }
 
 export type AccountAuthentication =
+    | {kind: 'none'}
     | {kind: 'cookie'}
     | {kind: 'desktop-session'; session: AccountAuthProvider};
 
@@ -98,6 +99,7 @@ export interface PwaInstallPrompt {
 
 export interface PwaCapabilityAdapter {
     available: boolean;
+    installed: boolean;
     registerServiceWorker(): void;
     subscribeInstallPrompt(
         listener: (prompt: PwaInstallPrompt) => void,
@@ -126,6 +128,7 @@ export class PlatformCapabilityUnavailableError extends Error {
 export function unavailablePwaAdapter(): PwaCapabilityAdapter {
     return {
         available: false,
+        installed: false,
         registerServiceWorker() {},
         subscribeInstallPrompt: () => () => undefined,
         isMobileInstallClient: () => false,

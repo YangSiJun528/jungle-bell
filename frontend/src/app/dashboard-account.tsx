@@ -38,12 +38,16 @@ export function DashboardAccountProvider({children}: PropsWithChildren) {
     const browserSessionQuery = useQuery({
         queryKey: queryKeys.accountSession,
         queryFn: () => api.getAccountSession(),
-        enabled: platform.kind === 'browser',
+        enabled: platform.accountAuthentication.kind === 'cookie',
         staleTime: 60_000,
         refetchInterval: 60_000,
     });
     const status = dashboardAccountStatus(platform.kind, connectionQuery);
-    const personalAccess = personalAccessState(platform.kind, status, browserSessionQuery);
+    const personalAccess = personalAccessState(
+        platform.accountAuthentication.kind,
+        status,
+        browserSessionQuery,
+    );
     const value = useMemo<DashboardAccountContextValue>(
         () => ({status, personalAccess, connectionQuery, browserSessionQuery}),
         [browserSessionQuery, connectionQuery, personalAccess, status],

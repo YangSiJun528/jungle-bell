@@ -5,7 +5,12 @@ export interface PairingCompletionOptions {
     maximumAttempts?: number;
 }
 
-export type AccountInitializationState = 'checking' | 'error' | 'unconnected' | 'connected';
+export type AccountInitializationState =
+    | 'not-applicable'
+    | 'checking'
+    | 'error'
+    | 'unconnected'
+    | 'connected';
 export type AutomaticPairingAction = 'wait' | 'none' | 'clear' | 'resume' | 'qr';
 
 export interface PairingStartGate {

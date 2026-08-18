@@ -28,6 +28,7 @@ export function createPwaCapabilityAdapter(options: {
 
     return {
         available: true,
+        installed: installedPwa(windowObject, navigatorObject),
         registerServiceWorker() {
             if (!options.production || !('serviceWorker' in navigatorObject)) return;
             windowObject.addEventListener('load', () => {
@@ -60,6 +61,13 @@ export function createPwaCapabilityAdapter(options: {
             return subscription.toJSON();
         },
     };
+}
+
+function installedPwa(windowObject: Window, navigatorObject: Navigator): boolean {
+    const standaloneDisplay = typeof windowObject.matchMedia === 'function'
+        && windowObject.matchMedia('(display-mode: standalone)').matches;
+    const iosStandalone = (navigatorObject as Navigator & {standalone?: boolean}).standalone === true;
+    return standaloneDisplay || iosStandalone;
 }
 
 function installPrompt(event: BeforeInstallPromptEvent): PwaInstallPrompt {

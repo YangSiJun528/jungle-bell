@@ -10,7 +10,7 @@ describe('initial QR pairing bootstrap', () => {
 
         const entry = parseAndScrubInitialPairing({
             hash,
-            platform: 'browser',
+            authentication: 'cookie',
             pathname: '/',
             search: '?source=qr',
             historyState: {navigation: 1},
@@ -34,7 +34,7 @@ describe('initial QR pairing bootstrap', () => {
 
         const entry = parseAndScrubInitialPairing({
             hash,
-            platform: 'desktop',
+            authentication: 'desktop-session',
             pathname: '/',
             search: '',
             historyState: null,
@@ -46,11 +46,27 @@ describe('initial QR pairing bootstrap', () => {
         expect(replaceState).toHaveBeenCalledWith(null, '', '/#/home');
     });
 
+    test('일반 웹은 모바일용 QR을 처리하지 않고 secret을 제거한다', () => {
+        const replaceState = vi.fn();
+
+        const entry = parseAndScrubInitialPairing({
+            hash,
+            authentication: 'none',
+            pathname: '/',
+            search: '',
+            historyState: null,
+            replaceState,
+        });
+
+        expect(entry).toBeNull();
+        expect(replaceState).toHaveBeenCalledWith(null, '', '/#/home');
+    });
+
     test('일반 경로는 history를 변경하지 않는다', () => {
         const replaceState = vi.fn();
         expect(parseAndScrubInitialPairing({
             hash: '#laundry',
-            platform: 'browser',
+            authentication: 'none',
             pathname: '/',
             search: '',
             historyState: null,

@@ -456,6 +456,21 @@ function CompanionConnections() {
     );
 }
 
+function WebConnections() {
+    return (
+        <Card className="mx-auto max-w-xl">
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                    <Smartphone className="size-5"/>앱 설치가 필요합니다.
+                </CardTitle>
+                <CardDescription>
+                    기기 연결은 PC 앱 또는 홈 화면에 설치한 PWA에서만 제공됩니다.
+                </CardDescription>
+            </CardHeader>
+        </Card>
+    );
+}
+
 export function ConnectionsPage() {
     const {platform} = useDashboardEnvironment();
 
@@ -479,7 +494,9 @@ export function ConnectionsPage() {
                 <TabsContent value="devices">
                     {platform.capabilities.mobilePairingManagement
                         ? <DesktopConnections/>
-                        : <CompanionConnections/>}
+                        : platform.accountAuthentication.kind === 'cookie'
+                            ? <CompanionConnections/>
+                            : <WebConnections/>}
                 </TabsContent>
             </Tabs>
         </div>

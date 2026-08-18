@@ -16,11 +16,12 @@ import {
 
 type TestDashboardApiOptions = DashboardApiOptions & {
     desktopRuntime?: boolean;
+    installedPwa?: boolean;
     invokeCommand?: NativeInvoke;
 };
 
 function createDashboardApi(options: TestDashboardApiOptions = {}) {
-    const {desktopRuntime = false, invokeCommand, ...implementationOptions} = options;
+    const {desktopRuntime = false, installedPwa = true, invokeCommand, ...implementationOptions} = options;
     const nativeBridge = desktopRuntime
         ? createNativeBridge(invokeCommand)
         : undefined;
@@ -31,7 +32,11 @@ function createDashboardApi(options: TestDashboardApiOptions = {}) {
                 nativeBridge,
                 events: unavailableEventAdapter(),
             })
-            : createWebPlatformAdapter(unavailablePwaAdapter()),
+            : createWebPlatformAdapter({
+                ...unavailablePwaAdapter(),
+                available: true,
+                installed: installedPwa,
+            }),
     });
 }
 
@@ -62,6 +67,15 @@ test('브라우저 계정 세션은 401을 정상적인 미연결 상태로 처�
     assert.equal(calls[0]?.url, '/api/me/session');
     assert.equal(calls[0]?.init?.credentials, 'include');
     assert.equal(calls[0]?.init?.cache, 'no-store');
+});
+
+test('일반 웹은 계정 세션 API를 호출하지 않는다', async () => {
+    const fetcher = async () => {
+        throw new Error('FETCH_MUST_NOT_RUN');
+    };
+    const api = createDashboardApi({fetcher, installedPwa: false});
+
+    await assert.rejects(api.getAccountSession(), /ACCOUNT_AUTHENTICATION_UNAVAILABLE/u);
 });
 
 test('브라우저 계정 세션은 연결 상태 응답을 엄격히 검증한다', async () => {

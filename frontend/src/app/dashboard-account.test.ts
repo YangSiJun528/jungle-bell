@@ -65,39 +65,44 @@ describe('dashboard account status', () => {
         );
     });
 
-    test('브라우저 세션과 desktop 계정 상태를 공통 개인 접근 상태로 정규화한다', () => {
+    test('웹·PWA 세션과 desktop 계정 상태를 공통 개인 접근 상태로 정규화한다', () => {
         const desktop = {serverSession: 'stored', lmsAuthentication: 'authenticated'} as const;
-        assert.deepEqual(personalAccessState('browser', desktop, {
+        assert.deepEqual(personalAccessState('none', desktop, {
+            data: undefined,
+            isPending: true,
+            isError: false,
+        }), {status: 'not-applicable'});
+        assert.deepEqual(personalAccessState('cookie', desktop, {
             data: undefined,
             isPending: true,
             isError: false,
         }), {status: 'checking'});
-        assert.deepEqual(personalAccessState('browser', desktop, {
+        assert.deepEqual(personalAccessState('cookie', desktop, {
             data: null,
             isPending: false,
             isError: false,
         }), {status: 'unconnected'});
-        assert.deepEqual(personalAccessState('browser', desktop, {
+        assert.deepEqual(personalAccessState('cookie', desktop, {
             data: {authenticated: true, expiresAt: '2026-08-14T00:00:00.000Z'},
             isPending: false,
             isError: false,
         }), {status: 'connected'});
-        assert.deepEqual(personalAccessState('browser', desktop, {
+        assert.deepEqual(personalAccessState('cookie', desktop, {
             data: undefined,
             isPending: false,
             isError: true,
         }), {status: 'error'});
-        assert.deepEqual(personalAccessState('browser', desktop, {
+        assert.deepEqual(personalAccessState('cookie', desktop, {
             data: null,
             isPending: false,
             isError: true,
         }), {status: 'error'});
-        assert.deepEqual(personalAccessState('desktop', desktop, {
+        assert.deepEqual(personalAccessState('desktop-session', desktop, {
             data: undefined,
             isPending: false,
             isError: false,
         }), {status: 'connected'});
-        assert.deepEqual(personalAccessState('desktop', {
+        assert.deepEqual(personalAccessState('desktop-session', {
             serverSession: 'stored',
             lmsAuthentication: 'required',
         }, {

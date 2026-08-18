@@ -65,4 +65,12 @@ describe('PersonalAccountGate browser policy', () => {
         expect(renderGate('checking')).toContain('PC 연결 상태를 확인하고 있습니다.');
         expect(renderGate('error')).toContain('PC 연결 상태를 확인하지 못했습니다.');
     });
+
+    test('일반 웹에서는 인증 오류 대신 앱 전용 기능으로 안내한다', () => {
+        const markup = renderGate('not-applicable');
+
+        expect(markup).toContain('앱에서 사용할 수 있습니다.');
+        expect(markup).not.toContain('PC 연결이 필요합니다.');
+        expect(markup).not.toContain('개인 설정');
+    });
 });

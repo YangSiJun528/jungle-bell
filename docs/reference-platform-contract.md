@@ -76,8 +76,8 @@ Cloudflare Worker, D1, R2, Wrangler와 별도 TypeScript Jobs는 사용하지 �
 
 Rust background service는 보호 저장소의 장기 bearer로 `/api/desktop/*`만 호출합니다.
 WebView는 장기 credential을 받지 않고 Rust가 발급받은 단기 bearer로
-`/api/me/*`를 직접 호출합니다. 브라우저·PWA는 JavaScript가 읽을 수 없는
-Strict HttpOnly cookie를 사용합니다.
+`/api/me/*`를 직접 호출합니다. 설치 PWA는 JavaScript가 읽을 수 없는 Strict
+HttpOnly cookie를 사용합니다. 일반 웹은 `/api/me/*`를 호출하지 않습니다.
 
 Spring Security의 Bearer filter와 opaque-token introspection이 세 인증 형식을 공통
 `Authentication`으로 변환합니다. 경로별 PC·모바일·WebView 권한과 WebView exact

@@ -27,9 +27,10 @@ function nativeBridge(): NativeBridge {
     };
 }
 
-function pwaAdapter(): PwaCapabilityAdapter {
+function pwaAdapter(installed: boolean): PwaCapabilityAdapter {
     return {
         available: true,
+        installed,
         registerServiceWorker: vi.fn(),
         subscribeInstallPrompt: vi.fn(() => () => undefined),
         isMobileInstallClient: vi.fn(() => false),
@@ -38,11 +39,11 @@ function pwaAdapter(): PwaCapabilityAdapter {
 }
 
 describe('PlatformAdapter', () => {
-    it('브라우저에서는 쿠키 인증과 PWA 기능만 주입한다', async () => {
-        const platform = createWebPlatformAdapter(pwaAdapter());
+    it('일반 웹에서는 개인 인증과 Push를 주입하지 않는다', async () => {
+        const platform = createWebPlatformAdapter(pwaAdapter(false));
 
         expect(platform.kind).toBe('browser');
-        expect(platform.accountAuthentication.kind).toBe('cookie');
+        expect(platform.accountAuthentication.kind).toBe('none');
         expect(platform.capabilities).toEqual({
             desktopAccount: false,
             desktopSettings: false,
@@ -50,11 +51,18 @@ describe('PlatformAdapter', () => {
             lmsWindow: false,
             mobilePairingManagement: false,
             pwaInstall: true,
-            webPush: true,
+            webPush: false,
         });
         await expect(platform.native.openLmsLogin()).rejects.toEqual(
             new PlatformCapabilityUnavailableError('lmsWindow'),
         );
+    });
+
+    it('설치형 PWA에서만 쿠키 인증과 Push를 주입한다', () => {
+        const platform = createWebPlatformAdapter(pwaAdapter(true));
+
+        expect(platform.accountAuthentication.kind).toBe('cookie');
+        expect(platform.capabilities.webPush).toBe(true);
     });
 
     it('Tauri에서는 같은 SPA에 네이티브 기능과 메모리 단기 세션을 주입한다', () => {

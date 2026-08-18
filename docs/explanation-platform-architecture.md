@@ -29,7 +29,8 @@ Jungle LMS ─ checker WebView ─ Tauri PC
                                ├─ 알림 poll·ack
                                └─ 단기 WebView HTTP session bootstrap
                                            │
-브라우저·PWA ─ cookie ─────────────┐         │
+설치 PWA ─── cookie ────────────────┐         │
+일반 웹 ──── 공개 HTTP ─────────────┤         │
 공통 React SPA ─ 공개·계정 HTTP ───┼─ Spring API ────── PostgreSQL
 Tauri adapter ─ jbui·native IPC ───┘                        ▲
                                                             │
@@ -80,7 +81,8 @@ proxy 없이 React가 직접 HTTP로 조회합니다.
 - Spring Worker: 공개 데이터 수집, 알림 계획·Web Push, housekeeping.
 - Spring Core: 두 실행 모듈이 공유하는 도메인 로직, 저장소 port와 JDBC adapter.
 - PostgreSQL: session hash, 설정, 공개 세탁·급식 기록과 이미지, 알림 상태.
-- 브라우저·PWA: 공개 생활 정보, 동기화된 출석·D-Day, 생활 설정, 연결 관리와 Web Push.
+- 일반 웹: 인증 없이 공개 생활 정보만 조회.
+- 설치 PWA: 공개 생활 정보, 동기화된 출석·D-Day, 생활 설정, 연결 관리와 Web Push.
 
 서버는 PC를 원격 조작하지 않습니다. 데스크톱 inbox에는 표시할 알림 delivery만
 들어가며 LMS 요청이나 세탁 조작 명령을 넣지 않습니다.
