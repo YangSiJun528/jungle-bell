@@ -4,7 +4,8 @@ export type DashboardRoute =
     | 'laundry'
     | 'meals'
     | 'notifications'
-    | 'connections';
+    | 'connections'
+    | 'install';
 
 export type DashboardRoutePath = `/${DashboardRoute}`;
 
@@ -20,6 +21,7 @@ export const DASHBOARD_ROUTE_META: Readonly<Record<DashboardRoute, DashboardRout
     meals: {label: '식단', shortLabel: '식단'},
     notifications: {label: '알림', shortLabel: '알림'},
     connections: {label: '설정', shortLabel: '설정'},
+    install: {label: '앱 설치 안내', shortLabel: '앱 안내'},
 };
 
 const NAVIGATION_ROUTES = [
@@ -33,6 +35,16 @@ const PERSONAL_UTILITY_ROUTES = [
     'notifications',
     'connections',
 ] as const satisfies readonly DashboardRoute[];
+
+const SUPPORT_ROUTES = [
+    'install',
+] as const satisfies readonly DashboardRoute[];
+
+const ALL_ROUTES = [
+    ...NAVIGATION_ROUTES,
+    ...PERSONAL_UTILITY_ROUTES,
+    ...SUPPORT_ROUTES,
+] as const;
 
 /**
  * Primary navigation stays limited to campus tasks. Notification and device
@@ -56,7 +68,7 @@ export function dashboardRouteHref(route: DashboardRoute): `#${DashboardRoutePat
 
 export function dashboardRouteFromPath(pathname: string): DashboardRoute {
     const value = pathname.trim().toLowerCase().replace(/^\/+|\/+$/gu, '');
-    return [...NAVIGATION_ROUTES, ...PERSONAL_UTILITY_ROUTES].includes(value as DashboardRoute)
+    return ALL_ROUTES.includes(value as DashboardRoute)
         ? value as DashboardRoute
         : 'home';
 }
@@ -68,7 +80,7 @@ export function dashboardRouteFromHash(hash: string): DashboardRoute {
 export function normalizeLegacyDashboardHash(hash: string): `#${DashboardRoutePath}` | null {
     const value = hash.trim().toLowerCase().replace(/^#/u, '');
     if (value.startsWith('/')) return null;
-    const route = [...NAVIGATION_ROUTES, ...PERSONAL_UTILITY_ROUTES].includes(value as DashboardRoute)
+    const route = ALL_ROUTES.includes(value as DashboardRoute)
         ? value as DashboardRoute
         : null;
     return route ? dashboardRouteHref(route) : null;

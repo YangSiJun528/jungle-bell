@@ -90,6 +90,7 @@ test('각 기능 화면은 공통 PageHeader를 사용하고 페이지 내부 �
         './features/laundry/pages/laundry-page.tsx',
         './features/meals/pages/meals-page.tsx',
         './features/connections/connections-page.tsx',
+        './features/app-install/app-install-page.tsx',
     ];
     for (const page of featurePages) {
         const pageSource = source(page);
