@@ -154,7 +154,7 @@ class SecurityFilterChainIntegrationTest(
                 id, user_id, installation_id, kind, label, token_sha256,
                 created_at_epoch_ms, expires_at_epoch_ms, last_seen_at_epoch_ms,
                 revoked_at_epoch_ms, source_pairing_id
-            ) VALUES (:id, :userId, :installationId, :kind, NULL, :tokenHash,
+            ) VALUES (:id, :userId, :installationId, :kind, 'test device', :tokenHash,
                 :now, :expiresAt, :now, NULL, NULL)
             """.trimIndent(),
         ).param("id", sessionId).param("userId", userId).param("installationId", installationId)

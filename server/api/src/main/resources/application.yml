@@ -15,6 +15,7 @@ spring:
   sql:
     init:
       mode: always
+      schema-locations: classpath:schema.sql
   jackson:
     deserialization:
       fail-on-unknown-properties: true

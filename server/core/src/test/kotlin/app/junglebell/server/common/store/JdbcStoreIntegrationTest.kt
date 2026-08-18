@@ -57,12 +57,12 @@ class JdbcStoreIntegrationTest {
     fun `notification creation fans out once and reports a duplicate`() {
         val userId = createUser()
         val installationId = "desktop-${UUID.randomUUID()}"
-        createDesktop(userId, installationId, "desktop-token-${UUID.randomUUID()}", 20_000)
+        createDesktop(userId, installationId, randomHash(), 20_000)
         val mapper = JsonMapper.builder().addModule(KotlinModule.Builder().build()).build()
         val store = JdbcNotificationStore(jdbc, mapper)
         val notification = NotificationRecord(
             UUID.randomUUID(), userId, "event-1", "test", "title", "body", "/#/home",
-            mapOf("kind" to "test"), 1_000, 1_000, 10_000,
+            mapOf("kind" to "test"), 1_500, 1_000, 10_000,
         )
 
         assertTrue(store.create(notification))
@@ -78,7 +78,7 @@ class JdbcStoreIntegrationTest {
     fun `pairing approval creates the mobile session atomically`() {
         val userId = createUser()
         val desktopInstallationId = "desktop-${UUID.randomUUID()}"
-        createDesktop(userId, desktopInstallationId, "desktop-token-${UUID.randomUUID()}", 20_000)
+        createDesktop(userId, desktopInstallationId, randomHash(), 20_000)
         val store = JdbcPairingStore(jdbc)
         val pairingId = UUID.randomUUID()
         val pairing = PairingRecord(
@@ -187,6 +187,8 @@ class JdbcStoreIntegrationTest {
         jdbc.sql("INSERT INTO app_user(id, created_at_epoch_ms) VALUES (:id, 0)")
             .param("id", userId).update()
     }
+
+    private fun randomHash(): String = UUID.randomUUID().toString().replace("-", "").repeat(2)
 
     private fun createDesktop(userId: UUID, installationId: String, tokenHash: String, expiresAt: Long): UUID {
         val sessionId = UUID.randomUUID()
