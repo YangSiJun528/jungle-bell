@@ -17,10 +17,6 @@ class HttpCacheConfiguration : WebMvcConfigurer {
             .addResourceLocations("classpath:/static/icons/")
             .setCacheControl(ONE_DAY_PUBLIC)
 
-        registry.addResourceHandler("/manifest.webmanifest")
-            .addResourceLocations("classpath:/static/")
-            .setCacheControl(ONE_HOUR_PUBLIC)
-
         registry.addResourceHandler("/index.html", "/sw.js")
             .addResourceLocations("classpath:/static/")
             .setCacheControl(CacheControl.noStore())
@@ -28,6 +24,5 @@ class HttpCacheConfiguration : WebMvcConfigurer {
 
     private companion object {
         val ONE_DAY_PUBLIC: CacheControl = CacheControl.maxAge(Duration.ofDays(1)).cachePublic()
-        val ONE_HOUR_PUBLIC: CacheControl = CacheControl.maxAge(Duration.ofHours(1)).cachePublic()
     }
 }
