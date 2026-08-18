@@ -1,9 +1,9 @@
-name: jungle-bell-v2-test
+name: jungle-bell-production
 
 services:
   postgres:
     image: postgres:17-alpine
-    container_name: jungle-bell-postgres-v2-test
+    container_name: jungle-bell-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-jungle_bell}
@@ -13,7 +13,7 @@ services:
     secrets:
       - database-password
     volumes:
-      - jungle-bell-postgres-v2-test:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
@@ -32,9 +32,9 @@ services:
       dockerfile: server/Dockerfile
       target: api-runtime
       args:
-        PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://127.0.0.1:8080}
-    image: ${API_IMAGE:-jungle-bell-api:v2-test-local}
-    container_name: jungle-bell-api-v2-test
+        PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://jungle-bell.sijun-yang.com}
+    image: ${API_IMAGE:-jungle-bell-api:production-local}
+    container_name: jungle-bell-api
     restart: unless-stopped
     init: true
     depends_on:
@@ -44,19 +44,13 @@ services:
       TZ: Asia/Seoul
       DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-jungle_bell}
       DATABASE_USERNAME: ${POSTGRES_USER:-jungle_bell}
-      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://127.0.0.1:8080}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://jungle-bell.sijun-yang.com}
     secrets:
       - database-password
       - pairing-secret
       - vapid-public-key
     ports:
       - "127.0.0.1:${API_PORT:-8080}:8080"
-    networks:
-      default:
-        aliases:
-          # Preserve the active Quick Tunnel endpoint while the legacy
-          # single app service is replaced by the split API/worker services.
-          - app
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/actuator/health/readiness"]
       interval: 15s
@@ -76,9 +70,9 @@ services:
       dockerfile: server/Dockerfile
       target: worker-runtime
       args:
-        PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://127.0.0.1:8080}
-    image: ${WORKER_IMAGE:-jungle-bell-worker:v2-test-local}
-    container_name: jungle-bell-worker-v2-test
+        PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://jungle-bell.sijun-yang.com}
+    image: ${WORKER_IMAGE:-jungle-bell-worker:production-local}
+    container_name: jungle-bell-worker
     restart: unless-stopped
     init: true
     depends_on:
@@ -88,10 +82,10 @@ services:
       TZ: Asia/Seoul
       DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-jungle_bell}
       DATABASE_USERNAME: ${POSTGRES_USER:-jungle_bell}
-      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://127.0.0.1:8080}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://jungle-bell.sijun-yang.com}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-}
       COLLECTORS_ENABLED: ${COLLECTORS_ENABLED:-true}
-      LAUNDRY_SOURCE_URL: ${LAUNDRY_SOURCE_URL:?set LAUNDRY_SOURCE_URL}
+      LAUNDRY_SOURCE_URL: ${LAUNDRY_SOURCE_URL:-}
       MEALS_PINNED_SOURCE_URL: ${MEALS_PINNED_SOURCE_URL:-https://pf.kakao.com/rocket-web/web/profiles/_xhzNjn/posts?includePinnedPost=true}
       MEALS_DEFAULT_SOURCE_URL: ${MEALS_DEFAULT_SOURCE_URL:-https://pf.kakao.com/rocket-web/web/profiles/_xhzNjn/posts}
     secrets:
@@ -108,13 +102,12 @@ services:
 
   tunnel:
     image: cloudflare/cloudflared:latest
-    container_name: jungle-bell-tunnel-v2-test
+    container_name: jungle-bell-tunnel
     restart: unless-stopped
-    profiles: ["tunnel"]
     depends_on:
       api:
         condition: service_healthy
-    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN}
     security_opt:
       - no-new-privileges:true
     deploy:
@@ -124,8 +117,8 @@ services:
 
   quick-tunnel:
     image: cloudflare/cloudflared:latest
-    container_name: jungle-bell-quick-tunnel-v2-test
-    restart: unless-stopped
+    container_name: jungle-bell-quick-tunnel
+    restart: "no"
     profiles: ["quick-tunnel"]
     depends_on:
       api:
@@ -139,7 +132,7 @@ services:
           memory: 128M
 
 volumes:
-  jungle-bell-postgres-v2-test:
+  postgres-data:
 
 secrets:
   database-password:

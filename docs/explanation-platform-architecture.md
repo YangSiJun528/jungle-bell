@@ -2,8 +2,8 @@
 
 ## 설계 결론
 
-Jungle Bell은 PC가 Jungle LMS session과 출석 수집을 전담하고, OCI의 Spring 서버가
-기기 연결·출석 snapshot·생활 설정·공개 데이터·알림 전달 상태를 관리합니다.
+Jungle Bell은 PC가 Jungle LMS session과 출석 수집을 전담하고, Jungle Bell Spring
+서버가 기기 연결·출석 snapshot·생활 설정·공개 데이터·알림 전달 상태를 관리합니다.
 브라우저, 설치 PWA, Tauri PC 앱은 같은 SPA와 HTTP 계약을 사용하며 운영체제 기능만
 플랫폼 어댑터의 capability로 분리합니다.
 
@@ -51,8 +51,8 @@ Tauri adapter ─ jbui·native IPC ───┘                        ▲
   생성합니다.
 - 수집 실패가 HTTP server의 가용성에 영향을 주지 않도록 JVM 수준에서도 분리합니다.
 
-Cloudflare Tunnel은 필요할 때 OCI localhost 서비스를 외부에 노출하는 ingress일 뿐,
-애플리케이션 실행이나 데이터 저장을 담당하지 않습니다.
+named Cloudflare Tunnel은 `https://jungle-bell.sijun-yang.com`을 API에 연결하는 정식
+ingress입니다. 애플리케이션 실행이나 데이터 저장은 담당하지 않습니다.
 
 ## 자격 증명 경계
 

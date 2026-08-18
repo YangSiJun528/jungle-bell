@@ -20,7 +20,7 @@
     "withGlobalTauri": true,
     "windows": [],
     "security": {
-      "csp": "default-src 'self'; base-uri 'none'; object-src 'none'; frame-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self' ipc: http://ipc.localhost https://amp-leu-controversy-des.trycloudflare.com; media-src 'none'; worker-src 'self'; manifest-src 'self'"
+      "csp": "default-src 'self'; base-uri 'none'; object-src 'none'; frame-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self' ipc: http://ipc.localhost https://jungle-bell.sijun-yang.com; media-src 'none'; worker-src 'self'; manifest-src 'self'"
     }
   },
   "plugins": {

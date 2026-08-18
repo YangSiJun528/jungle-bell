@@ -21,6 +21,9 @@
 
 ## 설치
 
+웹과 설치형 PWA는 [jungle-bell.sijun-yang.com](https://jungle-bell.sijun-yang.com)에서
+사용할 수 있습니다.
+
 수동 설치를 원하는 경우 [Release 페이지](https://github.com/YangSiJun528/jungle-bell/releases/latest)를 참고하세요.
 
 ### macOS
@@ -169,7 +172,7 @@ PC 대시보드에서 **새로고침**을 누른 뒤 Jungle Campus 로그인 상
 cd frontend
 npm ci
 npm run dev:web          # 브라우저·PWA
-export JUNGLE_BELL_DATA_API_URL=https://amp-leu-controversy-des.trycloudflare.com
+export JUNGLE_BELL_DATA_API_URL=https://jungle-bell.sijun-yang.com
 npm run desktop:dev      # 같은 SPA + Tauri 어댑터
 
 cd ../server

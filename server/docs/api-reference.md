@@ -25,7 +25,7 @@ cookie는 token resolver에서 Bearer 인증으로 변환하고, 권한과 WebVi
 
 | Method | 경로 | 설명 |
 | --- | --- | --- |
-| `GET` | `/actuator/health/readiness` | OCI health check |
+| `GET` | `/actuator/health/readiness` | 운영 readiness health check |
 | `GET` | `/api/health` | 수집 source를 포함한 서비스 health |
 | `GET` | `/api/public/status` | source별 최근 시도·성공·실패 상태 |
 | `GET` | `/`, `/index.html` | 내장 React SPA HTML |

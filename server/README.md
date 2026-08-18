@@ -16,8 +16,9 @@ Jungle Bell 서버는 Kotlin Spring Boot 기반의 세 Gradle 모듈로 구성�
 않습니다. API 프로세스가 schema와 HTTP를 소유하고 Worker 프로세스는 schema를
 변경하지 않은 채 같은 PostgreSQL을 사용합니다.
 
-Cloudflare Worker, D1, R2와 별도 TypeScript Jobs 런타임은 사용하지 않습니다.
-Cloudflare Tunnel은 필요할 때 OCI API 앞에 두는 ingress입니다.
+Cloudflare Worker, D1, R2와 별도 TypeScript Jobs 런타임은 사용하지 않습니다. named
+Cloudflare Tunnel은 `https://jungle-bell.sijun-yang.com`을 API에 연결하는 정식
+ingress입니다.
 
 ## 디렉터리
 
@@ -37,7 +38,7 @@ server/
 │   └── src/main/
 │       ├── kotlin/app/junglebell/server/worker/  scheduler·외부 수집 adapter
 │       └── resources/application.yml      Worker 설정
-├── deploy/                                OCI Docker Compose와 환경 예시
+├── deploy/                                운영 Docker Compose와 환경 예시
 ├── tools/                                 배포 후 smoke test
 └── Dockerfile                             SPA와 두 실행 JAR의 다단계 이미지
 ```
@@ -54,11 +55,11 @@ cd server
 PostgreSQL과 두 실행 프로세스는 저장소 루트에서 시작합니다.
 
 ```bash
-cp server/deploy/.env.v2-test.example /tmp/jungle-bell.env
-# /tmp/jungle-bell.env의 secret 파일 경로와 수집 URL을 수정
+cp server/deploy/.env.production.example /tmp/jungle-bell.env
+# secret 경로와 수집 URL을 수정하고 PUBLIC_BASE_URL을 로컬 주소로 변경
 docker compose \
   --env-file /tmp/jungle-bell.env \
-  -f server/deploy/compose.v2-test.yml \
+  -f server/deploy/compose.production.yml \
   up --build -d postgres api worker
 ```
 
@@ -74,10 +75,10 @@ docker build --target api-runtime -f server/Dockerfile .
 docker build --target worker-runtime -f server/Dockerfile .
 ```
 
-배포된 인증 경계는 OCI 호스트에서 확인합니다.
+배포된 인증 경계는 공식 origin에서 확인합니다.
 
 ```bash
-server/tools/smoke-api.sh https://example.test
+server/tools/smoke-api.sh https://jungle-bell.sijun-yang.com
 ```
 
 ## 문서

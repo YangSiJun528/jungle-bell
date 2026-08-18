@@ -1,8 +1,8 @@
 # 서버 환경 변수 레퍼런스
 
-OCI 배포에서는 `server/deploy/.env.v2-test`에 비밀이 아닌 설정만 두고, secret 값은
-별도 파일로 관리합니다. Spring Boot는 `/run/secrets`의 config tree와 환경 변수를
-함께 읽습니다.
+운영 배포에서는 `server/deploy/.env.production`에 비밀이 아닌 설정과 secret 파일
+경로를 두고, secret 값은 별도 파일로 관리합니다. Spring Boot는 `/run/secrets`의
+config tree와 환경 변수를 함께 읽습니다.
 
 ## 데이터베이스
 
@@ -26,7 +26,7 @@ EXISTS`로 적용됩니다. Worker의 SQL 초기화는 꺼져 있습니다. 현�
 | 변수 | 기본값 | 설명 |
 | --- | --- | --- |
 | `PORT` | `8080` | API HTTP port. Worker는 HTTP server를 열지 않음 |
-| `PUBLIC_BASE_URL` | `http://127.0.0.1:8080` | 정적 자산과 공개 API의 외부 origin |
+| `PUBLIC_BASE_URL` | 로컬 실행 `http://127.0.0.1:8080`, 운영 `https://jungle-bell.sijun-yang.com` | 정적 자산, 공개 API 자산 URL, pairing URL의 외부 origin |
 | `PAIRING_SECRET` | config tree `pairing-secret` | pairing 서명 secret, 32자 이상 |
 | `PAIRING_SECRET_FILE` | 필수 | Compose pairing secret 파일 |
 | `JUNGLE_BELL_LOG_LEVEL` | `INFO` | 앱 package 로그 수준 |
@@ -58,7 +58,7 @@ housekeeping도 Worker에서 실행됩니다. 각 source의 최근 시도·성�
 | 변수 | 기본값 | 설명 |
 | --- | --- | --- |
 | `VAPID_PUBLIC_KEY` | config tree `vapid-public-key` | 브라우저 구독용 공개키 |
-| `VAPID_PRIVATE_KEY` | config tree `vapid-private-key` | OCI에만 두는 private key |
+| `VAPID_PRIVATE_KEY` | config tree `vapid-private-key` | 배포 호스트에만 두는 private key |
 | `VAPID_SUBJECT` | 없음 | `mailto:` 또는 HTTPS subject |
 | `VAPID_PUBLIC_KEY_FILE` | 필수 | Compose public key 파일 |
 | `VAPID_PRIVATE_KEY_FILE` | 필수 | Compose private key 파일 |
@@ -70,11 +70,11 @@ private key는 저장소, PostgreSQL, 로그에 기록하지 않습니다. key p
 
 | 변수 | 기본값 | 설명 |
 | --- | --- | --- |
-| `API_IMAGE` | `jungle-bell-api:v2-test-local` | API 이미지 tag |
-| `WORKER_IMAGE` | `jungle-bell-worker:v2-test-local` | Worker 이미지 tag |
+| `API_IMAGE` | `jungle-bell-api:production-local` | API 이미지 tag |
+| `WORKER_IMAGE` | `jungle-bell-worker:production-local` | Worker 이미지 tag |
 | `API_PORT` | `8080` | API의 호스트 loopback port |
-| `CLOUDFLARE_TUNNEL_TOKEN` | 없음 | 선택적인 named Tunnel token |
+| `CLOUDFLARE_TUNNEL_TOKEN` | 없음 | 운영 named Tunnel token |
 
-`CLOUDFLARE_TUNNEL_TOKEN`은 ingress용일 뿐입니다. 서버 실행이나 데이터 저장에는
-Cloudflare 서비스가 필요하지 않습니다. token이 없으면 `quick-tunnel` profile로
-임시 URL을 만들 수 있습니다.
+`CLOUDFLARE_TUNNEL_TOKEN`은 저장소 밖의 운영 `.env.production`에서 관리합니다.
+named Tunnel은 정식 ingress이며, `quick-tunnel` profile은 장애 분리용 임시 URL에만
+사용합니다. Cloudflare는 애플리케이션 실행이나 데이터 저장 계층이 아닙니다.
