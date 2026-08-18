@@ -1,6 +1,5 @@
 import {
     ArrowRight,
-    Download,
     RefreshCw,
     Utensils,
     WashingMachine,
@@ -17,14 +16,14 @@ import {
     CardHeader,
 } from '@/components/ui/card';
 import {PageHeader} from '@/components/dashboard/page-header';
+import {AsyncBoundary} from '@/components/dashboard/async-boundary';
+import {AppShowcaseCard} from '@/components/app-showcase/app-showcase-card';
 import {laundryZonePresentation} from '@/components/dashboard/laundry-zone-presentation';
-import {useDashboardEnvironment} from '@/app/dashboard-context';
 import {
     useRefreshHomeMutation,
     useSuspenseCampusQueries,
 } from '@/app/use-dashboard-queries';
 import {cn} from '@/lib/utils';
-import {JungleCampusSummary} from './jungle-campus-summary';
 import {HomeMealSlotsList} from './home-meal-slots';
 import {
     homeLaundrySummary,
@@ -58,32 +57,86 @@ function SummaryCard({icon: Icon, title, children, footer, className}: {
     );
 }
 
-export interface HomePageProps {
-    onRequestInstall?: () => void;
-}
-
-export function HomePage({onRequestInstall}: HomePageProps = {}) {
-    const {platform} = useDashboardEnvironment();
+function HomeLivingSummaries() {
     const {laundry, meals} = useSuspenseCampusQueries();
-    const refreshHome = useRefreshHomeMutation();
-
     const laundrySummary = homeLaundrySummary({
         snapshot: laundry.data,
     });
     const todayMealSlots = homeTodayMealSlots(meals.data);
     const laundryRefreshFailed = laundry.isError;
     const mealsRefreshFailed = meals.isError;
+
+    return (
+        <section className="grid gap-4 lg:grid-cols-2" aria-label="오늘의 생활 정보">
+            <SummaryCard
+                icon={WashingMachine}
+                title="세탁실"
+                footer={<Button asChild size="sm" variant="link" className="px-0"><Link to="/laundry">기기별 현황 보기 <ArrowRight/></Link></Button>}
+            >
+                {laundryRefreshFailed ? (
+                    <p className="text-xs text-amber-700 dark:text-amber-300">최신 상태를 가져오지 못해 마지막 확인값을 표시합니다.</p>
+                ) : null}
+                {laundry.data.machines.length === 0 ? (
+                    <p className="text-sm leading-6 text-muted-foreground">
+                        {laundryRefreshFailed
+                            ? '마지막으로 확인한 데이터에 표시할 워시타워가 없습니다.'
+                            : '표시할 워시타워 정보가 아직 없습니다.'}
+                    </p>
+                ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                        <div className={cn('rounded-lg border p-3', laundryZonePresentation('men').surfaceClassName)}>
+                            <p className="text-xs font-medium">남성 가능</p>
+                            <p className="mt-1 flex items-baseline gap-2">
+                                <strong className="text-2xl text-foreground">{laundrySummary.men === null ? '—' : `${laundrySummary.men}회`}</strong>
+                                {laundrySummary.men === null ? null : (
+                                    <span className="text-xs text-muted-foreground">지금 시작 가능</span>
+                                )}
+                            </p>
+                        </div>
+                        <div className={cn('rounded-lg border p-3', laundryZonePresentation('women').surfaceClassName)}>
+                            <p className="text-xs font-medium">여성 가능</p>
+                            <p className="mt-1 flex items-baseline gap-2">
+                                <strong className="text-2xl text-foreground">{laundrySummary.women === null ? '—' : `${laundrySummary.women}회`}</strong>
+                                {laundrySummary.women === null ? null : (
+                                    <span className="text-xs text-muted-foreground">지금 시작 가능</span>
+                                )}
+                            </p>
+                        </div>
+                    </div>
+                )}
+            </SummaryCard>
+
+            <SummaryCard
+                icon={Utensils}
+                title="오늘 급식"
+                footer={<Button asChild size="sm" variant="link" className="px-0"><Link to="/meals">전체 식단 보기 <ArrowRight/></Link></Button>}
+            >
+                {mealsRefreshFailed ? (
+                    <p className="text-xs text-amber-700 dark:text-amber-300">최신 식단을 가져오지 못해 마지막 확인값을 표시합니다.</p>
+                ) : null}
+                {todayMealSlots === null ? (
+                    <p className="text-sm leading-6 text-muted-foreground">
+                        {mealsRefreshFailed
+                            ? '마지막으로 확인한 데이터에는 오늘 식단이 없습니다.'
+                            : '오늘 식단이 아직 게시되지 않았습니다.'}
+                    </p>
+                ) : (
+                    <HomeMealSlotsList slots={todayMealSlots}/>
+                )}
+            </SummaryCard>
+        </section>
+    );
+}
+
+export function HomePage() {
+    const refreshHome = useRefreshHomeMutation();
+
     return (
         <div className="space-y-6">
             <PageHeader
                 title="오늘 필요한 정보"
                 actions={(
                     <div className="flex flex-wrap gap-2">
-                        {platform.kind === 'browser' && onRequestInstall ? (
-                            <Button variant="outline" onClick={onRequestInstall}>
-                                <Download aria-hidden="true"/>앱 설치 안내
-                            </Button>
-                        ) : null}
                         <Button variant="outline" disabled={refreshHome.isPending} onClick={() => refreshHome.mutate()}>
                             <RefreshCw aria-hidden="true" className={refreshHome.isPending ? 'animate-spin' : ''}/>
                             {refreshHome.isPending ? '새로고침 중' : '새로고침'}
@@ -92,7 +145,7 @@ export function HomePage({onRequestInstall}: HomePageProps = {}) {
                 )}
             />
 
-            <JungleCampusSummary/>
+            <AppShowcaseCard/>
 
             {refreshHome.isError ? (
                 <Alert variant="destructive">
@@ -112,65 +165,12 @@ export function HomePage({onRequestInstall}: HomePageProps = {}) {
                 </Alert>
             ) : null}
 
-            <section className="grid gap-4 lg:grid-cols-2" aria-label="오늘의 생활 정보">
-                <SummaryCard
-                    icon={WashingMachine}
-                    title="세탁실"
-                    footer={<Button asChild size="sm" variant="link" className="px-0"><Link to="/laundry">기기별 현황 보기 <ArrowRight/></Link></Button>}
-                >
-                    {laundryRefreshFailed ? (
-                        <p className="text-xs text-amber-700 dark:text-amber-300">최신 상태를 가져오지 못해 마지막 확인값을 표시합니다.</p>
-                    ) : null}
-                    {laundry.data.machines.length === 0 ? (
-                        <p className="text-sm leading-6 text-muted-foreground">
-                            {laundryRefreshFailed
-                                ? '마지막으로 확인한 데이터에 표시할 워시타워가 없습니다.'
-                                : '표시할 워시타워 정보가 아직 없습니다.'}
-                        </p>
-                    ) : (
-                        <div className="grid grid-cols-2 gap-2">
-                            <div className={cn('rounded-lg border p-3', laundryZonePresentation('men').surfaceClassName)}>
-                                <p className="text-xs font-medium">남성 가능</p>
-                                <p className="mt-1 flex items-baseline gap-2">
-                                    <strong className="text-2xl text-foreground">{laundrySummary.men === null ? '—' : `${laundrySummary.men}회`}</strong>
-                                    {laundrySummary.men === null ? null : (
-                                        <span className="text-xs text-muted-foreground">지금 시작 가능</span>
-                                    )}
-                                </p>
-                            </div>
-                            <div className={cn('rounded-lg border p-3', laundryZonePresentation('women').surfaceClassName)}>
-                                <p className="text-xs font-medium">여성 가능</p>
-                                <p className="mt-1 flex items-baseline gap-2">
-                                    <strong className="text-2xl text-foreground">{laundrySummary.women === null ? '—' : `${laundrySummary.women}회`}</strong>
-                                    {laundrySummary.women === null ? null : (
-                                        <span className="text-xs text-muted-foreground">지금 시작 가능</span>
-                                    )}
-                                </p>
-                            </div>
-                        </div>
-                    )}
-                </SummaryCard>
-
-                <SummaryCard
-                    icon={Utensils}
-                    title="오늘 급식"
-                    footer={<Button asChild size="sm" variant="link" className="px-0"><Link to="/meals">전체 식단 보기 <ArrowRight/></Link></Button>}
-                >
-                    {mealsRefreshFailed ? (
-                        <p className="text-xs text-amber-700 dark:text-amber-300">최신 식단을 가져오지 못해 마지막 확인값을 표시합니다.</p>
-                    ) : null}
-                    {todayMealSlots === null ? (
-                        <p className="text-sm leading-6 text-muted-foreground">
-                            {mealsRefreshFailed
-                                ? '마지막으로 확인한 데이터에는 오늘 식단이 없습니다.'
-                                : '오늘 식단이 아직 게시되지 않았습니다.'}
-                        </p>
-                    ) : (
-                        <HomeMealSlotsList slots={todayMealSlots}/>
-                    )}
-                </SummaryCard>
-
-            </section>
+            <AsyncBoundary
+                errorTitle="오늘의 생활 정보를 불러오지 못했습니다."
+                errorDescription="앱 안내는 계속 확인할 수 있습니다. 잠시 후 다시 시도해 주세요."
+            >
+                <HomeLivingSummaries/>
+            </AsyncBoundary>
         </div>
     );
 }

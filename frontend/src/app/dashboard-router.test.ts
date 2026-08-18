@@ -25,6 +25,17 @@ describe('dashboard router', () => {
         expect(router.state.matches.at(-1)?.routeId).toBe('/');
     });
 
+    test('routes the app showcase CTA to the dedicated install guide', async () => {
+        const history = createMemoryHistory({initialEntries: ['/home']});
+        const router = createDashboardRouter(history);
+
+        await router.load();
+        await router.navigate({to: '/install'});
+
+        expect(router.state.location.pathname).toBe('/install');
+        expect(router.state.matches.at(-1)?.routeId).toBe('/install');
+    });
+
     test('normalizes legacy route fragments without touching pairing fragments', () => {
         expect(normalizeLegacyDashboardHash('#attendance')).toBe('#/attendance');
         expect(normalizeLegacyDashboardHash('#/attendance')).toBeNull();

@@ -5,6 +5,7 @@ import {
     Bell,
     BellRing,
     CalendarCheck,
+    Download,
     House,
     Settings,
     UtensilsCrossed,
@@ -71,6 +72,7 @@ const ROUTE_ICONS: Readonly<Record<DashboardRoute, LucideIcon>> = {
     meals: UtensilsCrossed,
     notifications: Bell,
     connections: Settings,
+    install: Download,
 };
 
 interface NavigationItemProps {

@@ -1,4 +1,5 @@
 import {lazy} from 'react';
+import {useDashboardEnvironment} from './dashboard-context';
 import {useDashboardRouteRuntime} from './dashboard-route-runtime';
 
 const HomePage = lazy(() => import('@/features/home/home-page').then((module) => ({default: module.HomePage})));
@@ -6,10 +7,18 @@ const AttendancePage = lazy(() => import('@/features/attendance/attendance-page'
 const LaundryPage = lazy(() => import('@/features/laundry/pages/laundry-page').then((module) => ({default: module.LaundryPage})));
 const MealsPage = lazy(() => import('@/features/meals/pages/meals-page').then((module) => ({default: module.MealsPage})));
 const ConnectionsPage = lazy(() => import('@/features/connections/connections-page').then((module) => ({default: module.ConnectionsPage})));
+const AppInstallPage = lazy(() => import('@/features/app-install/app-install-page').then((module) => ({default: module.AppInstallPage})));
 
 export function HomeRoutePage() {
+    return <HomePage/>;
+}
+
+export function AppInstallRoutePage() {
     const {openInstallPrompt} = useDashboardRouteRuntime();
-    return <HomePage onRequestInstall={openInstallPrompt}/>;
+    const {platform} = useDashboardEnvironment();
+    const canRequestMobileInstall = platform.kind === 'browser'
+        && platform.pwa.isMobileInstallClient();
+    return <AppInstallPage onRequestMobileInstall={canRequestMobileInstall ? openInstallPrompt : undefined}/>;
 }
 
 export function AttendanceRoutePage() {
@@ -35,6 +44,7 @@ export function NotificationRoutePage() {
         case 'laundry': return <LaundryRoutePage/>;
         case 'meals': return <MealsRoutePage/>;
         case 'connections': return <ConnectionsRoutePage/>;
+        case 'install': return <AppInstallRoutePage/>;
         default: return <HomeRoutePage/>;
     }
 }

@@ -48,12 +48,12 @@ describe('home feature boundaries', () => {
         expect(source).not.toContain('CompactError');
     });
 
-    it('places the fixed Jungle Campus attendance surface before living information', () => {
+    it('places the app showcase before living information', () => {
         const source = readFileSync(new URL('./home-page.tsx', import.meta.url), 'utf8');
 
-        expect(source).toContain('<JungleCampusSummary/>');
-        expect(source.indexOf('<JungleCampusSummary'))
-            .toBeLessThan(source.indexOf('aria-label="오늘의 생활 정보"'));
+        expect(source).toContain('<AppShowcaseCard/>');
+        expect(source.indexOf('<AppShowcaseCard'))
+            .toBeLessThan(source.lastIndexOf('<AsyncBoundary'));
         expect(source).not.toContain('title="출석"');
         expect(source).not.toContain('<CardTitle>공식 정글캠퍼스</CardTitle>');
     });

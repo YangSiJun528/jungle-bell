@@ -7,6 +7,7 @@ import {
 } from '@tanstack/react-router';
 import {DashboardApp} from './dashboard-app';
 import {
+    AppInstallRoutePage,
     AttendanceRoutePage,
     ConnectionsRoutePage,
     HomeRoutePage,
@@ -51,6 +52,11 @@ const connectionsRoute = createRoute({
     path: 'connections',
     component: ConnectionsRoutePage,
 });
+const installRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: 'install',
+    component: AppInstallRoutePage,
+});
 const fallbackRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: '$',
@@ -64,6 +70,7 @@ const routeTree = rootRoute.addChildren([
     mealsRoute,
     notificationsRoute,
     connectionsRoute,
+    installRoute,
     fallbackRoute,
 ]);
 
