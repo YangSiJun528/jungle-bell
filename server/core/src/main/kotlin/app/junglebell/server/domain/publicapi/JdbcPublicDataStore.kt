@@ -231,6 +231,29 @@ class JdbcPublicDataStore(
         }.list()
     }
 
+    override fun laundryRisks(from: Instant, through: Instant): Map<LaundryRiskKey, LaundryRisk> = jdbc.sql(
+        """
+        WITH operation_sessions AS (
+            SELECT machine_id, appliance, session_id,
+                   BOOL_OR(type = 'ERROR_ENTERED') AS errored
+            FROM laundry_event
+            WHERE observed_at >= :from AND observed_at <= :through
+              AND session_id IS NOT NULL
+            GROUP BY machine_id, appliance, session_id
+            HAVING BOOL_OR(type = 'STARTED')
+        )
+        SELECT machine_id, appliance, COUNT(*) AS attempts,
+               COUNT(*) FILTER (WHERE errored) AS errors
+        FROM operation_sessions
+        GROUP BY machine_id, appliance
+        """.trimIndent(),
+    ).param("from", Timestamp.from(from)).param("through", Timestamp.from(through))
+        .query { row, _ ->
+            val key = LaundryRiskKey(row.getString("machine_id"), row.getString("appliance"))
+            val risk = LaundryRisk.calculate(row.getInt("attempts"), row.getInt("errors"))
+            key to risk
+        }.list().toMap()
+
     private fun upsertMealPost(post: MealPost, observedAt: Instant) {
         jdbc.sql(
             """

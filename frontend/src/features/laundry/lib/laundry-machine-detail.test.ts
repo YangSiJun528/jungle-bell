@@ -30,6 +30,8 @@ describe('laundryApplianceDetail', () => {
             errorCode: null,
             helpText: null,
             estimated: false,
+            riskLevel: undefined,
+            riskNotice: null,
         });
     });
 
@@ -51,6 +53,8 @@ describe('laundryApplianceDetail', () => {
             progress: 50,
             helpText: null,
             estimated: true,
+            riskLevel: undefined,
+            riskNotice: null,
         });
     });
 

@@ -16,11 +16,19 @@ const machines: DashboardLaundryMachine[] = [{
         startedAt: '2026-08-11T02:30:00.000Z',
         estimatedFinishAt: '2026-08-11T03:30:00.000Z',
         projection: {status: 'ESTIMATED_RUNNING', remainingMinutes: 35, estimated: true},
+        attempts: 6,
+        errors: 1,
+        rate: 16.7,
+        riskLevel: 'slight',
     },
     dryer: {
         appliance: 'dryer',
         operationalStatus: 'IDLE',
         projection: {status: 'IDLE', remainingMinutes: 0},
+        attempts: 10,
+        errors: 1,
+        rate: 10,
+        riskLevel: 'safe',
     },
 }, {
     id: '워시타워_1',
@@ -31,6 +39,10 @@ const machines: DashboardLaundryMachine[] = [{
         operationalStatus: 'ERROR',
         errorCode: 'EMPTY_WATER_ALERT_ERROR',
         projection: {status: 'ERROR'},
+        attempts: 5,
+        errors: 3,
+        rate: 60,
+        riskLevel: 'caution',
     },
 }];
 
@@ -70,6 +82,26 @@ describe('LaundryMachineList', () => {
         expect(markup).toContain('aria-valuetext="오류로 진행률을 확인할 수 없음"');
         expect(markup).toContain('11:30 시작');
         expect(markup).toContain('12:30 종료');
+    });
+
+    it('shows recent warnings only for slight and caution appliances', () => {
+        const visible = renderToStaticMarkup(
+            <LaundryMachineList machines={machines} nowMs={NOW_MS} showRiskWarnings/>,
+        );
+        const hidden = renderToStaticMarkup(
+            <LaundryMachineList machines={machines} nowMs={NOW_MS} showRiskWarnings={false}/>,
+        );
+
+        expect(visible.match(/data-laundry-risk-notice="true"/gu)).toHaveLength(2);
+        expect(visible).toContain('최근 7일 · 약간 주의');
+        expect(visible).toContain('6번 중 에러 1번 · 에러율 16.7%');
+        expect(visible).toContain('오류가 반복되면 다른 기기를 이용하세요.');
+        expect(visible).toContain('최근 7일 · 주의');
+        expect(visible).toContain('오류 가능성이 높아 다른 기기 이용을 권장합니다.');
+        expect(visible).not.toContain('최근 7일 · 안전');
+        expect(hidden).not.toContain('data-laundry-risk-notice="true"');
+        expect(hidden).toContain('배관 에러');
+        expect(hidden).toContain('헹굼 중');
     });
 
     it('완료 확인 상태에만 보정값 안내를 열 수 있는 버튼을 표시한다', () => {
@@ -121,5 +153,19 @@ describe('LaundryMachineList', () => {
         expect(markup).toContain('data-kind="dryer"');
         expect(markup).toContain('data-kind="washer"');
         expect(markup).not.toContain('min-w-[');
+    });
+
+    it('nine wash tower cards share equal outer rows and two internal appliance rows', () => {
+        const nineMachines = Array.from({length: 9}, (_, index) => ({
+            id: `워시타워_${index + 1}`,
+            zone: index < 5 ? 'men' as const : index < 7 ? 'common' as const : 'women' as const,
+            washer: null,
+            dryer: null,
+        }));
+        const markup = renderToStaticMarkup(<LaundryMachineList machines={nineMachines}/>);
+
+        expect(markup.match(/data-laundry-machine-card="true"/gu)).toHaveLength(9);
+        expect(markup).toContain('auto-rows-fr');
+        expect(markup.match(/grid flex-1 grid-rows-2/gu)).toHaveLength(9);
     });
 });

@@ -21,6 +21,7 @@ export function createTauriPlatformAdapter(options: {
         capabilities: {
             desktopAccount: true,
             desktopSettings: true,
+            laundryRiskIndicator: true,
             localNotifications: true,
             lmsWindow: true,
             mobilePairingManagement: true,

@@ -3,6 +3,7 @@ export type PlatformKind = 'browser' | 'desktop';
 export interface PlatformCapabilities {
     desktopAccount: boolean;
     desktopSettings: boolean;
+    laundryRiskIndicator: boolean;
     localNotifications: boolean;
     lmsWindow: boolean;
     mobilePairingManagement: boolean;

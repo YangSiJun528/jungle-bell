@@ -211,6 +211,53 @@ test('서버 capacity가 내부 불변식을 어기면 응답 전체를 거부�
     }
 });
 
+test('세탁 기기 최근 7일 위험 지표를 검증해 보존한다', async () => {
+    const appliance = {
+        appliance: 'washer',
+        operationalStatus: 'IDLE',
+        projection: {status: 'IDLE', remainingMinutes: 0},
+        state: null,
+        remainingMinutes: 0,
+        startedAt: null,
+        estimatedFinishAt: null,
+        sessionId: null,
+        errorCode: null,
+        attempts: 6,
+        errors: 1,
+        rate: 100 / 6,
+        riskLevel: 'slight',
+    };
+    const response = (value: unknown) => ({
+        schemaVersion: 1,
+        asOf: '2026-08-03T09:00:00.000Z',
+        final: false,
+        quality: {
+            collection: 'SUCCESS',
+            sourceFreshness: 'REFRESH_OBSERVED',
+            lastCheckedAt: '2026-08-03T09:00:00.000Z',
+            expectedRefreshIntervalSeconds: 300,
+        },
+        machines: [{id: '워시타워_1', washer: value, dryer: null}],
+    });
+    const valid = createDashboardApi({
+        fetcher: async () => jsonResponse(response(appliance)),
+    });
+
+    assert.deepEqual((await valid.getPublicLaundry()).machines[0]?.washer, appliance);
+
+    for (const invalidRisk of [
+        {...appliance, errors: 7},
+        {...appliance, rate: 16.6},
+        {...appliance, riskLevel: 'safe'},
+        {...appliance, attempts: -1},
+    ]) {
+        const invalid = createDashboardApi({
+            fetcher: async () => jsonResponse(response(invalidRisk)),
+        });
+        await assert.rejects(invalid.getPublicLaundry(), /API_RESPONSE_INVALID/u);
+    }
+});
+
 test('급식 원문 링크는 Kakao HTTPS allowlist만 화면 모델에 남긴다', async () => {
     const api = createDashboardApi({
         fetcher: async () => jsonResponse({

@@ -34,4 +34,14 @@ describe('LaundryPage capacity summary', () => {
         expect(source).toContain('<CardContent className="px-4 pb-3 pt-0 sm:px-6">');
         expect(source).toContain('[.border-b]:pb-3');
     });
+
+    it('platform capability gates one switch that controls both risk presentations', () => {
+        expect(source).toContain('platform.capabilities.laundryRiskIndicator');
+        expect(source).toContain('최근 7일 에러 위험 표시');
+        expect(source).toContain('onCheckedChange={setShowRisk}');
+        expect(source).toContain('showRiskIndicators={showRisk}');
+        expect(source).toContain('showRiskWarnings={showRisk}');
+        expect(source).not.toContain('전체 에러율');
+        expect(source).not.toContain('에러 위험 요약');
+    });
 });

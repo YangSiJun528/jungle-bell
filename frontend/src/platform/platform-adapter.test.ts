@@ -48,6 +48,7 @@ describe('PlatformAdapter', () => {
             desktopAccount: false,
             desktopSettings: false,
             localNotifications: false,
+            laundryRiskIndicator: false,
             lmsWindow: false,
             mobilePairingManagement: false,
             pwaInstall: true,
@@ -63,6 +64,7 @@ describe('PlatformAdapter', () => {
 
         expect(platform.accountAuthentication.kind).toBe('cookie');
         expect(platform.capabilities.webPush).toBe(true);
+        expect(platform.capabilities.laundryRiskIndicator).toBe(true);
     });
 
     it('Tauri에서는 같은 SPA에 네이티브 기능과 메모리 단기 세션을 주입한다', () => {
@@ -79,6 +81,7 @@ describe('PlatformAdapter', () => {
             desktopAccount: true,
             desktopSettings: true,
             localNotifications: true,
+            laundryRiskIndicator: true,
             lmsWindow: true,
             mobilePairingManagement: true,
             pwaInstall: false,

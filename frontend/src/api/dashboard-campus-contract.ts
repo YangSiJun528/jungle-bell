@@ -25,6 +25,12 @@ const laundryStateSchema = z.object({
     labelKo: z.string().optional(),
 });
 
+function riskLevel(rate: number): 'safe' | 'slight' | 'caution' {
+    if (rate > 40) return 'caution';
+    if (rate > 10) return 'slight';
+    return 'safe';
+}
+
 export const dashboardLaundryApplianceSchema = z.object({
     appliance: z.enum(['washer', 'dryer']),
     operationalStatus: textSchema(64),
@@ -37,6 +43,22 @@ export const dashboardLaundryApplianceSchema = z.object({
     observedAt: isoDateTimeSchema.optional(),
     sessionId: textSchema(512).nullable(),
     errorCode: textSchema(128).nullable(),
+    attempts: z.number().int().min(0).max(100_000).default(0),
+    errors: z.number().int().min(0).max(100_000).default(0),
+    rate: z.number().finite().min(0).max(100).default(0),
+    riskLevel: z.enum(['safe', 'slight', 'caution']).default('safe'),
+}).superRefine((value, context) => {
+    const expectedRate = value.attempts === 0
+        ? 0
+        : value.errors * 100 / value.attempts;
+    if (value.errors > value.attempts
+        || Math.abs(value.rate - expectedRate) > Number.EPSILON * 100
+        || value.riskLevel !== riskLevel(value.rate)) {
+        context.addIssue({
+            code: 'custom',
+            message: '최근 7일 세탁 에러 위험 지표가 올바르지 않습니다.',
+        });
+    }
 });
 
 export type DashboardLaundryAppliance = z.infer<typeof dashboardLaundryApplianceSchema>;

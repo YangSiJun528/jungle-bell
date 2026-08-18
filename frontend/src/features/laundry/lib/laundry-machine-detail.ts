@@ -15,6 +15,10 @@ import {
     laundryZonePresentation,
     type LaundryZone,
 } from '@/components/dashboard/laundry-zone-presentation';
+import {
+    laundryRiskNotice,
+    type LaundryRiskNotice,
+} from './laundry-risk';
 
 export type LaundryApplianceTone =
     | 'active'
@@ -37,6 +41,8 @@ export interface LaundryApplianceDetailView {
     errorCode: string | null;
     helpText: string | null;
     estimated: boolean;
+    riskLevel: LaundryStatusAppliance['riskLevel'];
+    riskNotice: LaundryRiskNotice | null;
 }
 
 export interface LaundryMachineDetailView {
@@ -181,6 +187,14 @@ export function laundryApplianceDetail(
         || status.tone === 'confirming'
         || status.tone === 'warning';
     const estimated = appliance?.projection?.estimated === true && showSessionTiming;
+    const riskNotice = appliance?.riskLevel
+        ? laundryRiskNotice({
+            attempts: appliance.attempts ?? 0,
+            errors: appliance.errors ?? 0,
+            rate: appliance.rate ?? 0,
+            riskLevel: appliance.riskLevel,
+        })
+        : null;
 
     return {
         kind,
@@ -195,6 +209,8 @@ export function laundryApplianceDetail(
         errorCode: normalizedErrorCode(appliance),
         helpText: status.helpText,
         estimated,
+        riskLevel: appliance?.riskLevel,
+        riskNotice,
     };
 }
 

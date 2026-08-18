@@ -115,6 +115,42 @@ class JdbcPublicDataStoreIntegrationTest {
         assertEquals(targetSha, weekly.contentSha)
     }
 
+    @Test
+    fun `laundry risk counts repeated error events once per operation session`() {
+        val machineId = "risk-${UUID.randomUUID()}"
+        val from = Instant.parse("2099-03-01T00:00:00Z")
+        val through = Instant.parse("2099-03-08T00:00:00Z")
+        val sessionOne = "session-one-${UUID.randomUUID()}"
+        val sessionTwo = "session-two-${UUID.randomUUID()}"
+
+        insertLaundryEvent(machineId, sessionOne, "STARTED", "2099-03-02T00:00:00Z")
+        insertLaundryEvent(machineId, sessionOne, "ERROR_ENTERED", "2099-03-02T00:10:00Z")
+        insertLaundryEvent(machineId, sessionOne, "ERROR_ENTERED", "2099-03-02T00:11:00Z")
+        insertLaundryEvent(machineId, sessionTwo, "STARTED", "2099-03-03T00:00:00Z")
+        insertLaundryEvent(machineId, "outside-window", "STARTED", "2099-02-28T23:59:59Z")
+
+        val risk = assertNotNull(store.laundryRisks(from, through)[LaundryRiskKey(machineId, "washer")])
+
+        assertEquals(2, risk.attempts)
+        assertEquals(1, risk.errors)
+        assertEquals(50.0, risk.rate)
+        assertEquals("caution", risk.riskLevel)
+    }
+
+    private fun insertLaundryEvent(machineId: String, sessionId: String, type: String, observedAt: String) {
+        jdbc.sql(
+            """
+            INSERT INTO laundry_event(
+                id, machine_id, appliance, session_id, type, observed_at,
+                current_state, detail
+            ) VALUES (:id, :machineId, 'washer', :sessionId, :type, :observedAt,
+                'RUNNING', '{}'::jsonb)
+            """.trimIndent(),
+        ).param("id", UUID.randomUUID()).param("machineId", machineId)
+            .param("sessionId", sessionId).param("type", type)
+            .param("observedAt", java.sql.Timestamp.from(Instant.parse(observedAt))).update()
+    }
+
     private companion object {
         @Container
         @JvmStatic
