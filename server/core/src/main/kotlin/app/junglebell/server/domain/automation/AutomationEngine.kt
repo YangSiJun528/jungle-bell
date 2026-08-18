@@ -45,13 +45,14 @@ class AutomationEngine(
 
     internal fun planAttendance(now: Long): Int {
         var created = 0
+        val desktopStates = automation.desktopStatesByUser()
         for (candidate in automation.attendancePreferences()) {
             for (phase in listOf("morning", "evening")) {
                 val window = attendanceWindow(candidate, phase, now) ?: continue
                 if (candidate.skipAttendanceDate == window.attendanceDate.toString()) continue
                 if (candidate.skipSunday && window.attendanceDate.dayOfWeek == DayOfWeek.SUNDAY) continue
                 if (attendanceAlreadyHandled(candidate, phase, window, now)) continue
-                val reason = attendanceFallbackReason(candidate.userId, now)
+                val reason = attendanceFallbackReason(desktopStates[candidate.userId].orEmpty(), now)
                 val record = attendanceNotification(candidate.userId, phase, window, reason, now)
                 if (notifications.create(record)) created += 1
             }
@@ -62,6 +63,7 @@ class AutomationEngine(
     internal fun publishMeals(now: Long): Int {
         val cutoff = Instant.ofEpochMilli(now).minus(Duration.ofHours(12))
         var created = 0
+        val subscribers = mutableMapOf<String, List<UUID>>()
         for (post in automation.recentMealPublications(cutoff)) {
             val period = mealPeriod(post.title) ?: continue
             val serviceDate = mealServiceDate(post)
@@ -69,7 +71,7 @@ class AutomationEngine(
                 if (it.length <= 160) it else "${it.take(157)}..."
             }.ifBlank { "메뉴 내용을 확인해 주세요." }
             val label = if (period == "lunch") "중식" else "석식"
-            for (userId in automation.mealSubscriberUserIds(period)) {
+            for (userId in subscribers.getOrPut(period) { automation.mealSubscriberUserIds(period) }) {
                 val id = UUID.randomUUID()
                 val record = NotificationRecord(
                     id = id,
@@ -158,8 +160,7 @@ class AutomationEngine(
         return fresh && candidate.cohortStatus in setOf("upcoming", "ended", "none")
     }
 
-    private fun attendanceFallbackReason(userId: UUID, now: Long): String? {
-        val devices = automation.desktopStates(userId)
+    private fun attendanceFallbackReason(devices: List<DesktopState>, now: Long): String? {
         val recent = devices.filter { device ->
             device.lastSeenAtEpochMs?.let { now - it in 0..Duration.ofMinutes(10).toMillis() } == true
         }

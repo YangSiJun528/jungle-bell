@@ -196,6 +196,47 @@ class JdbcStoreIntegrationTest {
         )
     }
 
+    @Test
+    fun `inactive push delivery is settled once without leasing`() {
+        val userId = createUser()
+        val installationId = "desktop-${UUID.randomUUID()}"
+        val sessionId = createDesktop(userId, installationId, randomHash(), 20_000)
+        val subscriptionId = "jbps_${randomHash()}"
+        jdbc.sql(
+            """
+            INSERT INTO push_subscription(
+                id, user_id, session_id, endpoint, p256dh, auth,
+                created_at_epoch_ms, revoked_at_epoch_ms
+            ) VALUES (:id, :userId, :sessionId, 'https://push.example.test', 'p256dh', 'auth', 0, NULL)
+            """.trimIndent(),
+        ).param("id", subscriptionId).param("userId", userId).param("sessionId", sessionId).update()
+        val mapper = JsonMapper.builder().addModule(KotlinModule.Builder().build()).build()
+        val notificationStore = JdbcNotificationStore(jdbc, mapper)
+        val notification = NotificationRecord(
+            UUID.randomUUID(), userId, "event-inactive-push", "test", "title", "body", "/#/home",
+            emptyMap(), 1_000, 1_000, 10_000,
+        )
+        assertTrue(notificationStore.create(notification))
+        jdbc.sql("UPDATE push_subscription SET revoked_at_epoch_ms = 500 WHERE id = :id")
+            .param("id", subscriptionId).update()
+        val automationStore = JdbcAutomationStore(jdbc)
+
+        assertTrue(automationStore.claimPushDeliveries(1_000, "lease-inactive-1", 10).isEmpty())
+        assertTrue(automationStore.claimPushDeliveries(2_000, "lease-inactive-2", 10).isEmpty())
+        assertEquals(
+            "gone",
+            jdbc.sql(
+                "SELECT status FROM notification_delivery WHERE notification_id = :id AND target_id = :targetId",
+            ).param("id", notification.id).param("targetId", subscriptionId).query(String::class.java).single(),
+        )
+        assertEquals(
+            0,
+            jdbc.sql(
+                "SELECT attempts FROM notification_delivery WHERE notification_id = :id AND target_id = :targetId",
+            ).param("id", notification.id).param("targetId", subscriptionId).query(Int::class.java).single(),
+        )
+    }
+
     private fun createUser(): UUID = UUID.randomUUID().also { userId ->
         jdbc.sql("INSERT INTO app_user(id, created_at_epoch_ms) VALUES (:id, 0)")
             .param("id", userId).update()
