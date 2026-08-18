@@ -11,7 +11,7 @@
 | 공통 SPA 공개 기능 | 없음 | `/api/public/*`, `/api/health`, 정적 자산 |
 | Tauri background | `Authorization: Bearer jbd_…` | `/api/desktop/*` |
 | Tauri SPA | `Authorization: Bearer jbui_…`와 발급 시 등록한 exact `Origin` | `/api/me/*` |
-| 브라우저 SPA | `__Host-jb_device` Strict HttpOnly cookie | `/api/me/*` |
+| 설치형 PWA | `__Host-jb_device` Strict HttpOnly cookie | `/api/me/*` |
 
 PC 장기 credential은 90일 절대 만료이며 인증된 rotate만 허용합니다. WebView token은
 7분 절대 만료, 메모리 전용, 부모 PC session당 하나입니다. 부모 session을 rotate,

@@ -3,6 +3,8 @@ import {createPwaCapabilityAdapter} from './adapter';
 
 function browserObjects(options: {
     existingSubscription?: PushSubscription | null;
+    standalone?: boolean;
+    iosStandalone?: boolean;
 } = {}) {
     const subscription = {
         toJSON: vi.fn(() => ({endpoint: 'https://push.example/subscription'})),
@@ -18,15 +20,39 @@ function browserObjects(options: {
     };
     const windowObject = Object.assign(new EventTarget(), {
         PushManager: class {},
+        matchMedia: vi.fn(() => ({matches: options.standalone ?? false})),
     }) as unknown as Window;
     const navigatorObject = {
         userAgent: 'Mozilla/5.0 (Linux; Android 16)',
         serviceWorker,
+        standalone: options.iosStandalone ?? false,
     } as unknown as Navigator;
     return {navigatorObject, pushManager, register, subscription, windowObject};
 }
 
 describe('PwaCapabilityAdapter', () => {
+    it('일반 탭과 설치형 standalone 실행을 구분한다', () => {
+        const browser = browserObjects();
+        const standalone = browserObjects({standalone: true});
+        const iosStandalone = browserObjects({iosStandalone: true});
+
+        expect(createPwaCapabilityAdapter({
+            production: true,
+            windowObject: browser.windowObject,
+            navigatorObject: browser.navigatorObject,
+        }).installed).toBe(false);
+        expect(createPwaCapabilityAdapter({
+            production: true,
+            windowObject: standalone.windowObject,
+            navigatorObject: standalone.navigatorObject,
+        }).installed).toBe(true);
+        expect(createPwaCapabilityAdapter({
+            production: true,
+            windowObject: iosStandalone.windowObject,
+            navigatorObject: iosStandalone.navigatorObject,
+        }).installed).toBe(true);
+    });
+
     it('production web에서 load 이후에만 서비스 워커를 등록한다', async () => {
         const browser = browserObjects();
         const adapter = createPwaCapabilityAdapter({

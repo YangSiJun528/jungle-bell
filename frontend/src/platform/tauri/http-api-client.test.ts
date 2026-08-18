@@ -180,6 +180,20 @@ describe('HTTP API boundaries', () => {
         expect(new Headers(desktopInit.headers).has('cookie')).toBe(false);
     });
 
+    test('일반 웹은 개인 API를 네트워크 호출 전에 차단한다', async () => {
+        const fetcher = vi.fn(async () => json());
+        const client = createHttpApiClient({
+            fetcher,
+            publicBase: '',
+            platformBase: '',
+            accountAuthentication: {kind: 'none'},
+        });
+
+        await expect(client.accountResponse('/api/me/session'))
+            .rejects.toThrow('ACCOUNT_AUTHENTICATION_UNAVAILABLE');
+        expect(fetcher).not.toHaveBeenCalled();
+    });
+
     test('buffers a desktop response while preserving metadata and a fresh readable body', async () => {
         const upstream = new Response('{"accepted":true}', {
             status: 202,

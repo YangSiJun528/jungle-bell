@@ -1,5 +1,5 @@
 import type {BrowserAccountSession, DesktopConnectionState} from '@/api/dashboard-api';
-import type {PlatformKind} from '@/platform/contracts';
+import type {AccountAuthentication, PlatformKind} from '@/platform/contracts';
 
 export type ServerSessionStatus =
     | 'not-applicable'
@@ -22,7 +22,12 @@ export interface DashboardAccountStatus {
     lmsAuthentication: LmsAuthenticationStatus;
 }
 
-export type PersonalAccessStatus = 'checking' | 'connected' | 'unconnected' | 'error';
+export type PersonalAccessStatus =
+    | 'not-applicable'
+    | 'checking'
+    | 'connected'
+    | 'unconnected'
+    | 'error';
 
 export interface PersonalAccessState {
     status: PersonalAccessStatus;
@@ -75,11 +80,12 @@ export function dashboardAccountStatus(
 }
 
 export function personalAccessState(
-    platform: PlatformKind,
+    authentication: AccountAuthentication['kind'],
     desktop: DashboardAccountStatus,
     browser: BrowserSessionQueryState,
 ): PersonalAccessState {
-    if (platform === 'browser') {
+    if (authentication === 'none') return {status: 'not-applicable'};
+    if (authentication === 'cookie') {
         if (browser.isError) return {status: 'error'};
         if (browser.isPending && browser.data === undefined) return {status: 'checking'};
         return {status: browser.data ? 'connected' : 'unconnected'};

@@ -52,6 +52,12 @@ describe('mobile pairing flow', () => {
             hasRestoredPairing: true,
             hasQrLink: true,
         })).toBe('wait');
+        expect(automaticPairingAction({
+            account: 'not-applicable',
+            alreadyHandled: false,
+            hasRestoredPairing: true,
+            hasQrLink: true,
+        })).toBe('wait');
     });
 
     test('미연결 상태에서만 pending 복원을 QR보다 우선하고, 연결되면 pending을 제거한다', () => {

@@ -64,7 +64,11 @@ export function createHttpApiClient(options: {
 
     const fetchAccount = (path: AccountApiPath, init: RequestInit = {}): Promise<Response> => {
         assertApiPath(path, ['/api/me/']);
-        if (options.accountAuthentication.kind === 'cookie') {
+        const authentication = options.accountAuthentication;
+        if (authentication.kind === 'none') {
+            return Promise.reject(new Error('ACCOUNT_AUTHENTICATION_UNAVAILABLE'));
+        }
+        if (authentication.kind === 'cookie') {
             return options.fetcher(
                 apiUrl(options.platformBase, path),
                 unauthenticatedRequestInit(init, 'include', true),

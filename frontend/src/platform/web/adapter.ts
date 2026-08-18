@@ -20,14 +20,15 @@ const BASE_CAPABILITIES: PlatformCapabilities = {
 
 export function createWebPlatformAdapter(pwa: PwaCapabilityAdapter): PlatformAdapter {
     const native = unsupportedNativeBridge();
+    const installedPwa = pwa.available && pwa.installed;
     return {
         kind: 'browser',
         capabilities: {
             ...BASE_CAPABILITIES,
             pwaInstall: pwa.available,
-            webPush: pwa.available,
+            webPush: installedPwa,
         },
-        accountAuthentication: {kind: 'cookie'},
+        accountAuthentication: installedPwa ? {kind: 'cookie'} : {kind: 'none'},
         native,
         desktopSettings: unsupportedDesktopSettings(),
         events: unavailableEventAdapter(),

@@ -316,7 +316,9 @@ class JdbcPublicDataStore(
             Triple(row.getString(1), row.getString(2), row.getString(3))
         }.list()
         val posts = mealPosts(limit = 500).associateBy { it.id }
-        return menus.mapNotNull { (weekKey, sha, postId) -> posts[postId]?.let { WeeklyMealMenu(weekKey, sha, it) } }
+        return menus.mapNotNull { (weekKey, sha, postId) ->
+            matchingWeeklyMenu(weekKey, sha, posts[postId])
+        }
     }
 
     override fun asset(sha: String): StoredAsset? = jdbc.sql(
@@ -366,6 +368,9 @@ class JdbcPublicDataStore(
         row.getString("last_error"),
     )
 }
+
+internal fun matchingWeeklyMenu(weekKey: String, contentSha: String, post: MealPost?): WeeklyMealMenu? =
+    post?.takeIf { it.contentSha == contentSha }?.let { WeeklyMealMenu(weekKey, contentSha, it) }
 
 private data class MealRow(
     val id: String,

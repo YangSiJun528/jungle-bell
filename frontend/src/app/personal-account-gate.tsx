@@ -16,6 +16,17 @@ export function PersonalAccountGate({children}: PropsWithChildren) {
     const login = useMutation({mutationFn: () => api.openLmsLogin()});
 
     if (!platform.capabilities.desktopAccount) {
+        if (account.personalAccess.status === 'not-applicable') {
+            return (
+                <Alert>
+                    <Smartphone aria-hidden="true"/>
+                    <AlertTitle>앱에서 사용할 수 있습니다.</AlertTitle>
+                    <AlertDescription>
+                        개인 기능은 PC 앱 또는 홈 화면에 설치한 PWA에서 제공됩니다.
+                    </AlertDescription>
+                </Alert>
+            );
+        }
         if (account.personalAccess.status === 'checking') {
             return <LoadingState label="PC 연결 상태를 확인하고 있습니다."/>;
         }

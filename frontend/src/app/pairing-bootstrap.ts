@@ -1,4 +1,4 @@
-import type {PlatformKind} from '@/platform/contracts';
+import type {AccountAuthentication} from '@/platform/contracts';
 import {mobilePairingLinkFromHash, type MobilePairingLink} from '@/domain/connections/pairing-link';
 
 export type InitialPairingEntry =
@@ -7,7 +7,7 @@ export type InitialPairingEntry =
 
 interface InitialPairingInput {
     hash: string;
-    platform: PlatformKind;
+    authentication: AccountAuthentication['kind'];
     pathname: string;
     search: string;
     historyState: unknown;
@@ -24,17 +24,20 @@ export function parseAndScrubInitialPairing(input: InitialPairingInput): Initial
     const link = mobilePairingLinkFromHash(input.hash);
     if (!link) return null;
 
-    const nextHash = input.platform === 'browser' ? '#/connections' : '#/home';
+    const companion = input.authentication === 'cookie';
+    const nextHash = companion ? '#/connections' : '#/home';
     input.replaceState(input.historyState, '', `${input.pathname}${input.search}${nextHash}`);
 
-    if (input.platform === 'browser') return {kind: 'companion', link};
+    if (companion) return {kind: 'companion', link};
     return null;
 }
 
-export function captureInitialPairingFromWindow(platform: PlatformKind): void {
+export function captureInitialPairingFromWindow(
+    authentication: AccountAuthentication['kind'],
+): void {
     initialPairingEntry = parseAndScrubInitialPairing({
         hash: window.location.hash,
-        platform,
+        authentication,
         pathname: window.location.pathname,
         search: window.location.search,
         historyState: window.history.state,
