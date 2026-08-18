@@ -23,7 +23,11 @@ class HttpCacheConfigurationTest {
     fun setUp() {
         context = AnnotationConfigWebApplicationContext().apply {
             servletContext = MockServletContext()
-            register(TestWebConfiguration::class.java, HttpCacheConfiguration::class.java)
+            register(
+                TestWebConfiguration::class.java,
+                HttpCacheConfiguration::class.java,
+                WebManifestController::class.java,
+            )
             refresh()
         }
         mockMvc = MockMvcBuilders.webAppContextSetup(context).build()
@@ -70,6 +74,7 @@ class HttpCacheConfigurationTest {
     fun `web manifest is cached for one hour`() {
         mockMvc.perform(get("/manifest.webmanifest"))
             .andExpect(status().isOk)
+            .andExpect(header().string(HttpHeaders.CONTENT_TYPE, containsString("application/manifest+json")))
             .andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("max-age=3600")))
             .andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("public")))
     }
