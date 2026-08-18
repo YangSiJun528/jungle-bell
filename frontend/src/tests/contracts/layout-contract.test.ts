@@ -61,6 +61,8 @@ test('공통 푸터는 외부 링크와 모바일 하단 메뉴 여백만 제공
     assert.match(footer, /max-w-6xl/);
     assert.doesNotMatch(footer, /Jungle Bell은 정글 캠퍼스/);
     assert.match(footer, /github\.com\/YangSiJun528\/jungle-bell/);
+    assert.match(footer, /\/issues\/new\/choose/);
+    assert.doesNotMatch(footer, /\/discussions(?:\/|\b)/);
     assert.match(footer, /피드백 남기기/);
     assert.match(footer, /릴리즈/);
     assert.match(footer, /pb-28[\s\S]{0,160}md:pb-8/);

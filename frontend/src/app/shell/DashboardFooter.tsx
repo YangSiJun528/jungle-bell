@@ -1,7 +1,7 @@
 import {ExternalLink} from 'lucide-react';
 
 const PROJECT_URL = 'https://github.com/YangSiJun528/jungle-bell';
-const FEEDBACK_URL = `${PROJECT_URL}/discussions/categories/건의하기`;
+const FEEDBACK_URL = `${PROJECT_URL}/issues/new/choose`;
 const RELEASE_URL = `${PROJECT_URL}/releases/latest`;
 
 function ExternalFooterLink({href, children}: {href: string; children: string}) {
