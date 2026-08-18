@@ -109,7 +109,16 @@ export function JungleCampusSummary() {
         && availableAttendance === null;
 
     let content: React.ReactNode;
-    if (platform.kind === 'browser' && account.personalAccess.status === 'checking') {
+    if (platform.kind === 'browser' && account.personalAccess.status === 'not-applicable') {
+        content = (
+            <div className="text-sm leading-6">
+                <p className="font-medium">출석과 D-Day는 PC 앱 또는 연결된 PWA에서 확인할 수 있습니다.</p>
+                <Button asChild className="mt-2" size="sm" variant="outline">
+                    <Link to="/connections">앱 연결 안내</Link>
+                </Button>
+            </div>
+        );
+    } else if (platform.kind === 'browser' && account.personalAccess.status === 'checking') {
         content = (
             <div className="space-y-2" aria-label="PC 연결 상태 확인 중">
                 <Skeleton className="h-10 w-full"/>

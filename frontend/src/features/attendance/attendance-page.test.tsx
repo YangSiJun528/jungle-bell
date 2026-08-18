@@ -16,4 +16,9 @@ describe('AttendancePage LMS gate', () => {
         expect(source).toContain("import {selectDdayView} from '@/domain/attendance/dday-view'");
         expect(source).toContain('<DdayCard view={dday}/>');
     });
+
+    test('일반 웹에서는 출석 로딩 대신 앱 연결 안내를 표시한다', () => {
+        expect(source).toContain("account.personalAccess.status === 'not-applicable'");
+        expect(source).toContain('출석은 PC 앱 또는 연결된 PWA에서 확인할 수 있습니다.');
+    });
 });
