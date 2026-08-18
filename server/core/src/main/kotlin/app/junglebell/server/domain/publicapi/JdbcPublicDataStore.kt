@@ -201,30 +201,35 @@ class JdbcPublicDataStore(
         }
     }
 
-    override fun laundryEvents(since: Instant?, limit: Int): List<LaundryEvent> = jdbc.sql(
-        """
-        SELECT id, machine_id, appliance, session_id, type, previous_observed_at,
-               observed_at, eta_delta_minutes, previous_state, current_state, detail::text
-        FROM laundry_event
-        WHERE (:since IS NULL OR observed_at > :since)
-        ORDER BY observed_at ASC, id ASC LIMIT :limit
-        """.trimIndent(),
-    ).param("since", since?.let(Timestamp::from)).param("limit", limit).query { row, _ ->
-        @Suppress("UNCHECKED_CAST")
-        LaundryEvent(
-            row.getObject("id", UUID::class.java).toString(),
-            row.getString("machine_id"),
-            row.getString("appliance"),
-            row.getString("session_id"),
-            row.getString("type"),
-            row.getTimestamp("previous_observed_at")?.toInstant()?.toString(),
-            row.getTimestamp("observed_at").toInstant().toString(),
-            row.getObject("eta_delta_minutes", Double::class.javaObjectType),
-            row.getString("previous_state"),
-            row.getString("current_state"),
-            objectMapper.readValue(row.getString("detail"), Map::class.java) as Map<String, Any?>,
-        )
-    }.list()
+    override fun laundryEvents(since: Instant?, limit: Int): List<LaundryEvent> {
+        val where = if (since == null) "" else "WHERE observed_at > :since"
+        var spec = jdbc.sql(
+            """
+            SELECT id, machine_id, appliance, session_id, type, previous_observed_at,
+                   observed_at, eta_delta_minutes, previous_state, current_state, detail::text
+            FROM laundry_event
+            $where
+            ORDER BY observed_at ASC, id ASC LIMIT :limit
+            """.trimIndent(),
+        ).param("limit", limit)
+        if (since != null) spec = spec.param("since", Timestamp.from(since))
+        return spec.query { row, _ ->
+            @Suppress("UNCHECKED_CAST")
+            LaundryEvent(
+                row.getObject("id", UUID::class.java).toString(),
+                row.getString("machine_id"),
+                row.getString("appliance"),
+                row.getString("session_id"),
+                row.getString("type"),
+                row.getTimestamp("previous_observed_at")?.toInstant()?.toString(),
+                row.getTimestamp("observed_at").toInstant().toString(),
+                row.getObject("eta_delta_minutes", Double::class.javaObjectType),
+                row.getString("previous_state"),
+                row.getString("current_state"),
+                objectMapper.readValue(row.getString("detail"), Map::class.java) as Map<String, Any?>,
+            )
+        }.list()
+    }
 
     private fun upsertMealPost(post: MealPost, observedAt: Instant) {
         jdbc.sql(
@@ -258,25 +263,35 @@ class JdbcPublicDataStore(
         images.forEachIndexed { index, image ->
             jdbc.sql(
                 """
+                INSERT INTO meal_asset(sha, content_type, extension, byte_length, content)
+                VALUES (:sha, :contentType, :extension, :byteLength, :content)
+                ON CONFLICT (sha) DO NOTHING
+                """.trimIndent(),
+            ).param("sha", image.sha).param("contentType", image.contentType).param("extension", image.extension)
+                .param("byteLength", image.content.size.toLong()).param("content", image.content).update()
+            jdbc.sql(
+                """
                 INSERT INTO meal_image(
                     post_id, media_id, position, source_url, declared_content_type,
-                    filename, width, height, sha, content_type, extension, byte_length, content
+                    filename, width, height, asset_sha
                 ) VALUES (:postId, :mediaId, :position, :sourceUrl, :declaredContentType,
-                    :filename, :width, :height, :sha, :contentType, :extension, :byteLength, :content)
+                    :filename, :width, :height, :sha)
                 """.trimIndent(),
             ).param("postId", postId).param("mediaId", image.mediaId).param("position", index)
                 .param("sourceUrl", image.sourceUrl).param("declaredContentType", image.declaredContentType)
                 .param("filename", image.filename).param("width", image.width).param("height", image.height)
-                .param("sha", image.sha).param("contentType", image.contentType).param("extension", image.extension)
-                .param("byteLength", image.content.size.toLong()).param("content", image.content).update()
+                .param("sha", image.sha).update()
         }
     }
 
     override fun mealImage(postId: String, mediaId: String): StoredMealImage? = jdbc.sql(
         """
-        SELECT media_id, source_url, declared_content_type, filename, width, height,
-               sha, content_type, extension, content
-        FROM meal_image WHERE post_id = :postId AND media_id = :mediaId
+        SELECT image.media_id, image.source_url, image.declared_content_type,
+               image.filename, image.width, image.height, asset.sha,
+               asset.content_type, asset.extension, asset.content
+        FROM meal_image image
+        JOIN meal_asset asset ON asset.sha = image.asset_sha
+        WHERE image.post_id = :postId AND image.media_id = :mediaId
         """.trimIndent(),
     ).param("postId", postId).param("mediaId", mediaId).query { row, _ ->
         StoredMealImage(
@@ -315,14 +330,14 @@ class JdbcPublicDataStore(
         ).param("limit", limit).query { row, _ ->
             Triple(row.getString(1), row.getString(2), row.getString(3))
         }.list()
-        val posts = mealPosts(limit = 500).associateBy { it.id }
+        val posts = mealPostsByIds(menus.map { it.third }).associateBy { it.id }
         return menus.mapNotNull { (weekKey, sha, postId) ->
             matchingWeeklyMenu(weekKey, sha, posts[postId])
         }
     }
 
     override fun asset(sha: String): StoredAsset? = jdbc.sql(
-        "SELECT content, content_type, extension FROM meal_image WHERE sha = :sha LIMIT 1",
+        "SELECT content, content_type, extension FROM meal_asset WHERE sha = :sha",
     ).param("sha", sha).query { row, _ ->
         StoredAsset(row.getBytes("content"), row.getString("content_type"), row.getString("extension"))
     }.optional().orElse(null)
@@ -330,34 +345,73 @@ class JdbcPublicDataStore(
     private fun mealPostsWhere(where: String, params: Map<String, Any>, limit: Int): List<MealPost> {
         var spec = jdbc.sql(
             """
-            SELECT post.*, image.media_id, image.source_url, image.declared_content_type,
-                   image.filename, image.width, image.height, image.sha, image.content_type,
-                   image.extension, image.byte_length
+            SELECT post.*
             FROM meal_post post
-            LEFT JOIN meal_image image ON image.post_id = post.id
             WHERE $where
-            ORDER BY post.published_at DESC NULLS LAST, post.id, image.position
-            LIMIT :rowLimit
+            ORDER BY post.published_at DESC NULLS LAST, post.id
+            LIMIT :postLimit
             """.trimIndent(),
-        ).param("rowLimit", limit * 10)
+        ).param("postLimit", limit)
         params.forEach { (name, value) -> spec = spec.param(name, value) }
-        val rows = spec.query { row, _ ->
-            MealRow(
-                row.getString("id"), row.getString("kind"), row.getString("content_sha"),
-                row.getString("title"), row.getString("body"), row.getBoolean("pinned"),
-                row.getTimestamp("published_at")?.toInstant()?.toString(),
-                row.getTimestamp("updated_at")?.toInstant()?.toString(), row.getString("permalink"),
-                row.getString("status"), row.getTimestamp("first_seen_at").toInstant().toString(),
-                row.getTimestamp("last_seen_at").toInstant().toString(), row.getString("media_id"),
-                row.getString("source_url"), row.getString("declared_content_type"), row.getString("filename"),
-                row.getObject("width", Int::class.javaObjectType),
-                row.getObject("height", Int::class.javaObjectType), row.getString("sha"),
-                row.getString("content_type"), row.getString("extension"),
-                row.getObject("byte_length", Long::class.javaObjectType),
-            )
-        }.list()
-        return rows.groupBy { it.id }.values.take(limit).map { group -> group.first().toPost(group) }
+        return attachMealImages(spec.query(::mealPostRow).list())
     }
+
+    private fun mealPostsByIds(postIds: Collection<String>): List<MealPost> {
+        if (postIds.isEmpty()) return emptyList()
+        val rows = jdbc.sql(
+            """
+            SELECT post.* FROM meal_post post
+            WHERE post.id IN (:postIds)
+            ORDER BY post.published_at DESC NULLS LAST, post.id
+            """.trimIndent(),
+        ).param("postIds", postIds).query(::mealPostRow).list()
+        return attachMealImages(rows)
+    }
+
+    private fun attachMealImages(posts: List<MealPostRow>): List<MealPost> {
+        if (posts.isEmpty()) return emptyList()
+        val images = jdbc.sql(
+            """
+            SELECT image.post_id, image.media_id, image.source_url,
+                   image.declared_content_type, image.filename, image.width, image.height,
+                   asset.sha, asset.content_type, asset.extension, asset.byte_length
+            FROM meal_image image
+            JOIN meal_asset asset ON asset.sha = image.asset_sha
+            WHERE image.post_id IN (:postIds)
+            ORDER BY image.post_id, image.position
+            """.trimIndent(),
+        ).param("postIds", posts.map { it.id }).query { row, _ ->
+            MealImageRow(
+                postId = row.getString("post_id"),
+                mediaId = row.getString("media_id"),
+                sourceUrl = row.getString("source_url"),
+                declaredContentType = row.getString("declared_content_type"),
+                filename = row.getString("filename"),
+                width = row.getObject("width", Int::class.javaObjectType),
+                height = row.getObject("height", Int::class.javaObjectType),
+                sha = row.getString("sha"),
+                contentType = row.getString("content_type"),
+                extension = row.getString("extension"),
+                byteLength = row.getLong("byte_length"),
+            )
+        }.list().groupBy { it.postId }
+        return posts.map { post -> post.toPost(images[post.id].orEmpty()) }
+    }
+
+    private fun mealPostRow(row: java.sql.ResultSet, index: Int) = MealPostRow(
+        id = row.getString("id"),
+        kind = row.getString("kind"),
+        contentSha = row.getString("content_sha"),
+        title = row.getString("title"),
+        body = row.getString("body"),
+        pinned = row.getBoolean("pinned"),
+        publishedAt = row.getTimestamp("published_at")?.toInstant()?.toString(),
+        updatedAt = row.getTimestamp("updated_at")?.toInstant()?.toString(),
+        permalink = row.getString("permalink"),
+        status = row.getString("status"),
+        firstSeenAt = row.getTimestamp("first_seen_at").toInstant().toString(),
+        lastSeenAt = row.getTimestamp("last_seen_at").toInstant().toString(),
+    )
     private fun sourceStateRow(row: java.sql.ResultSet, index: Int) = SourceState(
         row.getString("source"),
         row.getTimestamp("last_attempt_at").toInstant().toString(),
@@ -372,7 +426,7 @@ class JdbcPublicDataStore(
 internal fun matchingWeeklyMenu(weekKey: String, contentSha: String, post: MealPost?): WeeklyMealMenu? =
     post?.takeIf { it.contentSha == contentSha }?.let { WeeklyMealMenu(weekKey, contentSha, it) }
 
-private data class MealRow(
+private data class MealPostRow(
     val id: String,
     val kind: String,
     val contentSha: String,
@@ -385,36 +439,41 @@ private data class MealRow(
     val status: String?,
     val firstSeenAt: String,
     val lastSeenAt: String,
-    val mediaId: String?,
-    val sourceUrl: String?,
+)
+
+private data class MealImageRow(
+    val postId: String,
+    val mediaId: String,
+    val sourceUrl: String,
     val declaredContentType: String?,
     val filename: String?,
     val width: Int?,
     val height: Int?,
-    val sha: String?,
-    val contentType: String?,
-    val extension: String?,
-    val byteLength: Long?,
-) {
-    fun toPost(rows: List<MealRow>): MealPost = MealPost(
+    val sha: String,
+    val contentType: String,
+    val extension: String,
+    val byteLength: Long,
+)
+
+private fun MealPostRow.toPost(images: List<MealImageRow>): MealPost =
+    MealPost(
         id, kind, contentSha, title, body, pinned, publishedAt, updatedAt, permalink, status,
-        rows.filter { it.mediaId != null }.map { row ->
+        images.map { image ->
             MealImage(
                 id,
-                row.mediaId!!,
-                row.sourceUrl!!,
-                row.declaredContentType,
-                row.filename,
-                row.width,
-                row.height,
-                row.sha!!,
-                "/api/public/assets/${row.sha}.${row.extension}",
-                row.contentType!!,
-                row.extension!!,
-                row.byteLength!!,
+                image.mediaId,
+                image.sourceUrl,
+                image.declaredContentType,
+                image.filename,
+                image.width,
+                image.height,
+                image.sha,
+                "/api/public/assets/${image.sha}.${image.extension}",
+                image.contentType,
+                image.extension,
+                image.byteLength,
             )
         },
         firstSeenAt,
         lastSeenAt,
     )
-}
