@@ -51,19 +51,21 @@ jobs:
       - run: chmod +x server/gradlew
       - run: ./gradlew --no-daemon check :api:bootJar :worker:bootJar
         working-directory: server
-      - name: Validate OCI Compose
+      - name: Validate production Compose
         working-directory: server
-        run: docker compose --env-file deploy/.env.v2-test.example -f deploy/compose.v2-test.yml --profile quick-tunnel config --quiet
-      - name: Build OCI API image
+        env:
+          CLOUDFLARE_TUNNEL_TOKEN: ci-placeholder
+        run: docker compose --env-file deploy/.env.production.example -f deploy/compose.production.yml --profile quick-tunnel config --quiet
+      - name: Build API image
         run: docker build --target api-runtime --file server/Dockerfile .
-      - name: Build OCI Worker image
+      - name: Build Worker image
         run: docker build --target worker-runtime --file server/Dockerfile .
 
   desktop:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
-      JUNGLE_BELL_DATA_API_URL: https://amp-leu-controversy-des.trycloudflare.com
+      JUNGLE_BELL_DATA_API_URL: https://jungle-bell.sijun-yang.com
     steps:
       - uses: actions/checkout@v6
         with:

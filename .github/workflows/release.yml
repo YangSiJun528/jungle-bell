@@ -84,7 +84,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          JUNGLE_BELL_DATA_API_URL: ${{ vars.JUNGLE_BELL_DATA_API_URL }}
+          JUNGLE_BELL_DATA_API_URL: https://jungle-bell.sijun-yang.com
         with:
           releaseId: ${{ needs.get-release-info.outputs.release_id }}
           tagName: ${{ needs.get-release-info.outputs.tag }}

@@ -13,7 +13,7 @@ const {VitePWA} = require('vite-plugin-pwa') as {
 export type FrontendTarget = 'web' | 'desktop';
 
 const host = process.env.TAURI_DEV_HOST;
-export const defaultDevApiOrigin = 'https://amp-leu-controversy-des.trycloudflare.com';
+export const defaultDevApiOrigin = 'https://jungle-bell.sijun-yang.com';
 export const tauriApiOrigins = new Set([defaultDevApiOrigin]);
 
 export function frontendTarget(mode: string): FrontendTarget {

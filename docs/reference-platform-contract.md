@@ -21,7 +21,8 @@ session 또는 bearer와 사용자·기기 소유권 검사로 결정합니다.
 
 서버는 `core`, `api`, `worker`의 세 Gradle 모듈로 나뉩니다. API와 Worker는 별도
 Spring Boot 프로세스로 실행하고 PostgreSQL 접근과 도메인 로직은 Core를 공유합니다.
-세 프로세스는 OCI Docker Compose로 실행합니다.
+세 프로세스는 Jungle Bell 운영 Docker Compose로 실행합니다. 실제 호스트는 특정
+클라우드 사업자에 종속되지 않습니다.
 
 | 항목 | 계약 |
 | --- | --- |
@@ -31,7 +32,8 @@ Spring Boot 프로세스로 실행하고 PostgreSQL 접근과 도메인 로직�
 | 수집·알림 | Worker의 Spring Scheduler, API와 별도 JVM |
 | 급식 이미지 | PostgreSQL `BYTEA`, SHA-256 immutable URL |
 | 정적 자산 | Vite + React 빌드 결과를 API JAR에 포함 |
-| 외부 ingress | 선택적인 Cloudflare Tunnel. 실행·저장 계층이 아님 |
+| 공식 origin | `https://jungle-bell.sijun-yang.com` |
+| 외부 ingress | named Cloudflare Tunnel. 실행·저장 계층이 아님 |
 
 Cloudflare Worker, D1, R2, Wrangler와 별도 TypeScript Jobs는 사용하지 않습니다.
 
@@ -117,7 +119,8 @@ Tauri 사용 통계는 release 빌드에서 사용자가 켠 경우에만 전송
 ## 스키마와 초기화 정책
 
 - 정식 사용자 데이터가 생기기 전에는 PostgreSQL `schema.sql` 하나만 유지합니다.
-- 하위 호환되지 않는 변경은 v2-test volume을 새로 만들고 다시 bootstrap합니다.
+- 하위 호환되지 않는 변경은 운영 사용자가 생기기 전까지 새 volume에서 다시
+  bootstrap합니다.
 - 2026년 8월 13일 cutover에서 공개 세탁·급식 기록만 이전했습니다.
 - 사용자, credential, session, 설정, pairing, 알림은 이전하지 않습니다.
 - 과거 로컬 설정 파일, `/pair`, `/app`, `/v1` alias는 지원하지 않습니다.

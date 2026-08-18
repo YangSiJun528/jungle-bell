@@ -1,25 +1,37 @@
-# Jungle Bell Server 운영 절차
+# Jungle Bell 서버 운영 절차
 
-이 문서는 OCI의 v2-test Spring 서버를 배포하고 확인하는 절차입니다. 런타임은
-PostgreSQL, HTTP API, 백그라운드 Worker와 선택적인 Cloudflare Tunnel로 구성됩니다.
+이 문서는 Jungle Bell 운영 서버를 배포하고 검증하는 방법을 설명합니다. 런타임은
+PostgreSQL, Spring Boot API, 백그라운드 Worker, named Cloudflare Tunnel로 구성됩니다.
+
+OCI 최초 전환과 데이터 이관은
+[`deploy/guide_oci_production_deployment.md`](deploy/guide_oci_production_deployment.md)를
+따릅니다.
+
+공식 서비스 origin은 다음 하나입니다.
+
+```text
+https://jungle-bell.sijun-yang.com
+```
 
 ## 운영 원칙
 
-- API, Worker와 PostgreSQL은 OCI에서 실행합니다.
+- API, Worker, PostgreSQL은 한 Docker Compose 프로젝트로 실행합니다.
+- named Cloudflare Tunnel을 정식 ingress로 사용하고 API port는 호스트 loopback에만
+  노출합니다.
+- React 정적 자산과 REST API는 Spring Boot API가 같은 origin에서 제공합니다.
+- `PUBLIC_BASE_URL`은 정적 자산, 공개 API 자산 URL, pairing QR 등 서버가 만드는 외부
+  URL의 기준입니다.
 - 데이터베이스 스키마 기준은 `core/src/main/resources/schema.sql` 하나입니다.
 - API가 시작할 때 schema를 적용하고 Worker는 schema 초기화를 실행하지 않습니다.
-- 정식 사용자가 없는 현재 단계에서는 migration 파일을 만들지 않습니다. 호환되지
-  않는 스키마 변경은 test 데이터베이스를 삭제하고 다시 생성합니다.
-- 재생성 전에 보존할 데이터는 세탁 기록과 급식 기록뿐입니다.
-- secret 값, 데이터베이스 dump, VAPID private key는 저장소에 넣지 않습니다.
-- 같은 OCI 호스트의 다른 Compose 프로젝트와 컨테이너는 건드리지 않습니다.
+- secret, 데이터베이스 dump, VAPID private key는 저장소에 넣지 않습니다.
+- 같은 호스트의 다른 Compose 프로젝트와 컨테이너는 건드리지 않습니다.
 
 ## 최초 준비
 
-OCI 호스트에 secret 디렉터리를 만듭니다.
+배포 호스트에 secret 디렉터리를 만듭니다.
 
 ```bash
-install -d -m 0700 ~/.config/jungle-bell-spring-v2-test
+install -d -m 0700 ~/.config/jungle-bell
 ```
 
 다음 파일을 생성합니다.
@@ -30,141 +42,149 @@ install -d -m 0700 ~/.config/jungle-bell-spring-v2-test
 - `vapid-private-key`
 
 secret 디렉터리는 `0700`이어야 합니다. 컨테이너의 non-root JVM이 Docker secret을
-읽을 수 있도록 파일은 `0644`로 둘 수 있지만 상위 디렉터리 접근은 차단합니다.
+읽을 수 있도록 OCI 배포 가이드에 따라 파일 그룹을 런타임 GID로 맞추고 `0640`으로
+설정합니다.
+
+운영 환경 파일은 추적되지 않는 `.env.production`으로 만듭니다.
 
 ```bash
-cp deploy/.env.v2-test.example deploy/.env.v2-test
-chmod 600 deploy/.env.v2-test
+cp server/deploy/.env.production.example server/deploy/.env.production
+chmod 600 server/deploy/.env.production
 ```
 
-`.env.v2-test`에서 최소한 다음 값을 설정합니다.
+다음 값을 확인하거나 설정합니다.
 
-- `PUBLIC_BASE_URL`
+- `PUBLIC_BASE_URL=https://jungle-bell.sijun-yang.com`
 - 네 secret 파일의 절대 경로
+- `CLOUDFLARE_TUNNEL_TOKEN`
 - `LAUNDRY_SOURCE_URL`
 - `VAPID_SUBJECT`
 
+`CLOUDFLARE_TUNNEL_TOKEN`, 데이터베이스 비밀번호, pairing secret, VAPID private key는
+저장소 밖에서 관리합니다.
+
+## Cloudflare named Tunnel 구성
+
+Cloudflare Tunnel의 public hostname을 다음과 같이 설정합니다.
+
+| 항목 | 값 |
+| --- | --- |
+| Public hostname | `jungle-bell.sijun-yang.com` |
+| Service type | `HTTP` |
+| Service URL | `api:8080` |
+
+Tunnel token은 `.env.production`의 `CLOUDFLARE_TUNNEL_TOKEN`에만 둡니다. 운영 DNS와
+smoke test는 Quick Tunnel URL을 사용하지 않습니다.
+
 ## 일반 배포
 
-저장소 내용을 OCI 전용 디렉터리에 동기화한 뒤 Compose를 검증합니다.
+저장소 내용을 배포 디렉터리에 동기화한 뒤 Compose 설정을 검증합니다.
 
 ```bash
-cd ~/jungle-bell-spring-v2-test
 docker compose \
-  --env-file server/deploy/.env.v2-test \
-  -f server/deploy/compose.v2-test.yml \
-  --profile quick-tunnel config --quiet
+  --env-file server/deploy/.env.production \
+  -f server/deploy/compose.production.yml \
+  config --quiet
 ```
 
-API와 Worker 이미지를 빌드하고 순서대로 갱신합니다. API readiness가 통과한 뒤
-Worker가 시작되므로 Worker가 초기화 전 schema를 읽지 않습니다.
+API와 Worker 이미지를 순차적으로 빌드한 뒤 전체 운영 stack을 갱신합니다. API
+readiness가 통과한 뒤 Worker와 Tunnel이 시작됩니다.
 
 ```bash
 docker compose \
-  --env-file server/deploy/.env.v2-test \
-  -f server/deploy/compose.v2-test.yml \
-  build api worker
+  --env-file server/deploy/.env.production \
+  -f server/deploy/compose.production.yml \
+  build api
 docker compose \
-  --env-file server/deploy/.env.v2-test \
-  -f server/deploy/compose.v2-test.yml \
-  up -d postgres api worker
+  --env-file server/deploy/.env.production \
+  -f server/deploy/compose.production.yml \
+  build worker
+docker compose \
+  --env-file server/deploy/.env.production \
+  -f server/deploy/compose.production.yml \
+  up -d
 ```
 
-단일 `app` 서비스에서 처음 전환할 때는 기존 API 컨테이너가 port를 점유하지 않도록
-같은 Compose 프로젝트를 한 번 내린 뒤 시작합니다. named PostgreSQL volume은
-`down`만으로 삭제되지 않습니다.
+Compose 프로젝트명과 PostgreSQL volume 이름을 변경하는 최초 전환에서는 기존
+volume이 자동 연결된다고 가정하지 않습니다. 필요한 공개 급식·세탁 기록을 먼저
+`pg_dump`로 백업하고, 새 volume에 restore한 결과를 확인한 뒤 이전 stack을
+중지합니다.
+
+## 임시 Quick Tunnel
+
+named Tunnel 장애를 분리해서 확인할 때만 Quick Tunnel을 일시적으로 실행합니다.
 
 ```bash
 docker compose \
-  --env-file server/deploy/.env.v2-test \
-  -f server/deploy/compose.v2-test.yml \
-  down
-docker compose \
-  --env-file server/deploy/.env.v2-test \
-  -f server/deploy/compose.v2-test.yml \
-  up -d postgres api worker
+  --env-file server/deploy/.env.production \
+  -f server/deploy/compose.production.yml \
+  --profile quick-tunnel up quick-tunnel
 ```
 
-고정 Tunnel token이면 `--profile tunnel`, 임시 URL이면 `--profile quick-tunnel`을
-사용합니다. Quick Tunnel URL은 cloudflared가 재생성되면 바뀝니다.
+출력된 임시 URL은 배포 설정, 데스크톱 빌드, DNS, 운영 문서에 기록하지 않습니다.
+확인이 끝나면 `Ctrl-C`로 종료합니다.
+
+## 데이터 확인
 
 ```bash
-docker compose \
-  --env-file server/deploy/.env.v2-test \
-  -f server/deploy/compose.v2-test.yml \
-  --profile quick-tunnel up -d quick-tunnel
-```
-
-## 이전 기록 확인
-
-2026년 8월 13일 cutover에서는 이전 서버의 급식·세탁 기록만 PostgreSQL로
-옮겼습니다. 일회성 importer는 배포 코드에서 제거했습니다.
-
-```bash
-docker exec jungle-bell-postgres-v2-test psql -U jungle_bell -d jungle_bell -c '
+docker exec jungle-bell-postgres psql -U jungle_bell -d jungle_bell -c '
 SELECT
   (SELECT count(*) FROM meal_post) AS meal_posts,
   (SELECT count(*) FROM meal_image) AS meal_images,
   (SELECT count(*) FROM minute_observation) AS minute_observations;'
 ```
 
-## 스키마 초기화
-
-정식 사용자가 없는 동안 호환되지 않는 변경은 volume을 새로 만듭니다. 이 작업은
-모든 계정·설정·알림과 기록을 삭제합니다. 기록 보존이 필요하면 먼저 `pg_dump`로
-급식·세탁 테이블을 저장하고 검증된 restore 계획을 준비합니다.
-
-```bash
-docker compose \
-  --env-file server/deploy/.env.v2-test \
-  -f server/deploy/compose.v2-test.yml \
-  down
-docker volume rm jungle-bell-v2-test_jungle-bell-postgres-v2-test
-```
-
-운영 사용자가 생긴 뒤에는 이 절차를 사용하지 말고 정식 migration 체계를 도입해야
-합니다.
-
 ## 배포 확인
 
+모든 외부 검증은 공식 origin에서 실행합니다.
+
 ```bash
-curl --fail --silent https://example.test/actuator/health/readiness
-curl --fail --silent https://example.test/api/health
-curl --fail --silent https://example.test/api/public/status
-curl --fail --silent https://example.test/api/public/laundry
-curl --fail --silent https://example.test/api/public/meals
-curl --fail --silent https://example.test/ >/dev/null
-server/tools/smoke-api.sh https://example.test
+curl --fail --silent https://jungle-bell.sijun-yang.com/ >/dev/null
+curl --fail --silent https://jungle-bell.sijun-yang.com/actuator/health/readiness
+curl --fail --silent https://jungle-bell.sijun-yang.com/api/health
+curl --fail --silent https://jungle-bell.sijun-yang.com/api/public/status
+curl --fail --silent https://jungle-bell.sijun-yang.com/api/public/laundry
+curl --fail --silent https://jungle-bell.sijun-yang.com/api/public/meals
+server/tools/smoke-api.sh https://jungle-bell.sijun-yang.com
 ```
 
-상태 응답에서 세 source의 `consecutiveFailures`가 0이고 `lastSuccessAt`이 현재
-시각에 맞는지 확인합니다. Worker가 실행 중이며 세탁 observation이 매분 증가하는지도
-확인합니다.
+다음 항목도 확인합니다.
+
+- 일반 브라우저와 설치 PWA에서 SPA 최초 접속, hash 경로 직접 접속, 새로고침
+- 공개 API와 immutable 급식 이미지 URL이 같은 origin을 사용하는지
+- PC 등록, WebView session, pairing 생성·claim·승인·완료
+- 릴리스 Desktop 앱의 서버 연결과 출석 snapshot 동기화
+- PWA Push subscription 등록, 테스트 알림 수신, 구독 해제
+- Worker의 세탁·급식 수집과 `lastSuccessAt`, `consecutiveFailures`
+- Cloudflare를 통과한 요청에서 enrollment rate limit이 `CF-Connecting-IP`를 client
+  key로 사용하는지
+
+실행 상태와 최근 로그도 함께 확인합니다.
 
 ```bash
 docker compose \
-  --env-file server/deploy/.env.v2-test \
-  -f server/deploy/compose.v2-test.yml \
-  ps api worker postgres
+  --env-file server/deploy/.env.production \
+  -f server/deploy/compose.production.yml \
+  ps
 docker compose \
-  --env-file server/deploy/.env.v2-test \
-  -f server/deploy/compose.v2-test.yml \
-  logs --since 10m api worker postgres
+  --env-file server/deploy/.env.production \
+  -f server/deploy/compose.production.yml \
+  logs --since 10m api worker tunnel postgres
 ```
 
 ## 롤백
 
 API 문제이면 직전 tag를 `API_IMAGE`, Worker 문제이면 `WORKER_IMAGE`에 지정하고 해당
-서비스만 다시 생성합니다. schema가 바뀌었다면 이미지 호환성을 추측하지 말고
-검증된 PostgreSQL backup으로 새 volume을 준비합니다.
+서비스만 다시 생성합니다. schema가 바뀌었다면 이미지 호환성을 추측하지 말고 검증된
+PostgreSQL backup으로 새 volume을 준비합니다.
 
 ```bash
 docker compose \
-  --env-file server/deploy/.env.v2-test \
-  -f server/deploy/compose.v2-test.yml \
+  --env-file server/deploy/.env.production \
+  -f server/deploy/compose.production.yml \
   up -d --no-deps --force-recreate api
 docker compose \
-  --env-file server/deploy/.env.v2-test \
-  -f server/deploy/compose.v2-test.yml \
+  --env-file server/deploy/.env.production \
+  -f server/deploy/compose.production.yml \
   up -d --no-deps --force-recreate worker
 ```

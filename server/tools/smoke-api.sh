@@ -2,7 +2,7 @@
 set -euo pipefail
 
 base_url="${1:-http://127.0.0.1:8080}"
-postgres_container="${POSTGRES_CONTAINER:-jungle-bell-postgres-v2-test}"
+postgres_container="${POSTGRES_CONTAINER:-jungle-bell-postgres}"
 installation_id="smoke-$(openssl rand -hex 8)"
 work_dir="$(mktemp -d)"
 
