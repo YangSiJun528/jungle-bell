@@ -7,7 +7,7 @@ interface AutomationStore {
     fun tryAcquireLease(name: String, now: Long, durationMs: Long, token: String): Boolean
     fun runHousekeepingIfDue(name: String, now: Long, durationMs: Long, token: String): Map<String, Int>?
     fun attendancePreferences(): List<AttendanceCandidate>
-    fun desktopStates(userId: UUID): List<DesktopState>
+    fun desktopStatesByUser(): Map<UUID, List<DesktopState>>
     fun recentMealPublications(since: Instant): List<MealPublication>
     fun mealSubscriberUserIds(period: String): List<UUID>
     fun activeLaundryWatches(): List<ActiveLaundryWatch>

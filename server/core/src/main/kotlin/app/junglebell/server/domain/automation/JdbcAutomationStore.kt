@@ -61,19 +61,22 @@ class JdbcAutomationStore(private val jdbc: JdbcClient) : AutomationStore {
         )
     }.list()
 
-    override fun desktopStates(userId: UUID): List<DesktopState> = jdbc.sql(
+    override fun desktopStatesByUser(): Map<UUID, List<DesktopState>> = jdbc.sql(
         """
-        SELECT last_seen_at_epoch_ms, lms_session_state
+        SELECT user_id, last_seen_at_epoch_ms, lms_session_state
         FROM desktop_device
-        WHERE user_id = :userId
-        ORDER BY installation_id
+        ORDER BY user_id, installation_id
         """.trimIndent(),
-    ).param("userId", userId).query { row, _ ->
-        DesktopState(
-            row.getObject("last_seen_at_epoch_ms")?.let { row.getLong("last_seen_at_epoch_ms") },
-            row.getString("lms_session_state"),
-        )
-    }.list()
+    ).query { row, _ ->
+        row.getObject("user_id", UUID::class.java) to
+            DesktopState(
+                row.getObject("last_seen_at_epoch_ms")?.let { row.getLong("last_seen_at_epoch_ms") },
+                row.getString("lms_session_state"),
+            )
+    }.list().groupBy(
+        keySelector = { it.first },
+        valueTransform = { it.second },
+    )
 
     override fun recentMealPublications(since: Instant): List<MealPublication> = jdbc.sql(
         """
@@ -133,56 +136,85 @@ class JdbcAutomationStore(private val jdbc: JdbcClient) : AutomationStore {
         """.trimIndent(),
     ).param("now", now).param("id", id).query(String::class.java).optional().isPresent
 
-    override fun claimPushDeliveries(now: Long, leaseToken: String, limit: Int): List<PushDelivery> = jdbc.sql(
-        """
-        WITH candidates AS (
-            SELECT delivery.notification_id, delivery.target_id
-            FROM notification_delivery delivery
-            JOIN notification ON notification.id = delivery.notification_id
-            WHERE delivery.target_kind = 'push'
-              AND delivery.status IN ('pending', 'retry')
-              AND COALESCE(delivery.next_attempt_at_epoch_ms, notification.due_at_epoch_ms) <= :now
-              AND notification.expires_at_epoch_ms > :now
-              AND (delivery.lease_expires_at_epoch_ms IS NULL OR delivery.lease_expires_at_epoch_ms <= :now)
-            ORDER BY COALESCE(delivery.next_attempt_at_epoch_ms, notification.due_at_epoch_ms),
-                     notification.created_at_epoch_ms
-            FOR UPDATE OF delivery SKIP LOCKED
-            LIMIT :limit
-        ), leased AS (
-            UPDATE notification_delivery delivery
-            SET lease_token = :leaseToken, lease_expires_at_epoch_ms = :leaseExpiresAt
-            FROM candidates
-            WHERE delivery.notification_id = candidates.notification_id
-              AND delivery.target_kind = 'push'
-              AND delivery.target_id = candidates.target_id
-            RETURNING delivery.notification_id, delivery.target_id, delivery.attempts
-        )
-        SELECT leased.notification_id, leased.target_id, leased.attempts,
-               notification.payload::text AS payload_json,
-               notification.expires_at_epoch_ms,
-               push.endpoint, push.p256dh, push.auth
-        FROM leased
-        JOIN notification ON notification.id = leased.notification_id
-        JOIN push_subscription push ON push.id = leased.target_id
-        JOIN app_session session ON session.id = push.session_id
-        WHERE push.revoked_at_epoch_ms IS NULL
-          AND session.revoked_at_epoch_ms IS NULL
-          AND session.expires_at_epoch_ms > :now
-        ORDER BY notification.created_at_epoch_ms
-        """.trimIndent(),
-    ).param("now", now).param("limit", limit).param("leaseToken", leaseToken)
-        .param("leaseExpiresAt", now + 60_000).query { row, _ ->
-            PushDelivery(
-                notificationId = row.getObject("notification_id", UUID::class.java),
-                subscriptionId = row.getString("target_id"),
-                attempts = row.getInt("attempts"),
-                payloadJson = row.getString("payload_json"),
-                expiresAtEpochMs = row.getLong("expires_at_epoch_ms"),
-                endpoint = row.getString("endpoint"),
-                p256dh = row.getString("p256dh"),
-                auth = row.getString("auth"),
+    @Transactional
+    override fun claimPushDeliveries(now: Long, leaseToken: String, limit: Int): List<PushDelivery> {
+        settleInactivePushDeliveries(now)
+        return jdbc.sql(
+            """
+            WITH candidates AS (
+                SELECT delivery.notification_id, delivery.target_id
+                FROM notification_delivery delivery
+                JOIN notification ON notification.id = delivery.notification_id
+                JOIN push_subscription push ON push.id = delivery.target_id
+                    AND push.revoked_at_epoch_ms IS NULL
+                JOIN app_session session ON session.id = push.session_id
+                    AND session.revoked_at_epoch_ms IS NULL
+                    AND session.expires_at_epoch_ms > :now
+                WHERE delivery.target_kind = 'push'
+                  AND delivery.status IN ('pending', 'retry')
+                  AND delivery.next_attempt_at_epoch_ms <= :now
+                  AND notification.expires_at_epoch_ms > :now
+                  AND (delivery.lease_expires_at_epoch_ms IS NULL OR delivery.lease_expires_at_epoch_ms <= :now)
+                ORDER BY delivery.next_attempt_at_epoch_ms, notification.created_at_epoch_ms
+                FOR UPDATE OF delivery SKIP LOCKED
+                LIMIT :limit
+            ), leased AS (
+                UPDATE notification_delivery delivery
+                SET lease_token = :leaseToken, lease_expires_at_epoch_ms = :leaseExpiresAt
+                FROM candidates
+                WHERE delivery.notification_id = candidates.notification_id
+                  AND delivery.target_kind = 'push'
+                  AND delivery.target_id = candidates.target_id
+                RETURNING delivery.notification_id, delivery.target_id, delivery.attempts
             )
-        }.list()
+            SELECT leased.notification_id, leased.target_id, leased.attempts,
+                   notification.payload::text AS payload_json,
+                   notification.expires_at_epoch_ms,
+                   push.endpoint, push.p256dh, push.auth
+            FROM leased
+            JOIN notification ON notification.id = leased.notification_id
+            JOIN push_subscription push ON push.id = leased.target_id
+            ORDER BY notification.created_at_epoch_ms
+            """.trimIndent(),
+        ).param("now", now).param("limit", limit).param("leaseToken", leaseToken)
+            .param("leaseExpiresAt", now + 60_000).query { row, _ ->
+                PushDelivery(
+                    notificationId = row.getObject("notification_id", UUID::class.java),
+                    subscriptionId = row.getString("target_id"),
+                    attempts = row.getInt("attempts"),
+                    payloadJson = row.getString("payload_json"),
+                    expiresAtEpochMs = row.getLong("expires_at_epoch_ms"),
+                    endpoint = row.getString("endpoint"),
+                    p256dh = row.getString("p256dh"),
+                    auth = row.getString("auth"),
+                )
+            }.list()
+    }
+
+    private fun settleInactivePushDeliveries(now: Long) {
+        jdbc.sql(
+            """
+            UPDATE notification_delivery delivery
+            SET status = 'gone', next_attempt_at_epoch_ms = NULL,
+                last_error = 'inactive-push-target',
+                lease_token = NULL, lease_expires_at_epoch_ms = NULL
+            FROM notification
+            WHERE notification.id = delivery.notification_id
+              AND delivery.target_kind = 'push'
+              AND delivery.status IN ('pending', 'retry')
+              AND delivery.next_attempt_at_epoch_ms <= :now
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM push_subscription push
+                  JOIN app_session session ON session.id = push.session_id
+                  WHERE push.id = delivery.target_id
+                    AND push.revoked_at_epoch_ms IS NULL
+                    AND session.revoked_at_epoch_ms IS NULL
+                    AND session.expires_at_epoch_ms > :now
+              )
+            """.trimIndent(),
+        ).param("now", now).update()
+    }
 
     override fun settlePush(
         delivery: PushDelivery,
@@ -231,5 +263,8 @@ class JdbcAutomationStore(private val jdbc: JdbcClient) : AutomationStore {
             .param("cutoff", now - 24 * 60 * 60_000L).update(),
         "notifications" to jdbc.sql("DELETE FROM notification WHERE expires_at_epoch_ms <= :cutoff")
             .param("cutoff", now - 30L * 24 * 60 * 60_000).update(),
+        "mealAssets" to jdbc.sql(
+            "DELETE FROM meal_asset asset WHERE NOT EXISTS (SELECT 1 FROM meal_image WHERE asset_sha = asset.sha)",
+        ).update(),
     )
 }
