@@ -110,14 +110,27 @@ class JdbcStoreIntegrationTest {
         val userId = createUser()
         val installationId = "desktop-${UUID.randomUUID()}"
         val tokenHash = "e".repeat(64)
-        createDesktop(userId, installationId, tokenHash, 20_000)
+        createDesktop(userId, installationId, tokenHash, 200_000)
 
-        val principal = JdbcAuthStore(jdbc).authenticateAppSession(tokenHash, 3_000)
+        val store = JdbcAuthStore(jdbc)
+        val principal = store.authenticateAppSession(tokenHash, 70_000)
 
         assertNotNull(principal)
         assertEquals(userId, principal.userId)
         assertEquals(
-            3_000L,
+            70_000L,
+            jdbc.sql("SELECT last_seen_at_epoch_ms FROM app_session WHERE token_sha256 = :hash")
+                .param("hash", tokenHash).query(Long::class.java).single(),
+        )
+        assertNotNull(store.authenticateAppSession(tokenHash, 100_000))
+        assertEquals(
+            70_000L,
+            jdbc.sql("SELECT last_seen_at_epoch_ms FROM app_session WHERE token_sha256 = :hash")
+                .param("hash", tokenHash).query(Long::class.java).single(),
+        )
+        assertNotNull(store.authenticateAppSession(tokenHash, 131_000))
+        assertEquals(
+            131_000L,
             jdbc.sql("SELECT last_seen_at_epoch_ms FROM app_session WHERE token_sha256 = :hash")
                 .param("hash", tokenHash).query(Long::class.java).single(),
         )
