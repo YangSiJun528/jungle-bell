@@ -325,7 +325,9 @@ function DesktopConnections() {
     );
 }
 
-function CompanionConnections() {
+export function CompanionConnections({completionPath = '/connections'}: {
+    completionPath?: '/connections' | '/home';
+}) {
     const {api} = useDashboardEnvironment();
     const account = useDashboardAccount();
     const client = useQueryClient();
@@ -380,7 +382,7 @@ function CompanionConnections() {
         },
         onSuccess: async () => {
             setMessage('연결이 완료됐습니다.');
-            await navigate({to: '/connections', replace: true});
+            await navigate({to: completionPath, replace: true});
             await refreshBrowserPersonalQueries(client);
         },
         onError: () => {

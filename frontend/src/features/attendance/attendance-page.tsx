@@ -87,6 +87,8 @@ export function AttendancePage() {
         && account.status.serverSession === 'recovery-required';
     const browserAccessChecking = platform.kind === 'browser'
         && account.personalAccess.status === 'checking';
+    const browserAccessUnavailable = platform.kind === 'browser'
+        && account.personalAccess.status === 'not-applicable';
     const browserAccessUnconnected = platform.kind === 'browser'
         && account.personalAccess.status === 'unconnected';
     const browserAccessError = platform.kind === 'browser'
@@ -144,12 +146,17 @@ export function AttendancePage() {
             ) : null}
 
             <section className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(20rem,0.8fr)]">
-                <Card aria-live="polite" aria-busy={detail.kind === 'loading'}>
+                <Card aria-live="polite" aria-busy={!browserAccessUnavailable && detail.kind === 'loading'}>
                     <CardHeader>
                         <CardTitle>오늘 출석</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        {browserAccessChecking ? (
+                        {browserAccessUnavailable ? (
+                            <EmptyState
+                                title="앱 연결이 필요합니다."
+                                description="출석은 PC 앱 또는 연결된 PWA에서 확인할 수 있습니다."
+                            />
+                        ) : browserAccessChecking ? (
                             <LoadingState label="PC 연결 상태를 확인하고 있습니다."/>
                         ) : browserAccessUnconnected ? (
                             <EmptyState

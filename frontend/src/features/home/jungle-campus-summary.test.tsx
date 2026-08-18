@@ -36,4 +36,13 @@ describe('JungleCampusSummary', () => {
         expect(source).toContain('attendance.isError && !attendance.data');
         expect(source).toContain('attendance.isError && attendance.data');
     });
+
+    it('일반 웹에서는 비활성 출석 쿼리를 로딩으로 표시하지 않는다', () => {
+        const unavailableBranch = source.indexOf("account.personalAccess.status === 'not-applicable'");
+        const loadingBranch = source.indexOf('attendance.isPending && !attendance.data');
+
+        expect(unavailableBranch).toBeGreaterThan(-1);
+        expect(unavailableBranch).toBeLessThan(loadingBranch);
+        expect(source).toContain('출석과 D-Day는 PC 앱 또는 연결된 PWA에서 확인할 수 있습니다.');
+    });
 });
