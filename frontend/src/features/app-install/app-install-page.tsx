@@ -2,6 +2,7 @@ import {Link} from '@tanstack/react-router';
 import {
     ArrowLeft,
     Download,
+    ExternalLink,
     Monitor,
     Settings,
     Smartphone,
@@ -14,8 +15,7 @@ import {PageHeader} from '@/components/dashboard/page-header';
 import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardHeader} from '@/components/ui/card';
 
-const RELEASE_URL = 'https://github.com/YangSiJun528/jungle-bell/releases/latest';
-const WEB_APP_URL = 'https://jungle-bell.sijun-yang.com';
+const PC_INSTALL_GUIDE_URL = 'https://github.com/YangSiJun528/jungle-bell#%EC%84%A4%EC%B9%98';
 
 function scrollToGuide(id: 'pc-install' | 'mobile-install'): void {
     document.getElementById(id)?.scrollIntoView({behavior: 'smooth', block: 'start'});
@@ -124,8 +124,8 @@ export function AppInstallPage({onRequestMobileInstall}: {
                     </p>
                 </div>
                 <Button asChild className="mt-4 w-full shrink-0 sm:mt-0 sm:w-auto">
-                    <a href={RELEASE_URL} target="_blank" rel="noopener noreferrer">
-                        최신 PC 앱 다운로드<Download aria-hidden="true"/>
+                    <a href={PC_INSTALL_GUIDE_URL} target="_blank" rel="noopener noreferrer">
+                        PC 앱 설치 가이드<ExternalLink aria-hidden="true"/>
                     </a>
                 </Button>
             </section>
@@ -147,10 +147,8 @@ export function AppInstallPage({onRequestMobileInstall}: {
                         모바일 앱 설치 안내 열기<Smartphone aria-hidden="true"/>
                     </Button>
                 ) : (
-                    <Button asChild className="mt-4 w-full shrink-0 sm:mt-0 sm:w-auto" variant="outline">
-                        <a href={WEB_APP_URL} target="_blank" rel="noopener noreferrer">
-                            모바일 앱 페이지 열기<Smartphone aria-hidden="true"/>
-                        </a>
+                    <Button className="mt-4 w-full shrink-0 sm:mt-0 sm:w-auto" variant="outline" disabled>
+                        모바일에서만 이용 가능<Smartphone aria-hidden="true"/>
                     </Button>
                 )}
             </section>

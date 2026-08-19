@@ -128,8 +128,12 @@ test('앱 안내는 실제 트레이 아이콘·모바일 알림과 기존 설�
         assert.match(mobileNotificationMockup, new RegExp(notification));
     }
     assert.match(mobileNotificationMockup, /모바일 잠금 화면에 표시된 Jungle Bell 출석, 세탁, 식사 알림 예시/);
-    assert.match(appInstall, /https:\/\/github\.com\/YangSiJun528\/jungle-bell\/releases\/latest/);
-    assert.match(appInstall, /https:\/\/jungle-bell\.sijun-yang\.com/);
+    assert.match(appInstall, /https:\/\/github\.com\/YangSiJun528\/jungle-bell#%EC%84%A4%EC%B9%98/);
+    assert.match(appInstall, /PC 앱 설치 가이드/);
+    assert.match(appInstall, /variant="outline" disabled>[\s\S]*모바일에서만 이용 가능/);
+    assert.doesNotMatch(appInstall, /https:\/\/jungle-bell\.sijun-yang\.com/);
+    assert.match(routePages, /platform\.kind === 'browser'[\s\S]*platform\.pwa\.isMobileInstallClient\(\)/);
+    assert.match(routePages, /onRequestMobileInstall=\{canRequestMobileInstall \? openInstallPrompt : undefined\}/);
     assert.match(appInstall, /<Link to="\/connections">설정으로 이동<\/Link>/);
     assert.match(appInstall, /<PageHeader[\s\S]*title="앱 설치 안내"/);
     assert.doesNotMatch(appInstall, /href="#(?:download|manual|open-pwa|connect)"/);
