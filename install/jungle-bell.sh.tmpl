@@ -79,11 +79,23 @@ fi
 rm -rf "$DEST/Jungle Bell.app"
 ditto "$TMP/Jungle Bell.app" "$DEST/Jungle Bell.app"
 
-# Ad-hoc re-sign so launchd accepts the unsigned-by-Apple binary, and clear
-# every extended attribute (notably com.apple.quarantine) so Gatekeeper won't
-# show the "앱이 손상되었기 때문에 열 수 없습니다" dialog on first launch.
-codesign --force --deep --sign - "$DEST/Jungle Bell.app" 2>/dev/null || true
+# Updater와 최초 설치가 같은 유효한 앱 번들 서명을 사용해야 macOS 알림 권한이
+# 업데이트 뒤에도 깨지지 않는다. 과거 unsigned 산출물만 설치 시 ad-hoc 서명한다.
+APP_PATH="$DEST/Jungle Bell.app"
+BUNDLE_ID="dev.sijun-yang.jungle-bell.v2"
+if ! codesign --verify --deep --strict "$APP_PATH" 2>/dev/null; then
+  codesign --force --deep --sign - --identifier "$BUNDLE_ID" "$APP_PATH"
+fi
+
+# Clear every extended attribute (notably com.apple.quarantine) so Gatekeeper
+# won't show the "앱이 손상되었기 때문에 열 수 없습니다" dialog on first launch.
 xattr -cr "$DEST/Jungle Bell.app" 2>/dev/null || true
+codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+SIGNED_IDENTIFIER=$(codesign -dv --verbose=4 "$APP_PATH" 2>&1 | sed -n 's/^Identifier=//p')
+if [ "$SIGNED_IDENTIFIER" != "$BUNDLE_ID" ]; then
+  echo "unexpected macOS bundle signing identifier: $SIGNED_IDENTIFIER" >&2
+  exit 1
+fi
 
 echo "Opening Jungle Bell..."
 open "$DEST/Jungle Bell.app"

@@ -6,11 +6,13 @@ const repoRoot = new URL('../../../../', import.meta.url);
 const repoSource = (path: string) => readFileSync(new URL(path, repoRoot), 'utf8');
 
 const tauriConfig = JSON.parse(repoSource('desktop/tauri.conf.json')) as {
+    bundle?: {macOS?: {signingIdentity?: string}};
     identifier?: string;
     plugins?: {updater?: {endpoints?: string[]}};
     version?: string;
 };
 const releaseWorkflow = repoSource('.github/workflows/release.yml');
+const macInstaller = repoSource('install/jungle-bell.sh.tmpl');
 
 const matchedVersion = (source: string, pattern: RegExp, label: string) => {
     const match = source.match(pattern);
@@ -74,6 +76,14 @@ test('리뉴얼 앱은 기존 앱과 다른 식별자와 v2 업데이트 채널�
     assert.deepEqual(tauriConfig.plugins?.updater?.endpoints, [
         'https://github.com/YangSiJun528/jungle-bell/releases/latest/download/latest-v2.json',
     ]);
+});
+
+test('macOS 업데이트 산출물과 설치본은 유효한 앱 번들 서명을 보장한다', () => {
+    assert.equal(tauriConfig.bundle?.macOS?.signingIdentity, '-');
+    assert.match(releaseWorkflow, /codesign --verify --deep --strict/);
+    assert.match(releaseWorkflow, /Identifier=dev\.sijun-yang\.jungle-bell\.v2/);
+    assert.match(macInstaller, /codesign --verify --deep --strict/);
+    assert.doesNotMatch(macInstaller, /codesign[^\n]+\|\| true/);
 });
 
 test('v2 업데이트 매니페스트는 초안 릴리스 안에서만 생성해 전용 이름으로 공개한다', () => {

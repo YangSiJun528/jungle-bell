@@ -120,6 +120,10 @@ jobs:
             ARCH="x64"
           fi
           APP_DIR="desktop/target/${TRIPLE}/release/bundle/macos"
+          APP_PATH="${APP_DIR}/Jungle Bell.app"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          SIGNATURE_INFO=$(codesign -dv --verbose=4 "$APP_PATH" 2>&1)
+          printf '%s\n' "$SIGNATURE_INFO" | grep -qx 'Identifier=dev.sijun-yang.jungle-bell.v2'
           ASSET="Jungle.Bell_${VER}_${ARCH}.tar.gz"
           tar -czf "$ASSET" -C "$APP_DIR" "Jungle Bell.app"
           gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber "$ASSET"
