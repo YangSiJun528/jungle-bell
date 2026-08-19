@@ -12,9 +12,23 @@ const buildSource = readFileSync(new URL('build.rs', rustRoot), 'utf8');
 const cargoSource = readFileSync(new URL('Cargo.toml', rustRoot), 'utf8');
 const settingsSource = readFileSync(new URL('./settings.ts', import.meta.url), 'utf8');
 const settingsHtml = readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+const packageJson = JSON.parse(
+    readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
+) as {version: string};
+const packageLock = JSON.parse(
+    readFileSync(new URL('../package-lock.json', import.meta.url), 'utf8'),
+) as {version: string; packages: Record<string, {version?: string}>};
 const capability = JSON.parse(
     readFileSync(new URL('capabilities/default.json', rustRoot), 'utf8'),
 ) as {permissions: string[]};
+const tauriConfig = JSON.parse(
+    readFileSync(new URL('tauri.conf.json', rustRoot), 'utf8'),
+) as {
+    version: string;
+    identifier: string;
+    plugins: {updater?: {endpoints?: string[]}};
+    bundle: {createUpdaterArtifacts?: boolean};
+};
 
 test('0.4.5 런타임에는 자동·수동·주기 업데이트 경로가 없다', () => {
     assert.equal(existsSync(new URL('src/updater.rs', rustRoot)), false);
@@ -52,4 +66,17 @@ test('트레이 유지보수 종료 항목은 안내 후 GitHub 이동 또는 �
     assert.match(traySource, /MessageDialogButtons::OkCancelCustom/);
     assert.match(traySource, /"GitHub로 이동"\.into\(\)/);
     assert.match(traySource, /"닫기"\.into\(\)/);
+});
+
+test('0.4.4에서 한 번 전달할 0.4.5 산출물 계약을 유지한다', () => {
+    assert.equal(packageJson.version, '0.4.5');
+    assert.equal(packageLock.version, '0.4.5');
+    assert.equal(packageLock.packages['']?.version, '0.4.5');
+    assert.match(cargoSource, /^version = "0\.4\.5"$/m);
+    assert.equal(tauriConfig.version, '0.4.5');
+    assert.equal(tauriConfig.identifier, 'dev.sijun-yang.jungle-bell');
+    assert.equal(tauriConfig.bundle.createUpdaterArtifacts, true);
+    assert.deepEqual(tauriConfig.plugins.updater?.endpoints, [
+        'https://github.com/YangSiJun528/jungle-bell/releases/latest/download/latest.json',
+    ]);
 });
