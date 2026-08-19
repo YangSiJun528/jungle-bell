@@ -112,7 +112,7 @@ export function NotificationPanelContent({seenMobileIds, onMobileNotificationSee
                 client.setQueryData(queryKeys.notifications('desktop'), result.snapshot);
                 setDeliveryMessage(desktopTestNotificationMessage(result));
             } else {
-                setDeliveryMessage(`연결된 모바일 ${String(result)}대에 테스트 푸시를 보냈습니다. PC 앱에도 잠시 후 표시됩니다.`);
+                setDeliveryMessage(`연결된 모바일 ${String(result)}대의 테스트 푸시를 전송 대기열에 추가했습니다. 1분 안에 도착합니다.`);
                 await client.invalidateQueries({queryKey: queryKeys.notifications('browser')});
             }
         },

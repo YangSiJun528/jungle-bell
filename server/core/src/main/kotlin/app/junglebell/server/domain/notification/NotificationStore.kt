@@ -26,4 +26,15 @@ data class NotificationRecord(
     val createdAtEpochMs: Long,
     val dueAtEpochMs: Long,
     val expiresAtEpochMs: Long,
-)
+) {
+    /** Web Push가 항상 표시 가능한 공통 envelope를 갖도록 저장 직전에 정규화합니다. */
+    fun deliveryPayload(): Map<String, Any?> = payload + mapOf(
+        "notificationId" to id.toString(),
+        "kind" to kind,
+        "title" to title,
+        "body" to body,
+        "path" to path,
+        "createdAtEpochMs" to createdAtEpochMs,
+        "expiresAtEpochMs" to expiresAtEpochMs,
+    )
+}

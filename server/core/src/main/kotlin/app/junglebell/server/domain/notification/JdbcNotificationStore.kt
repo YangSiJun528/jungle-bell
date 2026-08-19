@@ -55,7 +55,7 @@ class JdbcNotificationStore(
     ).param("id", record.id).param("userId", record.userId)
         .param("sourceEventId", record.sourceEventId).param("kind", record.kind)
         .param("title", record.title).param("body", record.body).param("path", record.path)
-        .param("payload", objectMapper.writeValueAsString(record.payload))
+        .param("payload", objectMapper.writeValueAsString(record.deliveryPayload()))
         .param("createdAt", record.createdAtEpochMs).param("dueAt", record.dueAtEpochMs)
         .param("expiresAt", record.expiresAtEpochMs)
         .query(UUID::class.java).optional().isPresent

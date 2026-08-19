@@ -72,6 +72,18 @@ class JdbcStoreIntegrationTest {
             jdbc.sql("SELECT count(*) FROM notification_delivery WHERE notification_id = :id")
                 .param("id", notification.id).query(Int::class.java).single(),
         )
+        assertEquals(
+            listOf(notification.id.toString(), "title", "body", "/#/home", "10000"),
+            jdbc.sql(
+                """
+                SELECT payload ->> 'notificationId', payload ->> 'title', payload ->> 'body',
+                       payload ->> 'path', payload ->> 'expiresAtEpochMs'
+                FROM notification WHERE id = :id
+                """.trimIndent(),
+            ).param("id", notification.id).query { row, _ ->
+                (1..5).map(row::getString)
+            }.single(),
+        )
     }
 
     @Test

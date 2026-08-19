@@ -34,7 +34,21 @@ class NotificationServiceTest {
             TestNotificationRequest(),
         )
 
-        assertEquals("/#/notifications", store.record?.path)
+        val record = requireNotNull(store.record)
+        assertEquals("/#/notifications", record.path)
+        assertEquals(
+            mapOf(
+                "notificationId" to record.id.toString(),
+                "tag" to record.payload["tag"],
+                "kind" to "test",
+                "title" to "Jungle Bell 테스트 알림",
+                "body" to "알림이 정상적으로 연결되었습니다.",
+                "path" to "/#/notifications",
+                "createdAtEpochMs" to record.createdAtEpochMs,
+                "expiresAtEpochMs" to record.expiresAtEpochMs,
+            ),
+            record.deliveryPayload(),
+        )
     }
 
     private class CapturingNotificationStore : NotificationStore {

@@ -115,6 +115,10 @@ describe('notification center information architecture', () => {
         expect(pageSource.match(/onMutate: \(\) => setDeliveryMessage\(''\)/gu)).toHaveLength(2);
     });
 
+    test('테스트 Push는 Worker 전달 주기를 사용자에게 명확히 안내한다', () => {
+        expect(pageSource).toContain('테스트 푸시를 전송 대기열에 추가했습니다. 1분 안에 도착합니다.');
+    });
+
     test('패널에서는 중복 제목 없이 기존 알림 처리 UI를 재사용한다', () => {
         expect(pageSource).toContain('export function NotificationPanelContent');
         expect(pageSource).not.toContain('export function NotificationsPage');
