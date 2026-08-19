@@ -23,6 +23,7 @@ const pwaAdapter = source('./platform/pwa/adapter.ts');
 const platformEvents = source('./platform/tauri/event-adapter.ts');
 const vite = source('../vite.config.ts');
 const home = source('./features/home/home-page.tsx');
+const jungleCampusSummary = source('./features/home/jungle-campus-summary.tsx');
 const appInstall = source('./features/app-install/app-install-page.tsx');
 const appShowcase = source('./components/app-showcase/app-showcase-card.tsx');
 const desktopAppMockup = source('./components/app-showcase/desktop-app-mockup.tsx');
