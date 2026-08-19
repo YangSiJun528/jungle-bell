@@ -13,7 +13,7 @@ export function DesktopAppMockup({
         <figure
             className={cn(
                 'relative isolate min-h-[20rem] overflow-hidden rounded-2xl border border-white/45',
-                'bg-[linear-gradient(to_bottom,#eae5f2_0,#eae5f2_2.25rem,#7653a7_2.25rem,#7653a7_100%)]',
+                'bg-[#eae5f2]',
                 'shadow-[0_24px_56px_rgba(25,53,31,.24)]',
                 compact ? 'min-h-[17rem]' : 'min-h-[24rem]',
                 className,
@@ -22,6 +22,8 @@ export function DesktopAppMockup({
             <figcaption className="sr-only">
                 macOS 메뉴 막대에서 Jungle Bell 출석 상태를 확인하는 PC 앱 예시
             </figcaption>
+
+            <div className="absolute -inset-x-px -bottom-px top-9 bg-[#7653a7]" aria-hidden="true"/>
 
             <div className="relative z-20 flex h-9 items-center justify-between border-b border-white/45 px-3 text-[0.625rem] font-semibold text-[#202720]">
                 <span className="flex min-w-0 items-center gap-1.5 whitespace-nowrap">
