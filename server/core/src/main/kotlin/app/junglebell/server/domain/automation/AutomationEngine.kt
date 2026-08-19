@@ -15,6 +15,7 @@ import java.time.ZonedDateTime
 import java.util.UUID
 
 internal data class AttendanceNotificationCopy(
+    val kind: String,
     val title: String,
     val body: String,
 )
@@ -35,7 +36,7 @@ internal fun attendanceNotificationCopy(
         "login-required" -> "PC의 LMS 로그인이 만료되어 출석 상태를 확인할 수 없습니다."
         else -> "$label 여부를 LMS에서 확인해 주세요."
     }
-    return AttendanceNotificationCopy(title, body)
+    return AttendanceNotificationCopy("attendance-action-required", title, body)
 }
 
 class AutomationEngine(
@@ -215,13 +216,13 @@ class AutomationEngine(
             id,
             userId,
             "attendance:${window.attendanceDate}:$phase:${window.slot}",
-            "attendance-$phase",
+            copy.kind,
             copy.title,
             copy.body,
             "/#/attendance",
             mapOf(
                 "notificationId" to id.toString(),
-                "kind" to "attendance-$phase",
+                "kind" to copy.kind,
                 "title" to copy.title,
                 "body" to copy.body,
                 "path" to "/#/attendance",
