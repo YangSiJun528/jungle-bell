@@ -64,7 +64,10 @@ describe('ServiceSettings', () => {
         expect(markup).toContain('출석 확인 기수');
         expect(markup).toContain('자동 선택');
         expect(source).toContain('{cohort.label}');
-        expect(source).toContain("updateSelectedCohort(value === 'automatic' ? null : value)");
+        expect(markup).toContain('변경사항 적용');
+        expect(source).toContain("setCohortDraft(value === 'automatic' ? null : value)");
+        expect(source).toContain('updateSelectedCohort(cohortDraft)');
+        expect(source).not.toContain("onValueChange={(value) => updateSelectedCohort");
     });
 
     test('모바일에서는 PC 로컬 설정을 편집하지 않는다', () => {

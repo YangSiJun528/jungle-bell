@@ -49,6 +49,7 @@ function DesktopServiceSettings() {
     const client = useQueryClient();
     const [confirmAutoUpdateOff, setConfirmAutoUpdateOff] = useState(false);
     const [confirmDebugOn, setConfirmDebugOn] = useState(false);
+    const [cohortDraft, setCohortDraft] = useState<string | null | undefined>(undefined);
     const settings = useQuery({
         queryKey: queryKeys.desktopSettings,
         queryFn: () => api.getDesktopSettings(),
@@ -69,7 +70,9 @@ function DesktopServiceSettings() {
     };
     const updateSelectedCohort = (selectedCohortId: string | null) => {
         if (!value) return;
-        save.mutate({...value, selectedCohortId});
+        save.mutate({...value, selectedCohortId}, {
+            onSuccess: () => setCohortDraft(undefined),
+        });
     };
 
     if (settings.isPending && !value) {
@@ -79,6 +82,15 @@ function DesktopServiceSettings() {
         return <ErrorState title="서비스 설정을 불러오지 못했습니다." retry={() => void settings.refetch()}/>;
     }
     if (!value) return null;
+
+    const savedCohortId = value.selectedCohortId
+        && value.cohortOptions.some(({id}) => id === value.selectedCohortId)
+        ? value.selectedCohortId
+        : null;
+    const displayedCohortId = cohortDraft === undefined ? savedCohortId : cohortDraft;
+    const cohortDirty = cohortDraft !== undefined && cohortDraft !== savedCohortId;
+    const effectiveCohortLabel = value.cohortOptions
+        .find(({id}) => id === value.effectiveCohortId)?.label ?? null;
 
     return (
         <div className="space-y-4">
@@ -97,11 +109,8 @@ function DesktopServiceSettings() {
                         </div>
                         <Select
                             disabled={save.isPending || value.cohortOptions.length === 0}
-                            value={value.selectedCohortId
-                                && value.cohortOptions.some(({id}) => id === value.selectedCohortId)
-                                ? value.selectedCohortId
-                                : 'automatic'}
-                            onValueChange={(value) => updateSelectedCohort(value === 'automatic' ? null : value)}
+                            value={displayedCohortId ?? 'automatic'}
+                            onValueChange={(value) => setCohortDraft(value === 'automatic' ? null : value)}
                         >
                             <SelectTrigger aria-label="출석 확인 기수" className="w-full sm:w-64">
                                 <SelectValue placeholder="기수를 선택하세요"/>
@@ -116,6 +125,23 @@ function DesktopServiceSettings() {
                     </div>
                     {value.cohortOptions.length === 0 ? (
                         <p className="text-xs text-muted-foreground">LMS 로그인 후 기수 목록이 표시됩니다.</p>
+                    ) : (
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <p className="text-xs text-muted-foreground">
+                                현재 적용 · {effectiveCohortLabel ?? '자동 선택 대기 중'}
+                            </p>
+                            <Button
+                                disabled={save.isPending || !cohortDirty}
+                                onClick={() => {
+                                    if (cohortDraft !== undefined) updateSelectedCohort(cohortDraft);
+                                }}
+                            >
+                                {save.isPending ? '적용 중' : '변경사항 적용'}
+                            </Button>
+                        </div>
+                    )}
+                    {cohortDirty ? (
+                        <p className="text-xs text-amber-700 dark:text-amber-300">적용하지 않은 기수 변경이 있습니다.</p>
                     ) : null}
                 </CardContent>
             </Card>

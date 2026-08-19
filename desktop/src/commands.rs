@@ -409,7 +409,9 @@ pub async fn update_desktop_settings(
         });
     }
     if previous.selected_cohort_id != saved.selected_cohort_id {
-        checker::refresh_webview(&app, "cohort selection changed");
+        // 선택은 checker의 Rust 해석 단계에서 매 조회마다 반영된다. LMS 창이
+        // 열려 있어도 지연되지 않도록 페이지 reload 대신 즉시 조회를 요청한다.
+        checker::trigger_current_check(&app).await;
     }
     Ok(settings.snapshot().await.into())
 }

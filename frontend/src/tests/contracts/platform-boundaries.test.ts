@@ -58,6 +58,16 @@ describe('repository platform boundaries', () => {
         expect(nativeDataApi).not.toContain('DEFAULT_DEV_API_ORIGIN');
     });
 
+    test('기수 변경은 LMS 창 표시 여부와 무관하게 checker 재조회를 즉시 요청한다', () => {
+        const commands = readFileSync(resolve(repositoryRoot, 'desktop/src/commands.rs'), 'utf8');
+        const cohortChange = commands.match(
+            /if previous\.selected_cohort_id != saved\.selected_cohort_id \{([\s\S]*?)\n    \}/u,
+        )?.[1] ?? '';
+
+        expect(cohortChange).toContain('checker::trigger_current_check(&app).await');
+        expect(cohortChange).not.toContain('checker::refresh_webview');
+    });
+
     test('frontend scripts and Tauri hooks use separate web and desktop UI artifacts', () => {
         const packageJson = JSON.parse(readFrontend('package.json')) as {
             scripts: Record<string, string>;
