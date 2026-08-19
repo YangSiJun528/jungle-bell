@@ -5,6 +5,7 @@ import app.junglebell.server.common.config.JungleBellProperties
 import app.junglebell.server.domain.security.SessionPrincipal
 import app.junglebell.server.domain.security.TokenCodec
 import org.springframework.http.HttpStatus
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -20,10 +21,12 @@ class PairingService(
     private val properties: JungleBellProperties,
     private val clock: Clock,
 ) {
+    private val logger = LoggerFactory.getLogger(javaClass)
     private val pairingTtl = Duration.ofMinutes(2)
     private val mobileTtl = Duration.ofDays(30)
 
     fun create(principal: SessionPrincipal): PairingCreated {
+        logger.info("Pairing creation started.")
         val now = clock.millis()
         val id = UUID.randomUUID()
         val pairingId = "jbp_$id"
@@ -47,36 +50,57 @@ class PairingService(
             ),
         )
         val fragment = "pairing=${encode(pairingId)}&challenge=${encode(challenge)}"
-        return PairingCreated(
+        val response = PairingCreated(
             pairingId,
             properties.publicBaseUrl.resolve("/#$fragment").toString(),
             manualCode,
             Instant.ofEpochMilli(expiresAt).toString(),
         )
+        logger.info("Pairing creation completed. pairingId={}", pairingId)
+        return response
     }
 
     fun claimQr(pairingId: String, request: QrPairingClaimRequest): PairingClaim {
+        logger.info("QR pairing claim started.")
         val id = parsePairingId(pairingId)
         val pairing = store.findByQr(tokens.plainHash(request.challenge))
             ?.takeIf { it.id == id }
-            ?: throw ApiException("PAIRING_NOT_FOUND", HttpStatus.NOT_FOUND)
-        return claim(pairing, request.installationId, request.deviceLabel)
+        if (pairing == null) {
+            logger.warn("QR pairing claim rejected. reason=pairing_not_found")
+            throw ApiException("PAIRING_NOT_FOUND", HttpStatus.NOT_FOUND)
+        }
+        val response = claim(pairing, request.installationId, request.deviceLabel)
+        logger.info("QR pairing claim completed. pairingId={}", pairingId)
+        return response
     }
 
     fun claimManual(request: ManualPairingClaimRequest): PairingClaim {
+        logger.info("Manual pairing claim started.")
         val normalized = tokens.normalizeManualCode(request.manualCode)
-            ?: throw ApiException("PAIRING_NOT_FOUND", HttpStatus.NOT_FOUND)
+        if (normalized == null) {
+            logger.warn("Manual pairing claim rejected. reason=pairing_not_found")
+            throw ApiException("PAIRING_NOT_FOUND", HttpStatus.NOT_FOUND)
+        }
         val pairing = store.findByManual(tokens.manualCodeHash(normalized))
-            ?: throw ApiException("PAIRING_NOT_FOUND", HttpStatus.NOT_FOUND)
-        return claim(pairing, request.installationId, request.deviceLabel)
+        if (pairing == null) {
+            logger.warn("Manual pairing claim rejected. reason=pairing_not_found")
+            throw ApiException("PAIRING_NOT_FOUND", HttpStatus.NOT_FOUND)
+        }
+        val response = claim(pairing, request.installationId, request.deviceLabel)
+        logger.info("Manual pairing claim completed. pairingId={}", response.claimId)
+        return response
     }
 
     fun status(principal: SessionPrincipal, pairingId: String): PairingStatusResponse {
+        logger.debug("Pairing status lookup started.")
         val pairing = store.findById(parsePairingId(pairingId))
             ?.takeIf { it.userId == principal.userId && it.desktopInstallationId == principal.installationId }
-            ?: throw ApiException("PAIRING_NOT_FOUND", HttpStatus.NOT_FOUND)
+        if (pairing == null) {
+            logger.warn("Pairing status lookup rejected. reason=pairing_not_found")
+            throw ApiException("PAIRING_NOT_FOUND", HttpStatus.NOT_FOUND)
+        }
         val status = status(pairing)
-        return PairingStatusResponse(
+        val response = PairingStatusResponse(
             status,
             if (status == "claimed") {
                 PairingClaimDetails(
@@ -86,20 +110,36 @@ class PairingService(
                 )
             } else null,
         )
+        logger.debug("Pairing status lookup completed. pairingId={} pairingStatus={}", pairingId, status)
+        return response
     }
 
     fun approve(principal: SessionPrincipal, pairingId: String, request: PairingApprovalRequest) {
-        if (request.claimId != pairingId) throw ApiException("PAIRING_CLAIM_MISMATCH", HttpStatus.CONFLICT)
+        logger.info("Pairing approval started.")
+        if (request.claimId != pairingId) {
+            logger.warn("Pairing approval rejected. reason=claim_mismatch")
+            throw ApiException("PAIRING_CLAIM_MISMATCH", HttpStatus.CONFLICT)
+        }
         val id = parsePairingId(pairingId)
         val pairing = store.findById(id)
             ?.takeIf { it.userId == principal.userId && it.desktopInstallationId == principal.installationId }
-            ?: throw ApiException("PAIRING_NOT_FOUND", HttpStatus.NOT_FOUND)
+        if (pairing == null) {
+            logger.warn("Pairing approval rejected. reason=pairing_not_found")
+            throw ApiException("PAIRING_NOT_FOUND", HttpStatus.NOT_FOUND)
+        }
         val now = clock.millis()
-        if (pairing.expiresAtEpochMs <= now) throw ApiException("PAIRING_EXPIRED", HttpStatus.GONE)
+        if (pairing.expiresAtEpochMs <= now) {
+            logger.warn("Pairing approval rejected. reason=pairing_expired")
+            throw ApiException("PAIRING_EXPIRED", HttpStatus.GONE)
+        }
         val receiptHash = pairing.claimReceiptSha256
         val installationId = pairing.mobileInstallationId
         val label = pairing.mobileLabel
         if (pairing.status != "claimed" || receiptHash == null || installationId == null || label == null) {
+            logger.warn(
+                "Pairing approval rejected. reason={}",
+                if (pairing.status == "pending") "pairing_not_claimed" else "pairing_already_used",
+            )
             throw ApiException(
                 if (pairing.status == "pending") "PAIRING_NOT_CLAIMED" else "PAIRING_ALREADY_USED",
                 HttpStatus.CONFLICT,
@@ -116,40 +156,65 @@ class PairingService(
                 now + mobileTtl.toMillis(),
             )
         ) {
+            logger.warn("Pairing approval rejected. reason=pairing_already_used")
             throw ApiException("PAIRING_ALREADY_USED", HttpStatus.CONFLICT)
         }
+        logger.info("Pairing approval completed. pairingId={} result=approved", pairingId)
     }
 
     fun complete(pairingId: String, receipt: String): CompletedPairing {
+        logger.info("Pairing completion started.")
         if (!receipt.matches(Regex("^jbcr_[a-f0-9]{64}$"))) {
+            logger.warn("Pairing completion rejected. reason=invalid_receipt")
             throw ApiException("PAIRING_RECEIPT_INVALID", HttpStatus.UNAUTHORIZED)
         }
         val pairing = store.findById(parsePairingId(pairingId))
-            ?: throw ApiException("PAIRING_RECEIPT_INVALID", HttpStatus.UNAUTHORIZED)
+        if (pairing == null) {
+            logger.warn("Pairing completion rejected. reason=invalid_receipt")
+            throw ApiException("PAIRING_RECEIPT_INVALID", HttpStatus.UNAUTHORIZED)
+        }
         val receiptHash = tokens.plainHash(receipt)
         if (pairing.claimReceiptSha256 != receiptHash) {
+            logger.warn("Pairing completion rejected. reason=invalid_receipt")
             throw ApiException("PAIRING_RECEIPT_INVALID", HttpStatus.UNAUTHORIZED)
         }
         val now = clock.millis()
-        if (pairing.expiresAtEpochMs <= now) throw ApiException("PAIRING_EXPIRED", HttpStatus.GONE)
+        if (pairing.expiresAtEpochMs <= now) {
+            logger.warn("Pairing completion rejected. reason=pairing_expired")
+            throw ApiException("PAIRING_EXPIRED", HttpStatus.GONE)
+        }
         val approvedAt = pairing.approvedAtEpochMs
         if (approvedAt == null || pairing.status !in setOf("approved", "consumed")) {
+            logger.warn("Pairing completion rejected. reason=pairing_not_approved")
             throw ApiException("PAIRING_NOT_APPROVED", HttpStatus.CONFLICT)
         }
         val expiresAt = approvedAt + mobileTtl.toMillis()
-        if (expiresAt <= now) throw ApiException("PAIRING_EXPIRED", HttpStatus.GONE)
-        if (pairing.status == "approved" && !store.consume(pairing.id, receiptHash)) {
+        if (expiresAt <= now) {
+            logger.warn("Pairing completion rejected. reason=mobile_session_expired")
             throw ApiException("PAIRING_EXPIRED", HttpStatus.GONE)
         }
-        return CompletedPairing(tokens.mobileToken(receiptHash), expiresAt)
+        if (pairing.status == "approved" && !store.consume(pairing.id, receiptHash)) {
+            logger.warn("Pairing completion rejected. reason=pairing_already_consumed")
+            throw ApiException("PAIRING_EXPIRED", HttpStatus.GONE)
+        }
+        val response = CompletedPairing(tokens.mobileToken(receiptHash), expiresAt)
+        logger.info("Pairing completion completed. pairingId={} result=completed", pairingId)
+        return response
     }
 
     private fun claim(pairing: PairingRecord, installationId: String, label: String): PairingClaim {
         val now = clock.millis()
-        if (pairing.expiresAtEpochMs <= now) throw ApiException("PAIRING_EXPIRED", HttpStatus.GONE)
-        if (pairing.status != "pending") throw ApiException("PAIRING_ALREADY_USED", HttpStatus.CONFLICT)
+        if (pairing.expiresAtEpochMs <= now) {
+            logger.warn("Pairing claim rejected. pairingId=jbp_{} reason=pairing_expired", pairing.id)
+            throw ApiException("PAIRING_EXPIRED", HttpStatus.GONE)
+        }
+        if (pairing.status != "pending") {
+            logger.warn("Pairing claim rejected. pairingId=jbp_{} reason=pairing_already_used", pairing.id)
+            throw ApiException("PAIRING_ALREADY_USED", HttpStatus.CONFLICT)
+        }
         val receipt = tokens.opaque("jbcr_")
         if (!store.claim(pairing.id, tokens.plainHash(receipt), installationId, label.trim())) {
+            logger.warn("Pairing claim rejected. pairingId=jbp_{} reason=pairing_already_used", pairing.id)
             throw ApiException("PAIRING_ALREADY_USED", HttpStatus.CONFLICT)
         }
         return PairingClaim("jbp_${pairing.id}", receipt, pairing.expiresAtEpochMs)
@@ -164,6 +229,7 @@ class PairingService(
     private fun parsePairingId(value: String): UUID = try {
         UUID.fromString(value.removePrefix("jbp_").takeIf { value.startsWith("jbp_") } ?: "")
     } catch (_: IllegalArgumentException) {
+        logger.warn("Pairing operation rejected. reason=invalid_pairing_id")
         throw ApiException("INVALID_REQUEST")
     }
 

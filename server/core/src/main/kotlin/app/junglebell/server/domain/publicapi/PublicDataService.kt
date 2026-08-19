@@ -3,6 +3,7 @@ package app.junglebell.server.domain.publicapi
 import app.junglebell.server.common.error.ApiException
 import app.junglebell.server.common.config.JungleBellProperties
 import org.springframework.http.HttpStatus
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.time.Clock
 import java.time.DayOfWeek
@@ -21,44 +22,83 @@ class PublicDataService(
     private val clock: Clock,
     private val properties: JungleBellProperties,
 ) {
+    private val logger = LoggerFactory.getLogger(javaClass)
     private val kst = ZoneId.of("Asia/Seoul")
 
     fun health(): Pair<PublicHealth, HttpStatus> {
+        logger.debug("Public health evaluation started.")
         val now = clock.instant()
         val states = store.sourceStates()
         val degraded = states.size < 3 || states.any {
             it.lastSuccessAt == null || it.consecutiveFailures > 0 ||
                 Duration.between(Instant.parse(it.lastSuccessAt), now) > Duration.ofMinutes(15)
         }
-        return PublicHealth(if (degraded) "DEGRADED" else "OK", now.toString(), states) to
-            if (degraded) HttpStatus.SERVICE_UNAVAILABLE else HttpStatus.OK
+        val status = if (degraded) HttpStatus.SERVICE_UNAVAILABLE else HttpStatus.OK
+        val response = PublicHealth(if (degraded) "DEGRADED" else "OK", now.toString(), states) to status
+        logger.debug("Public health evaluation completed. status={} sourceCount={}", status.value(), states.size)
+        return response
     }
 
-    fun status(): PublicStatus = PublicStatus(cacheSlice(clock.instant()).toString(), store.sourceStates())
+    fun status(): PublicStatus {
+        logger.debug("Public status lookup started.")
+        val response = PublicStatus(cacheSlice(clock.instant()).toString(), store.sourceStates())
+        logger.debug("Public status lookup completed. sourceCount={}", response.sources.size)
+        return response
+    }
 
-    fun laundryHead(): SourceState = store.sourceState("laundry")
-        ?: throw ApiException("NO_DATA", HttpStatus.SERVICE_UNAVAILABLE)
+    fun laundryHead(): SourceState {
+        logger.debug("Laundry head lookup started.")
+        val response = store.sourceState("laundry")
+        if (response == null) {
+            logger.warn("Laundry head lookup rejected. reason=no_data")
+            throw ApiException("NO_DATA", HttpStatus.SERVICE_UNAVAILABLE)
+        }
+        logger.debug("Laundry head lookup completed. result=available")
+        return response
+    }
 
     fun laundry(): PublicLaundrySnapshot {
+        logger.debug("Laundry snapshot lookup started.")
         val version = store.latestLaundryVersion()
-            ?: throw ApiException("NO_DATA", HttpStatus.SERVICE_UNAVAILABLE)
+        if (version == null) {
+            logger.warn("Laundry snapshot lookup rejected. reason=no_data")
+            throw ApiException("NO_DATA", HttpStatus.SERVICE_UNAVAILABLE)
+        }
         val asOf = cacheSlice(clock.instant())
-        return project(
+        val response = project(
             version,
             store.sourceState("laundry"),
             asOf,
             false,
             store.laundryRisks(asOf.minus(Duration.ofDays(7)), asOf),
         )
+        logger.debug("Laundry snapshot lookup completed. machineCount={}", response.machines.size)
+        return response
     }
 
-    fun laundryVersion(sha: String): LaundryVersion = store.laundryVersion(sha)
-        ?: throw ApiException("VERSION_NOT_FOUND", HttpStatus.NOT_FOUND)
+    fun laundryVersion(sha: String): LaundryVersion {
+        logger.debug("Laundry version lookup started.")
+        val response = store.laundryVersion(sha)
+        if (response == null) {
+            logger.warn("Laundry version lookup rejected. reason=version_not_found")
+            throw ApiException("VERSION_NOT_FOUND", HttpStatus.NOT_FOUND)
+        }
+        logger.debug("Laundry version lookup completed. result=available")
+        return response
+    }
 
     fun laundryAt(minute: String): MinuteLaundryResponse {
-        val instant = parseCompactMinute(minute) ?: throw ApiException("INVALID_MINUTE")
+        logger.debug("Historical laundry lookup started.")
+        val instant = parseCompactMinute(minute)
+        if (instant == null) {
+            logger.warn("Historical laundry lookup rejected. reason=invalid_minute")
+            throw ApiException("INVALID_MINUTE")
+        }
         val observation = store.observation(instant.epochSecond / 60)
-            ?: throw ApiException("OBSERVATION_NOT_FOUND", HttpStatus.NOT_FOUND)
+        if (observation == null) {
+            logger.warn("Historical laundry lookup rejected. reason=observation_not_found")
+            throw ApiException("OBSERVATION_NOT_FOUND", HttpStatus.NOT_FOUND)
+        }
         val data = observation.versionSha?.let(store::laundryVersion)?.let {
             project(
                 it,
@@ -68,24 +108,38 @@ class PublicDataService(
                 store.laundryRisks(instant.minus(Duration.ofDays(7)), instant),
             )
         }
-        return MinuteLaundryResponse(minute, observation, data)
+        val response = MinuteLaundryResponse(minute, observation, data)
+        logger.debug("Historical laundry lookup completed. dataAvailable={}", data != null)
+        return response
     }
 
-    fun laundryEvents(since: Instant?, limit: Int) = mapOf("events" to store.laundryEvents(since, limit))
+    fun laundryEvents(since: Instant?, limit: Int): Map<String, List<LaundryEvent>> {
+        logger.debug("Laundry event lookup started. limit={}", limit)
+        val events = store.laundryEvents(since, limit)
+        logger.debug("Laundry event lookup completed. eventCount={}", events.size)
+        return mapOf("events" to events)
+    }
 
     fun meals(): PublicMealsSnapshot {
+        logger.debug("Meal snapshot lookup started.")
         val state = store.sourceState("meals-include-pinned")
-            ?: throw ApiException("NO_DATA", HttpStatus.SERVICE_UNAVAILABLE)
+        if (state == null) {
+            logger.warn("Meal snapshot lookup rejected. reason=no_source_state")
+            throw ApiException("NO_DATA", HttpStatus.SERVICE_UNAVAILABLE)
+        }
         val posts = store.mealPosts(100).map {
             it.withPublicAssetUrls(properties.publicBaseUrl)
         }
-        if (posts.isEmpty()) throw ApiException("NO_DATA", HttpStatus.SERVICE_UNAVAILABLE)
+        if (posts.isEmpty()) {
+            logger.warn("Meal snapshot lookup rejected. reason=no_posts")
+            throw ApiException("NO_DATA", HttpStatus.SERVICE_UNAVAILABLE)
+        }
         val weekly = store.weeklyMenus(100).map {
             it.withPublicAssetUrls(properties.publicBaseUrl)
         }
         val target = targetWeek(clock.instant())
         val current = weekly.firstOrNull { it.weekKey == target }
-        return PublicMealsSnapshot(
+        val response = PublicMealsSnapshot(
             cacheSlice(clock.instant()).toString(),
             state.lastSuccessAt,
             MealsData(
@@ -101,26 +155,37 @@ class PublicDataService(
                 weeklyMenus = weekly,
             ),
         )
+        logger.debug("Meal snapshot lookup completed. postCount={} weeklyMenuCount={}", posts.size, weekly.size)
+        return response
     }
 
     fun mealHistory(month: String): MealHistoryResponse {
+        logger.debug("Meal history lookup started.")
         val yearMonth = try {
             YearMonth.parse(month)
         } catch (_: Exception) {
+            logger.warn("Meal history lookup rejected. reason=invalid_month")
             throw ApiException("INVALID_REQUEST")
         }
         val from = yearMonth.atDay(1).atStartOfDay(kst).toInstant()
         val to = yearMonth.plusMonths(1).atDay(1).atStartOfDay(kst).toInstant()
-        return MealHistoryResponse(
+        val response = MealHistoryResponse(
             store.mealPostsForMonth(from, to).map {
                 it.withPublicAssetUrls(properties.publicBaseUrl)
             },
         )
+        logger.debug("Meal history lookup completed. postCount={}", response.posts.size)
+        return response
     }
 
     fun asset(sha: String, extension: String): StoredAsset {
-        val asset = store.asset(sha) ?: throw ApiException("ASSET_NOT_FOUND", HttpStatus.NOT_FOUND)
-        if (asset.extension != extension) throw ApiException("ASSET_NOT_FOUND", HttpStatus.NOT_FOUND)
+        logger.debug("Meal asset lookup started.")
+        val asset = store.asset(sha)
+        if (asset == null || asset.extension != extension) {
+            logger.warn("Meal asset lookup rejected. reason=asset_not_found")
+            throw ApiException("ASSET_NOT_FOUND", HttpStatus.NOT_FOUND)
+        }
+        logger.debug("Meal asset lookup completed. contentLength={}", asset.bytes.size)
         return asset
     }
 

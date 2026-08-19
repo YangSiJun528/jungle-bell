@@ -114,22 +114,42 @@ class AutomationEngine(
     private val kst = ZoneId.of("Asia/Seoul")
 
     fun runMinuteCycle() {
+        logger.info("Minute automation started.")
         val now = clock.millis()
         val lease = UUID.randomUUID().toString()
         val acquired = automation.tryAcquireLease("minute-automation", now, 50_000, lease)
-        if (!acquired) return
+        if (!acquired) {
+            logger.debug("Minute automation skipped. reason=lease_not_acquired")
+            return
+        }
 
-        runStage("attendance") { planAttendance(now) }
-        runStage("meals") { publishMeals(now) }
-        runStage("laundry") { applyLaundryWatches(now) }
-        runStage("push") { deliverPushes(now) }
+        val failedStageCount = listOf(
+            runStage("attendance") { planAttendance(now) },
+            runStage("meals") { publishMeals(now) },
+            runStage("laundry") { applyLaundryWatches(now) },
+            runStage("push") { deliverPushes(now) },
+        ).count { !it }
+        logger.info("Minute automation completed. failedStageCount={}", failedStageCount)
     }
 
     fun runHousekeeping() {
+        logger.info("Housekeeping started.")
         val now = clock.millis()
         val lease = UUID.randomUUID().toString()
         val result = automation.runHousekeepingIfDue("hourly-housekeeping", now, 55 * 60_000, lease)
-        if (result != null) logger.info("Housekeeping completed: {}", result)
+        if (result == null) {
+            logger.debug("Housekeeping skipped. reason=lease_not_acquired")
+            return
+        }
+        logger.info(
+            "Housekeeping completed. desktopUiSessions={} pairingChallenges={} enrollmentAttempts={} " +
+                "notifications={} mealAssets={}",
+            result["desktopUiSessions"],
+            result["pairingChallenges"],
+            result["enrollmentAttempts"],
+            result["notifications"],
+            result["mealAssets"],
+        )
     }
 
     internal fun planAttendance(now: Long): Int {
@@ -377,10 +397,20 @@ class AutomationEngine(
         return reference
     }
 
-    private inline fun runStage(name: String, operation: () -> Int) {
-        runCatching(operation)
-            .onSuccess { count -> if (count > 0) logger.info("{} created or delivered {} item(s)", name, count) }
-            .onFailure { error -> logger.error("{} automation failed", name, error) }
+    private inline fun runStage(name: String, operation: () -> Int): Boolean {
+        logger.debug("Automation stage started. stage={}", name)
+        return try {
+            val count = operation()
+            if (count > 0) {
+                logger.info("Automation stage completed. stage={} resultCount={}", name, count)
+            } else {
+                logger.debug("Automation stage completed. stage={} resultCount=0", name)
+            }
+            true
+        } catch (error: Exception) {
+            logger.error("Automation stage failed. stage={}", name, error)
+            false
+        }
     }
 }
 

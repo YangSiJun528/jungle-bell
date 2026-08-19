@@ -1,6 +1,7 @@
 package app.junglebell.server.api.security
 
 import app.junglebell.server.domain.security.TokenCodec
+import app.junglebell.server.api.logging.REQUEST_ID_HEADER
 import jakarta.servlet.http.Cookie
 import java.util.UUID
 import kotlin.test.Test
@@ -9,11 +10,13 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.http.HttpHeaders
+import org.springframework.http.HttpMethod
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.forwardedUrl
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
@@ -49,7 +52,15 @@ class SecurityFilterChainIntegrationTest(
     fun `missing credentials return the API authentication error`() {
         mockMvc.perform(get("/api/me/session"))
             .andExpect(status().isUnauthorized)
+            .andExpect(header().exists(REQUEST_ID_HEADER))
             .andExpect(jsonPath("$.error").value("AUTHENTICATION_REQUIRED"))
+    }
+
+    @Test
+    fun `safe client request id is returned on a security failure`() {
+        mockMvc.perform(get("/api/me/session").header(REQUEST_ID_HEADER, "security-test-1"))
+            .andExpect(status().isUnauthorized)
+            .andExpect(header().string(REQUEST_ID_HEADER, "security-test-1"))
     }
 
     @Test
@@ -59,6 +70,28 @@ class SecurityFilterChainIntegrationTest(
                 .header(HttpHeaders.ORIGIN, "tauri://localhost"),
         ).andExpect(status().isOk)
             .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "tauri://localhost"))
+            .andExpect(
+                header().string(
+                    HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS,
+                    org.hamcrest.Matchers.containsString(REQUEST_ID_HEADER),
+                ),
+            )
+    }
+
+    @Test
+    fun `desktop webview origin can send the request id header`() {
+        mockMvc.perform(
+            options("/api/public/status")
+                .header(HttpHeaders.ORIGIN, "tauri://localhost")
+                .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, HttpMethod.GET.name())
+                .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, REQUEST_ID_HEADER),
+        ).andExpect(status().isOk)
+            .andExpect(
+                header().string(
+                    HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS,
+                    org.hamcrest.Matchers.containsString(REQUEST_ID_HEADER),
+                ),
+            )
     }
 
     @Test

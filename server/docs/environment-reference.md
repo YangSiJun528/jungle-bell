@@ -40,6 +40,10 @@ Desktop UI origin allowlist는 코드에서 고정합니다.
 `CF-Connecting-IP`는 enrollment rate limit의 client key로만 사용하며, 값은 hash한 뒤
 저장합니다. header가 없으면 socket remote address를 사용합니다.
 
+서버 로그는 Docker 표준 출력에 기록합니다. `JUNGLE_BELL_LOG_LEVEL=DEBUG`로 앱 package의
+조회·정상 생략 로그를 일시적으로 활성화할 수 있습니다. 로그 식별자와 출력 형식은
+[로깅 레퍼런스](./logging-reference.md)를 따릅니다.
+
 ## 수집기
 
 | 변수 | 기본값 | 설명 |

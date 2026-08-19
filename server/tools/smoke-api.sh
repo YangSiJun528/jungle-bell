@@ -29,10 +29,20 @@ request() {
   local output="$2"
   shift 2
   local actual
-  actual="$(curl --silent --show-error --output "$output" --write-out '%{http_code}' "$@")"
+  local headers_file="$output.headers"
+  local request_id="smoke-$(openssl rand -hex 8)"
+  local returned_request_id
+  actual="$(curl --silent --show-error --output "$output" --dump-header "$headers_file" \
+    --write-out '%{http_code}' -H "X-Request-ID: $request_id" "$@")"
   [[ "$actual" == "$expected" ]] || {
     printf 'expected HTTP %s, got %s\n' "$expected" "$actual" >&2
     sed -n '1,20p' "$output" >&2
+    exit 1
+  }
+  returned_request_id="$(awk 'tolower($1) == "x-request-id:" { gsub("\r", "", $2); value=$2 } END { print value }' \
+    "$headers_file")"
+  [[ "$returned_request_id" == "$request_id" ]] || {
+    printf 'expected X-Request-ID %s, got %s\n' "$request_id" "$returned_request_id" >&2
     exit 1
   }
 }
@@ -102,6 +112,7 @@ request 401 "$work_dir/deleted-ui-token.json" \
 desktop_token=""
 
 printf '%s\n' \
+  'requestId=echoed' \
   'enrollment=201' \
   'desktopUiSession=201' \
   'attendance=200 missing' \

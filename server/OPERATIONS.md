@@ -209,6 +209,31 @@ docker compose \
   logs --since 10m api worker tunnel postgres
 ```
 
+특정 HTTP 요청이나 Worker 실행을 추적할 때는 응답의 `X-Request-ID` 또는 로그의
+`jobRunId`로 필터링합니다.
+
+```bash
+docker compose \
+  --env-file server/deploy/.env.production \
+  -f server/deploy/compose.production.yml \
+  logs --since 30m api | grep -F 'requestId=<REQUEST_ID>'
+docker compose \
+  --env-file server/deploy/.env.production \
+  -f server/deploy/compose.production.yml \
+  logs --since 30m worker | grep -F 'jobRunId=<JOB_RUN_ID>'
+```
+
+배포 검증에서는 API와 Worker 로그에 token 또는 인증 header 원문이 없는지도 확인합니다.
+
+```bash
+docker compose \
+  --env-file server/deploy/.env.production \
+  -f server/deploy/compose.production.yml \
+  logs --since 30m api worker | grep -E 'jbd_|jbs_|jbui_|jbcr_|Authorization:|Cookie:'
+```
+
+마지막 명령은 일치 항목을 출력하지 않아야 합니다.
+
 ## 롤백
 
 API 문제이면 직전 tag를 `API_IMAGE`, Worker 문제이면 `WORKER_IMAGE`에 지정하고 해당

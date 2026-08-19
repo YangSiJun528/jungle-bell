@@ -89,3 +89,4 @@ server/tools/smoke-api.sh https://jungle-bell.sijun-yang.com
 - 배포와 장애 대응: [OPERATIONS.md](./OPERATIONS.md)
 - HTTP endpoint: [docs/api-reference.md](./docs/api-reference.md)
 - 환경 변수: [docs/environment-reference.md](./docs/environment-reference.md)
+- 로그 형식과 필드: [docs/logging-reference.md](./docs/logging-reference.md)

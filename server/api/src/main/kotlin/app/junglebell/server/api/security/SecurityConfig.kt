@@ -1,6 +1,8 @@
 package app.junglebell.server.api.security
 
 import app.junglebell.server.api.common.ApiErrorResponse
+import app.junglebell.server.api.logging.AuthenticatedUserMdcFilter
+import app.junglebell.server.api.logging.REQUEST_ID_HEADER
 import app.junglebell.server.common.config.JungleBellProperties
 import jakarta.servlet.http.HttpServletResponse
 import java.nio.charset.StandardCharsets
@@ -9,6 +11,7 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.http.MediaType
 import org.springframework.http.HttpMethod
+import org.slf4j.LoggerFactory
 import org.springframework.security.config.Customizer.withDefaults
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.http.SessionCreationPolicy
@@ -16,6 +19,7 @@ import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.security.oauth2.core.OAuth2AuthenticatedPrincipal
 import org.springframework.security.oauth2.server.resource.introspection.OpaqueTokenIntrospector
 import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter
 import org.springframework.security.web.AuthenticationEntryPoint
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.security.web.access.AccessDeniedHandler
@@ -26,6 +30,8 @@ import tools.jackson.databind.ObjectMapper
 
 @Configuration
 class SecurityConfig {
+    private val logger = LoggerFactory.getLogger(javaClass)
+
     @Bean
     fun personalApiAuthorization(properties: JungleBellProperties) =
         PersonalApiAuthorizationManager(properties, allowMobile = true)
@@ -71,11 +77,16 @@ class SecurityConfig {
                         opaque.introspector(opaqueTokenIntrospector)
                     }
             }
+            .addFilterAfter(AuthenticatedUserMdcFilter(), BearerTokenAuthenticationFilter::class.java)
             .build()
 
     @Bean
     fun authenticationEntryPoint(objectMapper: ObjectMapper): AuthenticationEntryPoint =
-        AuthenticationEntryPoint { _, response, _ ->
+        AuthenticationEntryPoint { request, response, _ ->
+            logger.warn(
+                "HTTP request authentication rejected. method={} status=401 errorCode=AUTHENTICATION_REQUIRED",
+                request.method,
+            )
             writeError(response, objectMapper, 401, "AUTHENTICATION_REQUIRED")
         }
 
@@ -95,6 +106,11 @@ class SecurityConfig {
                 requiresDesktopUi(request.requestURI) -> "DESKTOP_CAPABILITY_REQUIRED"
             else -> "SESSION_KIND_DENIED"
         }
+        logger.warn(
+            "HTTP request authorization rejected. method={} status=403 errorCode={}",
+            request.method,
+            code,
+        )
         writeError(response, objectMapper, 403, code)
     }
 
@@ -104,16 +120,16 @@ class SecurityConfig {
         val personalApi = CorsConfiguration().apply {
             allowedOrigins = properties.allowedDesktopOrigins.toList()
             allowedMethods = listOf("GET", "POST", "PUT", "DELETE", "OPTIONS")
-            allowedHeaders = listOf("Authorization", "Content-Type", "Accept", "Cache-Control")
-            exposedHeaders = listOf("Cache-Control", "Location")
+            allowedHeaders = listOf("Authorization", "Content-Type", "Accept", "Cache-Control", REQUEST_ID_HEADER)
+            exposedHeaders = listOf("Cache-Control", "Location", REQUEST_ID_HEADER)
             allowCredentials = false
             maxAge = 600
         }
         val publicApi = CorsConfiguration().apply {
             allowedOrigins = properties.allowedDesktopOrigins.toList()
             allowedMethods = listOf("GET", "HEAD", "OPTIONS")
-            allowedHeaders = listOf("Accept", "Cache-Control")
-            exposedHeaders = listOf("Cache-Control")
+            allowedHeaders = listOf("Accept", "Cache-Control", REQUEST_ID_HEADER)
+            exposedHeaders = listOf("Cache-Control", REQUEST_ID_HEADER)
             allowCredentials = false
             maxAge = 600
         }

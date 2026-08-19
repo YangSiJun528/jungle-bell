@@ -40,6 +40,8 @@ jungle-bell:
     meals-pinned-url: ${MEALS_PINNED_SOURCE_URL:}
 
 logging:
+  pattern:
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} level=%-5p requestId=%X{requestId:--} userId=%X{userId:--} jobRunId=%X{jobRunId:--} thread=%thread source=%class.%method - %msg%n%ex"
   level:
     root: INFO
     app.junglebell: ${JUNGLE_BELL_LOG_LEVEL:INFO}

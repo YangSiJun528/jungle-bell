@@ -4,6 +4,13 @@
 `code`를 포함합니다. 서버 시각은 UTC ISO 8601, 영속 시각은 epoch milliseconds를
 사용합니다.
 
+## 요청 식별자
+
+클라이언트는 `X-Request-ID` 요청 header를 보낼 수 있습니다. 서버는 허용된 형식이면
+그 값을 유지하고, 누락되거나 형식이 맞지 않으면 UUID를 생성합니다. 성공과 오류를
+포함한 모든 응답에 최종 `X-Request-ID`를 반환합니다. 브라우저 요청에서는 CORS
+`Access-Control-Expose-Headers`에도 이 header를 포함합니다.
+
 ## 인증 방식
 
 | 대상 | 자격 증명 | 허용 경로 |

@@ -12,6 +12,7 @@ import jakarta.validation.Valid
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseCookie
+import org.slf4j.LoggerFactory
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -22,19 +23,28 @@ import java.time.Duration
 
 @RestController
 class PairingController(private val service: PairingService) {
+    private val logger = LoggerFactory.getLogger(javaClass)
+
     @PostMapping("/api/me/pairings")
     @ResponseStatus(HttpStatus.CREATED)
     fun create(
         @CurrentSession principal: SessionPrincipal,
         @RequestBody body: Map<String, Any?>,
     ): PairingCreated {
+        logger.info("Pairing creation request received.")
         require(body.isEmpty())
-        return service.create(principal.requireDesktop())
+        val response = service.create(principal.requireDesktop())
+        logger.info("Pairing creation request completed. pairingId={} status=201", response.pairingId)
+        return response
     }
 
     @GetMapping("/api/me/pairings/{id}")
-    fun status(@CurrentSession principal: SessionPrincipal, @PathVariable id: String) =
-        service.status(principal.requireDesktop(), id)
+    fun status(@CurrentSession principal: SessionPrincipal, @PathVariable id: String): PairingStatusResponse {
+        logger.debug("Pairing status request received.")
+        val response = service.status(principal.requireDesktop(), id)
+        logger.debug("Pairing status request completed. status=200")
+        return response
+    }
 
     @PostMapping("/api/me/pairings/{id}/approve")
     @ResponseStatus(HttpStatus.NO_CONTENT)
@@ -42,7 +52,11 @@ class PairingController(private val service: PairingService) {
         @CurrentSession principal: SessionPrincipal,
         @PathVariable id: String,
         @Valid @RequestBody body: PairingApprovalRequest,
-    ) = service.approve(principal.requireDesktop(), id, body)
+    ) {
+        logger.info("Pairing approval request received.")
+        service.approve(principal.requireDesktop(), id, body)
+        logger.info("Pairing approval request completed. status=204")
+    }
 
     @PostMapping("/api/pairings/{id}/claims")
     @ResponseStatus(HttpStatus.CREATED)
@@ -52,8 +66,10 @@ class PairingController(private val service: PairingService) {
         request: HttpServletRequest,
         response: HttpServletResponse,
     ): PairingClaimResponse {
+        logger.info("QR pairing claim request received.")
         val claim = service.claimQr(id, body)
         setPendingCookie(request, response, claim)
+        logger.info("QR pairing claim request completed. pairingId={} status=201", claim.claimId)
         return PairingClaimResponse(claim.claimId)
     }
 
@@ -64,8 +80,10 @@ class PairingController(private val service: PairingService) {
         request: HttpServletRequest,
         response: HttpServletResponse,
     ): PairingClaimResponse {
+        logger.info("Manual pairing claim request received.")
         val claim = service.claimManual(body)
         setPendingCookie(request, response, claim)
+        logger.info("Manual pairing claim request completed. pairingId={} status=201", claim.claimId)
         return PairingClaimResponse(claim.claimId)
     }
 
@@ -77,9 +95,13 @@ class PairingController(private val service: PairingService) {
         request: HttpServletRequest,
         response: HttpServletResponse,
     ) {
+        logger.info("Pairing completion request received.")
         require(body.isEmpty())
         val receipt = cookie(request, "__Host-jb_pending_claim") ?: cookie(request, "jb_pending_claim")
-            ?: throw ApiException("PAIRING_RECEIPT_INVALID", HttpStatus.UNAUTHORIZED)
+        if (receipt == null) {
+            logger.warn("Pairing completion rejected. reason=receipt_cookie_missing")
+            throw ApiException("PAIRING_RECEIPT_INVALID", HttpStatus.UNAUTHORIZED)
+        }
         val completed = service.complete(id, receipt)
         clearCookie(request, response, "jb_pending_claim")
         setCookie(
@@ -89,6 +111,7 @@ class PairingController(private val service: PairingService) {
             completed.token,
             Duration.ofMillis((completed.expiresAtEpochMs - System.currentTimeMillis()).coerceAtLeast(0)),
         )
+        logger.info("Pairing completion request completed. status=204")
     }
 
     private fun setPendingCookie(request: HttpServletRequest, response: HttpServletResponse, claim: PairingClaim) =

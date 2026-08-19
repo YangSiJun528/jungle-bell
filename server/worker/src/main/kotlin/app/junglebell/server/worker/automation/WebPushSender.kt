@@ -43,7 +43,11 @@ class WebPushSender(properties: JungleBellProperties) : PushSender {
                 else -> PushResult("retry", "HTTP_$status")
             }
         } catch (error: Exception) {
-            logger.warn("Web Push request failed for subscription {}", delivery.subscriptionId, error)
+            logger.warn(
+                "Web Push request failed. subscriptionId={} action=retry",
+                delivery.subscriptionId,
+                sanitized(error),
+            )
             PushResult("retry", "WEB_PUSH_NETWORK_ERROR")
         }
     }
@@ -53,6 +57,10 @@ class WebPushSender(properties: JungleBellProperties) : PushSender {
         uri.scheme == "https" && uri.userInfo == null && uri.fragment == null &&
             uri.host?.lowercase() in ALLOWED_HOSTS
     }.getOrDefault(false)
+
+    private fun sanitized(error: Exception): RuntimeException = RuntimeException(error.javaClass.simpleName).also {
+        it.stackTrace = error.stackTrace
+    }
 
     private companion object {
         val ALLOWED_HOSTS = setOf(

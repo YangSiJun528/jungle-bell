@@ -6,6 +6,7 @@ import jakarta.validation.ConstraintViolationException
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.http.converter.HttpMessageNotReadableException
+import org.slf4j.LoggerFactory
 import org.springframework.validation.BindException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.MissingServletRequestParameterException
@@ -23,9 +24,17 @@ data class ApiErrorResponse(
 
 @RestControllerAdvice
 class ApiErrorHandler {
+    private val logger = LoggerFactory.getLogger(javaClass)
+
     @ExceptionHandler(ApiException::class)
-    fun api(error: ApiException): ResponseEntity<ApiErrorResponse> =
-        ResponseEntity.status(error.status).body(ApiErrorResponse(error.code))
+    fun api(error: ApiException): ResponseEntity<ApiErrorResponse> {
+        logger.warn(
+            "HTTP request rejected. status={} errorCode={}",
+            error.status.value(),
+            error.code,
+        )
+        return ResponseEntity.status(error.status).body(ApiErrorResponse(error.code))
+    }
 
     @ExceptionHandler(
         MethodArgumentNotValidException::class,
@@ -36,16 +45,27 @@ class ApiErrorHandler {
         MissingServletRequestParameterException::class,
         IllegalArgumentException::class,
     )
-    fun invalidRequest(error: Exception): ResponseEntity<ApiErrorResponse> =
-        ResponseEntity.badRequest().body(ApiErrorResponse("INVALID_REQUEST", validationIssues(error)))
+    fun invalidRequest(error: Exception): ResponseEntity<ApiErrorResponse> {
+        logger.warn(
+            "HTTP request rejected. status=400 errorCode=INVALID_REQUEST errorType={}",
+            error.javaClass.simpleName,
+        )
+        return ResponseEntity.badRequest().body(ApiErrorResponse("INVALID_REQUEST", validationIssues(error)))
+    }
 
     @ExceptionHandler(NoResourceFoundException::class)
-    fun notFound(@Suppress("UNUSED_PARAMETER") error: NoResourceFoundException): ResponseEntity<ApiErrorResponse> =
-        ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiErrorResponse("NOT_FOUND"))
+    fun notFound(@Suppress("UNUSED_PARAMETER") error: NoResourceFoundException): ResponseEntity<ApiErrorResponse> {
+        logger.debug("HTTP request resource not found. status=404 errorCode=NOT_FOUND")
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiErrorResponse("NOT_FOUND"))
+    }
 
     @ExceptionHandler(Exception::class)
     fun internal(error: Exception, request: HttpServletRequest): ResponseEntity<ApiErrorResponse> {
-        request.servletContext.log("Unhandled API failure for ${request.method} ${request.requestURI}", error)
+        logger.error(
+            "HTTP request failed. method={} status=500 errorCode=INTERNAL_ERROR",
+            request.method,
+            error,
+        )
         return ResponseEntity.internalServerError().body(ApiErrorResponse("INTERNAL_ERROR"))
     }
 
