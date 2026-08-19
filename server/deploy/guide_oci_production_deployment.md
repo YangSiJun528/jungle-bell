@@ -268,6 +268,9 @@ curl --fail --silent https://jungle-bell.sijun-yang.com/api/public/meals
 server/tools/smoke-api.sh https://jungle-bell.sijun-yang.com
 ```
 
+스모크 스크립트는 성공·실패 종료 시 인증된 identity 삭제 API로 임시 계정 정리를
+시도합니다. 출력에 `testAccount=deleted`가 있어야 외부 검증을 통과한 것입니다.
+
 서버에서도 상태와 최근 오류를 확인합니다.
 
 ```bash

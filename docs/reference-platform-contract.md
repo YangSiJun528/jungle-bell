@@ -48,11 +48,11 @@ Cloudflare Worker, D1, R2, Wrangler와 별도 TypeScript Jobs는 사용하지 �
 | 공개 세탁 | `GET /api/public/laundry`, `/head`, `/at`, `/minutes/:minute`, `/versions/:sha`, `/events` |
 | 공개 급식 | `GET /api/public/meals`, `GET /api/public/meals/history` |
 | 공개 자산 | `GET /api/public/assets/:sha.:extension` |
-| PC 등록 | `POST /api/desktop/installations`, `POST /api/desktop/installations/rotate` |
+| PC 등록 | `POST /api/desktop/installations`, `POST /api/desktop/installations/rotate`, `DELETE /api/desktop/installations/current` |
 | PC WebView session | `POST /api/desktop/webview-sessions`, `DELETE /api/desktop/webview-sessions/current` |
 | PC 동기화 | `POST /api/desktop/heartbeat`, `GET\|PUT /api/desktop/attendance` |
 | PC 알림 | `GET /api/desktop/notifications`, ack, test |
-| 모바일 관리 | `GET /api/desktop/mobile-sessions`, `DELETE /api/desktop/mobile-sessions/:id` |
+| 모바일 관리 | `GET /api/me/mobile-sessions`, `DELETE /api/me/mobile-sessions/:id` |
 | pairing | PC 생성·상태·승인과 모바일 claim·complete |
 | 브라우저 session | `GET\|DELETE /api/me/session` |
 | 공통 계정 정보 | `/api/me` 아래 출석, 설정, 세탁 watch, 알림 |
@@ -71,7 +71,7 @@ Cloudflare Worker, D1, R2, Wrangler와 별도 TypeScript Jobs는 사용하지 �
 | WebView origin | release `tauri://localhost`·`http://tauri.localhost`, dev `http://127.0.0.1:5173` |
 | pairing | QR 또는 10자리 코드, 2분 유효, PC 명시 승인 |
 | pending claim | 2분 Strict HttpOnly cookie |
-| 모바일 session | Strict HttpOnly cookie, 최대 365일 |
+| 모바일 session | Strict HttpOnly cookie, 최대 30일 |
 | Push subscription | 활성 모바일 session 소유, 해제·만료 시 전달 대상에서 제외 |
 
 Rust background service는 보호 저장소의 장기 bearer로 `/api/desktop/*`만 호출합니다.
@@ -82,6 +82,14 @@ HttpOnly cookie를 사용합니다. 일반 웹은 `/api/me/*`를 호출하지 �
 Spring Security의 Bearer filter와 opaque-token introspection이 세 인증 형식을 공통
 `Authentication`으로 변환합니다. 경로별 PC·모바일·WebView 권한과 WebView exact
 origin 검사는 `SecurityFilterChain`의 authorization policy에서 처리합니다.
+
+유효한 credential이 있는 PC identity 초기화는 인증된
+`DELETE /api/desktop/installations/current`가 먼저 성공해야 합니다. 이 요청은 해당
+`app_user`를 삭제하여 PC·WebView·모바일 session, Push 구독, 개인 설정과 알림을 한
+transaction에서 연쇄 삭제합니다. 서버가 오프라인이거나 삭제를 거부하면 앱은 로컬
+credential과 installation ID를 보존하여 모바일 접근이 남은 채로 새 identity를 만들지
+않습니다. credential이 이미 누락·만료되어 서버 identity를 증명할 수 없는 복구 경로는
+로컬 재등록만 수행하며, 이전 모바일 session은 운영자 확인과 정리가 필요할 수 있습니다.
 
 claim과 complete JSON에는 access token, LMS cookie, claim receipt를 포함하지
 않습니다. 연결된 모바일이 없는 상태는 정상적인 빈 목록입니다.

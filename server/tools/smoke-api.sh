@@ -2,18 +2,25 @@
 set -euo pipefail
 
 base_url="${1:-http://127.0.0.1:8080}"
-postgres_container="${POSTGRES_CONTAINER:-jungle-bell-postgres}"
 installation_id="smoke-$(openssl rand -hex 8)"
 work_dir="$(mktemp -d)"
+desktop_token=""
+account_deleted="false"
 
 cleanup() {
-  user_id="$(docker exec "$postgres_container" psql -U jungle_bell -d jungle_bell \
-    -Atc "SELECT user_id FROM desktop_device WHERE installation_id = '$installation_id'" 2>/dev/null || true)"
-  if [[ -n "$user_id" ]]; then
-    docker exec "$postgres_container" psql -U jungle_bell -d jungle_bell \
-      -c "DELETE FROM app_user WHERE id = '$user_id'::uuid" >/dev/null
+  local original_status="$?"
+  trap - EXIT
+  if [[ -n "$desktop_token" && "$account_deleted" != "true" ]]; then
+    local cleanup_status
+    cleanup_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+      -X DELETE -H "authorization: Bearer $desktop_token" \
+      "$base_url/api/desktop/installations/current" || true)"
+    if [[ "$cleanup_status" != "204" ]]; then
+      printf 'warning: smoke account cleanup returned HTTP %s\n' "$cleanup_status" >&2
+    fi
   fi
   rm -rf "$work_dir"
+  exit "$original_status"
 }
 trap cleanup EXIT
 
@@ -24,7 +31,7 @@ request() {
   local actual
   actual="$(curl --silent --show-error --output "$output" --write-out '%{http_code}' "$@")"
   [[ "$actual" == "$expected" ]] || {
-    printf 'expected HTTP %s, got %s for %s\n' "$expected" "$actual" "$*" >&2
+    printf 'expected HTTP %s, got %s\n' "$expected" "$actual" >&2
     sed -n '1,20p' "$output" >&2
     exit 1
   }
@@ -79,8 +86,20 @@ request 403 "$work_dir/evil-origin.json" \
   -H 'origin: https://evil.example' \
   "$base_url/api/me/attendance"
 
-cleanup
-trap - EXIT
+request 204 "$work_dir/delete-identity.json" \
+  -X DELETE \
+  -H "authorization: Bearer $desktop_token" \
+  "$base_url/api/desktop/installations/current"
+account_deleted="true"
+
+request 401 "$work_dir/deleted-desktop-token.json" \
+  -H "authorization: Bearer $desktop_token" \
+  "$base_url/api/desktop/attendance"
+request 401 "$work_dir/deleted-ui-token.json" \
+  -H "authorization: Bearer $ui_token" \
+  -H 'origin: tauri://localhost' \
+  "$base_url/api/me/attendance"
+desktop_token=""
 
 printf '%s\n' \
   'enrollment=201' \
@@ -91,4 +110,6 @@ printf '%s\n' \
   'mobileSessions=200 empty' \
   'heartbeat=200' \
   'evilOrigin=403' \
+  'deletedDesktopToken=401' \
+  'deletedWebviewToken=401' \
   'testAccount=deleted'

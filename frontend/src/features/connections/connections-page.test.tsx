@@ -38,6 +38,8 @@ describe('ConnectionsPage settings information architecture', () => {
         expect(source).toContain("setIdentityResetReason('reset')");
         expect(source).toContain('PC 연결 정보를 초기화할까요?');
         expect(source).toContain('네, PC 초기화');
+        expect(source).toContain('이 PC의 서버 계정과 인증 정보를 삭제하고 새로 만듭니다.');
+        expect(source).toContain('기존 모바일 정리는 운영자 확인이 필요할 수 있습니다.');
         expect(source).toContain('onClick={() => reset.mutate()}');
         expect(source).not.toContain('window.confirm');
     });

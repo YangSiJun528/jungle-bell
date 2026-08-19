@@ -416,18 +416,17 @@ impl RemoteSyncService {
         }
     }
 
-    pub(crate) async fn reset_identity(&self, origin: &str) -> Result<ConnectedServiceStatus, String> {
+    pub(crate) async fn reset_identity(&self, _origin: &str) -> Result<ConnectedServiceStatus, String> {
         let _transition = self.webview_session_transition.lock().await;
         let registration = self.registration.lock().await;
         let identity_transition = self.identity_transition.write().await;
-        self.identity_generation.fetch_add(1, Ordering::AcqRel);
         if let Some(bearer) = self.current_bearer().await {
-            if let Err(error) = self.api.revoke_webview_session(&bearer, origin).await {
-                // Revocation is defense in depth. Offline/unavailable service must never
-                // prevent clearing the long-lived credential and local installation ID.
-                log::warn!("[connected-service] UI session revocation deferred: {}", error.code());
+            if let Err(error) = self.api.delete_installation(&bearer).await {
+                self.record_error(error).await;
+                return Err(error.code().to_owned());
             }
         }
+        self.identity_generation.fetch_add(1, Ordering::AcqRel);
         let credential_transition = self.credential_transition.lock().await;
         clear_credential_store(Arc::clone(&self.credential_store))
             .await
@@ -814,7 +813,7 @@ mod initialization_tests {
         let store = StdArc::new(crate::secure_credential::MemoryCredentialStore::new(None));
         let service = StdArc::new(
             RemoteSyncService::with_store(
-                RemoteApi::new("http://127.0.0.1:9").unwrap(),
+                RemoteApi::with_identity_deletion_result(Ok(())),
                 directory.path().to_path_buf(),
                 identity.id,
                 false,

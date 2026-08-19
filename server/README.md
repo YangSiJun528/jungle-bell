@@ -81,6 +81,9 @@ docker build --target worker-runtime -f server/Dockerfile .
 server/tools/smoke-api.sh https://jungle-bell.sijun-yang.com
 ```
 
+스크립트가 만든 임시 계정은 인증된 identity 삭제 API로 정리되므로 공식 origin을
+로컬에서 검증해도 운영 DB에 테스트 계정을 남기지 않습니다.
+
 ## 문서
 
 - 배포와 장애 대응: [OPERATIONS.md](./OPERATIONS.md)

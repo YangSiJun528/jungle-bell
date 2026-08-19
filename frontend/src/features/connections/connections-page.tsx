@@ -307,7 +307,9 @@ function DesktopConnections() {
                                 : 'PC 연결 정보를 초기화할까요?'}
                         </AlertDialogTitle>
                         <AlertDialogDescription>
-                            이 PC의 서버 인증 정보를 삭제하고 새로 만듭니다. 연결된 모바일은 모두 해제되며 되돌릴 수 없습니다.
+                            {identityResetReason === 'recovery'
+                                ? '남아 있는 로컬 인증 정보를 새로 만듭니다. 이전 서버 credential이 이미 없으면 기존 모바일 정리는 운영자 확인이 필요할 수 있습니다.'
+                                : '이 PC의 서버 계정과 인증 정보를 삭제하고 새로 만듭니다. 연결된 모바일은 모두 해제되며 되돌릴 수 없습니다.'}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>

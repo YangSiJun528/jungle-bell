@@ -7,6 +7,8 @@ pub(crate) struct RemoteApi {
     client: Client,
     #[cfg(test)]
     rotation_result: Arc<std::sync::Mutex<Option<Result<BearerCredential, ServiceError>>>>,
+    #[cfg(test)]
+    identity_deletion_result: Arc<std::sync::Mutex<Option<Result<(), ServiceError>>>>,
 }
 
 impl RemoteApi {
@@ -27,6 +29,8 @@ impl RemoteApi {
             client,
             #[cfg(test)]
             rotation_result: Arc::new(std::sync::Mutex::new(None)),
+            #[cfg(test)]
+            identity_deletion_result: Arc::new(std::sync::Mutex::new(None)),
         })
     }
 
@@ -34,6 +38,13 @@ impl RemoteApi {
     pub(crate) fn with_rotation_result(result: Result<BearerCredential, ServiceError>) -> Self {
         let mut api = Self::new("https://bell.example.com").unwrap();
         api.rotation_result = Arc::new(std::sync::Mutex::new(Some(result)));
+        api
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_identity_deletion_result(result: Result<(), ServiceError>) -> Self {
+        let mut api = Self::new("http://127.0.0.1:9").unwrap();
+        api.identity_deletion_result = Arc::new(std::sync::Mutex::new(Some(result)));
         api
     }
 
@@ -77,6 +88,22 @@ impl RemoteApi {
         BearerCredential::from_wire(body.access_token, &body.expires_at)
     }
 
+    pub(crate) async fn delete_installation(&self, bearer: &str) -> Result<(), ServiceError> {
+        #[cfg(test)]
+        if let Some(result) = self.identity_deletion_result.lock().unwrap().take() {
+            return result;
+        }
+        let response = self
+            .client
+            .delete(self.endpoint(CURRENT_INSTALLATION_PATH)?)
+            .bearer_auth(bearer)
+            .header(CACHE_CONTROL, "no-store")
+            .send()
+            .await
+            .map_err(|_| ServiceError::Unavailable)?;
+        ensure_authenticated_status(&response, &[StatusCode::NO_CONTENT])
+    }
+
     pub(crate) async fn bootstrap_webview_session(
         &self,
         bearer: &str,
@@ -95,19 +122,6 @@ impl RemoteApi {
         let session: DesktopHttpSession = decode_json_limited(response).await?;
         session.validate()?;
         Ok(session)
-    }
-
-    pub(crate) async fn revoke_webview_session(&self, bearer: &str, origin: &str) -> Result<(), ServiceError> {
-        let response = self
-            .client
-            .delete(self.endpoint(CURRENT_WEBVIEW_SESSION_PATH)?)
-            .bearer_auth(bearer)
-            .header(CACHE_CONTROL, "no-store")
-            .json(&DesktopHttpSessionRequest { origin })
-            .send()
-            .await
-            .map_err(|_| ServiceError::Unavailable)?;
-        ensure_authenticated_status(&response, &[StatusCode::NO_CONTENT])
     }
 
     pub(crate) async fn put_attendance(
@@ -213,6 +227,7 @@ pub(crate) fn is_canonical_server_path(path: &str) -> bool {
     if matches!(
         path,
         INSTALLATIONS_PATH
+            | CURRENT_INSTALLATION_PATH
             | ROTATE_INSTALLATION_PATH
             | WEBVIEW_SESSIONS_PATH
             | CURRENT_WEBVIEW_SESSION_PATH

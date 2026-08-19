@@ -148,6 +148,10 @@ curl --fail --silent https://jungle-bell.sijun-yang.com/api/public/meals
 server/tools/smoke-api.sh https://jungle-bell.sijun-yang.com
 ```
 
+스모크 스크립트는 임시 PC 계정을 만든 뒤 인증된
+`DELETE /api/desktop/installations/current`로 계정과 종속 데이터를 삭제합니다. 실패
+중단 시에도 같은 삭제를 시도하므로 로컬 PostgreSQL container 접근에 의존하지 않습니다.
+
 다음 항목도 확인합니다.
 
 - 일반 브라우저와 설치 PWA에서 SPA 최초 접속, hash 경로 직접 접속, 새로고침

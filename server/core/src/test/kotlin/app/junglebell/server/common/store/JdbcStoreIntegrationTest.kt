@@ -165,6 +165,44 @@ class JdbcStoreIntegrationTest {
     }
 
     @Test
+    fun `desktop identity deletion cascades every account-owned session and subscription`() {
+        val userId = createUser()
+        val installationId = "desktop-${UUID.randomUUID()}"
+        val desktopSessionId = createDesktop(userId, installationId, randomHash(), 20_000)
+        val mobileSessionId = UUID.randomUUID()
+        jdbc.sql(
+            """
+            INSERT INTO app_session(
+                id, user_id, installation_id, kind, label, token_sha256,
+                created_at_epoch_ms, expires_at_epoch_ms, last_seen_at_epoch_ms,
+                revoked_at_epoch_ms, source_pairing_id
+            ) VALUES (:id, :userId, 'mobile-reset-test', 'mobile', '휴대전화', :tokenHash,
+                0, 20000, 0, NULL, NULL)
+            """.trimIndent(),
+        ).param("id", mobileSessionId).param("userId", userId).param("tokenHash", randomHash()).update()
+        jdbc.sql(
+            """
+            INSERT INTO push_subscription(
+                id, user_id, session_id, endpoint, p256dh, auth,
+                created_at_epoch_ms, revoked_at_epoch_ms
+            ) VALUES (:id, :userId, :sessionId, 'https://push.example.test/reset', 'p256dh', 'auth', 0, NULL)
+            """.trimIndent(),
+        ).param("id", "jbps_${randomHash()}").param("userId", userId)
+            .param("sessionId", mobileSessionId).update()
+        val principal = SessionPrincipal(desktopSessionId, userId, installationId, SessionKind.DESKTOP)
+
+        assertTrue(JdbcAccountStore(jdbc).deleteDesktopIdentity(principal))
+        for (table in listOf("app_user", "desktop_device", "app_session", "push_subscription")) {
+            assertEquals(
+                0,
+                jdbc.sql("SELECT count(*) FROM $table WHERE ${if (table == "app_user") "id" else "user_id"} = :userId")
+                    .param("userId", userId).query(Int::class.java).single(),
+                table,
+            )
+        }
+    }
+
+    @Test
     fun `push claim and settlement revoke a gone subscription`() {
         val userId = createUser()
         val installationId = "desktop-${UUID.randomUUID()}"

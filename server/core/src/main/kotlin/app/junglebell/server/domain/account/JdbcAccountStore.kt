@@ -132,6 +132,22 @@ class JdbcAccountStore(private val jdbc: JdbcClient) : AccountStore {
         .param("newSessionId", newSessionId).param("tokenHash", tokenHash).param("expiresAt", expiresAt)
         .query(UUID::class.java).optional().isPresent
 
+    override fun deleteDesktopIdentity(principal: SessionPrincipal): Boolean = jdbc.sql(
+        """
+        DELETE FROM app_user account
+        USING app_session session
+        WHERE account.id = :userId
+          AND session.id = :sessionId
+          AND session.user_id = account.id
+          AND session.installation_id = :installationId
+          AND session.kind = 'desktop'
+          AND session.revoked_at_epoch_ms IS NULL
+        RETURNING account.id
+        """.trimIndent(),
+    ).param("userId", principal.userId).param("sessionId", principal.sessionId)
+        .param("installationId", principal.installationId)
+        .query(UUID::class.java).optional().isPresent
+
     override fun replaceDesktopUiSession(
         id: UUID,
         principal: SessionPrincipal,

@@ -62,6 +62,7 @@ stale-while-revalidate를 사용합니다.
 | Method | 경로 | 설명 |
 | --- | --- | --- |
 | `POST` | `/api/desktop/installations` | 새 PC와 사용자 생성, `jbd_` credential 발급 |
+| `DELETE` | `/api/desktop/installations/current` | 현재 PC 사용자와 모든 session·개인 데이터 삭제 |
 | `POST` | `/api/desktop/installations/rotate` | 현재 PC credential 교체 |
 | `POST` | `/api/desktop/webview-sessions` | exact origin에 묶인 `jbui_` token 발급 |
 | `DELETE` | `/api/desktop/webview-sessions/current` | 해당 origin의 WebView token 폐기 |
@@ -114,7 +115,7 @@ WebView bearer는 다른 namespace에 사용할 수 없습니다. 허용 origin�
 | `GET` | `/api/me/attendance` | 출석 snapshot과 PC 상태 |
 
 claim receipt는 JSON에 노출하지 않고 2분짜리 Strict HttpOnly pending cookie에만
-저장합니다. 승인 완료 시 최대 365일의 모바일 session cookie를 발급합니다.
+저장합니다. 승인 완료 시 최대 30일의 모바일 session cookie를 발급합니다.
 
 연결된 모바일이 0개인 상태는 오류가 아니라 정상적인 빈 목록입니다.
 

@@ -32,6 +32,7 @@ const LMS_HOST: &str = "jungle-lms.krafton.com";
 const CHECKER_WINDOW_LABEL: &str = "checker";
 const DASHBOARD_WINDOW_LABEL: &str = "dashboard";
 const INSTALLATIONS_PATH: &str = "/api/desktop/installations";
+const CURRENT_INSTALLATION_PATH: &str = "/api/desktop/installations/current";
 const ROTATE_INSTALLATION_PATH: &str = "/api/desktop/installations/rotate";
 const WEBVIEW_SESSIONS_PATH: &str = "/api/desktop/webview-sessions";
 const CURRENT_WEBVIEW_SESSION_PATH: &str = "/api/desktop/webview-sessions/current";
@@ -525,6 +526,7 @@ mod tests {
         let api = RemoteApi::new("https://bell.example.com").unwrap();
         for path in [
             "/api/desktop/installations",
+            "/api/desktop/installations/current",
             "/api/desktop/installations/rotate",
             "/api/desktop/webview-sessions",
             "/api/desktop/webview-sessions/current",
@@ -595,7 +597,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn identity_reset은_webview_revoke가_offline이어도_local_identity를_지운다() {
+    async fn identity_reset은_server_deletion이_실패하면_local_identity를_보존한다() {
         let directory = tempfile::tempdir().unwrap();
         let identity = secure_credential::load_or_create_installation_identity(directory.path()).unwrap();
         let original_id = identity.id.clone();
@@ -614,12 +616,34 @@ mod tests {
         )
         .unwrap();
 
+        assert_eq!(
+            service.reset_identity("tauri://localhost").await,
+            Err(ServiceError::Unavailable.code().to_owned()),
+        );
+        assert_eq!(service.installation_id_for_analytics().await, original_id);
+        assert!(service.current_bearer().await.is_some());
+        assert!(store.load().unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn credential이_이미_없으면_identity_recovery가_새_registration을_시도한다() {
+        let directory = tempfile::tempdir().unwrap();
+        let identity = secure_credential::load_or_create_installation_identity(directory.path()).unwrap();
+        let original_id = identity.id.clone();
+        let service = RemoteSyncService::with_store(
+            RemoteApi::new("http://127.0.0.1:9").unwrap(),
+            directory.path().to_path_buf(),
+            original_id.clone(),
+            false,
+            Arc::new(MemoryCredentialStore::new(None)),
+        )
+        .unwrap();
+
         let status = service.reset_identity("tauri://localhost").await.unwrap();
+
         assert!(!status.authenticated);
         assert_eq!(status.last_error.as_deref(), Some(ServiceError::Unavailable.code()));
         assert_ne!(service.installation_id_for_analytics().await, original_id);
-        assert!(service.current_bearer().await.is_none());
-        assert!(store.load().unwrap().is_none());
     }
 
     #[test]

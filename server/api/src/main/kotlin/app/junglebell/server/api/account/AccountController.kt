@@ -34,6 +34,11 @@ class AccountController(private val service: AccountService) {
         return service.rotate(principal)
     }
 
+    @DeleteMapping("/api/desktop/installations/current")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    fun deleteDesktopIdentity(@CurrentSession principal: SessionPrincipal) =
+        service.deleteDesktopIdentity(principal.requireDesktop())
+
     @PostMapping("/api/desktop/webview-sessions")
     @ResponseStatus(HttpStatus.CREATED)
     fun issueDesktopUi(

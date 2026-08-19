@@ -28,6 +28,8 @@ interface AccountStore {
         expiresAt: Long,
     ): Boolean
 
+    fun deleteDesktopIdentity(principal: SessionPrincipal): Boolean
+
     fun replaceDesktopUiSession(
         id: UUID,
         principal: SessionPrincipal,

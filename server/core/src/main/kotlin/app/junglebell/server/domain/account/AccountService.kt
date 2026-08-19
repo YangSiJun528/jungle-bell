@@ -63,6 +63,12 @@ class AccountService(
         return AccessTokenResponse(accessToken, Instant.ofEpochMilli(expiresAt).toString())
     }
 
+    fun deleteDesktopIdentity(principal: SessionPrincipal) {
+        if (!store.deleteDesktopIdentity(principal)) {
+            throw ApiException("DESKTOP_IDENTITY_DELETION_REJECTED", HttpStatus.CONFLICT)
+        }
+    }
+
     fun issueDesktopUi(principal: SessionPrincipal, request: DesktopUiSessionRequest): AccessTokenResponse {
         if (request.origin !in properties.allowedDesktopOrigins) {
             throw ApiException("ORIGIN_NOT_ALLOWED", HttpStatus.FORBIDDEN)

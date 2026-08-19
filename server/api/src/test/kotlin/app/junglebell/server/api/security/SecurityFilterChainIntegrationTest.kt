@@ -12,6 +12,7 @@ import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.forwardedUrl
@@ -97,6 +98,61 @@ class SecurityFilterChainIntegrationTest(
             get("/api/desktop/attendance")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer $token"),
         ).andExpect(status().isOk)
+    }
+
+    @Test
+    fun `desktop identity deletion invalidates its bearer and removes the account`() {
+        val token = "jbd_" + "f".repeat(64)
+        val sessionId = createAppSession("desktop", token)
+        val userId = jdbc.sql("SELECT user_id FROM app_session WHERE id = :id")
+            .param("id", sessionId).query(UUID::class.java).single()
+        val mobileToken = "jbs_" + "8".repeat(64)
+        val now = System.currentTimeMillis()
+        jdbc.sql(
+            """
+            INSERT INTO app_session(
+                id, user_id, installation_id, kind, label, token_sha256,
+                created_at_epoch_ms, expires_at_epoch_ms, last_seen_at_epoch_ms,
+                revoked_at_epoch_ms, source_pairing_id
+            ) VALUES (:id, :userId, :installationId, 'mobile', 'reset test mobile', :tokenHash,
+                :now, :expiresAt, :now, NULL, NULL)
+            """.trimIndent(),
+        ).param("id", UUID.randomUUID()).param("userId", userId)
+            .param("installationId", "mobile-${UUID.randomUUID()}")
+            .param("tokenHash", tokens.sessionHash(mobileToken))
+            .param("now", now).param("expiresAt", now + 60_000).update()
+
+        mockMvc.perform(get("/api/me/session").cookie(Cookie("jb_device", mobileToken)))
+            .andExpect(status().isOk)
+
+        mockMvc.perform(
+            delete("/api/desktop/installations/current")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer $token"),
+        ).andExpect(status().isNoContent)
+
+        mockMvc.perform(
+            get("/api/desktop/attendance")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer $token"),
+        ).andExpect(status().isUnauthorized)
+        mockMvc.perform(get("/api/me/session").cookie(Cookie("jb_device", mobileToken)))
+            .andExpect(status().isUnauthorized)
+        kotlin.test.assertEquals(
+            0,
+            jdbc.sql("SELECT count(*) FROM app_user WHERE id = :id")
+                .param("id", userId).query(Int::class.java).single(),
+        )
+    }
+
+    @Test
+    fun `mobile bearer cannot delete a desktop identity`() {
+        val token = "jbs_" + "9".repeat(64)
+        createAppSession("mobile", token)
+
+        mockMvc.perform(
+            delete("/api/desktop/installations/current")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer $token"),
+        ).andExpect(status().isForbidden)
+            .andExpect(jsonPath("$.error").value("SESSION_KIND_DENIED"))
     }
 
     @Test

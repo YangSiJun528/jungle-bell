@@ -2,6 +2,8 @@ package app.junglebell.server.domain.account
 
 import app.junglebell.server.common.error.ApiException
 import app.junglebell.server.common.config.JungleBellProperties
+import app.junglebell.server.domain.security.SessionKind
+import app.junglebell.server.domain.security.SessionPrincipal
 import app.junglebell.server.domain.security.TokenCodec
 import org.mockito.Answers
 import org.mockito.Mockito.mock
@@ -10,6 +12,7 @@ import java.net.URI
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
+import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -78,6 +81,31 @@ class AccountServiceTest {
 
         assertEquals("DESKTOP_ALREADY_ENROLLED", error.code)
         assertEquals(409, error.status.value())
+    }
+
+    @Test
+    fun deleteDesktopIdentityRequiresTheCurrentDesktopRow() {
+        val store = mock(AccountStore::class.java) { invocation ->
+            if (invocation.method.name == "deleteDesktopIdentity") false
+            else Answers.RETURNS_DEFAULTS.answer(invocation)
+        }
+        val principal = SessionPrincipal(
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            "desktop-installation-4",
+            SessionKind.DESKTOP,
+        )
+
+        val error = assertFailsWith<ApiException> {
+            service(store).deleteDesktopIdentity(principal)
+        }
+
+        assertEquals("DESKTOP_IDENTITY_DELETION_REJECTED", error.code)
+        assertEquals(409, error.status.value())
+        assertEquals(
+            1,
+            mockingDetails(store).invocations.count { it.method.name == "deleteDesktopIdentity" },
+        )
     }
 
     private fun enrollmentStore(failure: RuntimeException? = null): AccountStore =
