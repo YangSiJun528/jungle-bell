@@ -14,28 +14,92 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.util.UUID
 
+private const val MINUTE_MILLIS = 60_000L
+private val ATTENDANCE_TIME_ZONE = ZoneId.of("Asia/Seoul")
+
 internal data class AttendanceNotificationCopy(
     val kind: String,
     val title: String,
     val body: String,
 )
 
+internal data class AttendanceNotificationTiming(
+    val deadlineAtEpochMs: Long,
+    val countdownTargetEpochMs: Long?,
+    val remainingMinutes: Long?,
+)
+
+internal fun attendanceRemainingMinutes(nowEpochMs: Long, targetEpochMs: Long): Long? {
+    val remainingMillis = targetEpochMs - nowEpochMs
+    if (remainingMillis <= 0) return null
+    return remainingMillis / MINUTE_MILLIS + if (remainingMillis % MINUTE_MILLIS == 0L) 0 else 1
+}
+
+internal fun attendanceNotificationTiming(
+    phase: String,
+    deadline: Boolean,
+    deadlineAtEpochMs: Long,
+    endsAtEpochMs: Long,
+    nowEpochMs: Long,
+): AttendanceNotificationTiming {
+    val countdownTargetEpochMs = when {
+        !deadline -> deadlineAtEpochMs
+        phase == "morning" -> endsAtEpochMs
+        else -> null
+    }
+    return AttendanceNotificationTiming(
+        deadlineAtEpochMs = deadlineAtEpochMs,
+        countdownTargetEpochMs = countdownTargetEpochMs,
+        remainingMinutes = countdownTargetEpochMs?.let { attendanceRemainingMinutes(nowEpochMs, it) },
+    )
+}
+
+private fun attendanceTimeLabel(epochMs: Long): String {
+    val time = Instant.ofEpochMilli(epochMs).atZone(ATTENDANCE_TIME_ZONE)
+    return "%02d:%02d".format(time.hour, time.minute)
+}
+
+private fun attendanceRemainingLabel(minutes: Long): String {
+    require(minutes > 0) { "Remaining attendance minutes must be positive." }
+    if (minutes < 60) return "${minutes}분"
+    val hours = minutes / 60
+    val remainder = minutes % 60
+    return if (remainder == 0L) "${hours}시간" else "${hours}시간 ${remainder}분"
+}
+
 internal fun attendanceNotificationCopy(
     phase: String,
     deadline: Boolean,
     fallbackReason: String?,
+    timing: AttendanceNotificationTiming,
 ): AttendanceNotificationCopy {
     val label = when (phase) {
         "morning" -> "학습 시작"
         "evening" -> "학습 종료"
         else -> error("Unsupported attendance phase: $phase")
     }
-    val title = if (deadline) "$label 체크 마감" else "$label 체크가 필요합니다"
-    val body = when (fallbackReason) {
-        "desktop-offline" -> "PC가 연결되지 않아 출석 상태를 확인할 수 없습니다. LMS에서 직접 확인해 주세요."
-        "login-required" -> "PC의 LMS 로그인이 만료되어 출석 상태를 확인할 수 없습니다."
+    val morningGrace = phase == "morning" && deadline && timing.remainingMinutes != null
+    val title = when {
+        morningGrace -> "학습 시작 체크 지각 임박"
+        deadline -> "$label 체크 마감"
+        else -> "$label 체크가 필요합니다"
+    }
+    val timingBody = when {
+        timing.countdownTargetEpochMs != null && timing.remainingMinutes != null -> {
+            val deadlineKind = if (morningGrace) "최종 마감" else "마감"
+            "${attendanceTimeLabel(timing.countdownTargetEpochMs)} ${deadlineKind}까지 " +
+                "${attendanceRemainingLabel(timing.remainingMinutes)} 남았습니다."
+        }
+        deadline -> "${attendanceTimeLabel(timing.deadlineAtEpochMs)} 마감 시각이 지났습니다."
         else -> "$label 여부를 LMS에서 확인해 주세요."
     }
+    val guidance = when (fallbackReason) {
+        "desktop-offline" -> "PC가 연결되지 않아 출석 상태를 확인할 수 없습니다. LMS에서 직접 확인해 주세요."
+        "login-required" ->
+            "PC의 LMS 로그인이 만료되어 출석 상태를 확인할 수 없습니다. LMS에서 직접 확인해 주세요."
+        else -> if (deadline && timing.remainingMinutes == null) "지금 LMS에서 확인해 주세요." else null
+    }
+    val body = listOfNotNull(timingBody, guidance).joinToString(" ")
     return AttendanceNotificationCopy("attendance-action-required", title, body)
 }
 
@@ -211,7 +275,14 @@ class AutomationEngine(
         now: Long,
     ): NotificationRecord {
         val id = UUID.randomUUID()
-        val copy = attendanceNotificationCopy(phase, window.deadline, fallbackReason)
+        val timing = attendanceNotificationTiming(
+            phase = phase,
+            deadline = window.deadline,
+            deadlineAtEpochMs = window.deadlineAtEpochMs,
+            endsAtEpochMs = window.endsAtEpochMs,
+            nowEpochMs = now,
+        )
+        val copy = attendanceNotificationCopy(phase, window.deadline, fallbackReason, timing)
         return NotificationRecord(
             id,
             userId,
@@ -231,6 +302,9 @@ class AutomationEngine(
                 "attendanceDate" to window.attendanceDate.toString(),
                 "phase" to phase,
                 "fallbackReason" to fallbackReason,
+                "deadlineAtEpochMs" to timing.deadlineAtEpochMs,
+                "countdownTargetEpochMs" to timing.countdownTargetEpochMs,
+                "remainingMinutes" to timing.remainingMinutes,
             ),
             now,
             window.dueAtEpochMs,
@@ -271,12 +345,13 @@ class AutomationEngine(
         }
         val ends = if (deadlineSlot) graceEnd else minOf(due.plusMinutes(intervalMinutes.toLong()), deadline)
         return AttendanceWindow(
-            attendanceDate,
-            phase,
-            "%02d%02d".format(due.hour, due.minute),
-            deadlineSlot,
-            due.toInstant().toEpochMilli(),
-            ends.toInstant().toEpochMilli(),
+            attendanceDate = attendanceDate,
+            phase = phase,
+            slot = "%02d%02d".format(due.hour, due.minute),
+            deadline = deadlineSlot,
+            deadlineAtEpochMs = deadline.toInstant().toEpochMilli(),
+            dueAtEpochMs = due.toInstant().toEpochMilli(),
+            endsAtEpochMs = ends.toInstant().toEpochMilli(),
         )
     }
 
@@ -314,6 +389,7 @@ data class AttendanceWindow(
     val phase: String,
     val slot: String,
     val deadline: Boolean,
+    val deadlineAtEpochMs: Long,
     val dueAtEpochMs: Long,
     val endsAtEpochMs: Long,
 )
