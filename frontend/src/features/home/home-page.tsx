@@ -18,12 +18,14 @@ import {
 import {PageHeader} from '@/components/dashboard/page-header';
 import {AsyncBoundary} from '@/components/dashboard/async-boundary';
 import {AppShowcaseCard} from '@/components/app-showcase/app-showcase-card';
+import {useDashboardEnvironment} from '@/app/dashboard-context';
 import {laundryZonePresentation} from '@/components/dashboard/laundry-zone-presentation';
 import {
     useRefreshHomeMutation,
     useSuspenseCampusQueries,
 } from '@/app/use-dashboard-queries';
 import {cn} from '@/lib/utils';
+import {JungleCampusSummary} from './jungle-campus-summary';
 import {HomeMealSlotsList} from './home-meal-slots';
 import {
     homeLaundrySummary,
@@ -129,7 +131,9 @@ function HomeLivingSummaries() {
 }
 
 export function HomePage() {
+    const {platform} = useDashboardEnvironment();
     const refreshHome = useRefreshHomeMutation();
+    const showAttendanceSummary = platform.kind === 'desktop' || platform.pwa.installed;
 
     return (
         <div className="space-y-6">
@@ -145,7 +149,7 @@ export function HomePage() {
                 )}
             />
 
-            <AppShowcaseCard/>
+            {showAttendanceSummary ? <JungleCampusSummary/> : <AppShowcaseCard/>}
 
             {refreshHome.isError ? (
                 <Alert variant="destructive">
@@ -167,7 +171,7 @@ export function HomePage() {
 
             <AsyncBoundary
                 errorTitle="오늘의 생활 정보를 불러오지 못했습니다."
-                errorDescription="앱 안내는 계속 확인할 수 있습니다. 잠시 후 다시 시도해 주세요."
+                errorDescription="상단 정보는 계속 확인할 수 있습니다. 잠시 후 다시 시도해 주세요."
             >
                 <HomeLivingSummaries/>
             </AsyncBoundary>

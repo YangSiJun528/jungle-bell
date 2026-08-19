@@ -48,11 +48,13 @@ describe('home feature boundaries', () => {
         expect(source).not.toContain('CompactError');
     });
 
-    it('places the app showcase before living information', () => {
+    it('PC와 설치형 PWA에는 출석 요약을, 일반 웹에는 앱 소개를 표시한다', () => {
         const source = readFileSync(new URL('./home-page.tsx', import.meta.url), 'utf8');
 
+        expect(source).toContain("platform.kind === 'desktop' || platform.pwa.installed");
+        expect(source).toContain('<JungleCampusSummary/>');
         expect(source).toContain('<AppShowcaseCard/>');
-        expect(source.indexOf('<AppShowcaseCard'))
+        expect(source.indexOf('<JungleCampusSummary'))
             .toBeLessThan(source.lastIndexOf('<AsyncBoundary'));
         expect(source).not.toContain('title="출석"');
         expect(source).not.toContain('<CardTitle>공식 정글캠퍼스</CardTitle>');

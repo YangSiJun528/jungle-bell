@@ -91,13 +91,14 @@ test('브라우저와 데스크톱은 동일한 SPA 경로 정책을 사용한�
     assert.match(shell, /routes\.map/);
 });
 
-test('홈은 출석 카드를 앱 소개 카드로 교체하고 오늘 세탁·급식을 유지한다', () => {
+test('홈은 PC·PWA 출석 요약과 일반 웹 앱 소개를 구분하고 오늘 세탁·급식을 유지한다', () => {
     assert.match(home, /title="오늘 필요한 정보"/);
     for (const title of ['세탁실', '오늘 급식']) {
         assert.match(home, new RegExp(`title="${title}"`));
     }
-    assert.match(home, /<AppShowcaseCard\/>/);
-    assert.doesNotMatch(home, /<JungleCampusSummary\/>|onRequestInstall/);
+    assert.match(home, /platform\.kind === 'desktop' \|\| platform\.pwa\.installed/);
+    assert.match(home, /<JungleCampusSummary\/>[\s\S]*<AppShowcaseCard\/>/);
+    assert.doesNotMatch(home, /onRequestInstall/);
     assert.match(appShowcase, /data-app-showcase-card="true"/);
     assert.match(appShowcase, /PC·모바일 앱을 설치해[\s\S]*더 편리하게 사용하세요\./);
     assert.match(appShowcase, /출석 상태를 확인하고, 출석·식사·세탁 생활 알림과 앞으로 추가될 편의 기능까지 이용할 수 있어요\./);
