@@ -115,6 +115,12 @@ describe('notification center information architecture', () => {
         expect(pageSource.match(/onMutate: \(\) => setDeliveryMessage\(''\)/gu)).toHaveLength(2);
     });
 
+    test('푸시 권한 요청을 비동기 mutation 전의 클릭 핸들러에서 시작한다', () => {
+        expect(pageSource).toContain('push.mutate(platform.pwa.subscribePush(pushPublicKey.data));');
+        expect(pageSource).toContain('testNotification.mutate(platform.pwa.subscribePush(pushPublicKey.data));');
+        expect(pageSource).not.toContain('subscribePush(await api.getPushPublicKey())');
+    });
+
     test('테스트 Push는 Worker 전달 주기를 사용자에게 명확히 안내한다', () => {
         expect(pageSource).toContain('테스트 푸시를 전송 대기열에 추가했습니다. 1분 안에 도착합니다.');
     });

@@ -18,6 +18,7 @@ export const queryKeys = {
     desktopConnection: ['desktop-connection'] as const,
     desktopSettings: ['desktop-settings'] as const,
     notifications: (platform: 'browser' | 'desktop') => ['notifications', platform] as const,
+    pushPublicKey: ['push-public-key'] as const,
     attendancePreferences: ['personal', 'attendance-preferences'] as const,
     mealPreferences: ['personal', 'meal-preferences'] as const,
     laundryWatches: ['personal', 'laundry-watches'] as const,

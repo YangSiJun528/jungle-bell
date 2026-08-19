@@ -1,5 +1,5 @@
 import {useState} from 'react';
-import {useMutation, useQueryClient} from '@tanstack/react-query';
+import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Link} from '@tanstack/react-router';
 import {Check, ExternalLink, Send, Smartphone} from 'lucide-react';
 import {queryKeys, useDashboardEnvironment} from '@/app/dashboard-context';
@@ -19,7 +19,7 @@ import {
     type NotificationInboxItem,
     type NotificationInboxSnapshot,
 } from '@/domain/notifications/inbox';
-import {desktopTestNotificationMessage} from './notification-result';
+import {desktopTestNotificationMessage, mobilePushErrorMessage} from './notification-result';
 import {notificationRowsForTab} from './notification-tabs';
 
 export function NotificationRow({item, unread, onActivate, onDismiss, dismissing = false, href}: {
@@ -91,20 +91,33 @@ export function NotificationPanelContent({seenMobileIds, onMobileNotificationSee
     const backgroundRefreshFailed = notifications.isError
         && !authenticationRequired
         && notifications.data !== undefined;
+    const pushPublicKey = useQuery({
+        queryKey: queryKeys.pushPublicKey,
+        queryFn: () => api.getPushPublicKey(),
+        enabled: !desktop && account.personalAccess.status === 'connected',
+        staleTime: 5 * 60_000,
+    });
+
+    const registerStartedPush = async (subscriptionPromise: Promise<PushSubscriptionJSON>) => {
+        const subscription = await subscriptionPromise;
+        await api.registerPushSubscription(subscription);
+    };
 
     const push = useMutation({
         onMutate: () => setDeliveryMessage(''),
-        mutationFn: async () => {
-            const subscription = await platform.pwa.subscribePush(await api.getPushPublicKey());
-            await api.registerPushSubscription(subscription);
+        mutationFn: registerStartedPush,
+        onSuccess: async () => {
+            setDeliveryMessage('이 기기에서 푸시 알림을 받을 수 있습니다.');
+            await client.invalidateQueries({queryKey: queryKeys.mobileSessions});
         },
     });
 
     const testNotification = useMutation({
         onMutate: () => setDeliveryMessage(''),
-        mutationFn: async () => {
+        mutationFn: async (subscriptionPromise: Promise<PushSubscriptionJSON> | undefined) => {
             if (desktop) return api.sendDesktopTestNotification();
-            await push.mutateAsync();
+            if (!subscriptionPromise) throw new Error('PUSH_SUBSCRIPTION_NOT_STARTED');
+            await registerStartedPush(subscriptionPromise);
             return api.sendMobileTestNotification();
         },
         onSuccess: async (result) => {
@@ -113,10 +126,32 @@ export function NotificationPanelContent({seenMobileIds, onMobileNotificationSee
                 setDeliveryMessage(desktopTestNotificationMessage(result));
             } else {
                 setDeliveryMessage(`연결된 모바일 ${String(result)}대의 테스트 푸시를 전송 대기열에 추가했습니다. 1분 안에 도착합니다.`);
-                await client.invalidateQueries({queryKey: queryKeys.notifications('browser')});
+                await Promise.all([
+                    client.invalidateQueries({queryKey: queryKeys.notifications('browser')}),
+                    client.invalidateQueries({queryKey: queryKeys.mobileSessions}),
+                ]);
             }
         },
     });
+
+    const connectPush = () => {
+        if (!pushPublicKey.data) return;
+        testNotification.reset();
+        // subscribePush starts permission acquisition synchronously while this
+        // click still owns the browser's transient user activation.
+        push.mutate(platform.pwa.subscribePush(pushPublicKey.data));
+    };
+
+    const sendTestNotification = () => {
+        push.reset();
+        if (desktop) {
+            testNotification.mutate(undefined);
+            return;
+        }
+        if (!pushPublicKey.data) return;
+        // Start permission acquisition before React Query enters its async mutation lifecycle.
+        testNotification.mutate(platform.pwa.subscribePush(pushPublicKey.data));
+    };
 
     const activate = useMutation({
         mutationFn: (id: string) => api.activateDesktopNotification(id),
@@ -229,25 +264,34 @@ export function NotificationPanelContent({seenMobileIds, onMobileNotificationSee
                     </div>
                     <div className="flex flex-wrap gap-2">
                         {!desktop ? (
-                            <Button variant="outline" size="sm" onClick={() => push.mutate()} disabled={push.isPending}>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={connectPush}
+                                disabled={push.isPending || testNotification.isPending || !pushPublicKey.data}
+                            >
                                 <Smartphone aria-hidden="true" className="size-4"/>푸시 연결
                             </Button>
                         ) : null}
                         <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => testNotification.mutate()}
-                            disabled={testNotification.isPending || push.isPending}
+                            onClick={sendTestNotification}
+                            disabled={testNotification.isPending || push.isPending || (!desktop && !pushPublicKey.data)}
                         >
                             <Send aria-hidden="true" className="size-4"/>
                             테스트 알림
                         </Button>
                     </div>
-                    {(push.isError || testNotification.isError) ? (
+                    {(pushPublicKey.isError || push.isError || testNotification.isError) ? (
                         <Alert variant="destructive">
                             <Send aria-hidden="true"/>
                             <AlertTitle>알림을 보내지 못했습니다.</AlertTitle>
-                            <AlertDescription>알림 권한 또는 연결 상태를 확인하세요.</AlertDescription>
+                            <AlertDescription>
+                                {mobilePushErrorMessage(
+                                    testNotification.error ?? push.error ?? pushPublicKey.error,
+                                )}
+                            </AlertDescription>
                         </Alert>
                     ) : null}
                     {deliveryMessage ? <p aria-live="polite" className="text-sm text-muted-foreground">{deliveryMessage}</p> : null}

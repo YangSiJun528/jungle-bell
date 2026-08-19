@@ -118,6 +118,27 @@ describe('PwaCapabilityAdapter', () => {
         });
     });
 
+    it('구독 Promise를 반환하기 전에 권한 요청을 즉시 시작한다', async () => {
+        const browser = browserObjects();
+        let grantPermission: ((permission: NotificationPermission) => void) | undefined;
+        const requestPermission = vi.fn(() => new Promise<NotificationPermission>((resolve) => {
+            grantPermission = resolve;
+        }));
+        const adapter = createPwaCapabilityAdapter({
+            production: true,
+            windowObject: browser.windowObject,
+            navigatorObject: browser.navigatorObject,
+            notificationObject: {requestPermission},
+        });
+
+        const subscription = adapter.subscribePush('AQ');
+
+        expect(requestPermission).toHaveBeenCalledOnce();
+        expect(browser.pushManager.getSubscription).not.toHaveBeenCalled();
+        grantPermission?.('granted');
+        await expect(subscription).resolves.toEqual({endpoint: 'https://push.example/subscription'});
+    });
+
     it('지원되지 않는 브라우저에서는 Push 요청 전에 실패한다', async () => {
         const windowObject = new EventTarget() as unknown as Window;
         const navigatorObject = {userAgent: 'test'} as Navigator;
