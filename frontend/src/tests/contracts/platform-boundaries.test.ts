@@ -68,6 +68,18 @@ describe('repository platform boundaries', () => {
         expect(cohortChange).not.toContain('checker::refresh_webview');
     });
 
+    test('출석 캐시 갱신 이벤트는 서버 snapshot 업로드 성공 뒤에만 발행한다', () => {
+        const remoteSync = readFileSync(resolve(repositoryRoot, 'desktop/src/remote_sync.rs'), 'utf8');
+        const uploadAndPublish = remoteSync.match(
+            /async fn upload_attendance_and_publish[\s\S]*?\n\}/u,
+        )?.[0] ?? '';
+
+        expect(uploadAndPublish).toContain('service.upload_attendance(snapshot).await?');
+        expect(uploadAndPublish).toContain('ATTENDANCE_SNAPSHOT_UPDATED_EVENT');
+        expect(uploadAndPublish.indexOf('service.upload_attendance(snapshot).await?'))
+            .toBeLessThan(uploadAndPublish.indexOf('ATTENDANCE_SNAPSHOT_UPDATED_EVENT'));
+    });
+
     test('frontend scripts and Tauri hooks use separate web and desktop UI artifacts', () => {
         const packageJson = JSON.parse(readFrontend('package.json')) as {
             scripts: Record<string, string>;

@@ -90,6 +90,9 @@ export interface PlatformEventAdapter {
     subscribeNotificationInboxUpdated(
         listener: (payload: unknown) => void,
     ): Promise<PlatformUnlisten>;
+    subscribeAttendanceSnapshotUpdated(
+        listener: (payload: unknown) => void,
+    ): Promise<PlatformUnlisten>;
     subscribeLmsSessionStateUpdated(
         listener: (payload: unknown) => void,
     ): Promise<PlatformUnlisten>;
@@ -145,6 +148,7 @@ export function unavailableEventAdapter(): PlatformEventAdapter {
     return {
         enabled: false,
         subscribeNotificationInboxUpdated: subscribe,
+        subscribeAttendanceSnapshotUpdated: subscribe,
         subscribeLmsSessionStateUpdated: subscribe,
     };
 }

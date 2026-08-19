@@ -16,7 +16,7 @@ use std::{
 use chrono::{DateTime, Datelike, SecondsFormat, Utc};
 use reqwest::{redirect::Policy, Client, Response, StatusCode, Url};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use tauri::{Manager, WebviewWindow};
+use tauri::{Emitter, Manager, WebviewWindow};
 use tokio::sync::{Mutex, Notify, RwLock};
 use zeroize::Zeroizing;
 
@@ -37,6 +37,7 @@ const ROTATE_INSTALLATION_PATH: &str = "/api/desktop/installations/rotate";
 const WEBVIEW_SESSIONS_PATH: &str = "/api/desktop/webview-sessions";
 const CURRENT_WEBVIEW_SESSION_PATH: &str = "/api/desktop/webview-sessions/current";
 const ATTENDANCE_SNAPSHOT_PATH: &str = "/api/desktop/attendance";
+const ATTENDANCE_SNAPSHOT_UPDATED_EVENT: &str = "attendance-snapshot-updated";
 const HEARTBEAT_PATH: &str = "/api/desktop/heartbeat";
 const NOTIFICATIONS_PATH: &str = "/api/desktop/notifications";
 const MAX_RESPONSE_BYTES: u64 = 512 * 1024;
@@ -56,6 +57,28 @@ pub(crate) use contract::*;
 pub(crate) use service::*;
 use validation::*;
 
+#[derive(Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AttendanceSnapshotUpdated {
+    revision: u64,
+}
+
+pub(crate) async fn upload_attendance_and_publish(
+    app: &tauri::AppHandle,
+    service: &RemoteSyncService,
+    snapshot: &AttendanceSnapshot,
+) -> Result<(), String> {
+    let revision = service.upload_attendance(snapshot).await?;
+    if let Err(error) = app.emit_to(
+        DASHBOARD_WINDOW_LABEL,
+        ATTENDANCE_SNAPSHOT_UPDATED_EVENT,
+        AttendanceSnapshotUpdated { revision },
+    ) {
+        log::debug!("[connected-service] attendance snapshot event skipped: {error}");
+    }
+    Ok(())
+}
+
 pub(crate) fn sync_checker_report(
     window: WebviewWindow,
     last_loaded_url: String,
@@ -66,6 +89,7 @@ pub(crate) fn sync_checker_report(
         log::warn!("[connected-service] checker report rejected outside exact LMS context");
         return;
     }
+    let app = window.app_handle().clone();
     tauri::async_runtime::spawn(async move {
         drop(window);
         if service.registration_needed() {
@@ -75,7 +99,7 @@ pub(crate) fn sync_checker_report(
             }
         }
         if let Some(snapshot) = snapshot {
-            if let Err(error) = service.upload_attendance(&snapshot).await {
+            if let Err(error) = upload_attendance_and_publish(&app, service.as_ref(), &snapshot).await {
                 log::debug!("[connected-service] attendance snapshot deferred: {error}");
             }
         }

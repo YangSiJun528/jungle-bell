@@ -22,6 +22,7 @@ import {
 } from '@/platform/event-subscriptions';
 import type {PlatformAdapter} from '@/platform/contracts';
 import {createJungleBellQueryClient} from './query-client';
+import {handleAttendanceSnapshotUpdated} from './desktop-attendance-event';
 
 const queryClient = createJungleBellQueryClient();
 
@@ -40,6 +41,9 @@ function PlatformEventBridge({platform}: {platform: PlatformAdapter}) {
                     if (snapshot) {
                         client.setQueryData<NotificationInboxSnapshot>(queryKeys.notifications('desktop'), snapshot);
                     }
+                }),
+                () => platform.events.subscribeAttendanceSnapshotUpdated((payload) => {
+                    void handleAttendanceSnapshotUpdated(client, payload);
                 }),
                 () => platform.events.subscribeLmsSessionStateUpdated((payload) => {
                     const state = normalizeLmsSessionStateEvent(payload);

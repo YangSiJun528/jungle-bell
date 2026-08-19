@@ -185,8 +185,11 @@ async fn handle_attendance_snapshot(
         );
     } else if let Some(snapshot) = remote_snapshot {
         let remote_sync_service = remote_sync_service.inner().clone();
+        let app = app.clone();
         tauri::async_runtime::spawn(async move {
-            if let Err(error) = remote_sync_service.upload_attendance(&snapshot).await {
+            if let Err(error) =
+                remote_sync::upload_attendance_and_publish(&app, remote_sync_service.as_ref(), &snapshot).await
+            {
                 log::debug!("[connected-service] attendance snapshot deferred: {error}");
             }
         });

@@ -14,6 +14,7 @@ const context = source('./app/dashboard-context.tsx');
 const personalAccountGate = source('./app/personal-account-gate.tsx');
 const personalFeatureSlot = source('./app/personal-feature-slot.tsx');
 const providers = source('./app/dashboard-providers.tsx');
+const desktopAttendanceEvent = source('./app/desktop-attendance-event.ts');
 const queries = source('./app/use-dashboard-queries.ts');
 const campusQueryOptions = source('./app/campus-query-options.ts');
 const routes = source('./app/routes.ts');
@@ -250,6 +251,9 @@ test('TanStack Query는 공개 데이터와 개인 데이터를 서로 다른 �
     assert.match(queries, /queryKey: queryKeys\.notifications\(platform\.kind\),[\s\S]{0,260}staleTime: DASHBOARD_REFRESH\.personal/);
 
     assert.match(platformEvents, /['"]notification-inbox-updated['"]/);
+    assert.match(platformEvents, /['"]attendance-snapshot-updated['"]/);
+    assert.match(desktopAttendanceEvent, /handleAttendanceSnapshotUpdated\([\s\S]*queryKeys\.attendance\('desktop'\)[\s\S]*exact:\s*true/);
+    assert.match(providers, /subscribeAttendanceSnapshotUpdated\([\s\S]*handleAttendanceSnapshotUpdated\(client, payload\)/);
     assert.doesNotMatch(providers, /campus-data-(?:updated|error)/);
     assert.match(providers, /registerDesktopSubscriptions/);
     assert.doesNotMatch(providers, /report_campus_ready/);

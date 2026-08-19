@@ -241,15 +241,15 @@ impl RemoteSyncService {
         true
     }
 
-    async fn complete_attendance_success(&self, request: &AuthenticatedRequest) -> bool {
+    async fn complete_attendance_success(&self, request: &AuthenticatedRequest) -> Option<u64> {
         let _identity = self.identity_transition.read().await;
         if self.identity_generation.load(Ordering::Acquire) != request.identity_generation {
-            return false;
+            return None;
         }
         self.record_success().await;
-        self.snapshot_revision.fetch_add(1, Ordering::Release);
+        let revision = self.snapshot_revision.fetch_add(1, Ordering::AcqRel) + 1;
         self.snapshot_uploaded.notify_waiters();
-        true
+        Some(revision)
     }
 
     pub(crate) async fn with_current_identity<T>(
@@ -453,15 +453,15 @@ impl RemoteSyncService {
         Ok(self.status().await)
     }
 
-    pub(crate) async fn upload_attendance(&self, snapshot: &AttendanceSnapshot) -> Result<(), String> {
+    pub(crate) async fn upload_attendance(&self, snapshot: &AttendanceSnapshot) -> Result<u64, String> {
         let request = self
             .authenticated_request()
             .await
             .map_err(|error| error.code().to_owned())?;
         match self.api.put_attendance(&request.bearer, snapshot).await {
             Ok(_) => {
-                if self.complete_attendance_success(&request).await {
-                    Ok(())
+                if let Some(revision) = self.complete_attendance_success(&request).await {
+                    Ok(revision)
                 } else {
                     Err(ServiceError::StaleIdentity.code().into())
                 }
@@ -844,7 +844,7 @@ mod initialization_tests {
         };
         let (_, applied) = tokio::join!(reset, completion);
 
-        assert!(!applied);
+        assert_eq!(applied, None);
         assert_eq!(service.snapshot_revision.load(Ordering::Acquire), baseline);
         assert!(
             tokio::time::timeout(Duration::from_millis(10), service.wait_for_snapshot_after(baseline))
@@ -892,7 +892,7 @@ mod initialization_tests {
             .await;
         service.runtime.lock().await.last_server_contact = None;
 
-        assert!(service.complete_attendance_success(&request).await);
+        assert_eq!(service.complete_attendance_success(&request).await, Some(1));
         assert_eq!(service.snapshot_revision.load(Ordering::Acquire), 1);
         assert!(service.status().await.last_server_contact.is_some());
     }
