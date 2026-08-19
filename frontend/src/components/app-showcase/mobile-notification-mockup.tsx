@@ -4,8 +4,8 @@ import {cn} from '@/lib/utils';
 const NOTIFICATIONS = [
     {
         time: '지금',
-        title: '오후 출석 시간이 시작됐어요',
-        description: '정글캠퍼스에서 직접 확인해 주세요.',
+        title: '학습 종료 가능 시간이에요.',
+        description: '정글캠퍼스로 바로가기.',
     },
     {
         time: '1분 전',

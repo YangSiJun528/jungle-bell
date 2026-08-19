@@ -99,7 +99,7 @@ test('홈은 출석 카드를 앱 소개 카드로 교체하고 오늘 세탁·�
     assert.match(home, /<AppShowcaseCard\/>/);
     assert.doesNotMatch(home, /<JungleCampusSummary\/>|onRequestInstall/);
     assert.match(appShowcase, /data-app-showcase-card="true"/);
-    assert.match(appShowcase, /PC·모바일 앱을 설치해[\s\S]*Jungle Bell을 더 편리하게 사용하세요\./);
+    assert.match(appShowcase, /PC·모바일 앱을 설치해[\s\S]*더 편리하게 사용하세요\./);
     assert.match(appShowcase, /출석 상태를 확인하고, 출석·식사·세탁 생활 알림과 앞으로 추가될 편의 기능까지 이용할 수 있어요\./);
     assert.match(appShowcase, /<Link to="\/install">[\s\S]*앱 안내 보기/);
     assert.match(appShowcase, /<DesktopAppMockup[\s\S]*<MobileNotificationMockup/);
@@ -121,12 +121,13 @@ test('앱 안내는 실제 트레이 아이콘·모바일 알림과 기존 설�
     assert.match(trayIcon, /M512 896a384 384 0 1 0 0-768/);
     assert.match(trayIcon, /M725\.888 315\.008C676\.48 428\.672/);
     for (const notification of [
-        '오후 출석 시간이 시작됐어요',
+        '학습 종료 가능 시간이에요.',
         '남성 3번 세탁이 곧 끝나요',
         '오늘 저녁 메뉴가 게시됐어요',
     ]) {
         assert.match(mobileNotificationMockup, new RegExp(notification));
     }
+    assert.match(mobileNotificationMockup, /정글캠퍼스로 바로가기\./);
     assert.match(mobileNotificationMockup, /모바일 잠금 화면에 표시된 Jungle Bell 출석, 세탁, 식사 알림 예시/);
     assert.match(appInstall, /https:\/\/github\.com\/YangSiJun528\/jungle-bell#%EC%84%A4%EC%B9%98/);
     assert.match(appInstall, /PC 앱 설치 가이드/);

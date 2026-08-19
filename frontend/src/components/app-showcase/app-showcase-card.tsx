@@ -13,7 +13,7 @@ export function AppShowcaseCard() {
         >
             <div className="z-10 flex min-w-0 flex-col justify-center px-5 py-9 sm:px-8 sm:py-11 lg:px-10">
                 <h2 className="text-pretty text-3xl font-bold leading-[1.17] tracking-[-0.045em] sm:text-4xl lg:text-[2.6rem]">
-                    PC·모바일 앱을 설치해 <span className="text-primary">Jungle Bell을 더 편리하게 사용하세요.</span>
+                    PC·모바일 앱을 설치해 <span className="text-primary">더 편리하게 사용하세요.</span>
                 </h2>
                 <p className="mt-5 max-w-xl text-pretty text-sm leading-6 text-muted-foreground sm:text-base sm:leading-7">
                     출석 상태를 확인하고, 출석·식사·세탁 생활 알림과 앞으로 추가될 편의 기능까지 이용할 수 있어요.
