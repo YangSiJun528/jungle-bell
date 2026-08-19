@@ -49,6 +49,7 @@ pub(crate) enum CheckerWatchdogAction {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CheckerEvent {
     PageLoaded,
+    InteractivePageLoaded,
     Ready { generation: u64 },
     Report { generation: u64, api_error: bool },
     ReportTimeout { generation: u64 },
@@ -85,6 +86,12 @@ pub(crate) fn apply_supervisor_event(runtime: &mut CheckerRuntime, event: Checke
                 CheckerAction::TriggerCheck { generation },
                 CheckerAction::StartReportWatchdog { generation },
             ]
+        }
+        CheckerEvent::InteractivePageLoaded => {
+            runtime.page_load_generation = runtime.page_load_generation.saturating_add(1);
+            let generation = runtime.page_load_generation;
+            runtime.status = CheckerRuntimeStatus::PageLoaded { generation };
+            vec![]
         }
         CheckerEvent::Ready { generation } => {
             if generation != runtime.page_load_generation {
@@ -131,9 +138,33 @@ pub(crate) fn apply_supervisor_event(runtime: &mut CheckerRuntime, event: Checke
 }
 
 pub(crate) fn record_checker_page_load(state: &mut AppState, page_url: &str) -> (u64, Vec<CheckerAction>) {
-    state.checker.last_loaded_url = Some(page_url.to_string());
-    let actions = apply_supervisor_event(&mut state.checker, CheckerEvent::PageLoaded);
+    state.checker.last_loaded_url = Some(safe_page_location(page_url));
+    let event = if Url::parse(page_url).ok().as_ref().is_some_and(is_checker_report_origin) {
+        CheckerEvent::PageLoaded
+    } else {
+        CheckerEvent::InteractivePageLoaded
+    };
+    let actions = apply_supervisor_event(&mut state.checker, event);
     (state.checker.page_load_generation, actions)
+}
+
+fn is_checker_report_origin(url: &Url) -> bool {
+    url.scheme() == "https"
+        && url.host_str() == Some("jungle-lms.krafton.com")
+        && url.port_or_known_default() == Some(443)
+        && url.username().is_empty()
+        && url.password().is_none()
+}
+
+fn safe_page_location(page_url: &str) -> String {
+    let Ok(mut url) = Url::parse(page_url) else {
+        return "<invalid-url>".to_string();
+    };
+    let _ = url.set_username("");
+    let _ = url.set_password(None);
+    url.set_query(None);
+    url.set_fragment(None);
+    url.to_string()
 }
 
 pub(crate) fn record_checker_ready(state: &mut AppState, generation: u64) -> Vec<CheckerAction> {
@@ -209,6 +240,18 @@ pub fn refresh_webview(app: &tauri::AppHandle, reason: &str) -> bool {
         return false;
     };
 
+    let checker_visible = match checker.is_visible() {
+        Ok(visible) => visible,
+        Err(error) => {
+            log::warn!("[checker] refresh deferred: LMS window visibility unavailable ({reason}): {error}");
+            return false;
+        }
+    };
+    if should_defer_automatic_refresh(checker_visible) {
+        log::debug!("[checker] refresh deferred while LMS window is visible ({reason})");
+        return true;
+    }
+
     let target = ATTENDANCE_URL.parse().unwrap();
     let state: tauri::State<Arc<Mutex<AppState>>> = app.state();
     let last_loaded_url = state
@@ -234,6 +277,10 @@ pub fn refresh_webview(app: &tauri::AppHandle, reason: &str) -> bool {
             false
         }
     }
+}
+
+fn should_defer_automatic_refresh(checker_visible: bool) -> bool {
+    checker_visible
 }
 
 fn decide_refresh_action(last_loaded_url: Option<&str>) -> CheckerRefreshAction {
@@ -270,6 +317,7 @@ pub(crate) fn build_webview(app: &tauri::AppHandle) -> tauri::Result<tauri::Webv
         if payload.event() == PageLoadEvent::Finished {
             let app_handle = window.app_handle().clone();
             let page_url = payload.url().to_string();
+            let page_location = safe_page_location(&page_url);
             tauri::async_runtime::spawn(async move {
                 let state: tauri::State<Arc<Mutex<AppState>>> = app_handle.state();
                 let (generation, actions) = {
@@ -279,18 +327,26 @@ pub(crate) fn build_webview(app: &tauri::AppHandle) -> tauri::Result<tauri::Webv
                     result
                 };
 
-                log::debug!(
-                    "[checker] page loaded, triggering check: generation={} url={}",
-                    generation,
-                    page_url,
-                );
+                if actions.is_empty() {
+                    log::debug!(
+                        "[checker] interactive page loaded: generation={} location={}",
+                        generation,
+                        page_location,
+                    );
+                } else {
+                    log::debug!(
+                        "[checker] page loaded, triggering check: generation={} location={}",
+                        generation,
+                        page_location,
+                    );
+                }
                 for action in actions {
                     match action {
                         CheckerAction::TriggerCheck { generation } => {
                             trigger_check(&app_handle, generation);
                         }
                         CheckerAction::StartReportWatchdog { generation } => {
-                            spawn_report_watchdog(app_handle.clone(), generation, page_url.clone());
+                            spawn_report_watchdog(app_handle.clone(), generation, page_location.clone());
                         }
                         CheckerAction::Refresh { .. }
                         | CheckerAction::GiveUp { .. }
@@ -345,9 +401,22 @@ pub(crate) fn show_lms_window(app: &tauri::AppHandle) -> Result<(), String> {
         .map_err(|error| format!("LMS_WINDOW_FOCUS_FAILED: {error}"))
 }
 
-fn spawn_report_watchdog(app: tauri::AppHandle, generation: u64, page_url: String) {
+fn spawn_report_watchdog(app: tauri::AppHandle, generation: u64, page_location: String) {
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(CHECKER_REPORT_TIMEOUT).await;
+
+        let checker_visible = app
+            .get_webview_window("checker")
+            .map(|window| window.is_visible().unwrap_or(true))
+            .unwrap_or(false);
+        if should_defer_automatic_refresh(checker_visible) {
+            log::debug!(
+                "[checker] watchdog deferred while LMS window is visible: generation={} location={}",
+                generation,
+                page_location,
+            );
+            return;
+        }
 
         let state: tauri::State<Arc<Mutex<AppState>>> = app.state();
         let (actions, ready_generation, report_generation, tray_snapshot) = {
@@ -381,9 +450,9 @@ fn spawn_report_watchdog(app: tauri::AppHandle, generation: u64, page_url: Strin
                 CheckerAction::Refresh { attempt, .. } => {
                     let reason = format!("no report after page load generation={generation} attempt={attempt}");
                     log::warn!(
-                        "[checker] watchdog: {} url={} ready_generation={} report_generation={}",
+                        "[checker] watchdog: {} location={} ready_generation={} report_generation={}",
                         reason,
-                        page_url,
+                        page_location,
                         ready_generation,
                         report_generation,
                     );
@@ -393,9 +462,9 @@ fn spawn_report_watchdog(app: tauri::AppHandle, generation: u64, page_url: Strin
                 }
                 CheckerAction::GiveUp { .. } => {
                     log::error!(
-                        "[checker] watchdog: no report after page load generation={} url={} ready_generation={} report_generation={} recreate_limit={}",
+                        "[checker] watchdog: no report after page load generation={} location={} ready_generation={} report_generation={} recreate_limit={}",
                         generation,
-                        page_url,
+                        page_location,
                         ready_generation,
                         report_generation,
                         CHECKER_NO_REPORT_REFRESH_LIMIT,
@@ -466,6 +535,48 @@ mod tests {
             decide_refresh_action(state.checker.last_loaded_url.as_deref()),
             CheckerRefreshAction::Reload
         );
+    }
+
+    #[test]
+    fn google_로그인_페이지는_checker_보고와_watchdog을_기대하지_않는다() {
+        let mut state = default_state();
+        let google_login = "https://accounts.google.com/v3/signin/identifier?continue=sensitive-oauth-state#step";
+
+        let (generation, actions) = record_checker_page_load(&mut state, google_login);
+
+        assert_eq!(generation, 1);
+        assert!(actions.is_empty());
+        assert_eq!(
+            state.checker.last_loaded_url.as_deref(),
+            Some("https://accounts.google.com/v3/signin/identifier")
+        );
+    }
+
+    #[test]
+    fn google_로그인_이동은_이전_checker_watchdog을_무효화한다() {
+        let mut state = default_state();
+        let (checker_generation, _) = record_checker_page_load(&mut state, ATTENDANCE_URL);
+
+        let (login_generation, actions) = record_checker_page_load(
+            &mut state,
+            "https://accounts.google.com/v3/signin/challenge/pwd?state=secret",
+        );
+
+        assert_eq!(login_generation, checker_generation + 1);
+        assert!(actions.is_empty());
+        assert!(apply_supervisor_event(
+            &mut state.checker,
+            CheckerEvent::ReportTimeout {
+                generation: checker_generation,
+            },
+        )
+        .is_empty());
+    }
+
+    #[test]
+    fn 표시중인_lms_창은_자동_갱신을_미룬다() {
+        assert!(should_defer_automatic_refresh(true));
+        assert!(!should_defer_automatic_refresh(false));
     }
 
     fn process_report(
