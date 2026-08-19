@@ -99,8 +99,8 @@ jobs:
           tagName: ${{ needs.get-release-info.outputs.tag }}
           args: ${{ matrix.args }}
           projectPath: desktop
-          tauriScript: npm --prefix ../frontend run tauri --
-          uploadUpdaterJson: true
+          tauriScript: npm run --prefix ../frontend tauri
+          includeUpdaterJson: true
           updaterJsonPreferNsis: true
 
       - name: Archive .app as tar.gz (macOS only)

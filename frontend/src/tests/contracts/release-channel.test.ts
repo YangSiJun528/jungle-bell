@@ -81,7 +81,7 @@ test('v2 업데이트 매니페스트는 초안 릴리스 안에서만 생성해
     assert.doesNotMatch(releaseWorkflow, /^\s*release:\s*$/mu);
     assert.match(releaseWorkflow, /IS_DRAFT/);
     assert.match(releaseWorkflow, /if \[ "\$IS_DRAFT" != "true" \]; then/);
-    assert.match(releaseWorkflow, /uploadUpdaterJson:\s*true/);
+    assert.match(releaseWorkflow, /includeUpdaterJson:\s*true/);
     assert.match(releaseWorkflow, /^\s*publish-v2-updater-manifest:\s*$/mu);
     assert.match(releaseWorkflow, /gh release download "\$TAG"[\s\S]*--pattern latest\.json/);
     assert.match(
