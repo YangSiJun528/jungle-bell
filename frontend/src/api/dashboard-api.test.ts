@@ -1013,6 +1013,7 @@ const laundryWatch = {
 test('데스크톱 서비스 설정은 canonical current-only commands와 exact DTO를 사용한다', async () => {
     const calls: Array<{command: string; args?: Record<string, unknown>}> = [];
     const initial = {
+        appVersion: '0.5.0-beta.1',
         autoStart: false,
         autoUpdate: true,
         usageAnalytics: true,
@@ -1054,16 +1055,24 @@ test('데스크톱 서비스 설정은 canonical current-only commands와 exact 
 test('데스크톱 서비스 설정은 unknown field와 non-boolean을 거부한다', async () => {
     for (const response of [
         {
+            appVersion: '0.5.0-beta.1',
             autoStart: false, autoUpdate: true, usageAnalytics: true, debugMode: false,
             selectedCohortId: null, effectiveCohortId: null, cohortOptions: [], unknown: true,
         },
         {
+            appVersion: '0.5.0-beta.1',
             autoStart: 'true', autoUpdate: true, usageAnalytics: true, debugMode: false,
             selectedCohortId: null, effectiveCohortId: null, cohortOptions: [],
         },
         {
+            appVersion: '0.5.0-beta.1',
             autoStart: false, autoUpdate: true, usageAnalytics: true, debugMode: false,
             selectedCohortId: '\nforged', effectiveCohortId: null, cohortOptions: [],
+        },
+        {
+            appVersion: 'beta',
+            autoStart: false, autoUpdate: true, usageAnalytics: true, debugMode: false,
+            selectedCohortId: null, effectiveCohortId: null, cohortOptions: [],
         },
     ]) {
         const api = createDashboardApi({

@@ -7,6 +7,8 @@ import type {
     NativeBridge,
 } from '@/platform/contracts';
 
+const APP_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.\d+)?$/u;
+
 export type {
     DesktopCohortOption,
     DesktopSettings,
@@ -35,7 +37,7 @@ function parseDesktopSettings(value: unknown): DesktopSettings {
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidResponse();
     const source = value as Record<string, unknown>;
     const keys = [
-        'autoStart', 'autoUpdate', 'usageAnalytics', 'debugMode',
+        'appVersion', 'autoStart', 'autoUpdate', 'usageAnalytics', 'debugMode',
         'selectedCohortId', 'effectiveCohortId', 'cohortOptions',
     ] as const;
     if (Object.keys(source).length !== keys.length || keys.some((key) => !hasOwn(source, key))) {
@@ -43,10 +45,14 @@ function parseDesktopSettings(value: unknown): DesktopSettings {
     }
     if ([source.autoStart, source.autoUpdate, source.usageAnalytics, source.debugMode]
         .some((value) => typeof value !== 'boolean')) throw invalidResponse();
+    if (typeof source.appVersion !== 'string' || !APP_VERSION_PATTERN.test(source.appVersion)) {
+        throw invalidResponse();
+    }
     const cohortOptions = parseCohortOptions(source.cohortOptions);
     const selectedCohortId = nullableCohortId(source.selectedCohortId);
     const effectiveCohortId = nullableCohortId(source.effectiveCohortId);
     return {
+        appVersion: source.appVersion,
         autoStart: source.autoStart as boolean,
         autoUpdate: source.autoUpdate as boolean,
         usageAnalytics: source.usageAnalytics as boolean,

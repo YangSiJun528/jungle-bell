@@ -312,6 +312,7 @@ where
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DesktopSettings {
+    app_version: String,
     auto_start: bool,
     auto_update: bool,
     usage_analytics: bool,
@@ -324,6 +325,7 @@ pub struct DesktopSettings {
 impl From<crate::desktop_settings::DesktopSettingsSnapshot> for DesktopSettings {
     fn from(value: crate::desktop_settings::DesktopSettingsSnapshot) -> Self {
         Self {
+            app_version: env!("CARGO_PKG_VERSION").to_owned(),
             auto_start: value.config.auto_start,
             auto_update: value.config.auto_update,
             usage_analytics: value.config.usage_analytics,
@@ -508,7 +510,24 @@ pub async fn send_test_notification(
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_js_log_payload, CheckerEventInput, CheckerEventResponse, DesktopSettingsInput};
+    use super::{
+        validate_js_log_payload, CheckerEventInput, CheckerEventResponse, DesktopSettings, DesktopSettingsInput,
+    };
+
+    #[test]
+    fn 데스크톱_설정은_현재_앱_버전을_노출한다() {
+        let settings: DesktopSettings = crate::desktop_settings::DesktopSettingsSnapshot {
+            config: crate::config::Config::default(),
+            cohort_options: Vec::new(),
+            effective_cohort_id: None,
+        }
+        .into();
+
+        assert_eq!(
+            serde_json::to_value(settings).unwrap()["appVersion"],
+            env!("CARGO_PKG_VERSION")
+        );
+    }
 
     #[test]
     fn 원격_js_로그_payload는_레벨_크기_제어문자를_검증한다() {

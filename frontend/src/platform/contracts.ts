@@ -62,6 +62,7 @@ export interface DesktopCohortOption {
 }
 
 export interface DesktopSettings {
+    appVersion: string;
     autoStart: boolean;
     autoUpdate: boolean;
     usageAnalytics: boolean;

@@ -22,6 +22,7 @@ vi.mock('@/app/dashboard-context', () => ({
 }));
 
 const settings: DesktopSettings = {
+    appVersion: '0.5.0-beta.1',
     autoStart: true,
     autoUpdate: true,
     usageAnalytics: true,
@@ -54,6 +55,8 @@ describe('ServiceSettings', () => {
             expect(markup).toContain(`aria-label="${label}"`);
         }
         expect(markup).toContain('로그 폴더');
+        expect(markup).toContain('앱 버전');
+        expect(markup).toContain('v0.5.0-beta.1');
         expect(markup).toContain('설치 식별자의 일방향 해시');
         expect(source).toContain('디버그 모드를 켤까요?');
         expect(source).toContain('특별한 목적이 없다면 켜지 마세요.');

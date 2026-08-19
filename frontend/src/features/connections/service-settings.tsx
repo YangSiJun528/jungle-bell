@@ -152,6 +152,16 @@ function DesktopServiceSettings() {
                     <CardDescription>이 PC에서 Jungle Bell을 실행하고 업데이트하는 방식을 정합니다.</CardDescription>
                 </CardHeader>
                 <CardContent>
+                    <div className="flex items-center justify-between gap-4 py-4">
+                        <div className="min-w-0">
+                            <p className="text-sm font-medium">앱 버전</p>
+                            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                                현재 설치된 Jungle Bell PC 앱의 버전입니다.
+                            </p>
+                        </div>
+                        <p className="shrink-0 font-mono text-sm text-muted-foreground">v{value.appVersion}</p>
+                    </div>
+                    <Separator/>
                     <ServiceSettingRow
                         title="자동 시작"
                         description="운영체제에 로그인하면 백그라운드에서 Jungle Bell을 시작합니다."
