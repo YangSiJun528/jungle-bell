@@ -98,7 +98,7 @@ class JdbcStoreIntegrationTest {
             jdbc.sql("SELECT count(*) FROM notification_delivery WHERE notification_id = :id")
                 .param("id", notification.id).query(Int::class.java).single(),
         )
-        assertEquals(0, store.desktopInbox(userId, installationId, 1_500, 20).single().attempt)
+        assertEquals(0L, store.desktopInbox(userId, installationId, 1_500, 20).single().attempt)
         assertEquals(
             listOf(notification.id.toString(), "title", "body", "/#/home", "10000"),
             jdbc.sql(
