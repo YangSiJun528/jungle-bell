@@ -117,12 +117,10 @@ pub(crate) enum LmsSessionState {
 }
 
 pub(crate) fn lms_session_state(state: &AppState) -> LmsSessionState {
-    if state.needs_login {
-        LmsSessionState::LoginRequired
-    } else if state.data_loaded {
-        LmsSessionState::Connected
-    } else {
-        LmsSessionState::Unknown
+    match state.lms_authentication {
+        crate::state::LmsAuthenticationState::Unknown => LmsSessionState::Unknown,
+        crate::state::LmsAuthenticationState::Authenticated => LmsSessionState::Connected,
+        crate::state::LmsAuthenticationState::Required => LmsSessionState::LoginRequired,
     }
 }
 

@@ -6,6 +6,14 @@ use tokio::sync::Notify;
 
 use crate::{attendance::CohortOption, config::Config, interval_tasks::JobStore};
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum LmsAuthenticationState {
+    #[default]
+    Unknown,
+    Authenticated,
+    Required,
+}
+
 /// 앱 전역 상태. scheduler, checker, tray 모듈에서 공유.
 /// `Arc<Mutex<AppState>>`로 보호되며 Tauri managed state로 접근.
 pub struct AppState {
@@ -26,6 +34,8 @@ pub struct AppState {
     pub effective_cohort_id: Option<String>,
     /// 로그인이 필요한 상태 (API 401 또는 로그인 페이지)
     pub needs_login: bool,
+    /// 출석 데이터 적재 여부와 독립적으로 확인한 LMS 인증 상태.
+    pub lms_authentication: LmsAuthenticationState,
     /// 체커로부터 첫 보고를 받았는지 여부.
     /// false일 때는 상태 계산을 건너뛰어 잘못된 데이터 표시를 방지.
     pub data_loaded: bool,
@@ -51,6 +61,7 @@ impl AppState {
             cohort_options: Vec::new(),
             effective_cohort_id: None,
             needs_login: false,
+            lms_authentication: LmsAuthenticationState::Unknown,
             data_loaded: false,
             last_reset_day: None,
             interval_jobs: JobStore::default(),

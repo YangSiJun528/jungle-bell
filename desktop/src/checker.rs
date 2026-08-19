@@ -667,10 +667,15 @@ mod tests {
     fn checker_give_up은_offline_상태로_남긴다() {
         let mut state = default_state();
         let (generation, _) = record_checker_page_load(&mut state, ATTENDANCE_URL);
+        state.lms_authentication = crate::state::LmsAuthenticationState::Authenticated;
 
         record_checker_give_up(&mut state, generation);
 
         assert_eq!(state.checker.status, CheckerRuntimeStatus::Offline { generation });
+        assert_eq!(
+            state.lms_authentication,
+            crate::state::LmsAuthenticationState::Authenticated,
+        );
     }
 
     #[test]

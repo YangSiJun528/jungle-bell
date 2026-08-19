@@ -8,7 +8,9 @@ use std::collections::BTreeSet;
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Deserializer, Serialize};
 
-use crate::state::{self, AppState, CheckerRuntimeStatus, CohortPeriod, DailyPhase, DdayStatus, TraySnapshot};
+use crate::state::{
+    self, AppState, CheckerRuntimeStatus, CohortPeriod, DailyPhase, DdayStatus, LmsAuthenticationState, TraySnapshot,
+};
 
 /// checker.js의 API 조회 결과.
 /// JS invoke 호출의 JSON 페이로드에서 역직렬화됨.
@@ -264,12 +266,14 @@ pub(crate) fn apply_report_fields(state: &mut AppState, report: &AttendanceRepor
 
     if report.needs_login {
         state.needs_login = true;
+        state.lms_authentication = LmsAuthenticationState::Required;
         state.dday_status = DdayStatus::LoginRequired;
         state.cohort_period = None;
         return;
     }
 
     state.needs_login = false;
+    state.lms_authentication = LmsAuthenticationState::Authenticated;
     state.morning_checked = report.morning_done;
     state.evening_checked = report.evening_done;
     state.dday_status = dday_status_from_report(report);
@@ -333,7 +337,7 @@ mod tests {
     use chrono::{FixedOffset, TimeZone, Utc};
 
     use crate::config::Config;
-    use crate::state::{AppState, CheckerRuntimeStatus, DailyPhase, DdayStatus};
+    use crate::state::{AppState, CheckerRuntimeStatus, DailyPhase, DdayStatus, LmsAuthenticationState};
 
     use super::*;
 
@@ -403,6 +407,90 @@ mod tests {
         assert_eq!(update.phase, DailyPhase::NeedStart);
         assert!(snapshot.needs_login);
         assert_eq!(snapshot.dday_status, DdayStatus::LoginRequired);
+    }
+
+    #[test]
+    fn 최초_api_오류는_lms_인증을_unknown으로_유지한다() {
+        let mut state = AppState::new(Config::default());
+        let report = AttendanceReport {
+            generation: 1,
+            needs_login: false,
+            morning_done: false,
+            evening_done: false,
+            api_error: true,
+            cohort_status: CohortReportStatus::Unknown,
+            cohort_start_date: None,
+            cohort_end_date: None,
+        };
+
+        apply_attendance_report(&mut state, &report, kst_time(9, 0, 0));
+
+        assert_eq!(state.lms_authentication, LmsAuthenticationState::Unknown);
+    }
+
+    #[test]
+    fn 인증_성공_후_api_오류는_authenticated를_유지한다() {
+        let mut state = AppState::new(Config::default());
+        let mut report = AttendanceReport {
+            generation: 1,
+            needs_login: false,
+            morning_done: false,
+            evening_done: false,
+            api_error: false,
+            cohort_status: CohortReportStatus::NoCohort,
+            cohort_start_date: None,
+            cohort_end_date: None,
+        };
+        apply_attendance_report(&mut state, &report, kst_time(9, 0, 0));
+
+        report.api_error = true;
+        apply_attendance_report(&mut state, &report, kst_time(9, 1, 0));
+
+        assert_eq!(state.lms_authentication, LmsAuthenticationState::Authenticated);
+    }
+
+    #[test]
+    fn 로그인_필요_판정_후_api_오류는_required를_유지한다() {
+        let mut state = AppState::new(Config::default());
+        let mut report = AttendanceReport {
+            generation: 1,
+            needs_login: true,
+            morning_done: false,
+            evening_done: false,
+            api_error: false,
+            cohort_status: CohortReportStatus::Unknown,
+            cohort_start_date: None,
+            cohort_end_date: None,
+        };
+        apply_attendance_report(&mut state, &report, kst_time(9, 0, 0));
+
+        report.needs_login = false;
+        report.api_error = true;
+        apply_attendance_report(&mut state, &report, kst_time(9, 1, 0));
+
+        assert_eq!(state.lms_authentication, LmsAuthenticationState::Required);
+    }
+
+    #[test]
+    fn 정상_로그인_성공은_required에서_authenticated로_전환한다() {
+        let mut state = AppState::new(Config::default());
+        let mut report = AttendanceReport {
+            generation: 1,
+            needs_login: true,
+            morning_done: false,
+            evening_done: false,
+            api_error: false,
+            cohort_status: CohortReportStatus::Unknown,
+            cohort_start_date: None,
+            cohort_end_date: None,
+        };
+        apply_attendance_report(&mut state, &report, kst_time(9, 0, 0));
+
+        report.needs_login = false;
+        report.cohort_status = CohortReportStatus::NoCohort;
+        apply_attendance_report(&mut state, &report, kst_time(9, 1, 0));
+
+        assert_eq!(state.lms_authentication, LmsAuthenticationState::Authenticated);
     }
 
     #[test]

@@ -567,12 +567,14 @@ mod tests {
     }
 
     #[test]
-    fn connected_service_reports_lms_state_separately_from_server_authentication() {
+    fn connected_service_reports_explicit_lms_state_separately_from_attendance_data() {
         let mut state = AppState::new(Config::default());
         assert_eq!(lms_session_state(&state), LmsSessionState::Unknown);
         state.data_loaded = true;
+        assert_eq!(lms_session_state(&state), LmsSessionState::Unknown);
+        state.lms_authentication = crate::state::LmsAuthenticationState::Authenticated;
         assert_eq!(lms_session_state(&state), LmsSessionState::Connected);
-        state.needs_login = true;
+        state.lms_authentication = crate::state::LmsAuthenticationState::Required;
         assert_eq!(lms_session_state(&state), LmsSessionState::LoginRequired);
     }
 
