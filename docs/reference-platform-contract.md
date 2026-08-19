@@ -13,6 +13,8 @@
 | Jungle Campus | 외부 바로가기 | 외부 바로가기 | 전용 WebView와 상태 |
 | PC 서비스 설정 | 아니요 | PC 안내 | 자동 시작·업데이트, 사용 통계, 디버그, 로그 폴더 |
 
+Tauri PC 앱은 macOS와 Windows만 지원합니다. Linux 빌드·배포·CI는 제공하지 않습니다.
+
 PWA surface는 URL 경로가 아니라 `display-mode: standalone` 또는 iOS standalone
 상태로 판정합니다. 이는 UI 분기일 뿐 보안 증명이 아닙니다. 서버 권한은 HttpOnly
 session 또는 bearer와 사용자·기기 소유권 검사로 결정합니다.
@@ -66,7 +68,7 @@ Cloudflare Worker, D1, R2, Wrangler와 별도 TypeScript Jobs는 사용하지 �
 | 항목 | 계약 |
 | --- | --- |
 | PC credential | `jbd_…`, 최대 90일, 만료 전 인증된 rotate |
-| PC 저장 | Windows Credential Manager. macOS·Linux는 앱 전용 mode 0600 파일 |
+| PC 저장 | Windows Credential Manager. macOS는 앱 전용 mode 0600 파일 |
 | PC WebView session | `jbui_…`, 7분 절대 만료, 메모리 전용, 부모 PC session당 하나 |
 | WebView origin | release `tauri://localhost`·`http://tauri.localhost`, dev `http://127.0.0.1:5173` |
 | pairing | QR 또는 10자리 코드, 2분 유효, PC 명시 승인 |

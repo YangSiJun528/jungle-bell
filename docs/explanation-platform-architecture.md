@@ -18,6 +18,7 @@ desktop/   Tauri Rust 런타임, capability와 번들 설정
 `frontend`는 독립 npm 프로젝트입니다. 웹 빌드는 `dist/web`, Tauri용 UI 빌드는
 `dist/desktop`에 생성합니다. PWA는 별도 React 앱이 아니라 Web 어댑터의 설치·Push
 capability이며, 두 빌드는 같은 `DashboardApp`에 서로 다른 어댑터를 주입합니다.
+Tauri PC 앱의 지원·배포·CI 대상은 macOS와 Windows이며 Linux는 지원하지 않습니다.
 
 기존 서버 세션이나 연결 정보와 호환하지 않습니다. 새 버전에서는 PC 등록과 모바일
 연결을 다시 수행합니다. 이전 서버에서 옮기는 데이터는 공개 세탁·급식 기록뿐입니다.
@@ -62,8 +63,8 @@ Rust가 원문을 추출하거나 서버로 보내지 않습니다. 제한된 sa
 상태와 정규화한 출석 snapshot만 Rust로 전달합니다.
 
 PC가 Spring 서버에 쓰는 자격 증명은 LMS와 무관한 `jbd_` credential입니다. 서버는
-hash만 저장합니다. Windows는 원문을 Credential Manager에 보관하고 macOS·Linux는
-앱 전용 mode 0600 파일에 저장합니다.
+hash만 저장합니다. Windows는 원문을 Credential Manager에 보관하고 macOS는 앱 전용
+mode 0600 파일에 저장합니다.
 
 React 대시보드는 장기 credential을 받지 않습니다. Rust가 7분짜리 `jbui_` session을
 발급받아 WebView 메모리에만 전달합니다. 이 session은 exact Tauri origin과 부모 PC
