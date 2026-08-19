@@ -304,10 +304,13 @@ pub(crate) enum RemoteAttendanceFreshness {
 pub(crate) enum RemoteNotificationKind {
     MealPublished,
     LaundryFinishing,
+    LaundryCompletionExpected,
     LaundryCompleted,
     LaundryAvailable,
     LaundryAttention,
     AttendanceActionRequired,
+    AttendanceMorning,
+    AttendanceEvening,
     LoginRequired,
     Test,
 }

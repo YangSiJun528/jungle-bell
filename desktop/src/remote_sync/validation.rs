@@ -69,7 +69,7 @@ pub(crate) fn validate_notifications(notifications: &[RemoteNotification]) -> Re
             || !is_safe_relative_path(&notification.path)
             || notification.created_at_epoch_ms < 0
             || notification.expires_at_epoch_ms < notification.created_at_epoch_ms
-            || !(1..=100).contains(&notification.attempt)
+            || notification.attempt > 100
         {
             return Err(ServiceError::InvalidResponse);
         }

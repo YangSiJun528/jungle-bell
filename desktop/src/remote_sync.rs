@@ -86,12 +86,14 @@ fn notification_action(kind: RemoteNotificationKind) -> Option<NotificationActio
     match kind {
         RemoteNotificationKind::MealPublished => Some(NotificationAction::Meals),
         RemoteNotificationKind::LaundryFinishing
+        | RemoteNotificationKind::LaundryCompletionExpected
         | RemoteNotificationKind::LaundryCompleted
         | RemoteNotificationKind::LaundryAvailable
         | RemoteNotificationKind::LaundryAttention => Some(NotificationAction::Laundry),
-        RemoteNotificationKind::AttendanceActionRequired | RemoteNotificationKind::LoginRequired => {
-            Some(NotificationAction::Attendance)
-        }
+        RemoteNotificationKind::AttendanceActionRequired
+        | RemoteNotificationKind::AttendanceMorning
+        | RemoteNotificationKind::AttendanceEvening
+        | RemoteNotificationKind::LoginRequired => Some(NotificationAction::Attendance),
         RemoteNotificationKind::Test => None,
     }
 }
@@ -395,6 +397,61 @@ mod tests {
         assert!(!is_safe_notification_text("줄바꿈\n금지", 80, false));
         assert!(!is_safe_notification_text("x\u{0000}y", 80, true));
         assert!(!is_safe_notification_text(&"가".repeat(81), 80, false));
+    }
+
+    #[test]
+    fn current_server_pending_notification_contract_is_accepted() {
+        let envelope: RemoteNotificationEnvelope = serde_json::from_value(serde_json::json!({
+            "notifications": [
+                {
+                    "id": "7397763b-a05a-4010-bc54-09b63fe561ce",
+                    "kind": "laundry-completion-expected",
+                    "title": "세탁 완료 예상",
+                    "body": "2번 세탁기의 예상 종료 시각입니다.",
+                    "path": "/#/laundry",
+                    "createdAtEpochMs": 1_787_135_553_827_i64,
+                    "expiresAtEpochMs": 1_787_157_153_827_i64,
+                    "attempt": 0
+                },
+                {
+                    "id": "8365c7a2-18b3-4008-80a4-4ef5a81a7ed8",
+                    "kind": "attendance-morning",
+                    "title": "학습 시작 체크가 필요합니다",
+                    "body": "학습 시작 여부를 LMS에서 확인해 주세요.",
+                    "path": "/#/attendance",
+                    "createdAtEpochMs": 1_787_135_553_827_i64,
+                    "expiresAtEpochMs": 1_787_157_153_827_i64,
+                    "attempt": 0
+                },
+                {
+                    "id": "63cb0986-a9fb-43dd-a210-7adacf9108dd",
+                    "kind": "attendance-evening",
+                    "title": "학습 종료 체크가 필요합니다",
+                    "body": "학습 종료 여부를 LMS에서 확인해 주세요.",
+                    "path": "/#/attendance",
+                    "createdAtEpochMs": 1_787_135_553_827_i64,
+                    "expiresAtEpochMs": 1_787_157_153_827_i64,
+                    "attempt": 0
+                }
+            ]
+        }))
+        .unwrap();
+
+        assert!(validate_notifications(&envelope.notifications).is_ok());
+        assert_eq!(
+            notification_action(envelope.notifications[0].kind),
+            Some(NotificationAction::Laundry)
+        );
+        for notification in &envelope.notifications[1..] {
+            assert_eq!(
+                notification_action(notification.kind),
+                Some(NotificationAction::Attendance)
+            );
+        }
+
+        let mut invalid_attempt = envelope.notifications[0].clone();
+        invalid_attempt.attempt = 101;
+        assert!(validate_notifications(&[invalid_attempt]).is_err());
     }
 
     #[test]
