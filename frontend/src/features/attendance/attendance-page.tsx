@@ -48,7 +48,7 @@ function AttendanceCheck({label, checked}: {label: string; checked: boolean}) {
             : 'rounded-xl border border-amber-500/20 bg-amber-500/10 p-4 text-amber-900 dark:text-amber-200'}>
             <span className="flex items-center gap-2 text-sm font-medium">
                 {checked ? <Check aria-hidden="true" className="size-4"/> : <X aria-hidden="true" className="size-4"/>}
-                {label} 출석
+                {label}
             </span>
             <strong className="mt-3 block text-xl">{checked ? '완료' : '미완료'}</strong>
         </div>
@@ -198,8 +198,8 @@ export function AttendancePage() {
                                     <p className="mt-1 text-lg font-semibold">{calendarDateLabel(detail.snapshot.attendanceDate)}</p>
                                 </div>
                                 <div className="grid grid-cols-2 gap-3">
-                                    <AttendanceCheck label="오전" checked={detail.snapshot.morningChecked}/>
-                                    <AttendanceCheck label="오후" checked={detail.snapshot.eveningChecked}/>
+                                    <AttendanceCheck label="학습 시작" checked={detail.snapshot.morningChecked}/>
+                                    <AttendanceCheck label="학습 종료" checked={detail.snapshot.eveningChecked}/>
                                 </div>
                                 <p className="text-xs text-muted-foreground">마지막 동기화 · {dateTimeLabel(detail.lastSyncedAt)}</p>
                                 {detail.freshness === 'stale' ? (

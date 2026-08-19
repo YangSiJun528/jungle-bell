@@ -166,8 +166,8 @@ export function AttendancePreferencesSection() {
                         <Separator/>
                         <div className="py-4">
                             <PreferenceSwitchRow
-                                title="오전 알림"
-                                description="오전 출석이 확인되지 않으면 선택한 간격으로 알려드립니다."
+                                title="학습 시작 알림"
+                                description="학습 시작이 확인되지 않으면 선택한 간격으로 알려드립니다."
                                 checked={draft.morning}
                                 disabled={!draft.enabled || savePreferences.isPending}
                                 onCheckedChange={(morning) => updateDraft('morning', morning)}
@@ -175,7 +175,7 @@ export function AttendancePreferencesSection() {
                             <div className="grid gap-4 sm:grid-cols-2">
                                 <NumberSelect
                                     id="attendance-morning-start"
-                                    label="오전 확인 시작 시각"
+                                    label="학습 시작 확인 시각"
                                     value={draft.morningStartHour}
                                     options={MORNING_START_HOURS}
                                     disabled={!draft.enabled || !draft.morning || savePreferences.isPending}
@@ -184,7 +184,7 @@ export function AttendancePreferencesSection() {
                                 />
                                 <NumberSelect
                                     id="attendance-morning-interval"
-                                    label="오전 확인 간격"
+                                    label="학습 시작 확인 간격"
                                     value={draft.morningIntervalMinutes}
                                     options={INTERVAL_MINUTES}
                                     disabled={!draft.enabled || !draft.morning || savePreferences.isPending}
@@ -199,8 +199,8 @@ export function AttendancePreferencesSection() {
                         <Separator/>
                         <div className="py-4">
                             <PreferenceSwitchRow
-                                title="오후 알림"
-                                description="오후 출석이 확인되지 않으면 선택한 간격으로 알려드립니다."
+                                title="학습 종료 알림"
+                                description="학습 종료가 확인되지 않으면 선택한 간격으로 알려드립니다."
                                 checked={draft.evening}
                                 disabled={!draft.enabled || savePreferences.isPending}
                                 onCheckedChange={(evening) => updateDraft('evening', evening)}
@@ -208,7 +208,7 @@ export function AttendancePreferencesSection() {
                             <div className="grid gap-4 sm:grid-cols-2">
                                 <NumberSelect
                                     id="attendance-evening-end"
-                                    label="오후 확인 종료 시각"
+                                    label="학습 종료 확인 종료 시각"
                                     value={draft.eveningEndHour}
                                     options={EVENING_END_HOURS}
                                     disabled={!draft.enabled || !draft.evening || savePreferences.isPending}
@@ -217,7 +217,7 @@ export function AttendancePreferencesSection() {
                                 />
                                 <NumberSelect
                                     id="attendance-evening-interval"
-                                    label="오후 확인 간격"
+                                    label="학습 종료 확인 간격"
                                     value={draft.eveningIntervalMinutes}
                                     options={INTERVAL_MINUTES}
                                     disabled={!draft.enabled || !draft.evening || savePreferences.isPending}

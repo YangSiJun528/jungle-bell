@@ -477,7 +477,7 @@ test('모바일 알림 내역은 서버의 epoch 응답 필드를 그대로 검�
                 notifications: [{
                     id: '13fdbe73-d8d0-46a4-9fb5-85026f7162fe',
                     kind: 'attendance-action-required',
-                    title: '입실 체크가 필요합니다',
+                    title: '학습 시작 체크가 필요합니다',
                     body: 'LMS에서 직접 확인해 주세요.',
                     path: '/#attendance',
                     createdAtEpochMs: 1_785_727_000_000,
@@ -495,7 +495,7 @@ test('모바일 알림 내역은 서버의 epoch 응답 필드를 그대로 검�
     assert.deepEqual(notifications, [{
         id: '13fdbe73-d8d0-46a4-9fb5-85026f7162fe',
         kind: 'attendance-action-required',
-        title: '입실 체크가 필요합니다',
+        title: '학습 시작 체크가 필요합니다',
         body: 'LMS에서 직접 확인해 주세요.',
         path: '/#/attendance',
         createdAtEpochMs: 1_785_727_000_000,
@@ -892,7 +892,7 @@ test('데스크톱 알림함은 Tauri IPC snapshot을 검증하고 읽음 처리
         unreadCount: 1,
         items: [{
             id: '42',
-            title: '오전 출석을 확인해 주세요',
+            title: '학습 시작을 확인해 주세요',
             body: '공식 정글캠퍼스에서 출석 상태를 확인하세요.',
             createdAt: 1_785_727_000_000,
             readAt: null,

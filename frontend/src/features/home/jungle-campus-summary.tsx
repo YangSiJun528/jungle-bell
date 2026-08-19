@@ -46,8 +46,8 @@ function AttendanceCheck({label, checked}: {label: string; checked: boolean}) {
 function AttendanceChecks({snapshot}: {snapshot: AttendanceSnapshot}) {
     return (
         <div className="grid grid-cols-2 gap-2" aria-label="오늘 출석 상태">
-            <AttendanceCheck label="오전" checked={snapshot.morningChecked}/>
-            <AttendanceCheck label="오후" checked={snapshot.eveningChecked}/>
+            <AttendanceCheck label="학습 시작" checked={snapshot.morningChecked}/>
+            <AttendanceCheck label="학습 종료" checked={snapshot.eveningChecked}/>
         </div>
     );
 }

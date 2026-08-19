@@ -14,6 +14,30 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.util.UUID
 
+internal data class AttendanceNotificationCopy(
+    val title: String,
+    val body: String,
+)
+
+internal fun attendanceNotificationCopy(
+    phase: String,
+    deadline: Boolean,
+    fallbackReason: String?,
+): AttendanceNotificationCopy {
+    val label = when (phase) {
+        "morning" -> "학습 시작"
+        "evening" -> "학습 종료"
+        else -> error("Unsupported attendance phase: $phase")
+    }
+    val title = if (deadline) "$label 체크 마감" else "$label 체크가 필요합니다"
+    val body = when (fallbackReason) {
+        "desktop-offline" -> "PC가 연결되지 않아 출석 상태를 확인할 수 없습니다. LMS에서 직접 확인해 주세요."
+        "login-required" -> "PC의 LMS 로그인이 만료되어 출석 상태를 확인할 수 없습니다."
+        else -> "$label 여부를 LMS에서 확인해 주세요."
+    }
+    return AttendanceNotificationCopy(title, body)
+}
+
 class AutomationEngine(
     private val automation: AutomationStore,
     private val notifications: NotificationStore,
@@ -180,26 +204,20 @@ class AutomationEngine(
         now: Long,
     ): NotificationRecord {
         val id = UUID.randomUUID()
-        val label = if (phase == "morning") "입실" else "퇴실"
-        val title = if (window.deadline) "$label 체크 마감" else "$label 체크가 필요합니다"
-        val body = when (fallbackReason) {
-            "desktop-offline" -> "PC가 연결되지 않아 출석 상태를 확인할 수 없습니다. LMS에서 직접 확인해 주세요."
-            "login-required" -> "PC의 LMS 로그인이 만료되어 출석 상태를 확인할 수 없습니다."
-            else -> "$label 여부를 LMS에서 확인해 주세요."
-        }
+        val copy = attendanceNotificationCopy(phase, window.deadline, fallbackReason)
         return NotificationRecord(
             id,
             userId,
             "attendance:${window.attendanceDate}:$phase:${window.slot}",
             "attendance-$phase",
-            title,
-            body,
+            copy.title,
+            copy.body,
             "/#/attendance",
             mapOf(
                 "notificationId" to id.toString(),
                 "kind" to "attendance-$phase",
-                "title" to title,
-                "body" to body,
+                "title" to copy.title,
+                "body" to copy.body,
                 "path" to "/#/attendance",
                 "createdAtEpochMs" to now,
                 "expiresAtEpochMs" to window.endsAtEpochMs,

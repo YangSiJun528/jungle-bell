@@ -23,7 +23,7 @@ pub struct AttendanceReport {
     pub needs_login: bool,
     /// 출석(체크인) 완료 여부
     pub morning_done: bool,
-    /// 퇴실(체크아웃) 완료 여부
+    /// 학습 종료(체크아웃) 완료 여부
     pub evening_done: bool,
     /// API 호출 실패 여부 (true이면 출석 상태 갱신 건너뜀)
     pub api_error: bool,

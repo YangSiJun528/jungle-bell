@@ -143,7 +143,7 @@ test('앱 안내는 실제 트레이 아이콘·모바일 알림과 기존 설�
 
 test('출석 화면은 조회 상태만 관리하고 공유 알림 설정을 중복하지 않는다', () => {
     assert.doesNotMatch(attendance, /surface\.kind === 'public'/);
-    assert.match(attendance, /오전[\s\S]*오후[\s\S]*마지막 동기화/);
+    assert.match(attendance, /학습 시작[\s\S]*학습 종료[\s\S]*마지막 동기화/);
     assert.match(attendance, /detail\.freshness === 'stale'/);
     assert.match(attendance, /PC 마지막 확인/);
     assert.match(attendance, /<CalendarCheck2 aria-hidden="true" className="size-5"\/>/);
@@ -197,8 +197,8 @@ test('설정 알림 탭은 연결된 기기의 출석·급식 설정을 함께 �
     assert.match(attendancePreferences, /api\.getAttendancePreferences\(\)/);
     assert.match(attendancePreferences, /api\.updateAttendancePreferences\(input\)/);
     for (const label of [
-        '출석 알림 사용', '오전 알림', '오전 확인 시작 시각', '오전 확인 간격',
-        '오후 알림', '오후 확인 종료 시각', '오후 확인 간격', '일요일 제외',
+        '출석 알림 사용', '학습 시작 알림', '학습 시작 확인 시각', '학습 시작 확인 간격',
+        '학습 종료 알림', '학습 종료 확인 종료 시각', '학습 종료 확인 간격', '일요일 제외',
     ]) {
         assert.match(attendancePreferences, new RegExp(label));
     }
