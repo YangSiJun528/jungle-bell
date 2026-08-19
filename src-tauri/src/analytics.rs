@@ -53,7 +53,6 @@ pub enum AttendancePeriod {
 }
 
 pub enum Setting {
-    AutoUpdate(bool),
     AutoStart(bool),
     StartNotificationEnabled(bool),
     EndNotificationEnabled(bool),
@@ -162,7 +161,6 @@ impl AttendancePeriod {
 impl Setting {
     fn into_parts(self) -> (&'static str, String) {
         match self {
-            Self::AutoUpdate(value) => ("auto_update", bool_value(value).into()),
             Self::AutoStart(value) => ("auto_start", bool_value(value).into()),
             Self::StartNotificationEnabled(value) => ("start_notification_enabled", bool_value(value).into()),
             Self::EndNotificationEnabled(value) => ("end_notification_enabled", bool_value(value).into()),

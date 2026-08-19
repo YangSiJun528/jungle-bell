@@ -13,9 +13,7 @@ interface TimeOfDay {
 interface SettingsComponent {
     activeTab: SettingsTab;
     appVersion: string;
-    pendingVersion: string | null;
     autoStart: boolean;
-    autoUpdate: boolean;
     showAppIcon: boolean;
     showDday: boolean;
     usageAnalytics: boolean;
@@ -32,7 +30,6 @@ interface SettingsComponent {
     get skipAttendanceHint(): string;
     init(): Promise<void>;
     selectTab(tab: SettingsTab): Promise<void>;
-    refreshUpdateStatus(): Promise<void>;
     refreshSkipAttendance(): Promise<void>;
     onFocus(): Promise<void>;
     setAttendanceNotification(enabled: boolean): Promise<void>;
@@ -48,7 +45,6 @@ interface SettingsComponent {
 
 type BooleanField =
     | 'autoStart'
-    | 'autoUpdate'
     | 'showAppIcon'
     | 'showDday'
     | 'usageAnalytics'
@@ -61,9 +57,7 @@ function settings(): SettingsComponent {
     return {
         activeTab: 'notification',
         appVersion: '',
-        pendingVersion: null,
         autoStart: false,
-        autoUpdate: false,
         showAppIcon: true,
         showDday: true,
         usageAnalytics: true,
@@ -101,7 +95,6 @@ function settings(): SettingsComponent {
             await Promise.all([
                 load<string>('get_app_version', (value) => { this.appVersion = value; }),
                 load<boolean>('get_auto_start', (value) => { this.autoStart = value; }),
-                load<boolean>('get_auto_update', (value) => { this.autoUpdate = value; }),
                 load<boolean>('get_show_app_icon', (value) => { this.showAppIcon = value; }),
                 load<boolean>('get_show_dday', (value) => { this.showDday = value; }),
                 load<boolean>('get_usage_analytics_enabled', (value) => { this.usageAnalytics = value; }),
@@ -114,21 +107,11 @@ function settings(): SettingsComponent {
                 load<TimeOfDay>('get_notification_end', (value) => { this.notificationEnd = value.hour; }),
                 load<number>('get_start_notification_interval', (value) => { this.startInterval = value; }),
                 load<number>('get_end_notification_interval', (value) => { this.endInterval = value; }),
-                this.refreshUpdateStatus(),
             ]);
         },
 
         async selectTab(tab) {
             this.activeTab = tab;
-            if (tab === 'app') await this.refreshUpdateStatus();
-        },
-
-        async refreshUpdateStatus() {
-            try {
-                this.pendingVersion = await invoke<string | null>('get_pending_update');
-            } catch (error) {
-                console.error('[settings] update status failed', error);
-            }
         },
 
         async refreshSkipAttendance() {
@@ -141,7 +124,7 @@ function settings(): SettingsComponent {
 
         async onFocus() {
             await invoke('log_from_js', {level: 'info', message: '[settings] window focus'}).catch(console.error);
-            await Promise.all([this.refreshSkipAttendance(), this.refreshUpdateStatus()]);
+            await this.refreshSkipAttendance();
         },
 
         async setAttendanceNotification(enabled) {

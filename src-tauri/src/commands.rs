@@ -2,7 +2,7 @@
 //!
 //! JS에서 `window.__TAURI__.core.invoke()`로 호출하는
 //! 모든 커맨드 함수가 이 모듈에 정의된다.
-//! 도메인 로직은 `checker`, `updater` 등 전용 모듈에 위임한다.
+//! 도메인 로직은 `checker` 등 전용 모듈에 위임한다.
 
 use std::process::Command;
 use std::sync::Arc;
@@ -199,13 +199,6 @@ macro_rules! setting_bool {
 
 // ── 매크로 생성 설정 커맨드 ──────────────────────────────
 
-setting_bool!(
-    get_auto_update,
-    set_auto_update,
-    auto_update,
-    "자동 업데이트 설정",
-    AutoUpdate
-);
 setting_bool!(
     get_start_notification_enabled,
     set_start_notification_enabled,
@@ -606,24 +599,6 @@ pub async fn set_show_app_icon(
     }
 
     analytics::track(Event::SettingChanged(Setting::ShowAppIcon(enabled)));
-    Ok(())
-}
-
-// ── 업데이트 ─────────────────────────────────────────────
-
-/// Tauri 커맨드: 주기적 체크에서 발견된 업데이트 버전 반환. None이면 최신 버전.
-#[tauri::command]
-pub async fn get_pending_update(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<Option<String>, String> {
-    Ok(state.lock().await.pending_update.clone())
-}
-
-/// Tauri 커맨드: 업데이트 확인 후 결과를 시스템 다이얼로그로 표시.
-#[tauri::command]
-pub async fn check_and_notify_update(app: tauri::AppHandle) -> Result<(), String> {
-    log::info!("[updater] 업데이트 확인 요청");
-    tauri::async_runtime::spawn(async move {
-        crate::updater::prompt_and_install_update(app, false).await;
-    });
     Ok(())
 }
 

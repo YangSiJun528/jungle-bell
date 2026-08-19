@@ -27,9 +27,6 @@ pub struct Config {
     pub evening_start: TimeOfDay,
     /// 체크아웃 마감 / 하루 끝
     pub evening_end: TimeOfDay,
-    /// 앱 시작 시 자동 업데이트 확인 여부
-    #[serde(default = "default_true")]
-    pub auto_update: bool,
     /// 시스템 시작 시 앱 자동 실행 여부
     #[serde(default = "default_true")]
     pub auto_start: bool,
@@ -242,7 +239,6 @@ impl Default for Config {
             morning_end: TimeOfDay { hour: 10, minute: 0 },
             evening_start: TimeOfDay { hour: 23, minute: 0 },
             evening_end: TimeOfDay { hour: 4, minute: 0 },
-            auto_update: true,
             auto_start: true,
             start_notification_enabled: true,
             end_notification_enabled: true,

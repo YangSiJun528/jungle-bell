@@ -12,6 +12,7 @@ use tokio::sync::Mutex as TokioMutex;
 
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::Serialize;
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 
 use crate::analytics::{self, Event};
 use crate::state::{AppState, CheckerRuntimeStatus, DailyPhase, DdayStatus, TraySnapshot};
@@ -24,6 +25,11 @@ use tauri::{
 
 const ATTENDANCE_URL: &str = "https://jungle-lms.krafton.com/check-in";
 const FEEDBACK_URL: &str = "https://github.com/YangSiJun528/jungle-bell/issues/new/choose";
+const PROJECT_URL: &str = "https://github.com/YangSiJun528/jungle-bell";
+const MAINTENANCE_NOTICE_TITLE: &str = "Jungle Bell 유지보수 종료 안내";
+const MAINTENANCE_NOTICE_MESSAGE: &str = "Jungle Bell은 현재 리뉴얼 중입니다.\n\
+이 앱은 더 이상 유지보수되지 않으며 앞으로 사용되지 않을 예정입니다.\n\
+새 Jungle Bell을 사용하려면 GitHub에서 직접 새로 설치해야 합니다.";
 
 const UTILITY_WINDOW_WIDTH: f64 = 560.0;
 const CONTENT_WINDOW_WIDTH: f64 = 720.0;
@@ -77,7 +83,6 @@ pub struct TrayState {
     pub menu: Menu<tauri::Wry>,
     pub status_item: MenuItem<tauri::Wry>,
     pub dday_item: MenuItem<tauri::Wry>,
-    pub version_item: MenuItem<tauri::Wry>,
     pub dday_visible: bool,
 }
 
@@ -673,6 +678,23 @@ where
     }
 }
 
+fn show_maintenance_notice(app: &tauri::AppHandle) {
+    app.dialog()
+        .message(MAINTENANCE_NOTICE_MESSAGE)
+        .title(MAINTENANCE_NOTICE_TITLE)
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            "GitHub로 이동".into(),
+            "닫기".into(),
+        ))
+        .show(|open_github| {
+            if open_github {
+                if let Err(error) = tauri_plugin_opener::open_url(PROJECT_URL, None::<&str>) {
+                    log::warn!("[tray] GitHub 열기 실패: {error}");
+                }
+            }
+        });
+}
+
 fn handle_menu_event(app: &tauri::AppHandle, event_id: &str) {
     match event_id {
         "open_page" => run_window_task(app, |app| open_attendance_window(&app)),
@@ -683,12 +705,7 @@ fn handle_menu_event(app: &tauri::AppHandle, event_id: &str) {
             let _ = tauri_plugin_opener::open_url(FEEDBACK_URL, None::<&str>);
         }
         "settings" => run_window_task(app, |app| open_settings_window(&app)),
-        "version" => {
-            let app = app.clone();
-            tauri::async_runtime::spawn(async move {
-                crate::updater::prompt_and_install_update(app, false).await;
-            });
-        }
+        "maintenance_notice" => show_maintenance_notice(app),
         "quit" => app.exit(0),
         _ => {}
     }
@@ -725,6 +742,8 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     let feedback = MenuItemBuilder::with_id("feedback", "피드백 보내기").build(app)?;
 
+    let maintenance_notice = MenuItemBuilder::with_id("maintenance_notice", "더 이상 유지보수 되지 않음").build(app)?;
+
     let quit = MenuItemBuilder::with_id("quit", "종료").build(app)?;
 
     let mut menu_builder = MenuBuilder::new(app).item(&status_item);
@@ -739,6 +758,7 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .item(&meals)
         .separator()
         .item(&version_item)
+        .item(&maintenance_notice)
         .item(&feedback)
         .item(&settings)
         .item(&quit)
@@ -749,7 +769,6 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         menu: menu.clone(),
         status_item: status_item.clone(),
         dday_item: dday_item.clone(),
-        version_item: version_item.clone(),
         dday_visible: show_dday,
     }));
     app.manage(tray_state);
@@ -1005,6 +1024,12 @@ mod tests {
     fn 트레이_목록은_워시타워_현황으로_표시한다() {
         assert!(include_str!("tray.rs").contains("MenuItemBuilder::with_id(\"laundry\", \"워시타워 현황\")"));
     }
+
+    #[test]
+    fn 트레이_목록은_유지보수_종료_안내를_제공한다() {
+        assert!(include_str!("tray.rs")
+            .contains("MenuItemBuilder::with_id(\"maintenance_notice\", \"더 이상 유지보수 되지 않음\")"));
+    }
 }
 
 pub async fn sync_dday_menu_visibility(app: &tauri::AppHandle, visible: bool) -> Result<(), String> {
@@ -1027,24 +1052,6 @@ pub async fn sync_dday_menu_visibility(app: &tauri::AppHandle, visible: bool) ->
 
     ts.dday_visible = visible;
     Ok(())
-}
-
-/// 트레이 버전 메뉴 아이템 갱신.
-///
-/// - `pending_update` = Some(version): "v{current} (업데이트 가능)" — 클릭 가능
-/// - `pending_update` = None: "v{current}" — 비활성(회색)
-pub fn update_tray_version(app: &tauri::AppHandle, pending_update: Option<String>) {
-    let current_version = app.package_info().version.to_string();
-    let (text, enabled) = if pending_update.is_some() {
-        (format!("v{} (업데이트 가능)", current_version), true)
-    } else {
-        (format!("v{}", current_version), false)
-    };
-    let tray_state: tauri::State<Arc<TokioMutex<TrayState>>> = app.state();
-    if let Ok(ts) = tray_state.try_lock() {
-        let _ = ts.version_item.set_text(text);
-        let _ = ts.version_item.set_enabled(enabled);
-    };
 }
 
 /// 트레이 아이콘, 툴팁, 상태/D-Day 메뉴 텍스트 갱신.

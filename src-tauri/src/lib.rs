@@ -12,7 +12,6 @@ mod runtime;
 mod scheduler;
 mod state;
 mod tray;
-mod updater;
 
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -75,27 +74,6 @@ fn notify_startup_status(app: &tauri::AppHandle, shared_state: &Arc<Mutex<AppSta
     }
 }
 
-fn spawn_startup_update_check(app: tauri::AppHandle, shared_state: Arc<Mutex<AppState>>) {
-    tauri::async_runtime::spawn(async move {
-        let auto_update = shared_state.lock().await.config.auto_update;
-        if auto_update {
-            updater::auto_install_update(app).await;
-        } else {
-            updater::check_and_store_pending_update(&app, &shared_state).await;
-        }
-    });
-}
-
-fn spawn_periodic_update_check(app: tauri::AppHandle, shared_state: Arc<Mutex<AppState>>) {
-    tauri::async_runtime::spawn(async move {
-        const INTERVAL_SECS: u64 = 60 * 60; // 1시간마다 체크
-        loop {
-            tokio::time::sleep(tokio::time::Duration::from_secs(INTERVAL_SECS)).await;
-            updater::check_update_periodic(&app, &shared_state).await;
-        }
-    });
-}
-
 /// 앱 진입점.
 ///
 /// Tauri 앱은 기본적으로 보이는 창이 없음 (tauri.conf.json에서 설정).
@@ -147,8 +125,6 @@ pub fn run() {
         ))
         // opener 플러그인: 시스템 브라우저로 URL 열기 (설정 페이지에서 사용)
         .plugin(tauri_plugin_opener::init())
-        // updater 플러그인: 자동 업데이트 지원
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         // notification 플러그인: OS 네이티브 알림 지원
         .plugin(tauri_plugin_notification::init())
@@ -162,16 +138,12 @@ pub fn run() {
             commands::report_checker_ready,
             commands::report_cms_identity,
             commands::log_from_js,
-            commands::get_auto_update,
-            commands::set_auto_update,
             commands::get_app_version,
             commands::report_campus_ready,
             commands::report_campus_interaction,
             commands::refresh_campus_data,
             commands::load_meal_history,
             commands::open_image_viewer,
-            commands::get_pending_update,
-            commands::check_and_notify_update,
             commands::get_auto_start,
             commands::set_auto_start,
             commands::get_start_notification_enabled,
@@ -236,8 +208,6 @@ pub fn run() {
             tray::setup_tray(app)?;
             checker::build_webview(app.handle())?;
             notify_startup_status(app.handle(), &shared_state);
-            spawn_startup_update_check(app.handle().clone(), shared_state.clone());
-            spawn_periodic_update_check(app.handle().clone(), shared_state.clone());
 
             // 백그라운드 루프: 상태 계산, 트레이 갱신, 체커 주기적 리로드.
             let app_handle = app.handle().clone();
