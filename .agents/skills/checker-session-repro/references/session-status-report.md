@@ -337,3 +337,90 @@ hidden checker WebView의 initialization script가 특정 실행에서 실행되
 
 - 실제 no-report 장애 주입은 수행하지 않았다. watchdog recreate/give-up은 단위 테스트로만 검증됐다.
 - `/private/tmp`의 snapshot과 rollback 디렉터리는 인증 세션을 포함할 수 있으므로 외부 공유 금지다.
+
+## 2026-08-19 v0.5.0-beta.1 필수 인증 게이트 검증
+
+검증 환경:
+
+- 앱: Jungle Bell `v0.5.0-beta.1` 개발 빌드
+- 기준 커밋: `1f909ba` 위 인증 게이트 미커밋 변경
+- 실제 창 크기: `1180 × 780` logical pixel
+- 재현 root: `/private/tmp/jungle-bell-session-repro-20260819-172307`
+- 시각 QA: `/tmp/jungle-bell/20260819-172307-1f909ba`
+
+세션 snapshot 메타데이터:
+
+| 대상 | 크기 | 항목 수 | SHA-256 |
+| --- | ---: | ---: | --- |
+| 설치 앱 v2 세션 | 1,997,616 bytes | 105 | `1e66da59bbbc17e60aa1de2af63469af5a0a423626c87bd938f893be4d7e6a5b` |
+| Tauri dev 세션 | 72,577,159 bytes | 5,080 | `8c96a4af127f345bd96307a8479d5cd94ec93e0a6731ea4f1b31220771ad887d` |
+
+두 archive 모두 mode `600`으로 저장했다. 세션·쿠키·WebKit storage 내용은 열람하거나 출력하지 않았다.
+
+### 인증된 PC 실행
+
+관찰 신호:
+
+- app starting `v0.5.0-beta.1`
+- checker.js ready: generation=1
+- report: `needs_login=false`
+- 대시보드 셸과 현재 홈 콘텐츠 표시
+- 기존 셸 내부 LMS 로그인 경고 미표시
+
+판정:
+
+- 명시적 LMS 인증 상태가 `Authenticated`로 전환된 뒤 전역 게이트가 해제됐다.
+- `desktop-authenticated.png`에서 실제 창의 오른쪽·아래쪽 클리핑이 없음을 확인했다.
+
+### 세션 없음 PC 실행
+
+절차:
+
+1. 설치 앱 v2 세션과 Tauri dev 세션을 각각 별도 rollback 위치로 이동했다.
+2. 개발 앱을 재실행했다.
+3. 로그인 필요 report와 전역 게이트를 확인했다.
+4. 생성된 미로그인 세션을 분리하고 두 기존 세션을 원래 위치로 복구했다.
+
+관찰 신호:
+
+- app starting `v0.5.0-beta.1`
+- checker.js ready: generation=1
+- login required: `/login`
+- report: `needs_login=true`
+- `Jungle Bell 인증` 전체 화면과 `LMS 로그인 창 열기` 버튼 표시
+- DashboardShell·라우트 콘텐츠 미표시
+
+판정:
+
+- `Required` 전이 직후 모든 라우트가 차단됐다.
+- `desktop-login-required.png`에서 실제 창 크기의 안내·버튼·여백과 클리핑을 확인했다.
+- 세션 복구 후 재실행에서 다시 `needs_login=false` report와 대시보드 복귀를 확인했다.
+
+### standalone PWA 및 일반 웹
+
+독립 Chrome 임시 프로필로 `/attendance`를 열어 확인했다.
+
+- Chrome 앱 모드: `display-mode: standalone=true`
+- URL: `/attendance` 유지
+- 미연결 세션: 전역 게이트 있음, DashboardShell 없음, pairing 입력 화면만 표시
+- 모바일 `390 × 844`: `scrollWidth=390`, `scrollHeight=844`, 가로·세로 클리핑 없음
+- 일반 브라우저: `standalone=false`, 전역 게이트 없음, DashboardShell 있음, 공개 출석 안내 표시
+
+시각 자료:
+
+- `pwa-unconnected-attendance.png`
+- `pwa-unconnected-mobile.png`
+
+### 자동 검증
+
+- `npm run verify`: 통과
+  - Vitest 417개 통과
+  - Rust unit 193개 및 integration 2개 통과
+  - TypeScript·웹/데스크톱 빌드·Rustfmt·Clippy 통과
+- React Doctor: 95/100, 신규 진단 없음
+
+### 남은 실제 기기 검증
+
+- 실물 휴대폰에서 pairing 승인 완료와 푸시 권한을 확인해야 한다.
+- 연결된 PWA의 background refetch 실패는 상태 단위 테스트로 검증했으며, 실제 네트워크 단절은 릴리즈 설치 후 확인한다.
+- 개발 바이너리는 `.app` bundle이 아니므로 macOS 알림 권한 백엔드는 초기화되지 않았다. 알림은 서명된 릴리즈 앱에서 별도로 확인한다.
