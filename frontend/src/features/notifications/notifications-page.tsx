@@ -22,6 +22,7 @@ import {
 } from '@/domain/notifications/inbox';
 import {desktopTestNotificationMessage, mobilePushErrorMessage} from './notification-result';
 import {notificationRowsForTab} from './notification-tabs';
+import {SystemNotificationSettingsButton} from './system-notification-settings';
 
 export function NotificationRow({item, unread, onActivate, onDismiss, dismissing = false, href}: {
     item: DashboardNotification | NotificationInboxItem;
@@ -89,6 +90,7 @@ export function NotificationPanelContent({seenMobileIds, onMobileNotificationsSe
     const authenticationRequired = notifications.isError
         && accountAuthenticationRequired(notifications.error);
     const [deliveryMessage, setDeliveryMessage] = useState('');
+    const [showSystemSettingsShortcut, setShowSystemSettingsShortcut] = useState(false);
     const backgroundRefreshFailed = notifications.isError
         && !authenticationRequired
         && notifications.data !== undefined;
@@ -120,7 +122,10 @@ export function NotificationPanelContent({seenMobileIds, onMobileNotificationsSe
     });
 
     const testNotification = useMutation({
-        onMutate: () => setDeliveryMessage(''),
+        onMutate: () => {
+            setDeliveryMessage('');
+            setShowSystemSettingsShortcut(false);
+        },
         mutationFn: async (subscriptionPromise: Promise<PushSubscriptionJSON> | undefined) => {
             if (desktop) return api.sendDesktopTestNotification();
             if (!subscriptionPromise) throw new Error('PUSH_SUBSCRIPTION_NOT_STARTED');
@@ -131,6 +136,7 @@ export function NotificationPanelContent({seenMobileIds, onMobileNotificationsSe
             if (desktop && typeof result === 'object' && result !== null && 'snapshot' in result) {
                 client.setQueryData(queryKeys.notifications('desktop'), result.snapshot);
                 setDeliveryMessage(desktopTestNotificationMessage(result));
+                setShowSystemSettingsShortcut(!result.systemDelivered);
             } else {
                 setDeliveryMessage(`연결된 모바일 ${String(result)}대의 테스트 푸시를 전송 대기열에 추가했습니다. 1분 안에 도착합니다.`);
                 await Promise.all([
@@ -351,7 +357,18 @@ export function NotificationPanelContent({seenMobileIds, onMobileNotificationsSe
                             푸시 기능을 준비하고 있습니다.
                         </p>
                     ) : null}
-                    {deliveryMessage ? <p aria-live="polite" className="text-sm text-muted-foreground">{deliveryMessage}</p> : null}
+                    {deliveryMessage ? showSystemSettingsShortcut ? (
+                        <Alert variant="destructive" aria-live="polite">
+                            <Send aria-hidden="true"/>
+                            <AlertTitle>운영체제 알림을 표시하지 못했습니다.</AlertTitle>
+                            <AlertDescription className="gap-3">
+                                <p>{deliveryMessage}</p>
+                                <SystemNotificationSettingsButton/>
+                            </AlertDescription>
+                        </Alert>
+                    ) : (
+                        <p aria-live="polite" className="text-sm text-muted-foreground">{deliveryMessage}</p>
+                    ) : null}
                 </section>
             ) : null}
         </div>

@@ -49,6 +49,7 @@ function unsupportedNativeBridge(): NativeBridge {
         checkDesktopUpdate: unsupported('desktopSettings'),
         installDesktopUpdate: unsupported('desktopSettings'),
         openLogFolder: unsupported('desktopSettings'),
+        openSystemNotificationSettings: unsupported('localNotifications'),
         getDesktopConnectionState: unsupported('desktopAccount'),
         resetDesktopIdentity: unsupported('desktopAccount'),
         refreshPlatformSync: unsupported('desktopAccount'),
@@ -71,5 +72,6 @@ function unsupportedDesktopSettings(): DesktopSettingsAdapter {
         checkDesktopUpdate: unsupported,
         installDesktopUpdate: unsupported,
         openLogFolder: unsupported,
+        openSystemNotificationSettings: unsupported,
     };
 }

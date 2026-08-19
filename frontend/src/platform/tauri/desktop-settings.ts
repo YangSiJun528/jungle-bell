@@ -24,6 +24,7 @@ export function createDashboardDesktopSettingsApi(
         | 'checkDesktopUpdate'
         | 'installDesktopUpdate'
         | 'openLogFolder'
+        | 'openSystemNotificationSettings'
     >,
 ): DesktopSettingsAdapter {
     return {
@@ -43,6 +44,10 @@ export function createDashboardDesktopSettingsApi(
         },
         async openLogFolder() {
             const result = await nativeBridge.openLogFolder();
+            if (result !== null && result !== undefined) throw invalidResponse();
+        },
+        async openSystemNotificationSettings() {
+            const result = await nativeBridge.openSystemNotificationSettings();
             if (result !== null && result !== undefined) throw invalidResponse();
         },
     };

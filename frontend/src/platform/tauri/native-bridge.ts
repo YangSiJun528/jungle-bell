@@ -22,6 +22,7 @@ export function createNativeBridge(
         checkDesktopUpdate: () => invokeCommand('check_desktop_update'),
         installDesktopUpdate: () => invokeCommand('install_desktop_update'),
         openLogFolder: () => invokeCommand('open_log_folder'),
+        openSystemNotificationSettings: () => invokeCommand('open_system_notification_settings'),
         getDesktopConnectionState: () => invokeCommand('get_connected_service_status'),
         resetDesktopIdentity: () => invokeCommand('reset_desktop_identity', {confirmed: true}),
         refreshPlatformSync: () => invokeCommand('refresh_platform_sync'),

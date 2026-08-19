@@ -52,8 +52,8 @@ pub struct DeliveryReport {
 }
 
 impl DeliveryReport {
-    pub fn any_delivered(self) -> bool {
-        self.inbox_recorded
+    pub fn was_displayed(self) -> bool {
+        self.system_delivered
     }
 }
 
@@ -369,19 +369,19 @@ mod tests {
     }
 
     #[test]
-    fn 앱_알림함에_저장된_경우에만_발송한_것으로_판단한다() {
-        assert!(DeliveryReport {
+    fn 운영체제_알림이_표시된_경우에만_발송한_것으로_판단한다() {
+        assert!(!DeliveryReport {
             inbox_recorded: true,
             inbox_created_at: Some(1_000),
             system_delivered: false,
         }
-        .any_delivered());
-        assert!(!DeliveryReport {
+        .was_displayed());
+        assert!(DeliveryReport {
             inbox_recorded: false,
             inbox_created_at: None,
             system_delivered: true,
         }
-        .any_delivered());
-        assert!(!DeliveryReport::default().any_delivered());
+        .was_displayed());
+        assert!(!DeliveryReport::default().was_displayed());
     }
 }

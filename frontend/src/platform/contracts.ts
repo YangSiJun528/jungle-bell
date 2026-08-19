@@ -45,6 +45,7 @@ export interface NativeBridge {
     checkDesktopUpdate(): Promise<unknown>;
     installDesktopUpdate(): Promise<unknown>;
     openLogFolder(): Promise<unknown>;
+    openSystemNotificationSettings(): Promise<unknown>;
     getDesktopConnectionState(): Promise<unknown>;
     resetDesktopIdentity(): Promise<unknown>;
     refreshPlatformSync(): Promise<unknown>;
@@ -91,6 +92,7 @@ export interface DesktopSettingsAdapter {
     checkDesktopUpdate(): Promise<DesktopUpdateStatus>;
     installDesktopUpdate(): Promise<void>;
     openLogFolder(): Promise<void>;
+    openSystemNotificationSettings(): Promise<void>;
 }
 
 export type PlatformUnlisten = () => void;

@@ -109,6 +109,15 @@ describe('repository platform boundaries', () => {
             .toBeLessThan(uploadAndPublish.indexOf('AttendanceSnapshotUpdated::Synced'));
     });
 
+    test('PC 알림 ACK와 테스트 전달 결과는 운영체제 표시 성공만 인정한다', () => {
+        const commands = readFileSync(resolve(repositoryRoot, 'desktop/src/commands.rs'), 'utf8');
+        const remoteSync = readFileSync(resolve(repositoryRoot, 'desktop/src/remote_sync.rs'), 'utf8');
+
+        expect(commands).toContain('broadcast_test_notification(report.system_delivered)');
+        expect(remoteSync).toContain('report.was_displayed()');
+        expect(remoteSync).not.toContain('report.any_delivered()');
+    });
+
     test('frontend scripts and Tauri hooks use separate web and desktop UI artifacts', () => {
         const packageJson = JSON.parse(readFrontend('package.json')) as {
             scripts: Record<string, string>;

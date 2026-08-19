@@ -17,9 +17,11 @@ describe('desktop update adapter', () => {
             availableVersion: '0.5.1',
         });
         await expect(api.installDesktopUpdate()).resolves.toBeUndefined();
+        await expect(api.openSystemNotificationSettings()).resolves.toBeUndefined();
         expect(invoke.mock.calls).toEqual([
             ['check_desktop_update'],
             ['install_desktop_update'],
+            ['open_system_notification_settings'],
         ]);
     });
 

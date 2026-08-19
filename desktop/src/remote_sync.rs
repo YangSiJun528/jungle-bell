@@ -160,7 +160,7 @@ async fn deliver_server_notifications(
         else {
             return;
         };
-        let outcome = if report.any_delivered() {
+        let outcome = if report.was_displayed() {
             NotificationAckOutcome::Displayed
         } else {
             NotificationAckOutcome::Failed

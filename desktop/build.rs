@@ -8,6 +8,7 @@ const APP_COMMANDS: &[&str] = &[
     "install_desktop_update",
     "update_desktop_settings",
     "open_log_folder",
+    "open_system_notification_settings",
     "get_notification_inbox_snapshot",
     "mark_notification_read",
     "mark_all_notifications_read",

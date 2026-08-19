@@ -11,6 +11,7 @@
     "allow-install-desktop-update",
     "allow-update-desktop-settings",
     "allow-open-log-folder",
+    "allow-open-system-notification-settings",
     "allow-get-connected-service-status",
     "allow-reset-desktop-identity",
     "allow-open-lms-login",

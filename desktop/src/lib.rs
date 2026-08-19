@@ -156,6 +156,7 @@ pub fn run() {
             commands::install_desktop_update,
             commands::update_desktop_settings,
             commands::open_log_folder,
+            commands::open_system_notification_settings,
             commands::get_notification_inbox_snapshot,
             commands::mark_notification_read,
             commands::mark_all_notifications_read,
@@ -250,7 +251,7 @@ mod tests {
     }
 
     #[test]
-    fn native_command_manifest는_os경계_15개와_http_bootstrap만_남긴다() {
+    fn native_command_manifest는_허용된_os경계와_http_bootstrap만_남긴다() {
         let build = include_str!("../build.rs");
         let manifest = build
             .split("const APP_COMMANDS")
@@ -275,6 +276,7 @@ mod tests {
             "install_desktop_update",
             "open_lms_login",
             "open_log_folder",
+            "open_system_notification_settings",
             "refresh_platform_sync",
             "report_checker_event",
             "reset_desktop_identity",

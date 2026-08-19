@@ -450,6 +450,23 @@ pub fn open_log_folder(window: tauri::WebviewWindow, app: tauri::AppHandle) -> R
     tauri_plugin_opener::open_path(log_dir, None::<&str>).map_err(|error| error.to_string())
 }
 
+fn system_notification_settings_url(target_os: &str) -> Option<&'static str> {
+    match target_os {
+        "macos" => Some("x-apple.systempreferences:com.apple.Notifications-Settings.extension"),
+        "windows" => Some("ms-settings:notifications"),
+        _ => None,
+    }
+}
+
+/// 대시보드가 임의 URL을 전달하지 못하게 하고, 현재 OS의 알림 설정만 연다.
+#[tauri::command]
+pub fn open_system_notification_settings(window: tauri::WebviewWindow) -> Result<(), String> {
+    remote_sync::ensure_dashboard_window(&window)?;
+    let url = system_notification_settings_url(std::env::consts::OS)
+        .ok_or_else(|| "SYSTEM_NOTIFICATION_SETTINGS_UNAVAILABLE".to_owned())?;
+    tauri_plugin_opener::open_url(url, None::<&str>).map_err(|_| "SYSTEM_NOTIFICATION_SETTINGS_OPEN_FAILED".to_owned())
+}
+
 /// 대시보드 알림함에 표시할 영속 앱 알림 목록을 반환한다.
 #[tauri::command]
 pub fn get_notification_inbox_snapshot(
@@ -528,7 +545,7 @@ pub async fn send_test_notification(
             repeat_after_ms: None,
         },
     );
-    let mobile_queued = match remote_sync.broadcast_test_notification(report.inbox_recorded).await {
+    let mobile_queued = match remote_sync.broadcast_test_notification(report.system_delivered).await {
         Ok(queued) => Some(queued),
         Err(error) => {
             log::warn!("[test-notification] mobile broadcast failed: {error}");
@@ -545,8 +562,22 @@ pub async fn send_test_notification(
 #[cfg(test)]
 mod tests {
     use super::{
-        validate_js_log_payload, CheckerEventInput, CheckerEventResponse, DesktopSettings, DesktopSettingsInput,
+        system_notification_settings_url, validate_js_log_payload, CheckerEventInput, CheckerEventResponse,
+        DesktopSettings, DesktopSettingsInput,
     };
+
+    #[test]
+    fn 운영체제별_알림_설정_url은_고정된_대상만_허용한다() {
+        assert_eq!(
+            system_notification_settings_url("macos"),
+            Some("x-apple.systempreferences:com.apple.Notifications-Settings.extension")
+        );
+        assert_eq!(
+            system_notification_settings_url("windows"),
+            Some("ms-settings:notifications")
+        );
+        assert_eq!(system_notification_settings_url("linux"), None);
+    }
 
     #[test]
     fn 데스크톱_설정은_현재_앱_버전을_노출한다() {

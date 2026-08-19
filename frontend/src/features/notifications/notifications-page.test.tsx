@@ -120,7 +120,8 @@ describe('notification center information architecture', () => {
     });
 
     test('새 푸시 연결이나 테스트를 시작할 때 이전 성공 문구를 지운다', () => {
-        expect(pageSource.match(/onMutate: \(\) => setDeliveryMessage\(''\)/gu)).toHaveLength(2);
+        expect(pageSource.match(/setDeliveryMessage\(''\)/gu)).toHaveLength(2);
+        expect(pageSource).toContain('setShowSystemSettingsShortcut(false)');
     });
 
     test('서비스 워커와 공개 키를 미리 준비하고 구독을 클릭 핸들러에서 시작한다', () => {
@@ -132,6 +133,12 @@ describe('notification center information architecture', () => {
 
     test('테스트 Push는 Worker 전달 주기를 사용자에게 명확히 안내한다', () => {
         expect(pageSource).toContain('테스트 푸시를 전송 대기열에 추가했습니다. 1분 안에 도착합니다.');
+    });
+
+    test('PC 테스트 알림의 OS 표시 실패 경고에서 알림 설정을 바로 연다', () => {
+        expect(pageSource).toContain('setShowSystemSettingsShortcut(!result.systemDelivered)');
+        expect(pageSource).toContain('운영체제 알림을 표시하지 못했습니다.');
+        expect(pageSource).toContain('<SystemNotificationSettingsButton/>');
     });
 
     test('패널에서는 중복 제목 없이 기존 알림 처리 UI를 재사용한다', () => {

@@ -1062,7 +1062,7 @@ test('데스크톱 서비스 설정은 canonical current-only commands와 exact 
         fetcher: async () => { throw new Error('unexpected fetch'); },
         invokeCommand: async (command, args) => {
             calls.push({command, args});
-            if (command === 'open_log_folder') return undefined;
+            if (command === 'open_log_folder' || command === 'open_system_notification_settings') return undefined;
             return command === 'update_desktop_settings' ? updated : initial;
         },
     });
@@ -1070,6 +1070,7 @@ test('데스크톱 서비스 설정은 canonical current-only commands와 exact 
     assert.deepEqual(await api.getDesktopSettings(), initial);
     assert.deepEqual(await api.updateDesktopSettings(updated), updated);
     await api.openLogFolder();
+    await api.openSystemNotificationSettings();
     assert.deepEqual(calls, [
         {command: 'get_desktop_settings', args: undefined},
         {command: 'update_desktop_settings', args: {input: {
@@ -1080,6 +1081,7 @@ test('데스크톱 서비스 설정은 canonical current-only commands와 exact 
             selectedCohortId: null,
         }}},
         {command: 'open_log_folder', args: undefined},
+        {command: 'open_system_notification_settings', args: undefined},
     ]);
 });
 
