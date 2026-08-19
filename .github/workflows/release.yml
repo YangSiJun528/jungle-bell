@@ -1,9 +1,7 @@
 name: Release
-run-name: Release ${{ github.event.release.tag_name || inputs.tag }}
+run-name: Release ${{ inputs.tag }}
 
 on:
-  release:
-    types: [created]
   workflow_dispatch:
     inputs:
       tag:
@@ -15,24 +13,35 @@ jobs:
   get-release-info:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
     outputs:
       tag: ${{ steps.info.outputs.tag }}
       release_id: ${{ steps.info.outputs.release_id }}
       is_prerelease: ${{ steps.info.outputs.is_prerelease }}
     steps:
-      - name: Get release info
+      - name: Validate draft release
         id: info
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
-          TAG="${{ github.event.release.tag_name || inputs.tag }}"
-          RELEASE_INFO=$(gh api repos/${{ github.repository }}/releases --jq ".[] | select(.tag_name == \"$TAG\")")
-          RELEASE_ID=$(echo "$RELEASE_INFO" | jq -r '.id')
-          IS_PRERELEASE=$(echo "$RELEASE_INFO" | jq -r '.prerelease')
+          set -euo pipefail
+
+          TAG="$INPUT_TAG"
+          RELEASE_INFO=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --json databaseId,isDraft,isPrerelease,tagName)
+          RELEASE_ID=$(echo "$RELEASE_INFO" | jq -r '.databaseId')
+          IS_DRAFT=$(echo "$RELEASE_INFO" | jq -r '.isDraft')
+          IS_PRERELEASE=$(echo "$RELEASE_INFO" | jq -r '.isPrerelease')
+
+          if [ "$IS_DRAFT" != "true" ]; then
+            echo "The v2 updater manifest may only be assembled inside a draft release." >&2
+            exit 1
+          fi
+
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "release_id=$RELEASE_ID" >> $GITHUB_OUTPUT
           echo "is_prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   publish-tauri:
     needs: [get-release-info]
@@ -91,6 +100,7 @@ jobs:
           args: ${{ matrix.args }}
           projectPath: desktop
           tauriScript: npm --prefix ../frontend run tauri --
+          uploadUpdaterJson: true
           updaterJsonPreferNsis: true
 
       - name: Archive .app as tar.gz (macOS only)
@@ -137,8 +147,48 @@ jobs:
           gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
             out/jungle-bell.sh out/jungle-bell.ps1
 
+  publish-v2-updater-manifest:
+    needs: [publish-tauri, get-release-info]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Promote updater manifest to the v2 channel
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.get-release-info.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          VERSION="${TAG#v}"
+          MANIFEST_DIR="$(mktemp -d)"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern latest.json --dir "$MANIFEST_DIR"
+
+          jq -e --arg version "$VERSION" '
+            . as $manifest
+            | ($manifest.version == $version)
+              and ([
+                "darwin-aarch64",
+                "darwin-x86_64",
+                "windows-x86_64"
+              ] | all(. as $platform
+                | ($manifest.platforms[$platform].signature | type == "string" and length > 0)
+                  and ($manifest.platforms[$platform].url | type == "string" and length > 0)
+              ))
+          ' "$MANIFEST_DIR/latest.json"
+
+          mv "$MANIFEST_DIR/latest.json" "$MANIFEST_DIR/latest-v2.json"
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+            "$MANIFEST_DIR/latest-v2.json"
+          gh release delete-asset "$TAG" latest.json --yes --repo "$GITHUB_REPOSITORY"
+
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets \
+            --jq '[.assets[].name] | (index("latest-v2.json") != null) and (index("latest.json") == null)' \
+            | grep -qx true
+
   publish-release:
-    needs: [publish-tauri, publish-installer-scripts, get-release-info]
+    needs: [publish-v2-updater-manifest, publish-installer-scripts, get-release-info]
     runs-on: ubuntu-latest
     permissions:
       contents: write
