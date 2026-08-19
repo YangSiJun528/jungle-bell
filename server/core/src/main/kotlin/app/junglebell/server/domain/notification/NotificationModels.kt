@@ -24,6 +24,11 @@ data class NotificationAckRequest(
     @field:Min(0) val occurredAtEpochMs: Long,
 )
 
+internal fun canonicalNotificationKind(kind: String): String = when (kind) {
+    "attendance-morning", "attendance-evening" -> "attendance-action-required"
+    else -> kind
+}
+
 data class TestNotificationRequest(val desktopDelivered: Boolean? = null)
 data class TestNotificationResponse(val notificationId: String, val queued: Int)
 

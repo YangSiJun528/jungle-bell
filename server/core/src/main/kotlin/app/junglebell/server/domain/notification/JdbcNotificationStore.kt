@@ -173,7 +173,8 @@ class JdbcNotificationStore(
 
     private fun notificationRow(row: java.sql.ResultSet, index: Int) = PublicNotification(
         row.getObject("id", UUID::class.java).toString(),
-        row.getString("kind"), row.getString("title"), row.getString("body"), row.getString("path"),
+        canonicalNotificationKind(row.getString("kind")),
+        row.getString("title"), row.getString("body"), row.getString("path"),
         row.getLong("created_at_epoch_ms"), row.getLong("expires_at_epoch_ms"), row.getLong("attempts"),
     )
 }

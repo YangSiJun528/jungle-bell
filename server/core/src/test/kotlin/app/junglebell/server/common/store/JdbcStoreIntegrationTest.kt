@@ -114,6 +114,22 @@ class JdbcStoreIntegrationTest {
     }
 
     @Test
+    fun `legacy attendance notification kinds are normalized when read`() {
+        val userId = createUser()
+        val mapper = JsonMapper.builder().addModule(KotlinModule.Builder().build()).build()
+        val store = JdbcNotificationStore(jdbc, mapper)
+        val notification = NotificationRecord(
+            UUID.randomUUID(), userId, "legacy-attendance", "test", "title", "body", "/#/attendance",
+            emptyMap(), 1_500, 1_000, 10_000,
+        )
+        assertTrue(store.create(notification))
+        jdbc.sql("UPDATE notification SET kind = 'attendance-evening' WHERE id = :id")
+            .param("id", notification.id).update()
+
+        assertEquals("attendance-action-required", store.history(userId, 20).single().kind)
+    }
+
+    @Test
     fun `pairing approval creates the mobile session atomically`() {
         val userId = createUser()
         val desktopInstallationId = "desktop-${UUID.randomUUID()}"

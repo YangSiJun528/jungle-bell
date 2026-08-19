@@ -222,19 +222,25 @@ const notificationPathSchema = z.string()
     .regex(/^\/#\/?(?:attendance|laundry|meals|notifications|connections)$/u)
     .transform((path) => path.replace(/^\/#\/?/u, '/#/'));
 
+const notificationKindSchema = z.enum([
+    'meal-published',
+    'laundry-finishing',
+    'laundry-completion-expected',
+    'laundry-completed',
+    'laundry-available',
+    'laundry-attention',
+    'attendance-action-required',
+    'attendance-morning',
+    'attendance-evening',
+    'login-required',
+    'test',
+]).transform((kind) => kind === 'attendance-morning' || kind === 'attendance-evening'
+    ? 'attendance-action-required' as const
+    : kind);
+
 const dashboardNotificationSchema = z.strictObject({
     id: uuidIdentifierSchema,
-    kind: z.enum([
-        'meal-published',
-        'laundry-finishing',
-        'laundry-completion-expected',
-        'laundry-completed',
-        'laundry-available',
-        'laundry-attention',
-        'attendance-action-required',
-        'login-required',
-        'test',
-    ]),
+    kind: notificationKindSchema,
     title: textSchema(256),
     body: textSchema(2_048),
     path: notificationPathSchema,

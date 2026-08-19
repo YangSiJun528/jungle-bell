@@ -548,6 +548,35 @@ test('완료 예상 세탁 알림 종류를 알림함 응답으로 허용한다'
     assert.deepEqual(await api.getNotifications(), [notification]);
 });
 
+test('이전 출석 알림 종류를 현재 계약으로 정규화한다', async () => {
+    const notification = (kind: 'attendance-morning' | 'attendance-evening', offset: number) => ({
+        id: offset === 0
+            ? '13fdbe73-d8d0-46a4-9fb5-85026f7162fe'
+            : '23fdbe73-d8d0-46a4-9fb5-85026f7162fe',
+        kind,
+        title: '출석 확인',
+        body: 'LMS에서 확인해 주세요.',
+        path: '/#/attendance',
+        createdAtEpochMs: 1_785_727_000_000 + offset,
+        expiresAtEpochMs: 1_785_727_600_000 + offset,
+        attempt: 0,
+    });
+    const api = createDashboardApi({
+        fetcher: async () => jsonResponse({
+            notifications: [
+                notification('attendance-morning', 0),
+                notification('attendance-evening', 1),
+            ],
+        }),
+        invokeCommand: async () => undefined,
+    });
+
+    assert.deepEqual(
+        (await api.getNotifications()).map(({kind}) => kind),
+        ['attendance-action-required', 'attendance-action-required'],
+    );
+});
+
 test('개인 API는 HttpOnly 쿠키·no-store를 강제하고 Authorization을 만들지 않는다', async () => {
     const calls: Array<{url: string; init?: RequestInit}> = [];
     const api = createDashboardApi({
