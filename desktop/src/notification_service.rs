@@ -176,6 +176,7 @@ fn system_notification_dashboard_route(action: Option<NotificationAction>) -> Da
     action.map_or(DashboardRoute::Notifications, NotificationAction::dashboard_route)
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn should_dispatch_system_notification_to_main_thread(target_is_macos: bool, current_is_main_thread: bool) -> bool {
     target_is_macos && !current_is_main_thread
 }

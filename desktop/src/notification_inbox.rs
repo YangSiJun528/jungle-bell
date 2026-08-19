@@ -5,7 +5,9 @@ use std::sync::Mutex;
 
 use chrono::Utc;
 use serde::{Deserialize, Deserializer, Serialize};
-use tauri::{Emitter, Manager};
+use tauri::Emitter;
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+use tauri::Manager;
 
 use crate::tray::{self, DashboardRoute};
 
