@@ -75,6 +75,8 @@ describe('MealHistorySection', () => {
         expect(markup).toContain('data-meal-history-overview="true"');
         expect(markup).toContain('data-meal-history-weekly="true"');
         expect(source).toContain('lg:grid-cols-[minmax(17rem,20rem)_minmax(0,1fr)]');
+        expect(source).toContain('className="grid gap-4 sm:grid-cols-2"');
+        expect(source).not.toContain('lg:grid-cols-1');
         expect(source).toMatch(
             /data-meal-history-overview="true"[\s\S]*<\/div>\s*<section[\s\S]*data-meal-history-weekly="true"/u,
         );

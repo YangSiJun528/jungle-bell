@@ -89,7 +89,7 @@ function MealHistoryMonth({
                         {activeHistoryDate ? mealDateLabel(activeHistoryDate) : '선택한 날짜 식단'}
                     </h3>
                     {activeHistoryMeals.length > 0 ? (
-                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                        <div className="grid gap-4 sm:grid-cols-2">
                             {activeHistoryMeals.map((meal) => (
                                 <MealPostCard compact key={meal.id} meal={meal}/>
                             ))}
