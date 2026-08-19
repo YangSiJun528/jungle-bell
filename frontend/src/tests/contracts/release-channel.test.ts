@@ -18,7 +18,7 @@ const matchedVersion = (source: string, pattern: RegExp, label: string) => {
     return match[1];
 };
 
-test('Gradle·Vite·Tauri 릴리스 버전은 같은 안정 SemVer다', () => {
+test('Gradle·Vite·Tauri 릴리스 버전은 같은 허용 SemVer다', () => {
     const frontendPackage = JSON.parse(repoSource('frontend/package.json')) as {
         version?: string;
     };
@@ -29,7 +29,7 @@ test('Gradle·Vite·Tauri 릴리스 버전은 같은 안정 SemVer다', () => {
     const canonicalVersion = frontendPackage.version;
 
     assert.ok(canonicalVersion, 'Vite 애플리케이션 버전을 찾을 수 없다');
-    assert.match(canonicalVersion, /^\d+\.\d+\.\d+$/u);
+    assert.match(canonicalVersion, /^\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.\d+)?$/u);
 
     const versionSurfaces = [
         ['Vite package-lock 루트', frontendPackageLock.version],

@@ -28,9 +28,10 @@ https://jungle-bell.sijun-yang.com
 
 ## 버전과 배포 기록
 
-제품, 서버, 프런트엔드, 데스크톱은 하나의 안정 SemVer를 사용합니다. 현재 기준은
-`0.5.0`이며 `-SNAPSHOT` 버전은 사용하지 않습니다. 버전을 바꿀 때는 `$bump-version`
-스킬로 다음 항목을 함께 갱신합니다.
+제품, 서버, 프런트엔드, 데스크톱은 하나의 SemVer를 사용합니다. 정식 릴리스는
+`MAJOR.MINOR.PATCH`, 시험 릴리스는 `MAJOR.MINOR.PATCH-(alpha|beta|rc).NUMBER` 형식이며
+`-SNAPSHOT`은 사용하지 않습니다. 현재 소스 버전은 `0.5.0-beta.0`입니다. 버전을 바꿀
+때는 `$bump-version` 스킬로 다음 항목을 함께 갱신합니다.
 
 - `frontend/package.json`과 `frontend/package-lock.json`
 - `server/build.gradle.kts`
@@ -47,7 +48,7 @@ npm --prefix frontend test -- src/tests/contracts/release-channel.test.ts
 남깁니다.
 
 ```text
-version=0.5.0
+version=<SemVer>
 gitSha=<40자 Git SHA>
 apiImage=<sha256 digest>
 workerImage=<sha256 digest>
