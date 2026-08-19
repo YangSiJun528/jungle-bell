@@ -215,7 +215,9 @@ test('설정 알림 탭은 연결된 기기의 출석·급식 설정을 함께 �
     assert.match(notifications, /api\.sendMobileTestNotification\(\)/);
     assert.match(notifications, /api\.registerPushSubscription/);
     assert.match(notifications, /platform\.pwa\.subscribePush/);
-    assert.match(pwaAdapter, /notificationObject\.requestPermission\(\)/);
+    assert.match(notifications, /platform\.pwa\.preparePush\(\)/);
+    assert.match(pwaAdapter, /readyRegistration\.pushManager\.subscribe\(/);
+    assert.doesNotMatch(pwaAdapter, /Notification\.requestPermission|notificationObject\.requestPermission/);
     assert.match(notifications, /운영체제 알림/);
     assert.match(notifications, /푸시 연결/);
     assert.match(notifications, /테스트 알림/);

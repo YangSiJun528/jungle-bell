@@ -106,6 +106,7 @@ export interface PwaCapabilityAdapter {
     available: boolean;
     installed: boolean;
     registerServiceWorker(): void;
+    preparePush(): Promise<void>;
     subscribeInstallPrompt(
         listener: (prompt: PwaInstallPrompt) => void,
     ): PlatformUnlisten;
@@ -135,6 +136,9 @@ export function unavailablePwaAdapter(): PwaCapabilityAdapter {
         available: false,
         installed: false,
         registerServiceWorker() {},
+        preparePush: async () => {
+            throw new PlatformCapabilityUnavailableError('webPush');
+        },
         subscribeInstallPrompt: () => () => undefined,
         isMobileInstallClient: () => false,
         subscribePush: async () => {

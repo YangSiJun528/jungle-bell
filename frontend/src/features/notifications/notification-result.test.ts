@@ -25,6 +25,7 @@ describe('mobile push error result', () => {
         expect(mobilePushErrorMessage(new Error('PUSH_PERMISSION_DENIED'))).toContain('알림을 허용');
         expect(mobilePushErrorMessage(new DOMException('', 'NotAllowedError'))).toContain('알림을 허용');
         expect(mobilePushErrorMessage(new Error('PUSH_UNSUPPORTED'))).toContain('Web Push를 지원');
+        expect(mobilePushErrorMessage(new Error('PUSH_NOT_READY'))).toContain('준비가 끝나지 않았습니다');
         expect(mobilePushErrorMessage(new Error('WEB_PUSH_NOT_CONFIGURED'))).toContain('서버의 Web Push 설정');
     });
 

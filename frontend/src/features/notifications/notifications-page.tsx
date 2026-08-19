@@ -91,9 +91,15 @@ export function NotificationPanelContent({seenMobileIds, onMobileNotificationSee
     const backgroundRefreshFailed = notifications.isError
         && !authenticationRequired
         && notifications.data !== undefined;
-    const pushPublicKey = useQuery({
-        queryKey: queryKeys.pushPublicKey,
-        queryFn: () => api.getPushPublicKey(),
+    const pushSetup = useQuery({
+        queryKey: queryKeys.pushSetup,
+        queryFn: async () => {
+            const [applicationServerKey] = await Promise.all([
+                api.getPushPublicKey(),
+                platform.pwa.preparePush(),
+            ]);
+            return applicationServerKey;
+        },
         enabled: !desktop && account.personalAccess.status === 'connected',
         staleTime: 5 * 60_000,
     });
@@ -135,11 +141,11 @@ export function NotificationPanelContent({seenMobileIds, onMobileNotificationSee
     });
 
     const connectPush = () => {
-        if (!pushPublicKey.data) return;
+        if (!pushSetup.data) return;
         testNotification.reset();
-        // subscribePush starts permission acquisition synchronously while this
-        // click still owns the browser's transient user activation.
-        push.mutate(platform.pwa.subscribePush(pushPublicKey.data));
+        // Start the browser subscription synchronously while this click still
+        // owns the browser's transient user activation.
+        push.mutate(platform.pwa.subscribePush(pushSetup.data));
     };
 
     const sendTestNotification = () => {
@@ -148,9 +154,9 @@ export function NotificationPanelContent({seenMobileIds, onMobileNotificationSee
             testNotification.mutate(undefined);
             return;
         }
-        if (!pushPublicKey.data) return;
-        // Start permission acquisition before React Query enters its async mutation lifecycle.
-        testNotification.mutate(platform.pwa.subscribePush(pushPublicKey.data));
+        if (!pushSetup.data) return;
+        // Start the browser subscription before React Query enters its async mutation lifecycle.
+        testNotification.mutate(platform.pwa.subscribePush(pushSetup.data));
     };
 
     const activate = useMutation({
@@ -268,7 +274,7 @@ export function NotificationPanelContent({seenMobileIds, onMobileNotificationSee
                                 variant="outline"
                                 size="sm"
                                 onClick={connectPush}
-                                disabled={push.isPending || testNotification.isPending || !pushPublicKey.data}
+                                disabled={push.isPending || testNotification.isPending || !pushSetup.data}
                             >
                                 <Smartphone aria-hidden="true" className="size-4"/>푸시 연결
                             </Button>
@@ -277,22 +283,27 @@ export function NotificationPanelContent({seenMobileIds, onMobileNotificationSee
                             variant="outline"
                             size="sm"
                             onClick={sendTestNotification}
-                            disabled={testNotification.isPending || push.isPending || (!desktop && !pushPublicKey.data)}
+                            disabled={testNotification.isPending || push.isPending || (!desktop && !pushSetup.data)}
                         >
                             <Send aria-hidden="true" className="size-4"/>
                             테스트 알림
                         </Button>
                     </div>
-                    {(pushPublicKey.isError || push.isError || testNotification.isError) ? (
+                    {(pushSetup.isError || push.isError || testNotification.isError) ? (
                         <Alert variant="destructive">
                             <Send aria-hidden="true"/>
                             <AlertTitle>알림을 보내지 못했습니다.</AlertTitle>
                             <AlertDescription>
                                 {mobilePushErrorMessage(
-                                    testNotification.error ?? push.error ?? pushPublicKey.error,
+                                    testNotification.error ?? push.error ?? pushSetup.error,
                                 )}
                             </AlertDescription>
                         </Alert>
+                    ) : null}
+                    {!desktop && pushSetup.isPending ? (
+                        <p aria-live="polite" className="text-sm text-muted-foreground">
+                            푸시 기능을 준비하고 있습니다.
+                        </p>
                     ) : null}
                     {deliveryMessage ? <p aria-live="polite" className="text-sm text-muted-foreground">{deliveryMessage}</p> : null}
                 </section>

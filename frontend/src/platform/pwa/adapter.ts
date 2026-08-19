@@ -10,30 +10,51 @@ interface BeforeInstallPromptEvent extends Event {
     userChoice: Promise<{outcome: 'accepted' | 'dismissed'}>;
 }
 
-interface NotificationPermissionRequester {
-    requestPermission(): Promise<NotificationPermission>;
-}
-
 export function createPwaCapabilityAdapter(options: {
     production: boolean;
     windowObject?: Window;
     navigatorObject?: Navigator;
-    notificationObject?: NotificationPermissionRequester | null;
 }): PwaCapabilityAdapter {
     const windowObject = options.windowObject ?? window;
     const navigatorObject = options.navigatorObject ?? navigator;
-    const notificationObject = options.notificationObject === undefined
-        ? typeof Notification === 'undefined' ? null : Notification
-        : options.notificationObject;
+    let readyRegistration: ServiceWorkerRegistration | null = null;
+    let registrationPromise: Promise<ServiceWorkerRegistration> | null = null;
+
+    const startServiceWorker = (): Promise<ServiceWorkerRegistration> => {
+        if (!options.production || !('serviceWorker' in navigatorObject)) {
+            return Promise.reject(new Error('PUSH_UNSUPPORTED'));
+        }
+        if (readyRegistration) return Promise.resolve(readyRegistration);
+        if (registrationPromise) return registrationPromise;
+
+        registrationPromise = navigatorObject.serviceWorker.register('./sw.js', {scope: './'})
+            .then(() => navigatorObject.serviceWorker.ready)
+            .then((registration) => {
+                readyRegistration = registration;
+                return registration;
+            })
+            .catch((error: unknown) => {
+                registrationPromise = null;
+                throw error;
+            });
+        return registrationPromise;
+    };
 
     return {
         available: true,
         installed: installedPwa(windowObject, navigatorObject),
         registerServiceWorker() {
             if (!options.production || !('serviceWorker' in navigatorObject)) return;
-            windowObject.addEventListener('load', () => {
-                void navigatorObject.serviceWorker.register('./sw.js', {scope: './'});
-            }, {once: true});
+            const register = () => void startServiceWorker().catch(() => undefined);
+            if (windowObject.document?.readyState === 'complete') {
+                register();
+            } else {
+                windowObject.addEventListener('load', register, {once: true});
+            }
+        },
+        async preparePush() {
+            if (!('PushManager' in windowObject)) throw new Error('PUSH_UNSUPPORTED');
+            await startServiceWorker();
         },
         subscribeInstallPrompt(listener): PlatformUnlisten {
             const handle = (event: Event) => {
@@ -44,21 +65,25 @@ export function createPwaCapabilityAdapter(options: {
             return () => windowObject.removeEventListener('beforeinstallprompt', handle);
         },
         isMobileInstallClient: () => isMobileInstallClient(navigatorObject),
-        async subscribePush(applicationServerKey) {
+        subscribePush(applicationServerKey) {
             if (!('serviceWorker' in navigatorObject)
-                || !('PushManager' in windowObject)
-                || !notificationObject) {
-                throw new Error('PUSH_UNSUPPORTED');
+                || !('PushManager' in windowObject)) {
+                return Promise.reject(new Error('PUSH_UNSUPPORTED'));
             }
-            const permission = await notificationObject.requestPermission();
-            if (permission !== 'granted') throw new Error('PUSH_PERMISSION_DENIED');
-            const registration = await navigatorObject.serviceWorker.ready;
-            const existing = await registration.pushManager.getSubscription();
-            const subscription = existing ?? await registration.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: decodeApplicationServerKey(applicationServerKey),
-            });
-            return subscription.toJSON();
+            if (!readyRegistration) return Promise.reject(new Error('PUSH_NOT_READY'));
+
+            try {
+                // WebKit requires subscribe() itself to run while this click still
+                // owns transient user activation. subscribe() also returns an
+                // existing subscription when its options match.
+                const subscription = readyRegistration.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: decodeApplicationServerKey(applicationServerKey),
+                });
+                return subscription.then((value) => value.toJSON());
+            } catch (error) {
+                return Promise.reject(error);
+            }
         },
     };
 }

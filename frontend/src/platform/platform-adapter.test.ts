@@ -32,6 +32,7 @@ function pwaAdapter(installed: boolean): PwaCapabilityAdapter {
         available: true,
         installed,
         registerServiceWorker: vi.fn(),
+        preparePush: vi.fn(async () => undefined),
         subscribeInstallPrompt: vi.fn(() => () => undefined),
         isMobileInstallClient: vi.fn(() => false),
         subscribePush: vi.fn(),

@@ -2,7 +2,6 @@ import {describe, expect, it, vi} from 'vitest';
 import {createPwaCapabilityAdapter} from './adapter';
 
 function browserObjects(options: {
-    existingSubscription?: PushSubscription | null;
     standalone?: boolean;
     iosStandalone?: boolean;
 } = {}) {
@@ -10,13 +9,13 @@ function browserObjects(options: {
         toJSON: vi.fn(() => ({endpoint: 'https://push.example/subscription'})),
     } as unknown as PushSubscription;
     const pushManager = {
-        getSubscription: vi.fn(async () => options.existingSubscription ?? null),
         subscribe: vi.fn(async () => subscription),
     };
-    const register = vi.fn(async () => undefined);
+    const registration = {pushManager} as unknown as ServiceWorkerRegistration;
+    const register = vi.fn(async () => registration);
     const serviceWorker = {
         register,
-        ready: Promise.resolve({pushManager}),
+        ready: Promise.resolve(registration),
     };
     const windowObject = Object.assign(new EventTarget(), {
         PushManager: class {},
@@ -59,14 +58,13 @@ describe('PwaCapabilityAdapter', () => {
             production: true,
             windowObject: browser.windowObject,
             navigatorObject: browser.navigatorObject,
-            notificationObject: null,
         });
 
         adapter.registerServiceWorker();
         expect(browser.register).not.toHaveBeenCalled();
 
         browser.windowObject.dispatchEvent(new Event('load'));
-        await Promise.resolve();
+        await adapter.preparePush();
 
         expect(browser.register).toHaveBeenCalledWith('./sw.js', {scope: './'});
     });
@@ -79,7 +77,6 @@ describe('PwaCapabilityAdapter', () => {
             production: false,
             windowObject: browser.windowObject,
             navigatorObject: browser.navigatorObject,
-            notificationObject: null,
         });
         const unlisten = adapter.subscribeInstallPrompt(listener);
         const event = Object.assign(new Event('beforeinstallprompt', {cancelable: true}), {
@@ -98,44 +95,44 @@ describe('PwaCapabilityAdapter', () => {
         expect(listener).toHaveBeenCalledOnce();
     });
 
-    it('알림 권한과 PushManager를 어댑터 내부에서만 사용한다', async () => {
+    it('서비스 워커 준비 전에는 Push 구독을 시작하지 않는다', async () => {
         const browser = browserObjects();
-        const requestPermission = vi.fn(async () => 'granted' as NotificationPermission);
         const adapter = createPwaCapabilityAdapter({
             production: true,
             windowObject: browser.windowObject,
             navigatorObject: browser.navigatorObject,
-            notificationObject: {requestPermission},
         });
 
+        await expect(adapter.subscribePush('AQ')).rejects.toThrow('PUSH_NOT_READY');
+        expect(browser.pushManager.subscribe).not.toHaveBeenCalled();
+
+        await adapter.preparePush();
         await expect(adapter.subscribePush('AQ')).resolves.toEqual({
             endpoint: 'https://push.example/subscription',
         });
-        expect(requestPermission).toHaveBeenCalledOnce();
         expect(browser.pushManager.subscribe).toHaveBeenCalledWith({
             userVisibleOnly: true,
             applicationServerKey: expect.any(ArrayBuffer),
         });
     });
 
-    it('구독 Promise를 반환하기 전에 권한 요청을 즉시 시작한다', async () => {
+    it('구독 Promise가 끝나기 전에 PushManager.subscribe를 동기 호출한다', async () => {
         const browser = browserObjects();
-        let grantPermission: ((permission: NotificationPermission) => void) | undefined;
-        const requestPermission = vi.fn(() => new Promise<NotificationPermission>((resolve) => {
-            grantPermission = resolve;
+        let resolveSubscription: ((subscription: PushSubscription) => void) | undefined;
+        browser.pushManager.subscribe.mockImplementation(() => new Promise<PushSubscription>((resolve) => {
+            resolveSubscription = resolve;
         }));
         const adapter = createPwaCapabilityAdapter({
             production: true,
             windowObject: browser.windowObject,
             navigatorObject: browser.navigatorObject,
-            notificationObject: {requestPermission},
         });
+        await adapter.preparePush();
 
         const subscription = adapter.subscribePush('AQ');
 
-        expect(requestPermission).toHaveBeenCalledOnce();
-        expect(browser.pushManager.getSubscription).not.toHaveBeenCalled();
-        grantPermission?.('granted');
+        expect(browser.pushManager.subscribe).toHaveBeenCalledOnce();
+        resolveSubscription?.(browser.subscription);
         await expect(subscription).resolves.toEqual({endpoint: 'https://push.example/subscription'});
     });
 
@@ -146,9 +143,9 @@ describe('PwaCapabilityAdapter', () => {
             production: true,
             windowObject,
             navigatorObject,
-            notificationObject: null,
         });
 
+        await expect(adapter.preparePush()).rejects.toThrow('PUSH_UNSUPPORTED');
         await expect(adapter.subscribePush('AQ')).rejects.toThrow('PUSH_UNSUPPORTED');
     });
 });

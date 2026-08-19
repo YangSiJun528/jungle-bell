@@ -22,6 +22,9 @@ export function mobilePushErrorMessage(error: unknown): string {
     if (code === 'PUSH_UNSUPPORTED') {
         return 'Web Push를 지원하는 브라우저에서 홈 화면에 설치한 PWA로 열어 주세요.';
     }
+    if (code === 'PUSH_NOT_READY') {
+        return '푸시 기능 준비가 끝나지 않았습니다. 잠시 후 다시 시도하세요.';
+    }
     if (code === 'WEB_PUSH_NOT_CONFIGURED') {
         return '서버의 Web Push 설정이 완료되지 않았습니다.';
     }
