@@ -10,11 +10,13 @@ import {useDashboardEnvironment} from './dashboard-context';
 
 interface PlatformAuthenticationGateProps extends PropsWithChildren {
     connectionContent: ReactNode;
+    notice?: ReactNode;
 }
 
-function GateFrame({title, description, children}: PropsWithChildren<{
+function GateFrame({title, description, notice, children}: PropsWithChildren<{
     title: string;
     description: string;
+    notice?: ReactNode;
 }>) {
     return (
         <main
@@ -22,6 +24,7 @@ function GateFrame({title, description, children}: PropsWithChildren<{
             data-authentication-gate="true"
         >
             <div className="w-full max-w-xl space-y-6">
+                {notice}
                 <header className="text-center">
                     <img className="mx-auto size-16 rounded-2xl" src={jungleBellLogo} alt="Jungle Bell"/>
                     <h1 className="mt-4 text-2xl font-bold">{title}</h1>
@@ -33,7 +36,7 @@ function GateFrame({title, description, children}: PropsWithChildren<{
     );
 }
 
-export function PlatformAuthenticationGate({children, connectionContent}: PlatformAuthenticationGateProps) {
+export function PlatformAuthenticationGate({children, connectionContent, notice}: PlatformAuthenticationGateProps) {
     const {api, platform} = useDashboardEnvironment();
     const account = useDashboardAccount();
     const login = useMutation({mutationFn: () => api.openLmsLogin()});
@@ -72,6 +75,7 @@ export function PlatformAuthenticationGate({children, connectionContent}: Platfo
             <GateFrame
                 title="Jungle Bell 연결"
                 description="설치형 PWA는 연결된 PC의 인증과 알림 설정을 사용합니다."
+                notice={notice}
             >
                 {content}
             </GateFrame>
@@ -133,6 +137,7 @@ export function PlatformAuthenticationGate({children, connectionContent}: Platfo
         <GateFrame
             title="Jungle Bell 인증"
             description="PC 앱은 LMS 로그인이 확인된 뒤 대시보드를 엽니다."
+            notice={notice}
         >
             {content}
             {login.isError ? (

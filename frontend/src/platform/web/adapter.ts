@@ -46,6 +46,8 @@ function unsupportedNativeBridge(): NativeBridge {
         bootstrapDesktopHttpSession: unsupported('desktopAccount'),
         getDesktopSettings: unsupported('desktopSettings'),
         updateDesktopSettings: unsupported('desktopSettings'),
+        checkDesktopUpdate: unsupported('desktopSettings'),
+        installDesktopUpdate: unsupported('desktopSettings'),
         openLogFolder: unsupported('desktopSettings'),
         getDesktopConnectionState: unsupported('desktopAccount'),
         resetDesktopIdentity: unsupported('desktopAccount'),
@@ -66,6 +68,8 @@ function unsupportedDesktopSettings(): DesktopSettingsAdapter {
     return {
         getDesktopSettings: unsupported,
         updateDesktopSettings: unsupported,
+        checkDesktopUpdate: unsupported,
+        installDesktopUpdate: unsupported,
         openLogFolder: unsupported,
     };
 }

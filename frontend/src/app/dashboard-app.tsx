@@ -23,6 +23,7 @@ import {
 } from './notification-panel-route';
 import {DashboardRouteRuntimeProvider} from './dashboard-route-runtime';
 import {PlatformAuthenticationGate} from './platform-authentication-gate';
+import {DesktopUpdateNotice} from './desktop-update-notice';
 
 const NotificationPanelContent = lazy(() => import('@/features/notifications/notifications-page').then((module) => ({default: module.NotificationPanelContent})));
 const CompanionConnections = lazy(() => import('@/features/connections/connections-page').then((module) => ({default: module.CompanionConnections})));
@@ -30,6 +31,7 @@ const CompanionConnections = lazy(() => import('@/features/connections/connectio
 export function DashboardApp() {
     return (
         <PlatformAuthenticationGate
+            notice={<DesktopUpdateNotice/>}
             connectionContent={(
                 <AsyncBoundary fallback={<LoadingState label="연결 화면을 준비하고 있습니다."/>}>
                     <CompanionConnections completionPath={null}/>
@@ -121,6 +123,7 @@ function DashboardContent() {
                 ),
             }}
         >
+            <DesktopUpdateNotice/>
             <DashboardRouteRuntimeProvider value={{contentRoute, openInstallPrompt}}>
                 <AsyncBoundary resetKeys={[contentRoute]}>
                     <Outlet/>

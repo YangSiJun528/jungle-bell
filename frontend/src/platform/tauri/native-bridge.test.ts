@@ -24,12 +24,14 @@ describe('NativeBridge', () => {
         await expect(bridge.bootstrapDesktopHttpSession()).rejects.toThrow('API_RESPONSE_INVALID');
     });
 
-    test('maps identity reset, settings, and local notification operations narrowly', async () => {
+    test('maps identity reset, settings, updates, and local notification operations narrowly', async () => {
         const invoke = vi.fn(async () => null);
         const bridge = createNativeBridge(invoke);
 
         await bridge.resetDesktopIdentity();
         await bridge.updateDesktopSettings({autoStart: true});
+        await bridge.checkDesktopUpdate();
+        await bridge.installDesktopUpdate();
         await bridge.getNotificationInboxSnapshot();
         await bridge.markNotificationRead('12');
         await bridge.markAllNotificationsRead();
@@ -37,6 +39,8 @@ describe('NativeBridge', () => {
         expect(invoke.mock.calls).toEqual([
             ['reset_desktop_identity', {confirmed: true}],
             ['update_desktop_settings', {input: {autoStart: true}}],
+            ['check_desktop_update'],
+            ['install_desktop_update'],
             ['get_notification_inbox_snapshot'],
             ['mark_notification_read', {id: '12'}],
             ['mark_all_notifications_read'],

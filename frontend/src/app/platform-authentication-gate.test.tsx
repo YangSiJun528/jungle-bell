@@ -69,7 +69,10 @@ function renderGate(options: {
     account.serverSession = options.serverSession ?? 'not-applicable';
     routeRenderCount = 0;
     return renderToStaticMarkup(
-        <PlatformAuthenticationGate connectionContent={<p>기기 연결 화면</p>}>
+        <PlatformAuthenticationGate
+            connectionContent={<p>기기 연결 화면</p>}
+            notice={<p data-update-notice="true">업데이트 안내</p>}
+        >
             <RouteContent/>
         </PlatformAuthenticationGate>,
     );
@@ -122,6 +125,7 @@ describe('PlatformAuthenticationGate', () => {
 
         expect(markup).toContain(message);
         expect(markup).toContain('LMS 로그인 창 열기');
+        expect(markup).toContain('data-update-notice="true"');
         expect(markup).not.toContain('data-route-content');
         expect(routeRenderCount).toBe(0);
         if (lmsAuthentication === 'unavailable') expect(markup).toContain('상태 다시 확인');

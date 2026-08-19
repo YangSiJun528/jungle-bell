@@ -43,6 +43,7 @@ test('React 앱과 Spring 공개 컨트롤러에 블로그 경로가 남지 않�
 
 test('제거된 앱 소식 IPC 없이 서명된 v2 앱 업데이트를 유지한다', () => {
     const dashboardApi = source('./api/dashboard-api.ts');
+    const dashboardApp = source('./app/dashboard-app.tsx');
     const dashboardCapability = source('../../desktop/capabilities/dashboard.json');
     const buildScript = source('../../desktop/build.rs');
     const appSource = source('../../desktop/src/lib.rs');
@@ -55,4 +56,7 @@ test('제거된 앱 소식 IPC 없이 서명된 v2 앱 업데이트를 유지한
     assert.match(tauriConfig, /github\.com\/YangSiJun528\/jungle-bell\/releases\/latest\/download\/latest-v2\.json/);
     assert.match(appSource, /tauri_plugin_updater/);
     assert.match(appSource, /spawn_startup_update_check/);
+    assert.match(dashboardApp, /DesktopUpdateNotice/);
+    assert.match(dashboardCapability, /allow-check-desktop-update/);
+    assert.match(dashboardCapability, /allow-install-desktop-update/);
 });

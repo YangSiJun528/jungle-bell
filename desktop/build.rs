@@ -4,6 +4,8 @@ const APP_COMMANDS: &[&str] = &[
     "report_checker_event",
     "bootstrap_desktop_http_session",
     "get_desktop_settings",
+    "check_desktop_update",
+    "install_desktop_update",
     "update_desktop_settings",
     "open_log_folder",
     "get_notification_inbox_snapshot",

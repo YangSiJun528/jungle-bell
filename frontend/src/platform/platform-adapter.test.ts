@@ -15,6 +15,8 @@ function nativeBridge(): NativeBridge {
         })),
         getDesktopSettings: vi.fn(),
         updateDesktopSettings: vi.fn(),
+        checkDesktopUpdate: vi.fn(),
+        installDesktopUpdate: vi.fn(),
         openLogFolder: vi.fn(),
         getDesktopConnectionState: vi.fn(),
         resetDesktopIdentity: vi.fn(),

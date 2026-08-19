@@ -42,6 +42,8 @@ export interface NativeBridge {
     bootstrapDesktopHttpSession(): Promise<DesktopHttpSessionBootstrap>;
     getDesktopSettings(): Promise<unknown>;
     updateDesktopSettings(input: unknown): Promise<unknown>;
+    checkDesktopUpdate(): Promise<unknown>;
+    installDesktopUpdate(): Promise<unknown>;
     openLogFolder(): Promise<unknown>;
     getDesktopConnectionState(): Promise<unknown>;
     resetDesktopIdentity(): Promise<unknown>;
@@ -78,9 +80,16 @@ export type DesktopSettingsUpdate = Pick<
     'autoStart' | 'autoUpdate' | 'usageAnalytics' | 'debugMode' | 'selectedCohortId'
 >;
 
+export interface DesktopUpdateStatus {
+    currentVersion: string;
+    availableVersion: string | null;
+}
+
 export interface DesktopSettingsAdapter {
     getDesktopSettings(): Promise<DesktopSettings>;
     updateDesktopSettings(input: DesktopSettingsUpdate): Promise<DesktopSettings>;
+    checkDesktopUpdate(): Promise<DesktopUpdateStatus>;
+    installDesktopUpdate(): Promise<void>;
     openLogFolder(): Promise<void>;
 }
 

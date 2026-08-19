@@ -152,6 +152,8 @@ pub fn run() {
             commands::report_checker_event,
             commands::bootstrap_desktop_http_session,
             commands::get_desktop_settings,
+            commands::check_desktop_update,
+            commands::install_desktop_update,
             commands::update_desktop_settings,
             commands::open_log_folder,
             commands::get_notification_inbox_snapshot,
@@ -248,7 +250,7 @@ mod tests {
     }
 
     #[test]
-    fn native_command_manifest는_os경계_13개와_http_bootstrap만_남긴다() {
+    fn native_command_manifest는_os경계_15개와_http_bootstrap만_남긴다() {
         let build = include_str!("../build.rs");
         let manifest = build
             .split("const APP_COMMANDS")
@@ -264,11 +266,13 @@ mod tests {
         let expected = [
             "activate_notification",
             "bootstrap_desktop_http_session",
+            "check_desktop_update",
             "get_connected_service_status",
             "get_desktop_settings",
             "get_notification_inbox_snapshot",
             "mark_all_notifications_read",
             "mark_notification_read",
+            "install_desktop_update",
             "open_lms_login",
             "open_log_folder",
             "refresh_platform_sync",

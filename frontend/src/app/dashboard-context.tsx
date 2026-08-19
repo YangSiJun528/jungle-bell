@@ -17,6 +17,7 @@ export const queryKeys = {
     accountSession: ['account-session'] as const,
     desktopConnection: ['desktop-connection'] as const,
     desktopSettings: ['desktop-settings'] as const,
+    desktopUpdate: ['desktop-update'] as const,
     notifications: (platform: 'browser' | 'desktop') => ['notifications', platform] as const,
     pushSetup: ['push-setup'] as const,
     attendancePreferences: ['personal', 'attendance-preferences'] as const,

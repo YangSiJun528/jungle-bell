@@ -4,6 +4,7 @@ import type {
     DesktopSettings,
     DesktopSettingsAdapter,
     DesktopSettingsUpdate,
+    DesktopUpdateStatus,
     NativeBridge,
 } from '@/platform/contracts';
 
@@ -16,7 +17,14 @@ export type {
 } from '@/platform/contracts';
 
 export function createDashboardDesktopSettingsApi(
-    nativeBridge: Pick<NativeBridge, 'getDesktopSettings' | 'updateDesktopSettings' | 'openLogFolder'>,
+    nativeBridge: Pick<
+        NativeBridge,
+        | 'getDesktopSettings'
+        | 'updateDesktopSettings'
+        | 'checkDesktopUpdate'
+        | 'installDesktopUpdate'
+        | 'openLogFolder'
+    >,
 ): DesktopSettingsAdapter {
     return {
         async getDesktopSettings() {
@@ -26,10 +34,38 @@ export function createDashboardDesktopSettingsApi(
             const body = desktopSettingsInput(input);
             return parseDesktopSettings(await nativeBridge.updateDesktopSettings(body));
         },
+        async checkDesktopUpdate() {
+            return parseDesktopUpdateStatus(await nativeBridge.checkDesktopUpdate());
+        },
+        async installDesktopUpdate() {
+            const result = await nativeBridge.installDesktopUpdate();
+            if (result !== null && result !== undefined) throw invalidResponse();
+        },
         async openLogFolder() {
             const result = await nativeBridge.openLogFolder();
             if (result !== null && result !== undefined) throw invalidResponse();
         },
+    };
+}
+
+function parseDesktopUpdateStatus(value: unknown): DesktopUpdateStatus {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidResponse();
+    const source = value as Record<string, unknown>;
+    const keys = ['currentVersion', 'availableVersion'] as const;
+    if (Object.keys(source).length !== keys.length || keys.some((key) => !hasOwn(source, key))) {
+        throw invalidResponse();
+    }
+    if (typeof source.currentVersion !== 'string' || !APP_VERSION_PATTERN.test(source.currentVersion)) {
+        throw invalidResponse();
+    }
+    if (source.availableVersion !== null
+        && (typeof source.availableVersion !== 'string'
+            || !APP_VERSION_PATTERN.test(source.availableVersion))) {
+        throw invalidResponse();
+    }
+    return {
+        currentVersion: source.currentVersion,
+        availableVersion: source.availableVersion as string | null,
     };
 }
 

@@ -355,6 +355,21 @@ pub async fn get_desktop_settings(
 }
 
 #[tauri::command]
+pub async fn check_desktop_update(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+) -> Result<crate::updater::DesktopUpdateStatus, String> {
+    remote_sync::ensure_dashboard_window(&window)?;
+    crate::updater::check_update(&app).await
+}
+
+#[tauri::command]
+pub async fn install_desktop_update(app: tauri::AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
+    remote_sync::ensure_dashboard_window(&window)?;
+    crate::updater::install_update(app).await
+}
+
+#[tauri::command]
 pub async fn update_desktop_settings(
     app: tauri::AppHandle,
     window: tauri::WebviewWindow,

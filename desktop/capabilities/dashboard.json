@@ -7,6 +7,8 @@
     "core:event:default",
     "allow-bootstrap-desktop-http-session",
     "allow-get-desktop-settings",
+    "allow-check-desktop-update",
+    "allow-install-desktop-update",
     "allow-update-desktop-settings",
     "allow-open-log-folder",
     "allow-get-connected-service-status",
