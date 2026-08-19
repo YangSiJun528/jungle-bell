@@ -8,8 +8,65 @@ const repoSource = (path: string) => readFileSync(new URL(path, repoRoot), 'utf8
 const tauriConfig = JSON.parse(repoSource('desktop/tauri.conf.json')) as {
     identifier?: string;
     plugins?: {updater?: {endpoints?: string[]}};
+    version?: string;
 };
 const releaseWorkflow = repoSource('.github/workflows/release.yml');
+
+const matchedVersion = (source: string, pattern: RegExp, label: string) => {
+    const match = source.match(pattern);
+    assert.ok(match?.[1], `${label} 버전을 찾을 수 없다`);
+    return match[1];
+};
+
+test('Gradle·Vite·Tauri 릴리스 버전은 같은 안정 SemVer다', () => {
+    const frontendPackage = JSON.parse(repoSource('frontend/package.json')) as {
+        version?: string;
+    };
+    const frontendPackageLock = JSON.parse(repoSource('frontend/package-lock.json')) as {
+        packages?: Record<string, {version?: string}>;
+        version?: string;
+    };
+    const canonicalVersion = frontendPackage.version;
+
+    assert.ok(canonicalVersion, 'Vite 애플리케이션 버전을 찾을 수 없다');
+    assert.match(canonicalVersion, /^\d+\.\d+\.\d+$/u);
+
+    const versionSurfaces = [
+        ['Vite package-lock 루트', frontendPackageLock.version],
+        ['Vite package-lock 워크스페이스', frontendPackageLock.packages?.['']?.version],
+        [
+            'Gradle',
+            matchedVersion(
+                repoSource('server/build.gradle.kts'),
+                /allprojects\s*\{[\s\S]*?version = "([^"]+)"/u,
+                'Gradle',
+            ),
+        ],
+        [
+            'Cargo manifest',
+            matchedVersion(
+                repoSource('desktop/Cargo.toml'),
+                /^\[package\][\s\S]*?^version = "([^"]+)"/mu,
+                'Cargo manifest',
+            ),
+        ],
+        [
+            'Cargo lock',
+            matchedVersion(
+                repoSource('desktop/Cargo.lock'),
+                /\[\[package\]\]\nname = "jungle-bell"\nversion = "([^"]+)"/u,
+                'Cargo lock',
+            ),
+        ],
+        ['Tauri', tauriConfig.version],
+    ] as const;
+
+    for (const [label, version] of versionSurfaces) {
+        assert.equal(version, canonicalVersion, `${label} 버전이 일치하지 않는다`);
+    }
+
+    assert.doesNotMatch(repoSource('server/Dockerfile'), /SNAPSHOT/u);
+});
 
 test('리뉴얼 앱은 기존 앱과 다른 식별자와 v2 업데이트 채널을 사용한다', () => {
     assert.equal(tauriConfig.identifier, 'dev.sijun-yang.jungle-bell.v2');

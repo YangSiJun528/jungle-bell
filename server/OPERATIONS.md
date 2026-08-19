@@ -26,6 +26,38 @@ https://jungle-bell.sijun-yang.com
 - secret, 데이터베이스 dump, VAPID private key는 저장소에 넣지 않습니다.
 - 같은 호스트의 다른 Compose 프로젝트와 컨테이너는 건드리지 않습니다.
 
+## 버전과 배포 기록
+
+제품, 서버, 프런트엔드, 데스크톱은 하나의 안정 SemVer를 사용합니다. 현재 기준은
+`0.5.0`이며 `-SNAPSHOT` 버전은 사용하지 않습니다. 버전을 바꿀 때는 `$bump-version`
+스킬로 다음 항목을 함께 갱신합니다.
+
+- `frontend/package.json`과 `frontend/package-lock.json`
+- `server/build.gradle.kts`
+- `desktop/Cargo.toml`과 `desktop/Cargo.lock`
+- `desktop/tauri.conf.json`
+
+다음 계약 테스트가 통과해야 배포할 수 있습니다.
+
+```bash
+npm --prefix frontend test -- src/tests/contracts/release-channel.test.ts
+```
+
+버전 문자열만으로 배포물을 식별하지 않습니다. 배포마다 다음 필드를 같은 기록에
+남깁니다.
+
+```text
+version=0.5.0
+gitSha=<40자 Git SHA>
+apiImage=<sha256 digest>
+workerImage=<sha256 digest>
+deployedAt=<KST ISO-8601 시각>
+dirty=false
+```
+
+공식 릴리스는 커밋된 소스에서 빌드해 `dirty=false`여야 합니다. 미커밋 소스를
+검증용으로 배포했다면 `dirty=true`로 기록하고 공식 릴리스로 간주하지 않습니다.
+
 ## 최초 준비
 
 배포 호스트에 secret 디렉터리를 만듭니다.

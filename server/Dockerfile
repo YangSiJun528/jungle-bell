@@ -19,6 +19,13 @@ COPY server/api/src ./api/src
 COPY server/worker/src ./worker/src
 COPY --from=web-build /workspace/frontend/dist/web ./api/src/main/resources/static
 RUN ./gradlew --no-daemon clean check :api:bootJar :worker:bootJar
+RUN set -eu; \
+    api_jar="$(find api/build/libs -maxdepth 1 -type f -name 'api-*.jar' ! -name '*-plain.jar')"; \
+    worker_jar="$(find worker/build/libs -maxdepth 1 -type f -name 'worker-*.jar' ! -name '*-plain.jar')"; \
+    test -f "$api_jar"; \
+    test -f "$worker_jar"; \
+    cp "$api_jar" /workspace/server/jungle-bell-api.jar; \
+    cp "$worker_jar" /workspace/server/jungle-bell-worker.jar
 
 FROM eclipse-temurin:21-jre-noble AS runtime-base
 RUN apt-get update \
@@ -31,10 +38,10 @@ USER jungle-bell
 ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=70 -XX:+ExitOnOutOfMemoryError"
 
 FROM runtime-base AS api-runtime
-COPY --from=server-build /workspace/server/api/build/libs/*-SNAPSHOT.jar /app/jungle-bell-api.jar
+COPY --from=server-build /workspace/server/jungle-bell-api.jar /app/jungle-bell-api.jar
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "/app/jungle-bell-api.jar"]
 
 FROM runtime-base AS worker-runtime
-COPY --from=server-build /workspace/server/worker/build/libs/*-SNAPSHOT.jar /app/jungle-bell-worker.jar
+COPY --from=server-build /workspace/server/jungle-bell-worker.jar /app/jungle-bell-worker.jar
 ENTRYPOINT ["java", "-jar", "/app/jungle-bell-worker.jar"]

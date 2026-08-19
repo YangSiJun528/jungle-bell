@@ -1,34 +1,35 @@
 ---
 name: bump-version
-description: Bump the app version across all config files for the jungle-bell project. Use when the user asks to bump/update the version, or says "버전 올려줘", "bump version", "/bump-version". Updates frontend/package.json, frontend/package-lock.json, desktop/Cargo.toml, desktop/tauri.conf.json, and desktop/Cargo.lock.
+description: Set one stable release version across the Jungle Bell Gradle server, Vite frontend, and Tauri desktop app. Use when the user asks to bump or align versions, says "버전 올려줘", "bump version", or "/bump-version", or when server/build.gradle.kts, frontend package metadata, desktop Cargo metadata, and tauri.conf.json have drifted.
 ---
 
 # Bump version
 
-Bump the version of this project.
+Apply one stable SemVer such as `0.5.0` to every first-party release surface. Never append
+`-SNAPSHOT`.
 
-If the user provided a specific version as an argument, use that version. Otherwise, read the current versions from `frontend/package.json`, `desktop/Cargo.toml`, and `desktop/tauri.conf.json` first, then ask the user what version they want to bump to.
+The Vite application version is the top-level package version. Do not change the `vite`, Spring
+Boot, Tauri crate, or other dependency versions as part of an application version bump.
 
-The following files need to be updated:
+Update these release surfaces together:
 
 1. `frontend/package.json` — top-level `"version"` field
-2. `frontend/package-lock.json` — updated with `npm version <version> --no-git-tag-version --allow-same-version`
-3. `desktop/Cargo.toml` — `version` field in `[package]`
-4. `desktop/tauri.conf.json` — top-level `"version"` field
-5. `desktop/Cargo.lock` — updated with `cargo generate-lockfile`
-
-## Interaction compatibility
-
-If a required target version is missing, ask one concise question and wait for the user's answer. Use the structured user-input tool available in the current runtime:
-
-- In runtimes that provide `AskUserQuestion`, use `AskUserQuestion`.
-- In Codex, use Codex's available user-input mechanism when available and appropriate; otherwise ask in normal chat.
+2. `frontend/package-lock.json` — root and `packages[""]` versions
+3. `server/build.gradle.kts` — `allprojects` version
+4. `desktop/Cargo.toml` — `[package]` version
+5. `desktop/tauri.conf.json` — top-level `"version"` field
+6. `desktop/Cargo.lock` — `jungle-bell` package version
 
 ## Steps
 
-1. Read `frontend/package.json`, `desktop/Cargo.toml`, and `desktop/tauri.conf.json` to confirm their current versions
-2. If no target version was specified, ask the user which version to bump to (show the current version for reference)
-3. Run `npm version <version> --no-git-tag-version --allow-same-version` in `frontend/` to update `package.json` and `package-lock.json`
-4. Update the version string in `desktop/Cargo.toml` and `desktop/tauri.conf.json`
-5. Run `cargo generate-lockfile` in `desktop/` to update `Cargo.lock`
-6. Confirm all five files contain the target version and report the old and new versions to the user
+1. Read all six files and record their current first-party versions.
+2. If the user did not provide a target, ask one concise question showing the current versions.
+3. Reject targets that are not plain `MAJOR.MINOR.PATCH` SemVer.
+4. In `frontend/`, run
+   `npm version <version> --no-git-tag-version --allow-same-version`.
+5. Update `server/build.gradle.kts`, `desktop/Cargo.toml`, and
+   `desktop/tauri.conf.json` with `apply_patch`.
+6. In `desktop/`, run `cargo generate-lockfile`.
+7. From `frontend/`, run
+   `npm test -- src/tests/contracts/release-channel.test.ts`.
+8. Confirm every release surface has the target version and report each old-to-new change.

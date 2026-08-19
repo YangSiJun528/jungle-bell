@@ -15,6 +15,8 @@ IP는 이 문서에 기록하지 않습니다.
   수행합니다.
 - 로컬 `server/deploy/.env.production`과 네 개의 secret 파일은 Git에 포함하지 않습니다.
 - 기존 배포는 롤백이 끝날 때까지 삭제하지 않습니다.
+- [서버 운영 절차의 버전과 배포 기록](../OPERATIONS.md#버전과-배포-기록)에 따라 버전
+  계약 테스트를 통과해야 합니다. 공식 릴리스는 깨끗한 working tree에서 빌드합니다.
 
 이 문서의 서버 경로는 다음과 같습니다.
 
@@ -284,6 +286,21 @@ docker compose \
   -f server/deploy/compose.production.yml \
   logs --since 10m api worker tunnel postgres
 ```
+
+검증을 마치면 버전, Git SHA, 두 이미지 digest, 배포 시각, working tree 상태를 한 배포
+기록에 남깁니다.
+
+```bash
+git status --short
+git rev-parse HEAD
+docker image inspect --format '{{.Id}}' jungle-bell-api:production
+docker image inspect --format '{{.Id}}' jungle-bell-worker:production
+date '+%Y-%m-%dT%H:%M:%S%:z'
+```
+
+필드 이름과 `dirty` 판정은
+[서버 운영 절차](../OPERATIONS.md#버전과-배포-기록)를 따릅니다. 명령 결과가 남아 있지
+않거나 공식 배포에서 `dirty=false`를 입증할 수 없으면 배포 기록이 완료된 것이 아닙니다.
 
 ## 롤백
 

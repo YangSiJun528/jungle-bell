@@ -1,4 +1,4 @@
 interface:
   display_name: "Bump Version"
-  short_description: "Bump jungle-bell versions consistently"
-  default_prompt: "Use $bump-version to bump jungle-bell to the requested version."
+  short_description: "Bump Gradle, Vite, and Tauri versions together"
+  default_prompt: "Use $bump-version to set one Jungle Bell release version across Gradle, Vite, and Tauri."
