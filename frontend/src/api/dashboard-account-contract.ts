@@ -28,7 +28,7 @@ const canonicalTextSchema = (maximum: number) => textSchema(maximum).refine(
     '앞뒤 공백은 허용되지 않습니다.',
 );
 
-const attendanceSnapshotSchema = z.strictObject({
+export const attendanceSnapshotSchema = z.strictObject({
     attendanceDate: calendarDateSchema,
     cohortId: textSchema(128).nullable(),
     cohortStatus: z.enum(['active', 'upcoming', 'ended', 'none', 'unknown']),
@@ -73,6 +73,8 @@ export type AttendanceData =
         freshness: 'fresh' | 'stale';
         lastSyncedAt: string;
         snapshot: AttendanceSnapshot;
+        source?: 'server' | 'desktop';
+        syncState?: 'synced' | 'pending';
     }
     | {
         status: 'unavailable';
@@ -117,6 +119,8 @@ export function parseAttendanceDashboardPayload(value: unknown): AttendanceDashb
                 freshness: parsed.freshness as 'fresh' | 'stale',
                 lastSyncedAt: parsed.attendance.collectedAt,
                 snapshot: parsed.attendance,
+                source: 'server',
+                syncState: 'synced',
             },
         devices: parsed.devices,
     };

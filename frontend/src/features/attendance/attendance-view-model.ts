@@ -4,6 +4,7 @@ import type {
     DesktopDevice,
 } from '@/api/dashboard-api';
 import type {AttendancePreferences} from '@/api/personal-api';
+import {ATTENDANCE_FRESHNESS_MS} from '@/domain/attendance/freshness';
 
 export type AttendanceDetailModel =
     | {kind: 'loading'}
@@ -15,12 +16,15 @@ export type AttendanceDetailModel =
         freshness: 'fresh' | 'stale';
         lastSyncedAt: string;
         snapshot: AttendanceSnapshot;
+        source?: 'server' | 'desktop';
+        syncState?: 'synced' | 'pending';
     };
 
 export function attendanceDetailModel(input: {
     isPending: boolean;
     isError: boolean;
     data?: AttendanceDashboard;
+    now?: number;
 }): AttendanceDetailModel {
     if (input.isError) return {kind: 'error'};
     if (input.isPending || !input.data) return {kind: 'loading'};
@@ -31,11 +35,15 @@ export function attendanceDetailModel(input: {
         return {kind: 'unavailable'};
     }
     const attendance = input.data.attendance;
+    const localObservationExpired = attendance.source === 'desktop'
+        && (input.now ?? Date.now()) - Date.parse(attendance.lastSyncedAt) > ATTENDANCE_FRESHNESS_MS;
     return {
         kind: 'available',
-        freshness: attendance.freshness,
+        freshness: attendance.freshness === 'stale' || localObservationExpired ? 'stale' : 'fresh',
         lastSyncedAt: attendance.lastSyncedAt,
         snapshot: attendance.snapshot,
+        source: attendance.source,
+        syncState: attendance.syncState,
     };
 }
 

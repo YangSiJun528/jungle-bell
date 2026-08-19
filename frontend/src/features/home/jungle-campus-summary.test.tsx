@@ -14,12 +14,15 @@ describe('JungleCampusSummary', () => {
         expect(source).not.toContain('PublicCampusContent');
         expect(source).not.toContain('일반 웹에서는 출석 정보를 저장하거나 표시하지 않습니다.');
         expect(source).toContain('AttendanceChecks');
-        expect(source).toContain('homeAttendanceForToday(attendance.data)');
+        expect(source).toContain('homeAttendanceState(attendance.data)');
         expect(source).toContain('useRefreshAttendanceMutation()');
         expect(source).toContain('useDashboardAccount()');
         expect(source).toContain("account.status.lmsAuthentication === 'required'");
         expect(source).toContain('refreshAttendance.mutate()');
-        expect(source).toContain('오늘 출석 상태를 다시 확인해야 합니다.');
+        expect(source).toContain('마지막 출석 확인 이후 시간이 지났습니다.');
+        expect(source).toContain('새 출석일 상태를 확인하고 있습니다.');
+        expect(source).toContain('다른 기기 동기화 대기 중');
+        expect(source).toContain('desktopLocalAttendanceAvailable');
         expect(source).toContain('<Link to="/attendance">');
         expect(source).toContain('overflow-y-auto');
         expect(source).toContain('min-h-full');

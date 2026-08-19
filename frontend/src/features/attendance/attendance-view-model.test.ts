@@ -47,6 +47,27 @@ describe('attendanceDetailModel', () => {
             data: {state: 'loaded', attendance: {status: 'unavailable', freshness: 'missing', lastSyncedAt: null, snapshot: null}, devices: []},
         }).kind).toBe('unavailable');
     });
+
+    it('PC 로컬 관측은 서버 응답 없이도 15분 동안만 fresh로 유지한다', () => {
+        const local: AttendanceDashboard = structuredClone(available);
+        if (local.state !== 'loaded' || local.attendance.status !== 'available') throw new Error('invalid fixture');
+        local.attendance.freshness = 'fresh';
+        local.attendance.source = 'desktop';
+        local.attendance.syncState = 'pending';
+
+        expect(attendanceDetailModel({
+            isPending: false,
+            isError: false,
+            data: local,
+            now: Date.parse('2026-08-11T00:15:00.000Z'),
+        })).toMatchObject({kind: 'available', freshness: 'fresh', source: 'desktop', syncState: 'pending'});
+        expect(attendanceDetailModel({
+            isPending: false,
+            isError: false,
+            data: local,
+            now: Date.parse('2026-08-11T00:15:00.001Z'),
+        })).toMatchObject({kind: 'available', freshness: 'stale'});
+    });
 });
 
 describe('attendance preference helpers', () => {

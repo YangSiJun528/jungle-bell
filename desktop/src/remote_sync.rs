@@ -57,10 +57,23 @@ pub(crate) use contract::*;
 pub(crate) use service::*;
 use validation::*;
 
-#[derive(Clone, Copy, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct AttendanceSnapshotUpdated {
-    revision: u64,
+#[derive(Clone, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+enum AttendanceSnapshotUpdated {
+    Observed { snapshot: AttendanceSnapshot },
+    Synced { revision: u64 },
+}
+
+pub(crate) fn publish_attendance_observation(app: &tauri::AppHandle, snapshot: &AttendanceSnapshot) {
+    if let Err(error) = app.emit_to(
+        DASHBOARD_WINDOW_LABEL,
+        ATTENDANCE_SNAPSHOT_UPDATED_EVENT,
+        AttendanceSnapshotUpdated::Observed {
+            snapshot: snapshot.clone(),
+        },
+    ) {
+        log::debug!("[checker] local attendance snapshot event skipped: {error}");
+    }
 }
 
 pub(crate) async fn upload_attendance_and_publish(
@@ -72,7 +85,7 @@ pub(crate) async fn upload_attendance_and_publish(
     if let Err(error) = app.emit_to(
         DASHBOARD_WINDOW_LABEL,
         ATTENDANCE_SNAPSHOT_UPDATED_EVENT,
-        AttendanceSnapshotUpdated { revision },
+        AttendanceSnapshotUpdated::Synced { revision },
     ) {
         log::debug!("[connected-service] attendance snapshot event skipped: {error}");
     }
@@ -252,18 +265,14 @@ pub(crate) async fn refresh_platform_sync(
     service: tauri::State<'_, Arc<RemoteSyncService>>,
 ) -> Result<(), String> {
     ensure_dashboard_window(&window)?;
-    service
-        .ensure_registered()
-        .await
-        .map_err(|error| error.code().to_owned())?;
     if app.get_webview_window(CHECKER_WINDOW_LABEL).is_none() {
         return Err("CHECKER_UNAVAILABLE".into());
     }
-    let baseline = service.snapshot_revision.load(Ordering::Acquire);
+    let baseline = service.observation_revision.load(Ordering::Acquire);
     if !crate::checker::trigger_current_check(&app).await {
         return Err("CHECKER_BUSY".into());
     }
-    tokio::time::timeout(Duration::from_secs(15), service.wait_for_snapshot_after(baseline))
+    tokio::time::timeout(Duration::from_secs(15), service.wait_for_observation_after(baseline))
         .await
         .map_err(|_| "CHECKER_SYNC_TIMEOUT".to_owned())
 }
@@ -410,6 +419,44 @@ mod tests {
             "attendance": null
         }))
         .is_err());
+    }
+
+    #[test]
+    fn attendance_snapshot_event는_로컬_관측과_서버_동기화를_구분한다() {
+        let snapshot = AttendanceSnapshot {
+            attendance_date: "2026-08-19".into(),
+            cohort_id: Some("cohort-1".into()),
+            cohort_status: AttendanceCohortStatus::Active,
+            cohort_start_date: Some("2026-08-01".into()),
+            cohort_end_date: Some("2026-08-31".into()),
+            morning_checked: true,
+            evening_checked: false,
+            collected_at: "2026-08-19T16:13:00.000Z".into(),
+        };
+
+        assert_eq!(
+            serde_json::to_value(AttendanceSnapshotUpdated::Observed {
+                snapshot: snapshot.clone(),
+            })
+            .unwrap(),
+            serde_json::json!({
+                "kind": "observed",
+                "snapshot": {
+                    "attendanceDate": "2026-08-19",
+                    "cohortId": "cohort-1",
+                    "cohortStatus": "active",
+                    "cohortStartDate": "2026-08-01",
+                    "cohortEndDate": "2026-08-31",
+                    "morningChecked": true,
+                    "eveningChecked": false,
+                    "collectedAt": "2026-08-19T16:13:00.000Z"
+                }
+            }),
+        );
+        assert_eq!(
+            serde_json::to_value(AttendanceSnapshotUpdated::Synced { revision: 3 }).unwrap(),
+            serde_json::json!({"kind": "synced", "revision": 3}),
+        );
     }
 
     #[test]

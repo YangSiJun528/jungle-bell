@@ -11,7 +11,8 @@ import {
     mealPeriodLabel as sharedMealPeriodLabel,
     selectTodayMeals,
 } from '@/domain/meals/today';
-import {kstDateString} from '@/domain/attendance/dday-progress';
+import {effectiveAttendanceDate} from '@/domain/attendance/attendance-day';
+import {ATTENDANCE_FRESHNESS_MS} from '@/domain/attendance/freshness';
 
 export interface LaundryHomeSummary {
     men: number | null;
@@ -29,15 +30,28 @@ export type HomeMealSlots = readonly [HomeMealSlot, HomeMealSlot];
 
 type AvailableAttendance = Extract<AttendanceData, {status: 'available'}>;
 
-export function homeAttendanceForToday(
+export type HomeAttendanceState =
+    | {kind: 'unavailable'}
+    | {kind: 'current'; attendance: AvailableAttendance}
+    | {kind: 'stale'; attendance: AvailableAttendance}
+    | {kind: 'different-attendance-day'; attendance: AvailableAttendance};
+
+export function homeAttendanceState(
     dashboard?: AttendanceDashboard,
     reference = new Date(),
-): AvailableAttendance | null {
-    if (!dashboard || dashboard.state !== 'loaded') return null;
+): HomeAttendanceState {
+    if (!dashboard || dashboard.state !== 'loaded') return {kind: 'unavailable'};
     const attendance = dashboard.attendance;
-    if (attendance.status !== 'available' || attendance.freshness !== 'fresh') return null;
-    if (attendance.snapshot.attendanceDate !== kstDateString(reference.getTime())) return null;
-    return attendance;
+    if (attendance.status !== 'available') return {kind: 'unavailable'};
+    if (attendance.snapshot.attendanceDate !== effectiveAttendanceDate(reference.getTime())) {
+        return {kind: 'different-attendance-day', attendance};
+    }
+    const localObservationExpired = attendance.source === 'desktop'
+        && reference.getTime() - Date.parse(attendance.lastSyncedAt) > ATTENDANCE_FRESHNESS_MS;
+    if (attendance.freshness !== 'fresh' || localObservationExpired) {
+        return {kind: 'stale', attendance};
+    }
+    return {kind: 'current', attendance};
 }
 
 export function homeLaundrySummary(input: {

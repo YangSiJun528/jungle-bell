@@ -2,7 +2,7 @@ import {readFileSync} from 'node:fs';
 import {describe, expect, it} from 'vitest';
 import type {AttendanceDashboard, DashboardMealsSnapshot} from '@/api/dashboard-api';
 import {
-    homeAttendanceForToday,
+    homeAttendanceState,
     homeTodayMealSlots,
     homeTodayMeals,
     mealPeriodLabel,
@@ -211,12 +211,39 @@ describe('home attendance summary', () => {
     const reference = new Date('2026-08-11T03:00:00.000Z');
 
     it('shows checks only for a fresh snapshot whose KST date is today', () => {
-        expect(homeAttendanceForToday(attendanceDashboard('2026-08-11', 'fresh'), reference))
-            .toMatchObject({status: 'available', freshness: 'fresh'});
+        expect(homeAttendanceState(attendanceDashboard('2026-08-11', 'fresh'), reference))
+            .toMatchObject({kind: 'current', attendance: {status: 'available', freshness: 'fresh'}});
     });
 
-    it('does not present stale or previous-day checks as today attendance', () => {
-        expect(homeAttendanceForToday(attendanceDashboard('2026-08-11', 'stale'), reference)).toBeNull();
-        expect(homeAttendanceForToday(attendanceDashboard('2026-08-10', 'fresh'), reference)).toBeNull();
+    it('stale과 다른 출석일을 서로 다른 원인으로 분류한다', () => {
+        expect(homeAttendanceState(attendanceDashboard('2026-08-11', 'stale'), reference).kind).toBe('stale');
+        expect(homeAttendanceState(attendanceDashboard('2026-08-10', 'fresh'), reference).kind)
+            .toBe('different-attendance-day');
+    });
+
+    it('자정부터 04시 전까지 방금 수집한 전날 출석을 현재 출석일로 표시한다', () => {
+        const beforeRollover = new Date('2026-08-19T16:13:00.000Z'); // KST 8월 20일 01:13
+
+        expect(homeAttendanceState(attendanceDashboard('2026-08-19', 'fresh'), beforeRollover).kind)
+            .toBe('current');
+    });
+
+    it('04시부터는 전날 snapshot을 새 출석일 대기 상태로 분류한다', () => {
+        const afterRollover = new Date('2026-08-19T19:00:00.000Z'); // KST 8월 20일 04:00
+
+        expect(homeAttendanceState(attendanceDashboard('2026-08-19', 'fresh'), afterRollover).kind)
+            .toBe('different-attendance-day');
+    });
+
+    it('서버 응답이 없어도 PC 로컬 관측은 15분 동안만 fresh로 취급한다', () => {
+        const local = attendanceDashboard('2026-08-20', 'fresh');
+        if (local.state !== 'loaded' || local.attendance.status !== 'available') throw new Error('invalid fixture');
+        local.attendance.source = 'desktop';
+        local.attendance.syncState = 'pending';
+        local.attendance.lastSyncedAt = '2026-08-19T20:00:00.000Z';
+        local.attendance.snapshot.collectedAt = local.attendance.lastSyncedAt;
+
+        expect(homeAttendanceState(local, new Date('2026-08-19T20:15:00.000Z')).kind).toBe('current');
+        expect(homeAttendanceState(local, new Date('2026-08-19T20:15:00.001Z')).kind).toBe('stale');
     });
 });

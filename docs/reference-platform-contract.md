@@ -6,7 +6,7 @@
 | --- | --- | --- | --- |
 | 홈 요약 | 공개 정보만 | 전체 | 전체 |
 | 급식·세탁 조회 | 예 | 예 | 예 |
-| 출석·D-Day | 로그인 안내 | 서버 snapshot | 서버 snapshot |
+| 출석·D-Day | 로그인 안내 | 서버 snapshot | 로컬 checker snapshot 우선, 서버 snapshot 보완 |
 | LMS 주기 조회 | 아니요 | 아니요 | 예 |
 | 알림 | 설치 안내 | Web Push | 운영체제 알림 |
 | 모바일 연결 | 아니요 | 수동 코드·해제 | QR·코드 생성, 승인·해제 |
@@ -107,6 +107,12 @@ claim과 complete JSON에는 access token, LMS cookie, claim receipt를 포함�
 - 알림: 로컬 알림함 snapshot·읽음·활성화, 운영체제 테스트 알림
 - PC 설정: `get_desktop_settings`, `update_desktop_settings`, `open_log_folder`
 - checker 전용: tagged `report_checker_event`
+
+checker가 검증된 출석 snapshot을 보고하면 Tauri는 `attendance-snapshot-updated`의
+`observed` 이벤트로 데스크톱 UI에 즉시 전달합니다. 서버 업로드가 끝나면 같은 이벤트의
+`synced` 변형을 보내 서버 snapshot을 다시 조회합니다. 데스크톱 UI는 아직 동기화되지
+않은 로컬 snapshot이 서버 응답보다 새롭고 15분 이내일 때만 로컬 값을 우선합니다.
+수동 새로고침도 서버 업로드가 아니라 유효한 로컬 관측을 완료 기준으로 사용합니다.
 
 `bootstrap_desktop_http_session`은 호출한 dashboard WebView URL을 Rust에서 직접
 검증합니다. `null`, 임의 localhost port, 원격 origin은 허용하지 않습니다.

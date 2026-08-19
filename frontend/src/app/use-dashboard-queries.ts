@@ -17,6 +17,7 @@ import {useDashboardAccount} from './dashboard-account';
 import {assertLmsAuthenticated, serverSessionReady} from './dashboard-account-state';
 import {queryKeys, useDashboardEnvironment} from './dashboard-context';
 import {runAttendanceRefresh, runDashboardRefresh} from './dashboard-refresh';
+import {preferDesktopAttendance} from './desktop-attendance-event';
 
 export const DASHBOARD_REFRESH = {
     personal: 60_000,
@@ -57,9 +58,16 @@ export function useCampusManualRefresh(kind: 'laundry' | 'meals') {
 export function useAttendanceQuery() {
     const {api, platform} = useDashboardEnvironment();
     const account = useDashboardAccount();
+    const client = useQueryClient();
+    const queryKey = queryKeys.attendance(platform.kind);
     return useQuery({
-        queryKey: queryKeys.attendance(platform.kind),
-        queryFn: () => api.getAttendance(),
+        queryKey,
+        queryFn: async () => {
+            const fetched = await api.getAttendance();
+            return platform.kind === 'desktop'
+                ? preferDesktopAttendance(client.getQueryData(queryKey), fetched)
+                : fetched;
+        },
         enabled: account.personalAccess.status === 'connected',
         staleTime: DASHBOARD_REFRESH.personal,
         refetchInterval: DASHBOARD_REFRESH.personal,

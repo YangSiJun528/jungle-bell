@@ -26,7 +26,7 @@ import type {AttendanceSnapshot} from '@/api/dashboard-api';
 import {dateTimeLabel} from '@/lib/format';
 import {DdayCard} from '@/components/dashboard/dday-card';
 import {selectDdayView} from '@/domain/attendance/dday-view';
-import {homeAttendanceForToday} from './home-view-model';
+import {homeAttendanceState} from './home-view-model';
 
 const CAMPUS_URL = 'https://jungle-lms.krafton.com/check-in';
 
@@ -94,19 +94,24 @@ export function JungleCampusSummary() {
     const refreshAttendance = useRefreshAttendanceMutation();
     const openCampus = useMutation({mutationFn: () => api.openLmsLogin()});
 
-    const personalReady = account.personalAccess.status === 'connected';
+    const desktopLocalAttendanceAvailable = platform.capabilities.desktopAccount
+        && attendance.data?.state === 'loaded'
+        && attendance.data.attendance.status === 'available'
+        && attendance.data.attendance.source === 'desktop';
+    const personalReady = account.personalAccess.status === 'connected'
+        || desktopLocalAttendanceAvailable;
     const dday = personalReady
         ? selectDdayView({
             platform: platform.kind,
             attendance: attendance.data,
         })
         : null;
-    const availableAttendance = personalReady
-        ? homeAttendanceForToday(attendance.data)
+    const attendanceState = personalReady
+        ? homeAttendanceState(attendance.data)
+        : {kind: 'unavailable'} as const;
+    const availableAttendance = attendanceState.kind === 'current'
+        ? attendanceState.attendance
         : null;
-    const attendanceNeedsRefresh = attendance.data?.state === 'loaded'
-        && attendance.data.attendance.status === 'available'
-        && availableAttendance === null;
 
     let content: React.ReactNode;
     if (platform.kind === 'browser' && account.personalAccess.status === 'not-applicable') {
@@ -177,14 +182,18 @@ export function JungleCampusSummary() {
                 </Button>
             </div>
         );
-    } else if (platform.capabilities.desktopAccount && account.status.serverSession === 'checking') {
+    } else if (platform.capabilities.desktopAccount
+        && !desktopLocalAttendanceAvailable
+        && account.status.serverSession === 'checking') {
         content = (
             <div className="space-y-2" aria-label="계정 연결 상태 확인 중">
                 <Skeleton className="h-10 w-full"/>
                 <p className="text-sm text-muted-foreground">계정 연결 상태를 확인하고 있습니다.</p>
             </div>
         );
-    } else if (platform.capabilities.desktopAccount && account.status.serverSession === 'recovery-required') {
+    } else if (platform.capabilities.desktopAccount
+        && !desktopLocalAttendanceAvailable
+        && account.status.serverSession === 'recovery-required') {
         content = (
             <div className="text-sm leading-6">
                 <p className="text-destructive">계정 복구가 필요합니다.</p>
@@ -193,7 +202,9 @@ export function JungleCampusSummary() {
                 </Button>
             </div>
         );
-    } else if (platform.capabilities.desktopAccount && account.status.serverSession === 'missing') {
+    } else if (platform.capabilities.desktopAccount
+        && !desktopLocalAttendanceAvailable
+        && account.status.serverSession === 'missing') {
         content = (
             <div className="text-sm leading-6">
                 <p className="font-medium">계정 연결이 필요합니다.</p>
@@ -233,16 +244,12 @@ export function JungleCampusSummary() {
         content = <p className="text-sm leading-6 text-muted-foreground">PC 앱과 다시 연결하면 오늘 출석 상태가 표시됩니다.</p>;
     } else if (attendance.data?.attendance.status === 'unavailable') {
         content = <p className="text-sm leading-6 text-muted-foreground">PC에서 처음 출석 정보를 동기화하기를 기다리고 있습니다.</p>;
-    } else if (attendanceNeedsRefresh) {
-        const lastSyncedAt = attendance.data?.state === 'loaded'
-            && attendance.data.attendance.status === 'available'
-            ? attendance.data.attendance.lastSyncedAt
-            : null;
+    } else if (attendanceState.kind === 'stale') {
         content = (
             <div className="text-sm leading-6">
-                <p className="font-medium text-amber-800 dark:text-amber-300">오늘 출석 상태를 다시 확인해야 합니다.</p>
+                <p className="font-medium text-amber-800 dark:text-amber-300">마지막 출석 확인 이후 시간이 지났습니다.</p>
                 <p className="mt-1 text-muted-foreground">
-                    {lastSyncedAt ? `마지막 동기화 · ${dateTimeLabel(lastSyncedAt)}` : '오늘 기준의 동기화 기록이 없습니다.'}
+                    마지막 확인 · {dateTimeLabel(attendanceState.attendance.lastSyncedAt)}
                 </p>
                 <Button
                     className="mt-2"
@@ -255,13 +262,37 @@ export function JungleCampusSummary() {
                 </Button>
             </div>
         );
+    } else if (attendanceState.kind === 'different-attendance-day') {
+        content = (
+            <div className="text-sm leading-6">
+                <p className="font-medium">새 출석일 상태를 확인하고 있습니다.</p>
+                <p className="mt-1 text-muted-foreground">
+                    마지막 확인 · {dateTimeLabel(attendanceState.attendance.lastSyncedAt)}
+                </p>
+                <Button
+                    className="mt-2"
+                    disabled={refreshAttendance.isPending}
+                    size="sm"
+                    variant="outline"
+                    onClick={() => refreshAttendance.mutate()}
+                >
+                    {refreshAttendance.isPending ? '확인 중' : '지금 확인'}
+                </Button>
+            </div>
+        );
     } else {
         content = (
             <>
                 {availableAttendance ? <AttendanceChecks snapshot={availableAttendance.snapshot}/> : null}
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                    <span>{availableAttendance ? `마지막 동기화 · ${dateTimeLabel(availableAttendance.lastSyncedAt)}` : '동기화 기록 없음'}</span>
-                    {attendance.isError && attendance.data ? (
+                    <span>{availableAttendance
+                        ? `${availableAttendance.source === 'desktop' ? '마지막 확인' : '마지막 동기화'} · ${dateTimeLabel(availableAttendance.lastSyncedAt)}`
+                        : '동기화 기록 없음'}</span>
+                    {availableAttendance?.syncState === 'pending' ? (
+                        <span className="flex items-center gap-1 text-muted-foreground">
+                            <RefreshCw aria-hidden="true" className="size-3"/> 다른 기기 동기화 대기 중
+                        </span>
+                    ) : attendance.isError && attendance.data ? (
                         <span className="flex items-center gap-1 text-amber-700 dark:text-amber-300">
                             <RefreshCw aria-hidden="true" className="size-3"/> 마지막 확인값 표시 중
                         </span>

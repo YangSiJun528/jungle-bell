@@ -1,0 +1,1 @@
+export const ATTENDANCE_FRESHNESS_MS = 15 * 60_000;

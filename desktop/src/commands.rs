@@ -174,6 +174,11 @@ async fn handle_attendance_snapshot(
         }
     }
 
+    if let Some(snapshot) = remote_snapshot.as_ref() {
+        remote_sync_service.record_attendance_observation();
+        remote_sync::publish_attendance_observation(&app, snapshot);
+    }
+
     // LMS credential은 checker WebView profile 밖으로 꺼내지 않는다. 검증된
     // checker 보고에서 정규화한 snapshot만 데스크톱 installation 세션으로 올린다.
     if let Some(last_loaded_url) = verification_url {

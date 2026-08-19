@@ -1,10 +1,25 @@
-import {hasOwn} from '@/lib/object';
+import {z} from 'zod';
+import {
+    attendanceSnapshotSchema,
+    type AttendanceSnapshot,
+} from '@/api/dashboard-account-contract';
 
-export function attendanceSnapshotRevision(value: unknown): number | null {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-    if (Object.keys(value).length !== 1 || !hasOwn(value, 'revision')) return null;
-    const revision = (value as {revision?: unknown}).revision;
-    return Number.isSafeInteger(revision) && (revision as number) > 0
-        ? revision as number
-        : null;
+const attendanceSnapshotEventSchema = z.discriminatedUnion('kind', [
+    z.strictObject({
+        kind: z.literal('observed'),
+        snapshot: attendanceSnapshotSchema,
+    }),
+    z.strictObject({
+        kind: z.literal('synced'),
+        revision: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+    }),
+]);
+
+export type AttendanceSnapshotEvent =
+    | {kind: 'observed'; snapshot: AttendanceSnapshot}
+    | {kind: 'synced'; revision: number};
+
+export function parseAttendanceSnapshotEvent(value: unknown): AttendanceSnapshotEvent | null {
+    const parsed = attendanceSnapshotEventSchema.safeParse(value);
+    return parsed.success ? parsed.data : null;
 }

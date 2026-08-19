@@ -79,11 +79,17 @@ export function AttendancePage() {
         && account.status.lmsAuthentication === 'required';
     const desktopLmsUnavailable = platform.capabilities.desktopAccount
         && account.status.lmsAuthentication === 'unavailable';
+    const desktopLocalAttendanceAvailable = platform.capabilities.desktopAccount
+        && detail.kind === 'available'
+        && detail.source === 'desktop';
     const desktopSessionChecking = platform.capabilities.desktopAccount
+        && !desktopLocalAttendanceAvailable
         && account.status.serverSession === 'checking';
     const desktopSessionMissing = platform.capabilities.desktopAccount
+        && !desktopLocalAttendanceAvailable
         && account.status.serverSession === 'missing';
     const desktopSessionRecovery = platform.capabilities.desktopAccount
+        && !desktopLocalAttendanceAvailable
         && account.status.serverSession === 'recovery-required';
     const browserAccessChecking = platform.kind === 'browser'
         && account.personalAccess.status === 'checking';
@@ -113,7 +119,8 @@ export function AttendancePage() {
                         <Button
                             variant="outline"
                             disabled={refreshAttendance.isPending
-                                || account.personalAccess.status !== 'connected'
+                                || (account.personalAccess.status !== 'connected'
+                                    && !desktopLocalAttendanceAvailable)
                                 || desktopLmsChecking
                                 || desktopLmsUnavailable
                                 || desktopSessionChecking
@@ -125,7 +132,7 @@ export function AttendancePage() {
                                 ? '새로고침 중'
                                 : desktopLmsChecking
                                     ? '인증 확인 중'
-                                    : desktopSessionMissing
+                                    : desktopSessionMissing && !desktopLocalAttendanceAvailable
                                         ? '계정 연결'
                                         : '새로고침'}
                         </Button>
@@ -201,7 +208,14 @@ export function AttendancePage() {
                                     <AttendanceCheck label="학습 시작" checked={detail.snapshot.morningChecked}/>
                                     <AttendanceCheck label="학습 종료" checked={detail.snapshot.eveningChecked}/>
                                 </div>
-                                <p className="text-xs text-muted-foreground">마지막 동기화 · {dateTimeLabel(detail.lastSyncedAt)}</p>
+                                <p className="text-xs text-muted-foreground">
+                                    {detail.source === 'desktop' ? '마지막 확인' : '마지막 동기화'} · {dateTimeLabel(detail.lastSyncedAt)}
+                                </p>
+                                {detail.syncState === 'pending' ? (
+                                    <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                                        <RefreshCw aria-hidden="true" className="size-3"/> 다른 기기 동기화 대기 중
+                                    </p>
+                                ) : null}
                                 {detail.freshness === 'stale' ? (
                                     <Alert className="border-amber-500/25 bg-amber-500/10 text-amber-900 dark:text-amber-200">
                                         <RefreshCw aria-hidden="true"/>

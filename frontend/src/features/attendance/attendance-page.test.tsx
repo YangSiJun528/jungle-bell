@@ -21,4 +21,10 @@ describe('AttendancePage LMS gate', () => {
         expect(source).toContain("account.personalAccess.status === 'not-applicable'");
         expect(source).toContain('출석은 PC 앱 또는 연결된 PWA에서 확인할 수 있습니다.');
     });
+
+    test('PC 로컬 관측이 있으면 서버 동기화와 무관하게 출석을 표시한다', () => {
+        expect(source).toContain('desktopLocalAttendanceAvailable');
+        expect(source).toContain('다른 기기 동기화 대기 중');
+        expect(source).toContain("detail.source === 'desktop' ? '마지막 확인' : '마지막 동기화'");
+    });
 });

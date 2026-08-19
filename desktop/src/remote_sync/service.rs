@@ -39,6 +39,8 @@ pub(crate) struct RemoteSyncService {
     identity_generation: AtomicU64,
     webview_session_transition: Mutex<()>,
     pub(crate) runtime: Mutex<SyncRuntime>,
+    pub(crate) observation_revision: AtomicU64,
+    pub(crate) observation_received: Notify,
     pub(crate) snapshot_revision: AtomicU64,
     pub(crate) snapshot_uploaded: Notify,
 }
@@ -134,6 +136,8 @@ impl RemoteSyncService {
             identity_generation: AtomicU64::new(0),
             webview_session_transition: Mutex::new(()),
             runtime: Mutex::new(runtime),
+            observation_revision: AtomicU64::new(0),
+            observation_received: Notify::new(),
             snapshot_revision: AtomicU64::new(0),
             snapshot_uploaded: Notify::new(),
         })
@@ -250,6 +254,12 @@ impl RemoteSyncService {
         let revision = self.snapshot_revision.fetch_add(1, Ordering::AcqRel) + 1;
         self.snapshot_uploaded.notify_waiters();
         Some(revision)
+    }
+
+    pub(crate) fn record_attendance_observation(&self) -> u64 {
+        let revision = self.observation_revision.fetch_add(1, Ordering::AcqRel) + 1;
+        self.observation_received.notify_waiters();
+        revision
     }
 
     pub(crate) async fn with_current_identity<T>(
@@ -503,10 +513,21 @@ impl RemoteSyncService {
         }
     }
 
+    #[cfg(test)]
     pub(crate) async fn wait_for_snapshot_after(&self, baseline: u64) {
         loop {
             let notified = self.snapshot_uploaded.notified();
             if self.snapshot_revision.load(Ordering::Acquire) > baseline {
+                return;
+            }
+            notified.await;
+        }
+    }
+
+    pub(crate) async fn wait_for_observation_after(&self, baseline: u64) {
+        loop {
+            let notified = self.observation_received.notified();
+            if self.observation_revision.load(Ordering::Acquire) > baseline {
                 return;
             }
             notified.await;
@@ -895,5 +916,30 @@ mod initialization_tests {
         assert_eq!(service.complete_attendance_success(&request).await, Some(1));
         assert_eq!(service.snapshot_revision.load(Ordering::Acquire), 1);
         assert!(service.status().await.last_server_contact.is_some());
+    }
+
+    #[tokio::test]
+    async fn local_attendance_observation은_서버_upload와_독립적으로_새로고침을_완료한다() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = StdArc::new(crate::secure_credential::MemoryCredentialStore::new(None));
+        let service = RemoteSyncService::with_store(
+            RemoteApi::new("https://bell.example.com").unwrap(),
+            directory.path().to_path_buf(),
+            uuid::Uuid::new_v4().hyphenated().to_string(),
+            true,
+            store,
+        )
+        .unwrap();
+        let observation_baseline = service.observation_revision.load(Ordering::Acquire);
+        let upload_baseline = service.snapshot_revision.load(Ordering::Acquire);
+
+        assert_eq!(service.record_attendance_observation(), observation_baseline + 1);
+        tokio::time::timeout(
+            Duration::from_millis(10),
+            service.wait_for_observation_after(observation_baseline),
+        )
+        .await
+        .unwrap();
+        assert_eq!(service.snapshot_revision.load(Ordering::Acquire), upload_baseline);
     }
 }

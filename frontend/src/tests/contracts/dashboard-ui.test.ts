@@ -249,7 +249,7 @@ test('TanStack Query는 공개 데이터와 개인 데이터를 서로 다른 �
     assert.match(queries, /useSuspenseQuery\(laundryQueryOptions\(api\)\)/);
     assert.match(queries, /useSuspenseQuery\(mealsQueryOptions\(api\)\)/);
     assert.match(queries, /useSuspenseQueries\(\{[\s\S]*laundryQueryOptions\(api\)[\s\S]*mealsQueryOptions\(api\)/);
-    assert.match(queries, /queryKey: queryKeys\.attendance\(platform\.kind\),[\s\S]{0,220}staleTime: DASHBOARD_REFRESH\.personal/);
+    assert.match(queries, /const queryKey = queryKeys\.attendance\(platform\.kind\);[\s\S]{0,600}staleTime: DASHBOARD_REFRESH\.personal/);
     assert.match(queries, /queryKey: queryKeys\.notifications\(platform\.kind\),[\s\S]{0,260}staleTime: DASHBOARD_REFRESH\.personal/);
 
     assert.match(platformEvents, /['"]notification-inbox-updated['"]/);

@@ -68,16 +68,45 @@ describe('repository platform boundaries', () => {
         expect(cohortChange).not.toContain('checker::refresh_webview');
     });
 
-    test('출석 캐시 갱신 이벤트는 서버 snapshot 업로드 성공 뒤에만 발행한다', () => {
+    test('프론트엔드와 Tauri는 같은 04시 출석일 경계를 사용한다', () => {
+        const frontendAttendanceDay = readFrontend('src/domain/attendance/attendance-day.ts');
+        const desktopConfig = readFileSync(resolve(repositoryRoot, 'desktop/src/config.rs'), 'utf8');
+        const frontendHour = frontendAttendanceDay.match(/ATTENDANCE_DAY_START_HOUR_KST\s*=\s*(\d+)/u)?.[1];
+        const desktopHour = desktopConfig.match(/MORNING_START_HOUR:\s*u32\s*=\s*(\d+)/u)?.[1];
+
+        expect(frontendHour).toBe('4');
+        expect(frontendHour).toBe(desktopHour);
+    });
+
+    test('PC 로컬 관측과 서버 snapshot은 같은 15분 freshness를 사용한다', () => {
+        const frontendFreshness = readFrontend('src/domain/attendance/freshness.ts');
+        const accountService = readFileSync(
+            resolve(repositoryRoot, 'server/core/src/main/kotlin/app/junglebell/server/domain/account/AccountService.kt'),
+            'utf8',
+        );
+
+        expect(frontendFreshness).toMatch(/ATTENDANCE_FRESHNESS_MS\s*=\s*15 \* 60_000/u);
+        expect(accountService).toContain('attendanceFreshness = Duration.ofMinutes(15)');
+    });
+
+    test('PC 출석은 로컬 관측을 먼저 발행하고 서버 동기화 완료를 별도로 알린다', () => {
+        const commands = readFileSync(resolve(repositoryRoot, 'desktop/src/commands.rs'), 'utf8');
         const remoteSync = readFileSync(resolve(repositoryRoot, 'desktop/src/remote_sync.rs'), 'utf8');
+        const refreshPlatformSync = remoteSync.match(
+            /pub\(crate\) async fn refresh_platform_sync[\s\S]*?\n\}/u,
+        )?.[0] ?? '';
         const uploadAndPublish = remoteSync.match(
             /async fn upload_attendance_and_publish[\s\S]*?\n\}/u,
         )?.[0] ?? '';
 
+        expect(commands).toContain('publish_attendance_observation(&app, snapshot)');
+        expect(refreshPlatformSync).toContain('service.observation_revision');
+        expect(refreshPlatformSync).toContain('service.wait_for_observation_after(baseline)');
+        expect(refreshPlatformSync).not.toContain('ensure_registered');
         expect(uploadAndPublish).toContain('service.upload_attendance(snapshot).await?');
-        expect(uploadAndPublish).toContain('ATTENDANCE_SNAPSHOT_UPDATED_EVENT');
+        expect(uploadAndPublish).toContain('AttendanceSnapshotUpdated::Synced');
         expect(uploadAndPublish.indexOf('service.upload_attendance(snapshot).await?'))
-            .toBeLessThan(uploadAndPublish.indexOf('ATTENDANCE_SNAPSHOT_UPDATED_EVENT'));
+            .toBeLessThan(uploadAndPublish.indexOf('AttendanceSnapshotUpdated::Synced'));
     });
 
     test('frontend scripts and Tauri hooks use separate web and desktop UI artifacts', () => {
