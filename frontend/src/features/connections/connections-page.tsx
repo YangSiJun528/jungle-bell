@@ -249,9 +249,9 @@ function DesktopConnections() {
                                 {createPairing.isError ? <p className="text-sm text-destructive">연결 코드를 만들지 못했습니다. 잠시 후 다시 시도하세요.</p> : null}
                             </div>
                         ) : (
-                            <div className="grid gap-4 sm:grid-cols-[9rem_1fr]">
+                            <div className="grid gap-4 sm:grid-cols-[9rem_minmax(0,1fr)]">
                                 {qr ? <img src={qr} alt="모바일 연결 QR 코드" className="aspect-square w-36 rounded-lg border bg-white p-2"/> : null}
-                                <div className="space-y-3">
+                                <div className="min-w-0 space-y-3">
                                     <div><p className="text-xs text-muted-foreground">수동 연결 코드</p><p className="mt-1 font-mono text-2xl font-bold tracking-wider">{formatManualPairingCode(pairing.manualCode)}</p></div>
                                     {pairingStatus.data?.status === 'completed' ? (
                                         <p aria-live="polite" className="text-sm text-emerald-700 dark:text-emerald-300">연결이 완료됐습니다.</p>
@@ -259,7 +259,21 @@ function DesktopConnections() {
                                         <p aria-live="polite" className="text-sm text-destructive">연결 코드가 만료됐습니다.</p>
                                     ) : null}
                                     {pairingStatus.data?.claim ? (
-                                        <Alert><KeyRound/><AlertTitle>{pairingStatus.data.claim.deviceLabel}</AlertTitle><AlertDescription>확인 코드 {pairingStatus.data.claim.confirmationCode}</AlertDescription><Button className="mt-3" size="sm" onClick={() => approve.mutate()} disabled={approve.isPending}>이 기기 승인</Button></Alert>
+                                        <Alert>
+                                            <KeyRound/>
+                                            <AlertTitle>{pairingStatus.data.claim.deviceLabel}</AlertTitle>
+                                            <AlertDescription>
+                                                <span>확인 코드 {pairingStatus.data.claim.confirmationCode}</span>
+                                                <Button
+                                                    className="mt-2 max-w-full"
+                                                    size="sm"
+                                                    onClick={() => approve.mutate()}
+                                                    disabled={approve.isPending}
+                                                >
+                                                    이 기기 승인
+                                                </Button>
+                                            </AlertDescription>
+                                        </Alert>
                                     ) : null}
                                     {pairingStatus.isError ? (
                                         <div className="space-y-2 text-sm text-destructive">

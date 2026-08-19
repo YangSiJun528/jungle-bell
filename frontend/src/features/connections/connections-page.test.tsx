@@ -43,4 +43,12 @@ describe('ConnectionsPage settings information architecture', () => {
         expect(source).toContain('onClick={() => reset.mutate()}');
         expect(source).not.toContain('window.confirm');
     });
+
+    test('작은 PC 창에서도 QR 옆 승인 영역과 버튼이 카드 안에서 줄어든다', () => {
+        expect(source).toContain('sm:grid-cols-[9rem_minmax(0,1fr)]');
+        expect(source).toContain('className="min-w-0 space-y-3"');
+        expect(source).toMatch(
+            /<Alert>[\s\S]*?<AlertDescription[^>]*>[\s\S]*?확인 코드[\s\S]*?<Button[^>]*>[\s\S]*?이 기기 승인[\s\S]*?<\/Button>[\s\S]*?<\/AlertDescription>[\s\S]*?<\/Alert>/u,
+        );
+    });
 });
