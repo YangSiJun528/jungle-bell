@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {test} from 'vitest';
 
 import {
+    markAllNotificationInboxItemsRead,
     markNotificationInboxItemRead,
     normalizeNotificationInboxSnapshot,
 } from './inbox';
@@ -115,4 +116,29 @@ test('알림 본 처리는 해당 항목과 미읽음 개수만 낙관적으로 
     assert.equal(next.items[1]?.readAt, null);
     assert.equal(markNotificationInboxItemRead(next, '2', 3_000), next);
     assert.equal(markNotificationInboxItemRead(next, 'missing', 3_000), next);
+});
+
+test('새 알림 전체 본 처리는 읽지 않은 항목만 같은 시각으로 갱신한다', () => {
+    const snapshot = normalizeNotificationInboxSnapshot({
+        revision: 3,
+        unreadCount: 2,
+        items: [
+            {
+                id: '3', title: '셋', body: '본문', createdAt: 1_100, readAt: null, action: null,
+            },
+            {
+                id: '2', title: '둘', body: '본문', createdAt: 1_000, readAt: 1_500, action: null,
+            },
+            {
+                id: '1', title: '하나', body: '본문', createdAt: 900, readAt: null, action: null,
+            },
+        ],
+    });
+    assert.ok(snapshot);
+
+    const next = markAllNotificationInboxItemsRead(snapshot, 2_000);
+    assert.notEqual(next, snapshot);
+    assert.equal(next.unreadCount, 0);
+    assert.deepEqual(next.items.map((item) => item.readAt), [2_000, 1_500, 2_000]);
+    assert.equal(markAllNotificationInboxItemsRead(next, 3_000), next);
 });

@@ -102,7 +102,15 @@ describe('notification center information architecture', () => {
         expect(pageSource).toContain('<TabsTrigger value="history">지난 알림</TabsTrigger>');
         expect(tabsSource).toContain("'createdAtEpochMs' in item ? seenMobileIds.has(item.id) : item.readAt !== null");
         expect(tabsSource).toContain('seenMobileIds.has(item.id)');
-        expect(pageSource).toContain('onMobileNotificationSeen(item.id)');
+        expect(pageSource).toContain('onMobileNotificationsSeen([item.id])');
+    });
+
+    test('새 알림이 있을 때만 전체 읽음 동작을 제공한다', () => {
+        expect(pageSource).toContain('markAllDesktopNotificationsRead');
+        expect(pageSource).toContain('markAllNotificationInboxItemsRead');
+        expect(pageSource).toContain('onMobileNotificationsSeen(mobileIds)');
+        expect(pageSource).toContain('모두 읽음');
+        expect(pageSource).toContain('newRows.length > 0');
     });
 
     test('캐시된 알림은 백그라운드 재조회 실패 시에도 유지한다', () => {

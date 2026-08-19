@@ -26,6 +26,7 @@ export function createNativeBridge(
         openLmsLogin: () => invokeCommand('open_lms_login'),
         getNotificationInboxSnapshot: () => invokeCommand('get_notification_inbox_snapshot'),
         markNotificationRead: (id) => invokeCommand('mark_notification_read', {id}),
+        markAllNotificationsRead: () => invokeCommand('mark_all_notifications_read'),
         activateNotification: (id) => invokeCommand('activate_notification', {id}),
         sendTestNotification: () => invokeCommand('send_test_notification'),
     };

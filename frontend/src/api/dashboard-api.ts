@@ -154,6 +154,7 @@ export interface DashboardApi extends DashboardPersonalApi, DesktopSettingsAdapt
     getNotifications(): Promise<DashboardNotification[]>;
     getDesktopNotificationInbox(): Promise<NotificationInboxSnapshot>;
     markDesktopNotificationRead(id: string): Promise<NotificationInboxSnapshot>;
+    markAllDesktopNotificationsRead(): Promise<NotificationInboxSnapshot>;
     activateDesktopNotification(id: string): Promise<NotificationInboxSnapshot>;
     sendDesktopTestNotification(): Promise<DesktopTestNotificationResult>;
     sendMobileTestNotification(): Promise<number>;
@@ -369,6 +370,12 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
             const notificationId = parseInput(notificationInboxIdSchema, id);
             return parseNotificationInboxSnapshot(
                 await nativeBridge.markNotificationRead(notificationId),
+            );
+        },
+
+        async markAllDesktopNotificationsRead() {
+            return parseNotificationInboxSnapshot(
+                await nativeBridge.markAllNotificationsRead(),
             );
         },
 

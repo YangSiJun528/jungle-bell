@@ -32,12 +32,14 @@ describe('NativeBridge', () => {
         await bridge.updateDesktopSettings({autoStart: true});
         await bridge.getNotificationInboxSnapshot();
         await bridge.markNotificationRead('12');
+        await bridge.markAllNotificationsRead();
 
         expect(invoke.mock.calls).toEqual([
             ['reset_desktop_identity', {confirmed: true}],
             ['update_desktop_settings', {input: {autoStart: true}}],
             ['get_notification_inbox_snapshot'],
             ['mark_notification_read', {id: '12'}],
+            ['mark_all_notifications_read'],
         ]);
     });
 });

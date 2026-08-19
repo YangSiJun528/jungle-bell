@@ -40,3 +40,10 @@ test('개별 알림을 본 처리하면 다른 새 알림은 유지한다', () =
     assert.deepEqual([...next], ['two', 'one']);
     assert.equal(next.has('three'), false);
 });
+
+test('새 알림 ID를 한 번에 병합하면 전체를 본 상태로 유지할 수 있다', () => {
+    const current = new Set(['old']);
+    const next = mergeSeenMobileNotificationIds(current, ['new-2', 'new-1']);
+
+    assert.deepEqual([...next], ['new-2', 'new-1', 'old']);
+});

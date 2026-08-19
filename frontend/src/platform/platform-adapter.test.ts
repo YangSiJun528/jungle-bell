@@ -22,6 +22,7 @@ function nativeBridge(): NativeBridge {
         openLmsLogin: vi.fn(),
         getNotificationInboxSnapshot: vi.fn(),
         markNotificationRead: vi.fn(),
+        markAllNotificationsRead: vi.fn(),
         activateNotification: vi.fn(),
         sendTestNotification: vi.fn(),
     };

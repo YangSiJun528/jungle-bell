@@ -49,6 +49,7 @@ export interface NativeBridge {
     openLmsLogin(): Promise<unknown>;
     getNotificationInboxSnapshot(): Promise<unknown>;
     markNotificationRead(id: string): Promise<unknown>;
+    markAllNotificationsRead(): Promise<unknown>;
     activateNotification(id: string): Promise<unknown>;
     sendTestNotification(): Promise<unknown>;
 }

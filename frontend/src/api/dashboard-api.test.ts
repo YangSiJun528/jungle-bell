@@ -933,7 +933,7 @@ test('인증 토큰을 브라우저 영속 저장소에 기록하지 않는다',
     assert.doesNotMatch(source, /(?:local|session)Storage\.setItem\([^\n]*(?:token|authorization|bearer)/i);
 });
 
-test('데스크톱 알림함은 Tauri IPC snapshot을 검증하고 읽음 처리와 알림 활성화를 전달한다', async () => {
+test('데스크톱 알림함은 Tauri IPC snapshot을 검증하고 개별·전체 읽음 처리와 알림 활성화를 전달한다', async () => {
     const calls: Array<{command: string; args?: Record<string, unknown>}> = [];
     const snapshot = {
         revision: 2,
@@ -958,10 +958,12 @@ test('데스크톱 알림함은 Tauri IPC snapshot을 검증하고 읽음 처리
 
     assert.deepEqual(await api.getDesktopNotificationInbox(), snapshot);
     assert.deepEqual(await api.markDesktopNotificationRead('42'), snapshot);
+    assert.deepEqual(await api.markAllDesktopNotificationsRead(), snapshot);
     assert.deepEqual(await api.activateDesktopNotification('42'), snapshot);
     assert.deepEqual(calls, [
         {command: 'get_notification_inbox_snapshot', args: undefined},
         {command: 'mark_notification_read', args: {id: '42'}},
+        {command: 'mark_all_notifications_read', args: undefined},
         {command: 'activate_notification', args: {id: '42'}},
     ]);
     await assert.rejects(api.markDesktopNotificationRead('../42'), /API_CLIENT_INVALID_ARGUMENT/);

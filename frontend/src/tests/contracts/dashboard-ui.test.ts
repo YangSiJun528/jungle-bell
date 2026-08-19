@@ -66,7 +66,7 @@ test('기능 화면은 공통 셸 아래에서 경로별 지연 로딩된다', (
         assert.match(routePages, new RegExp(`lazy\\(\\(\\) => import\\(['"]@/features/${feature}['"]\\)`));
     }
     assert.match(app, /lazy\(\(\) => import\(['"]@\/features\/notifications\/notifications-page['"]\)/);
-    assert.match(app, /<DashboardShell[\s\S]*notificationPanel=\{\{[\s\S]*open: notificationPanelOpen[\s\S]*setNotificationPanelRequestedOpen\(open\)[\s\S]*navigate\(contentRoute, true\)[\s\S]*<NotificationPanelContent[\s\S]*seenMobileIds=\{seenMobileIds\}[\s\S]*onMobileNotificationSeen=\{markMobileNotificationSeen\}[\s\S]*\/>[\s\S]*<DashboardRouteRuntimeProvider[\s\S]*<Outlet\/>[\s\S]*<InstallPrompt open=\{installPromptOpen\} onOpenChange=\{setInstallPromptVisibility\}\/>[\s\S]*<\/DashboardShell>/);
+    assert.match(app, /<DashboardShell[\s\S]*notificationPanel=\{\{[\s\S]*open: notificationPanelOpen[\s\S]*setNotificationPanelRequestedOpen\(open\)[\s\S]*navigate\(contentRoute, true\)[\s\S]*<NotificationPanelContent[\s\S]*seenMobileIds=\{seenMobileIds\}[\s\S]*onMobileNotificationsSeen=\{markMobileNotificationsSeen\}[\s\S]*\/>[\s\S]*<DashboardRouteRuntimeProvider[\s\S]*<Outlet\/>[\s\S]*<InstallPrompt open=\{installPromptOpen\} onOpenChange=\{setInstallPromptVisibility\}\/>[\s\S]*<\/DashboardShell>/);
     assert.match(dashboardRouter, /createHashHistory\(\)/);
     assert.match(dashboardRouter, /createRouter\(\{[\s\S]*routeTree[\s\S]*history/);
     assert.match(dashboardRouter, /path: 'home'[\s\S]*path: 'attendance'[\s\S]*path: 'laundry'[\s\S]*path: 'meals'[\s\S]*path: 'notifications'[\s\S]*path: 'connections'[\s\S]*path: 'install'/);
@@ -297,7 +297,7 @@ test('PWA 메타데이터·서비스 워커·설치 프롬프트는 React 진입
     );
     assert.doesNotMatch(installPrompt, /className="fixed (?:inset-x-3 )?bottom-3/);
     assert.match(app, /<DashboardRouteRuntimeProvider value=\{\{contentRoute, openInstallPrompt\}\}>[\s\S]*<Outlet\/>/);
-    assert.match(app, /<NotificationPanelContent[\s\S]*seenMobileIds=\{seenMobileIds\}[\s\S]*onMobileNotificationSeen=\{markMobileNotificationSeen\}[\s\S]*\/>/);
+    assert.match(app, /<NotificationPanelContent[\s\S]*seenMobileIds=\{seenMobileIds\}[\s\S]*onMobileNotificationsSeen=\{markMobileNotificationsSeen\}[\s\S]*\/>/);
     assert.match(app, /<InstallPrompt open=\{installPromptOpen\} onOpenChange=\{setInstallPromptVisibility\}\/>/);
     assert.doesNotMatch(home, /홈 화면 추가·PC 앱 안내/);
     assert.doesNotMatch(home, /이 QR은 설치한 모바일 PWA에서 열어야 합니다/);

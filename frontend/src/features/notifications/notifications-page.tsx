@@ -1,7 +1,7 @@
 import {useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Link} from '@tanstack/react-router';
-import {Check, ExternalLink, Send, Smartphone} from 'lucide-react';
+import {Check, CheckCheck, ExternalLink, Send, Smartphone} from 'lucide-react';
 import {queryKeys, useDashboardEnvironment} from '@/app/dashboard-context';
 import {useDashboardAccount} from '@/app/dashboard-account';
 import {PersonalAccountGate} from '@/app/personal-account-gate';
@@ -15,6 +15,7 @@ import type {DashboardNotification} from '@/api/dashboard-api';
 import {accountAuthenticationRequired} from '@/api/account-authentication';
 import {dateTimeLabel} from '@/lib/format';
 import {
+    markAllNotificationInboxItemsRead,
     markNotificationInboxItemRead,
     type NotificationInboxItem,
     type NotificationInboxSnapshot,
@@ -76,9 +77,9 @@ export function NotificationRow({item, unread, onActivate, onDismiss, dismissing
     );
 }
 
-export function NotificationPanelContent({seenMobileIds, onMobileNotificationSeen}: {
+export function NotificationPanelContent({seenMobileIds, onMobileNotificationsSeen}: {
     seenMobileIds: ReadonlySet<string>;
-    onMobileNotificationSeen: (id: string) => void;
+    onMobileNotificationsSeen: (ids: readonly string[]) => void;
 }) {
     const {api, platform} = useDashboardEnvironment();
     const account = useDashboardAccount();
@@ -183,6 +184,25 @@ export function NotificationPanelContent({seenMobileIds, onMobileNotificationSee
         onSuccess: (snapshot) => client.setQueryData(queryKeys.notifications('desktop'), snapshot),
     });
 
+    const markAllRead = useMutation({
+        mutationFn: () => api.markAllDesktopNotificationsRead(),
+        onMutate: async () => {
+            await client.cancelQueries({queryKey: queryKeys.notifications('desktop')});
+            const previous = client.getQueryData<NotificationInboxSnapshot>(queryKeys.notifications('desktop'));
+            if (previous) {
+                client.setQueryData(
+                    queryKeys.notifications('desktop'),
+                    markAllNotificationInboxItemsRead(previous, Date.now()),
+                );
+            }
+            return {previous};
+        },
+        onError: (_error, _variables, context) => {
+            if (context?.previous) client.setQueryData(queryKeys.notifications('desktop'), context.previous);
+        },
+        onSuccess: (snapshot) => client.setQueryData(queryKeys.notifications('desktop'), snapshot),
+    });
+
     const content = (() => {
         if (notifications.isPending && !notifications.data) return <LoadingState label="알림함을 불러오고 있습니다."/>;
         if (authenticationRequired) {
@@ -201,8 +221,12 @@ export function NotificationPanelContent({seenMobileIds, onMobileNotificationSee
         const data = notifications.data;
         if (!data) return <EmptyState title="아직 알림이 없습니다."/>;
         const rows = Array.isArray(data) ? data : data.items;
-        const renderRows = (history: boolean) => {
-            const matching = notificationRowsForTab(rows, seenMobileIds, history ? 'history' : 'new');
+        const newRows = notificationRowsForTab(rows, seenMobileIds, 'new');
+        const historyRows = notificationRowsForTab(rows, seenMobileIds, 'history');
+        const renderRows = (
+            matching: Array<DashboardNotification | NotificationInboxItem>,
+            history: boolean,
+        ) => {
             if (matching.length === 0) {
                 return <EmptyState title={history ? '지난 알림이 없습니다.' : '새 알림이 없습니다.'}/>;
             }
@@ -217,26 +241,48 @@ export function NotificationPanelContent({seenMobileIds, onMobileNotificationSee
                                 unread={!history}
                                 href={mobile ? item.path : undefined}
                                 onActivate={mobile
-                                    ? () => onMobileNotificationSeen(item.id)
+                                    ? () => onMobileNotificationsSeen([item.id])
                                     : () => activate.mutate(item.id)}
                                 onDismiss={!history ? (mobile
-                                    ? () => onMobileNotificationSeen(item.id)
+                                    ? () => onMobileNotificationsSeen([item.id])
                                     : () => markRead.mutate(item.id)) : undefined}
-                                dismissing={markRead.isPending && markRead.variables === item.id}
+                                dismissing={markAllRead.isPending
+                                    || (markRead.isPending && markRead.variables === item.id)}
                             />
                         );
                     })}
                 </Card>
             );
         };
+        const markAllNewNotifications = () => {
+            if (desktop) {
+                markAllRead.mutate();
+                return;
+            }
+            const mobileIds = newRows.flatMap((item) => 'createdAtEpochMs' in item ? [item.id] : []);
+            onMobileNotificationsSeen(mobileIds);
+        };
         return (
             <Tabs defaultValue="new" className="gap-3">
-                <TabsList aria-label="알림 목록 구분">
-                    <TabsTrigger value="new">새 알림</TabsTrigger>
-                    <TabsTrigger value="history">지난 알림</TabsTrigger>
-                </TabsList>
-                <TabsContent value="new">{renderRows(false)}</TabsContent>
-                <TabsContent value="history">{renderRows(true)}</TabsContent>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                    <TabsList aria-label="알림 목록 구분">
+                        <TabsTrigger value="new">새 알림</TabsTrigger>
+                        <TabsTrigger value="history">지난 알림</TabsTrigger>
+                    </TabsList>
+                    {newRows.length > 0 ? (
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            disabled={markAllRead.isPending || markRead.isPending}
+                            onClick={markAllNewNotifications}
+                        >
+                            <CheckCheck aria-hidden="true" className="size-4"/>모두 읽음
+                        </Button>
+                    ) : null}
+                </div>
+                <TabsContent value="new">{renderRows(newRows, false)}</TabsContent>
+                <TabsContent value="history">{renderRows(historyRows, true)}</TabsContent>
             </Tabs>
         );
     })();

@@ -81,9 +81,9 @@ function DashboardContent() {
         setNotificationPanelRequestedOpen(false);
     }, [route]);
 
-    const markMobileNotificationSeen = useCallback((id: string) => {
+    const markMobileNotificationsSeen = useCallback((ids: readonly string[]) => {
         setSeenMobileIds((current) => {
-            const next = mergeSeenMobileNotificationIds(current, [id]);
+            const next = mergeSeenMobileNotificationIds(current, ids);
             if (next !== current) writeSeenMobileNotificationIds(window.localStorage, next);
             return next;
         });
@@ -115,7 +115,7 @@ function DashboardContent() {
                     >
                         <NotificationPanelContent
                             seenMobileIds={seenMobileIds}
-                            onMobileNotificationSeen={markMobileNotificationSeen}
+                            onMobileNotificationsSeen={markMobileNotificationsSeen}
                         />
                     </AsyncBoundary>
                 ),

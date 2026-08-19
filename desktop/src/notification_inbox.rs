@@ -158,6 +158,20 @@ impl NotificationInboxStore {
         Ok(item.item.action)
     }
 
+    fn mark_all_read(&mut self, read_at: i64) -> bool {
+        let mut changed = false;
+        for stored in &mut self.items {
+            if stored.item.read_at.is_none() {
+                stored.item.read_at = Some(read_at);
+                changed = true;
+            }
+        }
+        if changed {
+            self.revision = self.revision.saturating_add(1);
+        }
+        changed
+    }
+
     fn load_from(path: &Path) -> Result<Self, String> {
         let data = match fs::read(path) {
             Ok(data) => data,
@@ -308,6 +322,27 @@ impl NotificationInboxService {
         id: &str,
     ) -> Result<NotificationInboxSnapshot, String> {
         self.mark_read(app, id).map(|(snapshot, _)| snapshot)
+    }
+
+    pub(crate) fn mark_all_read(&self, app: &tauri::AppHandle) -> Result<NotificationInboxSnapshot, String> {
+        let path = self.path.as_deref().ok_or_else(writes_disabled_error)?;
+        let mut store = self
+            .store
+            .lock()
+            .map_err(|_| "알림함 잠금이 손상되었습니다.".to_string())?;
+        let mut next = store.clone();
+        let previous_revision = next.revision;
+        if next.mark_all_read(Utc::now().timestamp_millis()) {
+            next.save_to(path)?;
+            *store = next;
+        }
+        let snapshot = store.snapshot();
+        drop(store);
+
+        if snapshot.revision != previous_revision {
+            self.publish_if_current(app, &snapshot);
+        }
+        Ok(snapshot)
     }
 
     pub fn activate(&self, app: &tauri::AppHandle, id: &str) -> Result<NotificationInboxSnapshot, String> {
@@ -684,6 +719,28 @@ mod tests {
 
         assert_eq!(store.mark_read(&id, 3_000).unwrap(), Some(NotificationAction::Laundry));
         assert_eq!(store.snapshot(), first);
+    }
+
+    #[test]
+    fn 전체_읽음_처리는_새_알림만_같은_시각으로_갱신하고_revision을_한_번만_올린다() {
+        let mut store = NotificationInboxStore::default();
+        let (first_id, _, _) = push(&mut store, "first", "첫 번째", None, None, 1_000);
+        push(&mut store, "second", "두 번째", None, None, 1_100);
+        push(&mut store, "third", "세 번째", None, None, 1_200);
+        store.mark_read(&first_id, 1_500).unwrap();
+        let revision = store.revision;
+
+        assert!(store.mark_all_read(2_000));
+        let snapshot = store.snapshot();
+        assert_eq!(snapshot.unread_count, 0);
+        assert_eq!(snapshot.revision, revision + 1);
+        assert_eq!(
+            snapshot.items.iter().map(|item| item.read_at).collect::<Vec<_>>(),
+            vec![Some(2_000), Some(2_000), Some(1_500)]
+        );
+
+        assert!(!store.mark_all_read(3_000));
+        assert_eq!(store.snapshot(), snapshot);
     }
 
     #[test]

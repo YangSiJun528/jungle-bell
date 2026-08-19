@@ -20,7 +20,7 @@ test('HTML 문서는 레이아웃을 복제하지 않고 React 셸을 위한 단
 test('모든 기능 경로는 하나의 DashboardShell과 main 콘텐츠 영역을 재사용한다', () => {
     assert.equal((app.match(/<DashboardShell\b/g) ?? []).length, 1);
     assert.equal((app.match(/<Outlet\b/g) ?? []).length, 1);
-    assert.match(app, /<DashboardShell[\s\S]*notificationPanel=\{\{[\s\S]*<NotificationPanelContent[\s\S]*seenMobileIds=\{seenMobileIds\}[\s\S]*onMobileNotificationSeen=\{markMobileNotificationSeen\}[\s\S]*\/>[\s\S]*<DashboardRouteRuntimeProvider[\s\S]*<Outlet\/>[\s\S]*<\/DashboardShell>/);
+    assert.match(app, /<DashboardShell[\s\S]*notificationPanel=\{\{[\s\S]*<NotificationPanelContent[\s\S]*seenMobileIds=\{seenMobileIds\}[\s\S]*onMobileNotificationsSeen=\{markMobileNotificationsSeen\}[\s\S]*\/>[\s\S]*<DashboardRouteRuntimeProvider[\s\S]*<Outlet\/>[\s\S]*<\/DashboardShell>/);
 
     assert.equal((shell.match(/<Sidebar\b/g) ?? []).length, 1);
     assert.equal((shell.match(/<header\b/g) ?? []).length, 0);

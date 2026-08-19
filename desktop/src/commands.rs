@@ -452,6 +452,17 @@ pub fn mark_notification_read(
     inbox.mark_read_without_activation(&app, &id)
 }
 
+/// 대시보드 알림 패널의 새 알림을 한 번에 읽음 처리한다.
+#[tauri::command]
+pub fn mark_all_notifications_read(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    inbox: tauri::State<'_, Arc<NotificationInboxService>>,
+) -> Result<NotificationInboxSnapshot, String> {
+    ensure_notification_reader_window(&window)?;
+    inbox.mark_all_read(&app)
+}
+
 fn ensure_notification_reader_window(window: &tauri::WebviewWindow) -> Result<(), String> {
     remote_sync::ensure_dashboard_window(window)
 }

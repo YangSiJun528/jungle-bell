@@ -15,6 +15,7 @@
     "allow-refresh-platform-sync",
     "allow-get-notification-inbox-snapshot",
     "allow-mark-notification-read",
+    "allow-mark-all-notifications-read",
     "allow-activate-notification",
     "allow-send-test-notification"
   ]

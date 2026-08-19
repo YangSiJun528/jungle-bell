@@ -8,6 +8,7 @@ const APP_COMMANDS: &[&str] = &[
     "open_log_folder",
     "get_notification_inbox_snapshot",
     "mark_notification_read",
+    "mark_all_notifications_read",
     "activate_notification",
     "send_test_notification",
     "get_connected_service_status",

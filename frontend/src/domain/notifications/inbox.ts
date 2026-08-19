@@ -32,6 +32,18 @@ export function markNotificationInboxItemRead(
     };
 }
 
+export function markAllNotificationInboxItemsRead(
+    snapshot: NotificationInboxSnapshot,
+    readAt: number,
+): NotificationInboxSnapshot {
+    if (snapshot.unreadCount === 0) return snapshot;
+    return {
+        ...snapshot,
+        unreadCount: 0,
+        items: snapshot.items.map((item) => item.readAt === null ? {...item, readAt} : item),
+    };
+}
+
 const MAX_TIMESTAMP = 8_640_000_000_000_000;
 const MAX_NOTIFICATION_ITEMS = 100;
 

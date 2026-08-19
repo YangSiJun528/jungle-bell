@@ -53,6 +53,7 @@ function unsupportedNativeBridge(): NativeBridge {
         openLmsLogin: unsupported('lmsWindow'),
         getNotificationInboxSnapshot: unsupported('localNotifications'),
         markNotificationRead: unsupported('localNotifications'),
+        markAllNotificationsRead: unsupported('localNotifications'),
         activateNotification: unsupported('localNotifications'),
         sendTestNotification: unsupported('localNotifications'),
     };
