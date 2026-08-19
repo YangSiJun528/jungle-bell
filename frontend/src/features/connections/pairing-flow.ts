@@ -18,6 +18,17 @@ export interface PairingStartGate {
     automaticHandled: boolean;
 }
 
+export type CompanionCompletionPath = '/connections' | '/home' | null;
+
+export async function finishCompanionPairing(options: {
+    completionPath: CompanionCompletionPath;
+    navigate(path: Exclude<CompanionCompletionPath, null>): Promise<unknown>;
+    refreshSession(): Promise<unknown>;
+}): Promise<void> {
+    if (options.completionPath) await options.navigate(options.completionPath);
+    await options.refreshSession();
+}
+
 export function tryReservePairingStart(gate: PairingStartGate): boolean {
     if (gate.inFlight) return false;
     gate.inFlight = true;

@@ -86,9 +86,11 @@ export function personalAccessState(
 ): PersonalAccessState {
     if (authentication === 'none') return {status: 'not-applicable'};
     if (authentication === 'cookie') {
+        if (browser.data !== undefined) {
+            return {status: browser.data ? 'connected' : 'unconnected'};
+        }
         if (browser.isError) return {status: 'error'};
-        if (browser.isPending && browser.data === undefined) return {status: 'checking'};
-        return {status: browser.data ? 'connected' : 'unconnected'};
+        return {status: 'checking'};
     }
     if (desktop.lmsAuthentication === 'checking' || desktop.serverSession === 'checking') {
         return {status: 'checking'};

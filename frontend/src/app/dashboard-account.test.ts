@@ -96,7 +96,12 @@ describe('dashboard account status', () => {
             data: null,
             isPending: false,
             isError: true,
-        }), {status: 'error'});
+        }), {status: 'unconnected'});
+        assert.deepEqual(personalAccessState('cookie', desktop, {
+            data: {authenticated: true, expiresAt: '2026-08-14T00:00:00.000Z'},
+            isPending: false,
+            isError: true,
+        }), {status: 'connected'});
         assert.deepEqual(personalAccessState('desktop-session', desktop, {
             data: undefined,
             isPending: false,

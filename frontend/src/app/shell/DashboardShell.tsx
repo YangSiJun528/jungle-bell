@@ -56,7 +56,6 @@ export interface DashboardShellProps {
     activeRoute: DashboardRoute;
     navigate: (route: DashboardRoute) => void;
     unreadCount: number;
-    accountNotice?: ReactNode;
     notificationPanel?: {
         open: boolean;
         onOpenChange: (open: boolean) => void;
@@ -332,7 +331,6 @@ export function DashboardShell({
     activeRoute,
     navigate,
     unreadCount,
-    accountNotice,
     notificationPanel,
     children,
 }: DashboardShellProps) {
@@ -434,7 +432,6 @@ export function DashboardShell({
                     notificationAriaLabel={notificationAriaLabel}
                 />
                 <div className="mx-auto w-full max-w-6xl p-3 sm:p-4 md:p-5 lg:p-6">
-                    {accountNotice}
                     {children}
                 </div>
                 <DashboardFooter/>

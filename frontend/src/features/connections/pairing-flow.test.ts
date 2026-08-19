@@ -1,12 +1,23 @@
 import {describe, expect, test, vi} from 'vitest';
 import {
     automaticPairingAction,
+    finishCompanionPairing,
     releasePairingStart,
     tryReservePairingStart,
     waitForPairingCompletion,
 } from './pairing-flow';
 
 describe('mobile pairing flow', () => {
+    test('루트 게이트의 연결 완료는 현재 URL을 유지한 채 세션만 다시 확인한다', async () => {
+        const navigate = vi.fn().mockResolvedValue(undefined);
+        const refreshSession = vi.fn().mockResolvedValue(undefined);
+
+        await finishCompanionPairing({completionPath: null, navigate, refreshSession});
+
+        expect(navigate).not.toHaveBeenCalled();
+        expect(refreshSession).toHaveBeenCalledOnce();
+    });
+
     test('일시적인 네트워크 오류 뒤 완료를 계속 확인한다', async () => {
         const complete = vi.fn()
             .mockRejectedValueOnce(new Error('NETWORK_ERROR'))

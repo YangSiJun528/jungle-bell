@@ -58,9 +58,11 @@ import {readInitialPairingEntry} from '@/app/pairing-bootstrap';
 import {desktopConnectionUiState} from './desktop-connection-state';
 import {
     automaticPairingAction,
+    finishCompanionPairing,
     releasePairingStart,
     tryReservePairingStart,
     waitForPairingCompletion,
+    type CompanionCompletionPath,
 } from './pairing-flow';
 import {ServiceSettings} from './service-settings';
 
@@ -328,7 +330,7 @@ function DesktopConnections() {
 }
 
 export function CompanionConnections({completionPath = '/connections'}: {
-    completionPath?: '/connections' | '/home';
+    completionPath?: CompanionCompletionPath;
 }) {
     const {api} = useDashboardEnvironment();
     const account = useDashboardAccount();
@@ -384,8 +386,11 @@ export function CompanionConnections({completionPath = '/connections'}: {
         },
         onSuccess: async () => {
             setMessage('연결이 완료됐습니다.');
-            await navigate({to: completionPath, replace: true});
-            await refreshBrowserPersonalQueries(client);
+            await finishCompanionPairing({
+                completionPath,
+                navigate: (path) => navigate({to: path, replace: true}),
+                refreshSession: () => refreshBrowserPersonalQueries(client),
+            });
         },
         onError: () => {
             const storage = pairingSessionStorage();

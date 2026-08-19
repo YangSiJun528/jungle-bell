@@ -12,7 +12,6 @@ import {
     dashboardRoutePath,
     type DashboardRoute,
 } from './routes';
-import {DashboardAccountNotice} from './dashboard-account-notice';
 import {
     mergeSeenMobileNotificationIds,
     readSeenMobileNotificationIds,
@@ -23,12 +22,26 @@ import {
     type DashboardContentRoute,
 } from './notification-panel-route';
 import {DashboardRouteRuntimeProvider} from './dashboard-route-runtime';
-import {PwaConnectionGate} from './pwa-connection-gate';
+import {PlatformAuthenticationGate} from './platform-authentication-gate';
 
 const NotificationPanelContent = lazy(() => import('@/features/notifications/notifications-page').then((module) => ({default: module.NotificationPanelContent})));
 const CompanionConnections = lazy(() => import('@/features/connections/connections-page').then((module) => ({default: module.CompanionConnections})));
 
 export function DashboardApp() {
+    return (
+        <PlatformAuthenticationGate
+            connectionContent={(
+                <AsyncBoundary fallback={<LoadingState label="연결 화면을 준비하고 있습니다."/>}>
+                    <CompanionConnections completionPath={null}/>
+                </AsyncBoundary>
+            )}
+        >
+            <DashboardContent/>
+        </PlatformAuthenticationGate>
+    );
+}
+
+function DashboardContent() {
     const {platform} = useDashboardEnvironment();
     const pathname = useRouterState({select: (state) => state.location.pathname});
     const routerNavigate = useNavigate();
@@ -84,45 +97,36 @@ export function DashboardApp() {
     }, [notifications.data, seenMobileIds]);
 
     return (
-        <PwaConnectionGate
-            connectionContent={(
-                <AsyncBoundary fallback={<LoadingState label="연결 화면을 준비하고 있습니다."/>}>
-                    <CompanionConnections completionPath="/home"/>
-                </AsyncBoundary>
-            )}
-        >
-            <DashboardShell
-                platform={platform.kind}
-                activeRoute={contentRoute}
-                navigate={navigate}
-                unreadCount={unreadCount}
-                accountNotice={<DashboardAccountNotice/>}
-                notificationPanel={{
-                    open: notificationPanelOpen,
-                    onOpenChange: (open) => {
-                        setNotificationPanelRequestedOpen(open);
-                        if (!open && route === 'notifications') navigate(contentRoute, true);
-                    },
-                    content: (
-                        <AsyncBoundary
-                            errorTitle="알림함을 불러오지 못했습니다."
-                            resetKeys={[notificationPanelOpen]}
-                        >
-                            <NotificationPanelContent
-                                seenMobileIds={seenMobileIds}
-                                onMobileNotificationSeen={markMobileNotificationSeen}
-                            />
-                        </AsyncBoundary>
-                    ),
-                }}
-            >
-                <DashboardRouteRuntimeProvider value={{contentRoute, openInstallPrompt}}>
-                    <AsyncBoundary resetKeys={[contentRoute]}>
-                        <Outlet/>
+        <DashboardShell
+            platform={platform.kind}
+            activeRoute={contentRoute}
+            navigate={navigate}
+            unreadCount={unreadCount}
+            notificationPanel={{
+                open: notificationPanelOpen,
+                onOpenChange: (open) => {
+                    setNotificationPanelRequestedOpen(open);
+                    if (!open && route === 'notifications') navigate(contentRoute, true);
+                },
+                content: (
+                    <AsyncBoundary
+                        errorTitle="알림함을 불러오지 못했습니다."
+                        resetKeys={[notificationPanelOpen]}
+                    >
+                        <NotificationPanelContent
+                            seenMobileIds={seenMobileIds}
+                            onMobileNotificationSeen={markMobileNotificationSeen}
+                        />
                     </AsyncBoundary>
-                </DashboardRouteRuntimeProvider>
-                <InstallPrompt open={installPromptOpen} onOpenChange={setInstallPromptVisibility}/>
-            </DashboardShell>
-        </PwaConnectionGate>
+                ),
+            }}
+        >
+            <DashboardRouteRuntimeProvider value={{contentRoute, openInstallPrompt}}>
+                <AsyncBoundary resetKeys={[contentRoute]}>
+                    <Outlet/>
+                </AsyncBoundary>
+            </DashboardRouteRuntimeProvider>
+            <InstallPrompt open={installPromptOpen} onOpenChange={setInstallPromptVisibility}/>
+        </DashboardShell>
     );
 }
