@@ -8,6 +8,7 @@ import app.junglebell.server.domain.pairing.JdbcPairingStore
 import app.junglebell.server.domain.pairing.PairingRecord
 import app.junglebell.server.domain.personal.AttendancePreferences
 import app.junglebell.server.domain.personal.JdbcPersonalStore
+import app.junglebell.server.domain.personal.LaundryWatch
 import app.junglebell.server.domain.personal.MealPreferencesInput
 import app.junglebell.server.domain.security.JdbcAuthStore
 import app.junglebell.server.domain.security.SessionKind
@@ -50,6 +51,31 @@ class JdbcStoreIntegrationTest {
         assertEquals(
             app.junglebell.server.domain.personal.MealPreferences(false, true, false, 2_000),
             store.saveMeal(userId, MealPreferencesInput(false, true, false), 2_000),
+        )
+    }
+
+    @Test
+    fun `laundry notification mode is shared by personal and automation stores`() {
+        val userId = createUser()
+        val watch = LaundryWatch(
+            id = "jbw_${"a".repeat(64)}",
+            machineId = "워시타워_1",
+            appliance = "washer",
+            sessionId = "session-1",
+            notificationMode = "estimated-completion",
+            notifyBeforeMinutes = 0,
+            status = "active",
+            createdAtEpochMs = 1_000,
+            updatedAtEpochMs = 1_000,
+        )
+
+        val personalStore = JdbcPersonalStore(jdbc)
+        assertTrue(personalStore.createWatch(userId, watch))
+        assertEquals(listOf(watch), personalStore.watches(userId))
+        assertEquals(
+            "estimated-completion",
+            JdbcAutomationStore(jdbc).activeLaundryWatches()
+                .single { it.id == watch.id }.notificationMode,
         )
     }
 

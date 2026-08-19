@@ -252,12 +252,25 @@ CREATE TABLE IF NOT EXISTS laundry_watch (
     machine_id text NOT NULL CHECK (length(machine_id) BETWEEN 1 AND 128),
     appliance text NOT NULL CHECK (appliance IN ('washer', 'dryer')),
     session_id text,
+    notification_mode text NOT NULL DEFAULT 'confirmed-completion'
+        CHECK (notification_mode IN ('before-completion', 'estimated-completion', 'confirmed-completion')),
     notify_before_minutes integer NOT NULL CHECK (notify_before_minutes BETWEEN 0 AND 180),
     notify_when_available boolean NOT NULL,
     status text NOT NULL CHECK (status IN ('active', 'completed', 'cancelled')),
     created_at_epoch_ms bigint NOT NULL,
     updated_at_epoch_ms bigint NOT NULL CHECK (updated_at_epoch_ms >= created_at_epoch_ms)
 );
+
+ALTER TABLE laundry_watch
+    ADD COLUMN IF NOT EXISTS notification_mode text NOT NULL DEFAULT 'confirmed-completion'
+    CHECK (notification_mode IN ('before-completion', 'estimated-completion', 'confirmed-completion'));
+
+UPDATE laundry_watch
+SET notification_mode = 'before-completion'
+WHERE notification_mode = 'confirmed-completion'
+  AND session_id IS NOT NULL
+  AND notify_before_minutes > 0
+  AND notify_when_available;
 
 CREATE INDEX IF NOT EXISTS laundry_watch_user_history
     ON laundry_watch (user_id, created_at_epoch_ms DESC, id);

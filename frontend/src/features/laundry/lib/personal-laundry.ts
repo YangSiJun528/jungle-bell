@@ -1,6 +1,8 @@
 import type {
     LaundryApplianceKind,
+    LaundryNotificationMode,
     LaundryWatch,
+    LaundryWatchInput,
 } from '@/api/personal-api';
 
 export interface LaundryTarget {
@@ -42,15 +44,12 @@ export function laundryTargets(machines: readonly PersonalLaundryMachine[]): Lau
             const sessionId = active && typeof state.sessionId === 'string' ? state.sessionId : null;
             const remaining = state.projection?.remainingMinutes ?? state.remainingMinutes;
             const remainingLabel = active && Number.isFinite(remaining) ? ` · ${Math.max(0, Math.ceil(remaining!))}분 남음` : '';
-            const condition = active
-                ? '종료 10분 전·완료·사용 가능 전환'
-                : '다음 사용 가능 전환';
             targets.push({
                 key: `${machine.id}:${appliance}`,
                 machineId: machine.id,
                 appliance,
                 sessionId,
-                label: `${machineLabel(machine.id)} · ${applianceLabel(appliance)}${remainingLabel} · ${condition} 알림`,
+                label: `${machineLabel(machine.id)} · ${applianceLabel(appliance)}${remainingLabel}`,
             });
         }
     }
@@ -64,19 +63,33 @@ export function hasDuplicateActiveWatch(
     return watches.some((watch) => watch.status === 'active'
         && watch.machineId === target.machineId
         && watch.appliance === target.appliance
-        && (target.sessionId === null
-            ? watch.sessionId === null && watch.notifyWhenAvailable
-            : watch.sessionId === target.sessionId));
+        && watch.sessionId === target.sessionId);
 }
 
 export function watchConditionLabel(watch: LaundryWatch): string {
-    if (watch.sessionId === null) {
-        return watch.notifyWhenAvailable ? '다음 사용 가능 전환 알림' : '사용 가능 알림 꺼짐';
+    switch (watch.notificationMode) {
+        case 'before-completion':
+            return `${watch.notifyBeforeMinutes}분 남았을 때 알림`;
+        case 'estimated-completion':
+            return '완료 예상 시점 알림';
+        case 'confirmed-completion':
+            return '완료 확정 시점 알림';
     }
-    const before = watch.notifyBeforeMinutes > 0
-        ? `이 동작 종료 ${watch.notifyBeforeMinutes}분 전·완료`
-        : '이 동작 완료';
-    return watch.notifyWhenAvailable ? `${before}·사용 가능 전환 알림` : `${before} 알림`;
+}
+
+export function buildLaundryWatchInput(
+    target: LaundryTarget,
+    notificationMode: LaundryNotificationMode,
+    notifyBeforeMinutes: number,
+): LaundryWatchInput {
+    if (target.sessionId === null) throw new Error('LAUNDRY_SESSION_REQUIRED');
+    return {
+        machineId: target.machineId,
+        appliance: target.appliance,
+        sessionId: target.sessionId,
+        notificationMode,
+        notifyBeforeMinutes: notificationMode === 'before-completion' ? notifyBeforeMinutes : 0,
+    };
 }
 
 export function applianceLabel(appliance: LaundryApplianceKind): string {

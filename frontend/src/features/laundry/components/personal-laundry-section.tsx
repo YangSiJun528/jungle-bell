@@ -26,6 +26,8 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import {Input} from '@/components/ui/input';
+import {Label} from '@/components/ui/label';
 import {
     Select,
     SelectContent,
@@ -35,11 +37,14 @@ import {
 } from '@/components/ui/select';
 import type {
     DashboardLaundrySnapshot,
+    LaundryApplianceKind,
+    LaundryNotificationMode,
     LaundryWatch,
 } from '@/api/dashboard-api';
 import {accountAuthenticationRequired} from '@/api/account-authentication';
 import {
     applianceLabel,
+    buildLaundryWatchInput,
     hasDuplicateActiveWatch,
     laundryTargets,
     machineLabel,
@@ -56,11 +61,16 @@ interface LaundryWatchCardProps {
     adding: boolean;
     busy: boolean;
     loading: boolean;
+    notificationMode: LaundryNotificationMode;
+    notifyBeforeMinutes: number;
     selectedTarget: LaundryTarget | null;
     targets: readonly LaundryTarget[];
     onAdd: () => void;
+    onApplianceChange: (appliance: LaundryApplianceKind) => void;
+    onMachineChange: (machineId: string) => void;
+    onModeChange: (mode: LaundryNotificationMode) => void;
+    onNotifyBeforeMinutesChange: (value: number) => void;
     onRemove: (id: string) => void;
-    onTargetChange: (key: string) => void;
 }
 
 function LaundryWatchCard({
@@ -68,12 +78,20 @@ function LaundryWatchCard({
     adding,
     busy,
     loading,
+    notificationMode,
+    notifyBeforeMinutes,
     selectedTarget,
     targets,
     onAdd,
+    onApplianceChange,
+    onMachineChange,
+    onModeChange,
+    onNotifyBeforeMinutesChange,
     onRemove,
-    onTargetChange,
 }: LaundryWatchCardProps) {
+    const machineIds = [...new Set(targets.map((target) => target.machineId))];
+    const applianceTargets = targets.filter((target) => target.machineId === selectedTarget?.machineId);
+    const sessionUnavailable = selectedTarget?.sessionId === null;
     return (
         <Card className="min-w-0 gap-4">
             <CardHeader>
@@ -81,7 +99,7 @@ function LaundryWatchCard({
                     <Bell className="size-4 text-primary"/>
                     내 세탁 알림
                 </CardTitle>
-                <CardDescription>동작 종료 10분 전, 완료 또는 다음 사용 가능 시 알려드려요.</CardDescription>
+                <CardDescription>워시타워와 기기, 알림 시점을 선택해 한 가지 조건만 설정합니다.</CardDescription>
             </CardHeader>
             <CardContent className="min-w-0 space-y-4">
                 {loading ? (
@@ -91,27 +109,111 @@ function LaundryWatchCard({
                         {targets.length > 0 ? (
                             <div
                                 data-laundry-watch-controls="true"
-                                className="flex min-w-0 flex-col gap-2 sm:flex-row"
+                                className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3"
                             >
-                                <Select
-                                    value={selectedTarget?.key ?? ''}
-                                    onValueChange={onTargetChange}
-                                >
-                                    <SelectTrigger className="min-w-0 w-full sm:flex-1">
-                                        <SelectValue placeholder="알림 대상을 선택하세요"/>
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {targets.map((target) => (
-                                            <SelectItem key={target.key} value={target.key}>
-                                                {target.label}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                                <div className="min-w-0 space-y-2">
+                                    <Label>워시타워 번호</Label>
+                                    <Select
+                                        value={selectedTarget?.machineId ?? ''}
+                                        onValueChange={onMachineChange}
+                                    >
+                                        <SelectTrigger
+                                            aria-label="워시타워 번호"
+                                            className="min-w-0 w-full"
+                                            data-laundry-watch-machine="true"
+                                        >
+                                            <SelectValue placeholder="워시타워 선택"/>
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {machineIds.map((machineId) => (
+                                                <SelectItem key={machineId} value={machineId}>
+                                                    {machineLabel(machineId)}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="min-w-0 space-y-2">
+                                    <Label>세탁기 또는 건조기</Label>
+                                    <Select
+                                        value={selectedTarget?.appliance ?? ''}
+                                        onValueChange={(value) => onApplianceChange(value as LaundryApplianceKind)}
+                                    >
+                                        <SelectTrigger
+                                            aria-label="세탁기 또는 건조기"
+                                            className="min-w-0 w-full"
+                                            data-laundry-watch-appliance="true"
+                                        >
+                                            <SelectValue placeholder="기기 선택"/>
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {applianceTargets.map((target) => (
+                                                <SelectItem key={target.appliance} value={target.appliance}>
+                                                    {applianceLabel(target.appliance)}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="min-w-0 space-y-2">
+                                    <Label>알림 시점</Label>
+                                    <Select
+                                        value={notificationMode}
+                                        onValueChange={(value) => onModeChange(value as LaundryNotificationMode)}
+                                    >
+                                        <SelectTrigger
+                                            aria-label="알림 시점"
+                                            className="min-w-0 w-full"
+                                            data-laundry-watch-mode="true"
+                                        >
+                                            <SelectValue/>
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="before-completion">N분 남았을 때</SelectItem>
+                                            <SelectItem value="estimated-completion">완료 예상</SelectItem>
+                                            <SelectItem value="confirmed-completion">완료 확정</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                        ) : (
+                            <p className="rounded-lg bg-muted/50 p-4 text-sm text-muted-foreground">
+                                기기 상태가 확인되면 알림 대상을 선택할 수 있습니다.
+                            </p>
+                        )}
+
+                        {targets.length > 0 ? (
+                            <div className="flex min-w-0 flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-end">
+                                {notificationMode === 'before-completion' ? (
+                                    <div className="min-w-0 flex-1 space-y-2">
+                                        <Label htmlFor="laundry-notify-before-minutes">남은 시간(분)</Label>
+                                        <Input
+                                            id="laundry-notify-before-minutes"
+                                            inputMode="numeric"
+                                            max={180}
+                                            min={1}
+                                            type="number"
+                                            value={notifyBeforeMinutes}
+                                            onChange={(event) => {
+                                                const value = Number(event.target.value);
+                                                if (Number.isInteger(value)) onNotifyBeforeMinutesChange(value);
+                                            }}
+                                        />
+                                    </div>
+                                ) : (
+                                    <p className="min-w-0 flex-1 text-sm text-muted-foreground">
+                                        {notificationMode === 'estimated-completion'
+                                            ? '예상 종료 시각에 알립니다.'
+                                            : '기기에서 완료가 확인되면 알립니다.'}
+                                    </p>
+                                )}
                                 <Button
                                     data-laundry-watch-add="true"
-                                    className="shrink-0"
+                                    className="w-full shrink-0 sm:w-auto"
                                     disabled={!selectedTarget
+                                        || sessionUnavailable
+                                        || (notificationMode === 'before-completion'
+                                            && (notifyBeforeMinutes < 1 || notifyBeforeMinutes > 180))
                                         || busy
                                         || hasDuplicateActiveWatch(activeWatches, selectedTarget)}
                                     onClick={onAdd}
@@ -119,14 +221,19 @@ function LaundryWatchCard({
                                     {adding
                                         ? <LoaderCircle className="animate-spin"/>
                                         : <BellPlus/>}
-                                    알림 추가
+                                    알림 확정
                                 </Button>
                             </div>
-                        ) : (
-                            <p className="rounded-lg bg-muted/50 p-4 text-sm text-muted-foreground">
-                                기기 상태가 확인되면 알림 대상을 선택할 수 있습니다.
+                        ) : null}
+
+                        {sessionUnavailable ? (
+                            <p className="text-sm text-muted-foreground">
+                                현재 동작 중인 기기만 알림을 설정할 수 있습니다.
                             </p>
-                        )}
+                        ) : null}
+                        <p className="text-xs text-muted-foreground">
+                            알림 시점: N분 남음, 완료 예상, 완료 확정
+                        </p>
 
                         {activeWatches.length > 0 ? (
                             <ul className="divide-y rounded-lg border">
@@ -171,7 +278,10 @@ function AuthenticatedPersonalLaundrySection({
     const attendance = useAttendanceQuery();
     const refreshAttendance = useRefreshAttendanceMutation();
     const client = useQueryClient();
-    const [selectedTargetKey, setSelectedTargetKey] = useState('');
+    const [selectedMachineId, setSelectedMachineId] = useState('');
+    const [selectedAppliance, setSelectedAppliance] = useState<LaundryApplianceKind>('washer');
+    const [notificationMode, setNotificationMode] = useState<LaundryNotificationMode>('before-completion');
+    const [notifyBeforeMinutes, setNotifyBeforeMinutes] = useState(10);
     const attendanceReady = attendance.data?.state === 'loaded'
         && attendance.data.attendance.status === 'available';
 
@@ -190,15 +300,9 @@ function AuthenticatedPersonalLaundrySection({
         if (!attendanceReady) throw new Error('PERSONAL_ACCOUNT_REQUIRED');
     };
     const addWatch = useMutation({
-        mutationFn: (target: LaundryTarget) => {
+        mutationFn: (input: ReturnType<typeof buildLaundryWatchInput>) => {
             assertPersonalAccess();
-            return api.createLaundryWatch({
-                machineId: target.machineId,
-                appliance: target.appliance,
-                sessionId: target.sessionId,
-                notifyBeforeMinutes: target.sessionId === null ? 0 : 10,
-                notifyWhenAvailable: true,
-            });
+            return api.createLaundryWatch(input);
         },
         onSuccess: invalidateWatches,
     });
@@ -215,9 +319,14 @@ function AuthenticatedPersonalLaundrySection({
         washer: machine.washer ? {...machine.washer, appliance: 'washer' as const} : null,
         dryer: machine.dryer ? {...machine.dryer, appliance: 'dryer' as const} : null,
     })));
-    const selectedTarget = targets.find((target) => target.key === selectedTargetKey)
-        ?? targets[0]
-        ?? null;
+    const effectiveMachineId = targets.some((target) => target.machineId === selectedMachineId)
+        ? selectedMachineId
+        : (targets[0]?.machineId ?? '');
+    const targetsForMachine = targets.filter((target) => target.machineId === effectiveMachineId);
+    const effectiveAppliance = targetsForMachine.some((target) => target.appliance === selectedAppliance)
+        ? selectedAppliance
+        : (targetsForMachine[0]?.appliance ?? 'washer');
+    const selectedTarget = targetsForMachine.find((target) => target.appliance === effectiveAppliance) ?? null;
     const activeWatches = (watches.data ?? []).filter((watch) => watch.status === 'active');
     const personalBusy = addWatch.isPending || removeWatch.isPending;
     const personalError = watches.error
@@ -283,11 +392,18 @@ function AuthenticatedPersonalLaundrySection({
                 adding={addWatch.isPending}
                 busy={personalBusy}
                 loading={watches.isPending}
+                notificationMode={notificationMode}
+                notifyBeforeMinutes={notifyBeforeMinutes}
                 selectedTarget={selectedTarget}
                 targets={targets}
-                onAdd={() => selectedTarget && addWatch.mutate(selectedTarget)}
+                onAdd={() => selectedTarget && addWatch.mutate(
+                    buildLaundryWatchInput(selectedTarget, notificationMode, notifyBeforeMinutes),
+                )}
+                onApplianceChange={setSelectedAppliance}
+                onMachineChange={setSelectedMachineId}
+                onModeChange={setNotificationMode}
+                onNotifyBeforeMinutesChange={setNotifyBeforeMinutes}
                 onRemove={(id) => removeWatch.mutate(id)}
-                onTargetChange={setSelectedTargetKey}
             />
 
             {personalError ? (

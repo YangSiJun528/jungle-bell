@@ -529,6 +529,25 @@ test('모바일 알림의 위조된 경로나 ISO 문자열 시간은 거부한�
     }
 });
 
+test('완료 예상 세탁 알림 종류를 알림함 응답으로 허용한다', async () => {
+    const notification = {
+        id: '13fdbe73-d8d0-46a4-9fb5-85026f7162fe',
+        kind: 'laundry-completion-expected',
+        title: '세탁 완료 예상',
+        body: '1번 세탁기의 예상 종료 시각입니다.',
+        path: '/#/laundry',
+        createdAtEpochMs: 1_785_727_000_000,
+        expiresAtEpochMs: 1_785_727_600_000,
+        attempt: 1,
+    };
+    const api = createDashboardApi({
+        fetcher: async () => jsonResponse({notifications: [notification]}),
+        invokeCommand: async () => undefined,
+    });
+
+    assert.deepEqual(await api.getNotifications(), [notification]);
+});
+
 test('개인 API는 HttpOnly 쿠키·no-store를 강제하고 Authorization을 만들지 않는다', async () => {
     const calls: Array<{url: string; init?: RequestInit}> = [];
     const api = createDashboardApi({
@@ -984,8 +1003,8 @@ const laundryWatch = {
     machineId: '워시타워_1',
     appliance: 'washer' as const,
     sessionId: 'session-1',
+    notificationMode: 'before-completion' as const,
     notifyBeforeMinutes: 10,
-    notifyWhenAvailable: true,
     status: 'active' as const,
     createdAtEpochMs: 1_785_727_000_000,
     updatedAtEpochMs: 1_785_727_000_001,
@@ -1091,7 +1110,7 @@ test('데스크톱 개인 생활 설정은 desktop-ui HTTP namespace와 단기 b
     assert.deepEqual(await api.listLaundryWatches(), [laundryWatch]);
     assert.deepEqual(await api.createLaundryWatch({
         machineId: '워시타워_1', appliance: 'washer', sessionId: 'session-1',
-        notifyBeforeMinutes: 10, notifyWhenAvailable: true,
+        notificationMode: 'before-completion', notifyBeforeMinutes: 10,
     }), laundryWatch);
     await api.deleteLaundryWatch(laundryWatch.id);
     assert.deepEqual(commands, ['bootstrap_desktop_http_session']);
@@ -1104,6 +1123,13 @@ test('데스크톱 개인 생활 설정은 desktop-ui HTTP namespace와 단기 b
         '/api/me/laundry-watches',
         `/api/me/laundry-watches/${laundryWatch.id}`,
     ]);
+    assert.deepEqual(JSON.parse(String(requests[5]?.init?.body)), {
+        machineId: '워시타워_1',
+        appliance: 'washer',
+        sessionId: 'session-1',
+        notificationMode: 'before-completion',
+        notifyBeforeMinutes: 10,
+    });
     for (const {init} of requests) {
         assert.equal(init?.credentials, 'omit');
         assert.equal(new Headers(init?.headers).get('authorization'), `Bearer ${desktopHttpSession().accessToken}`);
@@ -1139,10 +1165,17 @@ test('PWA 개인 생활 설정은 mobile canonical API와 HttpOnly cookie만 사
     });
     await api.listLaundryWatches();
     await api.createLaundryWatch({
-        machineId: '워시타워_1', appliance: 'washer', sessionId: null,
-        notifyBeforeMinutes: 0, notifyWhenAvailable: true,
+        machineId: '워시타워_1', appliance: 'washer', sessionId: 'session-1',
+        notificationMode: 'confirmed-completion', notifyBeforeMinutes: 0,
     });
     await api.deleteLaundryWatch(laundryWatch.id);
+    assert.deepEqual(JSON.parse(String(calls[5]?.init?.body)), {
+        machineId: '워시타워_1',
+        appliance: 'washer',
+        sessionId: 'session-1',
+        notificationMode: 'confirmed-completion',
+        notifyBeforeMinutes: 0,
+    });
     assert.deepEqual(calls.map(({url, init}) => ({
         path: new URL(url).pathname,
         method: init?.method,

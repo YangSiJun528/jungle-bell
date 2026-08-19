@@ -88,8 +88,8 @@ class JdbcPersonalStore(private val jdbc: JdbcClient) : PersonalStore {
             row.getString("machine_id"),
             row.getString("appliance"),
             row.getString("session_id"),
+            row.getString("notification_mode"),
             row.getInt("notify_before_minutes"),
-            row.getBoolean("notify_when_available"),
             row.getString("status"),
             row.getLong("created_at_epoch_ms"),
             row.getLong("updated_at_epoch_ms"),
@@ -100,15 +100,15 @@ class JdbcPersonalStore(private val jdbc: JdbcClient) : PersonalStore {
             """
             INSERT INTO laundry_watch(
                 id, user_id, machine_id, appliance, session_id, notify_before_minutes,
-                notify_when_available, status, created_at_epoch_ms, updated_at_epoch_ms
+                notification_mode, notify_when_available, status, created_at_epoch_ms, updated_at_epoch_ms
             ) VALUES (:id, :userId, :machineId, :appliance, :sessionId,
-                :notifyBefore, :notifyAvailable, :status, :createdAt, :updatedAt)
+                :notifyBefore, :notificationMode, false, :status, :createdAt, :updatedAt)
             ON CONFLICT DO NOTHING
             RETURNING id
             """.trimIndent(),
         ).param("id", watch.id).param("userId", userId).param("machineId", watch.machineId)
             .param("appliance", watch.appliance).param("sessionId", watch.sessionId)
-            .param("notifyBefore", watch.notifyBeforeMinutes).param("notifyAvailable", watch.notifyWhenAvailable)
+            .param("notifyBefore", watch.notifyBeforeMinutes).param("notificationMode", watch.notificationMode)
         .param("status", watch.status).param("createdAt", watch.createdAtEpochMs)
         .param("updatedAt", watch.updatedAtEpochMs).query(String::class.java).optional().isPresent
 

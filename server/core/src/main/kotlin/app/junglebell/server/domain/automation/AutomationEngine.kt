@@ -136,7 +136,13 @@ class AutomationEngine(
         var created = 0
         for (watch in automation.activeLaundryWatches()) {
             val appliance = appliances["${watch.machineId}:${watch.appliance}"] ?: continue
-            val decision = laundryDecision(watch, appliance, now) ?: continue
+            val decision = laundryNotificationDecision(watch, appliance, now)
+            if (decision == null) {
+                if (laundryWatchShouldCompleteSilently(watch, appliance)) {
+                    automation.completeLaundryWatch(watch.id, now)
+                }
+                continue
+            }
             val inserted = notifications.createFromLaundryWatch(
                 decision.notification,
                 watch.id,
@@ -295,88 +301,6 @@ class AutomationEngine(
         return reference
     }
 
-    private fun laundryDecision(
-        watch: ActiveLaundryWatch,
-        appliance: LaundryAppliance,
-        now: Long,
-    ): LaundryDecision? {
-        val sessionMatches = watch.sessionId == null || watch.sessionId == appliance.sessionId
-        val machine = Regex("\\d+$").find(watch.machineId)?.value?.let { "${it}번" } ?: watch.machineId
-        val device = if (watch.appliance == "washer") "세탁기" else "건조기"
-        val action = if (watch.appliance == "washer") "세탁" else "건조"
-        val kind: String
-        val title: String
-        val body: String
-        val suffix: String
-        val complete: Boolean
-        when {
-            watch.notifyWhenAvailable && watch.sessionId == null && appliance.operationalStatus == "IDLE" -> {
-                kind = "laundry-available"
-                title = "$device 사용 가능"
-                body = "$machine $device\uB97C 사용할 수 있습니다."
-                suffix = "available:${appliance.observedAt}"
-                complete = true
-            }
-            sessionMatches && watch.sessionId != null && appliance.operationalStatus in setOf("COMPLETED", "IDLE") -> {
-                kind = "laundry-completed"
-                title = "$action 완료"
-                body = "$machine $device\uAC00 끝났습니다. 세탁물을 꺼내 주세요."
-                suffix = "terminal"
-                complete = true
-            }
-            sessionMatches && watch.sessionId != null && appliance.operationalStatus in setOf("ERROR", "PAUSED") -> {
-                kind = "laundry-attention"
-                title = "$action ${if (appliance.operationalStatus == "ERROR") "오류" else "일시 정지"}"
-                body = "$machine $device 상태를 확인해 주세요."
-                suffix = appliance.operationalStatus
-                complete = false
-            }
-            sessionMatches && watch.sessionId != null && appliance.operationalStatus == "RUNNING" &&
-                appliance.remainingMinutes in 1..watch.notifyBeforeMinutes -> {
-                kind = "laundry-finishing"
-                title = "$action 종료 ${watch.notifyBeforeMinutes}분 전"
-                body = "$machine $device\uAC00 곧 끝납니다."
-                suffix = watch.notifyBeforeMinutes.toString()
-                complete = false
-            }
-            watch.sessionId != null && appliance.sessionId != null && watch.sessionId != appliance.sessionId -> {
-                automation.completeLaundryWatch(watch.id, now)
-                return null
-            }
-            else -> return null
-        }
-        val id = UUID.randomUUID()
-        val expiresAt = now + if (kind == "laundry-finishing") Duration.ofHours(2).toMillis() else Duration.ofHours(6).toMillis()
-        val sourceEventId = "$kind:${watch.id}:${appliance.sessionId ?: "none"}:$suffix"
-        return LaundryDecision(
-            NotificationRecord(
-                id,
-                watch.userId,
-                sourceEventId,
-                kind,
-                title,
-                body,
-                "/#/laundry",
-                mapOf(
-                    "notificationId" to id.toString(),
-                    "kind" to kind,
-                    "title" to title,
-                    "body" to body,
-                    "path" to "/#/laundry",
-                    "machineId" to watch.machineId,
-                    "appliance" to watch.appliance,
-                    "sessionId" to appliance.sessionId,
-                    "createdAtEpochMs" to now,
-                    "expiresAtEpochMs" to expiresAt,
-                ),
-                now,
-                now,
-                expiresAt,
-            ),
-            complete,
-        )
-    }
-
     private inline fun runStage(name: String, operation: () -> Int) {
         runCatching(operation)
             .onSuccess { count -> if (count > 0) logger.info("{} created or delivered {} item(s)", name, count) }
@@ -393,4 +317,99 @@ data class AttendanceWindow(
     val endsAtEpochMs: Long,
 )
 
-private data class LaundryDecision(val notification: NotificationRecord, val completeWatch: Boolean)
+internal data class LaundryDecision(val notification: NotificationRecord, val completeWatch: Boolean)
+
+internal fun laundryNotificationDecision(
+    watch: ActiveLaundryWatch,
+    appliance: LaundryAppliance,
+    now: Long,
+): LaundryDecision? {
+    val terminal = appliance.operationalStatus in setOf("COMPLETED", "IDLE") ||
+        appliance.projection?.status == "CONFIRMED_COMPLETED"
+    val sessionMatches = watch.sessionId == appliance.sessionId || watch.sessionId == null && terminal
+    if (!sessionMatches) return null
+
+    val remainingMinutes = projectedRemainingMinutes(appliance, now)
+    val estimatedCompletionReached = appliance.projection?.status == "AWAITING_COMPLETION_CONFIRMATION" ||
+        appliance.operationalStatus == "RUNNING" && remainingMinutes == 0 || terminal
+    val machine = Regex("\\d+$").find(watch.machineId)?.value?.let { "${it}번" } ?: watch.machineId
+    val device = if (watch.appliance == "washer") "세탁기" else "건조기"
+    val action = if (watch.appliance == "washer") "세탁" else "건조"
+    val copy = when {
+        watch.notificationMode == "before-completion" &&
+            appliance.operationalStatus == "RUNNING" &&
+            remainingMinutes in 1..watch.notifyBeforeMinutes -> LaundryNotificationCopy(
+            kind = "laundry-finishing",
+            title = "$action 종료 ${watch.notifyBeforeMinutes}분 전",
+            body = "$machine $device\uAC00 곧 끝납니다.",
+        )
+        watch.notificationMode == "estimated-completion" && estimatedCompletionReached -> LaundryNotificationCopy(
+            kind = "laundry-completion-expected",
+            title = "$action 완료 예상",
+            body = "$machine $device\uC758 예상 종료 시각입니다. 실제 상태를 확인해 주세요.",
+        )
+        watch.notificationMode == "confirmed-completion" && terminal -> LaundryNotificationCopy(
+            kind = "laundry-completed",
+            title = "$action 완료 확정",
+            body = "$machine $device\uAC00 끝났습니다. 세탁물을 꺼내 주세요.",
+        )
+        else -> return null
+    }
+    val id = UUID.randomUUID()
+    val expiresAt = now + if (copy.kind == "laundry-completed") {
+        Duration.ofHours(6).toMillis()
+    } else {
+        Duration.ofHours(2).toMillis()
+    }
+    return LaundryDecision(
+        notification = NotificationRecord(
+            id = id,
+            userId = watch.userId,
+            sourceEventId = "${copy.kind}:${watch.id}:${watch.sessionId ?: "none"}:${watch.notificationMode}",
+            kind = copy.kind,
+            title = copy.title,
+            body = copy.body,
+            path = "/#/laundry",
+            payload = mapOf(
+                "notificationId" to id.toString(),
+                "kind" to copy.kind,
+                "title" to copy.title,
+                "body" to copy.body,
+                "path" to "/#/laundry",
+                "machineId" to watch.machineId,
+                "appliance" to watch.appliance,
+                "sessionId" to watch.sessionId,
+                "notificationMode" to watch.notificationMode,
+                "remainingMinutes" to remainingMinutes,
+                "createdAtEpochMs" to now,
+                "expiresAtEpochMs" to expiresAt,
+            ),
+            createdAtEpochMs = now,
+            dueAtEpochMs = now,
+            expiresAtEpochMs = expiresAt,
+        ),
+        completeWatch = true,
+    )
+}
+
+private data class LaundryNotificationCopy(val kind: String, val title: String, val body: String)
+
+private fun projectedRemainingMinutes(appliance: LaundryAppliance, now: Long): Int {
+    val estimatedFinishAt = appliance.estimatedFinishAt ?: return appliance.projection?.remainingMinutes
+        ?: appliance.remainingMinutes
+    val seconds = runCatching {
+        Duration.between(Instant.ofEpochMilli(now), Instant.parse(estimatedFinishAt)).seconds
+    }.getOrNull() ?: return appliance.projection?.remainingMinutes ?: appliance.remainingMinutes
+    return if (seconds <= 0) 0 else ((seconds + 59) / 60).toInt()
+}
+
+private fun laundryWatchShouldCompleteSilently(
+    watch: ActiveLaundryWatch,
+    appliance: LaundryAppliance,
+): Boolean {
+    val replacedSession = watch.sessionId != null && appliance.sessionId != null &&
+        watch.sessionId != appliance.sessionId
+    val terminal = appliance.operationalStatus in setOf("COMPLETED", "IDLE") ||
+        appliance.projection?.status == "CONFIRMED_COMPLETED"
+    return replacedSession || terminal
+}

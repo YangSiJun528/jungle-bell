@@ -177,7 +177,7 @@ test('세탁 화면은 워시타워 상태표와 공통 계정 기능을 함께 
     assert.doesNotMatch(laundry, /as PersonalSurface/);
 
     assert.match(personalLaundry, /api\.listLaundryWatches\(\)/);
-    assert.match(personalLaundry, /api\.createLaundryWatch\(\{/);
+    assert.match(personalLaundry, /api\.createLaundryWatch\(input\)/);
     assert.match(personalLaundry, /api\.deleteLaundryWatch\(id\)/);
     assert.doesNotMatch(personalLaundry, /as PersonalSurface/);
     assert.match(personalLaundry, /enabled: attendanceReady/);

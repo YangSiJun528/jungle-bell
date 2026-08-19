@@ -59,8 +59,8 @@ data class ActiveLaundryWatch(
     val machineId: String,
     val appliance: String,
     val sessionId: String?,
+    val notificationMode: String,
     val notifyBeforeMinutes: Int,
-    val notifyWhenAvailable: Boolean,
 )
 
 data class PushDelivery(

@@ -34,22 +34,43 @@ export const mealPreferencesSchema = mealPreferencesInputSchema.extend({
 });
 
 export const laundryApplianceSchema = z.enum(['washer', 'dryer']);
+export const laundryNotificationModeSchema = z.enum([
+    'before-completion',
+    'estimated-completion',
+    'confirmed-completion',
+]);
+
+const validLaundryNotificationMinutes = (value: {
+    notificationMode: z.infer<typeof laundryNotificationModeSchema>;
+    notifyBeforeMinutes: number;
+}) => value.notificationMode === 'before-completion'
+    ? value.notifyBeforeMinutes > 0
+    : value.notifyBeforeMinutes === 0;
 
 export const laundryWatchInputSchema = z.strictObject({
     machineId: canonicalString(128),
     appliance: laundryApplianceSchema,
-    sessionId: canonicalString(256).nullable(),
+    sessionId: canonicalString(256),
+    notificationMode: laundryNotificationModeSchema,
     notifyBeforeMinutes: z.number().int().min(0).max(180),
-    notifyWhenAvailable: z.boolean(),
+}).refine(validLaundryNotificationMinutes, {
+    message: '선택한 알림 시점과 남은 시간 값이 일치하지 않습니다.',
 });
 
 export const laundryWatchIdSchema = z.string().regex(/^jbw_[a-f0-9]{64}$/u);
 
-export const laundryWatchSchema = laundryWatchInputSchema.extend({
+export const laundryWatchSchema = z.strictObject({
     id: laundryWatchIdSchema,
+    machineId: canonicalString(128),
+    appliance: laundryApplianceSchema,
+    sessionId: canonicalString(256).nullable(),
+    notificationMode: laundryNotificationModeSchema,
+    notifyBeforeMinutes: z.number().int().min(0).max(180),
     status: z.enum(['active', 'completed', 'cancelled']),
     createdAtEpochMs: epochMillisecondsSchema,
     updatedAtEpochMs: epochMillisecondsSchema,
+}).refine(validLaundryNotificationMinutes, {
+    message: '선택한 알림 시점과 남은 시간 값이 일치하지 않습니다.',
 }).refine(
     (value) => value.updatedAtEpochMs >= value.createdAtEpochMs,
     {message: 'updatedAtEpochMs must not precede createdAtEpochMs'},
@@ -63,5 +84,6 @@ export type AttendancePreferences = z.infer<typeof attendancePreferencesSchema>;
 export type MealPreferencesInput = z.infer<typeof mealPreferencesInputSchema>;
 export type MealPreferences = z.infer<typeof mealPreferencesSchema>;
 export type LaundryApplianceKind = z.infer<typeof laundryApplianceSchema>;
+export type LaundryNotificationMode = z.infer<typeof laundryNotificationModeSchema>;
 export type LaundryWatchInput = z.infer<typeof laundryWatchInputSchema>;
 export type LaundryWatch = z.infer<typeof laundryWatchSchema>;

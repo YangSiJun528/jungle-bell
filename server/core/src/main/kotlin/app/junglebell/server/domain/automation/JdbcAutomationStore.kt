@@ -110,7 +110,7 @@ class JdbcAutomationStore(private val jdbc: JdbcClient) : AutomationStore {
     override fun activeLaundryWatches(): List<ActiveLaundryWatch> = jdbc.sql(
         """
         SELECT id, user_id, machine_id, appliance, session_id,
-               notify_before_minutes, notify_when_available
+               notification_mode, notify_before_minutes
         FROM laundry_watch
         WHERE status = 'active'
         ORDER BY created_at_epoch_ms, id
@@ -122,8 +122,8 @@ class JdbcAutomationStore(private val jdbc: JdbcClient) : AutomationStore {
             machineId = row.getString("machine_id"),
             appliance = row.getString("appliance"),
             sessionId = row.getString("session_id"),
+            notificationMode = row.getString("notification_mode"),
             notifyBeforeMinutes = row.getInt("notify_before_minutes"),
-            notifyWhenAvailable = row.getBoolean("notify_when_available"),
         )
     }.list()
 

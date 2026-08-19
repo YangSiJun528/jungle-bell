@@ -7,9 +7,12 @@ export interface LaundryStatusAppliance {
     operationalStatus?: string;
     projection?: {status?: string; remainingMinutes?: number; estimated?: boolean} | null;
     state?: {code?: string; labelKo?: string} | null;
+    remainingMinutes?: number | null;
     totalMinutes?: number;
     startedAt?: string | null;
     estimatedFinishAt?: string | null;
+    observedAt?: string;
+    sessionId?: string | null;
     errorCode?: string | null;
     attempts?: number;
     errors?: number;

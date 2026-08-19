@@ -43,13 +43,27 @@ data class MealPreferences(
 data class LaundryWatchInput(
     @field:Size(min = 1, max = 128) val machineId: String,
     @field:Pattern(regexp = "^(washer|dryer)$") val appliance: String,
-    @field:Size(min = 1, max = 256) val sessionId: String?,
+    @field:Size(min = 1, max = 256) val sessionId: String,
+    @field:Pattern(regexp = "^(before-completion|estimated-completion|confirmed-completion)$")
+    val notificationMode: String,
     @field:Min(0) @field:Max(180) val notifyBeforeMinutes: Int,
-    val notifyWhenAvailable: Boolean,
 ) {
     fun validate() {
         require(machineId.trim() == machineId)
-        require(sessionId == null || sessionId.trim() == sessionId)
+        require(sessionId.trim() == sessionId)
+        require(notificationMode in NOTIFICATION_MODES)
+        require(
+            if (notificationMode == "before-completion") notifyBeforeMinutes in 1..180
+            else notifyBeforeMinutes == 0,
+        )
+    }
+
+    private companion object {
+        val NOTIFICATION_MODES = setOf(
+            "before-completion",
+            "estimated-completion",
+            "confirmed-completion",
+        )
     }
 }
 
@@ -58,8 +72,8 @@ data class LaundryWatch(
     val machineId: String,
     val appliance: String,
     val sessionId: String?,
+    val notificationMode: String,
     val notifyBeforeMinutes: Int,
-    val notifyWhenAvailable: Boolean,
     val status: String,
     val createdAtEpochMs: Long,
     val updatedAtEpochMs: Long,

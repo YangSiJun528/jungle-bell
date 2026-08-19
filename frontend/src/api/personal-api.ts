@@ -9,6 +9,7 @@ import {
     mealPreferencesSchema,
     type AttendancePreferences,
     type LaundryApplianceKind,
+    type LaundryNotificationMode,
     type LaundryWatch,
     type LaundryWatchInput,
     type MealPreferences,
@@ -24,6 +25,7 @@ import {
 export type {
     AttendancePreferences,
     LaundryApplianceKind,
+    LaundryNotificationMode,
     LaundryWatch,
     LaundryWatchInput,
     MealPreferences,

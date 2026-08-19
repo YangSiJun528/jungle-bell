@@ -227,6 +227,7 @@ const dashboardNotificationSchema = z.strictObject({
     kind: z.enum([
         'meal-published',
         'laundry-finishing',
+        'laundry-completion-expected',
         'laundry-completed',
         'laundry-available',
         'laundry-attention',

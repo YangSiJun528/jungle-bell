@@ -71,6 +71,7 @@ import {
 export type {
     AttendancePreferences,
     LaundryApplianceKind,
+    LaundryNotificationMode,
     LaundryWatch,
     LaundryWatchInput,
     MealPreferences,
