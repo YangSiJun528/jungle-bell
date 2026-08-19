@@ -117,6 +117,7 @@ test('앱 안내는 실제 트레이 아이콘·모바일 알림과 기존 설�
     assert.match(desktopAppMockup, /macOS 메뉴 막대에서 Jungle Bell 출석 상태를 확인하는 PC 앱 예시/);
     assert.match(desktopAppMockup, /ring-\[#e23c44\]/);
     assert.match(desktopAppMockup, /빨간색이면 출석을 확인할 시간이에요\./);
+    assert.doesNotMatch(desktopAppMockup, /TRAY_STATES|Jungle Bell 트레이 상태 예시/);
     assert.match(trayIcon, /M512 896a384 384 0 1 0 0-768/);
     assert.match(trayIcon, /M725\.888 315\.008C676\.48 428\.672/);
     for (const notification of [

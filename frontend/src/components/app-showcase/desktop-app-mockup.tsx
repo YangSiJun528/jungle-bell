@@ -1,17 +1,6 @@
 import {Apple} from 'lucide-react';
 import {cn} from '@/lib/utils';
-import {TrayIcon, type TrayIconStatus} from './tray-icon';
-
-const TRAY_STATES: readonly {
-    status: TrayIconStatus;
-    label: string;
-    description: string;
-}[] = [
-    {status: 'alert', label: '출석 필요', description: '빨강'},
-    {status: 'warning', label: '로그인 필요', description: '주황'},
-    {status: 'normal', label: '학습 중', description: '기본색'},
-    {status: 'offline', label: '확인 불가', description: '회색'},
-];
+import {TrayIcon} from './tray-icon';
 
 export function DesktopAppMockup({
     className,
@@ -24,7 +13,7 @@ export function DesktopAppMockup({
         <figure
             className={cn(
                 'relative isolate min-h-[20rem] overflow-hidden rounded-2xl border border-white/45',
-                'bg-[#7653a7]',
+                'bg-[linear-gradient(to_bottom,#eae5f2_0,#eae5f2_2.25rem,#7653a7_2.25rem,#7653a7_100%)]',
                 'shadow-[0_24px_56px_rgba(25,53,31,.24)]',
                 compact ? 'min-h-[17rem]' : 'min-h-[24rem]',
                 className,
@@ -34,7 +23,7 @@ export function DesktopAppMockup({
                 macOS 메뉴 막대에서 Jungle Bell 출석 상태를 확인하는 PC 앱 예시
             </figcaption>
 
-            <div className="relative z-20 flex h-9 items-center justify-between border-b border-white/45 bg-white/85 px-3 text-[0.625rem] font-semibold text-[#202720] backdrop-blur-xl">
+            <div className="relative z-20 flex h-9 items-center justify-between border-b border-white/45 px-3 text-[0.625rem] font-semibold text-[#202720]">
                 <span className="flex min-w-0 items-center gap-1.5 whitespace-nowrap">
                     <Apple aria-hidden="true" className="size-3 fill-current"/>
                     <strong>Finder</strong>
@@ -68,26 +57,6 @@ export function DesktopAppMockup({
             )}>
                 <small className="block font-semibold">PC 앱</small>
                 <strong className="mt-1 block text-base leading-snug sm:text-lg">메뉴 바에서<br/>출석 상태를 확인</strong>
-            </div>
-
-            <div
-                className={cn(
-                    'absolute inset-x-3 bottom-12 z-10 grid grid-cols-4 gap-1.5 rounded-xl border border-white/60 bg-white/75 p-2 backdrop-blur-xl',
-                    compact && 'grid-cols-3',
-                )}
-                aria-label="Jungle Bell 트레이 상태 예시"
-            >
-                {TRAY_STATES.slice(0, compact ? 3 : 4).map((state) => (
-                    <span className="grid min-w-0 justify-items-center gap-0.5 rounded-lg bg-white/65 px-1 py-2 text-center" key={state.status}>
-                        <TrayIcon
-                            status={state.status}
-                            label={`${state.label} 트레이 아이콘`}
-                            className="size-7 sm:size-8"
-                        />
-                        <strong className="truncate text-[0.5rem] sm:text-[0.625rem]">{state.label}</strong>
-                        {compact ? null : <small className="text-[0.5rem] text-muted-foreground">{state.description}</small>}
-                    </span>
-                ))}
             </div>
 
             <div className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 gap-1 rounded-xl border border-white/40 bg-white/40 p-1.5 shadow-lg backdrop-blur-xl" aria-hidden="true">
