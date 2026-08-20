@@ -25,6 +25,8 @@ https://jungle-bell.sijun-yang.com
 - API가 시작할 때 schema를 적용하고 Worker는 schema 초기화를 실행하지 않습니다.
 - secret, 데이터베이스 dump, VAPID private key는 저장소에 넣지 않습니다.
 - 같은 호스트의 다른 Compose 프로젝트와 컨테이너는 건드리지 않습니다.
+- 로컬 `server/deploy/.env.production`을 운영 설정의 원본으로 사용합니다. 매 배포마다
+  이 파일을 서버로 전송하며, 서버에 남아 있는 이전 환경 파일을 재사용하지 않습니다.
 
 ## 버전과 배포 기록
 
@@ -111,7 +113,12 @@ smoke test는 Quick Tunnel URL을 사용하지 않습니다.
 
 ## 일반 배포
 
-저장소 내용을 배포 디렉터리에 동기화한 뒤 Compose 설정을 검증합니다.
+먼저 [OCI 운영 서버 배포의 소스와 환경 파일 전송](deploy/guide_oci_production_deployment.md#1-소스와-환경-파일-전송)을
+실행합니다. 이 단계는 최초 배포뿐 아니라 모든 배포에서 필수입니다. 로컬 환경 파일의
+전송이나 설정 검증이 실패하면 이미지 빌드와 컨테이너 교체를 시작하지 않습니다.
+
+로컬 환경 파일을 전송한 뒤 서버에서 Compose 설정을 검증합니다. 운영 Compose는 필수
+변수가 없거나 빈 문자열이면 기본값을 사용하지 않고 즉시 실패합니다.
 
 ```bash
 docker compose \

@@ -29,7 +29,21 @@ IP는 이 문서에 기록하지 않습니다.
 
 ## 1. 소스와 환경 파일 전송
 
-로컬 저장소 루트에서 새 운영 디렉터리를 만들고 소스를 동기화합니다.
+로컬 `server/deploy/.env.production`이 운영 설정의 원본입니다. 최초 배포뿐 아니라 모든
+배포에서 소스와 함께 전송합니다. 원격 서버에 남아 있는 환경 파일을 다음 배포의 입력으로
+재사용하거나 직접 수정하지 않습니다.
+
+로컬 저장소 루트에서 환경 파일의 필수값과 Compose 설정을 먼저 검증합니다.
+
+```bash
+test -s server/deploy/.env.production
+docker compose \
+  --env-file server/deploy/.env.production \
+  -f server/deploy/compose.production.yml \
+  config --quiet
+```
+
+검증에 성공하면 새 운영 디렉터리를 만들고 소스를 동기화합니다.
 
 ```bash
 ssh ubuntu@oci-server 'install -d -m 0700 /home/ubuntu/jungle-bell-production'
@@ -49,17 +63,23 @@ rsync -az \
 
 scp -i ~/.ssh/oci_a1_flex \
   server/deploy/.env.production \
-  ubuntu@oci-server:/home/ubuntu/jungle-bell-production/server/deploy/.env.production
+  ubuntu@oci-server:/home/ubuntu/jungle-bell-production/server/deploy/.env.production.upload
 ```
 
-서버에서 환경 파일의 로컬 경로를 OCI 경로로 바꾸고 권한을 확인합니다.
+서버에서 업로드 파일의 로컬 secret 경로를 OCI 경로로 바꾼 뒤 권한 `0600`으로 원자적으로
+교체합니다. 변환이나 설치가 실패하면 기존 운영 환경 파일을 유지하고 배포를 중단합니다.
 
 ```bash
-cd /home/ubuntu/jungle-bell-production
-chmod 0600 server/deploy/.env.production
-sed -i \
-  's#/Users/sijun-yang/.config/jungle-bell#/home/ubuntu/.config/jungle-bell#g' \
-  server/deploy/.env.production
+ssh -i ~/.ssh/oci_a1_flex ubuntu@oci-server '
+  set -eu
+  upload=/home/ubuntu/jungle-bell-production/server/deploy/.env.production.upload
+  destination=/home/ubuntu/jungle-bell-production/server/deploy/.env.production
+  sed -i \
+    "s#/Users/sijun-yang/.config/jungle-bell#/home/ubuntu/.config/jungle-bell#g" \
+    "$upload"
+  chmod 0600 "$upload"
+  mv -f "$upload" "$destination"
+'
 ```
 
 ## 2. 운영 secret 준비

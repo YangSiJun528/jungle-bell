@@ -4,6 +4,10 @@
 경로를 두고, secret 값은 별도 파일로 관리합니다. Spring Boot는 `/run/secrets`의
 config tree와 환경 변수를 함께 읽습니다.
 
+표의 애플리케이션 기본값은 로컬 직접 실행에만 적용됩니다. 운영
+`compose.production.yml`은 `.env.production.example`에 나열된 모든 변수를 필수로
+취급하며, 누락되거나 빈 값이면 설정 해석 단계에서 실패합니다.
+
 ## 데이터베이스
 
 | 변수 | 기본값 | 설명 |
@@ -13,8 +17,8 @@ config tree와 환경 변수를 함께 읽습니다.
 | `DATABASE_PASSWORD` | config tree `database-password` | 로컬 직접 실행용 비밀번호 |
 | `DATABASE_POOL_MAX` | API `10`, Worker `6` | 프로세스별 Hikari 최대 connection 수 |
 | `DATABASE_POOL_MIN` | API `2`, Worker `1` | 프로세스별 Hikari 최소 idle connection 수 |
-| `POSTGRES_DB` | `jungle_bell` | Compose PostgreSQL database |
-| `POSTGRES_USER` | `jungle_bell` | Compose PostgreSQL 사용자 |
+| `POSTGRES_DB` | 운영 Compose 필수 | Compose PostgreSQL database |
+| `POSTGRES_USER` | 운영 Compose 필수 | Compose PostgreSQL 사용자 |
 | `DATABASE_PASSWORD_FILE` | 필수 | Compose secret 파일의 절대 경로 |
 
 `core/src/main/resources/schema.sql`은 API 시작 시 idempotent `CREATE TABLE IF NOT
@@ -26,7 +30,7 @@ EXISTS`로 적용됩니다. Worker의 SQL 초기화는 꺼져 있습니다. 현�
 | 변수 | 기본값 | 설명 |
 | --- | --- | --- |
 | `PORT` | `8080` | API HTTP port. Worker는 HTTP server를 열지 않음 |
-| `PUBLIC_BASE_URL` | 로컬 실행 `http://127.0.0.1:8080`, 운영 `https://jungle-bell.sijun-yang.com` | 정적 자산, 공개 API 자산 URL, pairing URL의 외부 origin |
+| `PUBLIC_BASE_URL` | 로컬 직접 실행 `http://127.0.0.1:8080`, 운영 Compose 필수 | 정적 자산, 공개 API 자산 URL, pairing URL의 외부 origin |
 | `PAIRING_SECRET` | config tree `pairing-secret` | pairing 서명 secret, 32자 이상 |
 | `PAIRING_SECRET_FILE` | 필수 | Compose pairing secret 파일 |
 | `JUNGLE_BELL_LOG_LEVEL` | `INFO` | 앱 package 로그 수준 |
@@ -48,10 +52,10 @@ Desktop UI origin allowlist는 코드에서 고정합니다.
 
 | 변수 | 기본값 | 설명 |
 | --- | --- | --- |
-| `COLLECTORS_ENABLED` | `false` | Worker의 세탁·급식 수집 활성화 여부 |
-| `LAUNDRY_SOURCE_URL` | 없음 | 내부 LG ThinQ 수집 source URL |
-| `MEALS_PINNED_SOURCE_URL` | 없음 | 고정 글을 포함한 카카오 채널 URL |
-| `MEALS_DEFAULT_SOURCE_URL` | 없음 | 일반 카카오 채널 URL |
+| `COLLECTORS_ENABLED` | 로컬 직접 실행 `false`, 운영 Compose 필수 | Worker의 세탁·급식 수집 활성화 여부 |
+| `LAUNDRY_SOURCE_URL` | 운영 Compose 필수 | 내부 LG ThinQ 수집 source URL |
+| `MEALS_PINNED_SOURCE_URL` | 운영 Compose 필수 | 고정 글을 포함한 카카오 채널 URL |
+| `MEALS_DEFAULT_SOURCE_URL` | 운영 Compose 필수 | 일반 카카오 채널 URL |
 
 Worker는 세탁을 매분, 급식을 scheduler 정의 주기마다 수집합니다. 알림 계획과
 housekeeping도 Worker에서 실행됩니다. 각 source의 최근 시도·성공·실패는
@@ -63,7 +67,7 @@ housekeeping도 Worker에서 실행됩니다. 각 source의 최근 시도·성�
 | --- | --- | --- |
 | `VAPID_PUBLIC_KEY` | config tree `vapid-public-key` | 브라우저 구독용 공개키 |
 | `VAPID_PRIVATE_KEY` | config tree `vapid-private-key` | 배포 호스트에만 두는 private key |
-| `VAPID_SUBJECT` | 없음 | `mailto:` 또는 HTTPS subject |
+| `VAPID_SUBJECT` | 운영 Compose 필수 | `mailto:` 또는 HTTPS subject |
 | `VAPID_PUBLIC_KEY_FILE` | 필수 | Compose public key 파일 |
 | `VAPID_PRIVATE_KEY_FILE` | 필수 | Compose private key 파일 |
 
@@ -74,10 +78,10 @@ private key는 저장소, PostgreSQL, 로그에 기록하지 않습니다. key p
 
 | 변수 | 기본값 | 설명 |
 | --- | --- | --- |
-| `API_IMAGE` | `jungle-bell-api:production-local` | API 이미지 tag |
-| `WORKER_IMAGE` | `jungle-bell-worker:production-local` | Worker 이미지 tag |
-| `API_PORT` | `8080` | API의 호스트 loopback port |
-| `CLOUDFLARE_TUNNEL_TOKEN` | 없음 | 운영 named Tunnel token |
+| `API_IMAGE` | 필수 | API 이미지 tag |
+| `WORKER_IMAGE` | 필수 | Worker 이미지 tag |
+| `API_PORT` | 필수 | API의 호스트 loopback port |
+| `CLOUDFLARE_TUNNEL_TOKEN` | 필수 | 운영 named Tunnel token |
 
 `CLOUDFLARE_TUNNEL_TOKEN`은 저장소 밖의 운영 `.env.production`에서 관리합니다.
 named Tunnel은 정식 ingress이며, `quick-tunnel` profile은 장애 분리용 임시 URL에만
