@@ -24,7 +24,7 @@ class JobRunContextTest {
             first = MDC.get(LoggingContext.JOB_RUN_ID)
             UUID.fromString(first)
             assertNull(MDC.get(LoggingContext.REQUEST_ID))
-            assertNull(MDC.get(LoggingContext.USER_ID))
+            assertNull(MDC.get("userId"))
         }
         JobRunContext.run {
             second = MDC.get(LoggingContext.JOB_RUN_ID)

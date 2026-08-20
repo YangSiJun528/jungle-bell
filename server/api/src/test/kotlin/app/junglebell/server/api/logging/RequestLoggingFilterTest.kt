@@ -1,8 +1,6 @@
 package app.junglebell.server.api.logging
 
 import app.junglebell.server.common.logging.LoggingContext
-import app.junglebell.server.domain.security.SessionKind
-import app.junglebell.server.domain.security.SessionPrincipal
 import jakarta.servlet.FilterChain
 import java.util.UUID
 import kotlin.test.AfterTest
@@ -14,14 +12,10 @@ import kotlin.test.assertNull
 import org.slf4j.MDC
 import org.springframework.mock.web.MockHttpServletRequest
 import org.springframework.mock.web.MockHttpServletResponse
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
-import org.springframework.security.core.context.SecurityContextHolder
-import org.springframework.security.oauth2.core.DefaultOAuth2AuthenticatedPrincipal
 
 class RequestLoggingFilterTest {
     @AfterTest
     fun clearContexts() {
-        SecurityContextHolder.clearContext()
         LoggingContext.clearCorrelationIds()
     }
 
@@ -81,31 +75,4 @@ class RequestLoggingFilterTest {
         assertNull(MDC.get(LoggingContext.REQUEST_ID))
     }
 
-    @Test
-    fun `authenticated user filter adds user id only around downstream processing`() {
-        val session = SessionPrincipal(UUID.randomUUID(), UUID.randomUUID(), "installation", SessionKind.DESKTOP)
-        val principal = DefaultOAuth2AuthenticatedPrincipal(
-            session.userId.toString(),
-            mapOf("session" to session),
-            emptyList(),
-        )
-        SecurityContextHolder.getContext().authentication = UsernamePasswordAuthenticationToken.authenticated(
-            principal,
-            "",
-            emptyList(),
-        )
-        MDC.put(LoggingContext.REQUEST_ID, "request-1")
-
-        AuthenticatedUserMdcFilter().doFilter(
-            MockHttpServletRequest(),
-            MockHttpServletResponse(),
-            FilterChain { _, _ ->
-                assertEquals("request-1", MDC.get(LoggingContext.REQUEST_ID))
-                assertEquals(session.userId.toString(), MDC.get(LoggingContext.USER_ID))
-            },
-        )
-
-        assertEquals("request-1", MDC.get(LoggingContext.REQUEST_ID))
-        assertNull(MDC.get(LoggingContext.USER_ID))
-    }
 }

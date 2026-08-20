@@ -15,30 +15,18 @@ class LoggingContextTest {
 
     @Test
     fun `request context controls and clears correlation identifiers`() {
-        MDC.put(LoggingContext.USER_ID, "stale-user")
+        MDC.put("userId", "stale-user")
         MDC.put(LoggingContext.JOB_RUN_ID, "stale-job")
 
         LoggingContext.withRequest("request-1") {
             assertEquals("request-1", MDC.get(LoggingContext.REQUEST_ID))
-            assertNull(MDC.get(LoggingContext.USER_ID))
+            assertNull(MDC.get("userId"))
             assertNull(MDC.get(LoggingContext.JOB_RUN_ID))
         }
 
         assertNull(MDC.get(LoggingContext.REQUEST_ID))
-        assertNull(MDC.get(LoggingContext.USER_ID))
+        assertNull(MDC.get("userId"))
         assertNull(MDC.get(LoggingContext.JOB_RUN_ID))
-    }
-
-    @Test
-    fun `user context preserves the request and restores a previous user`() {
-        LoggingContext.withRequest("request-1") {
-            MDC.put(LoggingContext.USER_ID, "outer-user")
-            LoggingContext.withUser("inner-user") {
-                assertEquals("request-1", MDC.get(LoggingContext.REQUEST_ID))
-                assertEquals("inner-user", MDC.get(LoggingContext.USER_ID))
-            }
-            assertEquals("outer-user", MDC.get(LoggingContext.USER_ID))
-        }
     }
 
     @Test
@@ -50,7 +38,7 @@ class LoggingContextTest {
         }
 
         assertNull(MDC.get(LoggingContext.REQUEST_ID))
-        assertNull(MDC.get(LoggingContext.USER_ID))
+        assertNull(MDC.get("userId"))
         assertNull(MDC.get(LoggingContext.JOB_RUN_ID))
     }
 }
