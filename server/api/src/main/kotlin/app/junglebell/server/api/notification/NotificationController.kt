@@ -3,6 +3,8 @@ package app.junglebell.server.api.notification
 import app.junglebell.server.domain.notification.*
 import app.junglebell.server.api.security.CurrentSession
 import app.junglebell.server.domain.security.SessionPrincipal
+import app.junglebell.server.domain.usage.UsageFeature
+import app.junglebell.server.domain.usage.UsageRecorder
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Max
 import jakarta.validation.constraints.Min
@@ -22,7 +24,10 @@ import java.util.UUID
 
 @Validated
 @RestController
-class NotificationController(private val service: NotificationService) {
+class NotificationController(
+    private val service: NotificationService,
+    private val usage: UsageRecorder,
+) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
     @GetMapping("/api/desktop/notifications")
@@ -100,6 +105,7 @@ class NotificationController(private val service: NotificationService) {
     ): PushSubscriptionResponse {
         logger.info("Push subscription request received.")
         val response = service.subscribe(principal, request)
+        usage.recordFeature(principal, UsageFeature.PUSH_SUBSCRIPTION_REGISTERED)
         logger.info("Push subscription request completed. status=201")
         return response
     }
@@ -109,6 +115,7 @@ class NotificationController(private val service: NotificationService) {
     fun unsubscribe(@CurrentSession principal: SessionPrincipal, @PathVariable id: String) {
         logger.info("Push unsubscription request received.")
         service.unsubscribe(principal, id)
+        usage.recordFeature(principal, UsageFeature.PUSH_SUBSCRIPTION_REMOVED)
         logger.info("Push unsubscription request completed. status=204")
     }
 }

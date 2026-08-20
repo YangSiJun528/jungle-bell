@@ -5,6 +5,8 @@ import app.junglebell.server.api.security.CurrentSession
 import app.junglebell.server.domain.pairing.*
 import app.junglebell.server.domain.security.SessionPrincipal
 import app.junglebell.server.domain.security.requireDesktop
+import app.junglebell.server.domain.usage.UsageFeature
+import app.junglebell.server.domain.usage.UsageRecorder
 import jakarta.servlet.http.Cookie
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
@@ -22,7 +24,10 @@ import org.springframework.web.bind.annotation.RestController
 import java.time.Duration
 
 @RestController
-class PairingController(private val service: PairingService) {
+class PairingController(
+    private val service: PairingService,
+    private val usage: UsageRecorder,
+) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
     @PostMapping("/api/me/pairings")
@@ -55,6 +60,7 @@ class PairingController(private val service: PairingService) {
     ) {
         logger.info("Pairing approval request received.")
         service.approve(principal.requireDesktop(), id, body)
+        usage.recordFeature(principal, UsageFeature.MOBILE_DEVICE_PAIRED)
         logger.info("Pairing approval request completed. status=204")
     }
 

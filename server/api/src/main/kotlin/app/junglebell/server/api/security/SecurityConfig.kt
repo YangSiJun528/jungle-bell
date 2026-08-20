@@ -1,7 +1,6 @@
 package app.junglebell.server.api.security
 
 import app.junglebell.server.api.common.ApiErrorResponse
-import app.junglebell.server.api.logging.AuthenticatedUserMdcFilter
 import app.junglebell.server.api.logging.REQUEST_ID_HEADER
 import app.junglebell.server.common.config.JungleBellProperties
 import jakarta.servlet.http.HttpServletResponse
@@ -19,7 +18,6 @@ import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.security.oauth2.core.OAuth2AuthenticatedPrincipal
 import org.springframework.security.oauth2.server.resource.introspection.OpaqueTokenIntrospector
 import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver
-import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter
 import org.springframework.security.web.AuthenticationEntryPoint
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.security.web.access.AccessDeniedHandler
@@ -60,6 +58,8 @@ class SecurityConfig {
                 it.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                     .requestMatchers(HttpMethod.POST, "/api/desktop/installations").permitAll()
                     .requestMatchers("/api/desktop/**").hasRole("DESKTOP")
+                    .requestMatchers(HttpMethod.POST, "/api/me/usage/ui-opened")
+                    .hasAnyRole("DESKTOP", "MOBILE")
                     .requestMatchers(
                         "/api/me/mobile-sessions",
                         "/api/me/mobile-sessions/**",
@@ -77,7 +77,6 @@ class SecurityConfig {
                         opaque.introspector(opaqueTokenIntrospector)
                     }
             }
-            .addFilterAfter(AuthenticatedUserMdcFilter(), BearerTokenAuthenticationFilter::class.java)
             .build()
 
     @Bean
@@ -127,8 +126,8 @@ class SecurityConfig {
         }
         val publicApi = CorsConfiguration().apply {
             allowedOrigins = properties.allowedDesktopOrigins.toList()
-            allowedMethods = listOf("GET", "HEAD", "OPTIONS")
-            allowedHeaders = listOf("Accept", "Cache-Control", REQUEST_ID_HEADER)
+            allowedMethods = listOf("GET", "HEAD", "POST", "OPTIONS")
+            allowedHeaders = listOf("Accept", "Content-Type", "Cache-Control", REQUEST_ID_HEADER)
             exposedHeaders = listOf("Cache-Control", REQUEST_ID_HEADER)
             allowCredentials = false
             maxAge = 600

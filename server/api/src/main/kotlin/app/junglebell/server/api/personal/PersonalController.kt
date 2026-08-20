@@ -3,6 +3,8 @@ package app.junglebell.server.api.personal
 import app.junglebell.server.domain.personal.*
 import app.junglebell.server.api.security.CurrentSession
 import app.junglebell.server.domain.security.SessionPrincipal
+import app.junglebell.server.domain.usage.UsageFeature
+import app.junglebell.server.domain.usage.UsageRecorder
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.slf4j.LoggerFactory
@@ -16,7 +18,10 @@ import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 
 @RestController
-class PersonalController(private val service: PersonalService) {
+class PersonalController(
+    private val service: PersonalService,
+    private val usage: UsageRecorder,
+) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
     @GetMapping("/api/me/attendance/preferences")
@@ -34,6 +39,7 @@ class PersonalController(private val service: PersonalService) {
     ): AttendancePreferences {
         logger.info("Attendance preference update request received.")
         val response = service.updateAttendance(principal.userId, value)
+        usage.recordFeature(principal, UsageFeature.ATTENDANCE_SETTINGS_CHANGED)
         logger.info("Attendance preference update request completed. status=200")
         return response
     }
@@ -53,6 +59,7 @@ class PersonalController(private val service: PersonalService) {
     ): MealPreferences {
         logger.info("Meal preference update request received.")
         val response = service.updateMeal(principal.userId, value)
+        usage.recordFeature(principal, UsageFeature.MEAL_NOTIFICATION_SETTINGS_CHANGED)
         logger.info("Meal preference update request completed. status=200")
         return response
     }
@@ -73,6 +80,7 @@ class PersonalController(private val service: PersonalService) {
     ): LaundryWatch {
         logger.info("Laundry watch creation request received.")
         val response = service.createWatch(principal.userId, value)
+        usage.recordFeature(principal, UsageFeature.LAUNDRY_WATCH_CREATED)
         logger.info("Laundry watch creation request completed. watchId={} status=201", response.id)
         return response
     }
@@ -85,6 +93,7 @@ class PersonalController(private val service: PersonalService) {
     ) {
         logger.info("Laundry watch deletion request received.")
         service.deleteWatch(principal.userId, id)
+        usage.recordFeature(principal, UsageFeature.LAUNDRY_WATCH_CANCELLED)
         logger.info("Laundry watch deletion request completed. status=204")
     }
 }

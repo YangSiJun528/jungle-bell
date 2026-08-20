@@ -34,7 +34,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,prometheus
+        include: health,info
   endpoint:
     health:
       probes:
@@ -59,10 +59,18 @@ jungle-bell:
     laundry-url:
     meals-default-url:
     meals-pinned-url:
+  usage:
+    enabled: ${USAGE_METRICS_ENABLED:true}
+    anonymous-hash-secret: ${USAGE_HASH_SECRET:${usage-hash-secret:local-development-usage-hash-secret}}
+    zone-id: Asia/Seoul
+    anonymous-retention-days: 2
+    user-activity-retention-days: 7
+    feature-retention-days: 30
+    summary-retention-days: 730
 
 logging:
   pattern:
-    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} level=%-5p requestId=%X{requestId:--} userId=%X{userId:--} jobRunId=%X{jobRunId:--} thread=%thread source=%class.%method - %msg%n%ex"
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} level=%-5p requestId=%X{requestId:--} jobRunId=%X{jobRunId:--} thread=%thread source=%class.%method - %msg%n%ex"
   level:
     root: INFO
     app.junglebell: ${JUNGLE_BELL_LOG_LEVEL:INFO}

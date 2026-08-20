@@ -38,10 +38,18 @@ jungle-bell:
     laundry-url: ${LAUNDRY_SOURCE_URL:}
     meals-default-url: ${MEALS_DEFAULT_SOURCE_URL:}
     meals-pinned-url: ${MEALS_PINNED_SOURCE_URL:}
+  usage:
+    enabled: ${USAGE_METRICS_ENABLED:true}
+    anonymous-hash-secret: ${USAGE_HASH_SECRET:${usage-hash-secret:local-development-usage-hash-secret}}
+    zone-id: Asia/Seoul
+    anonymous-retention-days: 2
+    user-activity-retention-days: 7
+    feature-retention-days: 30
+    summary-retention-days: 730
 
 logging:
   pattern:
-    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} level=%-5p requestId=%X{requestId:--} userId=%X{userId:--} jobRunId=%X{jobRunId:--} thread=%thread source=%class.%method - %msg%n%ex"
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} level=%-5p requestId=%X{requestId:--} jobRunId=%X{jobRunId:--} thread=%thread source=%class.%method - %msg%n%ex"
   level:
     root: INFO
     app.junglebell: ${JUNGLE_BELL_LOG_LEVEL:INFO}

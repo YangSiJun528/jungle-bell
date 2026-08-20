@@ -340,3 +340,49 @@ CREATE INDEX IF NOT EXISTS notification_delivery_push_due
 CREATE INDEX IF NOT EXISTS notification_delivery_desktop_pending
     ON notification_delivery (target_id, notification_id)
     WHERE target_kind = 'desktop' AND status IN ('pending', 'retry');
+
+CREATE TABLE IF NOT EXISTS usage_user_day (
+    usage_date date NOT NULL,
+    user_id uuid NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
+    client text NOT NULL CHECK (client IN ('web', 'pwa', 'desktop')),
+    activity text NOT NULL CHECK (activity IN ('ui_opened')),
+    PRIMARY KEY (usage_date, user_id, client, activity)
+);
+
+CREATE TABLE IF NOT EXISTS usage_feature_day (
+    usage_date date NOT NULL,
+    user_id uuid NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
+    client text NOT NULL CHECK (client IN ('web', 'pwa', 'desktop')),
+    feature_code text NOT NULL CHECK (feature_code IN (
+        'attendance_settings_changed',
+        'meal_notification_settings_changed',
+        'laundry_watch_created',
+        'laundry_watch_cancelled',
+        'mobile_device_paired',
+        'mobile_device_revoked',
+        'push_subscription_registered',
+        'push_subscription_removed'
+    )),
+    use_count bigint NOT NULL CHECK (use_count > 0),
+    PRIMARY KEY (usage_date, user_id, client, feature_code)
+);
+
+CREATE TABLE IF NOT EXISTS usage_anonymous_day (
+    usage_date date NOT NULL,
+    visitor_hash text NOT NULL CHECK (visitor_hash ~ '^[0-9a-f]{64}$'),
+    client text NOT NULL CHECK (client IN ('web', 'pwa')),
+    activity text NOT NULL CHECK (activity IN ('ui_opened')),
+    PRIMARY KEY (usage_date, visitor_hash, client, activity)
+);
+
+CREATE TABLE IF NOT EXISTS usage_daily_summary (
+    usage_date date NOT NULL,
+    audience text NOT NULL CHECK (audience IN ('anonymous', 'authenticated')),
+    metric_kind text NOT NULL CHECK (metric_kind IN ('activity', 'feature')),
+    client text NOT NULL CHECK (client IN ('all', 'web', 'pwa', 'desktop')),
+    metric_code text NOT NULL,
+    unique_subjects bigint NOT NULL CHECK (unique_subjects >= 0),
+    total_count bigint NOT NULL CHECK (total_count >= 0),
+    calculated_at_epoch_ms bigint NOT NULL,
+    PRIMARY KEY (usage_date, audience, metric_kind, client, metric_code)
+);

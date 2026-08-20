@@ -80,7 +80,6 @@ project(":api") {
         add("implementation", "org.jetbrains.kotlin:kotlin-reflect")
         add("implementation", "tools.jackson.module:jackson-module-kotlin")
 
-        add("runtimeOnly", "io.micrometer:micrometer-registry-prometheus")
         add("runtimeOnly", "org.postgresql:postgresql")
 
         add("testImplementation", "org.springframework.boot:spring-boot-starter-actuator-test")
@@ -112,7 +111,6 @@ project(":worker") {
         add("implementation", "org.bouncycastle:bcprov-jdk18on:1.85.2")
         add("implementation", "org.apache.httpcomponents:httpasyncclient:4.1.5")
 
-        add("runtimeOnly", "io.micrometer:micrometer-registry-prometheus")
         add("runtimeOnly", "org.postgresql:postgresql")
 
         add("testImplementation", "org.springframework.boot:spring-boot-starter-actuator-test")

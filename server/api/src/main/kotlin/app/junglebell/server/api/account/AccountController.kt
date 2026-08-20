@@ -4,6 +4,8 @@ import app.junglebell.server.domain.account.*
 import app.junglebell.server.api.security.CurrentSession
 import app.junglebell.server.domain.security.SessionPrincipal
 import app.junglebell.server.domain.security.requireDesktop
+import app.junglebell.server.domain.usage.UsageFeature
+import app.junglebell.server.domain.usage.UsageRecorder
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
@@ -18,7 +20,10 @@ import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 
 @RestController
-class AccountController(private val service: AccountService) {
+class AccountController(
+    private val service: AccountService,
+    private val usage: UsageRecorder,
+) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
     @PostMapping("/api/desktop/installations")
@@ -130,6 +135,7 @@ class AccountController(private val service: AccountService) {
     ) {
         logger.info("Mobile session revocation request received.")
         service.revokeMobile(principal.requireDesktop().userId, id)
+        usage.recordFeature(principal, UsageFeature.MOBILE_DEVICE_REVOKED)
         logger.info("Mobile session revocation request completed. status=204")
     }
 

@@ -45,9 +45,11 @@ services:
       DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:?set POSTGRES_DB}
       DATABASE_USERNAME: ${POSTGRES_USER:?set POSTGRES_USER}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?set PUBLIC_BASE_URL}
+      USAGE_METRICS_ENABLED: ${USAGE_METRICS_ENABLED:-true}
     secrets:
       - database-password
       - pairing-secret
+      - usage-hash-secret
       - vapid-public-key
     ports:
       - "127.0.0.1:${API_PORT:?set API_PORT}:8080"
@@ -85,12 +87,14 @@ services:
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?set PUBLIC_BASE_URL}
       VAPID_SUBJECT: ${VAPID_SUBJECT:?set VAPID_SUBJECT}
       COLLECTORS_ENABLED: ${COLLECTORS_ENABLED:?set COLLECTORS_ENABLED}
+      USAGE_METRICS_ENABLED: ${USAGE_METRICS_ENABLED:-true}
       LAUNDRY_SOURCE_URL: ${LAUNDRY_SOURCE_URL:?set LAUNDRY_SOURCE_URL}
       MEALS_PINNED_SOURCE_URL: ${MEALS_PINNED_SOURCE_URL:?set MEALS_PINNED_SOURCE_URL}
       MEALS_DEFAULT_SOURCE_URL: ${MEALS_DEFAULT_SOURCE_URL:?set MEALS_DEFAULT_SOURCE_URL}
     secrets:
       - database-password
       - pairing-secret
+      - usage-hash-secret
       - vapid-public-key
       - vapid-private-key
     security_opt:
@@ -139,6 +143,8 @@ secrets:
     file: ${DATABASE_PASSWORD_FILE:?set DATABASE_PASSWORD_FILE}
   pairing-secret:
     file: ${PAIRING_SECRET_FILE:?set PAIRING_SECRET_FILE}
+  usage-hash-secret:
+    file: ${USAGE_HASH_SECRET_FILE:?set USAGE_HASH_SECRET_FILE}
   vapid-public-key:
     file: ${VAPID_PUBLIC_KEY_FILE:?set VAPID_PUBLIC_KEY_FILE}
   vapid-private-key:

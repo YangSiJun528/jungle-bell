@@ -17,6 +17,8 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.forwardedUrl
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
@@ -46,6 +48,14 @@ class SecurityFilterChainIntegrationTest(
         mockMvc.perform(get("/blog")).andExpect(status().isNotFound)
         mockMvc.perform(get("/blog/")).andExpect(status().isNotFound)
         mockMvc.perform(get("/dashboard.html")).andExpect(status().isNotFound)
+    }
+
+    @Test
+    fun `readiness remains available while the Prometheus endpoint is absent`() {
+        mockMvc.perform(get("/actuator/health/readiness"))
+            .andExpect(status().isOk)
+        mockMvc.perform(get("/actuator/prometheus"))
+            .andExpect(status().isNotFound)
     }
 
     @Test
@@ -131,6 +141,103 @@ class SecurityFilterChainIntegrationTest(
             get("/api/desktop/attendance")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer $token"),
         ).andExpect(status().isOk)
+    }
+
+    @Test
+    fun `desktop and mobile sessions can report a UI open without choosing their client`() {
+        val desktopToken = "jbd_" + "1".repeat(64)
+        val mobileToken = "jbs_" + "2".repeat(64)
+        val desktopSession = createAppSession("desktop", desktopToken)
+        val mobileSession = createAppSession("mobile", mobileToken)
+
+        mockMvc.perform(
+            post("/api/me/usage/ui-opened")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer $desktopToken"),
+        ).andExpect(status().isNoContent)
+        mockMvc.perform(
+            post("/api/me/usage/ui-opened")
+                .cookie(Cookie("jb_device", mobileToken)),
+        ).andExpect(status().isNoContent)
+
+        assertUsageClient(desktopSession, "desktop")
+        assertUsageClient(mobileSession, "pwa")
+    }
+
+    @Test
+    fun `anonymous UI open issues a short lived first party visitor cookie`() {
+        val result = mockMvc.perform(
+            post("/api/public/usage/ui-opened")
+                .header("X-Forwarded-Proto", "https")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"client":"web"}"""),
+        ).andExpect(status().isNoContent)
+            .andExpect(header().string(HttpHeaders.SET_COOKIE, org.hamcrest.Matchers.containsString("__Host-jb_usage=jbv_")))
+            .andExpect(header().string(HttpHeaders.SET_COOKIE, org.hamcrest.Matchers.containsString("Max-Age=86400")))
+            .andExpect(header().string(HttpHeaders.SET_COOKIE, org.hamcrest.Matchers.containsString("HttpOnly")))
+            .andExpect(header().string(HttpHeaders.SET_COOKIE, org.hamcrest.Matchers.containsString("Secure")))
+            .andExpect(header().string(HttpHeaders.SET_COOKIE, org.hamcrest.Matchers.containsString("SameSite=Strict")))
+            .andReturn()
+
+        val token = result.response.getHeader(HttpHeaders.SET_COOKIE)!!
+            .substringAfter("jb_usage=").substringBefore(';')
+        mockMvc.perform(
+            post("/api/public/usage/ui-opened")
+                .header("X-Forwarded-Proto", "https")
+                .cookie(Cookie("__Host-jb_usage", token))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"client":"web"}"""),
+        ).andExpect(status().isNoContent)
+            .andExpect(header().doesNotExist(HttpHeaders.SET_COOKIE))
+
+        kotlin.test.assertEquals(
+            1,
+            jdbc.sql("SELECT count(*) FROM usage_anonymous_day WHERE client = 'web'")
+                .query(Int::class.java).single(),
+        )
+    }
+
+    @Test
+    fun `feature usage is recorded only after an allowlisted server operation succeeds`() {
+        val token = "jbs_" + "3".repeat(64)
+        val sessionId = createAppSession("mobile", token)
+        val valid = """
+            {
+              "enabled": true,
+              "morning": true,
+              "evening": true,
+              "morningStartHour": 8,
+              "eveningEndHour": 4,
+              "morningIntervalMinutes": 15,
+              "eveningIntervalMinutes": 15,
+              "skipSunday": false,
+              "skipAttendanceDate": null
+            }
+        """.trimIndent()
+        mockMvc.perform(
+            put("/api/me/attendance/preferences")
+                .cookie(Cookie("jb_device", token))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(valid),
+        ).andExpect(status().isOk)
+
+        val invalid = valid.replace("\"morningIntervalMinutes\": 15", "\"morningIntervalMinutes\": 2")
+        mockMvc.perform(
+            put("/api/me/attendance/preferences")
+                .cookie(Cookie("jb_device", token))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(invalid),
+        ).andExpect(status().isBadRequest)
+
+        val count = jdbc.sql(
+            """
+            SELECT usage.use_count
+            FROM usage_feature_day usage
+            JOIN app_session session ON session.user_id = usage.user_id
+            WHERE session.id = :sessionId AND usage.client = 'pwa'
+              AND usage.feature_code = 'attendance_settings_changed'
+            """.trimIndent(),
+        ).param("sessionId", sessionId).query(Long::class.java).single()
+        kotlin.test.assertEquals(1L, count)
     }
 
     @Test
@@ -273,6 +380,18 @@ class SecurityFilterChainIntegrationTest(
             .param("userId", parent.first).param("installationId", parent.second)
             .param("tokenHash", tokens.uiSessionHash(token)).param("origin", origin)
             .param("now", now).param("expiresAt", now + 60_000).update()
+    }
+
+    private fun assertUsageClient(sessionId: UUID, client: String) {
+        val count = jdbc.sql(
+            """
+            SELECT count(*)
+            FROM usage_user_day usage
+            JOIN app_session session ON session.user_id = usage.user_id
+            WHERE session.id = :sessionId AND usage.client = :client AND usage.activity = 'ui_opened'
+            """.trimIndent(),
+        ).param("sessionId", sessionId).param("client", client).query(Int::class.java).single()
+        kotlin.test.assertEquals(1, count)
     }
 
     companion object {
