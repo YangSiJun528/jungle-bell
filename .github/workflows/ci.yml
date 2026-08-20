@@ -55,7 +55,16 @@ jobs:
         working-directory: server
         env:
           CLOUDFLARE_TUNNEL_TOKEN: ci-placeholder
-        run: docker compose --env-file deploy/.env.production.example -f deploy/compose.production.yml --profile quick-tunnel config --quiet
+        run: |
+          if grep -Eq '\$\{[A-Z0-9_]+:-' deploy/compose.production.yml; then
+            echo 'Production Compose must not define fallback values.' >&2
+            exit 1
+          fi
+          docker compose --env-file deploy/.env.production.example -f deploy/compose.production.yml --profile quick-tunnel config --quiet
+          if LAUNDRY_SOURCE_URL= docker compose --env-file deploy/.env.production.example -f deploy/compose.production.yml config --quiet >/dev/null 2>&1; then
+            echo 'Production Compose accepted an empty LAUNDRY_SOURCE_URL.' >&2
+            exit 1
+          fi
       - name: Build API image
         run: docker build --target api-runtime --file server/Dockerfile .
       - name: Build Worker image

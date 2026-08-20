@@ -6,8 +6,8 @@ services:
     container_name: jungle-bell-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-jungle_bell}
-      POSTGRES_USER: ${POSTGRES_USER:-jungle_bell}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
       POSTGRES_PASSWORD_FILE: /run/secrets/database-password
       TZ: Asia/Seoul
     secrets:
@@ -32,8 +32,8 @@ services:
       dockerfile: server/Dockerfile
       target: api-runtime
       args:
-        PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://jungle-bell.sijun-yang.com}
-    image: ${API_IMAGE:-jungle-bell-api:production-local}
+        PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?set PUBLIC_BASE_URL}
+    image: ${API_IMAGE:?set API_IMAGE}
     container_name: jungle-bell-api
     restart: unless-stopped
     init: true
@@ -42,15 +42,15 @@ services:
         condition: service_healthy
     environment:
       TZ: Asia/Seoul
-      DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-jungle_bell}
-      DATABASE_USERNAME: ${POSTGRES_USER:-jungle_bell}
-      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://jungle-bell.sijun-yang.com}
+      DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:?set POSTGRES_DB}
+      DATABASE_USERNAME: ${POSTGRES_USER:?set POSTGRES_USER}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?set PUBLIC_BASE_URL}
     secrets:
       - database-password
       - pairing-secret
       - vapid-public-key
     ports:
-      - "127.0.0.1:${API_PORT:-8080}:8080"
+      - "127.0.0.1:${API_PORT:?set API_PORT}:8080"
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/actuator/health/readiness"]
       interval: 15s
@@ -70,8 +70,8 @@ services:
       dockerfile: server/Dockerfile
       target: worker-runtime
       args:
-        PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://jungle-bell.sijun-yang.com}
-    image: ${WORKER_IMAGE:-jungle-bell-worker:production-local}
+        PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?set PUBLIC_BASE_URL}
+    image: ${WORKER_IMAGE:?set WORKER_IMAGE}
     container_name: jungle-bell-worker
     restart: unless-stopped
     init: true
@@ -80,14 +80,14 @@ services:
         condition: service_healthy
     environment:
       TZ: Asia/Seoul
-      DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-jungle_bell}
-      DATABASE_USERNAME: ${POSTGRES_USER:-jungle_bell}
-      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://jungle-bell.sijun-yang.com}
-      VAPID_SUBJECT: ${VAPID_SUBJECT:-}
-      COLLECTORS_ENABLED: ${COLLECTORS_ENABLED:-true}
-      LAUNDRY_SOURCE_URL: ${LAUNDRY_SOURCE_URL:-}
-      MEALS_PINNED_SOURCE_URL: ${MEALS_PINNED_SOURCE_URL:-https://pf.kakao.com/rocket-web/web/profiles/_xhzNjn/posts?includePinnedPost=true}
-      MEALS_DEFAULT_SOURCE_URL: ${MEALS_DEFAULT_SOURCE_URL:-https://pf.kakao.com/rocket-web/web/profiles/_xhzNjn/posts}
+      DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:?set POSTGRES_DB}
+      DATABASE_USERNAME: ${POSTGRES_USER:?set POSTGRES_USER}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?set PUBLIC_BASE_URL}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:?set VAPID_SUBJECT}
+      COLLECTORS_ENABLED: ${COLLECTORS_ENABLED:?set COLLECTORS_ENABLED}
+      LAUNDRY_SOURCE_URL: ${LAUNDRY_SOURCE_URL:?set LAUNDRY_SOURCE_URL}
+      MEALS_PINNED_SOURCE_URL: ${MEALS_PINNED_SOURCE_URL:?set MEALS_PINNED_SOURCE_URL}
+      MEALS_DEFAULT_SOURCE_URL: ${MEALS_DEFAULT_SOURCE_URL:?set MEALS_DEFAULT_SOURCE_URL}
     secrets:
       - database-password
       - pairing-secret
