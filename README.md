@@ -5,7 +5,7 @@
 <h1 align="center">Jungle Bell</h1>
 
 <p align="center">
-  PC와 설치형 모바일 PWA에서 출석 상태·세탁실·식단·알림을 함께 확인합니다.
+  크래프톤 정글의 출석 상태와 생활(세탁/식단)을 편하게 확인하세요.
 </p>
 
 <div align="center">
@@ -14,12 +14,9 @@
   <a href="https://github.com/YangSiJun528/jungle-bell"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey" alt="Platform"></a>
 </div>
 
-> [!CAUTION]
-> Jungle Bell은 크래프톤 정글 공식 앱이 아니며 자동 출석 기능을 제공하지 않습니다.
-
 ## 주요 기능
 
-- **출석:** PC 앱이 Jungle Campus 출석 상태를 확인하고 PC와 연결된 PWA에 동기화합니다.
+- **출석:** PC 앱이 Jungle Campus 출석 상태를 확인하고 PC와 연결된 PWA 앱에 동기화합니다.
 - **세탁실:** 세탁기·건조기의 사용 가능 여부, 남은 시간과 예상 종료 시각을 확인합니다.
 - **식단:** 오늘의 중식·석식, 이번 주 식단표와 최근 식단 기록을 확인합니다.
 - **알림:** 출석 시간대·식사 시간·세탁 종료 또는 사용 가능 시점에 맞춰 알려 주어 필요한 확인을 놓치지 않게 합니다.
@@ -88,6 +85,9 @@ flowchart LR
 - PC 앱이 종료되거나 컴퓨터가 잠자기 상태면 출석 정보가 갱신되지 않습니다.
 
 ## 피드백 주기
+
+> [!CAUTION]
+> Jungle Bell은 크래프톤 정글 공식 앱이 아니며 자동 출석 기능을 제공하지 않습니다.
 
 [버그 제보](https://github.com/YangSiJun528/jungle-bell/issues/new?template=bug.yml) · [기능 개선](https://github.com/YangSiJun528/jungle-bell/issues/new?template=feature_request.yml) · [질문](https://github.com/YangSiJun528/jungle-bell/issues/new?template=question.yml)
 
