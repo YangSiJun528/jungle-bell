@@ -1,5 +1,4 @@
-import {useState} from 'react';
-import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
+import {useMutation, useQueryClient} from '@tanstack/react-query';
 import {Link} from '@tanstack/react-router';
 import {Check, CheckCheck, ExternalLink, Send, Smartphone} from 'lucide-react';
 import {queryKeys, useDashboardEnvironment} from '@/app/dashboard-context';
@@ -20,9 +19,8 @@ import {
     type NotificationInboxItem,
     type NotificationInboxSnapshot,
 } from '@/domain/notifications/inbox';
-import {desktopTestNotificationMessage, mobilePushErrorMessage} from './notification-result';
+import {NotificationDeliverySection} from './notification-delivery-setup';
 import {notificationRowsForTab} from './notification-tabs';
-import {SystemNotificationSettingsButton} from './system-notification-settings';
 
 export function NotificationRow({item, unread, onActivate, onDismiss, dismissing = false, href}: {
     item: DashboardNotification | NotificationInboxItem;
@@ -89,82 +87,9 @@ export function NotificationPanelContent({seenMobileIds, onMobileNotificationsSe
     const desktop = platform.capabilities.localNotifications;
     const authenticationRequired = notifications.isError
         && accountAuthenticationRequired(notifications.error);
-    const [deliveryMessage, setDeliveryMessage] = useState('');
-    const [showSystemSettingsShortcut, setShowSystemSettingsShortcut] = useState(false);
     const backgroundRefreshFailed = notifications.isError
         && !authenticationRequired
         && notifications.data !== undefined;
-    const pushSetup = useQuery({
-        queryKey: queryKeys.pushSetup,
-        queryFn: async () => {
-            const [applicationServerKey] = await Promise.all([
-                api.getPushPublicKey(),
-                platform.pwa.preparePush(),
-            ]);
-            return applicationServerKey;
-        },
-        enabled: !desktop && account.personalAccess.status === 'connected',
-        staleTime: 5 * 60_000,
-    });
-
-    const registerStartedPush = async (subscriptionPromise: Promise<PushSubscriptionJSON>) => {
-        const subscription = await subscriptionPromise;
-        await api.registerPushSubscription(subscription);
-    };
-
-    const push = useMutation({
-        onMutate: () => setDeliveryMessage(''),
-        mutationFn: registerStartedPush,
-        onSuccess: async () => {
-            setDeliveryMessage('이 기기에서 푸시 알림을 받을 수 있습니다.');
-            await client.invalidateQueries({queryKey: queryKeys.mobileSessions});
-        },
-    });
-
-    const testNotification = useMutation({
-        onMutate: () => {
-            setDeliveryMessage('');
-            setShowSystemSettingsShortcut(false);
-        },
-        mutationFn: async (subscriptionPromise: Promise<PushSubscriptionJSON> | undefined) => {
-            if (desktop) return api.sendDesktopTestNotification();
-            if (!subscriptionPromise) throw new Error('PUSH_SUBSCRIPTION_NOT_STARTED');
-            await registerStartedPush(subscriptionPromise);
-            return api.sendMobileTestNotification();
-        },
-        onSuccess: async (result) => {
-            if (desktop && typeof result === 'object' && result !== null && 'snapshot' in result) {
-                client.setQueryData(queryKeys.notifications('desktop'), result.snapshot);
-                setDeliveryMessage(desktopTestNotificationMessage(result));
-                setShowSystemSettingsShortcut(!result.systemDelivered);
-            } else {
-                setDeliveryMessage(`연결된 모바일 ${String(result)}대의 테스트 푸시를 전송 대기열에 추가했습니다. 1분 안에 도착합니다.`);
-                await Promise.all([
-                    client.invalidateQueries({queryKey: queryKeys.notifications('browser')}),
-                    client.invalidateQueries({queryKey: queryKeys.mobileSessions}),
-                ]);
-            }
-        },
-    });
-
-    const connectPush = () => {
-        if (!pushSetup.data) return;
-        testNotification.reset();
-        // Start the browser subscription synchronously while this click still
-        // owns the browser's transient user activation.
-        push.mutate(platform.pwa.subscribePush(pushSetup.data));
-    };
-
-    const sendTestNotification = () => {
-        push.reset();
-        if (desktop) {
-            testNotification.mutate(undefined);
-            return;
-        }
-        if (!pushSetup.data) return;
-        // Start the browser subscription before React Query enters its async mutation lifecycle.
-        testNotification.mutate(platform.pwa.subscribePush(pushSetup.data));
-    };
 
     const activate = useMutation({
         mutationFn: (id: string) => api.activateDesktopNotification(id),
@@ -313,63 +238,7 @@ export function NotificationPanelContent({seenMobileIds, onMobileNotificationsSe
             </section>
 
             {account.personalAccess.status === 'connected' && !authenticationRequired ? (
-                <section className="space-y-4 border-t pt-6" aria-labelledby="notification-delivery-title">
-                    <div>
-                        <h2 className="text-base font-semibold" id="notification-delivery-title">알림 수신</h2>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                            {desktop ? '이 컴퓨터의 운영체제 알림과 알림함 전달을 확인합니다.' : '이 기기에서 운영체제 푸시 알림을 받습니다.'}
-                        </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                        {!desktop ? (
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={connectPush}
-                                disabled={push.isPending || testNotification.isPending || !pushSetup.data}
-                            >
-                                <Smartphone aria-hidden="true" className="size-4"/>푸시 연결
-                            </Button>
-                        ) : null}
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={sendTestNotification}
-                            disabled={testNotification.isPending || push.isPending || (!desktop && !pushSetup.data)}
-                        >
-                            <Send aria-hidden="true" className="size-4"/>
-                            테스트 알림
-                        </Button>
-                    </div>
-                    {(pushSetup.isError || push.isError || testNotification.isError) ? (
-                        <Alert variant="destructive">
-                            <Send aria-hidden="true"/>
-                            <AlertTitle>알림을 보내지 못했습니다.</AlertTitle>
-                            <AlertDescription>
-                                {mobilePushErrorMessage(
-                                    testNotification.error ?? push.error ?? pushSetup.error,
-                                )}
-                            </AlertDescription>
-                        </Alert>
-                    ) : null}
-                    {!desktop && pushSetup.isPending ? (
-                        <p aria-live="polite" className="text-sm text-muted-foreground">
-                            푸시 기능을 준비하고 있습니다.
-                        </p>
-                    ) : null}
-                    {deliveryMessage ? showSystemSettingsShortcut ? (
-                        <Alert variant="destructive" aria-live="polite">
-                            <Send aria-hidden="true"/>
-                            <AlertTitle>운영체제 알림을 표시하지 못했습니다.</AlertTitle>
-                            <AlertDescription className="gap-3">
-                                <p>{deliveryMessage}</p>
-                                <SystemNotificationSettingsButton/>
-                            </AlertDescription>
-                        </Alert>
-                    ) : (
-                        <p aria-live="polite" className="text-sm text-muted-foreground">{deliveryMessage}</p>
-                    ) : null}
-                </section>
+                <NotificationDeliverySection/>
             ) : null}
         </div>
     );

@@ -27,6 +27,7 @@ import {DesktopUpdateNotice} from './desktop-update-notice';
 import {UsagePrivacyNotice} from './usage-privacy-notice';
 import {PublicRouteOutlet} from './privacy-page';
 import {MobileSetupRouteOutlet} from './mobile-setup-route-outlet';
+import {NotificationOnboardingNotice} from './notification-onboarding-notice';
 
 const NotificationPanelContent = lazy(() => import('@/features/notifications/notifications-page').then((module) => ({default: module.NotificationPanelContent})));
 const CompanionConnections = lazy(() => import('@/features/connections/connections-page').then((module) => ({default: module.CompanionConnections})));
@@ -132,6 +133,7 @@ function DashboardContent() {
         >
             <DesktopUpdateNotice/>
             <UsagePrivacyNotice/>
+            <NotificationOnboardingNotice/>
             <DashboardRouteRuntimeProvider value={{contentRoute, openInstallPrompt}}>
                 <AsyncBoundary resetKeys={[contentRoute]}>
                     <Outlet/>

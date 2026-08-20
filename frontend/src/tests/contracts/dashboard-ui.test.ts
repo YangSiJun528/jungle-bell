@@ -38,7 +38,10 @@ const washTower = source('./features/laundry/components/wash-tower-grid.tsx');
 const meals = source('./features/meals/pages/meals-page.tsx');
 const mealPreferences = source('./features/meals/components/meal-preferences-section.tsx');
 const notifications = source('./features/notifications/notifications-page.tsx');
+const notificationDeliverySetup = source('./features/notifications/notification-delivery-setup.tsx');
 const connections = source('./features/connections/connections-page.tsx');
+const mobileSetup = source('./features/connections/mobile-setup-page.tsx');
+const notificationOnboardingNotice = source('./app/notification-onboarding-notice.tsx');
 const notificationSettings = source('./app/settings/notification-settings.tsx');
 
 test('대시보드는 Alpine 템플릿 대신 React root에서 시작한다', () => {
@@ -211,16 +214,20 @@ test('설정 알림 탭은 연결된 기기의 출석·급식 설정을 함께 �
         assert.match(mealPreferences, new RegExp(label));
     }
 
-    assert.match(notifications, /api\.sendDesktopTestNotification\(\)/);
-    assert.match(notifications, /api\.sendMobileTestNotification\(\)/);
-    assert.match(notifications, /api\.registerPushSubscription/);
-    assert.match(notifications, /platform\.pwa\.subscribePush/);
-    assert.match(notifications, /platform\.pwa\.preparePush\(\)/);
+    assert.match(notificationDeliverySetup, /api\.sendDesktopTestNotification\(\)/);
+    assert.match(notificationDeliverySetup, /api\.sendMobileTestNotification\(\)/);
+    assert.match(notificationDeliverySetup, /api\.registerPushSubscription/);
+    assert.match(notificationDeliverySetup, /platform\.pwa\.subscribePush/);
+    assert.match(notificationDeliverySetup, /platform\.pwa\.preparePush\(\)/);
     assert.match(pwaAdapter, /readyRegistration\.pushManager\.subscribe\(/);
     assert.doesNotMatch(pwaAdapter, /Notification\.requestPermission|notificationObject\.requestPermission/);
-    assert.match(notifications, /운영체제 알림/);
-    assert.match(notifications, /푸시 연결/);
-    assert.match(notifications, /테스트 알림/);
+    assert.match(notificationDeliverySetup, /운영체제 알림/);
+    assert.match(notificationDeliverySetup, /푸시 연결/);
+    assert.match(notificationDeliverySetup, /테스트 알림/);
+    assert.match(app, /<NotificationOnboardingNotice\/>/);
+    assert.match(mobileSetup, /<NotificationOnboardingNotice\/>/);
+    assert.match(notificationOnboardingNotice, /platform\.pwa\.installed/);
+    assert.match(notificationOnboardingNotice, /personalAccess\.status !== 'connected'/);
 });
 
 test('연결 화면은 capability로 PC 관리와 브라우저 연결 흐름을 선택한다', () => {

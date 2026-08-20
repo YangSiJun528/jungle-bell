@@ -2,6 +2,7 @@ import {Link} from '@tanstack/react-router';
 import {Check, Link2, Smartphone} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {useDashboardEnvironment} from '@/app/dashboard-context';
+import {NotificationOnboardingNotice} from '@/app/notification-onboarding-notice';
 import {
     InstallPrompt,
     useInstallPromptVisibility,
@@ -63,6 +64,8 @@ export function MobileSetupPage() {
                     mode="setup"
                     onRequestMobileInstall={platform.pwa.installed ? undefined : openInstallPrompt}
                 />
+
+                <NotificationOnboardingNotice/>
 
                 <p className="flex items-center justify-center gap-2 text-center text-xs text-muted-foreground">
                     <Check aria-hidden="true" className="size-3.5"/>
