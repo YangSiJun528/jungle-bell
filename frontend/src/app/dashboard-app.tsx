@@ -24,7 +24,6 @@ import {
 import {DashboardRouteRuntimeProvider} from './dashboard-route-runtime';
 import {PlatformAuthenticationGate} from './platform-authentication-gate';
 import {DesktopUpdateNotice} from './desktop-update-notice';
-import {UsagePrivacyNotice} from './usage-privacy-notice';
 import {PublicRouteOutlet} from './privacy-page';
 import {MobileSetupRouteOutlet} from './mobile-setup-route-outlet';
 import {NotificationOnboardingNotice} from './notification-onboarding-notice';
@@ -39,7 +38,7 @@ export function DashboardApp() {
 
     return (
         <PlatformAuthenticationGate
-            notice={<><DesktopUpdateNotice/><UsagePrivacyNotice/></>}
+            notice={<DesktopUpdateNotice/>}
             connectionContent={(
                 <AsyncBoundary fallback={<LoadingState label="연결 화면을 준비하고 있습니다."/>}>
                     <CompanionConnections completionPath={null}/>
@@ -132,7 +131,6 @@ function DashboardContent() {
             }}
         >
             <DesktopUpdateNotice/>
-            <UsagePrivacyNotice/>
             <NotificationOnboardingNotice/>
             <DashboardRouteRuntimeProvider value={{contentRoute, openInstallPrompt}}>
                 <AsyncBoundary resetKeys={[contentRoute]}>
