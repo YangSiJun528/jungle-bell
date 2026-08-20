@@ -64,7 +64,7 @@ function DesktopServiceSettings() {
     });
     const openLogs = useMutation({mutationFn: () => api.openLogFolder()});
     const value = settings.data;
-    const update = (key: 'autoStart' | 'autoUpdate' | 'usageAnalytics' | 'debugMode', checked: boolean) => {
+    const update = (key: 'autoStart' | 'autoUpdate' | 'debugMode', checked: boolean) => {
         if (!value) return;
         save.mutate({...value, [key]: checked});
     };
@@ -179,22 +179,6 @@ function DesktopServiceSettings() {
                             if (checked) update('autoUpdate', true);
                             else setConfirmAutoUpdateOff(true);
                         }}
-                    />
-                </CardContent>
-            </Card>
-
-            <Card>
-                <CardHeader>
-                    <CardTitle>개인정보</CardTitle>
-                    <CardDescription>서비스 개선을 위해 보내는 최소 사용 기록을 제어합니다.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <ServiceSettingRow
-                        title="사용 통계"
-                        description="설치 식별자의 일방향 해시, 앱 버전, 운영체제와 기능 사용 이벤트만 전송합니다. 출석·식단 내용과 LMS 계정 정보는 전송하지 않습니다."
-                        checked={value.usageAnalytics}
-                        disabled={save.isPending}
-                        onCheckedChange={(checked) => update('usageAnalytics', checked)}
                     />
                 </CardContent>
             </Card>

@@ -81,13 +81,13 @@ function parseDesktopSettings(value: unknown): DesktopSettings {
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidResponse();
     const source = value as Record<string, unknown>;
     const keys = [
-        'appVersion', 'autoStart', 'autoUpdate', 'usageAnalytics', 'debugMode',
+        'appVersion', 'autoStart', 'autoUpdate', 'debugMode',
         'selectedCohortId', 'effectiveCohortId', 'cohortOptions',
     ] as const;
     if (Object.keys(source).length !== keys.length || keys.some((key) => !hasOwn(source, key))) {
         throw invalidResponse();
     }
-    if ([source.autoStart, source.autoUpdate, source.usageAnalytics, source.debugMode]
+    if ([source.autoStart, source.autoUpdate, source.debugMode]
         .some((value) => typeof value !== 'boolean')) throw invalidResponse();
     if (typeof source.appVersion !== 'string' || !APP_VERSION_PATTERN.test(source.appVersion)) {
         throw invalidResponse();
@@ -99,7 +99,6 @@ function parseDesktopSettings(value: unknown): DesktopSettings {
         appVersion: source.appVersion,
         autoStart: source.autoStart as boolean,
         autoUpdate: source.autoUpdate as boolean,
-        usageAnalytics: source.usageAnalytics as boolean,
         debugMode: source.debugMode as boolean,
         selectedCohortId,
         effectiveCohortId,
@@ -111,7 +110,6 @@ function desktopSettingsInput(input: DesktopSettingsUpdate): DesktopSettingsUpda
     if (!input || typeof input !== 'object' || [
         input.autoStart,
         input.autoUpdate,
-        input.usageAnalytics,
         input.debugMode,
     ].some((value) => typeof value !== 'boolean')) {
         throw new Error('API_CLIENT_INVALID_ARGUMENT');
@@ -120,7 +118,6 @@ function desktopSettingsInput(input: DesktopSettingsUpdate): DesktopSettingsUpda
     return {
         autoStart: input.autoStart,
         autoUpdate: input.autoUpdate,
-        usageAnalytics: input.usageAnalytics,
         debugMode: input.debugMode,
         selectedCohortId,
     };

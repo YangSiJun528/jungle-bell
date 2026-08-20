@@ -1,4 +1,3 @@
-mod analytics;
 mod attendance;
 mod attendance_day;
 mod autostart;
@@ -94,7 +93,6 @@ pub fn run() {
     let launched_from_autostart = std::env::args().any(|argument| argument == AUTOSTART_ARGUMENT);
     let config = Config::load();
     let log_level = configured_log_level(config.debug_mode);
-    analytics::init(config.usage_analytics);
     let shared_state = Arc::new(Mutex::new(AppState::new(config)));
     let notification_inbox_service = Arc::new(NotificationInboxService::load());
     let notification_service = Arc::new(NotificationService::new(notification_inbox_service.clone()));
@@ -181,9 +179,6 @@ pub fn run() {
             let remote_sync_service = Arc::new(tauri::async_runtime::block_on(
                 remote_sync::RemoteSyncService::configured(app.handle()),
             )?);
-            let analytics_installation_id =
-                tauri::async_runtime::block_on(remote_sync_service.installation_id_for_analytics());
-            analytics::set_identity(&analytics_installation_id);
             app.manage(remote_sync_service.clone());
             tray::setup_tray(app)?;
             if let Err(error) = notification_service.initialize_system_backend() {

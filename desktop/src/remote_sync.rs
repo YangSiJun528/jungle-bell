@@ -40,6 +40,7 @@ const ATTENDANCE_SNAPSHOT_PATH: &str = "/api/desktop/attendance";
 const ATTENDANCE_SNAPSHOT_UPDATED_EVENT: &str = "attendance-snapshot-updated";
 const HEARTBEAT_PATH: &str = "/api/desktop/heartbeat";
 const NOTIFICATIONS_PATH: &str = "/api/desktop/notifications";
+const UI_OPENED_PATH: &str = "/api/me/usage/ui-opened";
 const MAX_RESPONSE_BYTES: u64 = 512 * 1024;
 const MAX_NOTIFICATION_DELIVERIES: usize = 20;
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(45);
@@ -662,6 +663,7 @@ mod tests {
             "/api/desktop/attendance",
             "/api/desktop/notifications",
             "/api/desktop/notifications/test",
+            "/api/me/usage/ui-opened",
         ] {
             assert_eq!(api.endpoint(path).unwrap().path(), path);
         }
@@ -676,6 +678,7 @@ mod tests {
         assert!(api.endpoint("/api/desktop/notifications/../ack").is_err());
         assert!(api.endpoint("/api/private/laundry-watches").is_err());
         assert_eq!(ATTENDANCE_SNAPSHOT_PATH, "/api/desktop/attendance");
+        assert_eq!(UI_OPENED_PATH, "/api/me/usage/ui-opened");
     }
 
     #[test]
@@ -750,7 +753,7 @@ mod tests {
             service.reset_identity("tauri://localhost").await,
             Err(ServiceError::Unavailable.code().to_owned()),
         );
-        assert_eq!(service.installation_id_for_analytics().await, original_id);
+        assert_eq!(service.installation_id_for_test().await, original_id);
         assert!(service.current_bearer().await.is_some());
         assert!(store.load().unwrap().is_some());
     }
@@ -773,7 +776,7 @@ mod tests {
 
         assert!(!status.authenticated);
         assert_eq!(status.last_error.as_deref(), Some(ServiceError::Unavailable.code()));
-        assert_ne!(service.installation_id_for_analytics().await, original_id);
+        assert_ne!(service.installation_id_for_test().await, original_id);
     }
 
     #[test]

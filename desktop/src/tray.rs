@@ -454,9 +454,21 @@ fn focus_window_checked(window: &WebviewWindow<tauri::Wry>) -> Result<(), String
 }
 
 fn focus_window(window: &WebviewWindow<tauri::Wry>) {
-    if let Err(error) = focus_window_checked(window) {
-        log::warn!("[tray] window focus failed ({}): {}", window.label(), error);
+    match focus_window_checked(window) {
+        Ok(()) => record_ui_opened(window.app_handle()),
+        Err(error) => log::warn!("[tray] window focus failed ({}): {}", window.label(), error),
     }
+}
+
+fn record_ui_opened(app: &tauri::AppHandle) {
+    let Some(service) = app.try_state::<Arc<crate::remote_sync::RemoteSyncService>>() else {
+        log::debug!("[usage] UI open metric skipped before connected service initialization");
+        return;
+    };
+    let service = Arc::clone(service.inner());
+    tauri::async_runtime::spawn(async move {
+        service.record_ui_opened_best_effort().await;
+    });
 }
 
 fn foreground_window_skip_taskbar(_app: &tauri::AppHandle) -> bool {

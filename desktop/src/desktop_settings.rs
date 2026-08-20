@@ -139,7 +139,6 @@ mod tests {
         let expected = Config {
             auto_start: true,
             auto_update: false,
-            usage_analytics: false,
             debug_mode: true,
             selected_cohort_id: None,
         };

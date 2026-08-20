@@ -46,9 +46,8 @@ pub(crate) struct RemoteSyncService {
 }
 
 impl RemoteSyncService {
-    /// 분석 모듈이 원문을 외부에 노출하지 않고 해시하기 위한 로컬 설치 식별자다.
-    /// WebView/IPC 응답에는 포함하지 않는다.
-    pub(crate) async fn installation_id_for_analytics(&self) -> String {
+    #[cfg(test)]
+    pub(crate) async fn installation_id_for_test(&self) -> String {
         self.installation_id.read().await.clone()
     }
 
@@ -154,6 +153,20 @@ impl RemoteSyncService {
             lms_session_state: LmsSessionState::Unknown,
             last_server_contact: runtime.last_server_contact,
             last_error: runtime.last_error.clone(),
+        }
+    }
+
+    pub(crate) async fn record_ui_opened_best_effort(&self) {
+        let request = match self.authenticated_request().await {
+            Ok(request) => request,
+            Err(error) => {
+                log::debug!("[usage] UI open metric skipped: {}", error.code());
+                return;
+            }
+        };
+        if let Err(error) = self.api.record_ui_opened(&request.bearer).await {
+            // 통계 요청은 연결 상태, credential, 업무 기능의 성공 여부를 바꾸지 않는다.
+            log::debug!("[usage] UI open metric deferred: {}", error.code());
         }
     }
 
@@ -789,6 +802,38 @@ mod initialization_tests {
             status.last_error.as_deref(),
             Some(ServiceError::AuthenticationRequired.code())
         );
+    }
+
+    #[tokio::test]
+    async fn ui_opened_실패는_credential과_연결상태를_변경하지_않는다() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = StdArc::new(crate::secure_credential::MemoryCredentialStore::new(None));
+        let service = RemoteSyncService::with_store(
+            RemoteApi::with_ui_opened_result(Err(ServiceError::AuthenticationRequired)),
+            directory.path().to_path_buf(),
+            uuid::Uuid::new_v4().hyphenated().to_string(),
+            true,
+            store,
+        )
+        .unwrap();
+        service
+            .install_credential(BearerCredential {
+                token: Zeroizing::new(format!("jbd_{}", "a".repeat(64))),
+                expires_at: Utc::now() + chrono::Duration::days(30),
+            })
+            .await;
+        {
+            let mut runtime = service.runtime.lock().await;
+            runtime.last_server_contact = None;
+            runtime.last_error = None;
+        }
+
+        service.record_ui_opened_best_effort().await;
+
+        assert!(service.current_bearer().await.is_some());
+        let status = service.status().await;
+        assert!(status.last_server_contact.is_none());
+        assert!(status.last_error.is_none());
     }
 
     #[tokio::test]

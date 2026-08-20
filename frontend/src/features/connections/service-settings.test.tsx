@@ -25,7 +25,6 @@ const settings: DesktopSettings = {
     appVersion: '0.5.0-beta.1',
     autoStart: true,
     autoUpdate: true,
-    usageAnalytics: true,
     debugMode: false,
     selectedCohortId: null,
     effectiveCohortId: 'cohort-1',
@@ -51,18 +50,17 @@ function renderSettings(): string {
 describe('ServiceSettings', () => {
     test('데스크톱 로컬 기능을 실제 설정 컨트롤로 표시한다', () => {
         const markup = renderSettings();
-        for (const label of ['자동 시작', '자동 업데이트', '사용 통계', '디버그 모드']) {
+        for (const label of ['자동 시작', '자동 업데이트', '디버그 모드']) {
             expect(markup).toContain(`aria-label="${label}"`);
         }
         expect(markup).toContain('로그 폴더');
         expect(markup).toContain('앱 버전');
         expect(markup).toContain('v0.5.0-beta.1');
-        expect(markup).toContain('설치 식별자의 일방향 해시');
         expect(source).toContain('디버그 모드를 켤까요?');
         expect(source).toContain('특별한 목적이 없다면 켜지 마세요.');
         expect(source).toContain('네, 디버그 모드 켜기');
         expect(source).toContain("if (checked) setConfirmDebugOn(true)");
-        expect(markup).toContain('출석·식단 내용과 LMS 계정 정보는 전송하지 않습니다.');
+        expect(markup).not.toContain('사용 통계');
         expect(markup).toContain('개발자 도구나 외부 명령 실행 권한은 열지 않습니다.');
         expect(markup).toContain('출석 확인 기수');
         expect(markup).toContain('자동 선택');

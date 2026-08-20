@@ -30,7 +30,6 @@ tokio = { version = "1", features = ["time", "sync", "fs", "macros"] }
 dirs = "6"
 log = "0.4"
 tauri-plugin-log = "2"
-sha2 = "0.10"
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
 uuid = { version = "1", features = ["v4"] }
 zeroize = "1"

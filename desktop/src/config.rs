@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 const CURRENT_CONFIG_FILE_NAME: &str = "desktop-settings.json";
 const CONFIG_SCHEMA: &str = "jungle-bell.desktop-settings";
-const CONFIG_SCHEMA_VERSION: u32 = 3;
+const CONFIG_SCHEMA_VERSION: u32 = 4;
 const MIN_SUPPORTED_CONFIG_SCHEMA_VERSION: u32 = 3;
 
 pub const MORNING_START_HOUR: u32 = 4;
@@ -29,6 +29,25 @@ struct ConfigDocument {
     settings: Config,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ConfigEnvelope {
+    schema: String,
+    schema_version: u32,
+    settings: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct LegacyConfigV3 {
+    auto_start: bool,
+    auto_update: bool,
+    usage_analytics: bool,
+    debug_mode: bool,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    selected_cohort_id: Option<String>,
+}
+
 /// 데스크톱에 영속하는 현재형 사용자 설정.
 ///
 /// 출석 알림, 식단, 세탁 설정은 서버가 소유한다. 이 파일에는 이 PC의
@@ -38,7 +57,6 @@ struct ConfigDocument {
 pub struct Config {
     pub auto_start: bool,
     pub auto_update: bool,
-    pub usage_analytics: bool,
     pub debug_mode: bool,
     #[serde(deserialize_with = "deserialize_required_nullable")]
     pub selected_cohort_id: Option<String>,
@@ -49,7 +67,6 @@ impl Default for Config {
         Self {
             auto_start: false,
             auto_update: true,
-            usage_analytics: true,
             debug_mode: false,
             selected_cohort_id: None,
         }
@@ -77,9 +94,20 @@ impl Config {
     }
 
     pub(crate) fn load_from(path: &Path) -> Self {
+        Self::load_from_with_save(path, |config, path| config.save_to(path))
+    }
+
+    fn load_from_with_save(path: &Path, save: impl FnOnce(&Config, &Path) -> Result<(), String>) -> Self {
         match fs::read_to_string(path) {
             Ok(data) => match parse_config_document(&data) {
-                Ok(config) => config,
+                Ok((config, migrated)) => {
+                    if migrated {
+                        if let Err(error) = save(&config, path) {
+                            log::warn!("[config] v3 설정을 적용했지만 v4 파일 재작성에 실패했습니다: {error}");
+                        }
+                    }
+                    config
+                }
                 Err(error) => {
                     log::warn!(
                         "[config] 현재 설정 파일({}) 검증 실패: {}. 기본 설정을 사용합니다.",
@@ -122,15 +150,36 @@ fn serialize_config_document(config: &Config) -> Result<String, String> {
     .map_err(|error| format!("설정 직렬화 실패: {error}"))
 }
 
-fn parse_config_document(data: &str) -> Result<Config, String> {
-    let document: ConfigDocument = serde_json::from_str(data).map_err(|error| format!("설정 파싱 실패: {error}"))?;
-    if document.schema != CONFIG_SCHEMA
-        || !(MIN_SUPPORTED_CONFIG_SCHEMA_VERSION..=CONFIG_SCHEMA_VERSION).contains(&document.schema_version)
+fn parse_config_document(data: &str) -> Result<(Config, bool), String> {
+    let envelope: ConfigEnvelope = serde_json::from_str(data).map_err(|error| format!("설정 파싱 실패: {error}"))?;
+    if envelope.schema != CONFIG_SCHEMA
+        || !(MIN_SUPPORTED_CONFIG_SCHEMA_VERSION..=CONFIG_SCHEMA_VERSION).contains(&envelope.schema_version)
     {
         return Err("지원하지 않는 설정 스키마입니다.".into());
     }
-    validate_selected_cohort_id(document.settings.selected_cohort_id.as_deref())?;
-    Ok(document.settings)
+    let (config, migrated) = match envelope.schema_version {
+        3 => {
+            let legacy: LegacyConfigV3 =
+                serde_json::from_value(envelope.settings).map_err(|error| format!("v3 설정 파싱 실패: {error}"))?;
+            let _ = legacy.usage_analytics;
+            (
+                Config {
+                    auto_start: legacy.auto_start,
+                    auto_update: legacy.auto_update,
+                    debug_mode: legacy.debug_mode,
+                    selected_cohort_id: legacy.selected_cohort_id,
+                },
+                true,
+            )
+        }
+        4 => (
+            serde_json::from_value(envelope.settings).map_err(|error| format!("v4 설정 파싱 실패: {error}"))?,
+            false,
+        ),
+        _ => return Err("지원하지 않는 설정 스키마입니다.".into()),
+    };
+    validate_selected_cohort_id(config.selected_cohort_id.as_deref())?;
+    Ok((config, migrated))
 }
 
 pub(crate) fn validate_selected_cohort_id(value: Option<&str>) -> Result<(), String> {
@@ -245,11 +294,10 @@ mod tests {
             value,
             serde_json::json!({
                 "schema": "jungle-bell.desktop-settings",
-                "schemaVersion": 3,
+                "schemaVersion": 4,
                 "settings": {
                     "autoStart": false,
                     "autoUpdate": true,
-                    "usageAnalytics": true,
                     "debugMode": false,
                     "selectedCohortId": null
                 }
@@ -264,7 +312,7 @@ mod tests {
             ..Config::default()
         };
         let serialized = serialize_config_document(&config).unwrap();
-        assert_eq!(parse_config_document(&serialized).unwrap(), config);
+        assert_eq!(parse_config_document(&serialized).unwrap(), (config, false));
         assert!(serialized.contains("selectedCohortId"));
     }
 
@@ -278,21 +326,19 @@ mod tests {
             }),
             serde_json::json!({
                 "schema": "jungle-bell.desktop-settings",
-                "schemaVersion": 3,
+                "schemaVersion": 4,
                 "settings": {
                     "autoStart": true,
                     "autoUpdate": true,
-                    "usageAnalytics": true,
                     "debugMode": false
                 }
             }),
             serde_json::json!({
                 "schema": "jungle-bell.desktop-settings",
-                "schemaVersion": 3,
+                "schemaVersion": 4,
                 "settings": {
                     "autoStart": true,
                     "autoUpdate": true,
-                    "usageAnalytics": true,
                     "debugMode": false,
                     "selectedCohortId": null,
                     "unknown": true
@@ -302,6 +348,67 @@ mod tests {
         ] {
             assert!(parse_config_document(&invalid.to_string()).is_err());
         }
+    }
+
+    #[test]
+    fn v3_설정은_통계_옵션만_버리고_v4로_원자적_마이그레이션한다() {
+        let path = temporary_path("v3-migration");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(
+            &path,
+            serde_json::json!({
+                "schema": "jungle-bell.desktop-settings",
+                "schemaVersion": 3,
+                "settings": {
+                    "autoStart": true,
+                    "autoUpdate": false,
+                    "usageAnalytics": false,
+                    "debugMode": true,
+                    "selectedCohortId": "cohort-10"
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let loaded = Config::load_from(&path);
+
+        assert!(loaded.auto_start);
+        assert!(!loaded.auto_update);
+        assert!(loaded.debug_mode);
+        assert_eq!(loaded.selected_cohort_id.as_deref(), Some("cohort-10"));
+        let rewritten = fs::read_to_string(&path).unwrap();
+        assert!(rewritten.contains("\"schemaVersion\": 4"));
+        assert!(!rewritten.contains("usageAnalytics"));
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn v3_재작성_실패여도_읽은_설정은_유지한다() {
+        let path = temporary_path("v3-rewrite-failure");
+        fs::write(
+            &path,
+            serde_json::json!({
+                "schema": "jungle-bell.desktop-settings",
+                "schemaVersion": 3,
+                "settings": {
+                    "autoStart": true,
+                    "autoUpdate": false,
+                    "usageAnalytics": true,
+                    "debugMode": true,
+                    "selectedCohortId": null
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let loaded = Config::load_from_with_save(&path, |_, _| Err("injected write failure".into()));
+
+        assert!(loaded.auto_start);
+        assert!(!loaded.auto_update);
+        assert!(loaded.debug_mode);
+        fs::remove_file(path).unwrap();
     }
 
     #[test]

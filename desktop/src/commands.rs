@@ -10,7 +10,6 @@ use serde::{Deserialize, Deserializer, Serialize};
 use tauri::{Emitter, Manager};
 use tokio::sync::Mutex;
 
-use crate::analytics::{self, Event};
 use crate::attendance;
 use crate::checker;
 use crate::desktop_settings::DesktopSettingsService;
@@ -304,7 +303,6 @@ pub async fn report_checker_event(
 pub struct DesktopSettingsInput {
     auto_start: bool,
     auto_update: bool,
-    usage_analytics: bool,
     debug_mode: bool,
     #[serde(deserialize_with = "deserialize_required_nullable")]
     selected_cohort_id: Option<String>,
@@ -323,7 +321,6 @@ pub struct DesktopSettings {
     app_version: String,
     auto_start: bool,
     auto_update: bool,
-    usage_analytics: bool,
     debug_mode: bool,
     selected_cohort_id: Option<String>,
     effective_cohort_id: Option<String>,
@@ -336,7 +333,6 @@ impl From<crate::desktop_settings::DesktopSettingsSnapshot> for DesktopSettings 
             app_version: env!("CARGO_PKG_VERSION").to_owned(),
             auto_start: value.config.auto_start,
             auto_update: value.config.auto_update,
-            usage_analytics: value.config.usage_analytics,
             debug_mode: value.config.debug_mode,
             selected_cohort_id: value.config.selected_cohort_id,
             effective_cohort_id: value.effective_cohort_id,
@@ -381,15 +377,13 @@ pub async fn update_desktop_settings(
     let next = crate::config::Config {
         auto_start: input.auto_start,
         auto_update: input.auto_update,
-        usage_analytics: input.usage_analytics,
         debug_mode: input.debug_mode,
         selected_cohort_id: input.selected_cohort_id,
     };
     log::info!(
-        "[settings] 데스크톱 서비스 설정 변경: auto_start={} auto_update={} analytics={} debug={}",
+        "[settings] 데스크톱 서비스 설정 변경: auto_start={} auto_update={} debug={}",
         next.auto_start,
         next.auto_update,
-        next.usage_analytics,
         next.debug_mode,
     );
     let saved = settings.update(&app, next).await?;
@@ -400,32 +394,6 @@ pub async fn update_desktop_settings(
         } else {
             log::LevelFilter::Info
         });
-    }
-    if previous.usage_analytics != saved.usage_analytics {
-        if saved.usage_analytics {
-            analytics::set_user_enabled(true);
-            analytics::track(Event::UsageAnalyticsToggled(true));
-            analytics::track(Event::AppOpened);
-        } else {
-            analytics::track(Event::UsageAnalyticsToggled(false));
-            analytics::set_user_enabled(false);
-        }
-    }
-    for (changed, name, value) in [
-        (previous.auto_start != saved.auto_start, "auto_start", saved.auto_start),
-        (
-            previous.auto_update != saved.auto_update,
-            "auto_update",
-            saved.auto_update,
-        ),
-        (previous.debug_mode != saved.debug_mode, "debug_mode", saved.debug_mode),
-    ] {
-        if changed {
-            analytics::track(Event::DesktopSettingChanged {
-                setting: name,
-                enabled: value,
-            });
-        }
     }
     if !previous.auto_update && saved.auto_update {
         let app = app.clone();
@@ -638,7 +606,6 @@ mod tests {
         let current = serde_json::json!({
             "autoStart": false,
             "autoUpdate": true,
-            "usageAnalytics": true,
             "debugMode": false,
             "selectedCohortId": null
         });
@@ -647,13 +614,11 @@ mod tests {
             serde_json::json!({
                 "autoStart": false,
                 "autoUpdate": true,
-                "usageAnalytics": true,
                 "debugMode": false
             }),
             serde_json::json!({
                 "autoStart": false,
                 "autoUpdate": true,
-                "usageAnalytics": true,
                 "debugMode": false,
                 "selectedCohortId": null,
                 "legacy": true

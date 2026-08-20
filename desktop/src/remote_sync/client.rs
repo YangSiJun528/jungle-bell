@@ -9,6 +9,8 @@ pub(crate) struct RemoteApi {
     rotation_result: Arc<std::sync::Mutex<Option<Result<BearerCredential, ServiceError>>>>,
     #[cfg(test)]
     identity_deletion_result: Arc<std::sync::Mutex<Option<Result<(), ServiceError>>>>,
+    #[cfg(test)]
+    ui_opened_result: Arc<std::sync::Mutex<Option<Result<(), ServiceError>>>>,
 }
 
 impl RemoteApi {
@@ -31,6 +33,8 @@ impl RemoteApi {
             rotation_result: Arc::new(std::sync::Mutex::new(None)),
             #[cfg(test)]
             identity_deletion_result: Arc::new(std::sync::Mutex::new(None)),
+            #[cfg(test)]
+            ui_opened_result: Arc::new(std::sync::Mutex::new(None)),
         })
     }
 
@@ -45,6 +49,13 @@ impl RemoteApi {
     pub(crate) fn with_identity_deletion_result(result: Result<(), ServiceError>) -> Self {
         let mut api = Self::new("http://127.0.0.1:9").unwrap();
         api.identity_deletion_result = Arc::new(std::sync::Mutex::new(Some(result)));
+        api
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_ui_opened_result(result: Result<(), ServiceError>) -> Self {
+        let mut api = Self::new("https://bell.example.com").unwrap();
+        api.ui_opened_result = Arc::new(std::sync::Mutex::new(Some(result)));
         api
     }
 
@@ -159,6 +170,21 @@ impl RemoteApi {
         ensure_authenticated_status(&response, &[StatusCode::OK, StatusCode::NO_CONTENT])
     }
 
+    pub(crate) async fn record_ui_opened(&self, bearer: &str) -> Result<(), ServiceError> {
+        #[cfg(test)]
+        if let Some(result) = self.ui_opened_result.lock().unwrap().take() {
+            return result;
+        }
+        let response = self
+            .client
+            .post(self.endpoint(UI_OPENED_PATH)?)
+            .bearer_auth(bearer)
+            .send()
+            .await
+            .map_err(|_| ServiceError::Unavailable)?;
+        ensure_authenticated_status(&response, &[StatusCode::NO_CONTENT])
+    }
+
     pub(crate) async fn notifications(&self, bearer: &str) -> Result<Vec<RemoteNotification>, ServiceError> {
         let response = self
             .client
@@ -234,6 +260,7 @@ pub(crate) fn is_canonical_server_path(path: &str) -> bool {
             | ATTENDANCE_SNAPSHOT_PATH
             | HEARTBEAT_PATH
             | NOTIFICATIONS_PATH
+            | UI_OPENED_PATH
     ) || path == format!("{NOTIFICATIONS_PATH}/test")
     {
         return true;
