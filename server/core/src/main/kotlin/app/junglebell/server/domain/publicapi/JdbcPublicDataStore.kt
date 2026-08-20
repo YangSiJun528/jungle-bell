@@ -129,7 +129,18 @@ class JdbcPublicDataStore(
     }
 
     override fun latestLaundryVersion(): LaundryVersion? = jdbc.sql(
-        "SELECT normalized::text FROM laundry_version ORDER BY last_seen_at DESC LIMIT 1",
+        """
+        SELECT normalized::text
+        FROM laundry_version
+        WHERE EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements(normalized -> 'machines') AS machine
+            WHERE jsonb_typeof(machine -> 'washer') = 'object'
+               OR jsonb_typeof(machine -> 'dryer') = 'object'
+        )
+        ORDER BY last_seen_at DESC
+        LIMIT 1
+        """.trimIndent(),
     ).query(String::class.java).optional().map { objectMapper.readValue(it, LaundryVersion::class.java) }.orElse(null)
 
     override fun laundryVersion(sha: String): LaundryVersion? = jdbc.sql(

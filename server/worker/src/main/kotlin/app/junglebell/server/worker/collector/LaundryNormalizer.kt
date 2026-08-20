@@ -20,20 +20,30 @@ class LaundryNormalizer {
 
     fun normalize(raw: JsonNode, sha: String, observedAt: Instant, previous: LaundryVersion?): LaundryVersion {
         require(raw.isObject) { "Laundry response must be an object" }
+        val machineIds = raw.propertyNames().asSequence().toList()
+        require(machineIds.isNotEmpty()) { "Laundry response must contain machines" }
         val unknown = mutableListOf<UnknownEnumObservation>()
         val events = mutableListOf<LaundryEvent>()
         val previousById = previous?.machines?.associateBy { it.id }.orEmpty()
-        val machines = raw.propertyNames().sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it }).map { machineId ->
+        val machines = machineIds.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it }).map { machineId ->
             val tower = raw.path(machineId)
-            val washer = tower.get("washer")?.takeUnless(JsonNode::isNull)?.let {
+            require(tower.isObject) { "Laundry machine must be an object" }
+            val washer = applianceNode(tower, "washer")?.let {
                 appliance(machineId, "washer", it, observedAt, previousById[machineId]?.washer, unknown, events)
             }
-            val dryer = tower.get("dryer")?.takeUnless(JsonNode::isNull)?.let {
+            val dryer = applianceNode(tower, "dryer")?.let {
                 appliance(machineId, "dryer", it, observedAt, previousById[machineId]?.dryer, unknown, events)
             }
+            require(washer != null || dryer != null) { "Laundry machine must contain an appliance" }
             LaundryMachine(machineId, washer, dryer)
         }
         return LaundryVersion(1, sha, observedAt.toString(), machines, events, unknown)
+    }
+
+    private fun applianceNode(tower: JsonNode, name: String): JsonNode? {
+        val value = tower.get(name) ?: return null
+        require(value.isObject) { "Laundry appliance must be an object" }
+        return value
     }
 
     private fun appliance(

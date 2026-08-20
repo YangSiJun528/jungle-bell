@@ -137,6 +137,69 @@ class JdbcPublicDataStoreIntegrationTest {
         assertEquals("caution", risk.riskLevel)
     }
 
+    @Test
+    fun `latest laundry version skips a newer snapshot without appliance data`() {
+        val validSha = randomSha()
+        val invalidSha = randomSha()
+        val validAt = Instant.parse("2200-01-01T00:00:00Z")
+        val invalidAt = validAt.plusSeconds(60)
+        val washer = LaundryAppliance(
+            machineId = "워시타워_1",
+            appliance = "washer",
+            observedAt = validAt.toString(),
+            state = NormalizedEnum("POWER_OFF", null, true),
+            operationalStatus = "IDLE",
+            remainingMinutes = 0,
+            totalMinutes = 0,
+            startedAt = "1970-01-01T00:00:00Z",
+            estimatedFinishAt = null,
+            remoteControlEnabled = false,
+            cycleCount = 1,
+            sessionId = null,
+            errorCode = null,
+        )
+        store.recordLaundrySuccess(
+            LaundryVersion(
+                sourceVersionSha = validSha,
+                observedAt = validAt.toString(),
+                machines = listOf(LaundryMachine("워시타워_1", washer, null)),
+                events = emptyList(),
+                unknownEnums = emptyList(),
+            ),
+            validAt,
+            observation(validAt, validSha),
+        )
+        store.recordLaundrySuccess(
+            LaundryVersion(
+                sourceVersionSha = invalidSha,
+                observedAt = invalidAt.toString(),
+                machines = listOf(LaundryMachine("워시타워_1", null, null)),
+                events = emptyList(),
+                unknownEnums = emptyList(),
+            ),
+            invalidAt,
+            observation(invalidAt, invalidSha),
+        )
+
+        assertEquals(validSha, store.latestLaundryVersion()?.sourceVersionSha)
+    }
+
+    private fun observation(at: Instant, sha: String) = MinuteObservation(
+        source = "laundry",
+        minuteEpoch = at.epochSecond / 60,
+        scheduledAt = at.toString(),
+        collectedAt = at.toString(),
+        status = "SUCCESS",
+        versionSha = sha,
+        versionFirstSeenAt = at.toString(),
+        changed = true,
+        durationMs = 1,
+        httpStatus = 200,
+        error = null,
+    )
+
+    private fun randomSha(): String = UUID.randomUUID().toString().replace("-", "").repeat(2)
+
     private fun insertLaundryEvent(machineId: String, sessionId: String, type: String, observedAt: String) {
         jdbc.sql(
             """
