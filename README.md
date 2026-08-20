@@ -5,7 +5,7 @@
 <h1 align="center">Jungle Bell</h1>
 
 <p align="center">
-  크래프톤 정글의 출석 상태와 생활(세탁/식단)을 편하게 확인하세요.
+  크래프톤 정글의 생활 정보를 어디서나 편하게 확인하세요.
 </p>
 
 <div align="center">
