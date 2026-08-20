@@ -53,11 +53,15 @@
 
 ### macOS
 
+아래 명령어를 터미널에서 실행해 Jungle Bell을 설치하세요.
+
 ```bash
 curl -fsSL https://install.sijun-yang.com/jungle-bell.sh/latest | sh
 ```
 
 ### Windows
+
+아래 명령어를 PowerShell에서 실행해 Jungle Bell을 설치하세요.
 
 ```powershell
 irm https://install.sijun-yang.com/jungle-bell.ps1/latest | iex
