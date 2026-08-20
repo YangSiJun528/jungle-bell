@@ -31,7 +31,7 @@ export function DashboardFooter() {
                         to="/privacy"
                         className="rounded-sm font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
-                        개인정보 처리 안내
+                        개인정보 처리방침
                     </Link>
                 </nav>
             </div>
