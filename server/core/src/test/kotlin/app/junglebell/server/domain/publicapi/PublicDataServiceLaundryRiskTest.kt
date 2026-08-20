@@ -7,7 +7,9 @@ import java.time.Instant
 import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 class PublicDataServiceLaundryRiskTest {
     @Test
@@ -25,8 +27,10 @@ class PublicDataServiceLaundryRiskTest {
             ),
         )
 
-        val washer = assertNotNull(service.laundry().machines.single().washer)
+        val snapshot = service.laundry()
+        val washer = assertNotNull(snapshot.machines.single().washer)
 
+        assertTrue(snapshot.quality.collectorHealthy)
         assertEquals(6, washer.attempts)
         assertEquals(1, washer.errors)
         assertEquals(100.0 / 6, washer.rate)
@@ -34,9 +38,34 @@ class PublicDataServiceLaundryRiskTest {
         assertEquals(Instant.parse("2026-08-11T12:34:30Z"), store.requestedFrom)
         assertEquals(Instant.parse("2026-08-18T12:34:30Z"), store.requestedThrough)
     }
+
+    @Test
+    fun `public laundry response exposes unhealthy collector after a failed attempt`() {
+        val now = Instant.parse("2026-08-18T12:34:56Z")
+        val service = PublicDataService(
+            RiskStore(now, consecutiveFailures = 1, lastError = "invalid upstream response"),
+            Clock.fixed(now, ZoneOffset.UTC),
+            JungleBellProperties(
+                URI("https://example.test"),
+                emptySet(),
+                "x".repeat(32),
+                collectors = JungleBellProperties.CollectorProperties(false, null, null, null),
+            ),
+        )
+
+        val quality = service.laundry().quality
+
+        assertFalse(quality.collectorHealthy)
+        assertEquals("STALE", quality.collection)
+        assertEquals("COLLECTION_GAP", quality.sourceFreshness)
+    }
 }
 
-private class RiskStore(private val now: Instant) : PublicDataStore {
+private class RiskStore(
+    private val now: Instant,
+    private val consecutiveFailures: Int = 0,
+    private val lastError: String? = null,
+) : PublicDataStore {
     var requestedFrom: Instant? = null
     var requestedThrough: Instant? = null
 
@@ -74,8 +103,8 @@ private class RiskStore(private val now: Instant) : PublicDataStore {
         now.toString(),
         "a".repeat(64),
         now.toString(),
-        0,
-        null,
+        consecutiveFailures,
+        lastError,
     )
 
     override fun laundryRisks(from: Instant, through: Instant): Map<LaundryRiskKey, LaundryRisk> {

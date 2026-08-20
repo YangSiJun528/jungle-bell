@@ -205,8 +205,12 @@ class PublicDataService(
             listOfNotNull(machine.washer, machine.dryer).any { it.operationalStatus == "RUNNING" }
         }
         val collectionAge = state?.lastSuccessAt?.let { Duration.between(Instant.parse(it), asOf).seconds } ?: Long.MAX_VALUE
+        val collectorHealthy = state != null &&
+            state.consecutiveFailures == 0 &&
+            state.lastError == null &&
+            collectionAge <= 120
         val freshness = when {
-            state?.lastError != null || collectionAge > 120 -> "COLLECTION_GAP"
+            !collectorHealthy -> "COLLECTION_GAP"
             ageSeconds <= 60 -> "REFRESH_OBSERVED"
             anyActive && ageSeconds > 360 -> "REFRESH_OVERDUE"
             anyActive && ageSeconds <= 300 -> "WITHIN_REFRESH_WINDOW"
@@ -224,9 +228,10 @@ class PublicDataService(
             )
         }
         val quality = LaundryQuality(
-            if (freshness == "COLLECTION_GAP") "STALE" else "SUCCESS",
-            freshness,
-            when {
+            collectorHealthy = collectorHealthy,
+            collection = if (freshness == "COLLECTION_GAP") "STALE" else "SUCCESS",
+            sourceFreshness = freshness,
+            certainty = when {
                 freshness == "COLLECTION_GAP" -> "UNAVAILABLE"
                 anyActive && freshness != "REFRESH_OBSERVED" -> "PROVISIONAL_DEVICE_STATE"
                 else -> "OBSERVED_API_VALUE"

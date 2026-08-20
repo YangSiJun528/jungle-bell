@@ -101,6 +101,7 @@ data class LaundryVersion(
 )
 
 data class LaundryQuality(
+    val collectorHealthy: Boolean,
     val collection: String,
     val sourceFreshness: String,
     val certainty: String,
