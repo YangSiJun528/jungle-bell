@@ -25,6 +25,8 @@ export function AppInstallRoutePage() {
     const handoffLink = initialPairing?.kind === 'install-handoff'
         ? initialPairing.link
         : null;
+    // This only prepares an HttpOnly cookie; it does not mutate query-backed state.
+    // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation
     const prepareHandoff = useMutation({
         mutationFn: api.prepareQrPairingHandoff,
         onSuccess: clearInitialPairingEntry,
