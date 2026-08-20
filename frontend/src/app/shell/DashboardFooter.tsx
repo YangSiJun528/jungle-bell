@@ -1,4 +1,5 @@
 import {ExternalLink} from 'lucide-react';
+import {Link} from '@tanstack/react-router';
 
 const PROJECT_URL = 'https://github.com/YangSiJun528/jungle-bell';
 const FEEDBACK_URL = `${PROJECT_URL}/issues/new/choose`;
@@ -26,6 +27,12 @@ export function DashboardFooter() {
                     <ExternalFooterLink href={PROJECT_URL}>GitHub</ExternalFooterLink>
                     <ExternalFooterLink href={FEEDBACK_URL}>피드백 남기기</ExternalFooterLink>
                     <ExternalFooterLink href={RELEASE_URL}>릴리즈</ExternalFooterLink>
+                    <Link
+                        to="/privacy"
+                        className="rounded-sm font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                        개인정보 처리 안내
+                    </Link>
                 </nav>
             </div>
         </footer>

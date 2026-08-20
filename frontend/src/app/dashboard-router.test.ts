@@ -36,6 +36,15 @@ describe('dashboard router', () => {
         expect(router.state.matches.at(-1)?.routeId).toBe('/install');
     });
 
+    test('exposes the privacy notice as a dedicated public route', async () => {
+        const history = createMemoryHistory({initialEntries: ['/privacy']});
+        const router = createDashboardRouter(history);
+
+        await router.load();
+
+        expect(router.state.matches.at(-1)?.routeId).toBe('/privacy');
+    });
+
     test('normalizes legacy route fragments without touching pairing fragments', () => {
         expect(normalizeLegacyDashboardHash('#attendance')).toBe('#/attendance');
         expect(normalizeLegacyDashboardHash('#/attendance')).toBeNull();

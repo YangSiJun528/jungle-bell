@@ -24,14 +24,19 @@ import {
 import {DashboardRouteRuntimeProvider} from './dashboard-route-runtime';
 import {PlatformAuthenticationGate} from './platform-authentication-gate';
 import {DesktopUpdateNotice} from './desktop-update-notice';
+import {UsagePrivacyNotice} from './usage-privacy-notice';
+import {PublicRouteOutlet} from './privacy-page';
 
 const NotificationPanelContent = lazy(() => import('@/features/notifications/notifications-page').then((module) => ({default: module.NotificationPanelContent})));
 const CompanionConnections = lazy(() => import('@/features/connections/connections-page').then((module) => ({default: module.CompanionConnections})));
 
 export function DashboardApp() {
+    const pathname = useRouterState({select: (state) => state.location.pathname});
+    if (pathname === '/privacy') return <PublicRouteOutlet/>;
+
     return (
         <PlatformAuthenticationGate
-            notice={<DesktopUpdateNotice/>}
+            notice={<><DesktopUpdateNotice/><UsagePrivacyNotice/></>}
             connectionContent={(
                 <AsyncBoundary fallback={<LoadingState label="연결 화면을 준비하고 있습니다."/>}>
                     <CompanionConnections completionPath={null}/>
@@ -124,6 +129,7 @@ function DashboardContent() {
             }}
         >
             <DesktopUpdateNotice/>
+            <UsagePrivacyNotice/>
             <DashboardRouteRuntimeProvider value={{contentRoute, openInstallPrompt}}>
                 <AsyncBoundary resetKeys={[contentRoute]}>
                     <Outlet/>

@@ -15,6 +15,7 @@ import {
     MealsRoutePage,
     NotificationRoutePage,
 } from './dashboard-route-pages';
+import {PrivacyPage} from './privacy-page';
 
 const rootRoute = createRootRoute({component: DashboardApp});
 const indexRoute = createRoute({
@@ -57,6 +58,11 @@ const installRoute = createRoute({
     path: 'install',
     component: AppInstallRoutePage,
 });
+const privacyRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: 'privacy',
+    component: PrivacyPage,
+});
 const fallbackRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: '$',
@@ -71,6 +77,7 @@ const routeTree = rootRoute.addChildren([
     notificationsRoute,
     connectionsRoute,
     installRoute,
+    privacyRoute,
     fallbackRoute,
 ]);
 
