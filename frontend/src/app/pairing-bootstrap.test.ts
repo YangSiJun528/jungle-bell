@@ -5,12 +5,13 @@ import {parseAndScrubInitialPairing} from './pairing-bootstrap';
 describe('initial QR pairing bootstrap', () => {
     const hash = '#pairing=jbp_123&challenge=jbpc_one-time-secret';
 
-    test('브라우저는 secret을 메모리에만 반환하고 주소를 연결 화면으로 즉시 바꾼다', () => {
+    test('설치형 PWA는 secret을 메모리에만 반환하고 휴대폰 설정 화면으로 즉시 바꾼다', () => {
         const replaceState = vi.fn();
 
         const entry = parseAndScrubInitialPairing({
             hash,
             authentication: 'cookie',
+            mobileInstallClient: true,
             pathname: '/',
             search: '?source=qr',
             historyState: {navigation: 1},
@@ -25,7 +26,7 @@ describe('initial QR pairing bootstrap', () => {
         expect(replaceState).toHaveBeenCalledWith(
             {navigation: 1},
             '',
-            '/?source=qr#/connections',
+            '/?source=qr#/setup',
         );
     });
 
@@ -35,6 +36,7 @@ describe('initial QR pairing bootstrap', () => {
         const entry = parseAndScrubInitialPairing({
             hash,
             authentication: 'desktop-session',
+            mobileInstallClient: false,
             pathname: '/',
             search: '',
             historyState: null,
@@ -46,12 +48,33 @@ describe('initial QR pairing bootstrap', () => {
         expect(replaceState).toHaveBeenCalledWith(null, '', '/#/home');
     });
 
-    test('일반 웹은 모바일용 QR을 처리하지 않고 secret을 제거한다', () => {
+    test('일반 모바일 브라우저는 제한된 휴대폰 설정 흐름에서 QR을 처리한다', () => {
         const replaceState = vi.fn();
 
         const entry = parseAndScrubInitialPairing({
             hash,
             authentication: 'none',
+            mobileInstallClient: true,
+            pathname: '/',
+            search: '',
+            historyState: null,
+            replaceState,
+        });
+
+        expect(entry).toEqual({
+            kind: 'companion',
+            link: {pairingId: 'jbp_123', challenge: 'jbpc_one-time-secret'},
+        });
+        expect(replaceState).toHaveBeenCalledWith(null, '', '/#/setup');
+    });
+
+    test('데스크톱 일반 웹은 QR secret을 제거하고 공개 홈으로 복귀한다', () => {
+        const replaceState = vi.fn();
+
+        const entry = parseAndScrubInitialPairing({
+            hash,
+            authentication: 'none',
+            mobileInstallClient: false,
             pathname: '/',
             search: '',
             historyState: null,
@@ -67,6 +90,7 @@ describe('initial QR pairing bootstrap', () => {
         expect(parseAndScrubInitialPairing({
             hash: '#laundry',
             authentication: 'none',
+            mobileInstallClient: true,
             pathname: '/',
             search: '',
             historyState: null,

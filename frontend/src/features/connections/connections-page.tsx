@@ -1,7 +1,7 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
-import {useNavigate} from '@tanstack/react-router';
-import {CircleAlert, KeyRound, Link2, MonitorCheck, QrCode, RotateCcw, Smartphone, Trash2} from 'lucide-react';
+import {Link, useNavigate} from '@tanstack/react-router';
+import {CheckCircle2, CircleAlert, Download, KeyRound, Link2, MonitorCheck, QrCode, RotateCcw, Smartphone, Trash2} from 'lucide-react';
 import {
     queryKeys,
     refreshBrowserPersonalQueries,
@@ -65,6 +65,7 @@ import {
     type CompanionCompletionPath,
 } from './pairing-flow';
 import {ServiceSettings} from './service-settings';
+import {PairingExpiryCountdown} from './pairing-expiry-countdown';
 
 interface PairingClaimStart {
     mode: 'manual' | 'qr' | 'resume';
@@ -239,20 +240,26 @@ function DesktopConnections() {
 
             <div className="grid gap-6 lg:grid-cols-2">
                 <Card>
-                    <CardHeader><CardTitle className="flex items-center gap-2"><QrCode className="size-5"/>모바일 연결</CardTitle><CardDescription>설치한 PWA에서 QR 또는 10자리 코드를 입력하세요. 코드는 2분 동안 유효합니다.</CardDescription></CardHeader>
+                    <CardHeader><CardTitle className="flex items-center gap-2"><QrCode className="size-5"/>휴대폰 설정</CardTitle><CardDescription>스캔하면 PC 연결, 앱 설치, 알림 설정을 순서대로 안내합니다.</CardDescription></CardHeader>
                     <CardContent className="space-y-4">
                         {!personalReady || !connectionUi.canCreatePairing ? (
                             <p className="text-sm text-muted-foreground">LMS 로그인과 계정 연결 후 코드를 만들 수 있습니다.</p>
                         ) : !pairing ? (
                             <div className="space-y-3">
-                                <Button onClick={() => createPairing.mutate()} disabled={createPairing.isPending || !connectionUi.canCreatePairing}><Link2 className="size-4"/>{connection.data?.state === 'disconnected' ? 'PC 등록 및 연결 코드 만들기' : '연결 코드 만들기'}</Button>
+                                <Button onClick={() => createPairing.mutate()} disabled={createPairing.isPending || !connectionUi.canCreatePairing}><Link2 className="size-4"/>{connection.data?.state === 'disconnected' ? 'PC 등록 및 휴대폰 설정 시작' : '휴대폰 설정 QR 만들기'}</Button>
                                 {createPairing.isError ? <p className="text-sm text-destructive">연결 코드를 만들지 못했습니다. 잠시 후 다시 시도하세요.</p> : null}
                             </div>
                         ) : (
                             <div className="grid gap-4 sm:grid-cols-[9rem_minmax(0,1fr)]">
-                                {qr ? <img src={qr} alt="모바일 연결 QR 코드" className="aspect-square w-36 rounded-lg border bg-white p-2"/> : null}
+                                {qr ? <img src={qr} alt="휴대폰 설정 시작 QR 코드" className="aspect-square w-36 rounded-lg border bg-white p-2"/> : null}
                                 <div className="min-w-0 space-y-3">
-                                    <div><p className="text-xs text-muted-foreground">수동 연결 코드</p><p className="mt-1 font-mono text-2xl font-bold tracking-wider">{formatManualPairingCode(pairing.manualCode)}</p></div>
+                                    <div>
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                            <p className="text-xs text-muted-foreground">10자리 연결 코드</p>
+                                            <PairingExpiryCountdown expiresAt={pairing.expiresAt}/>
+                                        </div>
+                                        <p className="mt-1 font-mono text-2xl font-bold tracking-wider">{formatManualPairingCode(pairing.manualCode)}</p>
+                                    </div>
                                     {pairingStatus.data?.status === 'completed' ? (
                                         <p aria-live="polite" className="text-sm text-emerald-700 dark:text-emerald-300">연결이 완료됐습니다.</p>
                                     ) : pairingStatus.data?.status === 'expired' ? (
@@ -263,14 +270,14 @@ function DesktopConnections() {
                                             <KeyRound/>
                                             <AlertTitle>{pairingStatus.data.claim.deviceLabel}</AlertTitle>
                                             <AlertDescription>
-                                                <span>확인 코드 {pairingStatus.data.claim.confirmationCode}</span>
+                                                <span>확인 번호 {pairingStatus.data.claim.confirmationCode}</span>
                                                 <Button
                                                     className="mt-2 max-w-full"
                                                     size="sm"
                                                     onClick={() => approve.mutate()}
                                                     disabled={approve.isPending}
                                                 >
-                                                    이 기기 승인
+                                                    이 휴대폰 승인
                                                 </Button>
                                             </AlertDescription>
                                         </Alert>
@@ -282,7 +289,7 @@ function DesktopConnections() {
                                         </div>
                                     ) : null}
                                     {approve.isError ? <p className="text-sm text-destructive">이 기기를 승인하지 못했습니다.</p> : null}
-                                    <Button variant="outline" size="sm" onClick={() => createPairing.mutate()}>새 코드</Button>
+                                    <Button variant="outline" size="sm" onClick={() => createPairing.mutate()}>새 QR과 코드</Button>
                                     {createPairing.isError ? <p className="text-sm text-destructive">새 연결 코드를 만들지 못했습니다.</p> : null}
                                 </div>
                             </div>
@@ -343,19 +350,26 @@ function DesktopConnections() {
     );
 }
 
-export function CompanionConnections({completionPath = '/connections'}: {
+export function CompanionConnections({
+    completionPath = '/connections',
+    mode = 'settings',
+    onRequestMobileInstall,
+}: {
     completionPath?: CompanionCompletionPath;
+    mode?: 'settings' | 'setup';
+    onRequestMobileInstall?: () => void;
 }) {
-    const {api} = useDashboardEnvironment();
+    const {api, platform} = useDashboardEnvironment();
     const account = useDashboardAccount();
     const client = useQueryClient();
     const navigate = useNavigate();
     const [manualCode, setManualCode] = useState('');
     const [message, setMessage] = useState('');
+    const [completedInBrowser, setCompletedInBrowser] = useState(false);
     const pairingStartGate = useRef({inFlight: false, automaticHandled: false});
     const initialPairing = useMemo(readInitialPairingEntry, []);
     const pairingLink = initialPairing?.kind === 'companion' ? initialPairing.link : null;
-    const [restoredPairing, setRestoredPairing] = useState(() => {
+    const [restoredPairing] = useState(() => {
         const storage = pairingSessionStorage();
         return storage ? readPendingMobilePairing(storage, Date.now()) : null;
     });
@@ -399,12 +413,15 @@ export function CompanionConnections({completionPath = '/connections'}: {
             if (storage) clearPendingMobilePairing(storage);
         },
         onSuccess: async () => {
+            setCompletedInBrowser(true);
             setMessage('연결이 완료됐습니다.');
-            await finishCompanionPairing({
-                completionPath,
-                navigate: (path) => navigate({to: path, replace: true}),
-                refreshSession: () => refreshBrowserPersonalQueries(client),
-            });
+            if (platform.accountAuthentication.kind === 'cookie') {
+                await finishCompanionPairing({
+                    completionPath,
+                    navigate: (path) => navigate({to: path, replace: true}),
+                    refreshSession: () => refreshBrowserPersonalQueries(client),
+                });
+            }
         },
         onError: () => {
             const storage = pairingSessionStorage();
@@ -420,7 +437,14 @@ export function CompanionConnections({completionPath = '/connections'}: {
             setMessage('이 모바일 연결을 해제했습니다.');
         },
     });
-    const connected = account.personalAccess.status === 'connected';
+    const publicSetup = mode === 'setup'
+        && platform.kind === 'browser'
+        && platform.accountAuthentication.kind === 'none';
+    const effectiveAccountStatus = publicSetup && account.personalAccess.status === 'not-applicable'
+        ? 'unconnected'
+        : account.personalAccess.status;
+    const connected = account.personalAccess.status === 'connected' || completedInBrowser;
+    const checking = effectiveAccountStatus === 'checking';
     const confirmationCode = mobileInstallationId().slice(-4).toUpperCase();
     const startClaim = useCallback((input: PairingClaimStart) => {
         if (!tryReservePairingStart(pairingStartGate.current)) return;
@@ -431,7 +455,7 @@ export function CompanionConnections({completionPath = '/connections'}: {
 
     useEffect(() => {
         const action = automaticPairingAction({
-            account: account.personalAccess.status,
+            account: effectiveAccountStatus,
             alreadyHandled: pairingStartGate.current.automaticHandled,
             hasRestoredPairing: restoredPairing !== null,
             hasQrLink: pairingLink !== null,
@@ -440,7 +464,6 @@ export function CompanionConnections({completionPath = '/connections'}: {
             pairingStartGate.current.automaticHandled = true;
             const storage = pairingSessionStorage();
             if (storage) clearPendingMobilePairing(storage);
-            setRestoredPairing(null);
             return;
         }
         if (action === 'resume' && restoredPairing) {
@@ -450,19 +473,78 @@ export function CompanionConnections({completionPath = '/connections'}: {
         if (action === 'qr') {
             startClaim({mode: 'qr'});
         }
-    }, [account.personalAccess.status, pairingLink, restoredPairing, startClaim]);
+    }, [effectiveAccountStatus, pairingLink, restoredPairing, startClaim]);
+
+    const setupTitle = connected
+        ? 'PC 연결 완료'
+        : claim.isPending
+            ? 'PC 승인 대기'
+            : 'PC 연결';
+    const setupDescription = connected
+        ? platform.pwa.installed
+            ? '이 PWA는 PC와 연결되어 있습니다.'
+            : 'PC 승인이 끝났습니다. 이제 Jungle Bell을 홈 화면에 추가하세요.'
+        : '이 휴대폰을 PC에서 승인하면 개인 기능을 사용할 수 있습니다.';
 
     return (
         <div className="space-y-6">
             <Card className="mx-auto max-w-xl">
-                <CardHeader><CardTitle className="flex items-center gap-2"><MonitorCheck className="size-5"/>{connected ? '이 기기는 연결됨' : '연결 코드 입력'}</CardTitle><CardDescription>{connected ? 'PC 앱이 출석 상태를 주기적으로 갱신합니다.' : 'PC 앱의 기기 연결 화면에 표시된 코드를 입력하세요.'}</CardDescription></CardHeader>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <MonitorCheck className="size-5"/>
+                        {mode === 'setup' ? setupTitle : connected ? '이 기기는 연결됨' : '연결 코드 입력'}
+                    </CardTitle>
+                    <CardDescription>
+                        {mode === 'setup'
+                            ? setupDescription
+                            : connected
+                                ? 'PC 앱이 출석 상태를 주기적으로 갱신합니다.'
+                                : 'PC 앱의 기기 연결 화면에 표시된 코드를 입력하세요.'}
+                    </CardDescription>
+                </CardHeader>
                 <CardContent className="space-y-4">
-                    {connected ? (
+                    {checking ? (
+                        <LoadingState label="PC 연결 상태를 확인하고 있습니다."/>
+                    ) : connected && mode === 'setup' ? (
+                        <div className="space-y-4">
+                            <div className="flex items-start gap-3 rounded-lg bg-emerald-500/10 p-4 text-sm text-emerald-800 dark:text-emerald-200">
+                                <CheckCircle2 aria-hidden="true" className="mt-0.5 size-5 shrink-0"/>
+                                <div>
+                                    <strong className="block">1단계 완료</strong>
+                                    <p className="mt-1 leading-6">PC에서 이 휴대폰을 확인했습니다.</p>
+                                </div>
+                            </div>
+                            {platform.pwa.installed ? (
+                                <div className="space-y-3">
+                                    <p className="text-sm leading-6 text-muted-foreground">
+                                        앱 설치도 확인했습니다. 알림 확인은 다음 단계에서 선택할 수 있습니다.
+                                    </p>
+                                    <Button asChild><Link to="/home">Jungle Bell 시작</Link></Button>
+                                </div>
+                            ) : (
+                                <div className="space-y-3 rounded-lg border p-4">
+                                    <div>
+                                        <strong className="text-sm">2단계 · 앱 설치</strong>
+                                        <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                                            iPhone은 공유 메뉴의 ‘홈 화면에 추가’를, Android는 ‘앱 설치’를 선택합니다. 설치 후에는 홈 화면 아이콘으로 열어 주세요.
+                                        </p>
+                                    </div>
+                                    <Button onClick={onRequestMobileInstall} disabled={!onRequestMobileInstall}>
+                                        <Download aria-hidden="true"/>모바일 앱 설치 안내
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
+                    ) : connected ? (
                         <Button variant="outline" onClick={() => disconnect.mutate()} disabled={disconnect.isPending}>이 모바일 연결 해제</Button>
                     ) : (
                         <>
-                            <div className="space-y-2"><Label htmlFor="pairing-code">10자리 연결 코드</Label><Input id="pairing-code" value={manualCode} inputMode="text" maxLength={11} autoCapitalize="characters" placeholder="ABCDE-12345" onChange={(event) => setManualCode(formatManualPairingCode(event.target.value))}/></div>
-                            <Button onClick={() => startClaim({mode: 'manual'})} disabled={!validManualPairingCode(manualCode) || claim.isPending}>연결 요청</Button>
+                            {!claim.isPending ? (
+                                <>
+                                    <div className="space-y-2"><Label htmlFor="pairing-code">10자리 연결 코드</Label><Input id="pairing-code" value={manualCode} inputMode="text" maxLength={11} autoCapitalize="characters" placeholder="ABCDE-12345" onChange={(event) => setManualCode(formatManualPairingCode(event.target.value))}/></div>
+                                    <Button onClick={() => startClaim({mode: 'manual'})} disabled={!validManualPairingCode(manualCode)}>연결 요청</Button>
+                                </>
+                            ) : null}
                         </>
                     )}
                     {claim.isPending ? (

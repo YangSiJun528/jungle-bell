@@ -8,6 +8,7 @@ const LaundryPage = lazy(() => import('@/features/laundry/pages/laundry-page').t
 const MealsPage = lazy(() => import('@/features/meals/pages/meals-page').then((module) => ({default: module.MealsPage})));
 const ConnectionsPage = lazy(() => import('@/features/connections/connections-page').then((module) => ({default: module.ConnectionsPage})));
 const AppInstallPage = lazy(() => import('@/features/app-install/app-install-page').then((module) => ({default: module.AppInstallPage})));
+const MobileSetupPage = lazy(() => import('@/features/connections/mobile-setup-page').then((module) => ({default: module.MobileSetupPage})));
 
 export function HomeRoutePage() {
     return <HomePage/>;
@@ -19,6 +20,10 @@ export function AppInstallRoutePage() {
     const canRequestMobileInstall = platform.kind === 'browser'
         && platform.pwa.isMobileInstallClient();
     return <AppInstallPage onRequestMobileInstall={canRequestMobileInstall ? openInstallPrompt : undefined}/>;
+}
+
+export function MobileSetupRoutePage() {
+    return <MobileSetupPage/>;
 }
 
 export function AttendanceRoutePage() {

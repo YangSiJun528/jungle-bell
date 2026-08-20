@@ -227,9 +227,9 @@ test('연결 화면은 capability로 PC 관리와 브라우저 연결 흐름을 
     assert.match(connections, /platform\.capabilities\.mobilePairingManagement/);
     assert.match(connections, /api\.createMobilePairing\(\)/);
     assert.match(connections, /api\.approveMobilePairing/);
-    assert.match(connections, /모바일 연결/);
-    assert.match(connections, /10자리 코드/);
-    assert.match(connections, /alt="모바일 연결 QR 코드"/);
+    assert.match(connections, /휴대폰 설정/);
+    assert.match(connections, /10자리 연결 코드/);
+    assert.match(connections, /alt="휴대폰 설정 시작 QR 코드"/);
     assert.match(connections, /inputMode="text"/);
     assert.match(connections, /placeholder="ABCDE-12345"/);
     assert.match(connections, /api\.claimManualPairing/);

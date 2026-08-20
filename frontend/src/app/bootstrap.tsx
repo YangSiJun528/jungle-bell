@@ -9,7 +9,10 @@ import {normalizeLegacyDashboardHash} from './routes';
 import './styles/globals.css';
 
 export function bootstrapDashboard(platform: PlatformAdapter): void {
-    captureInitialPairingFromWindow(platform.accountAuthentication.kind);
+    captureInitialPairingFromWindow(
+        platform.accountAuthentication.kind,
+        platform.pwa.isMobileInstallClient(),
+    );
     const normalizedHash = normalizeLegacyDashboardHash(window.location.hash);
     if (normalizedHash) {
         window.history.replaceState(

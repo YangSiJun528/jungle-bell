@@ -8,6 +8,7 @@ export type InitialPairingEntry =
 interface InitialPairingInput {
     hash: string;
     authentication: AccountAuthentication['kind'];
+    mobileInstallClient: boolean;
     pathname: string;
     search: string;
     historyState: unknown;
@@ -24,8 +25,9 @@ export function parseAndScrubInitialPairing(input: InitialPairingInput): Initial
     const link = mobilePairingLinkFromHash(input.hash);
     if (!link) return null;
 
-    const companion = input.authentication === 'cookie';
-    const nextHash = companion ? '#/connections' : '#/home';
+    const companion = input.authentication === 'cookie'
+        || (input.authentication === 'none' && input.mobileInstallClient);
+    const nextHash = companion ? '#/setup' : '#/home';
     input.replaceState(input.historyState, '', `${input.pathname}${input.search}${nextHash}`);
 
     if (companion) return {kind: 'companion', link};
@@ -34,10 +36,12 @@ export function parseAndScrubInitialPairing(input: InitialPairingInput): Initial
 
 export function captureInitialPairingFromWindow(
     authentication: AccountAuthentication['kind'],
+    mobileInstallClient: boolean,
 ): void {
     initialPairingEntry = parseAndScrubInitialPairing({
         hash: window.location.hash,
         authentication,
+        mobileInstallClient,
         pathname: window.location.pathname,
         search: window.location.search,
         historyState: window.history.state,

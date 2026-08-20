@@ -45,10 +45,13 @@ describe('ConnectionsPage settings information architecture', () => {
     });
 
     test('작은 PC 창에서도 QR 옆 승인 영역과 버튼이 카드 안에서 줄어든다', () => {
+        expect(source).toContain('휴대폰 설정');
+        expect(source).toContain('스캔하면 PC 연결, 앱 설치, 알림 설정을 순서대로 안내합니다.');
+        expect(source).toContain('alt="휴대폰 설정 시작 QR 코드"');
         expect(source).toContain('sm:grid-cols-[9rem_minmax(0,1fr)]');
         expect(source).toContain('className="min-w-0 space-y-3"');
         expect(source).toMatch(
-            /<Alert>[\s\S]*?<AlertDescription[^>]*>[\s\S]*?확인 코드[\s\S]*?<Button[^>]*>[\s\S]*?이 기기 승인[\s\S]*?<\/Button>[\s\S]*?<\/AlertDescription>[\s\S]*?<\/Alert>/u,
+            /<Alert>[\s\S]*?<AlertDescription[^>]*>[\s\S]*?확인 번호[\s\S]*?<Button[^>]*>[\s\S]*?이 휴대폰 승인[\s\S]*?<\/Button>[\s\S]*?<\/AlertDescription>[\s\S]*?<\/Alert>/u,
         );
     });
 });
