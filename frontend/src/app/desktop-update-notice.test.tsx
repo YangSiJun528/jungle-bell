@@ -49,6 +49,7 @@ function renderNotice(options: {
     client.setQueryData(queryKeys.desktopUpdate, {
         currentVersion: '0.5.0',
         availableVersion: options.availableVersion,
+        mandatory: false,
     });
     return renderToStaticMarkup(
         <QueryClientProvider client={client}>

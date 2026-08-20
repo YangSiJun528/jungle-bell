@@ -23,6 +23,7 @@ import {
 import type {PlatformAdapter} from '@/platform/contracts';
 import {createJungleBellQueryClient} from './query-client';
 import {handleAttendanceSnapshotUpdated} from './desktop-attendance-event';
+import {DesktopUpdateGate} from './desktop-update-gate';
 
 const queryClient = createJungleBellQueryClient();
 
@@ -73,10 +74,12 @@ export function DashboardProviders({children, platform}: PropsWithChildren<{plat
     return (
         <QueryClientProvider client={queryClient}>
             <DashboardEnvironmentContext.Provider value={environment}>
-                <DashboardAccountProvider>
-                    <PlatformEventBridge platform={platform}/>
-                    {children}
-                </DashboardAccountProvider>
+                <DesktopUpdateGate>
+                    <DashboardAccountProvider>
+                        <PlatformEventBridge platform={platform}/>
+                        {children}
+                    </DashboardAccountProvider>
+                </DesktopUpdateGate>
             </DashboardEnvironmentContext.Provider>
         </QueryClientProvider>
     );

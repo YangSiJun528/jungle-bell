@@ -3,8 +3,7 @@ import {Download} from 'lucide-react';
 import {queryKeys, useDashboardEnvironment} from './dashboard-context';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Button} from '@/components/ui/button';
-
-const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1_000;
+import {useDesktopUpdateQuery} from './desktop-update-query';
 
 export function DesktopUpdateNotice() {
     const {api, platform} = useDashboardEnvironment();
@@ -17,13 +16,7 @@ export function DesktopUpdateNotice() {
         staleTime: 30_000,
     });
     const manualUpdate = desktop && settings.data?.autoUpdate === false;
-    const update = useQuery({
-        queryKey: queryKeys.desktopUpdate,
-        queryFn: () => api.checkDesktopUpdate(),
-        enabled: manualUpdate,
-        staleTime: UPDATE_CHECK_INTERVAL_MS,
-        refetchInterval: UPDATE_CHECK_INTERVAL_MS,
-    });
+    const {update} = useDesktopUpdateQuery();
     const install = useMutation({
         mutationFn: () => api.installDesktopUpdate(),
         onSuccess: async () => {
@@ -31,7 +24,7 @@ export function DesktopUpdateNotice() {
         },
     });
 
-    if (!manualUpdate || !update.data?.availableVersion) return null;
+    if (!manualUpdate || !update.data?.availableVersion || update.data.mandatory) return null;
 
     return (
         <Alert className="mb-4 border-amber-500/50 bg-amber-500/10">

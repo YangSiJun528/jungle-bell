@@ -6,7 +6,7 @@ describe('desktop update adapter', () => {
     test('parses the exact update status and installs through the native bridge', async () => {
         const invoke = vi.fn(async (command: string) => {
             if (command === 'check_desktop_update') {
-                return {currentVersion: '0.5.0', availableVersion: '0.5.1'};
+                return {currentVersion: '0.5.0', availableVersion: '0.6.0', mandatory: true};
             }
             return null;
         });
@@ -14,7 +14,8 @@ describe('desktop update adapter', () => {
 
         await expect(api.checkDesktopUpdate()).resolves.toEqual({
             currentVersion: '0.5.0',
-            availableVersion: '0.5.1',
+            availableVersion: '0.6.0',
+            mandatory: true,
         });
         await expect(api.installDesktopUpdate()).resolves.toBeUndefined();
         await expect(api.openSystemNotificationSettings()).resolves.toBeUndefined();
@@ -26,9 +27,11 @@ describe('desktop update adapter', () => {
     });
 
     test.each([
-        {currentVersion: '0.5.0'},
-        {currentVersion: '0.5.0', availableVersion: 'latest'},
-        {currentVersion: '0.5.0', availableVersion: null, extra: true},
+        {currentVersion: '0.5.0', availableVersion: null},
+        {currentVersion: '0.5.0', availableVersion: 'latest', mandatory: false},
+        {currentVersion: '0.5.0', availableVersion: null, mandatory: false, extra: true},
+        {currentVersion: '0.5.0', availableVersion: null, mandatory: 'false'},
+        {currentVersion: '0.5.0', availableVersion: null, mandatory: true},
     ])('rejects malformed update status %#', async (value) => {
         const api = createDashboardDesktopSettingsApi(createNativeBridge(async () => value));
         await expect(api.checkDesktopUpdate()).rejects.toThrow('API_RESPONSE_INVALID');

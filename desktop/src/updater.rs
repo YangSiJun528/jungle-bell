@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use semver::Version;
 use serde::Serialize;
 use tauri::Manager;
 use tauri_plugin_updater::UpdaterExt;
@@ -16,15 +17,33 @@ static UPDATE_OPERATION: Mutex<()> = Mutex::const_new(());
 pub(crate) struct DesktopUpdateStatus {
     current_version: String,
     available_version: Option<String>,
+    mandatory: bool,
 }
 
 impl DesktopUpdateStatus {
     fn new(current_version: impl Into<String>, available_version: Option<String>) -> Self {
+        let current_version = current_version.into();
+        let mandatory = current_version
+            .parse::<Version>()
+            .ok()
+            .zip(
+                available_version
+                    .as_deref()
+                    .and_then(|version| version.parse::<Version>().ok()),
+            )
+            .is_some_and(|(current, available)| is_mandatory_update(&current, &available));
         Self {
-            current_version: current_version.into(),
+            current_version,
             available_version,
+            mandatory,
         }
     }
+}
+
+fn is_mandatory_update(current: &Version, available: &Version) -> bool {
+    available.pre.is_empty()
+        && available.build.is_empty()
+        && (available.major, available.minor) > (current.major, current.minor)
 }
 
 pub(crate) async fn check_update(app: &tauri::AppHandle) -> Result<DesktopUpdateStatus, String> {
@@ -93,24 +112,50 @@ pub(crate) async fn auto_install_update(app: tauri::AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use semver::Version;
+
+    #[test]
+    fn 정식_minor_이상_릴리즈만_강제_업데이트한다() {
+        let current = Version::parse("0.5.4").unwrap();
+
+        assert!(!is_mandatory_update(&current, &Version::parse("0.5.5").unwrap()));
+        assert!(is_mandatory_update(&current, &Version::parse("0.6.0").unwrap()));
+        assert!(is_mandatory_update(&current, &Version::parse("1.0.0").unwrap()));
+        assert!(!is_mandatory_update(&current, &Version::parse("0.6.0-rc.1").unwrap()));
+        assert!(!is_mandatory_update(
+            &current,
+            &Version::parse("0.6.0+build.1").unwrap()
+        ));
+    }
 
     #[test]
     fn 업데이트_상태는_현재_버전과_선택적_최신_버전을_노출한다() {
         let available = DesktopUpdateStatus::new("0.5.0", Some("0.5.1".to_owned()));
-        let current = DesktopUpdateStatus::new("0.5.1", None);
+        let mandatory = DesktopUpdateStatus::new("0.5.0", Some("0.6.0".to_owned()));
+        let current = DesktopUpdateStatus::new("0.6.0", None);
 
         assert_eq!(
             serde_json::to_value(available).unwrap(),
             serde_json::json!({
                 "currentVersion": "0.5.0",
-                "availableVersion": "0.5.1"
+                "availableVersion": "0.5.1",
+                "mandatory": false
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(mandatory).unwrap(),
+            serde_json::json!({
+                "currentVersion": "0.5.0",
+                "availableVersion": "0.6.0",
+                "mandatory": true
             })
         );
         assert_eq!(
             serde_json::to_value(current).unwrap(),
             serde_json::json!({
-                "currentVersion": "0.5.1",
-                "availableVersion": null
+                "currentVersion": "0.6.0",
+                "availableVersion": null,
+                "mandatory": false
             })
         );
     }

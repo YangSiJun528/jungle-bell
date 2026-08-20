@@ -56,7 +56,7 @@ export function createDashboardDesktopSettingsApi(
 function parseDesktopUpdateStatus(value: unknown): DesktopUpdateStatus {
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidResponse();
     const source = value as Record<string, unknown>;
-    const keys = ['currentVersion', 'availableVersion'] as const;
+    const keys = ['currentVersion', 'availableVersion', 'mandatory'] as const;
     if (Object.keys(source).length !== keys.length || keys.some((key) => !hasOwn(source, key))) {
         throw invalidResponse();
     }
@@ -68,9 +68,12 @@ function parseDesktopUpdateStatus(value: unknown): DesktopUpdateStatus {
             || !APP_VERSION_PATTERN.test(source.availableVersion))) {
         throw invalidResponse();
     }
+    if (typeof source.mandatory !== 'boolean'
+        || (source.mandatory && source.availableVersion === null)) throw invalidResponse();
     return {
         currentVersion: source.currentVersion,
         availableVersion: source.availableVersion as string | null,
+        mandatory: source.mandatory,
     };
 }
 

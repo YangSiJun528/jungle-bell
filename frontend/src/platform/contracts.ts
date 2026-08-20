@@ -84,6 +84,7 @@ export type DesktopSettingsUpdate = Pick<
 export interface DesktopUpdateStatus {
     currentVersion: string;
     availableVersion: string | null;
+    mandatory: boolean;
 }
 
 export interface DesktopSettingsAdapter {
