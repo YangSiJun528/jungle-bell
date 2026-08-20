@@ -141,8 +141,21 @@ export function PrivacyPage() {
                     <p className="text-sm leading-6 text-muted-foreground">
                         정보주체는 개인정보 열람, 정정·삭제, 처리정지 및 동의 철회를 요구할 수 있습니다. 권리 행사와 개인정보 관련 고충은 이메일로 접수합니다.
                     </p>
+                    <dl className="rounded-xl border bg-card p-5">
+                        <dt className="font-semibold">개인정보 보호책임자</dt>
+                        <dd className="mt-2 text-sm leading-6 text-muted-foreground">양시준</dd>
+                        <dt className="mt-5 font-semibold">권리 행사 및 고충처리 이메일</dt>
+                        <dd className="mt-2 text-sm leading-6">
+                            <a
+                                href="mailto:yangsijun5528@gmail.com"
+                                className="font-medium text-primary underline-offset-4 hover:underline"
+                            >
+                                yangsijun5528@gmail.com
+                            </a>
+                        </dd>
+                    </dl>
                     <p className="text-sm leading-6 text-muted-foreground">
-                        공개 이슈에는 개인정보를 적지 마세요. 구체적인 이메일 연락처와 개인정보 보호책임자 정보는 정식 서비스 공개 전에 이 페이지에 추가합니다.
+                        공개 이슈에는 개인정보를 적지 마세요.
                     </p>
                     <a
                         href="https://github.com/YangSiJun528/jungle-bell"

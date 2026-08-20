@@ -28,6 +28,9 @@ describe('개인정보 처리방침', () => {
         expect(markup).toContain('필수 항목');
         expect(markup).toContain('IP 주소, 쿠키, 기기정보, 서비스 이용기록');
         expect(markup).toContain('회원 탈퇴 또는 연결 계정 삭제 시까지');
+        expect(markup).toContain('개인정보 보호책임자');
+        expect(markup).toContain('양시준');
+        expect(markup).toContain('href="mailto:yangsijun5528@gmail.com"');
         expect(markup).toContain('변경 고지 방법: 앱 내 공지');
     });
 
