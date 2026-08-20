@@ -9,7 +9,7 @@
 | 출석·D-Day | 로그인 안내 | 서버 snapshot | 로컬 checker snapshot 우선, 서버 snapshot 보완 |
 | LMS 주기 조회 | 아니요 | 아니요 | 예 |
 | 알림 | 설치 안내 | Web Push | 운영체제 알림 |
-| 모바일 연결 | 아니요 | 수동 코드·해제 | QR·코드 생성, 승인·해제 |
+| 모바일 연결 | 모바일 `/setup`에서 QR·수동 claim만 | 연결 완료·해제 | QR·코드 생성, 승인·해제 |
 | Jungle Campus | 외부 바로가기 | 외부 바로가기 | 전용 WebView와 상태 |
 | PC 서비스 설정 | 아니요 | PC 안내 | 자동 시작·업데이트, 사용 통계, 디버그, 로그 폴더 |
 
@@ -95,6 +95,27 @@ credential과 installation ID를 보존하여 모바일 접근이 남은 채로 
 
 claim과 complete JSON에는 access token, LMS cookie, claim receipt를 포함하지
 않습니다. 연결된 모바일이 없는 상태는 정상적인 빈 목록입니다.
+
+### 휴대폰 설정 흐름
+
+PC가 만드는 QR은 앱 바이너리가 아니라 공식 origin의 휴대폰 설정 링크입니다. 모바일
+브라우저가 링크를 열면 SPA는 QR fragment의 `pairingId`와 일회용 challenge를 React
+mount 전에 메모리로 옮기고 즉시 `/#/setup`으로 주소를 치환합니다. challenge는
+`localStorage`, `sessionStorage`, IndexedDB, 브라우저 history에 기록하지 않습니다.
+비모바일 브라우저는 QR claim을 시작하지 않고 비밀값을 제거한 뒤 홈으로 이동합니다.
+
+`/setup`은 일반 모바일 브라우저에서도 공개 pairing API만 사용해 QR claim 또는
+10자리 수동 코드 입력을 허용합니다. 4자리 확인 번호와 기기명을 PC에서 대조해
+승인하기 전에는 모바일 session이나 개인 API 권한을 발급하지 않습니다. complete가
+성공하면 Strict HttpOnly cookie를 만든 뒤 설치 안내를 표시합니다. QR 자체가 설치를
+자동 실행하지는 않으며 iPhone의 **홈 화면에 추가** 또는 Android의 **앱 설치**에는
+사용자 조작이 필요합니다.
+
+설치형 PWA가 유효한 cookie로 시작하면 선택형 알림 점검을 표시합니다. PC도 LMS와
+서버 session이 준비된 첫 실행에 같은 점검을 표시합니다. 완료와 건너뛰기는
+`desktop`과 `pwa`별 화면 상태로만 기억하며 권한이나 서버 session의 근거로 사용하지
+않습니다. 점검을 건너뛰어도 알림 센터에서 Push 연결과 테스트를 다시 실행할 수
+있습니다.
 
 ## 데스크톱 IPC surface
 

@@ -25,12 +25,18 @@ LMS credential은 첫 번째 행 밖으로 이동하지 않습니다. 서버와 
 | `jungle-bell:mobile-installation-id` | `localStorage` | 재연결 시 같은 모바일 설치 식별자 사용 | 비밀 아님 |
 | `jungle-bell:pending-mobile-pairing` | `sessionStorage` | 2분 이내 pairing poll 복구 | ID·생성 시각만, 권한 없음 |
 | `jungle-bell:seen-mobile-notifications` | `localStorage` | 이 브라우저의 안 본 알림 표시 | 화면 projection |
+| `jungle-bell:notification-onboarding:desktop:v1` | `localStorage` | PC 알림 점검 완료·건너뛰기 기억 | 화면 전용 |
+| `jungle-bell:notification-onboarding:pwa:v1` | `localStorage` | 설치형 PWA 알림 점검 완료·건너뛰기 기억 | 화면 전용 |
 | install nudge dismissal | `sessionStorage` | 현재 탭에서 안내창 재표시 방지 | 화면 전용 |
 
 모바일 session token과 pending claim receipt는 브라우저 저장 API에 기록하지
 않습니다. 서버가 발급한 Strict HttpOnly cookie가 유일한 인증 기준입니다.
 단기 desktop-ui token도 `localStorage`, `sessionStorage`, IndexedDB, React Query
 cache에 기록하지 않고 한 API client 인스턴스의 메모리에서만 유지합니다.
+
+QR fragment의 `pairingId`와 일회용 challenge는 React mount 전 모듈 메모리로만
+옮기고 주소에서 즉시 제거합니다. pairing을 시작한 뒤 `sessionStorage`에는 poll 복구에
+필요한 식별자와 생성 시각만 남기며 challenge나 claim receipt를 저장하지 않습니다.
 
 ## 런타임별 상태
 
