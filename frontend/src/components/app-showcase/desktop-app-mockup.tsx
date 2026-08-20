@@ -47,7 +47,7 @@ export function DesktopAppMockup({
 
             <div className={cn(
                 'absolute right-4 top-20 z-10 grid w-[min(13rem,52%)] gap-1 rounded-xl border border-white/70 bg-white/88 p-3 text-[#263128] shadow-xl backdrop-blur-xl',
-                compact && 'left-[38%] right-auto top-16 w-[42%]',
+                compact && 'left-[44%] right-auto top-16 w-[42%]',
             )}>
                 <small className="font-bold text-[#a42a31]">Jungle Bell 트레이</small>
                 <strong className="text-xs leading-snug sm:text-sm">빨간색이면 출석을 확인할 시간이에요.</strong>
@@ -55,10 +55,13 @@ export function DesktopAppMockup({
 
             <div className={cn(
                 'absolute left-5 top-36 z-10 rounded-xl border border-white/45 bg-white/15 p-4 text-white shadow-sm backdrop-blur-sm',
-                compact && 'top-20 w-[31%] p-3',
+                compact && 'top-20 w-[36%] p-2',
             )}>
                 <small className="block font-semibold">PC 앱</small>
-                <strong className="mt-1 block text-base leading-snug sm:text-lg">메뉴 바에서<br/>출석 상태를 확인</strong>
+                <strong className={cn(
+                    'mt-1 block whitespace-nowrap leading-snug',
+                    compact ? 'text-xs sm:text-sm' : 'text-base sm:text-lg',
+                )}>메뉴 바에서<br/>출석 상태를 확인</strong>
             </div>
 
             <div className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 gap-1 rounded-xl border border-white/40 bg-white/40 p-1.5 shadow-lg backdrop-blur-xl" aria-hidden="true">
