@@ -118,7 +118,7 @@ test('홈은 PC·PWA 출석 요약과 일반 웹 앱 소개를 구분하고 오�
     assert.match(home, /전체 정보를 갱신하지 못했습니다/);
 });
 
-test('앱 안내는 실제 트레이 아이콘·모바일 알림과 기존 설치·설정 경로를 사용한다', () => {
+test('앱 안내는 실제 트레이 아이콘·모바일 알림과 설치 경로를 사용한다', () => {
     assert.match(desktopAppMockup, /macOS 메뉴 막대에서 Jungle Bell 출석 상태를 확인하는 PC 앱 예시/);
     assert.match(desktopAppMockup, /ring-\[#e23c44\]/);
     assert.match(desktopAppMockup, /빨간색이면 출석을 확인할 시간이에요\./);
@@ -140,7 +140,7 @@ test('앱 안내는 실제 트레이 아이콘·모바일 알림과 기존 설�
     assert.doesNotMatch(appInstall, /https:\/\/jungle-bell\.sijun-yang\.com/);
     assert.match(routePages, /platform\.kind === 'browser'[\s\S]*platform\.pwa\.isMobileInstallClient\(\)/);
     assert.match(routePages, /onRequestMobileInstall=\{canRequestMobileInstall \? openInstallPrompt : undefined\}/);
-    assert.match(appInstall, /<Link to="\/connections">설정으로 이동<\/Link>/);
+    assert.doesNotMatch(appInstall, /이미 앱을 설치했나요\?/);
     assert.match(appInstall, /<PageHeader[\s\S]*title="앱 설치 안내"/);
     assert.doesNotMatch(appInstall, /href="#(?:download|manual|open-pwa|connect)"/);
     assert.doesNotMatch(appShowcase, /배너/);

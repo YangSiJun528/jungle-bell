@@ -4,7 +4,6 @@ import {
     Download,
     ExternalLink,
     Monitor,
-    Settings,
     Smartphone,
     type LucideIcon,
 } from 'lucide-react';
@@ -152,21 +151,6 @@ export function AppInstallPage({onRequestMobileInstall}: {
                     </Button>
                 )}
             </section>
-
-            <aside className="flex flex-col gap-4 rounded-xl border border-dashed border-primary/30 bg-primary/5 p-5 sm:flex-row sm:items-center sm:p-6" aria-labelledby="installed-title">
-                <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-card text-primary shadow-sm">
-                    <Settings aria-hidden="true" className="size-5"/>
-                </span>
-                <div className="min-w-0 flex-1">
-                    <h2 id="installed-title" className="font-semibold">이미 앱을 설치했나요?</h2>
-                    <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                        설치를 다시 할 필요 없이 설정에서 기기 연결을 시작할 수 있습니다.
-                    </p>
-                </div>
-                <Button asChild variant="outline" className="w-full shrink-0 bg-card sm:w-auto">
-                    <Link to="/connections">설정으로 이동</Link>
-                </Button>
-            </aside>
         </div>
     );
 }
