@@ -1,6 +1,11 @@
-import {lazy} from 'react';
+import {lazy, useEffect, useMemo} from 'react';
+import {useMutation} from '@tanstack/react-query';
 import {useDashboardEnvironment} from './dashboard-context';
 import {useDashboardRouteRuntime} from './dashboard-route-runtime';
+import {
+    clearInitialPairingEntry,
+    readInitialPairingEntry,
+} from './pairing-bootstrap';
 
 const HomePage = lazy(() => import('@/features/home/home-page').then((module) => ({default: module.HomePage})));
 const AttendancePage = lazy(() => import('@/features/attendance/attendance-page').then((module) => ({default: module.AttendancePage})));
@@ -8,7 +13,6 @@ const LaundryPage = lazy(() => import('@/features/laundry/pages/laundry-page').t
 const MealsPage = lazy(() => import('@/features/meals/pages/meals-page').then((module) => ({default: module.MealsPage})));
 const ConnectionsPage = lazy(() => import('@/features/connections/connections-page').then((module) => ({default: module.ConnectionsPage})));
 const AppInstallPage = lazy(() => import('@/features/app-install/app-install-page').then((module) => ({default: module.AppInstallPage})));
-const MobileSetupPage = lazy(() => import('@/features/connections/mobile-setup-page').then((module) => ({default: module.MobileSetupPage})));
 
 export function HomeRoutePage() {
     return <HomePage/>;
@@ -16,14 +20,41 @@ export function HomeRoutePage() {
 
 export function AppInstallRoutePage() {
     const {openInstallPrompt} = useDashboardRouteRuntime();
-    const {platform} = useDashboardEnvironment();
-    const canRequestMobileInstall = platform.kind === 'browser'
-        && platform.pwa.isMobileInstallClient();
-    return <AppInstallPage onRequestMobileInstall={canRequestMobileInstall ? openInstallPrompt : undefined}/>;
-}
+    const {api, platform} = useDashboardEnvironment();
+    const initialPairing = useMemo(readInitialPairingEntry, []);
+    const handoffLink = initialPairing?.kind === 'install-handoff'
+        ? initialPairing.link
+        : null;
+    const prepareHandoff = useMutation({
+        mutationFn: api.prepareQrPairingHandoff,
+        onSuccess: clearInitialPairingEntry,
+    });
+    const startHandoff = prepareHandoff.mutate;
 
-export function MobileSetupRoutePage() {
-    return <MobileSetupPage/>;
+    useEffect(() => {
+        if (handoffLink) startHandoff(handoffLink);
+    }, [handoffLink, startHandoff]);
+
+    const canRequestMobileInstall = platform.kind === 'browser'
+        && !platform.pwa.installed
+        && platform.pwa.isMobileInstallClient();
+    const mobileHandoffStatus = !handoffLink
+        ? 'none'
+        : prepareHandoff.isError
+            ? 'error'
+            : prepareHandoff.isSuccess
+                ? 'ready'
+                : 'preparing';
+    return (
+        <AppInstallPage
+            onRequestMobileInstall={canRequestMobileInstall ? openInstallPrompt : undefined}
+            focusMobileInstall={handoffLink !== null}
+            mobileHandoffStatus={mobileHandoffStatus}
+            onRetryMobileHandoff={handoffLink
+                ? () => prepareHandoff.mutate(handoffLink)
+                : undefined}
+        />
+    );
 }
 
 export function AttendanceRoutePage() {

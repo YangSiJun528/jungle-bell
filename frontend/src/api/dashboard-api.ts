@@ -23,6 +23,7 @@ import {
     mobileSessionsSchema,
     mobileTestNotificationResultSchema,
     notificationInboxIdSchema,
+    pairingHandoffClaimInputSchema,
     pairingClaimSchema,
     pairingIdSchema,
     parseAttendanceDashboardPayload,
@@ -33,6 +34,7 @@ import {
     pushSubscriptionInputSchema,
     pushSubscriptionResultSchema,
     qrPairingClaimInputSchema,
+    qrPairingHandoffInputSchema,
     type AttendanceData,
     type BrowserAccountSession,
     type DashboardNotification,
@@ -148,6 +150,14 @@ export interface DashboardApi extends DashboardPersonalApi, DesktopSettingsAdapt
         deviceLabel: string;
         installationId: string;
     }): Promise<PairingClaim>;
+    prepareQrPairingHandoff(input: {
+        pairingId: string;
+        challenge: string;
+    }): Promise<void>;
+    claimPairingHandoff(input: {
+        deviceLabel: string;
+        installationId: string;
+    }): Promise<PairingClaim | null>;
     completePairing(pairingId: string): Promise<'waiting' | 'completed'>;
     getAccountSession(): Promise<BrowserAccountSession | null>;
     disconnectMobileSession(): Promise<void>;
@@ -328,6 +338,27 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
                     }),
                 },
             );
+        },
+
+        async prepareQrPairingHandoff(input) {
+            const body = parseInput(qrPairingHandoffInputSchema, input);
+            await responseNoContent(await pairingResponse(
+                `/api/pairings/${encodeURIComponent(body.pairingId)}/handoff`,
+                {
+                    method: 'POST',
+                    body: JSON.stringify({challenge: body.challenge}),
+                },
+            ));
+        },
+
+        async claimPairingHandoff(input) {
+            const body = parseInput(pairingHandoffClaimInputSchema, input);
+            const response = await pairingResponse('/api/pairings/handoffs/claims', {
+                method: 'POST',
+                body: JSON.stringify(body),
+            });
+            if (response.status === 204) return null;
+            return responseValue(pairingClaimSchema, response);
         },
 
         async completePairing(pairingId) {

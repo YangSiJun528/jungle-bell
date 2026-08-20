@@ -790,6 +790,71 @@ test('모바일 수동 연결 요청에는 정규화한 10자리 코드만 전�
     );
 });
 
+test('설치 handoff는 QR proof를 쿠키로 준비하고 PWA 기기 정보로 claim한다', async () => {
+    const requests: Array<{url: string; init?: RequestInit}> = [];
+    const pairingId = 'jbp_01234567-89ab-4def-8123-456789abcdef';
+    const challenge = `jbpc_${'a'.repeat(64)}`;
+    const api = createDashboardApi({
+        platformApiBaseUrl: 'https://platform.example.com',
+        fetcher: async (input, init) => {
+            requests.push({url: String(input), init});
+            if (String(input).endsWith('/handoff')) return new Response(null, {status: 204});
+            return jsonResponse({
+                claimId: pairingId,
+                status: 'awaiting-desktop-approval',
+            }, 201);
+        },
+        invokeCommand: async () => undefined,
+    });
+
+    await api.prepareQrPairingHandoff({pairingId, challenge});
+    assert.deepEqual(
+        await api.claimPairingHandoff({
+            deviceLabel: '설치된 Jungle Bell',
+            installationId: 'jbmi_0123456789abcdef0123456789abcdef',
+        }),
+        {claimId: pairingId, status: 'awaiting-desktop-approval'},
+    );
+
+    assert.deepEqual(requests.map(({url, init}) => ({
+        url,
+        method: init?.method,
+        credentials: init?.credentials,
+        cache: init?.cache,
+        body: JSON.parse(String(init?.body)),
+    })), [
+        {
+            url: `https://platform.example.com/api/pairings/${pairingId}/handoff`,
+            method: 'POST',
+            credentials: 'include',
+            cache: 'no-store',
+            body: {challenge},
+        },
+        {
+            url: 'https://platform.example.com/api/pairings/handoffs/claims',
+            method: 'POST',
+            credentials: 'include',
+            cache: 'no-store',
+            body: {
+                deviceLabel: '설치된 Jungle Bell',
+                installationId: 'jbmi_0123456789abcdef0123456789abcdef',
+            },
+        },
+    ]);
+});
+
+test('설치 handoff cookie가 없으면 자동 claim을 정상적인 미발견으로 처리한다', async () => {
+    const api = createDashboardApi({
+        fetcher: async () => new Response(null, {status: 204}),
+        invokeCommand: async () => undefined,
+    });
+
+    assert.equal(await api.claimPairingHandoff({
+        deviceLabel: '설치된 Jungle Bell',
+        installationId: 'jbmi_0123456789abcdef0123456789abcdef',
+    }), null);
+});
+
 test('데스크톱 생활 정보도 공개 HTTP API를 직접 사용한다', async () => {
     const urls: string[] = [];
     const commands: string[] = [];

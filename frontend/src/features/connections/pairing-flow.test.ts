@@ -39,6 +39,17 @@ describe('mobile pairing flow', () => {
         expect(pause).not.toHaveBeenCalled();
     });
 
+    test('기본 승인 대기는 10분 pairing 유효 시간에 맞춰 600회 확인한다', async () => {
+        const complete = vi.fn().mockResolvedValue('waiting');
+        const pause = vi.fn().mockResolvedValue(undefined);
+
+        await expect(waitForPairingCompletion({pairingId: 'pairing', complete, pause}))
+            .rejects.toThrow('PAIRING_EXPIRED');
+
+        expect(complete).toHaveBeenCalledTimes(600);
+        expect(pause).toHaveBeenCalledTimes(600);
+    });
+
     test('pending receipt가 없거나 잘못된 복원은 즉시 중단한다', async () => {
         for (const code of ['PAIRING_RECEIPT_INVALID', 'PAIRING_RECEIPT_MISSING']) {
             const complete = vi.fn().mockRejectedValue(new Error(code));
@@ -56,18 +67,21 @@ describe('mobile pairing flow', () => {
             alreadyHandled: false,
             hasRestoredPairing: true,
             hasQrLink: true,
+            canClaimHandoff: true,
         })).toBe('wait');
         expect(automaticPairingAction({
             account: 'error',
             alreadyHandled: false,
             hasRestoredPairing: true,
             hasQrLink: true,
+            canClaimHandoff: true,
         })).toBe('wait');
         expect(automaticPairingAction({
             account: 'not-applicable',
             alreadyHandled: false,
             hasRestoredPairing: true,
             hasQrLink: true,
+            canClaimHandoff: true,
         })).toBe('wait');
     });
 
@@ -77,24 +91,28 @@ describe('mobile pairing flow', () => {
             alreadyHandled: false,
             hasRestoredPairing: true,
             hasQrLink: true,
+            canClaimHandoff: true,
         })).toBe('resume');
         expect(automaticPairingAction({
             account: 'unconnected',
             alreadyHandled: false,
             hasRestoredPairing: false,
             hasQrLink: true,
+            canClaimHandoff: true,
         })).toBe('qr');
         expect(automaticPairingAction({
             account: 'connected',
             alreadyHandled: false,
             hasRestoredPairing: true,
             hasQrLink: true,
+            canClaimHandoff: true,
         })).toBe('clear');
         expect(automaticPairingAction({
             account: 'unconnected',
             alreadyHandled: true,
             hasRestoredPairing: true,
             hasQrLink: true,
+            canClaimHandoff: true,
         })).toBe('none');
     });
 
@@ -109,10 +127,28 @@ describe('mobile pairing flow', () => {
             alreadyHandled: gate.automaticHandled,
             hasRestoredPairing: false,
             hasQrLink: true,
+            canClaimHandoff: true,
         })).toBe('none');
 
         releasePairingStart(gate);
         expect(tryReservePairingStart(gate)).toBe(true);
         expect(gate.automaticHandled).toBe(true);
+    });
+
+    test('설치 PWA는 복원할 claim이나 직접 QR이 없으면 handoff cookie를 확인한다', () => {
+        expect(automaticPairingAction({
+            account: 'unconnected',
+            alreadyHandled: false,
+            hasRestoredPairing: false,
+            hasQrLink: false,
+            canClaimHandoff: true,
+        })).toBe('handoff');
+        expect(automaticPairingAction({
+            account: 'unconnected',
+            alreadyHandled: false,
+            hasRestoredPairing: false,
+            hasQrLink: false,
+            canClaimHandoff: false,
+        })).toBe('none');
     });
 });

@@ -11,7 +11,7 @@ export type AccountInitializationState =
     | 'error'
     | 'unconnected'
     | 'connected';
-export type AutomaticPairingAction = 'wait' | 'none' | 'clear' | 'resume' | 'qr';
+export type AutomaticPairingAction = 'wait' | 'none' | 'clear' | 'resume' | 'qr' | 'handoff';
 
 export interface PairingStartGate {
     inFlight: boolean;
@@ -45,12 +45,14 @@ export function automaticPairingAction(input: {
     alreadyHandled: boolean;
     hasRestoredPairing: boolean;
     hasQrLink: boolean;
+    canClaimHandoff: boolean;
 }): AutomaticPairingAction {
     if (input.alreadyHandled) return 'none';
     if (input.account === 'connected') return 'clear';
     if (input.account !== 'unconnected') return 'wait';
     if (input.hasRestoredPairing) return 'resume';
-    return input.hasQrLink ? 'qr' : 'none';
+    if (input.hasQrLink) return 'qr';
+    return input.canClaimHandoff ? 'handoff' : 'none';
 }
 
 export function pairingCompletionErrorIsTerminal(error: unknown): boolean {
@@ -59,7 +61,7 @@ export function pairingCompletionErrorIsTerminal(error: unknown): boolean {
 }
 
 export async function waitForPairingCompletion(options: PairingCompletionOptions): Promise<void> {
-    const maximumAttempts = options.maximumAttempts ?? 120;
+    const maximumAttempts = options.maximumAttempts ?? 600;
     for (let attempt = 0; attempt < maximumAttempts; attempt += 1) {
         try {
             const result = await options.complete(options.pairingId);

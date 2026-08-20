@@ -3,6 +3,7 @@ import {mobilePairingLinkFromHash, type MobilePairingLink} from '@/domain/connec
 
 export type InitialPairingEntry =
     | {kind: 'companion'; link: MobilePairingLink}
+    | {kind: 'install-handoff'; link: MobilePairingLink}
     | null;
 
 interface InitialPairingInput {
@@ -19,18 +20,24 @@ let initialPairingEntry: InitialPairingEntry = null;
 
 /**
  * Captures a QR fragment before React mounts, then removes the one-time secret
- * from browser history. Browser clients can complete the pairing directly.
+ * from browser history. Uninstalled mobile browsers prepare an install handoff,
+ * while an already-installed PWA can claim the QR directly.
  */
 export function parseAndScrubInitialPairing(input: InitialPairingInput): InitialPairingEntry {
     const link = mobilePairingLinkFromHash(input.hash);
     if (!link) return null;
 
-    const companion = input.authentication === 'cookie'
-        || (input.authentication === 'none' && input.mobileInstallClient);
-    const nextHash = companion ? '#/setup' : '#/home';
+    const installedCompanion = input.authentication === 'cookie';
+    const installHandoff = input.authentication === 'none' && input.mobileInstallClient;
+    const nextHash = installedCompanion
+        ? '#/home'
+        : installHandoff
+            ? '#/install'
+            : '#/home';
     input.replaceState(input.historyState, '', `${input.pathname}${input.search}${nextHash}`);
 
-    if (companion) return {kind: 'companion', link};
+    if (installedCompanion) return {kind: 'companion', link};
+    if (installHandoff) return {kind: 'install-handoff', link};
     return null;
 }
 
@@ -51,4 +58,8 @@ export function captureInitialPairingFromWindow(
 
 export function readInitialPairingEntry(): InitialPairingEntry {
     return initialPairingEntry;
+}
+
+export function clearInitialPairingEntry(): void {
+    initialPairingEntry = null;
 }

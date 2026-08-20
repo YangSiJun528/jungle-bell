@@ -333,6 +333,16 @@ export const qrPairingClaimInputSchema = z.strictObject({
     installationId: mobileInstallationIdSchema,
 });
 
+export const qrPairingHandoffInputSchema = qrPairingClaimInputSchema.pick({
+    pairingId: true,
+    challenge: true,
+});
+
+export const pairingHandoffClaimInputSchema = qrPairingClaimInputSchema.pick({
+    deviceLabel: true,
+    installationId: true,
+});
+
 export const pushSubscriptionInputSchema = z.strictObject({
     endpoint: textSchema(4_096),
     keys: z.strictObject({

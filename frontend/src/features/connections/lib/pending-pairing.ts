@@ -1,7 +1,7 @@
 import {hasOwn} from '@/lib/object';
 
 export const PENDING_MOBILE_PAIRING_KEY = 'jungle-bell:pending-mobile-pairing';
-const PENDING_MOBILE_PAIRING_TTL_MS = 2 * 60_000;
+const PENDING_MOBILE_PAIRING_TTL_MS = 10 * 60_000;
 
 const PAIRING_ID = /^jbp_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 

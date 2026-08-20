@@ -127,13 +127,19 @@ WebView bearer는 다른 namespace에 사용할 수 없습니다. 허용 origin�
 | --- | --- | --- |
 | `POST` | `/api/pairings/{id}/claims` | QR proof로 pairing claim |
 | `POST` | `/api/pairings/claims` | 10자리 수동 코드로 pairing claim |
+| `POST` | `/api/pairings/{id}/handoff` | QR proof를 설치용 HttpOnly cookie로 교환 |
+| `POST` | `/api/pairings/handoffs/claims` | 설치형 PWA가 handoff cookie로 pairing claim |
 | `POST` | `/api/pairings/{id}/complete` | PC 승인 후 모바일 session cookie 발급 |
 | `GET` | `/api/me/session` | 현재 브라우저 session 상태 |
 | `DELETE` | `/api/me/session` | 현재 브라우저 session 폐기 |
 | `GET` | `/api/me/attendance` | 출석 snapshot과 PC 상태 |
 
-claim receipt는 JSON에 노출하지 않고 2분짜리 Strict HttpOnly pending cookie에만
-저장합니다. 승인 완료 시 최대 30일의 모바일 session cookie를 발급합니다.
+pairing, handoff cookie, pending claim은 10분 동안 유효합니다. handoff endpoint는
+pairing을 claim하지 않으며 설치 전 브라우저와 설치형 PWA 사이에 일회용 challenge만
+전달합니다. handoff cookie가 없으면 claim endpoint는 `204`를 반환해 PWA가 10자리
+수동 코드 입력으로 복구하게 합니다. claim receipt는 JSON에 노출하지 않고
+Secure·Strict HttpOnly pending cookie에만 저장합니다. 승인 완료 시 최대 30일의
+모바일 session cookie를 발급합니다.
 
 연결된 모바일이 0개인 상태는 오류가 아니라 정상적인 빈 목록입니다.
 

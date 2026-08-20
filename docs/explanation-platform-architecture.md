@@ -71,8 +71,10 @@ React 대시보드는 장기 credential을 받지 않습니다. Rust가 7분짜�
 session에 묶이고 `/api/me/*`만 호출할 수 있습니다. 공개 세탁·급식도 Rust
 proxy 없이 React가 직접 HTTP로 조회합니다.
 
-모바일 PWA는 PC에서 명시적으로 승인한 pairing으로만 연결됩니다. pending claim과
-모바일 session credential은 Strict HttpOnly cookie에만 저장합니다.
+모바일 PWA는 PC에서 명시적으로 승인한 pairing으로만 연결됩니다. 설치 전 브라우저는
+권한 없는 단기 handoff cookie만 준비하고, 설치형 PWA가 처음 열릴 때 claim을 시작합니다.
+handoff, pending claim, 모바일 session credential은 Secure·Strict HttpOnly cookie에만
+저장합니다.
 
 ## 상태 소유권
 

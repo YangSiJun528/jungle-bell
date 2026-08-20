@@ -9,7 +9,7 @@
 | 출석·D-Day | 로그인 안내 | 서버 snapshot | 로컬 checker snapshot 우선, 서버 snapshot 보완 |
 | LMS 주기 조회 | 아니요 | 아니요 | 예 |
 | 알림 | 설치 안내 | Web Push | 운영체제 알림 |
-| 모바일 연결 | 모바일 `/setup`에서 QR·수동 claim만 | 연결 완료·해제 | QR·코드 생성, 승인·해제 |
+| 모바일 연결 | 모바일 QR의 설치 handoff만 | handoff·수동 claim, 연결 완료·해제 | QR·코드 생성, 승인·해제 |
 | Jungle Campus | 외부 바로가기 | 외부 바로가기 | 전용 WebView와 상태 |
 | PC 서비스 설정 | 아니요 | PC 안내 | 자동 시작·업데이트, 사용 통계, 디버그, 로그 폴더 |
 
@@ -55,7 +55,7 @@ Cloudflare Worker, D1, R2, Wrangler와 별도 TypeScript Jobs는 사용하지 �
 | PC 동기화 | `POST /api/desktop/heartbeat`, `GET\|PUT /api/desktop/attendance` |
 | PC 알림 | `GET /api/desktop/notifications`, ack, test |
 | 모바일 관리 | `GET /api/me/mobile-sessions`, `DELETE /api/me/mobile-sessions/:id` |
-| pairing | PC 생성·상태·승인과 모바일 claim·complete |
+| pairing | PC 생성·상태·승인과 모바일 handoff·claim·complete |
 | 브라우저 session | `GET\|DELETE /api/me/session` |
 | 공통 계정 정보 | `/api/me` 아래 출석, 설정, 세탁 watch, 알림 |
 | PC 전용 계정 관리 | `/api/me` 아래 pairing 승인과 모바일 관리, WebView bearer만 허용 |
@@ -71,8 +71,9 @@ Cloudflare Worker, D1, R2, Wrangler와 별도 TypeScript Jobs는 사용하지 �
 | PC 저장 | Windows Credential Manager. macOS는 앱 전용 mode 0600 파일 |
 | PC WebView session | `jbui_…`, 7분 절대 만료, 메모리 전용, 부모 PC session당 하나 |
 | WebView origin | release `tauri://localhost`·`http://tauri.localhost`, dev `http://127.0.0.1:5173` |
-| pairing | QR 또는 10자리 코드, 2분 유효, PC 명시 승인 |
-| pending claim | 2분 Strict HttpOnly cookie |
+| pairing | QR 또는 10자리 코드, 10분 유효, PC 명시 승인 |
+| install handoff | 10분 Secure·Strict HttpOnly cookie, 권한 없음 |
+| pending claim | 10분 Secure·Strict HttpOnly cookie |
 | 모바일 session | Strict HttpOnly cookie, 최대 30일 |
 | Push subscription | 활성 모바일 session 소유, 해제·만료 시 전달 대상에서 제외 |
 
@@ -98,18 +99,24 @@ claim과 complete JSON에는 access token, LMS cookie, claim receipt를 포함�
 
 ### 휴대폰 설정 흐름
 
-PC가 만드는 QR은 앱 바이너리가 아니라 공식 origin의 휴대폰 설정 링크입니다. 모바일
-브라우저가 링크를 열면 SPA는 QR fragment의 `pairingId`와 일회용 challenge를 React
-mount 전에 메모리로 옮기고 즉시 `/#/setup`으로 주소를 치환합니다. challenge는
-`localStorage`, `sessionStorage`, IndexedDB, 브라우저 history에 기록하지 않습니다.
-비모바일 브라우저는 QR claim을 시작하지 않고 비밀값을 제거한 뒤 홈으로 이동합니다.
+PC가 만드는 QR은 앱 바이너리가 아니라 공식 origin의 설치 안내 링크입니다. 미설치
+모바일 브라우저가 링크를 열면 SPA는 QR fragment의 `pairingId`와 일회용 challenge를
+React mount 전에 메모리로 옮기고 즉시 `/#/install`로 주소를 치환합니다. 설치 화면은
+challenge를 서버에 한 번 전달해 10분짜리 Secure·Strict HttpOnly handoff cookie로
+교환합니다. 이 단계에서는 pairing을 claim하거나 개인 API 권한을 발급하지 않습니다.
+challenge는 `localStorage`, `sessionStorage`, IndexedDB, 브라우저 history에 기록하지
+않습니다. 비모바일 브라우저는 handoff를 시작하지 않고 비밀값을 제거한 뒤 홈으로
+이동합니다.
 
-`/setup`은 일반 모바일 브라우저에서도 공개 pairing API만 사용해 QR claim 또는
-10자리 수동 코드 입력을 허용합니다. 4자리 확인 번호와 기기명을 PC에서 대조해
-승인하기 전에는 모바일 session이나 개인 API 권한을 발급하지 않습니다. complete가
-성공하면 Strict HttpOnly cookie를 만든 뒤 설치 안내를 표시합니다. QR 자체가 설치를
-자동 실행하지는 않으며 iPhone의 **홈 화면에 추가** 또는 Android의 **앱 설치**에는
-사용자 조작이 필요합니다.
+사용자가 PWA를 설치하고 홈 화면 아이콘으로 실행하면 PWA는 handoff cookie로 claim을
+시도합니다. Android의 공유 origin 저장소 또는 설치 시 cookie를 전달하는 iOS 환경이면
+기기 고유 installation ID로 연결 요청이 자동 생성됩니다. 4자리 확인 번호와 기기명을
+PC에서 대조해 승인하기 전에는 모바일 session이나 개인 API 권한을 발급하지 않습니다.
+브라우저가 cookie를 전달하지 않거나 handoff가 만료된 환경에서는 설치형 PWA의 10자리
+수동 코드 입력으로 복구합니다. 기존 `/#/setup` 링크는 `/#/install`로 이동합니다.
+
+QR 자체가 PWA 설치나 설치 직후 실행을 자동화할 수는 없습니다. iPhone의 **홈 화면에
+추가**, Android의 **앱 설치**, 설치한 앱의 첫 실행에는 사용자 조작이 필요합니다.
 
 설치형 PWA가 유효한 cookie로 시작하면 선택형 알림 점검을 표시합니다. PC도 LMS와
 서버 session이 준비된 첫 실행에 같은 점검을 표시합니다. 완료와 건너뛰기는

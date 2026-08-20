@@ -22,7 +22,7 @@ class PairingService(
     private val clock: Clock,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
-    private val pairingTtl = Duration.ofMinutes(2)
+    private val pairingTtl = Duration.ofMinutes(10)
     private val mobileTtl = Duration.ofDays(30)
 
     fun create(principal: SessionPrincipal): PairingCreated {
@@ -71,6 +71,36 @@ class PairingService(
         }
         val response = claim(pairing, request.installationId, request.deviceLabel)
         logger.info("QR pairing claim completed. pairingId={}", pairingId)
+        return response
+    }
+
+    fun prepareHandoff(pairingId: String, challenge: String): Long {
+        logger.info("Pairing install handoff preparation started.")
+        val id = parsePairingId(pairingId)
+        val pairing = store.findByQr(tokens.plainHash(challenge))
+            ?.takeIf { it.id == id }
+        if (pairing == null) {
+            logger.warn("Pairing install handoff rejected. reason=pairing_not_found")
+            throw ApiException("PAIRING_NOT_FOUND", HttpStatus.NOT_FOUND)
+        }
+        ensurePending(pairing)
+        logger.info("Pairing install handoff preparation completed. pairingId={}", pairingId)
+        return pairing.expiresAtEpochMs
+    }
+
+    fun claimHandoff(challenge: String, request: PairingHandoffClaimRequest): PairingClaim {
+        logger.info("Pairing install handoff claim started.")
+        if (!challenge.matches(QR_CHALLENGE)) {
+            logger.warn("Pairing install handoff claim rejected. reason=handoff_invalid")
+            throw ApiException("PAIRING_HANDOFF_INVALID", HttpStatus.UNAUTHORIZED)
+        }
+        val pairing = store.findByQr(tokens.plainHash(challenge))
+        if (pairing == null) {
+            logger.warn("Pairing install handoff claim rejected. reason=handoff_invalid")
+            throw ApiException("PAIRING_HANDOFF_INVALID", HttpStatus.UNAUTHORIZED)
+        }
+        val response = claim(pairing, request.installationId, request.deviceLabel)
+        logger.info("Pairing install handoff claim completed. pairingId={}", response.claimId)
         return response
     }
 
@@ -203,21 +233,24 @@ class PairingService(
     }
 
     private fun claim(pairing: PairingRecord, installationId: String, label: String): PairingClaim {
-        val now = clock.millis()
-        if (pairing.expiresAtEpochMs <= now) {
-            logger.warn("Pairing claim rejected. pairingId=jbp_{} reason=pairing_expired", pairing.id)
-            throw ApiException("PAIRING_EXPIRED", HttpStatus.GONE)
-        }
-        if (pairing.status != "pending") {
-            logger.warn("Pairing claim rejected. pairingId=jbp_{} reason=pairing_already_used", pairing.id)
-            throw ApiException("PAIRING_ALREADY_USED", HttpStatus.CONFLICT)
-        }
+        ensurePending(pairing)
         val receipt = tokens.opaque("jbcr_")
         if (!store.claim(pairing.id, tokens.plainHash(receipt), installationId, label.trim())) {
             logger.warn("Pairing claim rejected. pairingId=jbp_{} reason=pairing_already_used", pairing.id)
             throw ApiException("PAIRING_ALREADY_USED", HttpStatus.CONFLICT)
         }
         return PairingClaim("jbp_${pairing.id}", receipt, pairing.expiresAtEpochMs)
+    }
+
+    private fun ensurePending(pairing: PairingRecord) {
+        if (pairing.expiresAtEpochMs <= clock.millis()) {
+            logger.warn("Pairing operation rejected. pairingId=jbp_{} reason=pairing_expired", pairing.id)
+            throw ApiException("PAIRING_EXPIRED", HttpStatus.GONE)
+        }
+        if (pairing.status != "pending") {
+            logger.warn("Pairing operation rejected. pairingId=jbp_{} reason=pairing_already_used", pairing.id)
+            throw ApiException("PAIRING_ALREADY_USED", HttpStatus.CONFLICT)
+        }
     }
 
     private fun status(pairing: PairingRecord): String = when {
@@ -234,6 +267,10 @@ class PairingService(
     }
 
     private fun encode(value: String) = URLEncoder.encode(value, StandardCharsets.UTF_8)
+
+    private companion object {
+        val QR_CHALLENGE = Regex("^jbpc_[a-f0-9]{64}$")
+    }
 }
 
 data class PairingClaim(val claimId: String, val receipt: String, val expiresAtEpochMs: Long)

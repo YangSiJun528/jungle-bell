@@ -1,7 +1,7 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
-import {Link, useNavigate} from '@tanstack/react-router';
-import {CheckCircle2, CircleAlert, Download, KeyRound, Link2, MonitorCheck, QrCode, RotateCcw, Smartphone, Trash2} from 'lucide-react';
+import {useNavigate} from '@tanstack/react-router';
+import {CircleAlert, KeyRound, Link2, MonitorCheck, QrCode, RotateCcw, Smartphone, Trash2} from 'lucide-react';
 import {
     queryKeys,
     refreshBrowserPersonalQueries,
@@ -36,7 +36,7 @@ import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@/compo
 import {Input} from '@/components/ui/input';
 import {Label} from '@/components/ui/label';
 import {Tabs, TabsContent, TabsList, TabsTrigger} from '@/components/ui/tabs';
-import type {MobilePairingCreated} from '@/api/dashboard-api';
+import type {MobilePairingCreated, PairingClaim} from '@/api/dashboard-api';
 import {NotificationSettings} from '@/app/settings/notification-settings';
 import {PersonalAccountGate} from '@/app/personal-account-gate';
 import {
@@ -68,7 +68,7 @@ import {ServiceSettings} from './service-settings';
 import {PairingExpiryCountdown} from './pairing-expiry-countdown';
 
 interface PairingClaimStart {
-    mode: 'manual' | 'qr' | 'resume';
+    mode: 'handoff' | 'manual' | 'qr' | 'resume';
     resumePairingId?: string;
 }
 
@@ -352,12 +352,8 @@ function DesktopConnections() {
 
 export function CompanionConnections({
     completionPath = '/connections',
-    mode = 'settings',
-    onRequestMobileInstall,
 }: {
     completionPath?: CompanionCompletionPath;
-    mode?: 'settings' | 'setup';
-    onRequestMobileInstall?: () => void;
 }) {
     const {api, platform} = useDashboardEnvironment();
     const account = useDashboardAccount();
@@ -365,7 +361,6 @@ export function CompanionConnections({
     const navigate = useNavigate();
     const [manualCode, setManualCode] = useState('');
     const [message, setMessage] = useState('');
-    const [completedInBrowser, setCompletedInBrowser] = useState(false);
     const pairingStartGate = useRef({inFlight: false, automaticHandled: false});
     const initialPairing = useMemo(readInitialPairingEntry, []);
     const pairingLink = initialPairing?.kind === 'companion' ? initialPairing.link : null;
@@ -376,24 +371,34 @@ export function CompanionConnections({
     const claim = useMutation({
         mutationFn: async ({mode, resumePairingId}: PairingClaimStart) => {
             const installationId = mobileInstallationId();
-            const request = mode === 'resume'
-                ? null
-                : mode === 'qr' && pairingLink
-                ? await api.claimQrPairing({
+            let request: PairingClaim | null = null;
+            let pairingId: string;
+            if (mode === 'resume') {
+                if (!resumePairingId) throw new Error('PAIRING_ID_MISSING');
+                pairingId = resumePairingId;
+            } else if (mode === 'handoff') {
+                request = await api.claimPairingHandoff({
+                    deviceLabel: mobileDeviceLabel(),
+                    installationId,
+                });
+                if (!request) return false;
+                pairingId = request.claimId;
+            } else if (mode === 'qr') {
+                if (!pairingLink) throw new Error('PAIRING_LINK_MISSING');
+                request = await api.claimQrPairing({
                     ...pairingLink,
                     deviceLabel: mobileDeviceLabel(),
                     installationId,
-                })
-                : await api.claimManualPairing({
+                });
+                pairingId = pairingLink.pairingId;
+            } else {
+                request = await api.claimManualPairing({
                     manualCode,
                     deviceLabel: mobileDeviceLabel(),
                     installationId,
                 });
-            const pairingId = mode === 'resume'
-                ? resumePairingId!
-                : mode === 'qr' && pairingLink
-                    ? pairingLink.pairingId
-                    : request!.claimId;
+                pairingId = request.claimId;
+            }
             if (request) {
                 const storage = pairingSessionStorage();
                 if (storage) {
@@ -411,9 +416,10 @@ export function CompanionConnections({
             });
             const storage = pairingSessionStorage();
             if (storage) clearPendingMobilePairing(storage);
+            return true;
         },
-        onSuccess: async () => {
-            setCompletedInBrowser(true);
+        onSuccess: async (completed) => {
+            if (!completed) return;
             setMessage('연결이 완료됐습니다.');
             if (platform.accountAuthentication.kind === 'cookie') {
                 await finishCompanionPairing({
@@ -437,14 +443,7 @@ export function CompanionConnections({
             setMessage('이 모바일 연결을 해제했습니다.');
         },
     });
-    const publicSetup = mode === 'setup'
-        && platform.kind === 'browser'
-        && platform.accountAuthentication.kind === 'none';
-    const effectiveAccountStatus = publicSetup && account.personalAccess.status === 'not-applicable'
-        ? 'unconnected'
-        : account.personalAccess.status;
-    const connected = account.personalAccess.status === 'connected' || completedInBrowser;
-    const checking = effectiveAccountStatus === 'checking';
+    const connected = account.personalAccess.status === 'connected';
     const confirmationCode = mobileInstallationId().slice(-4).toUpperCase();
     const startClaim = useCallback((input: PairingClaimStart) => {
         if (!tryReservePairingStart(pairingStartGate.current)) return;
@@ -455,10 +454,11 @@ export function CompanionConnections({
 
     useEffect(() => {
         const action = automaticPairingAction({
-            account: effectiveAccountStatus,
+            account: account.personalAccess.status,
             alreadyHandled: pairingStartGate.current.automaticHandled,
             hasRestoredPairing: restoredPairing !== null,
             hasQrLink: pairingLink !== null,
+            canClaimHandoff: platform.pwa.installed,
         });
         if (action === 'clear') {
             pairingStartGate.current.automaticHandled = true;
@@ -472,19 +472,16 @@ export function CompanionConnections({
         }
         if (action === 'qr') {
             startClaim({mode: 'qr'});
+            return;
         }
-    }, [effectiveAccountStatus, pairingLink, restoredPairing, startClaim]);
+        if (action === 'handoff') {
+            startClaim({mode: 'handoff'});
+        }
+    }, [account.personalAccess.status, pairingLink, platform.pwa.installed, restoredPairing, startClaim]);
 
-    const setupTitle = connected
-        ? 'PC 연결 완료'
-        : claim.isPending
-            ? 'PC 승인 대기'
-            : 'PC 연결';
-    const setupDescription = connected
-        ? platform.pwa.installed
-            ? '이 PWA는 PC와 연결되어 있습니다.'
-            : 'PC 승인이 끝났습니다. 이제 Jungle Bell을 홈 화면에 추가하세요.'
-        : '이 휴대폰을 PC에서 승인하면 개인 기능을 사용할 수 있습니다.';
+    const automaticCheckPending = account.personalAccess.status === 'unconnected'
+        && !pairingStartGate.current.automaticHandled;
+    const checking = account.personalAccess.status === 'checking' || automaticCheckPending;
 
     return (
         <div className="space-y-6">
@@ -492,49 +489,17 @@ export function CompanionConnections({
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         <MonitorCheck className="size-5"/>
-                        {mode === 'setup' ? setupTitle : connected ? '이 기기는 연결됨' : '연결 코드 입력'}
+                        {connected ? '이 기기는 연결됨' : claim.isPending ? 'PC 승인 대기' : '연결 코드 입력'}
                     </CardTitle>
                     <CardDescription>
-                        {mode === 'setup'
-                            ? setupDescription
-                            : connected
-                                ? 'PC 앱이 출석 상태를 주기적으로 갱신합니다.'
-                                : 'PC 앱의 기기 연결 화면에 표시된 코드를 입력하세요.'}
+                        {connected
+                            ? 'PC 앱이 출석 상태를 주기적으로 갱신합니다.'
+                            : '설치 QR 정보가 있으면 자동으로 연결하고, 없으면 PC 앱의 10자리 코드를 입력합니다.'}
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     {checking ? (
-                        <LoadingState label="PC 연결 상태를 확인하고 있습니다."/>
-                    ) : connected && mode === 'setup' ? (
-                        <div className="space-y-4">
-                            <div className="flex items-start gap-3 rounded-lg bg-emerald-500/10 p-4 text-sm text-emerald-800 dark:text-emerald-200">
-                                <CheckCircle2 aria-hidden="true" className="mt-0.5 size-5 shrink-0"/>
-                                <div>
-                                    <strong className="block">1단계 완료</strong>
-                                    <p className="mt-1 leading-6">PC에서 이 휴대폰을 확인했습니다.</p>
-                                </div>
-                            </div>
-                            {platform.pwa.installed ? (
-                                <div className="space-y-3">
-                                    <p className="text-sm leading-6 text-muted-foreground">
-                                        앱 설치도 확인했습니다. 알림 확인은 다음 단계에서 선택할 수 있습니다.
-                                    </p>
-                                    <Button asChild><Link to="/home">Jungle Bell 시작</Link></Button>
-                                </div>
-                            ) : (
-                                <div className="space-y-3 rounded-lg border p-4">
-                                    <div>
-                                        <strong className="text-sm">2단계 · 앱 설치</strong>
-                                        <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                                            iPhone은 공유 메뉴의 ‘홈 화면에 추가’를, Android는 ‘앱 설치’를 선택합니다. 설치 후에는 홈 화면 아이콘으로 열어 주세요.
-                                        </p>
-                                    </div>
-                                    <Button onClick={onRequestMobileInstall} disabled={!onRequestMobileInstall}>
-                                        <Download aria-hidden="true"/>모바일 앱 설치 안내
-                                    </Button>
-                                </div>
-                            )}
-                        </div>
+                        <LoadingState label="설치 QR 연결 정보를 확인하고 있습니다."/>
                     ) : connected ? (
                         <Button variant="outline" onClick={() => disconnect.mutate()} disabled={disconnect.isPending}>이 모바일 연결 해제</Button>
                     ) : (

@@ -13,7 +13,6 @@ import {
     HomeRoutePage,
     LaundryRoutePage,
     MealsRoutePage,
-    MobileSetupRoutePage,
     NotificationRoutePage,
 } from './dashboard-route-pages';
 import {PrivacyPage} from './privacy-page';
@@ -59,11 +58,6 @@ const installRoute = createRoute({
     path: 'install',
     component: AppInstallRoutePage,
 });
-const setupRoute = createRoute({
-    getParentRoute: () => rootRoute,
-    path: 'setup',
-    component: MobileSetupRoutePage,
-});
 const privacyRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: 'privacy',
@@ -83,7 +77,6 @@ const routeTree = rootRoute.addChildren([
     notificationsRoute,
     connectionsRoute,
     installRoute,
-    setupRoute,
     privacyRoute,
     fallbackRoute,
 ]);

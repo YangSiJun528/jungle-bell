@@ -40,7 +40,6 @@ const mealPreferences = source('./features/meals/components/meal-preferences-sec
 const notifications = source('./features/notifications/notifications-page.tsx');
 const notificationDeliverySetup = source('./features/notifications/notification-delivery-setup.tsx');
 const connections = source('./features/connections/connections-page.tsx');
-const mobileSetup = source('./features/connections/mobile-setup-page.tsx');
 const notificationOnboardingNotice = source('./app/notification-onboarding-notice.tsx');
 const notificationSettings = source('./app/settings/notification-settings.tsx');
 
@@ -140,6 +139,11 @@ test('앱 안내는 실제 트레이 아이콘·모바일 알림과 설치 경�
     assert.doesNotMatch(appInstall, /https:\/\/jungle-bell\.sijun-yang\.com/);
     assert.match(routePages, /platform\.kind === 'browser'[\s\S]*platform\.pwa\.isMobileInstallClient\(\)/);
     assert.match(routePages, /onRequestMobileInstall=\{canRequestMobileInstall \? openInstallPrompt : undefined\}/);
+    assert.match(routePages, /initialPairing\?\.kind === 'install-handoff'/);
+    assert.match(routePages, /api\.prepareQrPairingHandoff/);
+    assert.match(routePages, /focusMobileInstall=\{handoffLink !== null\}/);
+    assert.match(appInstall, /requestAnimationFrame\(\(\) => scrollToGuide\('mobile-install'\)\)/);
+    assert.match(appInstall, /설치 후 홈 화면의 Jungle Bell을 열면 PC 연결 요청이 자동으로 시작됩니다/);
     assert.doesNotMatch(appInstall, /이미 앱을 설치했나요\?/);
     assert.match(appInstall, /<PageHeader[\s\S]*title="앱 설치 안내"/);
     assert.doesNotMatch(appInstall, /href="#(?:download|manual|open-pwa|connect)"/);
@@ -225,7 +229,6 @@ test('설정 알림 탭은 연결된 기기의 출석·급식 설정을 함께 �
     assert.match(notificationDeliverySetup, /푸시 연결/);
     assert.match(notificationDeliverySetup, /테스트 알림/);
     assert.match(app, /<NotificationOnboardingNotice\/>/);
-    assert.match(mobileSetup, /<NotificationOnboardingNotice\/>/);
     assert.match(notificationOnboardingNotice, /platform\.pwa\.installed/);
     assert.match(notificationOnboardingNotice, /personalAccess\.status !== 'connected'/);
 });
@@ -240,6 +243,7 @@ test('연결 화면은 capability로 PC 관리와 브라우저 연결 흐름을 
     assert.match(connections, /inputMode="text"/);
     assert.match(connections, /placeholder="ABCDE-12345"/);
     assert.match(connections, /api\.claimManualPairing/);
+    assert.match(connections, /api\.claimPairingHandoff/);
     assert.match(connections, /api\.completePairing/);
     assert.match(connections, /api\.disconnectMobileSession\(\)/);
 });

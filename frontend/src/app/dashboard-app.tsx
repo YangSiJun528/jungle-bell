@@ -25,7 +25,6 @@ import {DashboardRouteRuntimeProvider} from './dashboard-route-runtime';
 import {PlatformAuthenticationGate} from './platform-authentication-gate';
 import {DesktopUpdateNotice} from './desktop-update-notice';
 import {PublicRouteOutlet} from './privacy-page';
-import {MobileSetupRouteOutlet} from './mobile-setup-route-outlet';
 import {NotificationOnboardingNotice} from './notification-onboarding-notice';
 
 const NotificationPanelContent = lazy(() => import('@/features/notifications/notifications-page').then((module) => ({default: module.NotificationPanelContent})));
@@ -33,7 +32,6 @@ const CompanionConnections = lazy(() => import('@/features/connections/connectio
 
 export function DashboardApp() {
     const pathname = useRouterState({select: (state) => state.location.pathname});
-    if (pathname === '/setup') return <MobileSetupRouteOutlet/>;
     if (pathname === '/privacy') return <PublicRouteOutlet/>;
 
     return (

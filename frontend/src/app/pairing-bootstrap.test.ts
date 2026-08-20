@@ -5,7 +5,7 @@ import {parseAndScrubInitialPairing} from './pairing-bootstrap';
 describe('initial QR pairing bootstrap', () => {
     const hash = '#pairing=jbp_123&challenge=jbpc_one-time-secret';
 
-    test('설치형 PWA는 secret을 메모리에만 반환하고 휴대폰 설정 화면으로 즉시 바꾼다', () => {
+    test('설치형 PWA는 secret을 메모리에만 반환하고 앱 홈에서 직접 연결한다', () => {
         const replaceState = vi.fn();
 
         const entry = parseAndScrubInitialPairing({
@@ -26,7 +26,7 @@ describe('initial QR pairing bootstrap', () => {
         expect(replaceState).toHaveBeenCalledWith(
             {navigation: 1},
             '',
-            '/?source=qr#/setup',
+            '/?source=qr#/home',
         );
     });
 
@@ -48,7 +48,7 @@ describe('initial QR pairing bootstrap', () => {
         expect(replaceState).toHaveBeenCalledWith(null, '', '/#/home');
     });
 
-    test('일반 모바일 브라우저는 제한된 휴대폰 설정 흐름에서 QR을 처리한다', () => {
+    test('일반 모바일 브라우저는 QR을 설치 안내 handoff로 처리한다', () => {
         const replaceState = vi.fn();
 
         const entry = parseAndScrubInitialPairing({
@@ -62,10 +62,10 @@ describe('initial QR pairing bootstrap', () => {
         });
 
         expect(entry).toEqual({
-            kind: 'companion',
+            kind: 'install-handoff',
             link: {pairingId: 'jbp_123', challenge: 'jbpc_one-time-secret'},
         });
-        expect(replaceState).toHaveBeenCalledWith(null, '', '/#/setup');
+        expect(replaceState).toHaveBeenCalledWith(null, '', '/#/install');
     });
 
     test('데스크톱 일반 웹은 QR secret을 제거하고 공개 홈으로 복귀한다', () => {

@@ -16,6 +16,15 @@ data class QrPairingClaimRequest(
     @field:Pattern(regexp = "^jbmi_[a-f0-9]{32}$") val installationId: String,
 )
 
+data class QrPairingHandoffRequest(
+    @field:Pattern(regexp = "^jbpc_[a-f0-9]{64}$") val challenge: String,
+)
+
+data class PairingHandoffClaimRequest(
+    @field:Size(min = 1, max = 80) val deviceLabel: String,
+    @field:Pattern(regexp = "^jbmi_[a-f0-9]{32}$") val installationId: String,
+)
+
 data class ManualPairingClaimRequest(
     @field:Size(min = 10, max = 32) val manualCode: String,
     @field:Size(min = 1, max = 80) val deviceLabel: String,

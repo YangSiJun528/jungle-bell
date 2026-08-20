@@ -30,13 +30,13 @@ test('pending pairing은 식별자와 생성 시각만 session storage에 보존
     const serialized = storage.values.get(PENDING_MOBILE_PAIRING_KEY) ?? '';
     assert.deepEqual(JSON.parse(serialized), pending);
     assert.doesNotMatch(serialized, /receipt|token|authorization|bearer/i);
-    assert.deepEqual(readPendingMobilePairing(storage, pending.createdAtEpochMs + 119_999), pending);
+    assert.deepEqual(readPendingMobilePairing(storage, pending.createdAtEpochMs + 599_999), pending);
 
     clearPendingMobilePairing(storage);
     assert.equal(storage.values.has(PENDING_MOBILE_PAIRING_KEY), false);
 });
 
-test('pending pairing은 2분이 지나거나 필드가 위조되면 제거한다', () => {
+test('pending pairing은 10분이 지나거나 필드가 위조되면 제거한다', () => {
     for (const value of [
         pending,
         {...pending, claimReceipt: `jbcr_${'a'.repeat(64)}`},
@@ -46,7 +46,7 @@ test('pending pairing은 2분이 지나거나 필드가 위조되면 제거한�
         const storage = memoryStorage();
         storage.setItem(PENDING_MOBILE_PAIRING_KEY, JSON.stringify(value));
         const now = value === pending
-            ? pending.createdAtEpochMs + 120_000
+            ? pending.createdAtEpochMs + 600_000
             : pending.createdAtEpochMs;
         assert.equal(readPendingMobilePairing(storage, now), null);
         assert.equal(storage.values.has(PENDING_MOBILE_PAIRING_KEY), false);

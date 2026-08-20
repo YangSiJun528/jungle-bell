@@ -14,6 +14,7 @@ import jakarta.validation.Valid
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseCookie
+import org.springframework.http.ResponseEntity
 import org.slf4j.LoggerFactory
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -79,6 +80,52 @@ class PairingController(
         return PairingClaimResponse(claim.claimId)
     }
 
+    @PostMapping("/api/pairings/{id}/handoff")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    fun prepareHandoff(
+        @PathVariable id: String,
+        @Valid @RequestBody body: QrPairingHandoffRequest,
+        request: HttpServletRequest,
+        response: HttpServletResponse,
+    ) {
+        logger.info("Pairing install handoff request received.")
+        val expiresAtEpochMs = service.prepareHandoff(id, body.challenge)
+        clearCookie(request, response, PENDING_CLAIM_COOKIE)
+        setCookie(
+            request,
+            response,
+            PAIRING_HANDOFF_COOKIE,
+            body.challenge,
+            Duration.ofMillis((expiresAtEpochMs - System.currentTimeMillis()).coerceAtLeast(0)),
+        )
+        logger.info("Pairing install handoff request completed. pairingId={} status=204", id)
+    }
+
+    @PostMapping("/api/pairings/handoffs/claims")
+    fun claimHandoff(
+        @Valid @RequestBody body: PairingHandoffClaimRequest,
+        request: HttpServletRequest,
+        response: HttpServletResponse,
+    ): ResponseEntity<PairingClaimResponse> {
+        logger.info("Pairing install handoff claim request received.")
+        val challenge = cookie(request, secureCookieName(request, PAIRING_HANDOFF_COOKIE))
+            ?: cookie(request, PAIRING_HANDOFF_COOKIE)
+            ?: return ResponseEntity.noContent().build()
+        return try {
+            val claim = service.claimHandoff(challenge, body)
+            clearCookie(request, response, PAIRING_HANDOFF_COOKIE)
+            setPendingCookie(request, response, claim)
+            logger.info(
+                "Pairing install handoff claim request completed. pairingId={} status=201",
+                claim.claimId,
+            )
+            ResponseEntity.status(HttpStatus.CREATED).body(PairingClaimResponse(claim.claimId))
+        } catch (error: ApiException) {
+            clearCookie(request, response, PAIRING_HANDOFF_COOKIE)
+            throw error
+        }
+    }
+
     @PostMapping("/api/pairings/claims")
     @ResponseStatus(HttpStatus.CREATED)
     fun claimManual(
@@ -103,17 +150,18 @@ class PairingController(
     ) {
         logger.info("Pairing completion request received.")
         require(body.isEmpty())
-        val receipt = cookie(request, "__Host-jb_pending_claim") ?: cookie(request, "jb_pending_claim")
+        val receipt = cookie(request, secureCookieName(request, PENDING_CLAIM_COOKIE))
+            ?: cookie(request, PENDING_CLAIM_COOKIE)
         if (receipt == null) {
             logger.warn("Pairing completion rejected. reason=receipt_cookie_missing")
             throw ApiException("PAIRING_RECEIPT_INVALID", HttpStatus.UNAUTHORIZED)
         }
         val completed = service.complete(id, receipt)
-        clearCookie(request, response, "jb_pending_claim")
+        clearCookie(request, response, PENDING_CLAIM_COOKIE)
         setCookie(
             request,
             response,
-            "jb_device",
+            DEVICE_COOKIE,
             completed.token,
             Duration.ofMillis((completed.expiresAtEpochMs - System.currentTimeMillis()).coerceAtLeast(0)),
         )
@@ -124,7 +172,7 @@ class PairingController(
         setCookie(
             request,
             response,
-            "jb_pending_claim",
+            PENDING_CLAIM_COOKIE,
             claim.receipt,
             Duration.ofMillis((claim.expiresAtEpochMs - System.currentTimeMillis()).coerceAtLeast(0)),
         )
@@ -136,8 +184,8 @@ class PairingController(
         value: String,
         maxAge: Duration,
     ) {
-        val secure = request.isSecure || request.getHeader("X-Forwarded-Proto") == "https"
-        val cookie = ResponseCookie.from(if (secure) "__Host-$name" else name, value)
+        val secure = secureRequest(request)
+        val cookie = ResponseCookie.from(if (secure) secureCookieName(request, name) else name, value)
             .httpOnly(true).secure(secure).sameSite("Strict").path("/").maxAge(maxAge).build()
         response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString())
     }
@@ -147,4 +195,16 @@ class PairingController(
 
     private fun cookie(request: HttpServletRequest, name: String): String? =
         request.cookies?.firstOrNull { it.name == name }?.value
+
+    private fun secureRequest(request: HttpServletRequest): Boolean =
+        request.isSecure || request.getHeader("X-Forwarded-Proto") == "https"
+
+    private fun secureCookieName(request: HttpServletRequest, name: String): String =
+        if (secureRequest(request)) "__Host-$name" else name
+
+    private companion object {
+        const val PAIRING_HANDOFF_COOKIE = "jb_pairing_handoff"
+        const val PENDING_CLAIM_COOKIE = "jb_pending_claim"
+        const val DEVICE_COOKIE = "jb_device"
+    }
 }

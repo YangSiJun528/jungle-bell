@@ -79,6 +79,7 @@ export function dashboardRouteFromHash(hash: string): DashboardRoute {
 
 export function normalizeLegacyDashboardHash(hash: string): `#${DashboardRoutePath}` | null {
     const value = hash.trim().toLowerCase().replace(/^#/u, '');
+    if (value === 'setup' || value === '/setup') return '#/install';
     if (value.startsWith('/')) return null;
     const route = ALL_ROUTES.includes(value as DashboardRoute)
         ? value as DashboardRoute

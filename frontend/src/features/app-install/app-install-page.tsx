@@ -1,13 +1,17 @@
 import {Link} from '@tanstack/react-router';
 import {
     ArrowLeft,
+    CircleAlert,
     Download,
     ExternalLink,
+    LoaderCircle,
     Monitor,
+    RotateCcw,
+    ShieldCheck,
     Smartphone,
     type LucideIcon,
 } from 'lucide-react';
-import type {ReactNode} from 'react';
+import {useEffect, type ReactNode} from 'react';
 import {DesktopAppMockup} from '@/components/app-showcase/desktop-app-mockup';
 import {MobileNotificationMockup} from '@/components/app-showcase/mobile-notification-mockup';
 import {PageHeader} from '@/components/dashboard/page-header';
@@ -15,6 +19,8 @@ import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardHeader} from '@/components/ui/card';
 
 const PC_INSTALL_GUIDE_URL = 'https://github.com/YangSiJun528/jungle-bell#%EC%84%A4%EC%B9%98';
+
+export type MobileInstallHandoffStatus = 'none' | 'preparing' | 'ready' | 'error';
 
 function scrollToGuide(id: 'pc-install' | 'mobile-install'): void {
     document.getElementById(id)?.scrollIntoView({behavior: 'smooth', block: 'start'});
@@ -57,9 +63,96 @@ function DeviceCard({
     );
 }
 
-export function AppInstallPage({onRequestMobileInstall}: {
+function MobileInstallHandoffNotice({status}: {status: MobileInstallHandoffStatus}) {
+    if (status === 'none') return null;
+
+    const content = status === 'preparing'
+        ? {
+            icon: <LoaderCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0 animate-spin"/>,
+            title: 'PC 연결 정보를 준비하고 있습니다.',
+            description: '준비가 끝난 뒤 앱을 설치해 주세요.',
+            className: 'bg-muted/55 text-muted-foreground',
+        }
+        : status === 'ready'
+            ? {
+                icon: <ShieldCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0"/>,
+                title: '설치 준비가 완료됐습니다.',
+                description: '설치 후 홈 화면의 Jungle Bell을 열면 PC 연결 요청이 자동으로 시작됩니다.',
+                className: 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-200',
+            }
+            : {
+                icon: <CircleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0"/>,
+                title: 'QR 연결 정보를 준비하지 못했습니다.',
+                description: '네트워크를 확인해 다시 시도하거나 PC에서 새 QR을 만들어 주세요.',
+                className: 'bg-destructive/10 text-destructive',
+            };
+
+    return (
+        <div className={`mt-4 flex items-start gap-2 rounded-lg p-3 text-sm ${content.className}`} aria-live="polite">
+            {content.icon}
+            <div>
+                <strong className="block">{content.title}</strong>
+                <p className="mt-1 leading-5">{content.description}</p>
+            </div>
+        </div>
+    );
+}
+
+function MobileInstallAction({
+    status,
+    onRequestMobileInstall,
+    onRetryMobileHandoff,
+}: {
+    status: MobileInstallHandoffStatus;
     onRequestMobileInstall?: () => void;
+    onRetryMobileHandoff?: () => void;
 }) {
+    const className = 'mt-4 w-full shrink-0 sm:mt-0 sm:w-auto';
+    if (status === 'preparing') {
+        return (
+            <Button className={className} variant="outline" disabled>
+                연결 정보 준비 중<LoaderCircle aria-hidden="true" className="animate-spin"/>
+            </Button>
+        );
+    }
+    if (status === 'error') {
+        return (
+            <Button className={className} variant="outline" onClick={onRetryMobileHandoff} disabled={!onRetryMobileHandoff}>
+                다시 준비<RotateCcw aria-hidden="true"/>
+            </Button>
+        );
+    }
+    if (onRequestMobileInstall) {
+        return (
+            <Button className={className} variant="outline" onClick={onRequestMobileInstall}>
+                모바일 앱 설치 안내 열기<Smartphone aria-hidden="true"/>
+            </Button>
+        );
+    }
+    return (
+        <Button className={className} variant="outline" disabled>
+            모바일에서만 이용 가능<Smartphone aria-hidden="true"/>
+        </Button>
+    );
+}
+
+export function AppInstallPage({
+    onRequestMobileInstall,
+    focusMobileInstall = false,
+    mobileHandoffStatus = 'none',
+    onRetryMobileHandoff,
+}: {
+    onRequestMobileInstall?: () => void;
+    focusMobileInstall?: boolean;
+    mobileHandoffStatus?: MobileInstallHandoffStatus;
+    onRetryMobileHandoff?: () => void;
+}) {
+    useEffect(() => {
+        if (!focusMobileInstall) return;
+        const frame = window.requestAnimationFrame(() => scrollToGuide('mobile-install'));
+        return () => window.cancelAnimationFrame(frame);
+    }, [focusMobileInstall]);
+
     return (
         <div className="space-y-8">
             <PageHeader
@@ -140,16 +233,13 @@ export function AppInstallPage({onRequestMobileInstall}: {
                     <p className="mt-2 text-sm leading-6 text-muted-foreground">
                         iPhone은 공유 메뉴의 ‘홈 화면에 추가’, Android는 브라우저 메뉴의 ‘앱 설치’를 선택합니다.
                     </p>
+                    <MobileInstallHandoffNotice status={mobileHandoffStatus}/>
                 </div>
-                {onRequestMobileInstall ? (
-                    <Button className="mt-4 w-full shrink-0 sm:mt-0 sm:w-auto" variant="outline" onClick={onRequestMobileInstall}>
-                        모바일 앱 설치 안내 열기<Smartphone aria-hidden="true"/>
-                    </Button>
-                ) : (
-                    <Button className="mt-4 w-full shrink-0 sm:mt-0 sm:w-auto" variant="outline" disabled>
-                        모바일에서만 이용 가능<Smartphone aria-hidden="true"/>
-                    </Button>
-                )}
+                <MobileInstallAction
+                    status={mobileHandoffStatus}
+                    onRequestMobileInstall={onRequestMobileInstall}
+                    onRetryMobileHandoff={onRetryMobileHandoff}
+                />
             </section>
         </div>
     );
