@@ -16,7 +16,7 @@
 | 대상 | 자격 증명 | 허용 경로 |
 | --- | --- | --- |
 | 공통 SPA 공개 기능 | 없음 | `/api/public/*`, `/api/health`, 정적 자산 |
-| Tauri background | `Authorization: Bearer jbd_…` | `/api/desktop/*` |
+| Tauri background | `Authorization: Bearer jbd_…` | `/api/desktop/*`, `POST /api/me/usage/ui-opened` |
 | Tauri SPA | `Authorization: Bearer jbui_…`와 발급 시 등록한 exact `Origin` | `/api/me/*` |
 | 설치형 PWA | `__Host-jb_device` Strict HttpOnly cookie | `/api/me/*` |
 
@@ -37,7 +37,18 @@ cookie는 token resolver에서 Bearer 인증으로 변환하고, 권한과 WebVi
 | `GET` | `/api/public/status` | source별 최근 시도·성공·실패 상태 |
 | `GET` | `/`, `/index.html` | 내장 React SPA HTML |
 
-Vite로 빌드한 React SPA는 Spring Boot JAR의 정적 자산으로 배포됩니다. 화면 이동은 `/#/home`, `/#/attendance`, `/#/laundry`, `/#/meals` hash 경로를 사용합니다.
+Vite로 빌드한 React SPA는 Spring Boot JAR의 정적 자산으로 배포됩니다. 화면 이동은 `/#/home`, `/#/attendance`, `/#/laundry`, `/#/meals` hash 경로를 사용하고 개인정보 처리 안내는 인증과 무관하게 `/#/privacy`에서 엽니다.
+
+## 사용량 기록
+
+| Method | 경로 | 인증 | 설명 |
+| --- | --- | --- | --- |
+| `POST` | `/api/public/usage/ui-opened` | 없음 | `{ "client": "web" | "pwa" }`, 24시간 HttpOnly 방문자 쿠키 발급·일일 중복 제거 |
+| `POST` | `/api/me/usage/ui-opened` | PC 장기 bearer 또는 모바일 cookie | 인증 session에서 사용자와 Desktop/PWA를 결정해 일일 중복 제거 |
+
+클라이언트가 임의 기능 이벤트를 제출하는 API는 없습니다. 기능 사용량은 허용된 서버 기능이
+성공한 직후 내부에서만 기록합니다. 상세 스키마와 보존기간은
+[사용량 메트릭 레퍼런스](./usage-metrics-reference.md)를 따릅니다.
 
 ## 공개 세탁 데이터
 
@@ -146,6 +157,7 @@ pending delivery를 전송하고 retry/backoff를 관리합니다.
 ## 저장 범위
 
 서버에는 정규화된 출석 snapshot, PC·모바일 session hash, 기기 metadata, 개인 설정,
-세탁 watch, Push subscription key, pairing 상태, 알림 delivery, 공개 세탁·급식 기록을
+세탁 watch, Push subscription key, pairing 상태, 알림 delivery, 공개 세탁·급식 기록,
+최소 사용량 원자료와 일별 집계를
 저장합니다. LMS cookie, LMS token, Google SSO credential, LMS 페이지 원문은 저장하지
 않습니다.

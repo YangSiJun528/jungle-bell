@@ -13,7 +13,7 @@ IP는 이 문서에 기록하지 않습니다.
 - Mac과 OCI의 Tailscale 연결이 정상이어야 합니다.
 - 서버 접근이 안 되면 [OCI 운영 서버 접근 복구](guide_oci_access_recovery.md)를 먼저
   수행합니다.
-- 로컬 `server/deploy/.env.production`과 네 개의 secret 파일은 Git에 포함하지 않습니다.
+- 로컬 `server/deploy/.env.production`과 다섯 개의 secret 파일은 Git에 포함하지 않습니다.
 - 기존 배포는 롤백이 끝날 때까지 삭제하지 않습니다.
 - [서버 운영 절차의 버전과 배포 기록](../OPERATIONS.md#버전과-배포-기록)에 따라 버전
   계약 테스트를 통과해야 합니다. 공식 릴리스는 깨끗한 working tree에서 빌드합니다.
@@ -94,6 +94,11 @@ for name in database-password pairing-secret vapid-public-key vapid-private-key;
     "/home/ubuntu/.config/jungle-bell-spring-v2-test/$name" \
     "/home/ubuntu/.config/jungle-bell/$name"
 done
+
+if [ ! -e /home/ubuntu/.config/jungle-bell/usage-hash-secret ]; then
+  openssl rand -hex 32 > /home/ubuntu/.config/jungle-bell/usage-hash-secret
+  chmod 0600 /home/ubuntu/.config/jungle-bell/usage-hash-secret
+fi
 ```
 
 상위 디렉터리는 계속 `0700`으로 유지합니다. secret 내용을 로그나 터미널 출력으로
@@ -135,7 +140,7 @@ api_gid=$(docker run --rm --entrypoint id jungle-bell-api:production -g)
 worker_gid=$(docker run --rm --entrypoint id jungle-bell-worker:production -g)
 test "$api_gid" = "$worker_gid"
 
-for name in database-password pairing-secret vapid-public-key vapid-private-key; do
+for name in database-password pairing-secret usage-hash-secret vapid-public-key vapid-private-key; do
   sudo chgrp "$api_gid" "/home/ubuntu/.config/jungle-bell/$name"
   chmod 0640 "/home/ubuntu/.config/jungle-bell/$name"
 done

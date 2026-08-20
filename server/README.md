@@ -90,3 +90,4 @@ server/tools/smoke-api.sh https://jungle-bell.sijun-yang.com
 - HTTP endpoint: [docs/api-reference.md](./docs/api-reference.md)
 - 환경 변수: [docs/environment-reference.md](./docs/environment-reference.md)
 - 로그 형식과 필드: [docs/logging-reference.md](./docs/logging-reference.md)
+- 사용량 스키마·보존·조회: [docs/usage-metrics-reference.md](./docs/usage-metrics-reference.md)

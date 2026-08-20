@@ -61,6 +61,18 @@ Worker는 세탁을 매분, 급식을 scheduler 정의 주기마다 수집합니
 housekeeping도 Worker에서 실행됩니다. 각 source의 최근 시도·성공·실패는
 `source_state`에 저장되고 API의 `/api/public/status`에 노출됩니다.
 
+## 사용량 집계
+
+| 변수 | 기본값 | 설명 |
+| --- | --- | --- |
+| `USAGE_METRICS_ENABLED` | `true` | API 신규 기록과 Worker 요약 재집계를 함께 활성화. 비활성화해도 보존기간 삭제는 계속 실행 |
+| `USAGE_HASH_SECRET` | config tree `usage-hash-secret` | 익명 방문자 쿠키를 날짜별 HMAC으로 변환하는 전용 secret, 32자 이상 |
+| `USAGE_HASH_SECRET_FILE` | 운영 Compose 필수 | API와 Worker에 동일하게 mount하는 Compose secret 파일 |
+
+`usage-hash-secret`은 pairing secret과 분리하고 저장소나 로그에 기록하지 않습니다.
+원자료와 요약 보존기간, 집계 조회 방법은 [사용량 메트릭 레퍼런스](./usage-metrics-reference.md)를
+따릅니다.
+
 ## Web Push
 
 | 변수 | 기본값 | 설명 |

@@ -73,6 +73,7 @@ install -d -m 0700 ~/.config/jungle-bell
 
 - `database-password`
 - `pairing-secret` — 32자 이상
+- `usage-hash-secret` — 익명 사용량 HMAC 전용, 32자 이상
 - `vapid-public-key`
 - `vapid-private-key`
 
@@ -90,13 +91,13 @@ chmod 600 server/deploy/.env.production
 다음 값을 확인하거나 설정합니다.
 
 - `PUBLIC_BASE_URL=https://jungle-bell.sijun-yang.com`
-- 네 secret 파일의 절대 경로
+- 다섯 secret 파일의 절대 경로
 - `CLOUDFLARE_TUNNEL_TOKEN`
 - `LAUNDRY_SOURCE_URL`
 - `VAPID_SUBJECT`
 
-`CLOUDFLARE_TUNNEL_TOKEN`, 데이터베이스 비밀번호, pairing secret, VAPID private key는
-저장소 밖에서 관리합니다.
+`CLOUDFLARE_TUNNEL_TOKEN`, 데이터베이스 비밀번호, pairing secret, usage hash secret,
+VAPID private key는 저장소 밖에서 관리합니다.
 
 ## Cloudflare named Tunnel 구성
 

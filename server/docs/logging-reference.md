@@ -1,18 +1,17 @@
 # 서버 로깅 레퍼런스
 
 Jungle Bell 서버는 API와 Worker 로그에 동일한 필드 형식을 사용합니다. 로그 메시지는
-영문으로 작성하고 HTTP·인증·작업 실행 식별자는 MDC에서 공통 출력합니다.
+영문으로 작성하고 HTTP 요청·작업 실행 식별자는 MDC에서 공통 출력합니다.
 
 ## 식별자
 
 | 필드 | 설정 범위 | 값 |
 | --- | --- | --- |
 | `requestId` | 모든 HTTP 요청 | 안전한 `X-Request-ID` 또는 서버가 생성한 UUID |
-| `userId` | 인증된 HTTP 요청 | `SessionPrincipal.userId` UUID |
 | `jobRunId` | Scheduler 실행 | 실행마다 생성한 UUID |
 
-HTTP 요청에는 `jobRunId=-`, 비인증 요청에는 `userId=-`가 출력됩니다. Worker 작업에는
-`requestId=- userId=-`가 출력됩니다. `tenantId`, `traceId`, `spanId`는 사용하지 않습니다.
+HTTP 요청에는 `jobRunId=-`, Worker 작업에는 `requestId=-`가 출력됩니다. 사용자 UUID,
+`tenantId`, `traceId`, `spanId`는 MDC에 넣지 않습니다.
 
 `X-Request-ID`는 영문자 또는 숫자로 시작하는 1~64자의 영문자, 숫자, `.`, `_`, `:`,
 `-`만 허용합니다. 누락되거나 형식이 맞지 않으면 요청을 거부하지 않고 UUID로
@@ -24,14 +23,14 @@ HTTP 요청에는 `jobRunId=-`, 비인증 요청에는 `userId=-`가 출력됩�
 API와 Worker는 Docker 표준 출력에 다음 Logback console pattern을 사용합니다.
 
 ```text
-%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} level=%-5p requestId=%X{requestId:--} userId=%X{userId:--} jobRunId=%X{jobRunId:--} thread=%thread source=%class.%method - %msg%n%ex
+%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} level=%-5p requestId=%X{requestId:--} jobRunId=%X{jobRunId:--} thread=%thread source=%class.%method - %msg%n%ex
 ```
 
 예시는 다음과 같습니다.
 
 ```text
-2026-08-20T00:00:00.000+09:00 level=INFO  requestId=client-123 userId=7c... jobRunId=- thread=http-nio-8080-exec-1 source=app.junglebell.server.api.pairing.PairingController.create - Pairing creation request completed. pairingId=jbp_... status=201
-2026-08-20T00:01:00.000+09:00 level=INFO  requestId=- userId=- jobRunId=3e... thread=scheduling-1 source=app.junglebell.server.worker.collector.CollectorScheduler.collectLaundry - Laundry collection job completed.
+2026-08-20T00:00:00.000+09:00 level=INFO requestId=client-123 jobRunId=- thread=http-nio-8080-exec-1 source=app.junglebell.server.api.pairing.PairingController.create - Pairing creation request completed. pairingId=jbp_... status=201
+2026-08-20T00:01:00.000+09:00 level=INFO requestId=- jobRunId=3e... thread=scheduling-1 source=app.junglebell.server.worker.collector.CollectorScheduler.collectLaundry - Laundry collection job completed.
 ```
 
 `%class.%method`는 호출 위치를 계산하므로 트래픽이나 CPU 사용량이 커지면 부하 테스트
@@ -68,7 +67,7 @@ cause는 출력하지 않습니다.
 
 다음 데이터는 메시지나 MDC에 기록하지 않습니다.
 
-- 요청·응답 본문 전체, IP 주소, 기기 label
+- 요청·응답 본문 전체, 사용자 UUID, IP 주소, 기기 label
 - Authorization, Cookie, 비밀번호와 모든 secret
 - `jbd_`, `jbs_`, `jbui_`, `jbcr_` token 원문
 - pairing challenge, manual code, receipt
