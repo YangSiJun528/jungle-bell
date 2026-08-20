@@ -118,6 +118,7 @@ export const dashboardLaundrySnapshotSchema = z.object({
     asOf: isoDateTimeSchema,
     final: z.boolean(),
     quality: z.object({
+        collectorHealthy: z.boolean(),
         collection: z.enum(['SUCCESS', 'STALE']),
         sourceFreshness: z.enum([
             'REFRESH_OBSERVED',

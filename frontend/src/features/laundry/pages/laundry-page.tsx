@@ -43,7 +43,9 @@ export function LaundryPage() {
     const [showRisk, setShowRisk] = useState(riskIndicatorAvailable);
 
     const snapshot = laundry.data;
-    const reliable = snapshot.quality.collection === 'SUCCESS' && laundrySituationDataIsReliable({
+    const reliable = snapshot.quality.collectorHealthy
+        && snapshot.quality.collection === 'SUCCESS'
+        && laundrySituationDataIsReliable({
         hasData: snapshot.machines.length > 0,
         error: laundry.error,
         sourceFreshness: snapshot.quality.sourceFreshness,
@@ -54,6 +56,7 @@ export function LaundryPage() {
     const summaries = capacityCards(snapshot.capacity, reliable);
     const refreshFailed = laundry.isError || manualRefresh.isError;
     const refreshing = laundry.isFetching || manualRefresh.isPending;
+    const collectorUnavailable = !snapshot.quality.collectorHealthy;
 
     return (
         <div className="space-y-6">
@@ -71,7 +74,15 @@ export function LaundryPage() {
                 )}
             />
 
-            {refreshFailed ? (
+            {collectorUnavailable ? (
+                        <Alert variant="destructive">
+                            <CircleAlert/>
+                            <AlertTitle>세탁실 수집 서버에 문제가 있습니다.</AlertTitle>
+                            <AlertDescription>
+                                실시간 상태를 확인할 수 없어 마지막 정상 데이터를 표시합니다.
+                            </AlertDescription>
+                        </Alert>
+                    ) : refreshFailed ? (
                         <Alert variant="destructive">
                             <CircleAlert/>
                             <AlertTitle>최신 기기 상태를 불러오지 못했습니다.</AlertTitle>

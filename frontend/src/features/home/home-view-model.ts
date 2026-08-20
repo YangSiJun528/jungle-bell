@@ -60,7 +60,8 @@ export function homeLaundrySummary(input: {
 }): LaundryHomeSummary {
     const snapshot = input.snapshot;
     const savedAt = Date.parse(snapshot.asOf);
-    const locallyReliable = snapshot.quality.collection === 'SUCCESS'
+    const locallyReliable = snapshot.quality.collectorHealthy
+        && snapshot.quality.collection === 'SUCCESS'
         && laundrySituationDataIsReliable({
             hasData: snapshot.machines.length > 0,
             error: null,

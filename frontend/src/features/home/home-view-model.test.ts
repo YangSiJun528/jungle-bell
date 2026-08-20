@@ -34,6 +34,7 @@ const attendanceDashboard = (
 describe('home feature boundaries', () => {
     it('keeps the global notification utility out of the home summary', () => {
         const source = readFileSync(new URL('./home-page.tsx', import.meta.url), 'utf8');
+        const viewModelSource = readFileSync(new URL('./home-view-model.ts', import.meta.url), 'utf8');
 
         expect(source).not.toContain('useNotificationsQuery');
         expect(source).not.toContain('homeUnreadSummary');
@@ -43,7 +44,10 @@ describe('home feature boundaries', () => {
         expect(source).not.toContain('useCampusDataIssue');
         expect(source).toContain('useSuspenseCampusQueries');
         expect(source).toContain('const laundryRefreshFailed = laundry.isError');
+        expect(source).toContain('const laundryCollectorUnavailable = !laundry.data.quality.collectorHealthy');
+        expect(viewModelSource).toContain('const locallyReliable = snapshot.quality.collectorHealthy');
         expect(source).toContain('const mealsRefreshFailed = meals.isError');
+        expect(source).toContain('수집 서버 장애로 마지막 정상 상태를 표시합니다.');
         expect(source).not.toContain('CardLoading');
         expect(source).not.toContain('CompactError');
     });

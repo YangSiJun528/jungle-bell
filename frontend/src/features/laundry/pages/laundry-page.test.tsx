@@ -21,6 +21,13 @@ describe('LaundryPage capacity summary', () => {
         expect(source).toContain('<LaundryWarningBadge/>');
     });
 
+    it('수집 서버 상태 플래그가 꺼지면 마지막 정상 데이터 경고를 표시한다', () => {
+        expect(source).toContain('const collectorUnavailable = !snapshot.quality.collectorHealthy');
+        expect(source).toContain('const reliable = snapshot.quality.collectorHealthy');
+        expect(source).toContain('세탁실 수집 서버에 문제가 있습니다.');
+        expect(source).toContain('실시간 상태를 확인할 수 없어 마지막 정상 데이터를 표시합니다.');
+    });
+
     it('횟수와 지금 시작 가능 의미를 한 줄로 표시한다', () => {
         expect(source).toContain('items-baseline');
         expect(source).toMatch(/\{card\.count === null \? '—' : `\$\{card\.count\}회`\}[\s\S]*지금 시작 가능/u);

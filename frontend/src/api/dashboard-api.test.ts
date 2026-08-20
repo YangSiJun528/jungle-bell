@@ -107,6 +107,7 @@ test('공개 생활 정보는 인증 없이 공개 API만 호출한다', async (
                 asOf: '2026-08-03T09:00:00.000Z',
                 final: false,
                 quality: {
+                    collectorHealthy: true,
                     collection: 'SUCCESS',
                     sourceFreshness: 'REFRESH_OBSERVED',
                     lastCheckedAt: '2026-08-03T09:00:00.000Z',
@@ -121,11 +122,40 @@ test('공개 생활 정보는 인증 없이 공개 API만 호출한다', async (
     const result = await api.getPublicLaundry();
 
     assert.equal(result.schemaVersion, 1);
+    assert.equal(result.quality.collectorHealthy, true);
     assert.equal(result.capacity, null);
     assert.equal(calls[0]?.url, 'https://campus.example.com/api/public/laundry');
     assert.equal(calls[0]?.init?.method, 'GET');
     assert.equal(calls[0]?.init?.credentials, 'omit');
     assert.equal(new Headers(calls[0]?.init?.headers).has('authorization'), false);
+});
+
+test('세탁 수집 서버 상태 플래그는 불리언 값만 허용한다', async () => {
+    const response = (collectorHealthy: unknown) => ({
+        schemaVersion: 1,
+        asOf: '2026-08-03T09:00:00.000Z',
+        final: false,
+        quality: {
+            collectorHealthy,
+            collection: 'STALE',
+            sourceFreshness: 'COLLECTION_GAP',
+            lastCheckedAt: '2026-08-03T08:55:00.000Z',
+            expectedRefreshIntervalSeconds: 300,
+        },
+        machines: [],
+    });
+    const unavailable = createDashboardApi({
+        fetcher: async () => jsonResponse(response(false)),
+    });
+
+    assert.equal((await unavailable.getPublicLaundry()).quality.collectorHealthy, false);
+
+    for (const invalidFlag of [undefined, 'false', 0]) {
+        const invalid = createDashboardApi({
+            fetcher: async () => jsonResponse(response(invalidFlag)),
+        });
+        await assert.rejects(invalid.getPublicLaundry(), /API_RESPONSE_INVALID/u);
+    }
 });
 
 test('세탁 가능 횟수는 서버 authoritative capacity 계약을 엄격히 유지한다', async () => {
@@ -156,6 +186,7 @@ test('세탁 가능 횟수는 서버 authoritative capacity 계약을 엄격히 
             asOf: '2026-08-03T09:00:00.000Z',
             final: false,
             quality: {
+                collectorHealthy: true,
                 collection: 'SUCCESS',
                 sourceFreshness: 'REFRESH_OBSERVED',
                 lastCheckedAt: '2026-08-03T09:00:00.000Z',
@@ -193,6 +224,7 @@ test('서버 capacity가 내부 불변식을 어기면 응답 전체를 거부�
                 asOf: '2026-08-03T09:00:00.000Z',
                 final: false,
                 quality: {
+                    collectorHealthy: true,
                     collection: 'SUCCESS',
                     sourceFreshness: 'REFRESH_OBSERVED',
                     lastCheckedAt: null,
@@ -232,6 +264,7 @@ test('세탁 기기 최근 7일 위험 지표를 검증해 보존한다', async 
         asOf: '2026-08-03T09:00:00.000Z',
         final: false,
         quality: {
+            collectorHealthy: true,
             collection: 'SUCCESS',
             sourceFreshness: 'REFRESH_OBSERVED',
             lastCheckedAt: '2026-08-03T09:00:00.000Z',
@@ -772,6 +805,7 @@ test('데스크톱 생활 정보도 공개 HTTP API를 직접 사용한다', asy
                     asOf: '2026-08-03T09:00:00.000Z',
                     final: false,
                     quality: {
+                        collectorHealthy: true,
                         collection: 'SUCCESS',
                         sourceFreshness: 'REFRESH_OBSERVED',
                         lastCheckedAt: '2026-08-03T09:00:00.000Z',

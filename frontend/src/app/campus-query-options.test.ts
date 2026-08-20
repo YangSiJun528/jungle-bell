@@ -15,6 +15,7 @@ const laundrySnapshot: DashboardLaundrySnapshot = {
     asOf: '2026-08-11T00:00:00.000Z',
     final: true,
     quality: {
+        collectorHealthy: true,
         collection: 'SUCCESS',
         sourceFreshness: 'REFRESH_OBSERVED',
         lastCheckedAt: '2026-08-11T00:00:00.000Z',

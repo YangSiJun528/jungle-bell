@@ -66,6 +66,7 @@ function HomeLivingSummaries() {
     });
     const todayMealSlots = homeTodayMealSlots(meals.data);
     const laundryRefreshFailed = laundry.isError;
+    const laundryCollectorUnavailable = !laundry.data.quality.collectorHealthy;
     const mealsRefreshFailed = meals.isError;
 
     return (
@@ -75,7 +76,9 @@ function HomeLivingSummaries() {
                 title="세탁실"
                 footer={<Button asChild size="sm" variant="link" className="px-0"><Link to="/laundry">기기별 현황 보기 <ArrowRight/></Link></Button>}
             >
-                {laundryRefreshFailed ? (
+                {laundryCollectorUnavailable ? (
+                    <p className="text-xs text-destructive">수집 서버 장애로 마지막 정상 상태를 표시합니다.</p>
+                ) : laundryRefreshFailed ? (
                     <p className="text-xs text-amber-700 dark:text-amber-300">최신 상태를 가져오지 못해 마지막 확인값을 표시합니다.</p>
                 ) : null}
                 {laundry.data.machines.length === 0 ? (
