@@ -5,8 +5,13 @@ import app.junglebell.server.domain.notification.NotificationStore
 import app.junglebell.server.domain.publicapi.LaundryAppliance
 import app.junglebell.server.domain.publicapi.NormalizedEnum
 import app.junglebell.server.domain.publicapi.PublicDataStore
+import org.mockito.ArgumentMatchers.anyInt
+import org.mockito.ArgumentMatchers.anyLong
+import org.mockito.ArgumentMatchers.anyString
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.mockingDetails
+import org.mockito.Mockito.never
+import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
 import java.time.Clock
 import java.time.Instant
@@ -19,6 +24,29 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 class AutomationEngineTest {
+    @Test
+    fun `push delivery is not gated by the minute automation lease`() {
+        val automation = mock(AutomationStore::class.java)
+        val pushSender = mock(PushSender::class.java)
+        `when`(pushSender.configured).thenReturn(true)
+        `when`(automation.claimPushDeliveries(anyLong(), anyString(), anyInt())).thenReturn(emptyList())
+        val engine = AutomationEngine(
+            automation,
+            mock(NotificationStore::class.java),
+            mock(PublicDataStore::class.java),
+            pushSender,
+            Clock.fixed(Instant.parse("2026-08-20T00:00:00Z"), ZoneOffset.UTC),
+        )
+
+        engine.runMinuteCycle()
+
+        verify(automation, never()).claimPushDeliveries(anyLong(), anyString(), anyInt())
+
+        engine.runPushCycle()
+
+        verify(automation).claimPushDeliveries(anyLong(), anyString(), anyInt())
+    }
+
     @Test
     fun `attendance notification copy includes the actual deadline countdown`() {
         val deadline = epoch("2026-08-20T10:00:00+09:00")

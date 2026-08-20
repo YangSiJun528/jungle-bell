@@ -127,9 +127,12 @@ class AutomationEngine(
             runStage("attendance") { planAttendance(now) },
             runStage("meals") { publishMeals(now) },
             runStage("laundry") { applyLaundryWatches(now) },
-            runStage("push") { deliverPushes(now) },
         ).count { !it }
         logger.info("Minute automation completed. failedStageCount={}", failedStageCount)
+    }
+
+    fun runPushCycle() {
+        runStage("push") { deliverPushes(clock.millis()) }
     }
 
     fun runHousekeeping() {
