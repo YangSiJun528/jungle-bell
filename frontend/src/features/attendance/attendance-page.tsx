@@ -1,6 +1,7 @@
 import {useMutation} from '@tanstack/react-query';
 import {CalendarCheck2, Check, ExternalLink, Laptop, RefreshCw, X} from 'lucide-react';
 
+import type {DesktopDevice} from '@/api/dashboard-api';
 import {useDashboardAccount} from '@/app/dashboard-account';
 import {useDashboardEnvironment} from '@/app/dashboard-context';
 import {
@@ -55,12 +56,60 @@ function AttendanceCheck({label, checked}: {label: string; checked: boolean}) {
     );
 }
 
+function AttendanceDevicesCard({devices}: {devices: DesktopDevice[]}) {
+    if (devices.length === 0) return null;
+
+    return (
+        <Card>
+            <CardHeader>
+                <div>
+                    <p className="text-xs font-medium text-muted-foreground">수집 기기</p>
+                    <CardTitle className="mt-1">출석 확인 PC</CardTitle>
+                </div>
+            </CardHeader>
+            <CardContent>
+                <ul className="divide-y rounded-xl border">
+                    {devices.map((device) => {
+                        const status = deviceStatus(device);
+                        return (
+                            <li
+                                key={device.id}
+                                className="flex items-center justify-between gap-4 p-4"
+                            >
+                                <div className="flex min-w-0 items-center gap-3">
+                                    <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted">
+                                        <Laptop aria-hidden="true" className="size-4" />
+                                    </span>
+                                    <div className="min-w-0">
+                                        <p className="truncate text-sm font-medium">
+                                            {device.deviceLabel || '내 PC'}
+                                        </p>
+                                        <p className="mt-1 text-xs text-muted-foreground">
+                                            {device.lastSeenAt
+                                                ? relativeTimeLabel(device.lastSeenAt)
+                                                : '확인 기록 없음'}
+                                            {` · ${status.label}`}
+                                            {device.appVersion ? ` · v${device.appVersion}` : ''}
+                                        </p>
+                                    </div>
+                                </div>
+                            </li>
+                        );
+                    })}
+                </ul>
+            </CardContent>
+        </Card>
+    );
+}
+
 export function AttendancePage() {
     const {api, platform} = useDashboardEnvironment();
     const account = useDashboardAccount();
     const attendance = useAttendanceQuery();
     const desktopConnection = useDesktopConnectionQuery();
     const refreshAttendance = useRefreshAttendanceMutation();
+    // Opening the LMS window does not mutate query-backed application state.
+    // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation
     const openCampus = useMutation({mutationFn: () => api.openLmsLogin()});
     const detail = attendanceDetailModel({
         isPending: attendance.isPending,
@@ -323,49 +372,7 @@ export function AttendancePage() {
 
             {dday ? <DdayCard view={dday} /> : null}
 
-            {devices.length > 0 ? (
-                <Card>
-                    <CardHeader>
-                        <div>
-                            <p className="text-xs font-medium text-muted-foreground">수집 기기</p>
-                            <CardTitle className="mt-1">출석 확인 PC</CardTitle>
-                        </div>
-                    </CardHeader>
-                    <CardContent>
-                        <ul className="divide-y rounded-xl border">
-                            {devices.map((device) => {
-                                const status = deviceStatus(device);
-                                return (
-                                    <li
-                                        key={device.id}
-                                        className="flex items-center justify-between gap-4 p-4"
-                                    >
-                                        <div className="flex min-w-0 items-center gap-3">
-                                            <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted">
-                                                <Laptop aria-hidden="true" className="size-4" />
-                                            </span>
-                                            <div className="min-w-0">
-                                                <p className="truncate text-sm font-medium">
-                                                    {device.deviceLabel || '내 PC'}
-                                                </p>
-                                                <p className="mt-1 text-xs text-muted-foreground">
-                                                    {device.lastSeenAt
-                                                        ? relativeTimeLabel(device.lastSeenAt)
-                                                        : '확인 기록 없음'}
-                                                    {` · ${status.label}`}
-                                                    {device.appVersion
-                                                        ? ` · v${device.appVersion}`
-                                                        : ''}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </li>
-                                );
-                            })}
-                        </ul>
-                    </CardContent>
-                </Card>
-            ) : null}
+            <AttendanceDevicesCard devices={devices} />
         </div>
     );
 }

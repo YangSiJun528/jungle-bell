@@ -15,6 +15,8 @@ export function PersonalAccountGate({children}: PropsWithChildren) {
     const {api, platform} = useDashboardEnvironment();
     const account = useDashboardAccount();
     const refresh = useRefreshAttendanceMutation();
+    // Opening the LMS window does not mutate query-backed application state.
+    // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation
     const login = useMutation({mutationFn: () => api.openLmsLogin()});
 
     if (!platform.capabilities.desktopAccount) {

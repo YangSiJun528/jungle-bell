@@ -85,6 +85,8 @@ export function JungleCampusSummary() {
     const account = useDashboardAccount();
     const attendance = useAttendanceQuery();
     const refreshAttendance = useRefreshAttendanceMutation();
+    // Opening the LMS window does not mutate query-backed application state.
+    // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation
     const openCampus = useMutation({mutationFn: () => api.openLmsLogin()});
 
     const desktopLocalAttendanceAvailable =

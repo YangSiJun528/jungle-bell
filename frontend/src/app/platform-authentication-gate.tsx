@@ -54,6 +54,8 @@ export function PlatformAuthenticationGate({
 }: PlatformAuthenticationGateProps) {
     const {api, platform} = useDashboardEnvironment();
     const account = useDashboardAccount();
+    // Opening the LMS window does not mutate query-backed application state.
+    // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation
     const login = useMutation({mutationFn: () => api.openLmsLogin()});
 
     if (platform.accountAuthentication.kind === 'none') return children;

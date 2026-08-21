@@ -7,6 +7,8 @@ import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@/compo
 
 export function SystemNotificationSettingsButton() {
     const {api, platform} = useDashboardEnvironment();
+    // Opening OS notification settings does not mutate query-backed application state.
+    // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation
     const openSettings = useMutation({mutationFn: () => api.openSystemNotificationSettings()});
 
     if (!platform.capabilities.localNotifications) return null;
