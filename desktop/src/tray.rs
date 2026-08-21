@@ -728,7 +728,9 @@ mod tests {
     fn has_antialiased_edge(image: &Image<'_>) -> bool {
         image
             .rgba()
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .any(|pixel| pixel[3] > 0 && pixel[3] < u8::MAX)
     }
 
@@ -752,14 +754,22 @@ mod tests {
     }
 
     fn visible_pixel_ratio(image: &Image<'_>) -> f64 {
-        let visible = image.rgba().chunks_exact(4).filter(|pixel| pixel[3] >= 128).count();
+        let visible = image
+            .rgba()
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .filter(|pixel| pixel[3] >= 128)
+            .count();
         visible as f64 / (image.width() * image.height()) as f64
     }
 
     fn contains_opaque_color(image: &Image<'_>, expected: [u8; 3]) -> bool {
         image
             .rgba()
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .any(|pixel| pixel[0..3] == expected && pixel[3] == u8::MAX)
     }
 
