@@ -5,7 +5,7 @@ export type LaundryRiskLevel = 'safe' | 'slight' | 'caution';
 export interface LaundryStatusAppliance {
     appliance?: string;
     operationalStatus?: string;
-    projection?: {status?: string; remainingMinutes?: number; estimated?: boolean} | null;
+    projection?: {status?: string; remainingMinutes?: number | null; estimated?: boolean} | null;
     state?: {code?: string; labelKo?: string} | null;
     remainingMinutes?: number | null;
     totalMinutes?: number;

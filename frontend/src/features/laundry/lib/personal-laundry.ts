@@ -16,7 +16,7 @@ export interface LaundryTarget {
 interface PersonalLaundryAppliance {
     appliance?: LaundryApplianceKind;
     operationalStatus?: string;
-    projection?: {status?: string; remainingMinutes?: number} | null;
+    projection?: {status?: string; remainingMinutes?: number | null} | null;
     remainingMinutes?: number | null;
     sessionId?: string | null;
 }

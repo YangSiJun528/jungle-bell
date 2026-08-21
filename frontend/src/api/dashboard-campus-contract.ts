@@ -16,7 +16,7 @@ import {
 
 const laundryProjectionSchema = z.object({
     status: textSchema(64),
-    remainingMinutes: finiteNumberSchema.optional(),
+    remainingMinutes: finiteNumberSchema.nullable().optional(),
     estimated: z.boolean().optional(),
 });
 

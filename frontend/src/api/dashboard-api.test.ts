@@ -158,6 +158,47 @@ test('세탁 수집 서버 상태 플래그는 불리언 값만 허용한다', a
     }
 });
 
+test('UNKNOWN 세탁 상태의 null 잔여 시간을 허용한다', async () => {
+    const api = createDashboardApi({
+        fetcher: async () => jsonResponse({
+            schemaVersion: 1,
+            asOf: '2026-08-21T11:04:00.000Z',
+            final: false,
+            quality: {
+                collectorHealthy: true,
+                collection: 'SUCCESS',
+                sourceFreshness: 'WITHIN_REFRESH_WINDOW',
+                lastCheckedAt: '2026-08-21T11:03:32.000Z',
+                expectedRefreshIntervalSeconds: 300,
+            },
+            machines: [{
+                id: '워시타워_7',
+                washer: null,
+                dryer: {
+                    appliance: 'dryer',
+                    operationalStatus: 'UNKNOWN',
+                    projection: {
+                        status: 'UNKNOWN',
+                        remainingMinutes: null,
+                        estimated: false,
+                    },
+                    state: {code: 'UNKNOWN'},
+                    remainingMinutes: 87,
+                    startedAt: '2026-08-21T08:23:08.000Z',
+                    estimatedFinishAt: null,
+                    sessionId: '워시타워_7:dryer:session',
+                    errorCode: null,
+                },
+            }],
+        }),
+    });
+
+    assert.equal(
+        (await api.getPublicLaundry()).machines[0]?.dryer?.projection?.remainingMinutes,
+        null,
+    );
+});
+
 test('세탁 가능 횟수는 서버 authoritative capacity 계약을 엄격히 유지한다', async () => {
     const capacity = {
         basis: 'WASHER_AND_DRYER_HEADROOM_60_MIN',
