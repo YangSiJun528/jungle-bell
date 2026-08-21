@@ -10,7 +10,8 @@ IP는 이 문서에 기록하지 않습니다.
 ## 전제 조건
 
 - 저장소 루트에서 명령을 실행합니다.
-- Mac과 OCI의 Tailscale 연결이 정상이어야 합니다.
+- Mac과 OCI의 Tailscale 연결이 정상이고, MagicDNS FQDN
+  `oci-server.tail3cbec1.ts.net`을 해석할 수 있어야 합니다.
 - 서버 접근이 안 되면 [OCI 운영 서버 접근 복구](guide_oci_access_recovery.md)를 먼저
   수행합니다.
 - 로컬 `server/deploy/.env.production`과 다섯 개의 secret 파일은 Git에 포함하지 않습니다.
@@ -46,7 +47,7 @@ docker compose \
 검증에 성공하면 새 운영 디렉터리를 만들고 소스를 동기화합니다.
 
 ```bash
-ssh ubuntu@oci-server 'install -d -m 0700 /home/ubuntu/jungle-bell-production'
+ssh ubuntu@oci-server.tail3cbec1.ts.net 'install -d -m 0700 /home/ubuntu/jungle-bell-production'
 
 rsync -az \
   --exclude .git/ \
@@ -59,18 +60,18 @@ rsync -az \
   --exclude .DS_Store \
   --exclude server/deploy/.env.production \
   -e 'ssh -i ~/.ssh/oci_a1_flex -o IdentitiesOnly=yes' \
-  ./ ubuntu@oci-server:/home/ubuntu/jungle-bell-production/
+  ./ ubuntu@oci-server.tail3cbec1.ts.net:/home/ubuntu/jungle-bell-production/
 
 scp -i ~/.ssh/oci_a1_flex \
   server/deploy/.env.production \
-  ubuntu@oci-server:/home/ubuntu/jungle-bell-production/server/deploy/.env.production.upload
+  ubuntu@oci-server.tail3cbec1.ts.net:/home/ubuntu/jungle-bell-production/server/deploy/.env.production.upload
 ```
 
 서버에서 업로드 파일의 로컬 secret 경로를 OCI 경로로 바꾼 뒤 권한 `0600`으로 원자적으로
 교체합니다. 변환이나 설치가 실패하면 기존 운영 환경 파일을 유지하고 배포를 중단합니다.
 
 ```bash
-ssh -i ~/.ssh/oci_a1_flex ubuntu@oci-server '
+ssh -i ~/.ssh/oci_a1_flex ubuntu@oci-server.tail3cbec1.ts.net '
   set -eu
   upload=/home/ubuntu/jungle-bell-production/server/deploy/.env.production.upload
   destination=/home/ubuntu/jungle-bell-production/server/deploy/.env.production
