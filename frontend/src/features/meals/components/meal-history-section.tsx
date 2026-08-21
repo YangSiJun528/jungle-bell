@@ -1,20 +1,18 @@
-import {useMemo, useState} from 'react';
 import {useSuspenseQuery} from '@tanstack/react-query';
 import {CalendarDays} from 'lucide-react';
+import {useMemo, useState} from 'react';
+
+import type {DashboardMealPost, DashboardMealsSnapshot} from '@/api/dashboard-api';
 import {useDashboardEnvironment} from '@/app/dashboard-context';
 import {AsyncBoundary} from '@/components/dashboard/async-boundary';
 import {EmptyState, MealHistorySkeleton} from '@/components/dashboard/async-state';
 import {Card} from '@/components/ui/card';
-import type {DashboardMealPost, DashboardMealsSnapshot} from '@/api/dashboard-api';
 import {kstDateKey} from '@/domain/meals/today';
+
+import {mealDateLabel, mealsGroupedByDate, weeklyMenuForDate} from '../lib/meal-view';
 import {MealHistoryCalendar} from './meal-history-calendar';
 import {MealPostCard} from './meal-post-card';
 import {WeeklyMealMenu} from './weekly-meal-menu';
-import {
-    mealDateLabel,
-    mealsGroupedByDate,
-    weeklyMenuForDate,
-} from '../lib/meal-view';
 
 interface MealHistoryMonthProps {
     initialHistory: DashboardMealPost[];
@@ -54,13 +52,18 @@ function MealHistoryMonth({
             .sort((left, right) => right.localeCompare(left));
     }, [historyByDate]);
     const availableDates = useMemo(() => new Set(historyDates), [historyDates]);
-    const visibleHistoryDates = historyDates.filter((date) => date.startsWith(`${visibleMonthKey}-`));
-    const activeHistoryDate = selectedHistoryDate
-        && selectedHistoryDate.startsWith(`${visibleMonthKey}-`)
-        && historyByDate.has(selectedHistoryDate)
-        ? selectedHistoryDate
-        : visibleHistoryDates[0] ?? '';
-    const activeHistoryMeals = activeHistoryDate ? historyByDate.get(activeHistoryDate) ?? [] : [];
+    const visibleHistoryDates = historyDates.filter((date) =>
+        date.startsWith(`${visibleMonthKey}-`),
+    );
+    const activeHistoryDate =
+        selectedHistoryDate &&
+        selectedHistoryDate.startsWith(`${visibleMonthKey}-`) &&
+        historyByDate.has(selectedHistoryDate)
+            ? selectedHistoryDate
+            : (visibleHistoryDates[0] ?? '');
+    const activeHistoryMeals = activeHistoryDate
+        ? (historyByDate.get(activeHistoryDate) ?? [])
+        : [];
     const activeWeeklyMenu = activeHistoryDate
         ? weeklyMenuForDate(meals.data.weeklyMenus, activeHistoryDate)
         : null;
@@ -91,18 +94,15 @@ function MealHistoryMonth({
                     {activeHistoryMeals.length > 0 ? (
                         <div className="grid gap-4 sm:grid-cols-2">
                             {activeHistoryMeals.map((meal) => (
-                                <MealPostCard compact key={meal.id} meal={meal}/>
+                                <MealPostCard compact key={meal.id} meal={meal} />
                             ))}
                         </div>
                     ) : (
-                        <EmptyState title="이 달에 저장된 급식 기록이 없습니다."/>
+                        <EmptyState title="이 달에 저장된 급식 기록이 없습니다." />
                     )}
                 </section>
             </div>
-            <section
-                aria-labelledby="selected-history-week-title"
-                data-meal-history-weekly="true"
-            >
+            <section aria-labelledby="selected-history-week-title" data-meal-history-weekly="true">
                 <h3 className="mb-3 text-sm font-semibold" id="selected-history-week-title">
                     선택한 주 급식표
                 </h3>
@@ -113,7 +113,7 @@ function MealHistoryMonth({
                         weekKey={activeWeeklyMenu.weekKey}
                     />
                 ) : (
-                    <EmptyState title="저장된 주간 급식표가 없습니다."/>
+                    <EmptyState title="저장된 주간 급식표가 없습니다." />
                 )}
             </section>
         </div>
@@ -127,7 +127,10 @@ export function MealHistorySection({meals}: {meals: DashboardMealsSnapshot}) {
         [meals.data.dailyMenus, meals.data.recentMenus],
     );
     const initialDates = useMemo(
-        () => [...mealsGroupedByDate(initialHistory).keys()].sort((left, right) => right.localeCompare(left)),
+        () =>
+            [...mealsGroupedByDate(initialHistory).keys()].sort((left, right) =>
+                right.localeCompare(left),
+            ),
         [initialHistory],
     );
     const [visibleMonthKey, setVisibleMonthKey] = useState(
@@ -137,12 +140,12 @@ export function MealHistorySection({meals}: {meals: DashboardMealsSnapshot}) {
     return (
         <section aria-labelledby="meal-history-title">
             <h2 className="mb-3 flex items-center gap-2 font-semibold" id="meal-history-title">
-                <CalendarDays className="size-4 text-primary"/>
+                <CalendarDays className="size-4 text-primary" />
                 지난 급식 기록
             </h2>
             <AsyncBoundary
                 errorTitle="급식 기록을 불러오지 못했습니다."
-                fallback={<MealHistorySkeleton/>}
+                fallback={<MealHistorySkeleton />}
                 resetKeys={[visibleMonthKey]}
             >
                 <MealHistoryMonth

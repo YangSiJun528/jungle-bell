@@ -1,5 +1,6 @@
 import {useMutation} from '@tanstack/react-query';
 import {ExternalLink} from 'lucide-react';
+
 import {useDashboardEnvironment} from '@/app/dashboard-context';
 import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@/components/ui/card';
@@ -19,7 +20,7 @@ export function SystemNotificationSettingsButton() {
                 disabled={openSettings.isPending}
                 onClick={() => openSettings.mutate()}
             >
-                <ExternalLink aria-hidden="true" className="size-4"/>
+                <ExternalLink aria-hidden="true" className="size-4" />
                 {openSettings.isPending ? '여는 중' : '알림 설정 열기'}
             </Button>
             {openSettings.isError ? (
@@ -41,11 +42,12 @@ export function SystemNotificationSettingsCard() {
             <CardHeader>
                 <CardTitle>운영체제 알림 설정</CardTitle>
                 <CardDescription>
-                    Jungle Bell 알림이 보이지 않으면 운영체제에서 앱 알림 권한과 표시 방식을 확인하세요.
+                    Jungle Bell 알림이 보이지 않으면 운영체제에서 앱 알림 권한과 표시 방식을
+                    확인하세요.
                 </CardDescription>
             </CardHeader>
             <CardContent>
-                <SystemNotificationSettingsButton/>
+                <SystemNotificationSettingsButton />
             </CardContent>
         </Card>
     );

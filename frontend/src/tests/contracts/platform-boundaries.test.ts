@@ -1,5 +1,6 @@
 import {existsSync, globSync, readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
+
 import {describe, expect, test} from 'vitest';
 
 const frontendRoot = resolve(import.meta.dirname, '../../..');
@@ -12,8 +13,13 @@ describe('repository platform boundaries', () => {
             expect(existsSync(resolve(repositoryRoot, directory)), directory).toBe(true);
         }
         for (const removed of [
-            'src', 'src-tauri', 'package.json', 'package-lock.json',
-            'vite.config.ts', 'tsconfig.json', 'components.json',
+            'src',
+            'src-tauri',
+            'package.json',
+            'package-lock.json',
+            'vite.config.ts',
+            'tsconfig.json',
+            'components.json',
         ]) {
             expect(existsSync(resolve(repositoryRoot, removed)), removed).toBe(false);
         }
@@ -24,7 +30,8 @@ describe('repository platform boundaries', () => {
             'src/{api,app,components,domain,features,hooks,lib}/**/*.{ts,tsx}',
             {cwd: frontendRoot},
         ).filter((path) => !path.includes('.test.'));
-        const forbidden = /@tauri-apps|__TAURI_INTERNALS__|navigator\.serviceWorker|\bPushManager\b|Notification\.requestPermission/u;
+        const forbidden =
+            /@tauri-apps|__TAURI_INTERNALS__|navigator\.serviceWorker|\bPushManager\b|Notification\.requestPermission/u;
         for (const path of commonFiles) {
             expect(readFrontend(path), path).not.toMatch(forbidden);
         }
@@ -47,7 +54,10 @@ describe('repository platform boundaries', () => {
     test('desktop API origin은 fallback 없는 컴파일 타임 계약이다', () => {
         const buildConfig = readFrontend('src/platform/build-config.ts');
         const dashboardApi = readFrontend('src/api/dashboard-api.ts');
-        const nativeDataApi = readFileSync(resolve(repositoryRoot, 'desktop/src/data_api.rs'), 'utf8');
+        const nativeDataApi = readFileSync(
+            resolve(repositoryRoot, 'desktop/src/data_api.rs'),
+            'utf8',
+        );
 
         expect(buildConfig).toContain('__JUNGLE_BELL_BUILD_CONFIG__');
         expect(buildConfig).toContain("buildConfig.target === 'desktop'");
@@ -60,9 +70,10 @@ describe('repository platform boundaries', () => {
 
     test('기수 변경은 LMS 창 표시 여부와 무관하게 checker 재조회를 즉시 요청한다', () => {
         const commands = readFileSync(resolve(repositoryRoot, 'desktop/src/commands.rs'), 'utf8');
-        const cohortChange = commands.match(
-            /if previous\.selected_cohort_id != saved\.selected_cohort_id \{([\s\S]*?)\n    \}/u,
-        )?.[1] ?? '';
+        const cohortChange =
+            commands.match(
+                /if previous\.selected_cohort_id != saved\.selected_cohort_id \{([\s\S]*?)\n    \}/u,
+            )?.[1] ?? '';
 
         expect(cohortChange).toContain('checker::trigger_current_check(&app).await');
         expect(cohortChange).not.toContain('checker::refresh_webview');
@@ -70,8 +81,13 @@ describe('repository platform boundaries', () => {
 
     test('프론트엔드와 Tauri는 같은 04시 출석일 경계를 사용한다', () => {
         const frontendAttendanceDay = readFrontend('src/domain/attendance/attendance-day.ts');
-        const desktopConfig = readFileSync(resolve(repositoryRoot, 'desktop/src/config.rs'), 'utf8');
-        const frontendHour = frontendAttendanceDay.match(/ATTENDANCE_DAY_START_HOUR_KST\s*=\s*(\d+)/u)?.[1];
+        const desktopConfig = readFileSync(
+            resolve(repositoryRoot, 'desktop/src/config.rs'),
+            'utf8',
+        );
+        const frontendHour = frontendAttendanceDay.match(
+            /ATTENDANCE_DAY_START_HOUR_KST\s*=\s*(\d+)/u,
+        )?.[1];
         const desktopHour = desktopConfig.match(/MORNING_START_HOUR:\s*u32\s*=\s*(\d+)/u)?.[1];
 
         expect(frontendHour).toBe('4');
@@ -81,7 +97,10 @@ describe('repository platform boundaries', () => {
     test('PC 로컬 관측과 서버 snapshot은 같은 15분 freshness를 사용한다', () => {
         const frontendFreshness = readFrontend('src/domain/attendance/freshness.ts');
         const accountService = readFileSync(
-            resolve(repositoryRoot, 'server/core/src/main/kotlin/app/junglebell/server/domain/account/AccountService.kt'),
+            resolve(
+                repositoryRoot,
+                'server/core/src/main/kotlin/app/junglebell/server/domain/account/AccountService.kt',
+            ),
             'utf8',
         );
 
@@ -91,13 +110,14 @@ describe('repository platform boundaries', () => {
 
     test('PC 출석은 로컬 관측을 먼저 발행하고 서버 동기화 완료를 별도로 알린다', () => {
         const commands = readFileSync(resolve(repositoryRoot, 'desktop/src/commands.rs'), 'utf8');
-        const remoteSync = readFileSync(resolve(repositoryRoot, 'desktop/src/remote_sync.rs'), 'utf8');
-        const refreshPlatformSync = remoteSync.match(
-            /pub\(crate\) async fn refresh_platform_sync[\s\S]*?\n\}/u,
-        )?.[0] ?? '';
-        const uploadAndPublish = remoteSync.match(
-            /async fn upload_attendance_and_publish[\s\S]*?\n\}/u,
-        )?.[0] ?? '';
+        const remoteSync = readFileSync(
+            resolve(repositoryRoot, 'desktop/src/remote_sync.rs'),
+            'utf8',
+        );
+        const refreshPlatformSync =
+            remoteSync.match(/pub\(crate\) async fn refresh_platform_sync[\s\S]*?\n\}/u)?.[0] ?? '';
+        const uploadAndPublish =
+            remoteSync.match(/async fn upload_attendance_and_publish[\s\S]*?\n\}/u)?.[0] ?? '';
 
         expect(commands).toContain('publish_attendance_observation(&app, snapshot)');
         expect(refreshPlatformSync).toContain('service.observation_revision');
@@ -105,13 +125,17 @@ describe('repository platform boundaries', () => {
         expect(refreshPlatformSync).not.toContain('ensure_registered');
         expect(uploadAndPublish).toContain('service.upload_attendance(snapshot).await?');
         expect(uploadAndPublish).toContain('AttendanceSnapshotUpdated::Synced');
-        expect(uploadAndPublish.indexOf('service.upload_attendance(snapshot).await?'))
-            .toBeLessThan(uploadAndPublish.indexOf('AttendanceSnapshotUpdated::Synced'));
+        expect(uploadAndPublish.indexOf('service.upload_attendance(snapshot).await?')).toBeLessThan(
+            uploadAndPublish.indexOf('AttendanceSnapshotUpdated::Synced'),
+        );
     });
 
     test('PC 알림 ACK와 테스트 전달 결과는 운영체제 표시 성공만 인정한다', () => {
         const commands = readFileSync(resolve(repositoryRoot, 'desktop/src/commands.rs'), 'utf8');
-        const remoteSync = readFileSync(resolve(repositoryRoot, 'desktop/src/remote_sync.rs'), 'utf8');
+        const remoteSync = readFileSync(
+            resolve(repositoryRoot, 'desktop/src/remote_sync.rs'),
+            'utf8',
+        );
 
         expect(commands).toContain('broadcast_test_notification(report.system_delivered)');
         expect(remoteSync).toContain('report.was_displayed()');

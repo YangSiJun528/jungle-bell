@@ -1,4 +1,5 @@
 import {readFileSync} from 'node:fs';
+
 import {describe, expect, test} from 'vitest';
 
 const source = readFileSync(new URL('./notification-delivery-setup.tsx', import.meta.url), 'utf8');
@@ -15,7 +16,9 @@ describe('notification delivery setup', () => {
     test('브라우저 권한 요청은 클릭의 사용자 활성화 안에서 시작한다', () => {
         expect(source).toContain('platform.pwa.preparePush()');
         expect(source).toContain('push.mutate(platform.pwa.subscribePush(pushSetup.data));');
-        expect(source).toContain('testNotification.mutate(platform.pwa.subscribePush(pushSetup.data));');
+        expect(source).toContain(
+            'testNotification.mutate(platform.pwa.subscribePush(pushSetup.data));',
+        );
         expect(source).not.toContain('subscribePush(await api.getPushPublicKey())');
     });
 
@@ -36,6 +39,6 @@ describe('notification delivery setup', () => {
     test('PC 운영체제 표시 실패 시 시스템 알림 설정 경로를 제공한다', () => {
         expect(source).toContain('setShowSystemSettingsShortcut(!result.systemDelivered)');
         expect(source).toContain('운영체제 알림을 표시하지 못했습니다.');
-        expect(source).toContain('<SystemNotificationSettingsButton/>');
+        expect(source).toContain('<SystemNotificationSettingsButton />');
     });
 });

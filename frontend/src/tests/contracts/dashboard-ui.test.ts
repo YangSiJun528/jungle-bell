@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+
 import {test} from 'vitest';
 
 const srcRoot = new URL('../../', import.meta.url);
@@ -38,7 +39,9 @@ const washTower = source('./features/laundry/components/wash-tower-grid.tsx');
 const meals = source('./features/meals/pages/meals-page.tsx');
 const mealPreferences = source('./features/meals/components/meal-preferences-section.tsx');
 const notifications = source('./features/notifications/notifications-page.tsx');
-const notificationDeliverySetup = source('./features/notifications/notification-delivery-setup.tsx');
+const notificationDeliverySetup = source(
+    './features/notifications/notification-delivery-setup.tsx',
+);
 const connections = source('./features/connections/connections-page.tsx');
 const notificationOnboardingNotice = source('./app/notification-onboarding-notice.tsx');
 const notificationSettings = source('./app/settings/notification-settings.tsx');
@@ -52,7 +55,7 @@ test('대시보드는 Alpine 템플릿 대신 React root에서 시작한다', ()
     assert.match(main, /createRoot\(root\)\.render\(/);
     assert.match(main, /<StrictMode>/);
     assert.match(main, /<DashboardProviders platform=\{platform\}>/);
-    assert.match(main, /<RouterProvider router=\{router\}\/>/);
+    assert.match(main, /<RouterProvider router=\{router\}\s*\/>/);
     assert.match(main, /import ['"]\.\/styles\/globals\.css['"]/);
 });
 
@@ -65,13 +68,25 @@ test('기능 화면은 공통 셸 아래에서 경로별 지연 로딩된다', (
         'connections/connections-page',
         'app-install/app-install-page',
     ]) {
-        assert.match(routePages, new RegExp(`lazy\\(\\(\\) => import\\(['"]@/features/${feature}['"]\\)`));
+        assert.match(
+            routePages,
+            new RegExp(`lazy\\(\\(\\) =>\\s*import\\(['"]@/features/${feature}['"]\\)`),
+        );
     }
-    assert.match(app, /lazy\(\(\) => import\(['"]@\/features\/notifications\/notifications-page['"]\)/);
-    assert.match(app, /<DashboardShell[\s\S]*notificationPanel=\{\{[\s\S]*open: notificationPanelOpen[\s\S]*setNotificationPanelRequestedOpen\(open\)[\s\S]*navigate\(contentRoute, true\)[\s\S]*<NotificationPanelContent[\s\S]*seenMobileIds=\{seenMobileIds\}[\s\S]*onMobileNotificationsSeen=\{markMobileNotificationsSeen\}[\s\S]*\/>[\s\S]*<DashboardRouteRuntimeProvider[\s\S]*<Outlet\/>[\s\S]*<InstallPrompt open=\{installPromptOpen\} onOpenChange=\{setInstallPromptVisibility\}\/>[\s\S]*<\/DashboardShell>/);
+    assert.match(
+        app,
+        /lazy\(\(\) =>\s*import\(['"]@\/features\/notifications\/notifications-page['"]\)/,
+    );
+    assert.match(
+        app,
+        /<DashboardShell[\s\S]*notificationPanel=\{\{[\s\S]*open: notificationPanelOpen[\s\S]*setNotificationPanelRequestedOpen\(open\)[\s\S]*navigate\(contentRoute, true\)[\s\S]*<NotificationPanelContent[\s\S]*seenMobileIds=\{seenMobileIds\}[\s\S]*onMobileNotificationsSeen=\{markMobileNotificationsSeen\}[\s\S]*\s\/>[\s\S]*<DashboardRouteRuntimeProvider[\s\S]*<Outlet\s*\/>[\s\S]*<InstallPrompt open=\{installPromptOpen\} onOpenChange=\{setInstallPromptVisibility\}\s*\/>[\s\S]*<\/DashboardShell>/,
+    );
     assert.match(dashboardRouter, /createHashHistory\(\)/);
     assert.match(dashboardRouter, /createRouter\(\{[\s\S]*routeTree[\s\S]*history/);
-    assert.match(dashboardRouter, /path: 'home'[\s\S]*path: 'attendance'[\s\S]*path: 'laundry'[\s\S]*path: 'meals'[\s\S]*path: 'notifications'[\s\S]*path: 'connections'[\s\S]*path: 'install'/);
+    assert.match(
+        dashboardRouter,
+        /path: 'home'[\s\S]*path: 'attendance'[\s\S]*path: 'laundry'[\s\S]*path: 'meals'[\s\S]*path: 'notifications'[\s\S]*path: 'connections'[\s\S]*path: 'install'/,
+    );
     assert.doesNotMatch(app, /useHashRoute\(\)/);
     assert.match(app, /window\.scrollTo\(\{top: 0, left: 0, behavior: 'auto'\}\)/);
     assert.match(shell, /data-dashboard-shell="renewal"/);
@@ -79,8 +94,14 @@ test('기능 화면은 공통 셸 아래에서 경로별 지연 로딩된다', (
 });
 
 test('브라우저와 데스크톱은 동일한 SPA 경로 정책을 사용한다', () => {
-    assert.match(routes, /NAVIGATION_ROUTES\s*=\s*\[[\s\S]*'home'[\s\S]*'attendance'[\s\S]*'laundry'[\s\S]*'meals'[\s\S]*\]/);
-    assert.match(routes, /PERSONAL_UTILITY_ROUTES\s*=\s*\[[\s\S]*'notifications'[\s\S]*'connections'[\s\S]*\]/);
+    assert.match(
+        routes,
+        /NAVIGATION_ROUTES\s*=\s*\[[\s\S]*'home'[\s\S]*'attendance'[\s\S]*'laundry'[\s\S]*'meals'[\s\S]*\]/,
+    );
+    assert.match(
+        routes,
+        /PERSONAL_UTILITY_ROUTES\s*=\s*\[[\s\S]*'notifications'[\s\S]*'connections'[\s\S]*\]/,
+    );
     assert.match(routes, /dashboardUtilityRoutes/);
 
     assert.match(shell, /<SidebarFooter className="border-t border-sidebar-border">/);
@@ -100,12 +121,15 @@ test('홈은 PC·PWA 출석 요약과 일반 웹 앱 소개를 구분하고 오�
         assert.match(home, new RegExp(`title="${title}"`));
     }
     assert.match(home, /platform\.kind === 'desktop' \|\| platform\.pwa\.installed/);
-    assert.match(home, /<JungleCampusSummary\/>[\s\S]*<AppShowcaseCard\/>/);
+    assert.match(home, /<JungleCampusSummary\s*\/>[\s\S]*<AppShowcaseCard\s*\/>/);
     assert.doesNotMatch(home, /onRequestInstall/);
     assert.match(appShowcase, /data-app-showcase-card="true"/);
     assert.match(appShowcase, /PC·모바일 앱을 설치해[\s\S]*더 편리하게 사용하세요\./);
-    assert.match(appShowcase, /whitespace-nowrap[\s\S]*PC·모바일 앱을 설치해<br\/>/);
-    assert.match(appShowcase, /출석 상태를 확인하고, 출석·식사·세탁 생활 알림과 앞으로 추가될 편의 기능까지 이용할 수 있어요\./);
+    assert.match(appShowcase, /whitespace-nowrap[\s\S]*PC·모바일 앱을 설치해[\s\S]*<br\s*\/>/);
+    assert.match(
+        appShowcase,
+        /출석 상태를 확인하고, 출석·식사·세탁 생활 알림과 앞으로 추가될 편의 기능까지\s+이용할 수 있어요\./,
+    );
     assert.match(appShowcase, /<Link to="\/install">[\s\S]*앱 안내 보기/);
     assert.match(appShowcase, /<DesktopAppMockup[\s\S]*<MobileNotificationMockup/);
     assert.doesNotMatch(shell, /캠퍼스 생활 현황/);
@@ -119,13 +143,16 @@ test('홈은 PC·PWA 출석 요약과 일반 웹 앱 소개를 구분하고 오�
 });
 
 test('앱 안내는 실제 트레이 아이콘·모바일 알림과 설치 경로를 사용한다', () => {
-    assert.match(desktopAppMockup, /macOS 메뉴 막대에서 Jungle Bell 출석 상태를 확인하는 PC 앱 예시/);
+    assert.match(
+        desktopAppMockup,
+        /macOS 메뉴 막대에서 Jungle Bell 출석 상태를 확인하는 PC 앱 예시/,
+    );
     assert.match(desktopAppMockup, /ring-\[#e23c44\]/);
     assert.match(desktopAppMockup, /빨간색이면 출석을 확인할 시간이에요\./);
     assert.match(desktopAppMockup, /compact && 'top-20 w-\[36%\] p-2'/);
     assert.match(desktopAppMockup, /compact \? 'text-xs sm:text-sm' : 'text-base sm:text-lg'/);
-    assert.match(desktopAppMockup, /whitespace-nowrap leading-snug/);
-    assert.match(desktopAppMockup, /메뉴 바에서<br\/>출석 상태를 확인/);
+    assert.match(desktopAppMockup, /leading-snug whitespace-nowrap/);
+    assert.match(desktopAppMockup, /메뉴 바에서[\s\S]*<br\s*\/>[\s\S]*출석 상태를 확인/);
     assert.doesNotMatch(desktopAppMockup, /TRAY_STATES|Jungle Bell 트레이 상태 예시/);
     assert.match(trayIcon, /M512 896a384 384 0 1 0 0-768/);
     assert.match(trayIcon, /M725\.888 315\.008C676\.48 428\.672/);
@@ -137,18 +164,30 @@ test('앱 안내는 실제 트레이 아이콘·모바일 알림과 설치 경�
         assert.match(mobileNotificationMockup, new RegExp(notification));
     }
     assert.match(mobileNotificationMockup, /정글캠퍼스로 바로가기\./);
-    assert.match(mobileNotificationMockup, /모바일 잠금 화면에 표시된 Jungle Bell 출석, 세탁, 식사 알림 예시/);
+    assert.match(
+        mobileNotificationMockup,
+        /모바일 잠금 화면에 표시된 Jungle Bell 출석, 세탁, 식사 알림 예시/,
+    );
     assert.match(appInstall, /https:\/\/github\.com\/YangSiJun528\/jungle-bell#%EC%84%A4%EC%B9%98/);
     assert.match(appInstall, /PC 앱 설치 가이드/);
     assert.match(appInstall, /variant="outline" disabled>[\s\S]*모바일에서만 이용 가능/);
     assert.doesNotMatch(appInstall, /https:\/\/jungle-bell\.sijun-yang\.com/);
-    assert.match(routePages, /platform\.kind === 'browser'[\s\S]*platform\.pwa\.isMobileInstallClient\(\)/);
-    assert.match(routePages, /onRequestMobileInstall=\{canRequestMobileInstall \? openInstallPrompt : undefined\}/);
+    assert.match(
+        routePages,
+        /platform\.kind === 'browser'[\s\S]*platform\.pwa\.isMobileInstallClient\(\)/,
+    );
+    assert.match(
+        routePages,
+        /onRequestMobileInstall=\{canRequestMobileInstall \? openInstallPrompt : undefined\}/,
+    );
     assert.match(routePages, /initialPairing\?\.kind === 'install-handoff'/);
     assert.match(routePages, /api\.prepareQrPairingHandoff/);
     assert.match(routePages, /focusMobileInstall=\{handoffLink !== null\}/);
     assert.match(appInstall, /requestAnimationFrame\(\(\) => scrollToGuide\('mobile-install'\)\)/);
-    assert.match(appInstall, /설치 후 홈 화면의 Jungle Bell을 열면 PC 연결 요청이 자동으로 시작됩니다/);
+    assert.match(
+        appInstall,
+        /설치 후 홈 화면의 Jungle Bell을 열면 PC 연결 요청이 자동으로 시작됩니다/,
+    );
     assert.doesNotMatch(appInstall, /이미 앱을 설치했나요\?/);
     assert.match(appInstall, /<PageHeader[\s\S]*title="앱 설치 안내"/);
     assert.doesNotMatch(appInstall, /href="#(?:download|manual|open-pwa|connect)"/);
@@ -160,11 +199,14 @@ test('출석 화면은 조회 상태만 관리하고 공유 알림 설정을 중
     assert.match(attendance, /학습 시작[\s\S]*학습 종료[\s\S]*마지막 동기화/);
     assert.match(attendance, /detail\.freshness === 'stale'/);
     assert.match(attendance, /PC 마지막 확인/);
-    assert.match(attendance, /<CalendarCheck2 aria-hidden="true" className="size-5"\/>/);
+    assert.match(attendance, /<CalendarCheck2 aria-hidden="true" className="size-5"\s*\/>/);
     assert.doesNotMatch(attendance, /jungleCompassIcon|@\/assets\/logo\.png/);
     assert.match(attendance, /platform\.capabilities\.lmsWindow[\s\S]*openCampus\.mutate\(\)/);
 
-    assert.doesNotMatch(attendance, /AttendancePreferencesSection|getAttendancePreferences|updateAttendancePreferences/);
+    assert.doesNotMatch(
+        attendance,
+        /AttendancePreferencesSection|getAttendancePreferences|updateAttendancePreferences/,
+    );
 });
 
 test('세탁 화면은 워시타워 상태표와 공통 계정 기능을 함께 제공한다', () => {
@@ -173,10 +215,13 @@ test('세탁 화면은 워시타워 상태표와 공통 계정 기능을 함께 
     assert.match(laundry, /워시타워 상태/);
     assert.match(laundry, /data-laundry-zone-legend="true"/);
     for (const zone of ['men', 'common', 'women']) {
-        assert.match(laundry, new RegExp(`<LaundryZoneBadge zone="${zone}"/>`));
+        assert.match(laundry, new RegExp(`<LaundryZoneBadge zone="${zone}"\\s*/>`));
     }
     assert.doesNotMatch(laundry, /1–5번 남성 · 6–7번 공용 · 8–9번 여성/);
-    assert.match(washTower, /<table[\s\S]*<caption className="sr-only">워시타워 번호별 세탁기와 건조기 상태<\/caption>/);
+    assert.match(
+        washTower,
+        /<table[\s\S]*<caption className="sr-only">워시타워 번호별 세탁기와 건조기 상태<\/caption>/,
+    );
     assert.match(washTower, /WASH_TOWER_ROWS\.map/);
     assert.match(washTower, /scope="col"/);
     assert.match(washTower, /scope="row"/);
@@ -184,7 +229,7 @@ test('세탁 화면은 워시타워 상태표와 공통 계정 기능을 함께 
     assert.match(washTower, /data-zone=\{machine\.zone\}/);
     assert.match(washTower, /overflow-x-auto/);
 
-    assert.match(laundry, /<PersonalLaundrySection machines=\{snapshot\.machines\}\/\>/);
+    assert.match(laundry, /<PersonalLaundrySection machines=\{snapshot\.machines\}\s*\/>/);
     assert.doesNotMatch(laundry, /use(?:Query|Mutation|QueryClient)/);
     assert.doesNotMatch(laundry, /api\.(?:list|create|delete|join|leave)Laundry/);
     assert.doesNotMatch(laundry, /as PersonalSurface/);
@@ -204,15 +249,21 @@ test('설정 알림 탭은 연결된 기기의 출석·급식 설정을 함께 �
     assert.doesNotMatch(meals, /MealPreferencesSection/);
     assert.doesNotMatch(meals, /as PersonalSurface/);
     assert.match(connections, /<TabsTrigger value="notifications">알림<\/TabsTrigger>/);
-    assert.match(connections, /<NotificationSettings\/>/);
-    assert.match(notificationSettings, /<AttendancePreferencesSection\/>/);
-    assert.match(notificationSettings, /<MealPreferencesSection\/>/);
+    assert.match(connections, /<NotificationSettings\s*\/>/);
+    assert.match(notificationSettings, /<AttendancePreferencesSection\s*\/>/);
+    assert.match(notificationSettings, /<MealPreferencesSection\s*\/>/);
 
     assert.match(attendancePreferences, /api\.getAttendancePreferences\(\)/);
     assert.match(attendancePreferences, /api\.updateAttendancePreferences\(input\)/);
     for (const label of [
-        '출석 알림 사용', '학습 시작 알림', '학습 시작 확인 시각', '학습 시작 확인 간격',
-        '학습 종료 알림', '학습 종료 확인 종료 시각', '학습 종료 확인 간격', '일요일 제외',
+        '출석 알림 사용',
+        '학습 시작 알림',
+        '학습 시작 확인 시각',
+        '학습 시작 확인 간격',
+        '학습 종료 알림',
+        '학습 종료 확인 종료 시각',
+        '학습 종료 확인 간격',
+        '일요일 제외',
     ]) {
         assert.match(attendancePreferences, new RegExp(label));
     }
@@ -229,11 +280,14 @@ test('설정 알림 탭은 연결된 기기의 출석·급식 설정을 함께 �
     assert.match(notificationDeliverySetup, /platform\.pwa\.subscribePush/);
     assert.match(notificationDeliverySetup, /platform\.pwa\.preparePush\(\)/);
     assert.match(pwaAdapter, /readyRegistration\.pushManager\.subscribe\(/);
-    assert.doesNotMatch(pwaAdapter, /Notification\.requestPermission|notificationObject\.requestPermission/);
+    assert.doesNotMatch(
+        pwaAdapter,
+        /Notification\.requestPermission|notificationObject\.requestPermission/,
+    );
     assert.match(notificationDeliverySetup, /운영체제 알림/);
     assert.match(notificationDeliverySetup, /푸시 연결/);
     assert.match(notificationDeliverySetup, /테스트 알림/);
-    assert.match(app, /<NotificationOnboardingNotice\/>/);
+    assert.match(app, /<NotificationOnboardingNotice\s*\/>/);
     assert.match(notificationOnboardingNotice, /platform\.pwa\.installed/);
     assert.match(notificationOnboardingNotice, /personalAccess\.status !== 'connected'/);
 });
@@ -255,23 +309,53 @@ test('연결 화면은 capability로 PC 관리와 브라우저 연결 흐름을 
 
 test('TanStack Query는 공개 데이터와 개인 데이터를 서로 다른 주기로 갱신한다', () => {
     assert.match(providers, /<QueryClientProvider client=\{queryClient\}>/);
-    assert.match(context, /queryKeys\s*=\s*\{[\s\S]*laundry[\s\S]*meals[\s\S]*attendance[\s\S]*notifications/);
-    assert.match(campusQueryOptions, /laundryQueryContract\s*=\s*\{[\s\S]{0,180}freshnessMs:\s*30_000/);
-    assert.match(campusQueryOptions, /mealsQueryContract\s*=\s*\{[\s\S]{0,180}freshnessMs:\s*5 \* 60_000/);
+    assert.match(
+        context,
+        /queryKeys\s*=\s*\{[\s\S]*laundry[\s\S]*meals[\s\S]*attendance[\s\S]*notifications/,
+    );
+    assert.match(
+        campusQueryOptions,
+        /laundryQueryContract\s*=\s*\{[\s\S]{0,180}freshnessMs:\s*30_000/,
+    );
+    assert.match(
+        campusQueryOptions,
+        /mealsQueryContract\s*=\s*\{[\s\S]{0,180}freshnessMs:\s*5 \* 60_000/,
+    );
     assert.match(queries, /personal:\s*60_000/);
     assert.match(queries, /enabled:\s*account\.personalAccess\.status === 'connected'/);
-    assert.match(campusQueryOptions, /queryOptions\(\{[\s\S]{0,180}queryKey: laundryQueryContract\.queryKey,[\s\S]{0,180}staleTime: laundryQueryContract\.freshnessMs/);
-    assert.match(campusQueryOptions, /queryOptions\(\{[\s\S]{0,180}queryKey: mealsQueryContract\.queryKey,[\s\S]{0,180}staleTime: mealsQueryContract\.freshnessMs/);
+    assert.match(
+        campusQueryOptions,
+        /queryOptions\(\{[\s\S]{0,180}queryKey: laundryQueryContract\.queryKey,[\s\S]{0,180}staleTime: laundryQueryContract\.freshnessMs/,
+    );
+    assert.match(
+        campusQueryOptions,
+        /queryOptions\(\{[\s\S]{0,180}queryKey: mealsQueryContract\.queryKey,[\s\S]{0,180}staleTime: mealsQueryContract\.freshnessMs/,
+    );
     assert.match(queries, /useSuspenseQuery\(laundryQueryOptions\(api\)\)/);
     assert.match(queries, /useSuspenseQuery\(mealsQueryOptions\(api\)\)/);
-    assert.match(queries, /useSuspenseQueries\(\{[\s\S]*laundryQueryOptions\(api\)[\s\S]*mealsQueryOptions\(api\)/);
-    assert.match(queries, /const queryKey = queryKeys\.attendance\(platform\.kind\);[\s\S]{0,600}staleTime: DASHBOARD_REFRESH\.personal/);
-    assert.match(queries, /queryKey: queryKeys\.notifications\(platform\.kind\),[\s\S]{0,260}staleTime: DASHBOARD_REFRESH\.personal/);
+    assert.match(
+        queries,
+        /useSuspenseQueries\(\{[\s\S]*laundryQueryOptions\(api\)[\s\S]*mealsQueryOptions\(api\)/,
+    );
+    assert.match(
+        queries,
+        /const queryKey = queryKeys\.attendance\(platform\.kind\);[\s\S]{0,600}staleTime: DASHBOARD_REFRESH\.personal/,
+    );
+    assert.match(
+        queries,
+        /queryKey: queryKeys\.notifications\(platform\.kind\),[\s\S]{0,260}staleTime: DASHBOARD_REFRESH\.personal/,
+    );
 
     assert.match(platformEvents, /['"]notification-inbox-updated['"]/);
     assert.match(platformEvents, /['"]attendance-snapshot-updated['"]/);
-    assert.match(desktopAttendanceEvent, /handleAttendanceSnapshotUpdated\([\s\S]*queryKeys\.attendance\('desktop'\)[\s\S]*exact:\s*true/);
-    assert.match(providers, /subscribeAttendanceSnapshotUpdated\([\s\S]*handleAttendanceSnapshotUpdated\(client, payload\)/);
+    assert.match(
+        desktopAttendanceEvent,
+        /handleAttendanceSnapshotUpdated\([\s\S]*queryKeys\.attendance\('desktop'\)[\s\S]*exact:\s*true/,
+    );
+    assert.match(
+        providers,
+        /subscribeAttendanceSnapshotUpdated\([\s\S]*handleAttendanceSnapshotUpdated\(client, payload\)/,
+    );
     assert.doesNotMatch(providers, /campus-data-(?:updated|error)/);
     assert.match(providers, /registerDesktopSubscriptions/);
     assert.doesNotMatch(providers, /report_campus_ready/);
@@ -294,14 +378,20 @@ test('PWA 메타데이터·서비스 워커·설치 프롬프트는 React 진입
     assert.match(html, /prefers-color-scheme: dark/);
     assert.doesNotMatch(html, /manifest\.webmanifest|apple-touch-icon/);
     assert.doesNotMatch(html, /rel=\"icon\"/);
-    assert.match(vite, /rel=\"icon\" href=\"\.\/icons\/icon-32\.png\" type=\"image\/png\" sizes=\"32x32\"/);
+    assert.match(
+        vite,
+        /rel=\"icon\" href=\"\.\/icons\/icon-32\.png\" type=\"image\/png\" sizes=\"32x32\"/,
+    );
     assert.match(vite, /rel=\"icon\" href=\"\.\/icons\/icon\.svg\" type=\"image\/svg\+xml\"/);
     assert.match(vite, /rel=\"manifest\" href=\"\.\/manifest\.webmanifest\"/);
-    assert.match(pwaAdapter, /navigatorObject\.serviceWorker\.register\('\.\/sw\.js'/);
+    assert.match(pwaAdapter, /navigatorObject\.serviceWorker[\s\S]{0,80}\.register\('\.\/sw\.js'/);
     assert.match(pwaAdapter, /beforeinstallprompt/);
     assert.match(installPrompt, /platform\.pwa\.available/);
     assert.match(installPrompt, /홈 화면에 추가/);
-    assert.match(installPrompt, /https:\/\/github\.com\/YangSiJun528\/jungle-bell\/releases\/latest/);
+    assert.match(
+        installPrompt,
+        /https:\/\/github\.com\/YangSiJun528\/jungle-bell\/releases\/latest/,
+    );
     assert.match(installPrompt, /PC 앱 다운로드/);
     assert.match(installPrompt, /useState\(false\)/);
     assert.match(installPrompt, /if \(!open\) return null/);
@@ -312,9 +402,18 @@ test('PWA 메타데이터·서비스 워커·설치 프롬프트는 React 진입
         '열린 안내만 모바일 하단 메뉴 및 safe area 위에 있어야 합니다.',
     );
     assert.doesNotMatch(installPrompt, /className="fixed (?:inset-x-3 )?bottom-3/);
-    assert.match(app, /<DashboardRouteRuntimeProvider value=\{\{contentRoute, openInstallPrompt\}\}>[\s\S]*<Outlet\/>/);
-    assert.match(app, /<NotificationPanelContent[\s\S]*seenMobileIds=\{seenMobileIds\}[\s\S]*onMobileNotificationsSeen=\{markMobileNotificationsSeen\}[\s\S]*\/>/);
-    assert.match(app, /<InstallPrompt open=\{installPromptOpen\} onOpenChange=\{setInstallPromptVisibility\}\/>/);
+    assert.match(
+        app,
+        /<DashboardRouteRuntimeProvider value=\{\{contentRoute, openInstallPrompt\}\}>[\s\S]*<Outlet\s*\/>/,
+    );
+    assert.match(
+        app,
+        /<NotificationPanelContent[\s\S]*seenMobileIds=\{seenMobileIds\}[\s\S]*onMobileNotificationsSeen=\{markMobileNotificationsSeen\}[\s\S]*\s\/>/,
+    );
+    assert.match(
+        app,
+        /<InstallPrompt open=\{installPromptOpen\} onOpenChange=\{setInstallPromptVisibility\}\s*\/>/,
+    );
     assert.doesNotMatch(home, /홈 화면 추가·PC 앱 안내/);
     assert.doesNotMatch(home, /이 QR은 설치한 모바일 PWA에서 열어야 합니다/);
     assert.doesNotMatch(home, /PWA 설치 안내 열기/);

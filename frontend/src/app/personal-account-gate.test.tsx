@@ -1,9 +1,10 @@
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
-import {renderToStaticMarkup} from 'react-dom/server';
 import {createMemoryHistory, RouterContextProvider} from '@tanstack/react-router';
+import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, test, vi} from 'vitest';
-import {PersonalAccountGate} from './personal-account-gate';
+
 import {createDashboardRouter} from './dashboard-router';
+import {PersonalAccountGate} from './personal-account-gate';
 
 const {account, environment} = vi.hoisted(() => ({
     account: {
@@ -45,7 +46,9 @@ function renderGate(status: string): string {
     return renderToStaticMarkup(
         <RouterContextProvider router={router}>
             <QueryClientProvider client={client}>
-                <PersonalAccountGate><p>개인 설정</p></PersonalAccountGate>
+                <PersonalAccountGate>
+                    <p>개인 설정</p>
+                </PersonalAccountGate>
             </QueryClientProvider>
         </RouterContextProvider>,
     );

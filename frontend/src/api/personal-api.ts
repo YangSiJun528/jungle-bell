@@ -1,4 +1,7 @@
 import type {ZodType} from 'zod';
+
+import {parseInput, responseNoContent, responseValue} from './api-response';
+import type {HttpApiClient} from './http-api-client';
 import {
     attendancePreferencesSchema,
     laundryWatchIdSchema,
@@ -15,12 +18,6 @@ import {
     type MealPreferences,
     type MealPreferencesInput,
 } from './personal-contract';
-import type {HttpApiClient} from './http-api-client';
-import {
-    parseInput,
-    responseNoContent,
-    responseValue,
-} from './api-response';
 
 export type {
     AttendancePreferences,
@@ -62,62 +59,46 @@ export function createDashboardPersonalApi(options: {
         return options.httpClient.accountResponse(accountPath, init);
     };
 
-    const value = async <T>(
-        schema: ZodType<T>,
-        response: () => Promise<Response>,
-    ): Promise<T> => responseValue(schema, await response());
+    const value = async <T>(schema: ZodType<T>, response: () => Promise<Response>): Promise<T> =>
+        responseValue(schema, await response());
 
-    const noContent = async (
-        responseRequest: () => Promise<Response>,
-    ): Promise<void> => {
+    const noContent = async (responseRequest: () => Promise<Response>): Promise<void> => {
         await responseNoContent(await responseRequest());
     };
 
     return {
         async getAttendancePreferences() {
-            return value(
-                attendancePreferencesSchema,
-                () => request('GET', '/attendance/preferences'),
+            return value(attendancePreferencesSchema, () =>
+                request('GET', '/attendance/preferences'),
             );
         },
         async updateAttendancePreferences(input) {
             const body = parseInput(attendancePreferencesSchema, input);
-            return value(
-                attendancePreferencesSchema,
-                () => request('PUT', '/attendance/preferences', body),
+            return value(attendancePreferencesSchema, () =>
+                request('PUT', '/attendance/preferences', body),
             );
         },
         async getMealPreferences() {
-            return value(
-                mealPreferencesSchema,
-                () => request('GET', '/meal-preferences'),
-            );
+            return value(mealPreferencesSchema, () => request('GET', '/meal-preferences'));
         },
         async updateMealPreferences(input) {
             const body = parseInput(mealPreferencesInputSchema, input);
-            return value(
-                mealPreferencesSchema,
-                () => request('PUT', '/meal-preferences', body),
-            );
+            return value(mealPreferencesSchema, () => request('PUT', '/meal-preferences', body));
         },
         async listLaundryWatches() {
-            const result = await value(
-                laundryWatchListSchema,
-                () => request('GET', '/laundry-watches'),
+            const result = await value(laundryWatchListSchema, () =>
+                request('GET', '/laundry-watches'),
             );
             return result.watches;
         },
         async createLaundryWatch(input) {
             const body = parseInput(laundryWatchInputSchema, input);
-            return value(
-                laundryWatchSchema,
-                () => request('POST', '/laundry-watches', body),
-            );
+            return value(laundryWatchSchema, () => request('POST', '/laundry-watches', body));
         },
         async deleteLaundryWatch(id) {
             const watchId = parseInput(laundryWatchIdSchema, id);
-            await noContent(
-                () => request('DELETE', `/laundry-watches/${encodeURIComponent(watchId)}`),
+            await noContent(() =>
+                request('DELETE', `/laundry-watches/${encodeURIComponent(watchId)}`),
             );
         },
     };

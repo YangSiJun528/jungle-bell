@@ -1,6 +1,8 @@
 import {readFileSync} from 'node:fs';
+
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, it} from 'vitest';
+
 import {MealHistorySkeleton, PageSkeleton} from './async-state';
 
 const source = readFileSync(new URL('./async-boundary.tsx', import.meta.url), 'utf8');
@@ -15,8 +17,8 @@ describe('AsyncBoundary', () => {
     });
 
     it('화면과 월별 급식 기록의 레이아웃 스켈레톤을 제공한다', () => {
-        const page = renderToStaticMarkup(<PageSkeleton/>);
-        const meals = renderToStaticMarkup(<MealHistorySkeleton/>);
+        const page = renderToStaticMarkup(<PageSkeleton />);
+        const meals = renderToStaticMarkup(<MealHistorySkeleton />);
 
         expect(page).toContain('aria-label="화면을 불러오는 중"');
         expect(page).toContain('data-slot="skeleton"');

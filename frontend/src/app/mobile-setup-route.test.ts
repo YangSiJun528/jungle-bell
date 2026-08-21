@@ -1,4 +1,5 @@
 import {describe, expect, test} from 'vitest';
+
 import {normalizeLegacyDashboardHash} from './routes';
 
 describe('legacy mobile setup hash', () => {

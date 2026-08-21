@@ -1,26 +1,22 @@
+import {CircleAlert, CircleCheck, CircleDashed, Clock3, TriangleAlert} from 'lucide-react';
 import {useId} from 'react';
-import {
-    CircleAlert,
-    CircleCheck,
-    CircleDashed,
-    Clock3,
-    TriangleAlert,
-} from 'lucide-react';
+
 import {Card, CardContent, CardHeader} from '@/components/ui/card';
 import {Progress} from '@/components/ui/progress';
 import {TooltipProvider} from '@/components/ui/tooltip';
 import type {DashboardLaundryMachine} from '@/domain/laundry/capacity';
 import {cn} from '@/lib/utils';
+
 import {
     laundryMachineDetail,
     type LaundryApplianceDetailView,
     type LaundryApplianceTone,
 } from '../lib/laundry-machine-detail';
-import {sortWashTowers} from '../lib/wash-tower';
 import {
     LAUNDRY_WARNING_PROGRESS_CLASS_NAME,
     LAUNDRY_WARNING_TEXT_CLASS_NAME,
 } from '../lib/laundry-warning';
+import {sortWashTowers} from '../lib/wash-tower';
 import {LaundryStatusHint} from './laundry-status-hint';
 import {LaundryZoneBadge} from './laundry-zone-badge';
 
@@ -52,12 +48,12 @@ function clockLabel(value: string): string {
 
 function StatusIcon({tone}: {tone: LaundryApplianceTone}) {
     const className = 'size-4 shrink-0';
-    if (tone === 'available') return <CircleCheck className={className}/>;
-    if (tone === 'error') return <CircleAlert className={className}/>;
-    if (tone === 'warning') return <TriangleAlert className={className}/>;
-    if (tone === 'confirming') return <Clock3 className={className}/>;
-    if (tone === 'active') return <Clock3 className={className}/>;
-    return <CircleDashed className={className}/>;
+    if (tone === 'available') return <CircleCheck className={className} />;
+    if (tone === 'error') return <CircleAlert className={className} />;
+    if (tone === 'warning') return <TriangleAlert className={className} />;
+    if (tone === 'confirming') return <Clock3 className={className} />;
+    if (tone === 'active') return <Clock3 className={className} />;
+    return <CircleDashed className={className} />;
 }
 
 function RecentRiskNotice({view}: {view: LaundryApplianceDetailView}) {
@@ -93,15 +89,14 @@ function ApplianceDetail({
     titleId: string;
     view: LaundryApplianceDetailView;
 }) {
-    const progressText = view.progress === null
-        ? null
-        : view.tone === 'error'
-            ? '오류로 진행률을 확인할 수 없음'
-            : [
-                `${view.progress}% 진행`,
-                view.remainingLabel,
-                view.totalLabel,
-            ].filter(Boolean).join(', ');
+    const progressText =
+        view.progress === null
+            ? null
+            : view.tone === 'error'
+              ? '오류로 진행률을 확인할 수 없음'
+              : [`${view.progress}% 진행`, view.remainingLabel, view.totalLabel]
+                    .filter(Boolean)
+                    .join(', ');
     const hasStatusHint = view.helpText !== null || view.errorCode !== null;
 
     return (
@@ -111,7 +106,9 @@ function ApplianceDetail({
             data-kind={view.kind}
         >
             <div className="flex min-w-0 items-center justify-between gap-3">
-                <h4 className="text-sm font-medium" id={titleId}>{view.label}</h4>
+                <h4 className="text-sm font-medium" id={titleId}>
+                    {view.label}
+                </h4>
                 <div className="flex min-w-0 items-center gap-0.5">
                     <span
                         className={cn(
@@ -120,14 +117,17 @@ function ApplianceDetail({
                         )}
                         data-state={view.tone}
                     >
-                        <StatusIcon tone={view.tone}/>
+                        <StatusIcon tone={view.tone} />
                         <span className="truncate">{view.statusLabel}</span>
                     </span>
                     {hasStatusHint ? (
                         <LaundryStatusHint label={`${machineTitle} ${view.label} 상세 안내`}>
                             {view.helpText ? <p>{view.helpText}</p> : null}
                             {view.errorCode ? (
-                                <p>오류 코드 <code className="break-all font-mono">{view.errorCode}</code></p>
+                                <p>
+                                    오류 코드{' '}
+                                    <code className="font-mono break-all">{view.errorCode}</code>
+                                </p>
                             ) : null}
                         </LaundryStatusHint>
                     ) : null}
@@ -137,7 +137,9 @@ function ApplianceDetail({
             <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                 <strong className="text-lg tabular-nums">{view.remainingLabel}</strong>
                 {view.totalLabel ? (
-                    <span className="text-xs tabular-nums text-muted-foreground">{view.totalLabel}</span>
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                        {view.totalLabel}
+                    </span>
                 ) : null}
             </div>
 
@@ -146,15 +148,16 @@ function ApplianceDetail({
                     <Progress
                         aria-label={`${machineTitle} ${view.kind === 'washer' ? '세탁' : '건조'} 진행률`}
                         aria-valuetext={progressText ?? undefined}
-                        className={cn(view.tone === 'warning'
-                            && LAUNDRY_WARNING_PROGRESS_CLASS_NAME)}
+                        className={cn(
+                            view.tone === 'warning' && LAUNDRY_WARNING_PROGRESS_CLASS_NAME,
+                        )}
                         value={view.progress}
                     />
                 </div>
             )}
 
             {view.startedAt || view.estimatedFinishAt ? (
-                <p className="flex flex-wrap gap-x-3 gap-y-1 text-xs tabular-nums text-muted-foreground">
+                <p className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground tabular-nums">
                     {view.startedAt ? (
                         <time dateTime={view.startedAt}>{clockLabel(view.startedAt)} 시작</time>
                     ) : null}
@@ -166,8 +169,7 @@ function ApplianceDetail({
                 </p>
             ) : null}
 
-            {showRiskWarning ? <RecentRiskNotice view={view}/> : null}
-
+            {showRiskWarning ? <RecentRiskNotice view={view} /> : null}
         </section>
     );
 }
@@ -183,14 +185,22 @@ export function LaundryMachineList({
 
     return (
         <section className="space-y-3" aria-labelledby={titleId} data-laundry-detail-list="true">
-            <h2 className="font-semibold" id={titleId}>기기별 상세 상태</h2>
+            <h2 className="font-semibold" id={titleId}>
+                기기별 상세 상태
+            </h2>
             <TooltipProvider delayDuration={200}>
                 <div className="grid auto-rows-fr gap-3 md:grid-cols-2 lg:grid-cols-3">
                     {views.map((machine, machineIndex) => (
-                        <Card className="h-full gap-0 overflow-hidden py-0 shadow-none" data-laundry-machine-card="true" key={machine.id}>
+                        <Card
+                            className="h-full gap-0 overflow-hidden py-0 shadow-none"
+                            data-laundry-machine-card="true"
+                            key={machine.id}
+                        >
                             <CardHeader className="flex flex-row items-center justify-between gap-3 border-b px-4 py-3 [.border-b]:pb-3">
-                                <h3 className="text-base font-semibold leading-none">{machine.title}</h3>
-                                <LaundryZoneBadge zone={machine.zone}/>
+                                <h3 className="text-base leading-none font-semibold">
+                                    {machine.title}
+                                </h3>
+                                <LaundryZoneBadge zone={machine.zone} />
                             </CardHeader>
                             <CardContent className="grid flex-1 grid-rows-2 p-0">
                                 <ApplianceDetail

@@ -1,4 +1,5 @@
 import {describe, expect, test, vi} from 'vitest';
+
 import {createNativeBridge} from './native-bridge';
 
 const validSession = {

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
+
 import {test} from 'vitest';
 
 const srcRoot = new URL('../../', import.meta.url);
@@ -26,7 +27,10 @@ test('manifest는 모바일 standalone 설치와 최소 아이콘을 선언한�
 });
 
 test('PWA 아이콘과 웹 파비콘은 정글벨 나침반 심볼을 공유한다', () => {
-    assert.match(vite, /rel=\"icon\" href=\"\.\/icons\/icon-32\.png\" type=\"image\/png\" sizes=\"32x32\"/);
+    assert.match(
+        vite,
+        /rel=\"icon\" href=\"\.\/icons\/icon-32\.png\" type=\"image\/png\" sizes=\"32x32\"/,
+    );
     assert.match(vite, /rel=\"icon\" href=\"\.\/icons\/icon\.svg\" type=\"image\/svg\+xml\"/);
     assert.match(webIcon, /fill="#00CF8A"/);
     assert.match(webIcon, /M512 896a384 384 0 1 0 0-768/);
@@ -46,7 +50,10 @@ test('service worker는 Workbox revision manifest를 선캐시하고 개인 API�
     assert.match(worker, /no-store/i);
     assert.doesNotMatch(worker, /\/api\/private\/[^'"`]*['"`]\s*,/);
     assert.doesNotMatch(worker, /endsWith\(['"]\/(?:pair|app)['"]\)/);
-    assert.match(worker, /url\.pathname\s*===\s*appRootPath\s*\|\|\s*url\.pathname\s*===\s*indexPath/);
+    assert.match(
+        worker,
+        /url\.pathname\s*===\s*appRootPath\s*\|\|\s*url\.pathname\s*===\s*indexPath/,
+    );
     assert.match(worker, /matchPrecache\(['"]\.\/index\.html['"]\)/);
 });
 
@@ -58,7 +65,10 @@ test('공개 상태·세탁·급식 API는 과거 급식 페이지까지 network
     assert.match(worker, /url\.pathname === ['"]\/api\/public\/meals\/history['"]/);
     assert.match(worker, /new NetworkFirst/);
     assert.match(worker, /networkTimeoutSeconds:\s*\d+/);
-    assert.match(worker, /cacheName:\s*PUBLIC_DATA_CACHE[\s\S]*new ExpirationPlugin\(\{[\s\S]*maxEntries:\s*\d+/);
+    assert.match(
+        worker,
+        /cacheName:\s*PUBLIC_DATA_CACHE[\s\S]*new ExpirationPlugin\(\{[\s\S]*maxEntries:\s*\d+/,
+    );
     assert.match(worker, /maxAgeSeconds:\s*SEVEN_DAYS_SECONDS/);
 });
 
@@ -79,8 +89,8 @@ test('같은 출처 공개 이미지는 만료 한도가 있는 stale-while-reva
     assert.match(worker, /maxEntries:\s*\d+/);
     assert.match(worker, /maxAgeSeconds:\s*THIRTY_DAYS_SECONDS/);
     assert.ok(
-        worker.indexOf('precacheAndRoute(self.__WB_MANIFEST)')
-            < worker.indexOf("request.destination === 'image'"),
+        worker.indexOf('precacheAndRoute(self.__WB_MANIFEST)') <
+            worker.indexOf("request.destination === 'image'"),
         'precache route must win for built images and lazy chunks',
     );
 });
@@ -107,15 +117,14 @@ test('service worker는 만료되었거나 유효한 safe epoch가 없는 push�
         __WB_MANIFEST: [],
         addEventListener: (name: string, listener: WorkerListener) => listeners.set(name, listener),
         registration: {
-            showNotification: async (...args: unknown[]) => { shown.push(args); },
+            showNotification: async (...args: unknown[]) => {
+                shown.push(args);
+            },
         },
         location: {origin: 'https://jungle-bell.example'},
         clients: {},
     };
-    const executableWorker = worker.replace(
-        /^import[\s\S]*?from ['"][^'"]+['"];\n/gmu,
-        '',
-    );
+    const executableWorker = worker.replace(/^import[\s\S]*?from ['"][^'"]+['"];\n/gmu, '');
     runInNewContext(executableWorker, {
         self: workerSelf,
         fetch: async () => new Response(),
@@ -147,25 +156,32 @@ test('service worker는 만료되었거나 유효한 safe epoch가 없는 push�
 
     const waits: Promise<unknown>[] = [];
     push({
-        data: {json: () => ({
-            notificationId: 'notification-1',
-            title: '유효 알림',
-            expiresAtEpochMs: Date.now() + 60_000,
-        })},
+        data: {
+            json: () => ({
+                notificationId: 'notification-1',
+                title: '유효 알림',
+                expiresAtEpochMs: Date.now() + 60_000,
+            }),
+        },
         waitUntil: (promise) => waits.push(promise),
     });
     await Promise.all(waits);
     assert.equal(shown.length, 1);
     assert.equal((shown[0] as [string, {tag?: string}])[1].tag, 'notification-1');
-    assert.equal((shown[0] as [string, {data?: {path?: string}}])[1].data?.path, '/#/notifications');
+    assert.equal(
+        (shown[0] as [string, {data?: {path?: string}}])[1].data?.path,
+        '/#/notifications',
+    );
 
     const routeWaits: Promise<unknown>[] = [];
     push({
-        data: {json: () => ({
-            title: '출석 알림',
-            path: '/#attendance',
-            expiresAtEpochMs: Date.now() + 60_000,
-        })},
+        data: {
+            json: () => ({
+                title: '출석 알림',
+                path: '/#attendance',
+                expiresAtEpochMs: Date.now() + 60_000,
+            }),
+        },
         waitUntil: (promise) => routeWaits.push(promise),
     });
     await Promise.all(routeWaits);

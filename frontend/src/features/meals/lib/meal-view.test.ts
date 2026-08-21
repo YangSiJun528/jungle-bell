@@ -1,5 +1,7 @@
 import {describe, expect, it} from 'vitest';
+
 import type {DashboardMealsSnapshot} from '@/api/dashboard-api';
+
 import {
     mealsGroupedByDate,
     todayMealSlots,
@@ -14,7 +16,13 @@ const snapshot: DashboardMealsSnapshot = {
     data: {
         schemaVersion: 2,
         dailyMenus: [
-            {id: 'dinner', title: '8월 11일 석식', text: '저녁', publishedAt: null, permalink: null},
+            {
+                id: 'dinner',
+                title: '8월 11일 석식',
+                text: '저녁',
+                publishedAt: null,
+                permalink: null,
+            },
             {id: 'lunch', title: '8월 11일 중식', text: '점심', publishedAt: null, permalink: null},
         ],
         pinnedMenus: [],
@@ -40,7 +48,10 @@ describe('todayMealSlots', () => {
 
 describe('급식 이력 보조 모델', () => {
     it('급식 기록을 날짜별로 묶고 식사 순서로 정렬한다', () => {
-        const grouped = mealsGroupedByDate(snapshot.data.dailyMenus, new Date('2026-08-11T03:00:00.000Z'));
+        const grouped = mealsGroupedByDate(
+            snapshot.data.dailyMenus,
+            new Date('2026-08-11T03:00:00.000Z'),
+        );
         expect(grouped.get('2026-08-11')?.map((meal) => meal.id)).toEqual(['lunch', 'dinner']);
     });
 
@@ -49,21 +60,30 @@ describe('급식 이력 보조 모델', () => {
     });
 
     it('선택한 날짜가 속한 월요일 주차의 저장된 급식표를 찾는다', () => {
-        const weekly = [{
-            weekKey: '2026-08-10',
-            contentSha: 'weekly-sha',
-            post: {
-                id: 'weekly', title: '8월 2주차 식단표', text: '',
-                publishedAt: '2026-08-10T00:00:00.000Z', permalink: null,
+        const weekly = [
+            {
+                weekKey: '2026-08-10',
+                contentSha: 'weekly-sha',
+                post: {
+                    id: 'weekly',
+                    title: '8월 2주차 식단표',
+                    text: '',
+                    publishedAt: '2026-08-10T00:00:00.000Z',
+                    permalink: null,
+                },
             },
-        }, {
-            weekKey: '2026-08-17',
-            contentSha: 'next-week-sha',
-            post: {
-                id: 'next-weekly', title: '8월 3주차 식단표', text: '',
-                publishedAt: '2026-08-17T00:00:00.000Z', permalink: null,
+            {
+                weekKey: '2026-08-17',
+                contentSha: 'next-week-sha',
+                post: {
+                    id: 'next-weekly',
+                    title: '8월 3주차 식단표',
+                    text: '',
+                    publishedAt: '2026-08-17T00:00:00.000Z',
+                    permalink: null,
+                },
             },
-        }];
+        ];
 
         expect(weekKeyForDate('2026-08-16')).toBe('2026-08-10');
         expect(weeklyMenuForDate(weekly, '2026-08-13')?.post.id).toBe('weekly');

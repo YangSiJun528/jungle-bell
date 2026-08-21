@@ -28,10 +28,21 @@ interface PersonalLaundryMachine {
     dryer: PersonalLaundryAppliance | null;
 }
 
-const AVAILABLE_STATES = new Set(['AVAILABLE', 'IDLE', 'READY', 'COMPLETED', 'CONFIRMED_COMPLETED']);
+const AVAILABLE_STATES = new Set([
+    'AVAILABLE',
+    'IDLE',
+    'READY',
+    'COMPLETED',
+    'CONFIRMED_COMPLETED',
+]);
 const ACTIVE_STATES = new Set([
-    'RUNNING', 'SCHEDULED', 'PAUSED', 'ERROR', 'ESTIMATED_RUNNING',
-    'OBSERVED', 'AWAITING_COMPLETION_CONFIRMATION',
+    'RUNNING',
+    'SCHEDULED',
+    'PAUSED',
+    'ERROR',
+    'ESTIMATED_RUNNING',
+    'OBSERVED',
+    'AWAITING_COMPLETION_CONFIRMATION',
 ]);
 
 export function laundryTargets(machines: readonly PersonalLaundryMachine[]): LaundryTarget[] {
@@ -41,9 +52,13 @@ export function laundryTargets(machines: readonly PersonalLaundryMachine[]): Lau
             const state = machine[appliance];
             if (state === null) continue;
             const active = hasActiveSession(state);
-            const sessionId = active && typeof state.sessionId === 'string' ? state.sessionId : null;
+            const sessionId =
+                active && typeof state.sessionId === 'string' ? state.sessionId : null;
             const remaining = state.projection?.remainingMinutes ?? state.remainingMinutes;
-            const remainingLabel = active && Number.isFinite(remaining) ? ` · ${Math.max(0, Math.ceil(remaining!))}분 남음` : '';
+            const remainingLabel =
+                active && Number.isFinite(remaining)
+                    ? ` · ${Math.max(0, Math.ceil(remaining!))}분 남음`
+                    : '';
             targets.push({
                 key: `${machine.id}:${appliance}`,
                 machineId: machine.id,
@@ -60,10 +75,13 @@ export function hasDuplicateActiveWatch(
     watches: readonly LaundryWatch[],
     target: LaundryTarget,
 ): boolean {
-    return watches.some((watch) => watch.status === 'active'
-        && watch.machineId === target.machineId
-        && watch.appliance === target.appliance
-        && watch.sessionId === target.sessionId);
+    return watches.some(
+        (watch) =>
+            watch.status === 'active' &&
+            watch.machineId === target.machineId &&
+            watch.appliance === target.appliance &&
+            watch.sessionId === target.sessionId,
+    );
 }
 
 export function watchConditionLabel(watch: LaundryWatch): string {

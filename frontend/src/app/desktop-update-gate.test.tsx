@@ -1,5 +1,6 @@
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, test, vi} from 'vitest';
+
 import {DesktopUpdateGate} from './desktop-update-gate';
 
 const {environment, updateQuery} = vi.hoisted(() => ({
@@ -9,11 +10,13 @@ const {environment, updateQuery} = vi.hoisted(() => ({
         installDesktopUpdate: vi.fn(),
     },
     updateQuery: {
-        data: undefined as undefined | {
-            currentVersion: string;
-            availableVersion: string | null;
-            mandatory: boolean;
-        },
+        data: undefined as
+            | undefined
+            | {
+                  currentVersion: string;
+                  availableVersion: string | null;
+                  mandatory: boolean;
+              },
         isError: false,
         isPending: false,
         isFetching: false,
@@ -47,16 +50,17 @@ function renderGate(options: {
     error?: boolean;
     pending?: boolean;
 }): string {
-    environment.platform = options.platform === 'desktop'
-        ? {kind: 'desktop', capabilities: {desktopSettings: true}}
-        : {kind: 'browser', capabilities: {desktopSettings: false}};
+    environment.platform =
+        options.platform === 'desktop'
+            ? {kind: 'desktop', capabilities: {desktopSettings: true}}
+            : {kind: 'browser', capabilities: {desktopSettings: false}};
     updateQuery.data = options.data;
     updateQuery.isError = options.error ?? false;
     updateQuery.isPending = options.pending ?? false;
     routeRenderCount = 0;
     return renderToStaticMarkup(
         <DesktopUpdateGate>
-            <RouteContent/>
+            <RouteContent />
         </DesktopUpdateGate>,
     );
 }

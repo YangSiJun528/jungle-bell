@@ -1,5 +1,6 @@
 import {QueryClient} from '@tanstack/react-query';
 import {expect, test} from 'vitest';
+
 import {
     queryKeys,
     refreshBrowserPersonalQueries,
@@ -73,9 +74,11 @@ test('identity reset clears personal cache before the native reset starts', () =
     );
     const resetMutation = source.slice(source.indexOf('const reset = useMutation'));
     expect(resetMutation.indexOf('onMutate:')).toBeGreaterThanOrEqual(0);
-    expect(resetMutation.indexOf('removeDesktopIdentityQueries(client)'))
-        .toBeGreaterThan(resetMutation.indexOf('onMutate:'));
-    expect(resetMutation.indexOf('removeDesktopIdentityQueries(client)'))
-        .toBeLessThan(resetMutation.indexOf('onSuccess:'));
+    expect(resetMutation.indexOf('removeDesktopIdentityQueries(client)')).toBeGreaterThan(
+        resetMutation.indexOf('onMutate:'),
+    );
+    expect(resetMutation.indexOf('removeDesktopIdentityQueries(client)')).toBeLessThan(
+        resetMutation.indexOf('onSuccess:'),
+    );
 });
 import {readFileSync} from 'node:fs';

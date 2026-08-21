@@ -1,10 +1,15 @@
+import {readFileSync} from 'node:fs';
+
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, test, vi} from 'vitest';
+
 import type {DesktopSettings} from '@/platform/contracts';
+
 import {ServiceSettings} from './service-settings';
 
 const source = readFileSync(new URL('./service-settings.tsx', import.meta.url), 'utf8');
+const normalizedSource = source.replace(/\s+/gu, ' ');
 
 const {api, environment, queryKeys} = vi.hoisted(() => ({
     api: {
@@ -28,13 +33,15 @@ const settings: DesktopSettings = {
     debugMode: false,
     selectedCohortId: null,
     effectiveCohortId: 'cohort-1',
-    cohortOptions: [{
-        id: 'cohort-1',
-        label: '정글 10기',
-        startDate: '2026-07-01',
-        endDate: '2026-08-31',
-        isActive: true,
-    }],
+    cohortOptions: [
+        {
+            id: 'cohort-1',
+            label: '정글 10기',
+            startDate: '2026-07-01',
+            endDate: '2026-08-31',
+            isActive: true,
+        },
+    ],
 };
 
 function renderSettings(): string {
@@ -42,7 +49,7 @@ function renderSettings(): string {
     client.setQueryData(queryKeys.desktopSettings, settings);
     return renderToStaticMarkup(
         <QueryClientProvider client={client}>
-            <ServiceSettings/>
+            <ServiceSettings />
         </QueryClientProvider>,
     );
 }
@@ -57,9 +64,9 @@ describe('ServiceSettings', () => {
         expect(markup).toContain('앱 버전');
         expect(markup).toContain('v0.5.0-beta.1');
         expect(source).toContain('디버그 모드를 켤까요?');
-        expect(source).toContain('특별한 목적이 없다면 켜지 마세요.');
+        expect(normalizedSource).toContain('특별한 목적이 없다면 켜지 마세요.');
         expect(source).toContain('네, 디버그 모드 켜기');
-        expect(source).toContain("if (checked) setConfirmDebugOn(true)");
+        expect(source).toContain('if (checked) setConfirmDebugOn(true)');
         expect(markup).not.toContain('사용 통계');
         expect(markup).toContain('개발자 도구나 외부 명령 실행 권한은 열지 않습니다.');
         expect(markup).toContain('출석 확인 기수');
@@ -68,7 +75,7 @@ describe('ServiceSettings', () => {
         expect(markup).toContain('변경사항 적용');
         expect(source).toContain("setCohortDraft(value === 'automatic' ? null : value)");
         expect(source).toContain('updateSelectedCohort(cohortDraft)');
-        expect(source).not.toContain("onValueChange={(value) => updateSelectedCohort");
+        expect(source).not.toContain('onValueChange={(value) => updateSelectedCohort');
     });
 
     test('모바일에서는 PC 로컬 설정을 편집하지 않는다', () => {
@@ -82,4 +89,3 @@ describe('ServiceSettings', () => {
         }
     });
 });
-import {readFileSync} from 'node:fs';

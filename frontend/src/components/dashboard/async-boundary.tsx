@@ -1,6 +1,7 @@
-import {Suspense, type ReactNode} from 'react';
 import {QueryErrorResetBoundary} from '@tanstack/react-query';
+import {Suspense, type ReactNode} from 'react';
 import {ErrorBoundary} from 'react-error-boundary';
+
 import {ErrorState, PageSkeleton} from './async-state';
 
 interface AsyncBoundaryProps {
@@ -16,7 +17,7 @@ export function AsyncBoundary({
     children,
     errorDescription,
     errorTitle,
-    fallback = <PageSkeleton/>,
+    fallback = <PageSkeleton />,
     resetKeys,
 }: AsyncBoundaryProps) {
     return (

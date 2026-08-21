@@ -27,10 +27,23 @@ const COUNTDOWN_PROJECTION_STATUSES = new Set([
 ]);
 
 const LG_STATE_LABELS: Record<string, string> = {
-    POWER_OFF: '전원 꺼짐', INITIAL: '사용 가능', RESERVED: '예약됨', DETECTING: '세탁량 감지 중',
-    DISPENSING: '세제 투입 중', SOAKING: '불림 중', WASHING: '세탁 중', RINSING: '헹굼 중',
-    SPINNING: '탈수 중', DRYING: '건조 중', COOLING: '식힘 중', REFRESHING: '리프레시 중',
-    WRINKLE_CARE: '구김 방지 중', PAUSE: '일시 정지', END: '완료', ERROR: '오류', UNKNOWN: '알 수 없음',
+    POWER_OFF: '전원 꺼짐',
+    INITIAL: '사용 가능',
+    RESERVED: '예약됨',
+    DETECTING: '세탁량 감지 중',
+    DISPENSING: '세제 투입 중',
+    SOAKING: '불림 중',
+    WASHING: '세탁 중',
+    RINSING: '헹굼 중',
+    SPINNING: '탈수 중',
+    DRYING: '건조 중',
+    COOLING: '식힘 중',
+    REFRESHING: '리프레시 중',
+    WRINKLE_CARE: '구김 방지 중',
+    PAUSE: '일시 정지',
+    END: '완료',
+    ERROR: '오류',
+    UNKNOWN: '알 수 없음',
 };
 
 export function laundryAvailabilityState(
@@ -45,8 +58,8 @@ export function laundryAvailabilityState(
     }
 
     if (projectionStatus) {
-        return projectionStatus === 'CONFIRMED_COMPLETED'
-            || (projectionStatus === 'IDLE' && operationalStatus !== 'SCHEDULED')
+        return projectionStatus === 'CONFIRMED_COMPLETED' ||
+            (projectionStatus === 'IDLE' && operationalStatus !== 'SCHEDULED')
             ? 'available'
             : 'unavailable';
     }
@@ -65,9 +78,10 @@ export function laundryRemainingMinutes(
 
     const finishAt = Date.parse(appliance?.estimatedFinishAt ?? '');
     const projectionStatus = appliance?.projection?.status;
-    const countsDown = appliance?.operationalStatus === 'RUNNING'
-        && COUNTDOWN_PROJECTION_STATUSES.has(projectionStatus ?? '')
-        && Number.isFinite(finishAt);
+    const countsDown =
+        appliance?.operationalStatus === 'RUNNING' &&
+        COUNTDOWN_PROJECTION_STATUSES.has(projectionStatus ?? '') &&
+        Number.isFinite(finishAt);
     return countsDown
         ? Math.max(0, Math.ceil((finishAt - nowMs) / 60_000))
         : Math.max(0, Math.ceil(fallback as number));
@@ -96,7 +110,8 @@ export function laundryRemainingText(
     const status = appliance.projection?.status;
     if (status === 'CONFIRMED_COMPLETED') return '완료';
     if (status === 'ERROR') return '오류';
-    if (status === 'IDLE') return appliance.operationalStatus === 'SCHEDULED' ? '예약' : '사용 가능';
+    if (status === 'IDLE')
+        return appliance.operationalStatus === 'SCHEDULED' ? '예약' : '사용 가능';
     if (status === 'UNKNOWN') return '--';
     const value = laundryRemainingMinutes(appliance, nowMs);
     if (value === null) return '--';
@@ -115,7 +130,8 @@ export function laundryProgress(
     if (laundryAvailabilityState(appliance) === 'error') return 0;
     const total = appliance?.totalMinutes ?? 0;
     const remaining = laundryRemainingMinutes(appliance, nowMs);
-    if (!total || remaining === null || laundryAvailabilityState(appliance) === 'available') return null;
+    if (!total || remaining === null || laundryAvailabilityState(appliance) === 'available')
+        return null;
     return Math.min(100, Math.max(0, ((total - remaining) / total) * 100));
 }
 
@@ -124,7 +140,9 @@ export function laundryStartAt(appliance?: LaundryStatusAppliance | null): strin
     return startedAt && Number.isFinite(Date.parse(startedAt)) ? startedAt : null;
 }
 
-export function laundryOperationLabel(appliance?: LaundryStatusAppliance | null): string | undefined {
+export function laundryOperationLabel(
+    appliance?: LaundryStatusAppliance | null,
+): string | undefined {
     const code = appliance?.state?.code;
     if (code === 'RUNNING') {
         if (appliance?.appliance === 'washer') return '세탁 중';

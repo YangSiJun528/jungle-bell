@@ -33,10 +33,7 @@ export type AccountAuthentication =
     | {kind: 'cookie'}
     | {kind: 'desktop-session'; session: AccountAuthProvider};
 
-export type NativeInvoke = (
-    command: string,
-    args?: Record<string, unknown>,
-) => Promise<unknown>;
+export type NativeInvoke = (command: string, args?: Record<string, unknown>) => Promise<unknown>;
 
 export interface NativeBridge {
     bootstrapDesktopHttpSession(): Promise<DesktopHttpSessionBootstrap>;
@@ -119,9 +116,7 @@ export interface PwaCapabilityAdapter {
     installed: boolean;
     registerServiceWorker(): void;
     preparePush(): Promise<void>;
-    subscribeInstallPrompt(
-        listener: (prompt: PwaInstallPrompt) => void,
-    ): PlatformUnlisten;
+    subscribeInstallPrompt(listener: (prompt: PwaInstallPrompt) => void): PlatformUnlisten;
     isMobileInstallClient(): boolean;
     subscribePush(applicationServerKey: string): Promise<PushSubscriptionJSON>;
 }

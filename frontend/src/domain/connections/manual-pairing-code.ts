@@ -16,7 +16,5 @@ export function validManualPairingCode(value: string): boolean {
 
 export function formatManualPairingCode(value: string): string {
     const normalized = normalizeManualPairingCode(value).slice(0, 10);
-    return normalized.length > 5
-        ? `${normalized.slice(0, 5)}-${normalized.slice(5)}`
-        : normalized;
+    return normalized.length > 5 ? `${normalized.slice(0, 5)}-${normalized.slice(5)}` : normalized;
 }

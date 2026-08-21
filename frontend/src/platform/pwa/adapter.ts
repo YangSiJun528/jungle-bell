@@ -1,8 +1,5 @@
-import type {
-    PwaCapabilityAdapter,
-    PwaInstallPrompt,
-    PlatformUnlisten,
-} from '@/platform/contracts';
+import type {PwaCapabilityAdapter, PwaInstallPrompt, PlatformUnlisten} from '@/platform/contracts';
+
 import {isMobileInstallClient} from './install-client';
 
 interface BeforeInstallPromptEvent extends Event {
@@ -27,7 +24,8 @@ export function createPwaCapabilityAdapter(options: {
         if (readyRegistration) return Promise.resolve(readyRegistration);
         if (registrationPromise) return registrationPromise;
 
-        registrationPromise = navigatorObject.serviceWorker.register('./sw.js', {scope: './'})
+        registrationPromise = navigatorObject.serviceWorker
+            .register('./sw.js', {scope: './'})
             .then(() => navigatorObject.serviceWorker.ready)
             .then((registration) => {
                 readyRegistration = registration;
@@ -66,8 +64,7 @@ export function createPwaCapabilityAdapter(options: {
         },
         isMobileInstallClient: () => isMobileInstallClient(navigatorObject),
         subscribePush(applicationServerKey) {
-            if (!('serviceWorker' in navigatorObject)
-                || !('PushManager' in windowObject)) {
+            if (!('serviceWorker' in navigatorObject) || !('PushManager' in windowObject)) {
                 return Promise.reject(new Error('PUSH_UNSUPPORTED'));
             }
             if (!readyRegistration) return Promise.reject(new Error('PUSH_NOT_READY'));
@@ -89,9 +86,11 @@ export function createPwaCapabilityAdapter(options: {
 }
 
 function installedPwa(windowObject: Window, navigatorObject: Navigator): boolean {
-    const standaloneDisplay = typeof windowObject.matchMedia === 'function'
-        && windowObject.matchMedia('(display-mode: standalone)').matches;
-    const iosStandalone = (navigatorObject as Navigator & {standalone?: boolean}).standalone === true;
+    const standaloneDisplay =
+        typeof windowObject.matchMedia === 'function' &&
+        windowObject.matchMedia('(display-mode: standalone)').matches;
+    const iosStandalone =
+        (navigatorObject as Navigator & {standalone?: boolean}).standalone === true;
     return standaloneDisplay || iosStandalone;
 }
 
@@ -105,7 +104,7 @@ function installPrompt(event: BeforeInstallPromptEvent): PwaInstallPrompt {
 }
 
 function decodeApplicationServerKey(value: string): ArrayBuffer {
-    const padding = '='.repeat((4 - value.length % 4) % 4);
+    const padding = '='.repeat((4 - (value.length % 4)) % 4);
     const binary = atob((value + padding).replace(/-/gu, '+').replace(/_/gu, '/'));
     const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
     return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;

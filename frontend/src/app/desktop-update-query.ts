@@ -1,4 +1,5 @@
 import {useQuery} from '@tanstack/react-query';
+
 import {queryKeys, useDashboardEnvironment} from './dashboard-context';
 
 const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1_000;

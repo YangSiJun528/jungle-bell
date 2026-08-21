@@ -1,4 +1,5 @@
 import type {PropsWithChildren} from 'react';
+
 import {useDashboardAccount} from './dashboard-account';
 
 export function PersonalFeatureSlot({children}: PropsWithChildren) {

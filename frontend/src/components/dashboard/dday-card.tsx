@@ -1,14 +1,8 @@
 import {ChevronDown, Flag} from 'lucide-react';
 import {useState} from 'react';
-import {
-    Card,
-    CardContent,
-} from '@/components/ui/card';
-import {
-    Collapsible,
-    CollapsibleContent,
-    CollapsibleTrigger,
-} from '@/components/ui/collapsible';
+
+import {Card, CardContent} from '@/components/ui/card';
+import {Collapsible, CollapsibleContent, CollapsibleTrigger} from '@/components/ui/collapsible';
 import {Progress} from '@/components/ui/progress';
 import type {DdayPeriod, DdayProgress} from '@/domain/attendance/dday-progress';
 import type {DdayView} from '@/domain/attendance/dday-view';
@@ -41,11 +35,13 @@ function DdayMatrix({progress}: {progress: DdayProgress}) {
                 className="grid min-w-[20rem] grid-cols-[2.5rem_minmax(0,1fr)] gap-x-2 gap-y-1"
                 aria-hidden="true"
             >
-                <span className="self-end text-center text-[10px] font-semibold text-muted-foreground">월</span>
+                <span className="self-end text-center text-[10px] font-semibold text-muted-foreground">
+                    월
+                </span>
                 <span className="grid grid-cols-[repeat(31,minmax(0,1fr))] gap-0.5">
                     {DAYS.map((day) => (
                         <span
-                            className="flex min-w-0 justify-center text-[9px] font-medium tabular-nums text-muted-foreground"
+                            className="flex min-w-0 justify-center text-[9px] font-medium text-muted-foreground tabular-nums"
                             data-dday-day-axis="true"
                             key={day}
                         >
@@ -56,7 +52,10 @@ function DdayMatrix({progress}: {progress: DdayProgress}) {
 
                 {progress.rows.map((row) => (
                     <div className="contents" key={row.key}>
-                        <span className="self-center text-right text-xs font-medium tabular-nums text-muted-foreground" title={row.label}>
+                        <span
+                            className="self-center text-right text-xs font-medium text-muted-foreground tabular-nums"
+                            title={row.label}
+                        >
                             {row.shortLabel}
                         </span>
                         <span className="grid grid-cols-[repeat(31,minmax(0,1fr))] gap-0.5">
@@ -66,15 +65,21 @@ function DdayMatrix({progress}: {progress: DdayProgress}) {
                                         'aspect-square min-w-0 rounded-[2px]',
                                         cell === null && 'bg-transparent',
                                         cell?.state === 'elapsed' && 'bg-primary',
-                                        cell?.state === 'current' && 'bg-primary/15 ring-1 ring-inset ring-primary',
-                                        cell?.state === 'remaining' && 'bg-transparent ring-1 ring-inset ring-border',
+                                        cell?.state === 'current' &&
+                                            'bg-primary/15 ring-1 ring-primary ring-inset',
+                                        cell?.state === 'remaining' &&
+                                            'bg-transparent ring-1 ring-border ring-inset',
                                     )}
                                     data-dday-cell="true"
                                     data-dday-state={cell?.state ?? 'outside'}
                                     key={`${row.key}-${dayIndex + 1}`}
-                                    title={cell
-                                        ? (cell.state === 'current' ? `${cell.label} · 오늘` : cell.label)
-                                        : undefined}
+                                    title={
+                                        cell
+                                            ? cell.state === 'current'
+                                                ? `${cell.label} · 오늘`
+                                                : cell.label
+                                            : undefined
+                                    }
                                 />
                             ))}
                         </span>
@@ -97,24 +102,31 @@ export function DdayCard({view, defaultOpen = false}: DdayCardProps) {
 
     return (
         <Collapsible asChild open={canExpand && open} onOpenChange={setOpen}>
-            <Card className="w-full gap-0 overflow-hidden border-primary/20 py-0" data-dday-card="true">
+            <Card
+                className="w-full gap-0 overflow-hidden border-primary/20 py-0"
+                data-dday-card="true"
+            >
                 <CollapsibleTrigger
-                    className="group/dday flex min-h-20 w-full items-center gap-3 px-5 py-4 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset disabled:cursor-default disabled:hover:bg-transparent sm:px-6"
+                    className="group/dday flex min-h-20 w-full items-center gap-3 px-5 py-4 text-left transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset disabled:cursor-default disabled:hover:bg-transparent sm:px-6"
                     disabled={!canExpand}
                     aria-controls="dday-calendar"
-                    aria-label={canExpand
-                        ? `${view.text}, 과정 달력 ${open ? '접기' : '펼치기'}`
-                        : view.text}
+                    aria-label={
+                        canExpand
+                            ? `${view.text}, 과정 달력 ${open ? '접기' : '펼치기'}`
+                            : view.text
+                    }
                 >
                     <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
-                        <Flag aria-hidden="true" className="size-5"/>
+                        <Flag aria-hidden="true" className="size-5" />
                     </span>
                     <span className="min-w-0 flex-1">
                         <span className="block text-xs font-semibold text-primary">D-Day</span>
                         <strong className="block truncate text-base">{view.text}</strong>
                     </span>
                     {progress ? (
-                        <strong className="shrink-0 text-sm tabular-nums text-primary">{progress.percent}%</strong>
+                        <strong className="shrink-0 text-sm text-primary tabular-nums">
+                            {progress.percent}%
+                        </strong>
                     ) : null}
                     {canExpand ? (
                         <ChevronDown
@@ -132,9 +144,21 @@ export function DdayCard({view, defaultOpen = false}: DdayCardProps) {
                                 aria-label={progressLabel(progress)}
                             />
                             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                                <span>완료 <strong className="text-foreground">{progress.elapsed}</strong>일</span>
-                                <span>남음 <strong className="text-foreground">{progress.remaining}</strong>일</span>
-                                <time className="ml-auto whitespace-nowrap tabular-nums">{periodLabel(period)}</time>
+                                <span>
+                                    완료{' '}
+                                    <strong className="text-foreground">{progress.elapsed}</strong>
+                                    일
+                                </span>
+                                <span>
+                                    남음{' '}
+                                    <strong className="text-foreground">
+                                        {progress.remaining}
+                                    </strong>
+                                    일
+                                </span>
+                                <time className="ml-auto whitespace-nowrap tabular-nums">
+                                    {periodLabel(period)}
+                                </time>
                             </div>
                         </div>
                     ) : (
@@ -147,7 +171,7 @@ export function DdayCard({view, defaultOpen = false}: DdayCardProps) {
                 {canExpand && progress ? (
                     <CollapsibleContent id="dday-calendar">
                         <div className="border-t px-5 py-4 sm:px-6">
-                            <DdayMatrix progress={progress}/>
+                            <DdayMatrix progress={progress} />
                         </div>
                     </CollapsibleContent>
                 ) : null}

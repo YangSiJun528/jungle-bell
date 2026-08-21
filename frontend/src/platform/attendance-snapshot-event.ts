@@ -1,8 +1,6 @@
 import {z} from 'zod';
-import {
-    attendanceSnapshotSchema,
-    type AttendanceSnapshot,
-} from '@/api/dashboard-account-contract';
+
+import {attendanceSnapshotSchema, type AttendanceSnapshot} from '@/api/dashboard-account-contract';
 
 const attendanceSnapshotEventSchema = z.discriminatedUnion('kind', [
     z.strictObject({

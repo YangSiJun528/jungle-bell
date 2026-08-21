@@ -57,9 +57,9 @@ function parseDate(value: string): ParsedDate | null {
     const timestamp = Date.UTC(year, month - 1, day);
     const parsed = new Date(timestamp);
     if (
-        parsed.getUTCFullYear() !== year
-        || parsed.getUTCMonth() !== month - 1
-        || parsed.getUTCDate() !== day
+        parsed.getUTCFullYear() !== year ||
+        parsed.getUTCMonth() !== month - 1 ||
+        parsed.getUTCDate() !== day
     ) {
         return null;
     }
@@ -81,9 +81,9 @@ function stateForTimestamp(
 }
 
 function summarize(rows: DdayProgressRow[], percent: number): DdayProgress {
-    const cells = rows.flatMap((row) => (
-        row.cells.filter((cell): cell is DdayProgressCell => cell !== null)
-    ));
+    const cells = rows.flatMap((row) =>
+        row.cells.filter((cell): cell is DdayProgressCell => cell !== null),
+    );
     let elapsed = 0;
     let remaining = 0;
     let current = 0;
@@ -110,7 +110,7 @@ function calendarRows(start: ParsedDate, end: ParsedDate, today: ParsedDate): Dd
     return Array.from({length: endMonthIndex - startMonthIndex + 1}, (_, index) => {
         const monthIndex = startMonthIndex + index;
         const year = Math.floor(monthIndex / 12);
-        const month = monthIndex % 12 + 1;
+        const month = (monthIndex % 12) + 1;
 
         return {
             key: `${year}-${pad(month)}`,
@@ -120,16 +120,11 @@ function calendarRows(start: ParsedDate, end: ParsedDate, today: ParsedDate): Dd
                 const day = dayIndex + 1;
                 const timestamp = Date.UTC(year, month - 1, day);
                 const date = new Date(timestamp);
-                const isValidDate = (
-                    date.getUTCFullYear() === year
-                    && date.getUTCMonth() === month - 1
-                    && date.getUTCDate() === day
-                );
-                if (
-                    !isValidDate
-                    || timestamp < start.timestamp
-                    || timestamp > end.timestamp
-                ) {
+                const isValidDate =
+                    date.getUTCFullYear() === year &&
+                    date.getUTCMonth() === month - 1 &&
+                    date.getUTCDate() === day;
+                if (!isValidDate || timestamp < start.timestamp || timestamp > end.timestamp) {
                     return null;
                 }
 
@@ -148,8 +143,15 @@ function calendarRows(start: ParsedDate, end: ParsedDate, today: ParsedDate): Dd
     });
 }
 
-function progressPercent(startTimestamp: number, totalDays: number, todayTimestamp: number): number {
-    const completedDays = Math.min(totalDays, Math.max(0, Math.round((todayTimestamp - startTimestamp) / DAY_MS)));
+function progressPercent(
+    startTimestamp: number,
+    totalDays: number,
+    todayTimestamp: number,
+): number {
+    const completedDays = Math.min(
+        totalDays,
+        Math.max(0, Math.round((todayTimestamp - startTimestamp) / DAY_MS)),
+    );
     return Math.round((completedDays / totalDays) * 1_000) / 10;
 }
 

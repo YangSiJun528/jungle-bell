@@ -60,16 +60,24 @@ function parseDesktopUpdateStatus(value: unknown): DesktopUpdateStatus {
     if (Object.keys(source).length !== keys.length || keys.some((key) => !hasOwn(source, key))) {
         throw invalidResponse();
     }
-    if (typeof source.currentVersion !== 'string' || !APP_VERSION_PATTERN.test(source.currentVersion)) {
+    if (
+        typeof source.currentVersion !== 'string' ||
+        !APP_VERSION_PATTERN.test(source.currentVersion)
+    ) {
         throw invalidResponse();
     }
-    if (source.availableVersion !== null
-        && (typeof source.availableVersion !== 'string'
-            || !APP_VERSION_PATTERN.test(source.availableVersion))) {
+    if (
+        source.availableVersion !== null &&
+        (typeof source.availableVersion !== 'string' ||
+            !APP_VERSION_PATTERN.test(source.availableVersion))
+    ) {
         throw invalidResponse();
     }
-    if (typeof source.mandatory !== 'boolean'
-        || (source.mandatory && source.availableVersion === null)) throw invalidResponse();
+    if (
+        typeof source.mandatory !== 'boolean' ||
+        (source.mandatory && source.availableVersion === null)
+    )
+        throw invalidResponse();
     return {
         currentVersion: source.currentVersion,
         availableVersion: source.availableVersion as string | null,
@@ -81,14 +89,23 @@ function parseDesktopSettings(value: unknown): DesktopSettings {
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidResponse();
     const source = value as Record<string, unknown>;
     const keys = [
-        'appVersion', 'autoStart', 'autoUpdate', 'debugMode',
-        'selectedCohortId', 'effectiveCohortId', 'cohortOptions',
+        'appVersion',
+        'autoStart',
+        'autoUpdate',
+        'debugMode',
+        'selectedCohortId',
+        'effectiveCohortId',
+        'cohortOptions',
     ] as const;
     if (Object.keys(source).length !== keys.length || keys.some((key) => !hasOwn(source, key))) {
         throw invalidResponse();
     }
-    if ([source.autoStart, source.autoUpdate, source.debugMode]
-        .some((value) => typeof value !== 'boolean')) throw invalidResponse();
+    if (
+        [source.autoStart, source.autoUpdate, source.debugMode].some(
+            (value) => typeof value !== 'boolean',
+        )
+    )
+        throw invalidResponse();
     if (typeof source.appVersion !== 'string' || !APP_VERSION_PATTERN.test(source.appVersion)) {
         throw invalidResponse();
     }
@@ -107,14 +124,19 @@ function parseDesktopSettings(value: unknown): DesktopSettings {
 }
 
 function desktopSettingsInput(input: DesktopSettingsUpdate): DesktopSettingsUpdate {
-    if (!input || typeof input !== 'object' || [
-        input.autoStart,
-        input.autoUpdate,
-        input.debugMode,
-    ].some((value) => typeof value !== 'boolean')) {
+    if (
+        !input ||
+        typeof input !== 'object' ||
+        [input.autoStart, input.autoUpdate, input.debugMode].some(
+            (value) => typeof value !== 'boolean',
+        )
+    ) {
         throw new Error('API_CLIENT_INVALID_ARGUMENT');
     }
-    const selectedCohortId = nullableCohortId(input.selectedCohortId, 'API_CLIENT_INVALID_ARGUMENT');
+    const selectedCohortId = nullableCohortId(
+        input.selectedCohortId,
+        'API_CLIENT_INVALID_ARGUMENT',
+    );
     return {
         autoStart: input.autoStart,
         autoUpdate: input.autoUpdate,
@@ -130,17 +152,24 @@ function parseCohortOptions(value: unknown): DesktopCohortOption[] {
         if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw invalidResponse();
         const source = entry as Record<string, unknown>;
         const keys = ['id', 'label', 'startDate', 'endDate', 'isActive'];
-        if (Object.keys(source).length !== keys.length || keys.some((key) => !hasOwn(source, key))) {
+        if (
+            Object.keys(source).length !== keys.length ||
+            keys.some((key) => !hasOwn(source, key))
+        ) {
             throw invalidResponse();
         }
         const id = nullableCohortId(source.id);
         const label = source.label;
-        if (!id || ids.has(id)
-            || typeof label !== 'string'
-            || label.length < 1
-            || label.length > 80
-            || label.trim() !== label
-            || typeof source.isActive !== 'boolean') throw invalidResponse();
+        if (
+            !id ||
+            ids.has(id) ||
+            typeof label !== 'string' ||
+            label.length < 1 ||
+            label.length > 80 ||
+            label.trim() !== label ||
+            typeof source.isActive !== 'boolean'
+        )
+            throw invalidResponse();
         const startDate = calendarDate(source.startDate);
         const endDate = source.endDate === null ? null : calendarDate(source.endDate);
         if (endDate && endDate < startDate) throw invalidResponse();
@@ -151,11 +180,13 @@ function parseCohortOptions(value: unknown): DesktopCohortOption[] {
 
 function nullableCohortId(value: unknown, code = 'API_RESPONSE_INVALID'): string | null {
     if (value === null) return null;
-    if (typeof value !== 'string'
-        || value.length < 1
-        || value.length > 128
-        || value.trim() !== value
-        || [...value].some((character) => /[\u0000-\u001f\u007f]/u.test(character))) {
+    if (
+        typeof value !== 'string' ||
+        value.length < 1 ||
+        value.length > 128 ||
+        value.trim() !== value ||
+        [...value].some((character) => /[\u0000-\u001f\u007f]/u.test(character))
+    ) {
         throw new Error(code);
     }
     return value;
@@ -164,7 +195,8 @@ function nullableCohortId(value: unknown, code = 'API_RESPONSE_INVALID'): string
 function calendarDate(value: unknown): string {
     if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/u.test(value)) throw invalidResponse();
     const parsed = new Date(`${value}T00:00:00.000Z`);
-    if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) throw invalidResponse();
+    if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value)
+        throw invalidResponse();
     return value;
 }
 

@@ -1,23 +1,28 @@
 import {describe, expect, it} from 'vitest';
+
 import type {DashboardLaundryMachine} from '@/domain/laundry/capacity';
-import {
-    laundryApplianceDetail,
-    laundryMachineDetail,
-} from './laundry-machine-detail';
+
+import {laundryApplianceDetail, laundryMachineDetail} from './laundry-machine-detail';
 
 const NOW_MS = Date.parse('2026-08-11T03:00:00.000Z');
 
 describe('laundryApplianceDetail', () => {
     it('작동 중 기기의 세부 상태와 잔여·전체 시간 및 진행률을 만든다', () => {
-        expect(laundryApplianceDetail({
-            appliance: 'washer',
-            operationalStatus: 'RUNNING',
-            state: {code: 'RINSING'},
-            totalMinutes: 60,
-            startedAt: '2026-08-11T02:30:00.000Z',
-            estimatedFinishAt: '2026-08-11T03:30:00.000Z',
-            projection: {status: 'ESTIMATED_RUNNING', remainingMinutes: 35},
-        }, 'washer', NOW_MS)).toEqual({
+        expect(
+            laundryApplianceDetail(
+                {
+                    appliance: 'washer',
+                    operationalStatus: 'RUNNING',
+                    state: {code: 'RINSING'},
+                    totalMinutes: 60,
+                    startedAt: '2026-08-11T02:30:00.000Z',
+                    estimatedFinishAt: '2026-08-11T03:30:00.000Z',
+                    projection: {status: 'ESTIMATED_RUNNING', remainingMinutes: 35},
+                },
+                'washer',
+                NOW_MS,
+            ),
+        ).toEqual({
             kind: 'washer',
             label: '세탁기',
             statusLabel: '헹굼 중',
@@ -36,18 +41,24 @@ describe('laundryApplianceDetail', () => {
     });
 
     it('서버 추정 여부를 사용자 문구에 덧붙이지 않는다', () => {
-        expect(laundryApplianceDetail({
-            appliance: 'washer',
-            operationalStatus: 'RUNNING',
-            state: {code: 'RINSING'},
-            totalMinutes: 60,
-            estimatedFinishAt: '2026-08-11T03:30:00.000Z',
-            projection: {
-                status: 'ESTIMATED_RUNNING',
-                remainingMinutes: 35,
-                estimated: true,
-            },
-        }, 'washer', NOW_MS)).toMatchObject({
+        expect(
+            laundryApplianceDetail(
+                {
+                    appliance: 'washer',
+                    operationalStatus: 'RUNNING',
+                    state: {code: 'RINSING'},
+                    totalMinutes: 60,
+                    estimatedFinishAt: '2026-08-11T03:30:00.000Z',
+                    projection: {
+                        status: 'ESTIMATED_RUNNING',
+                        remainingMinutes: 35,
+                        estimated: true,
+                    },
+                },
+                'washer',
+                NOW_MS,
+            ),
+        ).toMatchObject({
             statusLabel: '헹굼 중',
             remainingLabel: '30분',
             progress: 50,
@@ -59,11 +70,17 @@ describe('laundryApplianceDetail', () => {
     });
 
     it('사용 가능·정보 없음·오류 상태를 구분하고 오류에는 빈 진행률을 유지한다', () => {
-        expect(laundryApplianceDetail({
-            appliance: 'dryer',
-            operationalStatus: 'IDLE',
-            projection: {status: 'IDLE', remainingMinutes: 0},
-        }, 'dryer', NOW_MS)).toMatchObject({
+        expect(
+            laundryApplianceDetail(
+                {
+                    appliance: 'dryer',
+                    operationalStatus: 'IDLE',
+                    projection: {status: 'IDLE', remainingMinutes: 0},
+                },
+                'dryer',
+                NOW_MS,
+            ),
+        ).toMatchObject({
             statusLabel: '사용 가능',
             tone: 'available',
             remainingLabel: '사용 가능',
@@ -77,12 +94,18 @@ describe('laundryApplianceDetail', () => {
             progress: null,
         });
 
-        expect(laundryApplianceDetail({
-            appliance: 'dryer',
-            operationalStatus: 'ERROR',
-            errorCode: 'EMPTY_WATER_ALERT_ERROR',
-            projection: {status: 'ERROR'},
-        }, 'dryer', NOW_MS)).toMatchObject({
+        expect(
+            laundryApplianceDetail(
+                {
+                    appliance: 'dryer',
+                    operationalStatus: 'ERROR',
+                    errorCode: 'EMPTY_WATER_ALERT_ERROR',
+                    projection: {status: 'ERROR'},
+                },
+                'dryer',
+                NOW_MS,
+            ),
+        ).toMatchObject({
             statusLabel: '배관 에러',
             tone: 'error',
             remainingLabel: '확인 필요',
@@ -93,24 +116,36 @@ describe('laundryApplianceDetail', () => {
     });
 
     it('일시 정지는 경고로, LG 완료 확인 대기는 초록색 확인 상태로 설명한다', () => {
-        expect(laundryApplianceDetail({
-            appliance: 'washer',
-            operationalStatus: 'PAUSED',
-            totalMinutes: 30,
-            projection: {status: 'PAUSED', remainingMinutes: 12},
-        }, 'washer', NOW_MS)).toMatchObject({
+        expect(
+            laundryApplianceDetail(
+                {
+                    appliance: 'washer',
+                    operationalStatus: 'PAUSED',
+                    totalMinutes: 30,
+                    projection: {status: 'PAUSED', remainingMinutes: 12},
+                },
+                'washer',
+                NOW_MS,
+            ),
+        ).toMatchObject({
             statusLabel: '일시 정지',
             tone: 'warning',
             remainingLabel: '12분',
             progress: 60,
         });
 
-        expect(laundryApplianceDetail({
-            appliance: 'dryer',
-            operationalStatus: 'RUNNING',
-            estimatedFinishAt: '2026-08-11T02:59:00.000Z',
-            projection: {status: 'AWAITING_COMPLETION_CONFIRMATION', remainingMinutes: 0},
-        }, 'dryer', NOW_MS)).toMatchObject({
+        expect(
+            laundryApplianceDetail(
+                {
+                    appliance: 'dryer',
+                    operationalStatus: 'RUNNING',
+                    estimatedFinishAt: '2026-08-11T02:59:00.000Z',
+                    projection: {status: 'AWAITING_COMPLETION_CONFIRMATION', remainingMinutes: 0},
+                },
+                'dryer',
+                NOW_MS,
+            ),
+        ).toMatchObject({
             statusLabel: '완료 확인 중',
             tone: 'confirming',
             remainingLabel: '0분',
@@ -120,29 +155,47 @@ describe('laundryApplianceDetail', () => {
     });
 
     it('수집기 sentinel 또는 현재 세션으로 볼 수 없는 시작 시각은 숨긴다', () => {
-        expect(laundryApplianceDetail({
-            appliance: 'dryer',
-            operationalStatus: 'RUNNING',
-            startedAt: '1970-01-01T00:00:00.000Z',
-            projection: {status: 'ESTIMATED_RUNNING', remainingMinutes: 10},
-        }, 'dryer', NOW_MS).startedAt).toBeNull();
+        expect(
+            laundryApplianceDetail(
+                {
+                    appliance: 'dryer',
+                    operationalStatus: 'RUNNING',
+                    startedAt: '1970-01-01T00:00:00.000Z',
+                    projection: {status: 'ESTIMATED_RUNNING', remainingMinutes: 10},
+                },
+                'dryer',
+                NOW_MS,
+            ).startedAt,
+        ).toBeNull();
 
-        expect(laundryApplianceDetail({
-            appliance: 'dryer',
-            operationalStatus: 'RUNNING',
-            startedAt: '2026-08-09T03:00:00.000Z',
-            projection: {status: 'ESTIMATED_RUNNING', remainingMinutes: 10},
-        }, 'dryer', NOW_MS).startedAt).toBeNull();
+        expect(
+            laundryApplianceDetail(
+                {
+                    appliance: 'dryer',
+                    operationalStatus: 'RUNNING',
+                    startedAt: '2026-08-09T03:00:00.000Z',
+                    projection: {status: 'ESTIMATED_RUNNING', remainingMinutes: 10},
+                },
+                'dryer',
+                NOW_MS,
+            ).startedAt,
+        ).toBeNull();
     });
 
     it('사용 가능 상태에는 이전 세션의 시작·종료 시각을 노출하지 않는다', () => {
-        expect(laundryApplianceDetail({
-            appliance: 'washer',
-            operationalStatus: 'IDLE',
-            startedAt: '2026-08-11T02:00:00.000Z',
-            estimatedFinishAt: '2026-08-11T02:50:00.000Z',
-            projection: {status: 'IDLE', remainingMinutes: 0},
-        }, 'washer', NOW_MS)).toMatchObject({
+        expect(
+            laundryApplianceDetail(
+                {
+                    appliance: 'washer',
+                    operationalStatus: 'IDLE',
+                    startedAt: '2026-08-11T02:00:00.000Z',
+                    estimatedFinishAt: '2026-08-11T02:50:00.000Z',
+                    projection: {status: 'IDLE', remainingMinutes: 0},
+                },
+                'washer',
+                NOW_MS,
+            ),
+        ).toMatchObject({
             startedAt: null,
             estimatedFinishAt: null,
         });

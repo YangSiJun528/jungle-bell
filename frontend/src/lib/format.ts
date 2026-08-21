@@ -12,7 +12,10 @@ export function dateTimeLabel(value: string | number | null | undefined): string
     return Number.isNaN(date.getTime()) ? '확인 기록 없음' : dateTimeFormatter.format(date);
 }
 
-export function relativeTimeLabel(value: string | number | null | undefined, now = Date.now()): string {
+export function relativeTimeLabel(
+    value: string | number | null | undefined,
+    now = Date.now(),
+): string {
     if (value === null || value === undefined) return '확인 기록 없음';
     const timestamp = new Date(value).getTime();
     if (!Number.isFinite(timestamp)) return '확인 기록 없음';

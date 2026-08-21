@@ -1,9 +1,8 @@
 import assert from 'node:assert/strict';
+
 import {test} from 'vitest';
-import {
-    dashboardDdayLabel,
-    dashboardDdayPeriod,
-} from './dday-label';
+
+import {dashboardDdayLabel, dashboardDdayPeriod} from './dday-label';
 
 const attendance = {
     attendanceDate: '2026-08-10',
@@ -22,8 +21,14 @@ test('홈 D-Day는 출석 snapshot의 cohort 기간에서만 계산한다', () =
         endDate: '2026-08-31',
     });
     assert.equal(dashboardDdayLabel(attendance, '2026-08-10'), '수료까지 D-21');
-    assert.equal(dashboardDdayLabel({...attendance, cohortStatus: 'upcoming'}, '2026-07-28'), '시작까지 D-4');
-    assert.equal(dashboardDdayLabel({...attendance, cohortStatus: 'ended'}, '2026-09-01'), '과정 종료');
+    assert.equal(
+        dashboardDdayLabel({...attendance, cohortStatus: 'upcoming'}, '2026-07-28'),
+        '시작까지 D-4',
+    );
+    assert.equal(
+        dashboardDdayLabel({...attendance, cohortStatus: 'ended'}, '2026-09-01'),
+        '과정 종료',
+    );
     assert.equal(dashboardDdayPeriod({...attendance, cohortEndDate: '2026-02-30'}), null);
     assert.equal(dashboardDdayPeriod({...attendance, cohortStartDate: null}), null);
 });

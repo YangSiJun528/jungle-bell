@@ -1,8 +1,11 @@
 import {readFileSync} from 'node:fs';
+
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, test, vi} from 'vitest';
+
 import type {AttendancePreferences} from '@/api/personal-api';
+
 import {AttendancePreferencesSection} from './attendance-preferences-section';
 
 const {api, queryKeys} = vi.hoisted(() => ({
@@ -58,7 +61,7 @@ function renderPreferences(): string {
     client.setQueryData(queryKeys.attendancePreferences, preferences);
     return renderToStaticMarkup(
         <QueryClientProvider client={client}>
-            <AttendancePreferencesSection/>
+            <AttendancePreferencesSection />
         </QueryClientProvider>,
     );
 }

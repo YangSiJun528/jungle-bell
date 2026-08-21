@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
+
 import {transformWithOxc} from 'vite';
 import {test} from 'vitest';
 
@@ -26,14 +27,14 @@ async function executeChecker(options: {invalidSelection?: boolean} = {}) {
             return options.invalidSelection
                 ? {type: 'cohortSelection', selection: {legacy: true}}
                 : {
-                    type: 'cohortSelection',
-                    selection: {
-                        cohort_id: 'cohort-1',
-                        cohort_status: 'active',
-                        cohort_start_date: '2026-01-01',
-                        cohort_end_date: '2026-12-31',
-                    },
-                };
+                      type: 'cohortSelection',
+                      selection: {
+                          cohort_id: 'cohort-1',
+                          cohort_status: 'active',
+                          cohort_start_date: '2026-01-01',
+                          cohort_end_date: '2026-12-31',
+                      },
+                  };
         }
         return {type: 'acknowledged'};
     };
@@ -44,28 +45,41 @@ async function executeChecker(options: {invalidSelection?: boolean} = {}) {
         Promise,
         String,
         console,
-        fetch: async (url: string) => url.endsWith('/api/v2/me/cohorts')
-            ? {
-                status: 200,
-                statusText: 'OK',
-                ok: true,
-                json: async () => [{
-                    id: 'cohort-1', name: '1기', startDate: '2026-01-01',
-                    endDate: '2026-12-31', isActive: true,
-                }],
-            }
-            : {
-                status: 200,
-                statusText: 'OK',
-                ok: true,
-                text: async () => JSON.stringify({checkedAt: '2026-08-10T09:00:00+09:00', checkedOutAt: null}),
-            },
+        fetch: async (url: string) =>
+            url.endsWith('/api/v2/me/cohorts')
+                ? {
+                      status: 200,
+                      statusText: 'OK',
+                      ok: true,
+                      json: async () => [
+                          {
+                              id: 'cohort-1',
+                              name: '1기',
+                              startDate: '2026-01-01',
+                              endDate: '2026-12-31',
+                              isActive: true,
+                          },
+                      ],
+                  }
+                : {
+                      status: 200,
+                      statusText: 'OK',
+                      ok: true,
+                      text: async () =>
+                          JSON.stringify({
+                              checkedAt: '2026-08-10T09:00:00+09:00',
+                              checkedOutAt: null,
+                          }),
+                  },
         window: {
             location: {href: 'https://jungle-lms.krafton.com/check-in'},
             __TAURI__: {
                 core: {invoke},
                 event: {
-                    listen: async (_event: string, handler: (event: {payload: unknown}) => void) => {
+                    listen: async (
+                        _event: string,
+                        handler: (event: {payload: unknown}) => void,
+                    ) => {
                         trigger = handler;
                         return () => undefined;
                     },
@@ -96,8 +110,14 @@ function localValue<T>(value: unknown): T {
 
 test('checker는 positive trigger 뒤 단일 tagged IPC로 ready·resolve·snapshot을 보고한다', async () => {
     const runtime = await executeChecker();
-    assert.deepEqual(runtime.calls.map(({command}) => command), ['report_checker_event']);
-    assert.deepEqual(runtime.calls.map(({event}) => event.type), ['log']);
+    assert.deepEqual(
+        runtime.calls.map(({command}) => command),
+        ['report_checker_event'],
+    );
+    assert.deepEqual(
+        runtime.calls.map(({event}) => event.type),
+        ['log'],
+    );
 
     runtime.trigger({generation: 3});
     await flushTasks();
@@ -109,7 +129,8 @@ test('checker는 positive trigger 뒤 단일 tagged IPC로 ready·resolve·snaps
     assert.ok(eventTypes.indexOf('resolveCohort') < eventTypes.indexOf('attendanceSnapshot'));
     const ready = runtime.calls.find(({event}) => event.type === 'ready')?.event;
     assert.deepEqual(localValue(ready), {type: 'ready', generation: 3});
-    const snapshot = runtime.calls.find(({event}) => event.type === 'attendanceSnapshot')?.event.status;
+    const snapshot = runtime.calls.find(({event}) => event.type === 'attendanceSnapshot')?.event
+        .status;
     assert.deepEqual(localValue(snapshot), {
         generation: 3,
         needs_login: false,
@@ -126,11 +147,15 @@ test('checker는 잘못된 generation을 거부하고 strict cohort 응답 오�
     const runtime = await executeChecker({invalidSelection: true});
     runtime.trigger({generation: 0});
     await flushTasks();
-    assert.equal(runtime.calls.some(({event}) => event.type === 'ready'), false);
+    assert.equal(
+        runtime.calls.some(({event}) => event.type === 'ready'),
+        false,
+    );
 
     runtime.trigger({generation: 1});
     await flushTasks();
-    const snapshot = runtime.calls.find(({event}) => event.type === 'attendanceSnapshot')?.event.status;
+    const snapshot = runtime.calls.find(({event}) => event.type === 'attendanceSnapshot')?.event
+        .status;
     assert.deepEqual(localValue(snapshot), {
         generation: 1,
         needs_login: false,

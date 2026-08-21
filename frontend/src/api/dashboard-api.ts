@@ -1,10 +1,9 @@
 import {z, type ZodType} from 'zod';
+
 import type {NotificationInboxSnapshot} from '@/domain/notifications/inbox';
-import type {
-    DesktopSettingsAdapter,
-    PlatformAdapter,
-} from '@/platform/contracts';
 import {platformApiBaseUrl} from '@/platform/build-config';
+import type {DesktopSettingsAdapter, PlatformAdapter} from '@/platform/contracts';
+
 import {
     parseInput,
     responseJson,
@@ -60,15 +59,8 @@ import {
     type DashboardMealsSnapshot,
     type DashboardWeeklyMealMenu,
 } from './dashboard-campus-contract';
-import {
-    createHttpApiClient,
-    type AccountApiPath,
-    type PairingApiPath,
-} from './http-api-client';
-import {
-    createDashboardPersonalApi,
-    type DashboardPersonalApi,
-} from './personal-api';
+import {createHttpApiClient, type AccountApiPath, type PairingApiPath} from './http-api-client';
+import {createDashboardPersonalApi, type DashboardPersonalApi} from './personal-api';
 
 export type {
     AttendancePreferences,
@@ -109,10 +101,7 @@ export {
     safeMealPermalink,
 };
 
-export type DashboardFetch = (
-    input: RequestInfo | URL,
-    init?: RequestInit,
-) => Promise<Response>;
+export type DashboardFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 export interface DashboardApiOptions {
     campusApiBaseUrl?: string;
@@ -150,10 +139,7 @@ export interface DashboardApi extends DashboardPersonalApi, DesktopSettingsAdapt
         deviceLabel: string;
         installationId: string;
     }): Promise<PairingClaim>;
-    prepareQrPairingHandoff(input: {
-        pairingId: string;
-        challenge: string;
-    }): Promise<void>;
+    prepareQrPairingHandoff(input: {pairingId: string; challenge: string}): Promise<void>;
     claimPairingHandoff(input: {
         deviceLabel: string;
         installationId: string;
@@ -185,14 +171,16 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
     const nativeBridge = platform.native;
     const adapterApiBase = platformApiBaseUrl;
     const campusBase = normalizeBaseUrl(options.campusApiBaseUrl ?? adapterApiBase);
-    const pageOrigin = typeof window !== 'undefined' && /^https?:$/u.test(window.location.protocol)
-        ? window.location.origin
-        : null;
+    const pageOrigin =
+        typeof window !== 'undefined' && /^https?:$/u.test(window.location.protocol)
+            ? window.location.origin
+            : null;
     const mealAssetOrigin = campusBase || (platform.kind === 'browser' ? pageOrigin : null);
     const platformBase = normalizeBaseUrl(options.platformApiBaseUrl ?? adapterApiBase);
-    const desktopSession = platform.accountAuthentication.kind === 'desktop-session'
-        ? platform.accountAuthentication.session
-        : undefined;
+    const desktopSession =
+        platform.accountAuthentication.kind === 'desktop-session'
+            ? platform.accountAuthentication.session
+            : undefined;
     const httpClient = createHttpApiClient({
         fetcher,
         publicBase: campusBase,
@@ -301,19 +289,16 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
         },
 
         async listMobileSessions() {
-            return (await accountValue(
-                mobileSessionsSchema,
-                '/api/me/mobile-sessions',
-                {method: 'GET'},
-            )).devices;
+            return (
+                await accountValue(mobileSessionsSchema, '/api/me/mobile-sessions', {method: 'GET'})
+            ).devices;
         },
 
         async revokeMobileSession(deviceId) {
             const id = parseInput(mobileSessionIdSchema, deviceId);
-            await accountNoContent(
-                `/api/me/mobile-sessions/${encodeURIComponent(id)}`,
-                {method: 'DELETE'},
-            );
+            await accountNoContent(`/api/me/mobile-sessions/${encodeURIComponent(id)}`, {
+                method: 'DELETE',
+            });
         },
 
         async claimManualPairing(input) {
@@ -342,13 +327,15 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
 
         async prepareQrPairingHandoff(input) {
             const body = parseInput(qrPairingHandoffInputSchema, input);
-            await responseNoContent(await pairingResponse(
-                `/api/pairings/${encodeURIComponent(body.pairingId)}/handoff`,
-                {
-                    method: 'POST',
-                    body: JSON.stringify({challenge: body.challenge}),
-                },
-            ));
+            await responseNoContent(
+                await pairingResponse(
+                    `/api/pairings/${encodeURIComponent(body.pairingId)}/handoff`,
+                    {
+                        method: 'POST',
+                        body: JSON.stringify({challenge: body.challenge}),
+                    },
+                ),
+            );
         },
 
         async claimPairingHandoff(input) {
@@ -368,7 +355,9 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
                 {method: 'POST', body: JSON.stringify({})},
             );
             if (response.status === 409) {
-                const parsed = pairingWaitingErrorSchema.safeParse(await safeResponseJson(response));
+                const parsed = pairingWaitingErrorSchema.safeParse(
+                    await safeResponseJson(response),
+                );
                 if (parsed.success) return 'waiting';
             }
             await responseNoContent(response);
@@ -386,15 +375,17 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
         },
 
         async getNotifications() {
-            return (await accountValue(
-                dashboardNotificationsSchema,
-                '/api/me/notifications?limit=20',
-                {method: 'GET'},
-            )).notifications;
+            return (
+                await accountValue(dashboardNotificationsSchema, '/api/me/notifications?limit=20', {
+                    method: 'GET',
+                })
+            ).notifications;
         },
 
         async getDesktopNotificationInbox() {
-            return parseNotificationInboxSnapshot(await nativeBridge.getNotificationInboxSnapshot());
+            return parseNotificationInboxSnapshot(
+                await nativeBridge.getNotificationInboxSnapshot(),
+            );
         },
 
         async markDesktopNotificationRead(id) {
@@ -405,9 +396,7 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
         },
 
         async markAllDesktopNotificationsRead() {
-            return parseNotificationInboxSnapshot(
-                await nativeBridge.markAllNotificationsRead(),
-            );
+            return parseNotificationInboxSnapshot(await nativeBridge.markAllNotificationsRead());
         },
 
         async activateDesktopNotification(id) {
@@ -422,19 +411,21 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
         },
 
         async sendMobileTestNotification() {
-            return (await accountValue(
-                mobileTestNotificationResultSchema,
-                '/api/me/notifications/test',
-                {method: 'POST', body: JSON.stringify({})},
-            )).queued;
+            return (
+                await accountValue(
+                    mobileTestNotificationResultSchema,
+                    '/api/me/notifications/test',
+                    {method: 'POST', body: JSON.stringify({})},
+                )
+            ).queued;
         },
 
         async getPushPublicKey() {
-            return (await accountValue(
-                pushPublicKeyResultSchema,
-                '/api/me/push/vapid-public-key',
-                {method: 'GET'},
-            )).publicKey;
+            return (
+                await accountValue(pushPublicKeyResultSchema, '/api/me/push/vapid-public-key', {
+                    method: 'GET',
+                })
+            ).publicKey;
         },
 
         async registerPushSubscription(subscription) {
@@ -442,14 +433,10 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
                 endpoint: subscription.endpoint,
                 keys: subscription.keys,
             });
-            await accountValue(
-                pushSubscriptionResultSchema,
-                '/api/me/push/subscriptions',
-                {
-                    method: 'PUT',
-                    body: JSON.stringify(body),
-                },
-            );
+            await accountValue(pushSubscriptionResultSchema, '/api/me/push/subscriptions', {
+                method: 'PUT',
+                body: JSON.stringify(body),
+            });
         },
     };
 }
@@ -458,12 +445,15 @@ function normalizeBaseUrl(value: string): string {
     const trimmed = value.trim().replace(/\/+$/u, '');
     if (!trimmed) return '';
     const parsed = new URL(trimmed);
-    const localHttp = parsed.protocol === 'http:'
-        && (parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost');
-    if ((parsed.protocol !== 'https:' && !localHttp)
-        || parsed.username
-        || parsed.password
-        || parsed.pathname !== '/') {
+    const localHttp =
+        parsed.protocol === 'http:' &&
+        (parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost');
+    if (
+        (parsed.protocol !== 'https:' && !localHttp) ||
+        parsed.username ||
+        parsed.password ||
+        parsed.pathname !== '/'
+    ) {
         throw new Error('DASHBOARD_API_URL_INVALID');
     }
     return parsed.origin;

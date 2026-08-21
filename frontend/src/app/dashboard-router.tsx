@@ -5,6 +5,7 @@ import {
     createRouter,
     type RouterHistory,
 } from '@tanstack/react-router';
+
 import {DashboardApp} from './dashboard-app';
 import {
     AppInstallRoutePage,
@@ -98,6 +99,8 @@ declare module '@tanstack/react-router' {
     }
 }
 
-export function createDashboardRouter(history: RouterHistory = createHashHistory()): DashboardRouter {
+export function createDashboardRouter(
+    history: RouterHistory = createHashHistory(),
+): DashboardRouter {
     return buildDashboardRouter(history);
 }

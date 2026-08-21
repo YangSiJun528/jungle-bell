@@ -151,12 +151,17 @@ function assertApiPath(path: string, prefixes: readonly string[]): void {
     } catch {
         throw new Error('API_CLIENT_INVALID_ARGUMENT');
     }
-    if (parsed.origin !== 'https://api.invalid'
-        || parsed.hash
-        || `${parsed.pathname}${parsed.search}` !== path
-        || !prefixes.some((prefix) => path === prefix
-            || path.startsWith(prefix.endsWith('/') ? prefix : `${prefix}/`)
-            || path.startsWith(`${prefix}?`))) {
+    if (
+        parsed.origin !== 'https://api.invalid' ||
+        parsed.hash ||
+        `${parsed.pathname}${parsed.search}` !== path ||
+        !prefixes.some(
+            (prefix) =>
+                path === prefix ||
+                path.startsWith(prefix.endsWith('/') ? prefix : `${prefix}/`) ||
+                path.startsWith(`${prefix}?`),
+        )
+    ) {
         throw new Error('API_CLIENT_INVALID_ARGUMENT');
     }
 }

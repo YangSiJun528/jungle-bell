@@ -1,5 +1,6 @@
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, test, vi} from 'vitest';
+
 import {PersonalFeatureSlot} from './personal-feature-slot';
 
 const state = vi.hoisted(() => ({status: 'unconnected'}));
@@ -18,14 +19,18 @@ describe('PersonalFeatureSlot', () => {
 
         state.status = 'unconnected';
         const hidden = renderToStaticMarkup(
-            <PersonalFeatureSlot><PersonalQueryOwner/></PersonalFeatureSlot>,
+            <PersonalFeatureSlot>
+                <PersonalQueryOwner />
+            </PersonalFeatureSlot>,
         );
         expect(hidden).toBe('');
         expect(renders).toBe(0);
 
         state.status = 'connected';
         const visible = renderToStaticMarkup(
-            <PersonalFeatureSlot><PersonalQueryOwner/></PersonalFeatureSlot>,
+            <PersonalFeatureSlot>
+                <PersonalQueryOwner />
+            </PersonalFeatureSlot>,
         );
         expect(visible).toContain('개인 세탁 알림');
         expect(renders).toBe(1);

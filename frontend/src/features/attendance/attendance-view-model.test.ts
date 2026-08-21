@@ -1,5 +1,7 @@
 import {describe, expect, it} from 'vitest';
+
 import type {AttendanceDashboard} from '@/api/dashboard-api';
+
 import {
     attendanceDetailModel,
     attendancePreferencesEqual,
@@ -29,53 +31,83 @@ const available: AttendanceDashboard = {
 
 describe('attendanceDetailModel', () => {
     it('keeps stale freshness while reporting completed checks', () => {
-        expect(attendanceDetailModel({isPending: false, isError: false, data: available})).toMatchObject({
+        expect(
+            attendanceDetailModel({isPending: false, isError: false, data: available}),
+        ).toMatchObject({
             kind: 'available',
             freshness: 'stale',
         });
     });
 
     it('distinguishes authentication and first-sync states', () => {
-        expect(attendanceDetailModel({
-            isPending: false,
-            isError: false,
-            data: {state: 'auth-required'},
-        }).kind).toBe('auth-required');
-        expect(attendanceDetailModel({
-            isPending: false,
-            isError: false,
-            data: {state: 'loaded', attendance: {status: 'unavailable', freshness: 'missing', lastSyncedAt: null, snapshot: null}, devices: []},
-        }).kind).toBe('unavailable');
+        expect(
+            attendanceDetailModel({
+                isPending: false,
+                isError: false,
+                data: {state: 'auth-required'},
+            }).kind,
+        ).toBe('auth-required');
+        expect(
+            attendanceDetailModel({
+                isPending: false,
+                isError: false,
+                data: {
+                    state: 'loaded',
+                    attendance: {
+                        status: 'unavailable',
+                        freshness: 'missing',
+                        lastSyncedAt: null,
+                        snapshot: null,
+                    },
+                    devices: [],
+                },
+            }).kind,
+        ).toBe('unavailable');
     });
 
     it('PC 로컬 관측은 서버 응답 없이도 15분 동안만 fresh로 유지한다', () => {
         const local: AttendanceDashboard = structuredClone(available);
-        if (local.state !== 'loaded' || local.attendance.status !== 'available') throw new Error('invalid fixture');
+        if (local.state !== 'loaded' || local.attendance.status !== 'available')
+            throw new Error('invalid fixture');
         local.attendance.freshness = 'fresh';
         local.attendance.source = 'desktop';
         local.attendance.syncState = 'pending';
 
-        expect(attendanceDetailModel({
-            isPending: false,
-            isError: false,
-            data: local,
-            now: Date.parse('2026-08-11T00:15:00.000Z'),
-        })).toMatchObject({kind: 'available', freshness: 'fresh', source: 'desktop', syncState: 'pending'});
-        expect(attendanceDetailModel({
-            isPending: false,
-            isError: false,
-            data: local,
-            now: Date.parse('2026-08-11T00:15:00.001Z'),
-        })).toMatchObject({kind: 'available', freshness: 'stale'});
+        expect(
+            attendanceDetailModel({
+                isPending: false,
+                isError: false,
+                data: local,
+                now: Date.parse('2026-08-11T00:15:00.000Z'),
+            }),
+        ).toMatchObject({
+            kind: 'available',
+            freshness: 'fresh',
+            source: 'desktop',
+            syncState: 'pending',
+        });
+        expect(
+            attendanceDetailModel({
+                isPending: false,
+                isError: false,
+                data: local,
+                now: Date.parse('2026-08-11T00:15:00.001Z'),
+            }),
+        ).toMatchObject({kind: 'available', freshness: 'stale'});
     });
 });
 
 describe('attendance preference helpers', () => {
     const preferences = {
-        enabled: true, morning: true, evening: false,
-        morningStartHour: 9, eveningEndHour: 4,
-        morningIntervalMinutes: 15 as const, eveningIntervalMinutes: 15 as const,
-        skipSunday: true, skipAttendanceDate: null,
+        enabled: true,
+        morning: true,
+        evening: false,
+        morningStartHour: 9,
+        eveningEndHour: 4,
+        morningIntervalMinutes: 15 as const,
+        eveningIntervalMinutes: 15 as const,
+        skipSunday: true,
+        skipAttendanceDate: null,
     };
 
     it('compares every server-backed setting', () => {
@@ -104,8 +136,14 @@ describe('attendance preference helpers', () => {
 });
 
 it('summarizes the connected PC state', () => {
-    expect(deviceStatus({
-        id: 'pc', deviceLabel: '내 PC', lastSeenAt: null, health: 'online',
-        lmsSessionState: 'connected', appVersion: null,
-    })).toEqual({label: '정상 연결'});
+    expect(
+        deviceStatus({
+            id: 'pc',
+            deviceLabel: '내 PC',
+            lastSeenAt: null,
+            health: 'online',
+            lmsSessionState: 'connected',
+            appVersion: null,
+        }),
+    ).toEqual({label: '정상 연결'});
 });

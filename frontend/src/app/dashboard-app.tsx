@@ -1,49 +1,59 @@
-import {lazy, useCallback, useEffect, useMemo, useState} from 'react';
 import {Outlet, useNavigate, useRouterState} from '@tanstack/react-router';
+import {lazy, useCallback, useEffect, useMemo, useState} from 'react';
+
 import {AsyncBoundary} from '@/components/dashboard/async-boundary';
 import {LoadingState} from '@/components/dashboard/async-state';
-import {useDashboardEnvironment} from './dashboard-context';
 import {InstallPrompt, useInstallPromptVisibility} from '@/platform/pwa/install-prompt';
-import {DashboardShell} from './shell';
-import {useNotificationsQuery} from './use-dashboard-queries';
+
+import {useDashboardEnvironment} from './dashboard-context';
+import {DashboardRouteRuntimeProvider} from './dashboard-route-runtime';
+import {DesktopUpdateNotice} from './desktop-update-notice';
+import {
+    mergeSeenMobileNotificationIds,
+    readSeenMobileNotificationIds,
+    writeSeenMobileNotificationIds,
+} from './mobile-notification-seen';
+import {NotificationOnboardingNotice} from './notification-onboarding-notice';
+import {
+    notificationPanelBackgroundRoute,
+    type DashboardContentRoute,
+} from './notification-panel-route';
+import {PlatformAuthenticationGate} from './platform-authentication-gate';
+import {PublicRouteOutlet} from './privacy-page';
 import {
     DASHBOARD_ROUTE_META,
     dashboardRouteFromPath,
     dashboardRoutePath,
     type DashboardRoute,
 } from './routes';
-import {
-    mergeSeenMobileNotificationIds,
-    readSeenMobileNotificationIds,
-    writeSeenMobileNotificationIds,
-} from './mobile-notification-seen';
-import {
-    notificationPanelBackgroundRoute,
-    type DashboardContentRoute,
-} from './notification-panel-route';
-import {DashboardRouteRuntimeProvider} from './dashboard-route-runtime';
-import {PlatformAuthenticationGate} from './platform-authentication-gate';
-import {DesktopUpdateNotice} from './desktop-update-notice';
-import {PublicRouteOutlet} from './privacy-page';
-import {NotificationOnboardingNotice} from './notification-onboarding-notice';
+import {DashboardShell} from './shell';
+import {useNotificationsQuery} from './use-dashboard-queries';
 
-const NotificationPanelContent = lazy(() => import('@/features/notifications/notifications-page').then((module) => ({default: module.NotificationPanelContent})));
-const CompanionConnections = lazy(() => import('@/features/connections/connections-page').then((module) => ({default: module.CompanionConnections})));
+const NotificationPanelContent = lazy(() =>
+    import('@/features/notifications/notifications-page').then((module) => ({
+        default: module.NotificationPanelContent,
+    })),
+);
+const CompanionConnections = lazy(() =>
+    import('@/features/connections/connections-page').then((module) => ({
+        default: module.CompanionConnections,
+    })),
+);
 
 export function DashboardApp() {
     const pathname = useRouterState({select: (state) => state.location.pathname});
-    if (pathname === '/privacy') return <PublicRouteOutlet/>;
+    if (pathname === '/privacy') return <PublicRouteOutlet />;
 
     return (
         <PlatformAuthenticationGate
-            notice={<DesktopUpdateNotice/>}
-            connectionContent={(
-                <AsyncBoundary fallback={<LoadingState label="연결 화면을 준비하고 있습니다."/>}>
-                    <CompanionConnections completionPath={null}/>
+            notice={<DesktopUpdateNotice />}
+            connectionContent={
+                <AsyncBoundary fallback={<LoadingState label="연결 화면을 준비하고 있습니다." />}>
+                    <CompanionConnections completionPath={null} />
                 </AsyncBoundary>
-            )}
+            }
         >
-            <DashboardContent/>
+            <DashboardContent />
         </PlatformAuthenticationGate>
     );
 }
@@ -56,23 +66,26 @@ function DashboardContent() {
     const notifications = useNotificationsQuery();
     const [seenMobileIds, setSeenMobileIds] = useState(readSeenMobileNotificationIds);
     const [notificationPanelRequestedOpen, setNotificationPanelRequestedOpen] = useState(false);
-    const [notificationBackgroundRoute, setNotificationBackgroundRoute] = useState<DashboardContentRoute>(
-        () => notificationPanelBackgroundRoute('home', route),
-    );
-    const {installPromptOpen, openInstallPrompt, setInstallPromptVisibility} = useInstallPromptVisibility();
+    const [notificationBackgroundRoute, setNotificationBackgroundRoute] =
+        useState<DashboardContentRoute>(() => notificationPanelBackgroundRoute('home', route));
+    const {installPromptOpen, openInstallPrompt, setInstallPromptVisibility} =
+        useInstallPromptVisibility();
     const contentRoute = notificationPanelBackgroundRoute(notificationBackgroundRoute, route);
     const notificationPanelOpen = route === 'notifications' || notificationPanelRequestedOpen;
 
-    const navigate = useCallback((next: DashboardRoute, replace = false) => {
-        if (next === route && !replace) {
-            window.scrollTo({top: 0, behavior: 'smooth'});
-            return;
-        }
-        void routerNavigate({
-            to: dashboardRoutePath(next),
-            replace,
-        });
-    }, [route, routerNavigate]);
+    const navigate = useCallback(
+        (next: DashboardRoute, replace = false) => {
+            if (next === route && !replace) {
+                window.scrollTo({top: 0, behavior: 'smooth'});
+                return;
+            }
+            void routerNavigate({
+                to: dashboardRoutePath(next),
+                replace,
+            });
+        },
+        [route, routerNavigate],
+    );
 
     useEffect(() => {
         document.title = `${DASHBOARD_ROUTE_META[route].label} · Jungle Bell`;
@@ -128,14 +141,14 @@ function DashboardContent() {
                 ),
             }}
         >
-            <DesktopUpdateNotice/>
-            <NotificationOnboardingNotice/>
+            <DesktopUpdateNotice />
+            <NotificationOnboardingNotice />
             <DashboardRouteRuntimeProvider value={{contentRoute, openInstallPrompt}}>
                 <AsyncBoundary resetKeys={[contentRoute]}>
-                    <Outlet/>
+                    <Outlet />
                 </AsyncBoundary>
             </DashboardRouteRuntimeProvider>
-            <InstallPrompt open={installPromptOpen} onOpenChange={setInstallPromptVisibility}/>
+            <InstallPrompt open={installPromptOpen} onOpenChange={setInstallPromptVisibility} />
         </DashboardShell>
     );
 }

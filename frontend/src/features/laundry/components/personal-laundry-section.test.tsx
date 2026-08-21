@@ -1,7 +1,9 @@
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, test, vi} from 'vitest';
+
 import type {DashboardLaundrySnapshot, LaundryWatch} from '@/api/dashboard-api';
+
 import {PersonalLaundrySection} from './personal-laundry-section';
 
 const {api, queryKeys, state} = vi.hoisted(() => ({
@@ -55,21 +57,28 @@ vi.mock('@/app/dashboard-account-state', () => ({
             throw new Error('SERVER_SESSION_REQUIRED');
         }
     },
-    serverSessionReady: () => state.serverSession === 'stored' || state.serverSession === 'memory-only',
+    serverSessionReady: () =>
+        state.serverSession === 'stored' || state.serverSession === 'memory-only',
 }));
 
 vi.mock('@/app/use-dashboard-queries', () => ({
     useAttendanceQuery: () => ({
         data: {
             state: 'loaded',
-            attendance: state.attendanceStatus === 'available'
-                ? {
-                    status: 'available',
-                    freshness: 'fresh',
-                    lastSyncedAt: '2026-08-12T00:00:00.000Z',
-                    snapshot: {},
-                }
-                : {status: 'unavailable', freshness: 'missing', lastSyncedAt: null, snapshot: null},
+            attendance:
+                state.attendanceStatus === 'available'
+                    ? {
+                          status: 'available',
+                          freshness: 'fresh',
+                          lastSyncedAt: '2026-08-12T00:00:00.000Z',
+                          snapshot: {},
+                      }
+                    : {
+                          status: 'unavailable',
+                          freshness: 'missing',
+                          lastSyncedAt: null,
+                          snapshot: null,
+                      },
             devices: [],
         },
         isPending: false,
@@ -79,21 +88,23 @@ vi.mock('@/app/use-dashboard-queries', () => ({
     useRefreshAttendanceMutation: () => ({isPending: false, mutate: vi.fn()}),
 }));
 
-const machines: DashboardLaundrySnapshot['machines'] = [{
-    id: '워시타워_1',
-    zone: 'men',
-    washer: {
-        appliance: 'washer',
-        operationalStatus: 'RUNNING',
-        projection: {status: 'ESTIMATED_RUNNING', remainingMinutes: 23},
-        sessionId: 'washer-session',
+const machines: DashboardLaundrySnapshot['machines'] = [
+    {
+        id: '워시타워_1',
+        zone: 'men',
+        washer: {
+            appliance: 'washer',
+            operationalStatus: 'RUNNING',
+            projection: {status: 'ESTIMATED_RUNNING', remainingMinutes: 23},
+            sessionId: 'washer-session',
+        },
+        dryer: {
+            appliance: 'dryer',
+            operationalStatus: 'IDLE',
+            projection: {status: 'IDLE', remainingMinutes: 0},
+        },
     },
-    dryer: {
-        appliance: 'dryer',
-        operationalStatus: 'IDLE',
-        projection: {status: 'IDLE', remainingMinutes: 0},
-    },
-}];
+];
 
 const activeWatch: LaundryWatch = {
     id: 'watch-1',
@@ -107,32 +118,33 @@ const activeWatch: LaundryWatch = {
     updatedAtEpochMs: 1,
 };
 
-function renderPersonalLaundry(options: {
-    watches?: LaundryWatch[];
-    machines?: DashboardLaundrySnapshot['machines'];
-    lmsAuthentication?: string;
-    personalAccess?: string;
-    platformKind?: string;
-    attendanceStatus?: string;
-    serverSession?: string;
-} = {}): string {
+function renderPersonalLaundry(
+    options: {
+        watches?: LaundryWatch[];
+        machines?: DashboardLaundrySnapshot['machines'];
+        lmsAuthentication?: string;
+        personalAccess?: string;
+        platformKind?: string;
+        attendanceStatus?: string;
+        serverSession?: string;
+    } = {},
+): string {
     const client = new QueryClient();
     state.lmsAuthentication = options.lmsAuthentication ?? 'authenticated';
     state.attendanceStatus = options.attendanceStatus ?? 'available';
     state.serverSession = options.serverSession ?? 'stored';
     state.platformKind = options.platformKind ?? 'desktop';
-    state.personalAccess = options.personalAccess
-        ?? (state.lmsAuthentication === 'authenticated'
-            && (state.serverSession === 'stored' || state.serverSession === 'memory-only')
+    state.personalAccess =
+        options.personalAccess ??
+        (state.lmsAuthentication === 'authenticated' &&
+        (state.serverSession === 'stored' || state.serverSession === 'memory-only')
             ? 'connected'
             : 'unconnected');
     client.setQueryData(queryKeys.laundryWatches, options.watches ?? [activeWatch]);
 
     return renderToStaticMarkup(
         <QueryClientProvider client={client}>
-            <PersonalLaundrySection
-                machines={options.machines ?? machines}
-            />
+            <PersonalLaundrySection machines={options.machines ?? machines} />
         </QueryClientProvider>,
     );
 }

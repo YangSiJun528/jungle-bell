@@ -1,9 +1,12 @@
 import {readFileSync} from 'node:fs';
+
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, test, vi} from 'vitest';
+
 import type {DashboardMealsSnapshot} from '@/api/dashboard-api';
 import {kstDateKey} from '@/domain/meals/today';
+
 import {MealHistorySection} from './meal-history-section';
 
 const source = readFileSync(new URL('./meal-history-section.tsx', import.meta.url), 'utf8');
@@ -23,40 +26,43 @@ const meals: DashboardMealsSnapshot = {
         schemaVersion: 2,
         dailyMenus: [],
         pinnedMenus: [],
-        recentMenus: [{
-            id: 'past-lunch',
-            title: '2020년 1월 2일 중식 메뉴',
-            text: '잡곡밥, 육개장',
-            publishedAt: '2020-01-02T03:00:00.000Z',
-            permalink: null,
-            images: [],
-        }],
-        currentWeeklyMenu: null,
-        weeklyMenus: [{
-            weekKey: '2019-12-30',
-            contentSha: 'weekly-sha',
-            post: {
-                id: 'past-weekly',
-                title: '2019년 12월 30일 주차 급식표',
-                text: '',
-                publishedAt: '2019-12-30T00:00:00.000Z',
+        recentMenus: [
+            {
+                id: 'past-lunch',
+                title: '2020년 1월 2일 중식 메뉴',
+                text: '잡곡밥, 육개장',
+                publishedAt: '2020-01-02T03:00:00.000Z',
                 permalink: null,
                 images: [],
             },
-        }],
+        ],
+        currentWeeklyMenu: null,
+        weeklyMenus: [
+            {
+                weekKey: '2019-12-30',
+                contentSha: 'weekly-sha',
+                post: {
+                    id: 'past-weekly',
+                    title: '2019년 12월 30일 주차 급식표',
+                    text: '',
+                    publishedAt: '2019-12-30T00:00:00.000Z',
+                    permalink: null,
+                    images: [],
+                },
+            },
+        ],
     },
 };
 
 function renderHistory(snapshot = meals): string {
     const client = new QueryClient();
     client.setQueryData(['campus', 'meals', 'history', '2020-01'], {posts: []});
-    client.setQueryData(
-        ['campus', 'meals', 'history', kstDateKey(new Date()).slice(0, 7)],
-        {posts: []},
-    );
+    client.setQueryData(['campus', 'meals', 'history', kstDateKey(new Date()).slice(0, 7)], {
+        posts: [],
+    });
     return renderToStaticMarkup(
         <QueryClientProvider client={client}>
-            <MealHistorySection meals={snapshot}/>
+            <MealHistorySection meals={snapshot} />
         </QueryClientProvider>,
     );
 }

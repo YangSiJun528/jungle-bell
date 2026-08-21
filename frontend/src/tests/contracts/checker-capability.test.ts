@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {existsSync, readdirSync, readFileSync} from 'node:fs';
+
 import {test} from 'vitest';
 
 const srcRoot = new URL('../../', import.meta.url);
@@ -19,10 +20,13 @@ const capabilityDirectory = new URL('../../desktop/capabilities/', srcRoot);
 type CapabilityPermission = string | {identifier: string};
 const capabilities = readdirSync(capabilityDirectory)
     .filter((path) => path.endsWith('.json'))
-    .map((path) => JSON.parse(readFileSync(new URL(path, capabilityDirectory), 'utf8')) as {
-        local?: boolean;
-        permissions: CapabilityPermission[];
-    });
+    .map(
+        (path) =>
+            JSON.parse(readFileSync(new URL(path, capabilityDirectory), 'utf8')) as {
+                local?: boolean;
+                permissions: CapabilityPermission[];
+            },
+    );
 const checkerCapability = JSON.parse(
     readFileSync(new URL('../../desktop/capabilities/checker.json', srcRoot), 'utf8'),
 ) as {
@@ -45,7 +49,7 @@ function permissionIdentifier(permission: CapabilityPermission): string {
 }
 
 function captures(source: string, pattern: RegExp): string[] {
-    return [...source.matchAll(pattern)].flatMap((entry) => entry[1] ? [entry[1]] : []);
+    return [...source.matchAll(pattern)].flatMap((entry) => (entry[1] ? [entry[1]] : []));
 }
 
 function appManifestCommands(): string[] {
@@ -98,7 +102,10 @@ test('원격 checker는 필요한 명령과 event listen 권한만 가진다', (
     assert.deepEqual(checkerCapability.windows, ['checker']);
     assert.equal(checkerCapability.local, false);
     assert.deepEqual(checkerCapability.remote.urls, ['https://jungle-lms.krafton.com/*']);
-    assert.deepEqual(sorted(checkerCapability.permissions.map(permissionIdentifier)), expectedPermissions);
+    assert.deepEqual(
+        sorted(checkerCapability.permissions.map(permissionIdentifier)),
+        expectedPermissions,
+    );
     assert.deepEqual(invoked, ['report_checker_event']);
     assert.match(checkerSource, /type: 'ready'/);
     assert.match(checkerSource, /type: 'log'/);
@@ -112,7 +119,10 @@ test('원격 checker는 필요한 명령과 event listen 권한만 가진다', (
 });
 
 test('desktop 검증은 Rust 컴파일 전에 checker injection을 생성한다', () => {
-    assert.match(rootPackage.scripts?.['verify:desktop'] ?? '', /^npm run build:desktop-ui && cargo fmt /);
+    assert.match(
+        rootPackage.scripts?.['verify:desktop'] ?? '',
+        /^npm run build:desktop-ui && cargo fmt /,
+    );
 });
 
 test('LMS WebView는 외부 페이지 실행을 깨뜨리는 전역 옵션을 사용하지 않는다', () => {
@@ -134,8 +144,14 @@ test('LMS WebView는 외부 페이지 실행을 깨뜨리는 전역 옵션을 �
 
     // 기존 체커는 출석 URL에 머물러 있으면 reload, 로그인 등
     // 다른 URL에 있으면 같은 WebView를 navigate하여 세션 store를 유지한다.
-    assert.match(checkerRuntimeSource, /CheckerRefreshAction::Reload\s*=>[\s\S]*?checker\.reload\(\)/);
-    assert.match(checkerRuntimeSource, /CheckerRefreshAction::Navigate\s*=>[\s\S]*?checker\.navigate\(target\)/);
+    assert.match(
+        checkerRuntimeSource,
+        /CheckerRefreshAction::Reload\s*=>[\s\S]*?checker\.reload\(\)/,
+    );
+    assert.match(
+        checkerRuntimeSource,
+        /CheckerRefreshAction::Navigate\s*=>[\s\S]*?checker\.navigate\(target\)/,
+    );
 });
 
 test('LMS 로그인 창을 닫으면 숨긴 채로 복귀하고 인증 상태를 즉시 재확인한다', () => {

@@ -1,8 +1,11 @@
 import {readFileSync} from 'node:fs';
+
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, test, vi} from 'vitest';
+
 import type {DesktopSettings} from '@/platform/contracts';
+
 import {DesktopUpdateNotice} from './desktop-update-notice';
 
 const source = readFileSync(new URL('./desktop-update-notice.tsx', import.meta.url), 'utf8');
@@ -36,10 +39,7 @@ const settings: DesktopSettings = {
     cohortOptions: [],
 };
 
-function renderNotice(options: {
-    autoUpdate: boolean;
-    availableVersion: string | null;
-}): string {
+function renderNotice(options: {autoUpdate: boolean; availableVersion: string | null}): string {
     const client = new QueryClient();
     client.setQueryData(queryKeys.desktopSettings, {
         ...settings,
@@ -52,7 +52,7 @@ function renderNotice(options: {
     });
     return renderToStaticMarkup(
         <QueryClientProvider client={client}>
-            <DesktopUpdateNotice/>
+            <DesktopUpdateNotice />
         </QueryClientProvider>,
     );
 }

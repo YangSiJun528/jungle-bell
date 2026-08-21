@@ -1,6 +1,8 @@
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, it} from 'vitest';
+
 import type {DashboardMealPost} from '@/api/dashboard-api';
+
 import {WeeklyMealMenu} from './weekly-meal-menu';
 
 describe('WeeklyMealMenu', () => {
@@ -12,18 +14,20 @@ describe('WeeklyMealMenu', () => {
             text: '',
             publishedAt: '2026-08-10T00:00:00.000Z',
             permalink: 'https://pf.kakao.com/_xhzNjn/112664323',
-            images: [{
-                sha,
-                url: `https://campus.example.com/api/public/assets/${sha}.jpg`,
-                contentType: 'image/jpeg',
-                extension: 'jpg',
-                width: 1439,
-                height: 1079,
-                byteLength: 120_000,
-            }],
+            images: [
+                {
+                    sha,
+                    url: `https://campus.example.com/api/public/assets/${sha}.jpg`,
+                    contentType: 'image/jpeg',
+                    extension: 'jpg',
+                    width: 1439,
+                    height: 1079,
+                    byteLength: 120_000,
+                },
+            ],
         };
 
-        const markup = renderToStaticMarkup(<WeeklyMealMenu meal={meal} weekKey="2026-08-10"/>);
+        const markup = renderToStaticMarkup(<WeeklyMealMenu meal={meal} weekKey="2026-08-10" />);
 
         expect(markup).toContain('8월 2주차 식단표');
         expect(markup).toContain('8월 10일 ~ 8월 16일');
@@ -52,7 +56,7 @@ describe('WeeklyMealMenu', () => {
         };
 
         const markup = renderToStaticMarkup(
-            <WeeklyMealMenu meal={meal} showSourceLink={false} weekKey="2026-07-20"/>,
+            <WeeklyMealMenu meal={meal} showSourceLink={false} weekKey="2026-07-20" />,
         );
 
         expect(markup).not.toContain('급식표 보러가기');
@@ -69,7 +73,7 @@ describe('WeeklyMealMenu', () => {
             images: [],
         };
 
-        const markup = renderToStaticMarkup(<WeeklyMealMenu meal={meal} weekKey="2026-08-10"/>);
+        const markup = renderToStaticMarkup(<WeeklyMealMenu meal={meal} weekKey="2026-08-10" />);
 
         expect(markup).toContain('급식표 텍스트 내용');
         expect(markup).toContain('월요일 중식: 잡곡밥, 육개장');

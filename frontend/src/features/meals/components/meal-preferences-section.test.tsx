@@ -1,7 +1,9 @@
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, test, vi} from 'vitest';
+
 import type {MealPreferences} from '@/api/dashboard-api';
+
 import {MealPreferencesSection} from './meal-preferences-section';
 
 const {api, queryKeys} = vi.hoisted(() => ({
@@ -35,7 +37,7 @@ function renderPreferences(): string {
     client.setQueryData(queryKeys.mealPreferences, preferences);
     return renderToStaticMarkup(
         <QueryClientProvider client={client}>
-            <MealPreferencesSection/>
+            <MealPreferencesSection />
         </QueryClientProvider>,
     );
 }

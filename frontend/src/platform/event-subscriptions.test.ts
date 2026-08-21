@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+
 import {test} from 'vitest';
+
 import {
     createDesktopSubscriptionRegistry,
     disposeDesktopSubscriptions,
@@ -29,13 +31,17 @@ test('desktop event listeners start concurrently and clean up after normal regis
             starts.push(index);
             return entry.promise;
         }),
-        async () => { readyCount += 1; },
+        async () => {
+            readyCount += 1;
+        },
     );
 
     assert.deepEqual(starts, [0, 1, 2]);
-    registrations.forEach((entry, index) => entry.resolve(() => {
-        cleanupCounts[index] = (cleanupCounts[index] ?? 0) + 1;
-    }));
+    registrations.forEach((entry, index) =>
+        entry.resolve(() => {
+            cleanupCounts[index] = (cleanupCounts[index] ?? 0) + 1;
+        }),
+    );
     await registration;
     assert.equal(readyCount, 1);
 
@@ -52,12 +58,16 @@ test('desktop event listeners resolving after disposal are immediately removed w
     const registration = registerDesktopSubscriptions(
         registry,
         registrations.map((entry) => () => entry.promise),
-        async () => { readyCount += 1; },
+        async () => {
+            readyCount += 1;
+        },
     );
     disposeDesktopSubscriptions(registry);
-    registrations.forEach((entry, index) => entry.resolve(() => {
-        cleanupCounts[index] = (cleanupCounts[index] ?? 0) + 1;
-    }));
+    registrations.forEach((entry, index) =>
+        entry.resolve(() => {
+            cleanupCounts[index] = (cleanupCounts[index] ?? 0) + 1;
+        }),
+    );
     await registration;
 
     assert.equal(readyCount, 0);
@@ -72,11 +82,19 @@ test('partial listener registration is rolled back when one registration fails',
         registerDesktopSubscriptions(
             registry,
             [
-                async () => () => { cleanupCounts[0] = (cleanupCounts[0] ?? 0) + 1; },
-                async () => { throw new Error('LISTEN_FAILED'); },
-                async () => () => { cleanupCounts[1] = (cleanupCounts[1] ?? 0) + 1; },
+                async () => () => {
+                    cleanupCounts[0] = (cleanupCounts[0] ?? 0) + 1;
+                },
+                async () => {
+                    throw new Error('LISTEN_FAILED');
+                },
+                async () => () => {
+                    cleanupCounts[1] = (cleanupCounts[1] ?? 0) + 1;
+                },
             ],
-            async () => { throw new Error('READY_MUST_NOT_RUN'); },
+            async () => {
+                throw new Error('READY_MUST_NOT_RUN');
+            },
         ),
         /LISTEN_FAILED/,
     );

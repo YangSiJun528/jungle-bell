@@ -1,14 +1,10 @@
-import {
-    createContext,
-    useContext,
-} from 'react';
 import type {QueryClient} from '@tanstack/react-query';
+import {createContext, useContext} from 'react';
+
 import {createDashboardApi, type DashboardApi} from '@/api/dashboard-api';
 import type {PlatformAdapter} from '@/platform/contracts';
-import {
-    laundryQueryContract,
-    mealsQueryContract,
-} from './campus-query-options';
+
+import {laundryQueryContract, mealsQueryContract} from './campus-query-options';
 
 export const queryKeys = {
     laundry: laundryQueryContract.queryKey,

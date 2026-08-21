@@ -37,11 +37,11 @@ export function laundryCapacity(
     locallyReliable: boolean,
 ): LaundryCapacityView {
     return {
-        men: locallyReliable && capacity?.men.reliable === true
-            ? capacity.men.startableLoads
-            : null,
-        women: locallyReliable && capacity?.women.reliable === true
-            ? capacity.women.startableLoads
-            : null,
+        men:
+            locallyReliable && capacity?.men.reliable === true ? capacity.men.startableLoads : null,
+        women:
+            locallyReliable && capacity?.women.reliable === true
+                ? capacity.women.startableLoads
+                : null,
     };
 }

@@ -1,0 +1,33 @@
+{
+    "$schema": "./node_modules/oxfmt/configuration_schema.json",
+    "printWidth": 100,
+    "tabWidth": 4,
+    "useTabs": false,
+    "semi": true,
+    "singleQuote": true,
+    "jsxSingleQuote": false,
+    "quoteProps": "as-needed",
+    "trailingComma": "all",
+    "bracketSpacing": false,
+    "bracketSameLine": false,
+    "arrowParens": "always",
+    "endOfLine": "lf",
+    "insertFinalNewline": true,
+    "objectWrap": "preserve",
+    "proseWrap": "preserve",
+    "embeddedLanguageFormatting": "auto",
+    "ignorePatterns": ["dist/**", "coverage/**"],
+    "sortImports": {
+        "partitionByComment": true,
+        "sortSideEffects": false
+    },
+    "sortPackageJson": {
+        "sortScripts": false
+    },
+    "sortTailwindcss": {
+        "stylesheet": "./src/app/styles/globals.css",
+        "functions": ["cn", "clsx", "cva", "twMerge"],
+        "preserveDuplicates": false,
+        "preserveWhitespace": false
+    }
+}

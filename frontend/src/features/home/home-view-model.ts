@@ -5,14 +5,11 @@ import type {
     DashboardMealPost,
     DashboardMealsSnapshot,
 } from '@/api/dashboard-api';
-import {laundryCapacity} from '@/domain/laundry/capacity';
-import {laundrySituationDataIsReliable} from '@/domain/laundry/freshness';
-import {
-    mealPeriodLabel as sharedMealPeriodLabel,
-    selectTodayMeals,
-} from '@/domain/meals/today';
 import {effectiveAttendanceDate} from '@/domain/attendance/attendance-day';
 import {ATTENDANCE_FRESHNESS_MS} from '@/domain/attendance/freshness';
+import {laundryCapacity} from '@/domain/laundry/capacity';
+import {laundrySituationDataIsReliable} from '@/domain/laundry/freshness';
+import {mealPeriodLabel as sharedMealPeriodLabel, selectTodayMeals} from '@/domain/meals/today';
 
 export interface LaundryHomeSummary {
     men: number | null;
@@ -46,8 +43,9 @@ export function homeAttendanceState(
     if (attendance.snapshot.attendanceDate !== effectiveAttendanceDate(reference.getTime())) {
         return {kind: 'different-attendance-day', attendance};
     }
-    const localObservationExpired = attendance.source === 'desktop'
-        && reference.getTime() - Date.parse(attendance.lastSyncedAt) > ATTENDANCE_FRESHNESS_MS;
+    const localObservationExpired =
+        attendance.source === 'desktop' &&
+        reference.getTime() - Date.parse(attendance.lastSyncedAt) > ATTENDANCE_FRESHNESS_MS;
     if (attendance.freshness !== 'fresh' || localObservationExpired) {
         return {kind: 'stale', attendance};
     }
@@ -60,9 +58,10 @@ export function homeLaundrySummary(input: {
 }): LaundryHomeSummary {
     const snapshot = input.snapshot;
     const savedAt = Date.parse(snapshot.asOf);
-    const locallyReliable = snapshot.quality.collectorHealthy
-        && snapshot.quality.collection === 'SUCCESS'
-        && laundrySituationDataIsReliable({
+    const locallyReliable =
+        snapshot.quality.collectorHealthy &&
+        snapshot.quality.collection === 'SUCCESS' &&
+        laundrySituationDataIsReliable({
             hasData: snapshot.machines.length > 0,
             error: null,
             sourceFreshness: snapshot.quality.sourceFreshness,

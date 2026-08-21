@@ -1,4 +1,5 @@
 import {describe, expect, test, vi} from 'vitest';
+
 import {reportWebUiOpened, startWebUsageReporting} from './usage-reporting';
 
 describe('web usage reporting', () => {
@@ -8,16 +9,21 @@ describe('web usage reporting', () => {
         await reportWebUiOpened(false, fetcher);
 
         expect(fetcher).toHaveBeenCalledOnce();
-        expect(fetcher).toHaveBeenCalledWith('/api/public/usage/ui-opened', expect.objectContaining({
-            method: 'POST',
-            credentials: 'include',
-            body: JSON.stringify({client: 'web'}),
-        }));
+        expect(fetcher).toHaveBeenCalledWith(
+            '/api/public/usage/ui-opened',
+            expect.objectContaining({
+                method: 'POST',
+                credentials: 'include',
+                body: JSON.stringify({client: 'web'}),
+            }),
+        );
     });
 
     test('PWA uses its authenticated session and falls back only after 401', async () => {
-        const connected = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
-            new Response(null, {status: 204}));
+        const connected = vi.fn(
+            async (_input: RequestInfo | URL, _init?: RequestInit) =>
+                new Response(null, {status: 204}),
+        );
         await reportWebUiOpened(true, connected);
         expect(connected).toHaveBeenCalledTimes(1);
         expect(connected.mock.calls[0]?.[0]).toBe('/api/me/usage/ui-opened');
@@ -39,12 +45,19 @@ describe('web usage reporting', () => {
         let visibilityState: DocumentVisibilityState = 'visible';
         let listener: (() => void) | undefined;
         let resolveRequest: (() => void) | undefined;
-        const fetcher = vi.fn(() => new Promise<Response>((resolve) => {
-            resolveRequest = () => resolve(new Response(null, {status: 204}));
-        }));
+        const fetcher = vi.fn(
+            () =>
+                new Promise<Response>((resolve) => {
+                    resolveRequest = () => resolve(new Response(null, {status: 204}));
+                }),
+        );
         const documentObject = {
-            get visibilityState() { return visibilityState; },
-            addEventListener: (_type: 'visibilitychange', value: () => void) => { listener = value; },
+            get visibilityState() {
+                return visibilityState;
+            },
+            addEventListener: (_type: 'visibilitychange', value: () => void) => {
+                listener = value;
+            },
             removeEventListener: vi.fn(),
         };
 
@@ -60,6 +73,9 @@ describe('web usage reporting', () => {
         listener?.();
         expect(fetcher).toHaveBeenCalledTimes(2);
         stop();
-        expect(documentObject.removeEventListener).toHaveBeenCalledWith('visibilitychange', listener);
+        expect(documentObject.removeEventListener).toHaveBeenCalledWith(
+            'visibilitychange',
+            listener,
+        );
     });
 });

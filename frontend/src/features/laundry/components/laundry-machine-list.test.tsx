@@ -1,55 +1,60 @@
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, it} from 'vitest';
+
 import type {DashboardLaundryMachine} from '@/domain/laundry/capacity';
+
 import {LaundryMachineList} from './laundry-machine-list';
 
 const NOW_MS = Date.parse('2026-08-11T03:00:00.000Z');
 
-const machines: DashboardLaundryMachine[] = [{
-    id: '워시타워_2',
-    zone: 'men',
-    washer: {
-        appliance: 'washer',
-        operationalStatus: 'RUNNING',
-        state: {code: 'RINSING'},
-        totalMinutes: 60,
-        startedAt: '2026-08-11T02:30:00.000Z',
-        estimatedFinishAt: '2026-08-11T03:30:00.000Z',
-        projection: {status: 'ESTIMATED_RUNNING', remainingMinutes: 35, estimated: true},
-        attempts: 6,
-        errors: 1,
-        rate: 16.7,
-        riskLevel: 'slight',
+const machines: DashboardLaundryMachine[] = [
+    {
+        id: '워시타워_2',
+        zone: 'men',
+        washer: {
+            appliance: 'washer',
+            operationalStatus: 'RUNNING',
+            state: {code: 'RINSING'},
+            totalMinutes: 60,
+            startedAt: '2026-08-11T02:30:00.000Z',
+            estimatedFinishAt: '2026-08-11T03:30:00.000Z',
+            projection: {status: 'ESTIMATED_RUNNING', remainingMinutes: 35, estimated: true},
+            attempts: 6,
+            errors: 1,
+            rate: 16.7,
+            riskLevel: 'slight',
+        },
+        dryer: {
+            appliance: 'dryer',
+            operationalStatus: 'IDLE',
+            projection: {status: 'IDLE', remainingMinutes: 0},
+            attempts: 10,
+            errors: 1,
+            rate: 10,
+            riskLevel: 'safe',
+        },
     },
-    dryer: {
-        appliance: 'dryer',
-        operationalStatus: 'IDLE',
-        projection: {status: 'IDLE', remainingMinutes: 0},
-        attempts: 10,
-        errors: 1,
-        rate: 10,
-        riskLevel: 'safe',
+    {
+        id: '워시타워_1',
+        zone: 'men',
+        washer: null,
+        dryer: {
+            appliance: 'dryer',
+            operationalStatus: 'ERROR',
+            errorCode: 'EMPTY_WATER_ALERT_ERROR',
+            projection: {status: 'ERROR'},
+            attempts: 5,
+            errors: 3,
+            rate: 60,
+            riskLevel: 'caution',
+        },
     },
-}, {
-    id: '워시타워_1',
-    zone: 'men',
-    washer: null,
-    dryer: {
-        appliance: 'dryer',
-        operationalStatus: 'ERROR',
-        errorCode: 'EMPTY_WATER_ALERT_ERROR',
-        projection: {status: 'ERROR'},
-        attempts: 5,
-        errors: 3,
-        rate: 60,
-        riskLevel: 'caution',
-    },
-}];
+];
 
 describe('LaundryMachineList', () => {
     it('번호순 워시타워 목록에 세탁기와 건조기 상세 상태를 표시한다', () => {
         const markup = renderToStaticMarkup(
-            <LaundryMachineList machines={machines} nowMs={NOW_MS}/>,
+            <LaundryMachineList machines={machines} nowMs={NOW_MS} />,
         );
 
         expect(markup).toContain('기기별 상세 상태');
@@ -71,7 +76,7 @@ describe('LaundryMachineList', () => {
 
     it('진행률과 시간 정보를 접근 가능한 이름으로 제공한다', () => {
         const markup = renderToStaticMarkup(
-            <LaundryMachineList machines={machines} nowMs={NOW_MS}/>,
+            <LaundryMachineList machines={machines} nowMs={NOW_MS} />,
         );
 
         expect(markup).toContain('role="progressbar"');
@@ -86,10 +91,10 @@ describe('LaundryMachineList', () => {
 
     it('shows recent warnings only for slight and caution appliances', () => {
         const visible = renderToStaticMarkup(
-            <LaundryMachineList machines={machines} nowMs={NOW_MS} showRiskWarnings/>,
+            <LaundryMachineList machines={machines} nowMs={NOW_MS} showRiskWarnings />,
         );
         const hidden = renderToStaticMarkup(
-            <LaundryMachineList machines={machines} nowMs={NOW_MS} showRiskWarnings={false}/>,
+            <LaundryMachineList machines={machines} nowMs={NOW_MS} showRiskWarnings={false} />,
         );
 
         expect(visible.match(/data-laundry-risk-notice="true"/gu)).toHaveLength(2);
@@ -107,22 +112,24 @@ describe('LaundryMachineList', () => {
     it('완료 확인 상태에만 보정값 안내를 열 수 있는 버튼을 표시한다', () => {
         const markup = renderToStaticMarkup(
             <LaundryMachineList
-                machines={[{
-                    id: '워시타워_3',
-                    zone: 'men',
-                    washer: null,
-                    dryer: {
-                        appliance: 'dryer',
-                        operationalStatus: 'RUNNING',
-                        state: {code: 'END'},
-                        estimatedFinishAt: '2026-08-11T02:59:00.000Z',
-                        projection: {
-                            status: 'AWAITING_COMPLETION_CONFIRMATION',
-                            remainingMinutes: 0,
-                            estimated: true,
+                machines={[
+                    {
+                        id: '워시타워_3',
+                        zone: 'men',
+                        washer: null,
+                        dryer: {
+                            appliance: 'dryer',
+                            operationalStatus: 'RUNNING',
+                            state: {code: 'END'},
+                            estimatedFinishAt: '2026-08-11T02:59:00.000Z',
+                            projection: {
+                                status: 'AWAITING_COMPLETION_CONFIRMATION',
+                                remainingMinutes: 0,
+                                estimated: true,
+                            },
                         },
                     },
-                }]}
+                ]}
                 nowMs={NOW_MS}
             />,
         );
@@ -138,13 +145,15 @@ describe('LaundryMachineList', () => {
 
     it('상세 목록은 기본 앱 너비에서 워시타워 세 개를 한 행에 배치한다', () => {
         const markup = renderToStaticMarkup(
-            <LaundryMachineList machines={machines} nowMs={NOW_MS}/>,
+            <LaundryMachineList machines={machines} nowMs={NOW_MS} />,
         );
 
         expect(markup).toContain('data-laundry-detail-list="true"');
         expect(markup).toContain('data-laundry-machine-card="true"');
         expect(markup).toContain('[.border-b]:pb-3');
-        expect(markup).toContain('<h3 class="text-base font-semibold leading-none">1번 워시타워</h3>');
+        expect(markup).toContain(
+            '<h3 class="text-base leading-none font-semibold">1번 워시타워</h3>',
+        );
         expect(markup).toContain('auto-rows-fr');
         expect(markup).toContain('md:grid-cols-2');
         expect(markup).toContain('lg:grid-cols-3');
@@ -158,11 +167,12 @@ describe('LaundryMachineList', () => {
     it('nine wash tower cards share equal outer rows and two internal appliance rows', () => {
         const nineMachines = Array.from({length: 9}, (_, index) => ({
             id: `워시타워_${index + 1}`,
-            zone: index < 5 ? 'men' as const : index < 7 ? 'common' as const : 'women' as const,
+            zone:
+                index < 5 ? ('men' as const) : index < 7 ? ('common' as const) : ('women' as const),
             washer: null,
             dryer: null,
         }));
-        const markup = renderToStaticMarkup(<LaundryMachineList machines={nineMachines}/>);
+        const markup = renderToStaticMarkup(<LaundryMachineList machines={nineMachines} />);
 
         expect(markup.match(/data-laundry-machine-card="true"/gu)).toHaveLength(9);
         expect(markup).toContain('auto-rows-fr');

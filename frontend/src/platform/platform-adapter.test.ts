@@ -1,9 +1,7 @@
 import {describe, expect, it, vi} from 'vitest';
+
 import type {NativeBridge, PwaCapabilityAdapter} from './contracts';
-import {
-    PlatformCapabilityUnavailableError,
-    unavailableEventAdapter,
-} from './contracts';
+import {PlatformCapabilityUnavailableError, unavailableEventAdapter} from './contracts';
 import {createTauriPlatformAdapter} from './tauri/adapter';
 import {createWebPlatformAdapter} from './web/adapter';
 

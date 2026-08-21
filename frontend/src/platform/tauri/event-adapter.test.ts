@@ -1,4 +1,5 @@
 import {beforeEach, expect, test, vi} from 'vitest';
+
 import {createTauriEventAdapter} from './event-adapter';
 
 const listen = vi.hoisted(() => vi.fn(async () => () => undefined));

@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+
 import {test} from 'vitest';
+
 import {laundrySituationDataIsReliable} from './freshness';
 
 test('신뢰도는 데이터·오류·원본 상태·스냅샷 나이를 함께 검사한다', () => {
@@ -16,9 +18,18 @@ test('신뢰도는 데이터·오류·원본 상태·스냅샷 나이를 함께 
     assert.equal(laundrySituationDataIsReliable(base), true);
     assert.equal(laundrySituationDataIsReliable({...base, hasData: false}), false);
     assert.equal(laundrySituationDataIsReliable({...base, error: 'network'}), false);
-    assert.equal(laundrySituationDataIsReliable({...base, sourceFreshness: 'COLLECTION_GAP'}), false);
+    assert.equal(
+        laundrySituationDataIsReliable({...base, sourceFreshness: 'COLLECTION_GAP'}),
+        false,
+    );
     assert.equal(laundrySituationDataIsReliable({...base, snapshotSavedAt: nowMs - 599_999}), true);
-    assert.equal(laundrySituationDataIsReliable({...base, snapshotSavedAt: nowMs - 600_001}), false);
-    assert.equal(laundrySituationDataIsReliable({...base, expectedRefreshIntervalSeconds: 0}), false);
+    assert.equal(
+        laundrySituationDataIsReliable({...base, snapshotSavedAt: nowMs - 600_001}),
+        false,
+    );
+    assert.equal(
+        laundrySituationDataIsReliable({...base, expectedRefreshIntervalSeconds: 0}),
+        false,
+    );
     assert.equal(laundrySituationDataIsReliable({...base, snapshotSavedAt: nowMs + 1}), false);
 });

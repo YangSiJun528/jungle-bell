@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+
 import {test} from 'vitest';
+
 import {laundryCapacity} from './capacity';
 
 const authoritativeCapacity = {
@@ -31,8 +33,14 @@ test('서버가 산출한 남녀별 횟수만 그대로 표시한다', () => {
 test('서버 또는 로컬 snapshot을 신뢰할 수 없으면 횟수를 추측하지 않는다', () => {
     assert.deepEqual(laundryCapacity(authoritativeCapacity, false), {men: null, women: null});
     assert.deepEqual(laundryCapacity(null, true), {men: null, women: null});
-    assert.deepEqual(laundryCapacity({
-        ...authoritativeCapacity,
-        women: {...authoritativeCapacity.women, reliable: false, startableLoads: null},
-    }, true), {men: 3, women: null});
+    assert.deepEqual(
+        laundryCapacity(
+            {
+                ...authoritativeCapacity,
+                women: {...authoritativeCapacity.women, reliable: false, startableLoads: null},
+            },
+            true,
+        ),
+        {men: 3, women: null},
+    );
 });

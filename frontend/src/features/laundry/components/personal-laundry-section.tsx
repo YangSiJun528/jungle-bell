@@ -1,17 +1,15 @@
-import {useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
-import {
-    Bell,
-    BellPlus,
-    CircleAlert,
-    LoaderCircle,
-    RefreshCw,
-    Smartphone,
-    X,
-} from 'lucide-react';
-import {
-    useDashboardAccount,
-} from '@/app/dashboard-account';
+import {Bell, BellPlus, CircleAlert, LoaderCircle, RefreshCw, Smartphone, X} from 'lucide-react';
+import {useState} from 'react';
+
+import {accountAuthenticationRequired} from '@/api/account-authentication';
+import type {
+    DashboardLaundrySnapshot,
+    LaundryApplianceKind,
+    LaundryNotificationMode,
+    LaundryWatch,
+} from '@/api/dashboard-api';
+import {useDashboardAccount} from '@/app/dashboard-account';
 import {assertLmsAuthenticated, assertServerSessionReady} from '@/app/dashboard-account-state';
 import {queryKeys, useDashboardEnvironment} from '@/app/dashboard-context';
 import {PersonalFeatureSlot} from '@/app/personal-feature-slot';
@@ -19,13 +17,7 @@ import {useAttendanceQuery, useRefreshAttendanceMutation} from '@/app/use-dashbo
 import {LoadingState} from '@/components/dashboard/async-state';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Button} from '@/components/ui/button';
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
+import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@/components/ui/card';
 import {Input} from '@/components/ui/input';
 import {Label} from '@/components/ui/label';
 import {
@@ -35,13 +27,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import type {
-    DashboardLaundrySnapshot,
-    LaundryApplianceKind,
-    LaundryNotificationMode,
-    LaundryWatch,
-} from '@/api/dashboard-api';
-import {accountAuthenticationRequired} from '@/api/account-authentication';
 import {
     applianceLabel,
     buildLaundryWatchInput,
@@ -90,20 +75,24 @@ function LaundryWatchCard({
     onRemove,
 }: LaundryWatchCardProps) {
     const machineIds = [...new Set(targets.map((target) => target.machineId))];
-    const applianceTargets = targets.filter((target) => target.machineId === selectedTarget?.machineId);
+    const applianceTargets = targets.filter(
+        (target) => target.machineId === selectedTarget?.machineId,
+    );
     const sessionUnavailable = selectedTarget?.sessionId === null;
     return (
         <Card className="min-w-0 gap-4">
             <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                    <Bell className="size-4 text-primary"/>
+                    <Bell className="size-4 text-primary" />
                     내 세탁 알림
                 </CardTitle>
-                <CardDescription>워시타워와 기기, 알림 시점을 선택해 한 가지 조건만 설정합니다.</CardDescription>
+                <CardDescription>
+                    워시타워와 기기, 알림 시점을 선택해 한 가지 조건만 설정합니다.
+                </CardDescription>
             </CardHeader>
             <CardContent className="min-w-0 space-y-4">
                 {loading ? (
-                    <LoadingState label="세탁 알림을 불러오고 있습니다."/>
+                    <LoadingState label="세탁 알림을 불러오고 있습니다." />
                 ) : (
                     <>
                         {targets.length > 0 ? (
@@ -119,10 +108,10 @@ function LaundryWatchCard({
                                     >
                                         <SelectTrigger
                                             aria-label="워시타워 번호"
-                                            className="min-w-0 w-full"
+                                            className="w-full min-w-0"
                                             data-laundry-watch-machine="true"
                                         >
-                                            <SelectValue placeholder="워시타워 선택"/>
+                                            <SelectValue placeholder="워시타워 선택" />
                                         </SelectTrigger>
                                         <SelectContent>
                                             {machineIds.map((machineId) => (
@@ -137,18 +126,23 @@ function LaundryWatchCard({
                                     <Label>세탁기 또는 건조기</Label>
                                     <Select
                                         value={selectedTarget?.appliance ?? ''}
-                                        onValueChange={(value) => onApplianceChange(value as LaundryApplianceKind)}
+                                        onValueChange={(value) =>
+                                            onApplianceChange(value as LaundryApplianceKind)
+                                        }
                                     >
                                         <SelectTrigger
                                             aria-label="세탁기 또는 건조기"
-                                            className="min-w-0 w-full"
+                                            className="w-full min-w-0"
                                             data-laundry-watch-appliance="true"
                                         >
-                                            <SelectValue placeholder="기기 선택"/>
+                                            <SelectValue placeholder="기기 선택" />
                                         </SelectTrigger>
                                         <SelectContent>
                                             {applianceTargets.map((target) => (
-                                                <SelectItem key={target.appliance} value={target.appliance}>
+                                                <SelectItem
+                                                    key={target.appliance}
+                                                    value={target.appliance}
+                                                >
                                                     {applianceLabel(target.appliance)}
                                                 </SelectItem>
                                             ))}
@@ -159,19 +153,27 @@ function LaundryWatchCard({
                                     <Label>알림 시점</Label>
                                     <Select
                                         value={notificationMode}
-                                        onValueChange={(value) => onModeChange(value as LaundryNotificationMode)}
+                                        onValueChange={(value) =>
+                                            onModeChange(value as LaundryNotificationMode)
+                                        }
                                     >
                                         <SelectTrigger
                                             aria-label="알림 시점"
-                                            className="min-w-0 w-full"
+                                            className="w-full min-w-0"
                                             data-laundry-watch-mode="true"
                                         >
-                                            <SelectValue/>
+                                            <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="before-completion">N분 남았을 때</SelectItem>
-                                            <SelectItem value="estimated-completion">완료 예상</SelectItem>
-                                            <SelectItem value="confirmed-completion">완료 확정</SelectItem>
+                                            <SelectItem value="before-completion">
+                                                N분 남았을 때
+                                            </SelectItem>
+                                            <SelectItem value="estimated-completion">
+                                                완료 예상
+                                            </SelectItem>
+                                            <SelectItem value="confirmed-completion">
+                                                완료 확정
+                                            </SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -186,7 +188,9 @@ function LaundryWatchCard({
                             <div className="flex min-w-0 flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-end">
                                 {notificationMode === 'before-completion' ? (
                                     <div className="min-w-0 flex-1 space-y-2">
-                                        <Label htmlFor="laundry-notify-before-minutes">남은 시간(분)</Label>
+                                        <Label htmlFor="laundry-notify-before-minutes">
+                                            남은 시간(분)
+                                        </Label>
                                         <Input
                                             id="laundry-notify-before-minutes"
                                             inputMode="numeric"
@@ -196,7 +200,8 @@ function LaundryWatchCard({
                                             value={notifyBeforeMinutes}
                                             onChange={(event) => {
                                                 const value = Number(event.target.value);
-                                                if (Number.isInteger(value)) onNotifyBeforeMinutesChange(value);
+                                                if (Number.isInteger(value))
+                                                    onNotifyBeforeMinutesChange(value);
                                             }}
                                         />
                                     </div>
@@ -210,17 +215,22 @@ function LaundryWatchCard({
                                 <Button
                                     data-laundry-watch-add="true"
                                     className="w-full shrink-0 sm:w-auto"
-                                    disabled={!selectedTarget
-                                        || sessionUnavailable
-                                        || (notificationMode === 'before-completion'
-                                            && (notifyBeforeMinutes < 1 || notifyBeforeMinutes > 180))
-                                        || busy
-                                        || hasDuplicateActiveWatch(activeWatches, selectedTarget)}
+                                    disabled={
+                                        !selectedTarget ||
+                                        sessionUnavailable ||
+                                        (notificationMode === 'before-completion' &&
+                                            (notifyBeforeMinutes < 1 ||
+                                                notifyBeforeMinutes > 180)) ||
+                                        busy ||
+                                        hasDuplicateActiveWatch(activeWatches, selectedTarget)
+                                    }
                                     onClick={onAdd}
                                 >
-                                    {adding
-                                        ? <LoaderCircle className="animate-spin"/>
-                                        : <BellPlus/>}
+                                    {adding ? (
+                                        <LoaderCircle className="animate-spin" />
+                                    ) : (
+                                        <BellPlus />
+                                    )}
                                     알림 확정
                                 </Button>
                             </div>
@@ -239,10 +249,11 @@ function LaundryWatchCard({
                             <ul className="divide-y rounded-lg border">
                                 {activeWatches.map((watch) => (
                                     <li className="flex items-center gap-3 p-3" key={watch.id}>
-                                        <Bell className="size-4 shrink-0 text-primary"/>
+                                        <Bell className="size-4 shrink-0 text-primary" />
                                         <div className="min-w-0 flex-1 text-sm">
                                             <p className="font-medium">
-                                                {machineLabel(watch.machineId)} · {applianceLabel(watch.appliance)}
+                                                {machineLabel(watch.machineId)} ·{' '}
+                                                {applianceLabel(watch.appliance)}
                                             </p>
                                             <p className="truncate text-xs text-muted-foreground">
                                                 {watchConditionLabel(watch)}
@@ -255,13 +266,15 @@ function LaundryWatchCard({
                                             variant="ghost"
                                             onClick={() => onRemove(watch.id)}
                                         >
-                                            <X/>
+                                            <X />
                                         </Button>
                                     </li>
                                 ))}
                             </ul>
                         ) : (
-                            <p className="text-sm text-muted-foreground">설정된 세탁 알림이 없습니다.</p>
+                            <p className="text-sm text-muted-foreground">
+                                설정된 세탁 알림이 없습니다.
+                            </p>
                         )}
                     </>
                 )}
@@ -270,9 +283,7 @@ function LaundryWatchCard({
     );
 }
 
-function AuthenticatedPersonalLaundrySection({
-    machines,
-}: PersonalLaundrySectionProps) {
+function AuthenticatedPersonalLaundrySection({machines}: PersonalLaundrySectionProps) {
     const {api, platform} = useDashboardEnvironment();
     const account = useDashboardAccount();
     const attendance = useAttendanceQuery();
@@ -280,10 +291,11 @@ function AuthenticatedPersonalLaundrySection({
     const client = useQueryClient();
     const [selectedMachineId, setSelectedMachineId] = useState('');
     const [selectedAppliance, setSelectedAppliance] = useState<LaundryApplianceKind>('washer');
-    const [notificationMode, setNotificationMode] = useState<LaundryNotificationMode>('before-completion');
+    const [notificationMode, setNotificationMode] =
+        useState<LaundryNotificationMode>('before-completion');
     const [notifyBeforeMinutes, setNotifyBeforeMinutes] = useState(10);
-    const attendanceReady = attendance.data?.state === 'loaded'
-        && attendance.data.attendance.status === 'available';
+    const attendanceReady =
+        attendance.data?.state === 'loaded' && attendance.data.attendance.status === 'available';
 
     const watches = useQuery({
         queryKey: queryKeys.laundryWatches,
@@ -314,47 +326,48 @@ function AuthenticatedPersonalLaundrySection({
         onSuccess: invalidateWatches,
     });
 
-    const targets = laundryTargets(machines.map((machine) => ({
-        ...machine,
-        washer: machine.washer ? {...machine.washer, appliance: 'washer' as const} : null,
-        dryer: machine.dryer ? {...machine.dryer, appliance: 'dryer' as const} : null,
-    })));
+    const targets = laundryTargets(
+        machines.map((machine) => ({
+            ...machine,
+            washer: machine.washer ? {...machine.washer, appliance: 'washer' as const} : null,
+            dryer: machine.dryer ? {...machine.dryer, appliance: 'dryer' as const} : null,
+        })),
+    );
     const effectiveMachineId = targets.some((target) => target.machineId === selectedMachineId)
         ? selectedMachineId
         : (targets[0]?.machineId ?? '');
     const targetsForMachine = targets.filter((target) => target.machineId === effectiveMachineId);
-    const effectiveAppliance = targetsForMachine.some((target) => target.appliance === selectedAppliance)
+    const effectiveAppliance = targetsForMachine.some(
+        (target) => target.appliance === selectedAppliance,
+    )
         ? selectedAppliance
         : (targetsForMachine[0]?.appliance ?? 'washer');
-    const selectedTarget = targetsForMachine.find((target) => target.appliance === effectiveAppliance) ?? null;
+    const selectedTarget =
+        targetsForMachine.find((target) => target.appliance === effectiveAppliance) ?? null;
     const activeWatches = (watches.data ?? []).filter((watch) => watch.status === 'active');
     const personalBusy = addWatch.isPending || removeWatch.isPending;
-    const personalError = watches.error
-        ?? addWatch.error
-        ?? removeWatch.error;
-    const authRequired = attendance.data?.state === 'auth-required'
-        || accountAuthenticationRequired(personalError);
+    const personalError = watches.error ?? addWatch.error ?? removeWatch.error;
+    const authRequired =
+        attendance.data?.state === 'auth-required' || accountAuthenticationRequired(personalError);
 
     if (authRequired) {
         return (
             <Alert>
-                <Smartphone/>
+                <Smartphone />
                 <AlertTitle>PC 연결이 필요합니다.</AlertTitle>
-                <AlertDescription>
-                    PC 앱 연결 후 개인 세탁 기능 사용 가능
-                </AlertDescription>
+                <AlertDescription>PC 앱 연결 후 개인 세탁 기능 사용 가능</AlertDescription>
             </Alert>
         );
     }
 
     if (attendance.isPending) {
-        return <LoadingState label="개인 세탁 기능 준비 중"/>;
+        return <LoadingState label="개인 세탁 기능 준비 중" />;
     }
 
     if (attendance.isError) {
         return (
             <Alert variant="destructive">
-                <CircleAlert aria-hidden="true"/>
+                <CircleAlert aria-hidden="true" />
                 <AlertTitle>계정 상태 확인 실패</AlertTitle>
                 <AlertDescription>
                     <Button size="sm" variant="outline" onClick={() => void attendance.refetch()}>
@@ -368,7 +381,7 @@ function AuthenticatedPersonalLaundrySection({
     if (!attendanceReady) {
         return (
             <Alert>
-                <RefreshCw aria-hidden="true"/>
+                <RefreshCw aria-hidden="true" />
                 <AlertTitle>출석 동기화가 필요합니다.</AlertTitle>
                 <AlertDescription>
                     <Button
@@ -396,9 +409,16 @@ function AuthenticatedPersonalLaundrySection({
                 notifyBeforeMinutes={notifyBeforeMinutes}
                 selectedTarget={selectedTarget}
                 targets={targets}
-                onAdd={() => selectedTarget && addWatch.mutate(
-                    buildLaundryWatchInput(selectedTarget, notificationMode, notifyBeforeMinutes),
-                )}
+                onAdd={() =>
+                    selectedTarget &&
+                    addWatch.mutate(
+                        buildLaundryWatchInput(
+                            selectedTarget,
+                            notificationMode,
+                            notifyBeforeMinutes,
+                        ),
+                    )
+                }
                 onApplianceChange={setSelectedAppliance}
                 onMachineChange={setSelectedMachineId}
                 onModeChange={setNotificationMode}
@@ -408,15 +428,11 @@ function AuthenticatedPersonalLaundrySection({
 
             {personalError ? (
                 <Alert variant="destructive">
-                    <CircleAlert/>
+                    <CircleAlert />
                     <AlertTitle>세탁 알림 처리 실패</AlertTitle>
                     <AlertDescription className="gap-3">
                         <p>잠시 후 새로고침하세요.</p>
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => void watches.refetch()}
-                        >
+                        <Button size="sm" variant="outline" onClick={() => void watches.refetch()}>
                             새로고침
                         </Button>
                     </AlertDescription>
@@ -429,7 +445,7 @@ function AuthenticatedPersonalLaundrySection({
 export function PersonalLaundrySection(props: PersonalLaundrySectionProps) {
     return (
         <PersonalFeatureSlot>
-            <AuthenticatedPersonalLaundrySection {...props}/>
+            <AuthenticatedPersonalLaundrySection {...props} />
         </PersonalFeatureSlot>
     );
 }

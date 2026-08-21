@@ -1,6 +1,8 @@
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, it} from 'vitest';
+
 import type {DashboardLaundryMachine} from '@/domain/laundry/capacity';
+
 import {WashTowerGrid} from './wash-tower-grid';
 
 const NOW_MS = Date.parse('2026-08-11T03:00:00.000Z');
@@ -58,31 +60,38 @@ const machines: DashboardLaundryMachine[] = [
 
 describe('WashTowerGrid', () => {
     it('번호순 열과 실제 설치 순서인 건조기 위·세탁기 아래를 유지한다', () => {
-        const markup = renderToStaticMarkup(
-            <WashTowerGrid machines={machines} nowMs={NOW_MS}/>,
-        );
+        const markup = renderToStaticMarkup(<WashTowerGrid machines={machines} nowMs={NOW_MS} />);
         expect(markup).toContain('워시타워 번호별 세탁기와 건조기 상태');
         expect(markup).toContain('role="region"');
         expect(markup).toContain('aria-label="워시타워 상태표"');
         expect(markup).toContain('tabindex="0"');
-        expect(markup.indexOf('data-machine-id="워시타워_1"'))
-            .toBeLessThan(markup.indexOf('data-machine-id="워시타워_6"'));
-        expect(markup.indexOf('data-machine-id="워시타워_6"'))
-            .toBeLessThan(markup.indexOf('data-machine-id="워시타워_9"'));
-        expect(markup.indexOf('data-kind="dryer"'))
-            .toBeLessThan(markup.indexOf('data-kind="washer"'));
+        expect(markup.indexOf('data-machine-id="워시타워_1"')).toBeLessThan(
+            markup.indexOf('data-machine-id="워시타워_6"'),
+        );
+        expect(markup.indexOf('data-machine-id="워시타워_6"')).toBeLessThan(
+            markup.indexOf('data-machine-id="워시타워_9"'),
+        );
+        expect(markup.indexOf('data-kind="dryer"')).toBeLessThan(
+            markup.indexOf('data-kind="washer"'),
+        );
     });
 
     it('뒤섞인 입력에서도 1번부터 9번까지 물리적 배치를 유지한다', () => {
         const allTowers = [9, 2, 7, 1, 5, 3, 8, 4, 6].map((number) => ({
             id: `워시타워_${number}`,
-            zone: number <= 5 ? 'men' as const : number <= 7 ? 'common' as const : 'women' as const,
+            zone:
+                number <= 5
+                    ? ('men' as const)
+                    : number <= 7
+                      ? ('common' as const)
+                      : ('women' as const),
             washer: null,
             dryer: null,
         }));
-        const markup = renderToStaticMarkup(<WashTowerGrid machines={allTowers}/>);
+        const markup = renderToStaticMarkup(<WashTowerGrid machines={allTowers} />);
         const positions = Array.from({length: 9}, (_, index) =>
-            markup.indexOf(`aria-label="${index + 1}번,`));
+            markup.indexOf(`aria-label="${index + 1}번,`),
+        );
 
         expect(positions.every((position) => position >= 0)).toBe(true);
         expect(positions).toEqual([...positions].sort((left, right) => left - right));
@@ -90,17 +99,17 @@ describe('WashTowerGrid', () => {
 
     it('risk visibility shows only slight and caution dots without changing current state', () => {
         const visible = renderToStaticMarkup(
-            <WashTowerGrid machines={machines} nowMs={NOW_MS} showRiskIndicators/>,
+            <WashTowerGrid machines={machines} nowMs={NOW_MS} showRiskIndicators />,
         );
         const hidden = renderToStaticMarkup(
-            <WashTowerGrid machines={machines} nowMs={NOW_MS} showRiskIndicators={false}/>,
+            <WashTowerGrid machines={machines} nowMs={NOW_MS} showRiskIndicators={false} />,
         );
 
         expect(visible.match(/data-laundry-risk-indicator="true"/gu)).toHaveLength(2);
         expect(visible).toContain('data-risk-level="slight"');
         expect(visible).toContain('data-risk-level="caution"');
         expect(visible).not.toContain('data-risk-level="safe"');
-        expect(visible).toContain('absolute right-1 top-1');
+        expect(visible).toContain('absolute top-1 right-1');
         expect(visible).toContain('bg-orange-500');
         expect(visible).toContain('bg-destructive');
         expect(hidden).not.toContain('data-laundry-risk-indicator="true"');
@@ -110,9 +119,7 @@ describe('WashTowerGrid', () => {
     });
 
     it('구역과 상태에 맞는 셀 표현 및 접근성 설명을 제공한다', () => {
-        const markup = renderToStaticMarkup(
-            <WashTowerGrid machines={machines} nowMs={NOW_MS}/>,
-        );
+        const markup = renderToStaticMarkup(<WashTowerGrid machines={machines} nowMs={NOW_MS} />);
         const availableMarkup = renderToStaticMarkup(
             <WashTowerGrid
                 machines={machines.map((machine) => ({
@@ -156,14 +163,14 @@ describe('WashTowerGrid', () => {
         const numberTags = markup.match(/<span[^>]*data-laundry-zone-number="true"[^>]*>/gu) ?? [];
         expect(numberTags).toHaveLength(3);
         for (const tag of numberTags) {
-            expect(tag).not.toMatch(/\b(?:border(?:-\S+)?|rounded(?:-\S+)?|bg-(?:blue|violet|rose)-\S+)/u);
+            expect(tag).not.toMatch(
+                /\b(?:border(?:-\S+)?|rounded(?:-\S+)?|bg-(?:blue|violet|rose)-\S+)/u,
+            );
         }
     });
 
     it('세탁기와 건조기 셀을 같은 규격으로 고정한다', () => {
-        const markup = renderToStaticMarkup(
-            <WashTowerGrid machines={machines} nowMs={NOW_MS}/>,
-        );
+        const markup = renderToStaticMarkup(<WashTowerGrid machines={machines} nowMs={NOW_MS} />);
 
         expect(markup).toContain('data-wash-tower-cell="true"');
         expect(markup).toContain('h-10 w-full');
@@ -172,17 +179,13 @@ describe('WashTowerGrid', () => {
     });
 
     it('카드 구분선 아래에 별도 상단 마진을 만들지 않는다', () => {
-        const markup = renderToStaticMarkup(
-            <WashTowerGrid machines={machines} nowMs={NOW_MS}/>,
-        );
+        const markup = renderToStaticMarkup(<WashTowerGrid machines={machines} nowMs={NOW_MS} />);
 
         expect(markup).not.toContain('class="mt-4 ');
     });
 
     it('전달한 nowMs를 기준으로 실행 중 잔여 시간을 고정한다', () => {
-        const markup = renderToStaticMarkup(
-            <WashTowerGrid machines={machines} nowMs={NOW_MS}/>,
-        );
+        const markup = renderToStaticMarkup(<WashTowerGrid machines={machines} nowMs={NOW_MS} />);
 
         expect(markup).toContain('>01:05</span>');
         expect(markup).toContain('aria-label="워시타워_1 건조기 1시간 5분"');
@@ -190,17 +193,21 @@ describe('WashTowerGrid', () => {
     });
 
     it('추정 잔여 시간도 별도 예상 문구 없이 표시한다', () => {
-        const estimatedMachines = machines.map((machine) => machine.id === '워시타워_1'
-            ? {
-                ...machine,
-                dryer: machine.dryer ? {
-                    ...machine.dryer,
-                    projection: {...machine.dryer.projection, estimated: true},
-                } : null,
-            }
-            : machine);
+        const estimatedMachines = machines.map((machine) =>
+            machine.id === '워시타워_1'
+                ? {
+                      ...machine,
+                      dryer: machine.dryer
+                          ? {
+                                ...machine.dryer,
+                                projection: {...machine.dryer.projection, estimated: true},
+                            }
+                          : null,
+                  }
+                : machine,
+        );
         const markup = renderToStaticMarkup(
-            <WashTowerGrid machines={estimatedMachines} nowMs={NOW_MS}/>,
+            <WashTowerGrid machines={estimatedMachines} nowMs={NOW_MS} />,
         );
 
         expect(markup).toContain('>01:05</span>');

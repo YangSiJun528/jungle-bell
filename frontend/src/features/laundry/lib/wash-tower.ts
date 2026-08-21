@@ -37,7 +37,8 @@ export function sortWashTowers(
     return [...machines].sort((left, right) => {
         const leftNumber = washTowerNumber(left.id);
         const rightNumber = washTowerNumber(right.id);
-        if (leftNumber === null && rightNumber === null) return left.id.localeCompare(right.id, 'ko');
+        if (leftNumber === null && rightNumber === null)
+            return left.id.localeCompare(right.id, 'ko');
         if (leftNumber === null) return 1;
         if (rightNumber === null) return -1;
         return leftNumber - rightNumber || left.id.localeCompare(right.id, 'ko');
@@ -51,15 +52,14 @@ export function washTowerCellView(
 ): WashTowerCellView {
     const appliance = machine[kind];
     const state = laundryAvailabilityState(appliance);
-    const baseText = state === 'available'
-        ? '✓'
-        : state === 'error'
-            ? '경고'
-            : laundryOverviewText(appliance, nowMs);
+    const baseText =
+        state === 'available'
+            ? '✓'
+            : state === 'error'
+              ? '경고'
+              : laundryOverviewText(appliance, nowMs);
     const applianceLabel = kind === 'washer' ? '세탁기' : '건조기';
-    const statusLabel = state === 'error'
-        ? '경고'
-        : laundryRemainingText(appliance, nowMs);
+    const statusLabel = state === 'error' ? '경고' : laundryRemainingText(appliance, nowMs);
 
     return {
         label: `${machine.id} ${applianceLabel} ${statusLabel}`,

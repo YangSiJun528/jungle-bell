@@ -1,10 +1,13 @@
 import {describe, expect, it, vi} from 'vitest';
+
 import {createPwaCapabilityAdapter} from './adapter';
 
-function browserObjects(options: {
-    standalone?: boolean;
-    iosStandalone?: boolean;
-} = {}) {
+function browserObjects(
+    options: {
+        standalone?: boolean;
+        iosStandalone?: boolean;
+    } = {},
+) {
     const subscription = {
         toJSON: vi.fn(() => ({endpoint: 'https://push.example/subscription'})),
     } as unknown as PushSubscription;
@@ -35,21 +38,27 @@ describe('PwaCapabilityAdapter', () => {
         const standalone = browserObjects({standalone: true});
         const iosStandalone = browserObjects({iosStandalone: true});
 
-        expect(createPwaCapabilityAdapter({
-            production: true,
-            windowObject: browser.windowObject,
-            navigatorObject: browser.navigatorObject,
-        }).installed).toBe(false);
-        expect(createPwaCapabilityAdapter({
-            production: true,
-            windowObject: standalone.windowObject,
-            navigatorObject: standalone.navigatorObject,
-        }).installed).toBe(true);
-        expect(createPwaCapabilityAdapter({
-            production: true,
-            windowObject: iosStandalone.windowObject,
-            navigatorObject: iosStandalone.navigatorObject,
-        }).installed).toBe(true);
+        expect(
+            createPwaCapabilityAdapter({
+                production: true,
+                windowObject: browser.windowObject,
+                navigatorObject: browser.navigatorObject,
+            }).installed,
+        ).toBe(false);
+        expect(
+            createPwaCapabilityAdapter({
+                production: true,
+                windowObject: standalone.windowObject,
+                navigatorObject: standalone.navigatorObject,
+            }).installed,
+        ).toBe(true);
+        expect(
+            createPwaCapabilityAdapter({
+                production: true,
+                windowObject: iosStandalone.windowObject,
+                navigatorObject: iosStandalone.navigatorObject,
+            }).installed,
+        ).toBe(true);
     });
 
     it('production web에서 load 이후에만 서비스 워커를 등록한다', async () => {
@@ -119,9 +128,12 @@ describe('PwaCapabilityAdapter', () => {
     it('구독 Promise가 끝나기 전에 PushManager.subscribe를 동기 호출한다', async () => {
         const browser = browserObjects();
         let resolveSubscription: ((subscription: PushSubscription) => void) | undefined;
-        browser.pushManager.subscribe.mockImplementation(() => new Promise<PushSubscription>((resolve) => {
-            resolveSubscription = resolve;
-        }));
+        browser.pushManager.subscribe.mockImplementation(
+            () =>
+                new Promise<PushSubscription>((resolve) => {
+                    resolveSubscription = resolve;
+                }),
+        );
         const adapter = createPwaCapabilityAdapter({
             production: true,
             windowObject: browser.windowObject,
@@ -133,7 +145,9 @@ describe('PwaCapabilityAdapter', () => {
 
         expect(browser.pushManager.subscribe).toHaveBeenCalledOnce();
         resolveSubscription?.(browser.subscription);
-        await expect(subscription).resolves.toEqual({endpoint: 'https://push.example/subscription'});
+        await expect(subscription).resolves.toEqual({
+            endpoint: 'https://push.example/subscription',
+        });
     });
 
     it('지원되지 않는 브라우저에서는 Push 요청 전에 실패한다', async () => {

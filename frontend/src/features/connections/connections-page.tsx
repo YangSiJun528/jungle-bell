@@ -1,7 +1,24 @@
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {useNavigate} from '@tanstack/react-router';
-import {CircleAlert, KeyRound, Link2, MonitorCheck, QrCode, RotateCcw, Smartphone, Trash2} from 'lucide-react';
+import {
+    CircleAlert,
+    KeyRound,
+    Link2,
+    MonitorCheck,
+    QrCode,
+    RotateCcw,
+    Smartphone,
+    Trash2,
+} from 'lucide-react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+
+import type {MobilePairingCreated, PairingClaim} from '@/api/dashboard-api';
+import {useDashboardAccount} from '@/app/dashboard-account';
+import {
+    assertLmsAuthenticated,
+    assertServerSessionReady,
+    serverSessionReady,
+} from '@/app/dashboard-account-state';
 import {
     queryKeys,
     refreshBrowserPersonalQueries,
@@ -9,14 +26,9 @@ import {
     removeDesktopIdentityQueries,
     useDashboardEnvironment,
 } from '@/app/dashboard-context';
-import {
-    useDashboardAccount,
-} from '@/app/dashboard-account';
-import {
-    assertLmsAuthenticated,
-    assertServerSessionReady,
-    serverSessionReady,
-} from '@/app/dashboard-account-state';
+import {readInitialPairingEntry} from '@/app/pairing-bootstrap';
+import {PersonalAccountGate} from '@/app/personal-account-gate';
+import {NotificationSettings} from '@/app/settings/notification-settings';
 import {useDesktopConnectionQuery, useRefreshAttendanceMutation} from '@/app/use-dashboard-queries';
 import {EmptyState, ErrorState, LoadingState} from '@/components/dashboard/async-state';
 import {PageHeader} from '@/components/dashboard/page-header';
@@ -36,26 +48,21 @@ import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@/compo
 import {Input} from '@/components/ui/input';
 import {Label} from '@/components/ui/label';
 import {Tabs, TabsContent, TabsList, TabsTrigger} from '@/components/ui/tabs';
-import type {MobilePairingCreated, PairingClaim} from '@/api/dashboard-api';
-import {NotificationSettings} from '@/app/settings/notification-settings';
-import {PersonalAccountGate} from '@/app/personal-account-gate';
 import {
     formatManualPairingCode,
     validManualPairingCode,
 } from '@/domain/connections/manual-pairing-code';
+import {dateTimeLabel, relativeTimeLabel} from '@/lib/format';
+
+import {desktopConnectionUiState} from './desktop-connection-state';
 import {pairingQrDataUrl} from './lib/pairing-qr';
 import {
     clearPendingMobilePairing,
     readPendingMobilePairing,
     storePendingMobilePairing,
 } from './lib/pending-pairing';
-import {dateTimeLabel, relativeTimeLabel} from '@/lib/format';
-import {
-    mobileDeviceLabel,
-    mobileInstallationId,
-} from './mobile-identity';
-import {readInitialPairingEntry} from '@/app/pairing-bootstrap';
-import {desktopConnectionUiState} from './desktop-connection-state';
+import {mobileDeviceLabel, mobileInstallationId} from './mobile-identity';
+import {PairingExpiryCountdown} from './pairing-expiry-countdown';
 import {
     automaticPairingAction,
     finishCompanionPairing,
@@ -65,7 +72,6 @@ import {
     type CompanionCompletionPath,
 } from './pairing-flow';
 import {ServiceSettings} from './service-settings';
-import {PairingExpiryCountdown} from './pairing-expiry-countdown';
 
 interface PairingClaimStart {
     mode: 'handoff' | 'manual' | 'qr' | 'resume';
@@ -85,10 +91,12 @@ function DesktopConnections() {
     const account = useDashboardAccount();
     const client = useQueryClient();
     const [pairing, setPairing] = useState<MobilePairingCreated | null>(null);
-    const [identityResetReason, setIdentityResetReason] = useState<'recovery' | 'reset' | null>(null);
+    const [identityResetReason, setIdentityResetReason] = useState<'recovery' | 'reset' | null>(
+        null,
+    );
     const refreshAccount = useRefreshAttendanceMutation();
-    const personalReady = account.status.lmsAuthentication === 'authenticated'
-        && serverSessionReady(account.status);
+    const personalReady =
+        account.status.lmsAuthentication === 'authenticated' && serverSessionReady(account.status);
 
     const connection = useDesktopConnectionQuery();
     const sessions = useQuery({
@@ -123,8 +131,10 @@ function DesktopConnections() {
         mutationFn: () => {
             assertLmsAuthenticated(account.status);
             assertServerSessionReady(account.status);
-            if (connection.data?.state !== 'connected'
-                && connection.data?.state !== 'disconnected') {
+            if (
+                connection.data?.state !== 'connected' &&
+                connection.data?.state !== 'disconnected'
+            ) {
                 throw new Error('DESKTOP_CONNECTION_REQUIRED');
             }
             return api.createMobilePairing();
@@ -164,45 +174,67 @@ function DesktopConnections() {
         },
     });
 
-    const qr = useMemo(() => pairing ? pairingQrDataUrl(pairing.qrPayload) : null, [pairing]);
+    const qr = useMemo(() => (pairing ? pairingQrDataUrl(pairing.qrPayload) : null), [pairing]);
     const connectionUi = desktopConnectionUiState(connection.data);
     const activeSessions = sessions.data?.filter((item) => item.status === 'active') ?? [];
-    const serverSessionLabel = account.status.serverSession === 'stored'
-        ? '보안 저장됨'
-        : account.status.serverSession === 'memory-only'
-            ? '현재 실행에서만 유지'
-            : account.status.serverSession === 'recovery-required'
+    const serverSessionLabel =
+        account.status.serverSession === 'stored'
+            ? '보안 저장됨'
+            : account.status.serverSession === 'memory-only'
+              ? '현재 실행에서만 유지'
+              : account.status.serverSession === 'recovery-required'
                 ? '복구 필요'
                 : account.status.serverSession === 'missing'
-                    ? '없음'
-                    : '확인 중';
-    const lmsAuthenticationLabel = account.status.lmsAuthentication === 'authenticated'
-        ? '로그인됨'
-        : account.status.lmsAuthentication === 'required'
-            ? '로그인 필요'
-            : account.status.lmsAuthentication === 'unavailable'
+                  ? '없음'
+                  : '확인 중';
+    const lmsAuthenticationLabel =
+        account.status.lmsAuthentication === 'authenticated'
+            ? '로그인됨'
+            : account.status.lmsAuthentication === 'required'
+              ? '로그인 필요'
+              : account.status.lmsAuthentication === 'unavailable'
                 ? '확인 실패'
                 : '확인 중';
     return (
         <div className="space-y-6">
-            {connection.isPending ? <LoadingState/> : connection.isError ? <ErrorState retry={() => void connection.refetch()}/> : (
+            {connection.isPending ? (
+                <LoadingState />
+            ) : connection.isError ? (
+                <ErrorState retry={() => void connection.refetch()} />
+            ) : (
                 <Card>
                     <CardHeader>
                         <CardTitle>이 PC</CardTitle>
                     </CardHeader>
                     <CardContent className="grid gap-4 sm:grid-cols-2">
-                        <div className="rounded-lg bg-muted/55 p-4 text-sm"><strong>마지막 확인</strong><p className="mt-1 text-muted-foreground">{relativeTimeLabel(connection.data?.lastSeenAt)}</p></div>
-                        <div className="rounded-lg bg-muted/55 p-4 text-sm"><strong>서버 인증 정보</strong><p className="mt-1 text-muted-foreground">{serverSessionLabel}</p></div>
-                        <div className="rounded-lg bg-muted/55 p-4 text-sm"><strong>LMS 계정</strong><p className="mt-1 text-muted-foreground">{lmsAuthenticationLabel}</p></div>
+                        <div className="rounded-lg bg-muted/55 p-4 text-sm">
+                            <strong>마지막 확인</strong>
+                            <p className="mt-1 text-muted-foreground">
+                                {relativeTimeLabel(connection.data?.lastSeenAt)}
+                            </p>
+                        </div>
+                        <div className="rounded-lg bg-muted/55 p-4 text-sm">
+                            <strong>서버 인증 정보</strong>
+                            <p className="mt-1 text-muted-foreground">{serverSessionLabel}</p>
+                        </div>
+                        <div className="rounded-lg bg-muted/55 p-4 text-sm">
+                            <strong>LMS 계정</strong>
+                            <p className="mt-1 text-muted-foreground">{lmsAuthenticationLabel}</p>
+                        </div>
                         {connection.data?.state === 'connected' ? (
-                            <p className="text-sm text-muted-foreground sm:col-span-2">연결 상태 · {connectionUi.label}</p>
+                            <p className="text-sm text-muted-foreground sm:col-span-2">
+                                연결 상태 · {connectionUi.label}
+                            </p>
                         ) : null}
                         {connectionUi.needsIdentityRecovery ? (
                             <Alert className="sm:col-span-2" variant="destructive">
-                                <CircleAlert/>
+                                <CircleAlert />
                                 <AlertTitle>{connectionUi.label}</AlertTitle>
                                 <AlertDescription>
-                                    <p>{connectionUi.reason} 복구하면 연결된 모바일을 다시 연결해야 합니다.</p>
+                                    <p>
+                                        {connectionUi.reason} 복구하면 연결된 모바일을 다시 연결해야
+                                        합니다.
+                                    </p>
                                     <Button
                                         className="mt-3"
                                         size="sm"
@@ -210,14 +242,19 @@ function DesktopConnections() {
                                         onClick={() => setIdentityResetReason('recovery')}
                                         disabled={reset.isPending}
                                     >
-                                        <RotateCcw className="size-4"/>{reset.isPending ? '복구 중' : 'PC 연결 정보 복구'}
+                                        <RotateCcw className="size-4" />
+                                        {reset.isPending ? '복구 중' : 'PC 연결 정보 복구'}
                                     </Button>
-                                    {reset.isError ? <p className="mt-2 text-sm text-destructive">PC 연결 정보를 복구하지 못했습니다.</p> : null}
+                                    {reset.isError ? (
+                                        <p className="mt-2 text-sm text-destructive">
+                                            PC 연결 정보를 복구하지 못했습니다.
+                                        </p>
+                                    ) : null}
                                 </AlertDescription>
                             </Alert>
                         ) : connection.data?.state === 'disconnected' ? (
                             <Alert className="sm:col-span-2">
-                                <CircleAlert/>
+                                <CircleAlert />
                                 <AlertTitle>{connectionUi.label}</AlertTitle>
                                 <AlertDescription>
                                     <p>{connectionUi.reason}</p>
@@ -226,8 +263,10 @@ function DesktopConnections() {
                                         size="sm"
                                         variant="outline"
                                         onClick={() => refreshAccount.mutate()}
-                                        disabled={refreshAccount.isPending
-                                            || account.status.lmsAuthentication !== 'authenticated'}
+                                        disabled={
+                                            refreshAccount.isPending ||
+                                            account.status.lmsAuthentication !== 'authenticated'
+                                        }
                                     >
                                         {refreshAccount.isPending ? '연결 중' : '계정 연결'}
                                     </Button>
@@ -240,37 +279,83 @@ function DesktopConnections() {
 
             <div className="grid gap-6 lg:grid-cols-2">
                 <Card>
-                    <CardHeader><CardTitle className="flex items-center gap-2"><QrCode className="size-5"/>휴대폰 설정</CardTitle><CardDescription>스캔하면 PC 연결, 앱 설치, 알림 설정을 순서대로 안내합니다.</CardDescription></CardHeader>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <QrCode className="size-5" />
+                            휴대폰 설정
+                        </CardTitle>
+                        <CardDescription>
+                            스캔하면 PC 연결, 앱 설치, 알림 설정을 순서대로 안내합니다.
+                        </CardDescription>
+                    </CardHeader>
                     <CardContent className="space-y-4">
                         {!personalReady || !connectionUi.canCreatePairing ? (
-                            <p className="text-sm text-muted-foreground">LMS 로그인과 계정 연결 후 코드를 만들 수 있습니다.</p>
+                            <p className="text-sm text-muted-foreground">
+                                LMS 로그인과 계정 연결 후 코드를 만들 수 있습니다.
+                            </p>
                         ) : !pairing ? (
                             <div className="space-y-3">
-                                <Button onClick={() => createPairing.mutate()} disabled={createPairing.isPending || !connectionUi.canCreatePairing}><Link2 className="size-4"/>{connection.data?.state === 'disconnected' ? 'PC 등록 및 휴대폰 설정 시작' : '휴대폰 설정 QR 만들기'}</Button>
-                                {createPairing.isError ? <p className="text-sm text-destructive">연결 코드를 만들지 못했습니다. 잠시 후 다시 시도하세요.</p> : null}
+                                <Button
+                                    onClick={() => createPairing.mutate()}
+                                    disabled={
+                                        createPairing.isPending || !connectionUi.canCreatePairing
+                                    }
+                                >
+                                    <Link2 className="size-4" />
+                                    {connection.data?.state === 'disconnected'
+                                        ? 'PC 등록 및 휴대폰 설정 시작'
+                                        : '휴대폰 설정 QR 만들기'}
+                                </Button>
+                                {createPairing.isError ? (
+                                    <p className="text-sm text-destructive">
+                                        연결 코드를 만들지 못했습니다. 잠시 후 다시 시도하세요.
+                                    </p>
+                                ) : null}
                             </div>
                         ) : (
                             <div className="grid gap-4 sm:grid-cols-[9rem_minmax(0,1fr)]">
-                                {qr ? <img src={qr} alt="휴대폰 설정 시작 QR 코드" className="aspect-square w-36 rounded-lg border bg-white p-2"/> : null}
+                                {qr ? (
+                                    <img
+                                        src={qr}
+                                        alt="휴대폰 설정 시작 QR 코드"
+                                        className="aspect-square w-36 rounded-lg border bg-white p-2"
+                                    />
+                                ) : null}
                                 <div className="min-w-0 space-y-3">
                                     <div>
                                         <div className="flex flex-wrap items-center justify-between gap-2">
-                                            <p className="text-xs text-muted-foreground">10자리 연결 코드</p>
-                                            <PairingExpiryCountdown expiresAt={pairing.expiresAt}/>
+                                            <p className="text-xs text-muted-foreground">
+                                                10자리 연결 코드
+                                            </p>
+                                            <PairingExpiryCountdown expiresAt={pairing.expiresAt} />
                                         </div>
-                                        <p className="mt-1 font-mono text-2xl font-bold tracking-wider">{formatManualPairingCode(pairing.manualCode)}</p>
+                                        <p className="mt-1 font-mono text-2xl font-bold tracking-wider">
+                                            {formatManualPairingCode(pairing.manualCode)}
+                                        </p>
                                     </div>
                                     {pairingStatus.data?.status === 'completed' ? (
-                                        <p aria-live="polite" className="text-sm text-emerald-700 dark:text-emerald-300">연결이 완료됐습니다.</p>
+                                        <p
+                                            aria-live="polite"
+                                            className="text-sm text-emerald-700 dark:text-emerald-300"
+                                        >
+                                            연결이 완료됐습니다.
+                                        </p>
                                     ) : pairingStatus.data?.status === 'expired' ? (
-                                        <p aria-live="polite" className="text-sm text-destructive">연결 코드가 만료됐습니다.</p>
+                                        <p aria-live="polite" className="text-sm text-destructive">
+                                            연결 코드가 만료됐습니다.
+                                        </p>
                                     ) : null}
                                     {pairingStatus.data?.claim ? (
                                         <Alert>
-                                            <KeyRound/>
-                                            <AlertTitle>{pairingStatus.data.claim.deviceLabel}</AlertTitle>
+                                            <KeyRound />
+                                            <AlertTitle>
+                                                {pairingStatus.data.claim.deviceLabel}
+                                            </AlertTitle>
                                             <AlertDescription>
-                                                <span>확인 번호 {pairingStatus.data.claim.confirmationCode}</span>
+                                                <span>
+                                                    확인 번호{' '}
+                                                    {pairingStatus.data.claim.confirmationCode}
+                                                </span>
                                                 <Button
                                                     className="mt-2 max-w-full"
                                                     size="sm"
@@ -285,12 +370,32 @@ function DesktopConnections() {
                                     {pairingStatus.isError ? (
                                         <div className="space-y-2 text-sm text-destructive">
                                             <p>연결 상태를 확인하지 못했습니다.</p>
-                                            <Button variant="outline" size="sm" onClick={() => void pairingStatus.refetch()}>새로고침</Button>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => void pairingStatus.refetch()}
+                                            >
+                                                새로고침
+                                            </Button>
                                         </div>
                                     ) : null}
-                                    {approve.isError ? <p className="text-sm text-destructive">이 기기를 승인하지 못했습니다.</p> : null}
-                                    <Button variant="outline" size="sm" onClick={() => createPairing.mutate()}>새 QR과 코드</Button>
-                                    {createPairing.isError ? <p className="text-sm text-destructive">새 연결 코드를 만들지 못했습니다.</p> : null}
+                                    {approve.isError ? (
+                                        <p className="text-sm text-destructive">
+                                            이 기기를 승인하지 못했습니다.
+                                        </p>
+                                    ) : null}
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => createPairing.mutate()}
+                                    >
+                                        새 QR과 코드
+                                    </Button>
+                                    {createPairing.isError ? (
+                                        <p className="text-sm text-destructive">
+                                            새 연결 코드를 만들지 못했습니다.
+                                        </p>
+                                    ) : null}
                                 </div>
                             </div>
                         )}
@@ -298,23 +403,81 @@ function DesktopConnections() {
                 </Card>
 
                 <Card>
-                    <CardHeader><CardTitle className="flex items-center gap-2"><Smartphone className="size-5"/>연결된 모바일</CardTitle></CardHeader>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Smartphone className="size-5" />
+                            연결된 모바일
+                        </CardTitle>
+                    </CardHeader>
                     <CardContent className="space-y-3">
-                        {!personalReady ? <EmptyState title="계정 연결이 필요합니다."/> : sessions.isPending ? <LoadingState/> : sessions.isError ? <ErrorState retry={() => void sessions.refetch()}/> : activeSessions.length ? activeSessions.map((session) => (
-                            <div key={session.deviceId} className="flex items-center justify-between gap-3 rounded-lg border p-3">
-                                <div className="min-w-0"><strong className="block truncate text-sm">{session.deviceLabel}</strong><span className="text-xs text-muted-foreground">최근 사용 {dateTimeLabel(session.lastSeenAt)} · {session.pushEnabled ? '푸시 켜짐' : '푸시 꺼짐'}</span></div>
-                                <Button variant="ghost" size="icon-sm" aria-label={`${session.deviceLabel} 연결 해제`} onClick={() => revoke.mutate(session.deviceId)}><Trash2 className="size-4"/></Button>
-                            </div>
-                        )) : <EmptyState title="연결된 모바일이 없습니다."/>}
-                        {revoke.isError ? <p className="text-sm text-destructive">모바일 연결을 해제하지 못했습니다.</p> : null}
+                        {!personalReady ? (
+                            <EmptyState title="계정 연결이 필요합니다." />
+                        ) : sessions.isPending ? (
+                            <LoadingState />
+                        ) : sessions.isError ? (
+                            <ErrorState retry={() => void sessions.refetch()} />
+                        ) : activeSessions.length ? (
+                            activeSessions.map((session) => (
+                                <div
+                                    key={session.deviceId}
+                                    className="flex items-center justify-between gap-3 rounded-lg border p-3"
+                                >
+                                    <div className="min-w-0">
+                                        <strong className="block truncate text-sm">
+                                            {session.deviceLabel}
+                                        </strong>
+                                        <span className="text-xs text-muted-foreground">
+                                            최근 사용 {dateTimeLabel(session.lastSeenAt)} ·{' '}
+                                            {session.pushEnabled ? '푸시 켜짐' : '푸시 꺼짐'}
+                                        </span>
+                                    </div>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon-sm"
+                                        aria-label={`${session.deviceLabel} 연결 해제`}
+                                        onClick={() => revoke.mutate(session.deviceId)}
+                                    >
+                                        <Trash2 className="size-4" />
+                                    </Button>
+                                </div>
+                            ))
+                        ) : (
+                            <EmptyState title="연결된 모바일이 없습니다." />
+                        )}
+                        {revoke.isError ? (
+                            <p className="text-sm text-destructive">
+                                모바일 연결을 해제하지 못했습니다.
+                            </p>
+                        ) : null}
                     </CardContent>
                 </Card>
             </div>
 
-            {connection.data?.state === 'connected' ? <Card className="border-destructive/25">
-                <CardHeader><CardTitle className="text-base">PC 연결 정보 초기화</CardTitle><CardDescription>서버 연결을 새로 만들며 모든 모바일을 다시 연결해야 합니다.</CardDescription></CardHeader>
-                <CardContent className="space-y-3"><Button variant="destructive" onClick={() => setIdentityResetReason('reset')} disabled={reset.isPending}><RotateCcw className="size-4"/>초기화</Button>{reset.isError ? <p className="text-sm text-destructive">PC 연결 정보를 초기화하지 못했습니다.</p> : null}</CardContent>
-            </Card> : null}
+            {connection.data?.state === 'connected' ? (
+                <Card className="border-destructive/25">
+                    <CardHeader>
+                        <CardTitle className="text-base">PC 연결 정보 초기화</CardTitle>
+                        <CardDescription>
+                            서버 연결을 새로 만들며 모든 모바일을 다시 연결해야 합니다.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                        <Button
+                            variant="destructive"
+                            onClick={() => setIdentityResetReason('reset')}
+                            disabled={reset.isPending}
+                        >
+                            <RotateCcw className="size-4" />
+                            초기화
+                        </Button>
+                        {reset.isError ? (
+                            <p className="text-sm text-destructive">
+                                PC 연결 정보를 초기화하지 못했습니다.
+                            </p>
+                        ) : null}
+                    </CardContent>
+                </Card>
+            ) : null}
 
             <AlertDialog
                 open={identityResetReason !== null}
@@ -412,7 +575,8 @@ export function CompanionConnections({
             await waitForPairingCompletion({
                 pairingId,
                 complete: (id) => api.completePairing(id),
-                pause: (milliseconds) => new Promise((resolve) => window.setTimeout(resolve, milliseconds)),
+                pause: (milliseconds) =>
+                    new Promise((resolve) => window.setTimeout(resolve, milliseconds)),
             });
             const storage = pairingSessionStorage();
             if (storage) clearPendingMobilePairing(storage);
@@ -445,12 +609,15 @@ export function CompanionConnections({
     });
     const connected = account.personalAccess.status === 'connected';
     const confirmationCode = mobileInstallationId().slice(-4).toUpperCase();
-    const startClaim = useCallback((input: PairingClaimStart) => {
-        if (!tryReservePairingStart(pairingStartGate.current)) return;
-        claim.mutate(input, {
-            onSettled: () => releasePairingStart(pairingStartGate.current),
-        });
-    }, [claim]);
+    const startClaim = useCallback(
+        (input: PairingClaimStart) => {
+            if (!tryReservePairingStart(pairingStartGate.current)) return;
+            claim.mutate(input, {
+                onSettled: () => releasePairingStart(pairingStartGate.current),
+            });
+        },
+        [claim],
+    );
 
     useEffect(() => {
         const action = automaticPairingAction({
@@ -477,10 +644,17 @@ export function CompanionConnections({
         if (action === 'handoff') {
             startClaim({mode: 'handoff'});
         }
-    }, [account.personalAccess.status, pairingLink, platform.pwa.installed, restoredPairing, startClaim]);
+    }, [
+        account.personalAccess.status,
+        pairingLink,
+        platform.pwa.installed,
+        restoredPairing,
+        startClaim,
+    ]);
 
-    const automaticCheckPending = account.personalAccess.status === 'unconnected'
-        && !pairingStartGate.current.automaticHandled;
+    const automaticCheckPending =
+        account.personalAccess.status === 'unconnected' &&
+        !pairingStartGate.current.automaticHandled;
     const checking = account.personalAccess.status === 'checking' || automaticCheckPending;
 
     return (
@@ -488,8 +662,12 @@ export function CompanionConnections({
             <Card className="mx-auto max-w-xl">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                        <MonitorCheck className="size-5"/>
-                        {connected ? '이 기기는 연결됨' : claim.isPending ? 'PC 승인 대기' : '연결 코드 입력'}
+                        <MonitorCheck className="size-5" />
+                        {connected
+                            ? '이 기기는 연결됨'
+                            : claim.isPending
+                              ? 'PC 승인 대기'
+                              : '연결 코드 입력'}
                     </CardTitle>
                     <CardDescription>
                         {connected
@@ -499,24 +677,53 @@ export function CompanionConnections({
                 </CardHeader>
                 <CardContent className="space-y-4">
                     {checking ? (
-                        <LoadingState label="설치 QR 연결 정보를 확인하고 있습니다."/>
+                        <LoadingState label="설치 QR 연결 정보를 확인하고 있습니다." />
                     ) : connected ? (
-                        <Button variant="outline" onClick={() => disconnect.mutate()} disabled={disconnect.isPending}>이 모바일 연결 해제</Button>
+                        <Button
+                            variant="outline"
+                            onClick={() => disconnect.mutate()}
+                            disabled={disconnect.isPending}
+                        >
+                            이 모바일 연결 해제
+                        </Button>
                     ) : (
                         <>
                             {!claim.isPending ? (
                                 <>
-                                    <div className="space-y-2"><Label htmlFor="pairing-code">10자리 연결 코드</Label><Input id="pairing-code" value={manualCode} inputMode="text" maxLength={11} autoCapitalize="characters" placeholder="ABCDE-12345" onChange={(event) => setManualCode(formatManualPairingCode(event.target.value))}/></div>
-                                    <Button onClick={() => startClaim({mode: 'manual'})} disabled={!validManualPairingCode(manualCode)}>연결 요청</Button>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="pairing-code">10자리 연결 코드</Label>
+                                        <Input
+                                            id="pairing-code"
+                                            value={manualCode}
+                                            inputMode="text"
+                                            maxLength={11}
+                                            autoCapitalize="characters"
+                                            placeholder="ABCDE-12345"
+                                            onChange={(event) =>
+                                                setManualCode(
+                                                    formatManualPairingCode(event.target.value),
+                                                )
+                                            }
+                                        />
+                                    </div>
+                                    <Button
+                                        onClick={() => startClaim({mode: 'manual'})}
+                                        disabled={!validManualPairingCode(manualCode)}
+                                    >
+                                        연결 요청
+                                    </Button>
                                 </>
                             ) : null}
                         </>
                     )}
                     {claim.isPending ? (
                         <Alert>
-                            <KeyRound/>
+                            <KeyRound />
                             <AlertTitle>PC에서 이 기기를 승인해 주세요.</AlertTitle>
-                            <AlertDescription>PC 화면의 확인 코드가 <strong>{confirmationCode}</strong>인지 확인하세요.</AlertDescription>
+                            <AlertDescription>
+                                PC 화면의 확인 코드가 <strong>{confirmationCode}</strong>인지
+                                확인하세요.
+                            </AlertDescription>
                         </Alert>
                     ) : null}
                     {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
@@ -531,7 +738,7 @@ function WebConnections() {
         <Card className="mx-auto max-w-xl">
             <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                    <Smartphone className="size-5"/>앱 설치가 필요합니다.
+                    <Smartphone className="size-5" />앱 설치가 필요합니다.
                 </CardTitle>
                 <CardDescription>
                     기기 연결은 PC 앱 또는 홈 화면에 설치한 PWA에서만 제공됩니다.
@@ -546,27 +753,32 @@ export function ConnectionsPage() {
 
     return (
         <div className="space-y-6">
-            <PageHeader title="설정"/>
+            <PageHeader title="설정" />
             <Tabs defaultValue="notifications" className="gap-5">
-                <TabsList aria-label="설정 구분" className="grid h-auto w-full grid-cols-3 sm:w-fit">
+                <TabsList
+                    aria-label="설정 구분"
+                    className="grid h-auto w-full grid-cols-3 sm:w-fit"
+                >
                     <TabsTrigger value="notifications">알림</TabsTrigger>
                     <TabsTrigger value="services">서비스</TabsTrigger>
                     <TabsTrigger value="devices">기기 연결</TabsTrigger>
                 </TabsList>
                 <TabsContent value="notifications">
                     <PersonalAccountGate>
-                        <NotificationSettings/>
+                        <NotificationSettings />
                     </PersonalAccountGate>
                 </TabsContent>
                 <TabsContent value="services">
-                    <ServiceSettings/>
+                    <ServiceSettings />
                 </TabsContent>
                 <TabsContent value="devices">
-                    {platform.capabilities.mobilePairingManagement
-                        ? <DesktopConnections/>
-                        : platform.accountAuthentication.kind === 'cookie'
-                            ? <CompanionConnections/>
-                            : <WebConnections/>}
+                    {platform.capabilities.mobilePairingManagement ? (
+                        <DesktopConnections />
+                    ) : platform.accountAuthentication.kind === 'cookie' ? (
+                        <CompanionConnections />
+                    ) : (
+                        <WebConnections />
+                    )}
                 </TabsContent>
             </Tabs>
         </div>

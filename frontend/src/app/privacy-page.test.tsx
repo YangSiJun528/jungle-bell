@@ -1,7 +1,9 @@
 import {readFileSync} from 'node:fs';
-import {renderToStaticMarkup} from 'react-dom/server';
+
 import {createMemoryHistory, RouterContextProvider} from '@tanstack/react-router';
+import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, test} from 'vitest';
+
 import {createDashboardRouter} from './dashboard-router';
 import {PrivacyPage} from './privacy-page';
 
@@ -11,7 +13,7 @@ function renderPrivacyPage(): string {
     const router = createDashboardRouter(createMemoryHistory({initialEntries: ['/privacy']}));
     return renderToStaticMarkup(
         <RouterContextProvider router={router}>
-            <PrivacyPage/>
+            <PrivacyPage />
         </RouterContextProvider>,
     );
 }

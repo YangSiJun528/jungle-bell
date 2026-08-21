@@ -1,4 +1,5 @@
 import {describe, expect, test} from 'vitest';
+
 import {
     readNotificationOnboardingDecision,
     writeNotificationOnboardingDecision,
@@ -41,6 +42,8 @@ describe('notification onboarding state', () => {
             },
         };
         expect(readNotificationOnboardingDecision(unavailable, 'desktop')).toBeNull();
-        expect(() => writeNotificationOnboardingDecision(unavailable, 'desktop', 'dismissed')).not.toThrow();
+        expect(() =>
+            writeNotificationOnboardingDecision(unavailable, 'desktop', 'dismissed'),
+        ).not.toThrow();
     });
 });

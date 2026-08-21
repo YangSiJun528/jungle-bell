@@ -24,11 +24,14 @@ export function storePendingMobilePairing(
     if (!validPending(pending, pending.createdAtEpochMs)) {
         throw new Error('PENDING_PAIRING_INVALID');
     }
-    storage.setItem(PENDING_MOBILE_PAIRING_KEY, JSON.stringify({
-        pairingId: pending.pairingId,
-        claimId: pending.claimId,
-        createdAtEpochMs: pending.createdAtEpochMs,
-    }));
+    storage.setItem(
+        PENDING_MOBILE_PAIRING_KEY,
+        JSON.stringify({
+            pairingId: pending.pairingId,
+            claimId: pending.claimId,
+            createdAtEpochMs: pending.createdAtEpochMs,
+        }),
+    );
 }
 
 export function readPendingMobilePairing(
@@ -59,24 +62,33 @@ export function clearPendingMobilePairing(storage: PairingSessionStorage): void 
 }
 
 function validPending(value: unknown, nowEpochMs: number): value is PendingMobilePairing {
-    if (!Number.isSafeInteger(nowEpochMs) || nowEpochMs < 0
-        || !value || typeof value !== 'object' || Array.isArray(value)) {
+    if (
+        !Number.isSafeInteger(nowEpochMs) ||
+        nowEpochMs < 0 ||
+        !value ||
+        typeof value !== 'object' ||
+        Array.isArray(value)
+    ) {
         return false;
     }
     const source = value as Record<string, unknown>;
     const keys = Object.keys(source);
-    if (keys.length !== 3
-        || !['pairingId', 'claimId', 'createdAtEpochMs'].every((key) => hasOwn(source, key))) {
+    if (
+        keys.length !== 3 ||
+        !['pairingId', 'claimId', 'createdAtEpochMs'].every((key) => hasOwn(source, key))
+    ) {
         return false;
     }
     const createdAtEpochMs = source.createdAtEpochMs;
-    return typeof source.pairingId === 'string'
-        && PAIRING_ID.test(source.pairingId)
-        && typeof source.claimId === 'string'
-        && PAIRING_ID.test(source.claimId)
-        && typeof createdAtEpochMs === 'number'
-        && Number.isSafeInteger(createdAtEpochMs)
-        && createdAtEpochMs >= 0
-        && createdAtEpochMs <= nowEpochMs
-        && nowEpochMs - createdAtEpochMs < PENDING_MOBILE_PAIRING_TTL_MS;
+    return (
+        typeof source.pairingId === 'string' &&
+        PAIRING_ID.test(source.pairingId) &&
+        typeof source.claimId === 'string' &&
+        PAIRING_ID.test(source.claimId) &&
+        typeof createdAtEpochMs === 'number' &&
+        Number.isSafeInteger(createdAtEpochMs) &&
+        createdAtEpochMs >= 0 &&
+        createdAtEpochMs <= nowEpochMs &&
+        nowEpochMs - createdAtEpochMs < PENDING_MOBILE_PAIRING_TTL_MS
+    );
 }

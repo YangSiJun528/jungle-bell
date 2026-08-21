@@ -7,9 +7,7 @@ export interface DesktopSubscriptionRegistry {
 
 type SubscriptionRegistration = () => Promise<PlatformUnlisten>;
 
-type RegistrationResult =
-    | {ok: true; unlisten: PlatformUnlisten}
-    | {ok: false; error: unknown};
+type RegistrationResult = {ok: true; unlisten: PlatformUnlisten} | {ok: false; error: unknown};
 
 export function createDesktopSubscriptionRegistry(): DesktopSubscriptionRegistry {
     return {disposed: false, unlisteners: []};
@@ -25,14 +23,16 @@ export async function registerDesktopSubscriptions(
     subscriptions: readonly SubscriptionRegistration[],
     afterRegistered?: () => Promise<unknown>,
 ): Promise<void> {
-    const results: RegistrationResult[] = await Promise.all(subscriptions.map(async (subscribe) => {
-        try {
-            return {ok: true, unlisten: await subscribe()};
-        } catch (error) {
-            return {ok: false, error};
-        }
-    }));
-    const unlisteners = results.flatMap((result) => result.ok ? [result.unlisten] : []);
+    const results: RegistrationResult[] = await Promise.all(
+        subscriptions.map(async (subscribe) => {
+            try {
+                return {ok: true, unlisten: await subscribe()};
+            } catch (error) {
+                return {ok: false, error};
+            }
+        }),
+    );
+    const unlisteners = results.flatMap((result) => (result.ok ? [result.unlisten] : []));
     const failure = results.find((result) => !result.ok);
 
     if (registry.disposed || failure) {

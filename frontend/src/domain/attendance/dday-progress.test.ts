@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+
 import {test} from 'vitest';
+
 import {buildDdayProgress, kstDateString, type DdayPeriod} from './dday-progress.ts';
 
 const TEN_DAY_COURSE: DdayPeriod = {
@@ -91,12 +93,22 @@ test('시작 전과 종료 후에는 현재 칸 없이 전체 잔여 또는 완�
 
     assert.ok(upcoming);
     assert.deepEqual(
-        {elapsed: upcoming.elapsed, current: upcoming.current, remaining: upcoming.remaining, percent: upcoming.percent},
+        {
+            elapsed: upcoming.elapsed,
+            current: upcoming.current,
+            remaining: upcoming.remaining,
+            percent: upcoming.percent,
+        },
         {elapsed: 0, current: 0, remaining: 10, percent: 0},
     );
     assert.ok(ended);
     assert.deepEqual(
-        {elapsed: ended.elapsed, current: ended.current, remaining: ended.remaining, percent: ended.percent},
+        {
+            elapsed: ended.elapsed,
+            current: ended.current,
+            remaining: ended.remaining,
+            percent: ended.percent,
+        },
         {elapsed: 10, current: 0, remaining: 0, percent: 100},
     );
 });
@@ -107,7 +119,16 @@ test('KST 날짜는 UTC 오후 3시를 경계로 바뀐다', () => {
 });
 
 test('잘못되거나 비정상적으로 긴 기간은 시각화하지 않는다', () => {
-    assert.equal(buildDdayProgress({startDate: '2026-02-30', endDate: '2026-03-01'}, '2026-03-01'), null);
-    assert.equal(buildDdayProgress({startDate: '2026-03-02', endDate: '2026-03-01'}, '2026-03-01'), null);
-    assert.equal(buildDdayProgress({startDate: '2020-01-01', endDate: '2030-01-01'}, '2026-03-01'), null);
+    assert.equal(
+        buildDdayProgress({startDate: '2026-02-30', endDate: '2026-03-01'}, '2026-03-01'),
+        null,
+    );
+    assert.equal(
+        buildDdayProgress({startDate: '2026-03-02', endDate: '2026-03-01'}, '2026-03-01'),
+        null,
+    );
+    assert.equal(
+        buildDdayProgress({startDate: '2020-01-01', endDate: '2030-01-01'}, '2026-03-01'),
+        null,
+    );
 });

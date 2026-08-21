@@ -5,9 +5,9 @@ import {SystemNotificationSettingsCard} from '@/features/notifications/system-no
 export function NotificationSettings() {
     return (
         <div className="space-y-6">
-            <AttendancePreferencesSection/>
-            <MealPreferencesSection/>
-            <SystemNotificationSettingsCard/>
+            <AttendancePreferencesSection />
+            <MealPreferencesSection />
+            <SystemNotificationSettingsCard />
         </div>
     );
 }

@@ -1,8 +1,7 @@
 import {describe, expect, it, vi} from 'vitest';
-import type {
-    DashboardLaundrySnapshot,
-    DashboardMealsSnapshot,
-} from '@/api/dashboard-api';
+
+import type {DashboardLaundrySnapshot, DashboardMealsSnapshot} from '@/api/dashboard-api';
+
 import {
     laundryQueryContract,
     laundryQueryOptions,

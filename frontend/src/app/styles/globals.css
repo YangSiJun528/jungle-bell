@@ -1,11 +1,11 @@
-@import "tailwindcss";
-@import "tw-animate-css";
+@import 'tailwindcss';
+@import 'tw-animate-css';
 
 @custom-variant dark (&:is(.dark *));
 
 @font-face {
-    font-family: "Pretendard Variable";
-    src: url("../../assets/fonts/PretendardVariable.woff2") format("woff2-variations");
+    font-family: 'Pretendard Variable';
+    src: url('../../assets/fonts/PretendardVariable.woff2') format('woff2-variations');
     font-weight: 45 920;
     font-style: normal;
     font-display: swap;
@@ -78,7 +78,8 @@
 }
 
 @theme inline {
-    --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    --font-sans:
+        'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
     --color-background: var(--background);
     --color-foreground: var(--foreground);
     --color-card: var(--card);

@@ -1,4 +1,5 @@
 import {readFileSync} from 'node:fs';
+
 import {describe, expect, it} from 'vitest';
 
 const source = readFileSync(new URL('./meals-page.tsx', import.meta.url), 'utf8');
@@ -10,10 +11,10 @@ const historySource = readFileSync(
 describe('MealsPage information architecture', () => {
     it('오늘 사진, 주간 급식표, 날짜별 과거 기록을 독립 섹션으로 둔다', () => {
         expect(source).toContain('aria-labelledby="today-meals-title"');
-        expect(source).toContain('<TodayMealGrid meals={todayMeals}/>');
+        expect(source).toContain('<TodayMealGrid meals={todayMeals} />');
         expect(source).toContain('aria-labelledby="weekly-meal-title"');
         expect(source).toContain('<WeeklyMealMenu');
-        expect(source).toContain('<MealHistorySection meals={meals.data}/>');
+        expect(source).toContain('<MealHistorySection meals={meals.data} />');
         expect(historySource).toContain('aria-labelledby="meal-history-title"');
         expect(historySource).toContain('<MealHistoryCalendar');
         expect(historySource).not.toContain('MealHistoryLoadMore');

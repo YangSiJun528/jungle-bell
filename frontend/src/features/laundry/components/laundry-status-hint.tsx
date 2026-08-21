@@ -1,18 +1,9 @@
-import {useState, type ReactNode} from 'react';
 import {Info} from 'lucide-react';
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipTrigger,
-} from '@/components/ui/tooltip';
+import {useState, type ReactNode} from 'react';
 
-export function LaundryStatusHint({
-    children,
-    label,
-}: {
-    children: ReactNode;
-    label: string;
-}) {
+import {Tooltip, TooltipContent, TooltipTrigger} from '@/components/ui/tooltip';
+
+export function LaundryStatusHint({children, label}: {children: ReactNode; label: string}) {
     const [open, setOpen] = useState(false);
 
     return (
@@ -26,11 +17,11 @@ export function LaundryStatusHint({
                     type="button"
                     onClick={() => setOpen((current) => !current)}
                 >
-                    <Info className="size-4"/>
+                    <Info className="size-4" />
                 </button>
             </TooltipTrigger>
             <TooltipContent className="max-w-72" sideOffset={6}>
-                <div className="break-keep space-y-1.5 leading-5">{children}</div>
+                <div className="space-y-1.5 leading-5 break-keep">{children}</div>
             </TooltipContent>
         </Tooltip>
     );

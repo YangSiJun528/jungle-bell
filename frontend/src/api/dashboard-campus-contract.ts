@@ -1,9 +1,11 @@
 import {z} from 'zod';
+
 import type {
     DashboardLaundryMachine,
     LaundryCapacityEstimate,
     LaundryCapacitySnapshot,
 } from '@/domain/laundry/capacity';
+
 import {parseResponse} from './api-response';
 import {
     boundedLaundryCountSchema,
@@ -31,35 +33,37 @@ function riskLevel(rate: number): 'safe' | 'slight' | 'caution' {
     return 'safe';
 }
 
-export const dashboardLaundryApplianceSchema = z.object({
-    appliance: z.enum(['washer', 'dryer']),
-    operationalStatus: textSchema(64),
-    projection: laundryProjectionSchema.nullish().transform((value) => value ?? null),
-    state: laundryStateSchema.nullish().transform((value) => value ?? null),
-    remainingMinutes: finiteNumberSchema.nullable(),
-    totalMinutes: finiteNumberSchema.optional(),
-    startedAt: isoDateTimeSchema.nullable(),
-    estimatedFinishAt: isoDateTimeSchema.nullable(),
-    observedAt: isoDateTimeSchema.optional(),
-    sessionId: textSchema(512).nullable(),
-    errorCode: textSchema(128).nullable(),
-    attempts: z.number().int().min(0).max(100_000).default(0),
-    errors: z.number().int().min(0).max(100_000).default(0),
-    rate: z.number().finite().min(0).max(100).default(0),
-    riskLevel: z.enum(['safe', 'slight', 'caution']).default('safe'),
-}).superRefine((value, context) => {
-    const expectedRate = value.attempts === 0
-        ? 0
-        : value.errors * 100 / value.attempts;
-    if (value.errors > value.attempts
-        || Math.abs(value.rate - expectedRate) > Number.EPSILON * 100
-        || value.riskLevel !== riskLevel(value.rate)) {
-        context.addIssue({
-            code: 'custom',
-            message: '최근 7일 세탁 에러 위험 지표가 올바르지 않습니다.',
-        });
-    }
-});
+export const dashboardLaundryApplianceSchema = z
+    .object({
+        appliance: z.enum(['washer', 'dryer']),
+        operationalStatus: textSchema(64),
+        projection: laundryProjectionSchema.nullish().transform((value) => value ?? null),
+        state: laundryStateSchema.nullish().transform((value) => value ?? null),
+        remainingMinutes: finiteNumberSchema.nullable(),
+        totalMinutes: finiteNumberSchema.optional(),
+        startedAt: isoDateTimeSchema.nullable(),
+        estimatedFinishAt: isoDateTimeSchema.nullable(),
+        observedAt: isoDateTimeSchema.optional(),
+        sessionId: textSchema(512).nullable(),
+        errorCode: textSchema(128).nullable(),
+        attempts: z.number().int().min(0).max(100_000).default(0),
+        errors: z.number().int().min(0).max(100_000).default(0),
+        rate: z.number().finite().min(0).max(100).default(0),
+        riskLevel: z.enum(['safe', 'slight', 'caution']).default('safe'),
+    })
+    .superRefine((value, context) => {
+        const expectedRate = value.attempts === 0 ? 0 : (value.errors * 100) / value.attempts;
+        if (
+            value.errors > value.attempts ||
+            Math.abs(value.rate - expectedRate) > Number.EPSILON * 100 ||
+            value.riskLevel !== riskLevel(value.rate)
+        ) {
+            context.addIssue({
+                code: 'custom',
+                message: '최근 7일 세탁 에러 위험 지표가 올바르지 않습니다.',
+            });
+        }
+    });
 
 export type DashboardLaundryAppliance = z.infer<typeof dashboardLaundryApplianceSchema>;
 
@@ -71,40 +75,49 @@ function machineZone(id: string): DashboardLaundryMachine['zone'] {
     return 'other';
 }
 
-const laundryMachineSchema = z.object({
-    id: textSchema(128),
-    washer: dashboardLaundryApplianceSchema.nullable(),
-    dryer: dashboardLaundryApplianceSchema.nullable(),
-}).transform(({id, washer, dryer}): DashboardLaundryMachine => ({
-    id,
-    zone: machineZone(id),
-    washer,
-    dryer,
-}));
+const laundryMachineSchema = z
+    .object({
+        id: textSchema(128),
+        washer: dashboardLaundryApplianceSchema.nullable(),
+        dryer: dashboardLaundryApplianceSchema.nullable(),
+    })
+    .transform(({id, washer, dryer}): DashboardLaundryMachine => ({
+        id,
+        zone: machineZone(id),
+        washer,
+        dryer,
+    }));
 
 function laundryCapacityEstimateSchema<TAccess extends LaundryCapacityEstimate['access']>(
     access: TAccess,
 ) {
-    return z.strictObject({
-        access: z.literal(access),
-        washerAvailable: boundedLaundryCountSchema,
-        projectedDryerSupply: boundedLaundryCountSchema,
-        pendingDryerLoads: boundedLaundryCountSchema,
-        dryerHeadroom: boundedLaundryCountSchema,
-        startableLoads: boundedLaundryCountSchema.nullable(),
-        reliable: z.boolean(),
-    }).superRefine((value, context) => {
-        const expectedHeadroom = Math.max(0, value.projectedDryerSupply - value.pendingDryerLoads);
-        const expectedStartable = Math.min(value.washerAvailable, value.dryerHeadroom);
-        if (value.dryerHeadroom !== expectedHeadroom
-            || value.reliable !== (value.startableLoads !== null)
-            || (value.reliable && value.startableLoads !== expectedStartable)) {
-            context.addIssue({
-                code: 'custom',
-                message: '세탁 가능 횟수 불변식이 올바르지 않습니다.',
-            });
-        }
-    });
+    return z
+        .strictObject({
+            access: z.literal(access),
+            washerAvailable: boundedLaundryCountSchema,
+            projectedDryerSupply: boundedLaundryCountSchema,
+            pendingDryerLoads: boundedLaundryCountSchema,
+            dryerHeadroom: boundedLaundryCountSchema,
+            startableLoads: boundedLaundryCountSchema.nullable(),
+            reliable: z.boolean(),
+        })
+        .superRefine((value, context) => {
+            const expectedHeadroom = Math.max(
+                0,
+                value.projectedDryerSupply - value.pendingDryerLoads,
+            );
+            const expectedStartable = Math.min(value.washerAvailable, value.dryerHeadroom);
+            if (
+                value.dryerHeadroom !== expectedHeadroom ||
+                value.reliable !== (value.startableLoads !== null) ||
+                (value.reliable && value.startableLoads !== expectedStartable)
+            ) {
+                context.addIssue({
+                    code: 'custom',
+                    message: '세탁 가능 횟수 불변식이 올바르지 않습니다.',
+                });
+            }
+        });
 }
 
 const laundryCapacitySchema: z.ZodType<LaundryCapacitySnapshot> = z.strictObject({
@@ -146,7 +159,8 @@ const MEAL_IMAGE_TYPES = {
 } as const;
 
 const mealShaSchema = z.string().regex(/^[a-f0-9]{64}$/u);
-const mealImageExtensionSchema = z.string()
+const mealImageExtensionSchema = z
+    .string()
     .min(1)
     .max(8)
     .transform((value) => value.toLowerCase())
@@ -160,15 +174,18 @@ function normalizedMealAssetUrl(
 ): string | null {
     try {
         const parsed = new URL(value);
-        const localHttp = parsed.protocol === 'http:'
-            && (parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost');
-        if ((parsed.protocol !== 'https:' && !localHttp)
-            || parsed.username
-            || parsed.password
-            || (expectedOrigin !== null && parsed.origin !== expectedOrigin)
-            || parsed.pathname !== `/api/public/assets/${sha}.${extension}`
-            || parsed.search
-            || parsed.hash) {
+        const localHttp =
+            parsed.protocol === 'http:' &&
+            (parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost');
+        if (
+            (parsed.protocol !== 'https:' && !localHttp) ||
+            parsed.username ||
+            parsed.password ||
+            (expectedOrigin !== null && parsed.origin !== expectedOrigin) ||
+            parsed.pathname !== `/api/public/assets/${sha}.${extension}` ||
+            parsed.search ||
+            parsed.hash
+        ) {
             return null;
         }
         return parsed.toString();
@@ -178,35 +195,44 @@ function normalizedMealAssetUrl(
 }
 
 function mealImageSchema(expectedAssetOrigin: string | null) {
-    return z.object({
-        sha: mealShaSchema,
-        url: z.string().max(2_048),
-        contentType: z.enum([
-            'image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp',
-        ]),
-        extension: mealImageExtensionSchema,
-        width: z.number().int().min(1).max(20_000).nullable(),
-        height: z.number().int().min(1).max(20_000).nullable(),
-        byteLength: z.number().int().min(1).max(25_000_000),
-    }).superRefine((image, context) => {
-        if (image.contentType !== MEAL_IMAGE_TYPES[image.extension]
-            || normalizedMealAssetUrl(
+    return z
+        .object({
+            sha: mealShaSchema,
+            url: z.string().max(2_048),
+            contentType: z.enum([
+                'image/avif',
+                'image/gif',
+                'image/jpeg',
+                'image/png',
+                'image/webp',
+            ]),
+            extension: mealImageExtensionSchema,
+            width: z.number().int().min(1).max(20_000).nullable(),
+            height: z.number().int().min(1).max(20_000).nullable(),
+            byteLength: z.number().int().min(1).max(25_000_000),
+        })
+        .superRefine((image, context) => {
+            if (
+                image.contentType !== MEAL_IMAGE_TYPES[image.extension] ||
+                normalizedMealAssetUrl(
+                    image.url,
+                    image.sha,
+                    image.extension,
+                    expectedAssetOrigin,
+                ) === null
+            ) {
+                context.addIssue({code: 'custom', message: '허용되지 않은 급식 이미지입니다.'});
+            }
+        })
+        .transform((image) => ({
+            ...image,
+            url: normalizedMealAssetUrl(
                 image.url,
                 image.sha,
                 image.extension,
                 expectedAssetOrigin,
-            ) === null) {
-            context.addIssue({code: 'custom', message: '허용되지 않은 급식 이미지입니다.'});
-        }
-    }).transform((image) => ({
-        ...image,
-        url: normalizedMealAssetUrl(
-            image.url,
-            image.sha,
-            image.extension,
-            expectedAssetOrigin,
-        ) as string,
-    }));
+            ) as string,
+        }));
 }
 
 export type DashboardMealImage = z.output<ReturnType<typeof mealImageSchema>>;
@@ -215,12 +241,13 @@ export function safeMealPermalink(value: unknown): string | null {
     if (typeof value !== 'string' || value.length > 2_048) return null;
     try {
         const parsed = new URL(value.replace(/^http:\/\//u, 'https://'));
-        const safe = parsed.origin === 'https://pf.kakao.com'
-            && !parsed.username
-            && !parsed.password
-            && /^\/_xhzNjn\/(?:posts|[1-9][0-9]*)$/u.test(parsed.pathname)
-            && parsed.search === ''
-            && parsed.hash === '';
+        const safe =
+            parsed.origin === 'https://pf.kakao.com' &&
+            !parsed.username &&
+            !parsed.password &&
+            /^\/_xhzNjn\/(?:posts|[1-9][0-9]*)$/u.test(parsed.pathname) &&
+            parsed.search === '' &&
+            parsed.hash === '';
         return safe ? parsed.toString() : null;
     } catch {
         return null;
@@ -253,18 +280,25 @@ const mealWeekKeySchema = calendarDateSchema.refine(
 );
 
 function currentWeeklyMealMenuSchema(expectedAssetOrigin: string | null) {
-    return z.strictObject({
-        targetWeekKey: mealWeekKeySchema,
-        status: z.enum(['AVAILABLE', 'AWAITING_UPDATE']),
-        contentSha: mealShaSchema.nullable(),
-        post: mealPostSchema(expectedAssetOrigin).nullable(),
-    }).superRefine((value, context) => {
-        const available = value.contentSha !== null && value.post !== null;
-        if ((value.status === 'AVAILABLE') !== available
-            || (value.post?.contentSha !== undefined && value.post.contentSha !== value.contentSha)) {
-            context.addIssue({code: 'custom', message: '현재 주간 식단 계약이 올바르지 않습니다.'});
-        }
-    });
+    return z
+        .strictObject({
+            targetWeekKey: mealWeekKeySchema,
+            status: z.enum(['AVAILABLE', 'AWAITING_UPDATE']),
+            contentSha: mealShaSchema.nullable(),
+            post: mealPostSchema(expectedAssetOrigin).nullable(),
+        })
+        .superRefine((value, context) => {
+            const available = value.contentSha !== null && value.post !== null;
+            if (
+                (value.status === 'AVAILABLE') !== available ||
+                (value.post?.contentSha !== undefined && value.post.contentSha !== value.contentSha)
+            ) {
+                context.addIssue({
+                    code: 'custom',
+                    message: '현재 주간 식단 계약이 올바르지 않습니다.',
+                });
+            }
+        });
 }
 
 export type DashboardCurrentWeeklyMealMenu = z.output<
@@ -272,15 +306,17 @@ export type DashboardCurrentWeeklyMealMenu = z.output<
 >;
 
 function weeklyMealMenuSchema(expectedAssetOrigin: string | null) {
-    return z.strictObject({
-        weekKey: mealWeekKeySchema,
-        contentSha: mealShaSchema,
-        post: mealPostSchema(expectedAssetOrigin),
-    }).superRefine((value, context) => {
-        if (value.post.contentSha !== undefined && value.post.contentSha !== value.contentSha) {
-            context.addIssue({code: 'custom', message: '주간 식단 SHA가 일치하지 않습니다.'});
-        }
-    });
+    return z
+        .strictObject({
+            weekKey: mealWeekKeySchema,
+            contentSha: mealShaSchema,
+            post: mealPostSchema(expectedAssetOrigin),
+        })
+        .superRefine((value, context) => {
+            if (value.post.contentSha !== undefined && value.post.contentSha !== value.contentSha) {
+                context.addIssue({code: 'custom', message: '주간 식단 SHA가 일치하지 않습니다.'});
+            }
+        });
 }
 
 export type DashboardWeeklyMealMenu = z.output<ReturnType<typeof weeklyMealMenuSchema>>;

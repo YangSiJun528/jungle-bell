@@ -1,4 +1,5 @@
 import {Badge} from '@/components/ui/badge';
+
 import {LAUNDRY_WARNING_CLASS_NAME} from '../lib/laundry-warning';
 
 export function LaundryWarningBadge() {

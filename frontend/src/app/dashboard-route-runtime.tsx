@@ -1,4 +1,5 @@
 import {createContext, type PropsWithChildren, useContext} from 'react';
+
 import type {DashboardContentRoute} from './notification-panel-route';
 
 interface DashboardRouteRuntime {

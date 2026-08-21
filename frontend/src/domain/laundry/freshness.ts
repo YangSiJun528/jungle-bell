@@ -17,20 +17,19 @@ const RELIABLE_SOURCE_FRESHNESS = new Set([
 
 export function laundrySituationDataIsReliable(state: LaundrySituationDataState): boolean {
     if (
-        !state.hasData
-        || state.error
-        || !RELIABLE_SOURCE_FRESHNESS.has(state.sourceFreshness ?? '')
-        || !Number.isFinite(state.snapshotSavedAt)
+        !state.hasData ||
+        state.error ||
+        !RELIABLE_SOURCE_FRESHNESS.has(state.sourceFreshness ?? '') ||
+        !Number.isFinite(state.snapshotSavedAt)
     ) {
         return false;
     }
 
     const ageMs = state.nowMs - (state.snapshotSavedAt as number);
-    const expectedRefreshIntervalSeconds = state.expectedRefreshIntervalSeconds
-        ?? DEFAULT_EXPECTED_REFRESH_INTERVAL_SECONDS;
+    const expectedRefreshIntervalSeconds =
+        state.expectedRefreshIntervalSeconds ?? DEFAULT_EXPECTED_REFRESH_INTERVAL_SECONDS;
     if (!Number.isFinite(expectedRefreshIntervalSeconds) || expectedRefreshIntervalSeconds <= 0) {
         return false;
     }
-    return ageMs >= 0
-        && ageMs <= expectedRefreshIntervalSeconds * 1_000 * REFRESH_GRACE_MULTIPLIER;
+    return ageMs >= 0 && ageMs <= expectedRefreshIntervalSeconds * 1_000 * REFRESH_GRACE_MULTIPLIER;
 }

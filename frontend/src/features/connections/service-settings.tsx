@@ -1,7 +1,7 @@
-import {useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {CircleAlert, FolderOpen, Laptop, RefreshCw} from 'lucide-react';
-import type {DesktopSettingsUpdate} from '@/platform/contracts';
+import {useState} from 'react';
+
 import {queryKeys, useDashboardEnvironment} from '@/app/dashboard-context';
 import {ErrorState, LoadingState} from '@/components/dashboard/async-state';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
@@ -17,11 +17,24 @@ import {
 } from '@/components/ui/alert-dialog';
 import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@/components/ui/card';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import {Separator} from '@/components/ui/separator';
-import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@/components/ui/select';
 import {Switch} from '@/components/ui/switch';
+import type {DesktopSettingsUpdate} from '@/platform/contracts';
 
-function ServiceSettingRow({title, description, checked, disabled, onCheckedChange}: {
+function ServiceSettingRow({
+    title,
+    description,
+    checked,
+    disabled,
+    onCheckedChange,
+}: {
     title: string;
     description: string;
     checked: boolean;
@@ -70,27 +83,35 @@ function DesktopServiceSettings() {
     };
     const updateSelectedCohort = (selectedCohortId: string | null) => {
         if (!value) return;
-        save.mutate({...value, selectedCohortId}, {
-            onSuccess: () => setCohortDraft(undefined),
-        });
+        save.mutate(
+            {...value, selectedCohortId},
+            {
+                onSuccess: () => setCohortDraft(undefined),
+            },
+        );
     };
 
     if (settings.isPending && !value) {
-        return <LoadingState label="서비스 설정을 불러오고 있습니다."/>;
+        return <LoadingState label="서비스 설정을 불러오고 있습니다." />;
     }
     if (settings.isError && !value) {
-        return <ErrorState title="서비스 설정을 불러오지 못했습니다." retry={() => void settings.refetch()}/>;
+        return (
+            <ErrorState
+                title="서비스 설정을 불러오지 못했습니다."
+                retry={() => void settings.refetch()}
+            />
+        );
     }
     if (!value) return null;
 
-    const savedCohortId = value.selectedCohortId
-        && value.cohortOptions.some(({id}) => id === value.selectedCohortId)
-        ? value.selectedCohortId
-        : null;
+    const savedCohortId =
+        value.selectedCohortId && value.cohortOptions.some(({id}) => id === value.selectedCohortId)
+            ? value.selectedCohortId
+            : null;
     const displayedCohortId = cohortDraft === undefined ? savedCohortId : cohortDraft;
     const cohortDirty = cohortDraft !== undefined && cohortDraft !== savedCohortId;
-    const effectiveCohortLabel = value.cohortOptions
-        .find(({id}) => id === value.effectiveCohortId)?.label ?? null;
+    const effectiveCohortLabel =
+        value.cohortOptions.find(({id}) => id === value.effectiveCohortId)?.label ?? null;
 
     return (
         <div className="space-y-4">
@@ -110,21 +131,27 @@ function DesktopServiceSettings() {
                         <Select
                             disabled={save.isPending || value.cohortOptions.length === 0}
                             value={displayedCohortId ?? 'automatic'}
-                            onValueChange={(value) => setCohortDraft(value === 'automatic' ? null : value)}
+                            onValueChange={(value) =>
+                                setCohortDraft(value === 'automatic' ? null : value)
+                            }
                         >
                             <SelectTrigger aria-label="출석 확인 기수" className="w-full sm:w-64">
-                                <SelectValue placeholder="기수를 선택하세요"/>
+                                <SelectValue placeholder="기수를 선택하세요" />
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="automatic">자동 선택</SelectItem>
                                 {value.cohortOptions.map((cohort) => (
-                                    <SelectItem key={cohort.id} value={cohort.id}>{cohort.label}</SelectItem>
+                                    <SelectItem key={cohort.id} value={cohort.id}>
+                                        {cohort.label}
+                                    </SelectItem>
                                 ))}
                             </SelectContent>
                         </Select>
                     </div>
                     {value.cohortOptions.length === 0 ? (
-                        <p className="text-xs text-muted-foreground">LMS 로그인 후 기수 목록이 표시됩니다.</p>
+                        <p className="text-xs text-muted-foreground">
+                            LMS 로그인 후 기수 목록이 표시됩니다.
+                        </p>
                     ) : (
                         <div className="flex flex-wrap items-center justify-between gap-3">
                             <p className="text-xs text-muted-foreground">
@@ -133,7 +160,8 @@ function DesktopServiceSettings() {
                             <Button
                                 disabled={save.isPending || !cohortDirty}
                                 onClick={() => {
-                                    if (cohortDraft !== undefined) updateSelectedCohort(cohortDraft);
+                                    if (cohortDraft !== undefined)
+                                        updateSelectedCohort(cohortDraft);
                                 }}
                             >
                                 {save.isPending ? '적용 중' : '변경사항 적용'}
@@ -141,7 +169,9 @@ function DesktopServiceSettings() {
                         </div>
                     )}
                     {cohortDirty ? (
-                        <p className="text-xs text-amber-700 dark:text-amber-300">적용하지 않은 기수 변경이 있습니다.</p>
+                        <p className="text-xs text-amber-700 dark:text-amber-300">
+                            적용하지 않은 기수 변경이 있습니다.
+                        </p>
                     ) : null}
                 </CardContent>
             </Card>
@@ -149,7 +179,9 @@ function DesktopServiceSettings() {
             <Card>
                 <CardHeader>
                     <CardTitle>앱 실행</CardTitle>
-                    <CardDescription>이 PC에서 Jungle Bell을 실행하고 업데이트하는 방식을 정합니다.</CardDescription>
+                    <CardDescription>
+                        이 PC에서 Jungle Bell을 실행하고 업데이트하는 방식을 정합니다.
+                    </CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="flex items-center justify-between gap-4 py-4">
@@ -159,9 +191,11 @@ function DesktopServiceSettings() {
                                 현재 설치된 Jungle Bell PC 앱의 버전입니다.
                             </p>
                         </div>
-                        <p className="shrink-0 font-mono text-sm text-muted-foreground">v{value.appVersion}</p>
+                        <p className="shrink-0 font-mono text-sm text-muted-foreground">
+                            v{value.appVersion}
+                        </p>
                     </div>
-                    <Separator/>
+                    <Separator />
                     <ServiceSettingRow
                         title="자동 시작"
                         description="운영체제에 로그인하면 백그라운드에서 Jungle Bell을 시작합니다."
@@ -169,7 +203,7 @@ function DesktopServiceSettings() {
                         disabled={save.isPending}
                         onCheckedChange={(checked) => update('autoStart', checked)}
                     />
-                    <Separator/>
+                    <Separator />
                     <ServiceSettingRow
                         title="자동 업데이트"
                         description="서명된 최신 버전을 확인하고 자동으로 설치합니다."
@@ -186,7 +220,9 @@ function DesktopServiceSettings() {
             <Card>
                 <CardHeader>
                     <CardTitle>진단</CardTitle>
-                    <CardDescription>문제를 확인할 때만 상세 로그를 켜고 앱 로그를 확인합니다.</CardDescription>
+                    <CardDescription>
+                        문제를 확인할 때만 상세 로그를 켜고 앱 로그를 확인합니다.
+                    </CardDescription>
                 </CardHeader>
                 <CardContent>
                     <ServiceSettingRow
@@ -199,23 +235,29 @@ function DesktopServiceSettings() {
                             else update('debugMode', false);
                         }}
                     />
-                    <Separator/>
+                    <Separator />
                     <div className="flex items-center justify-between gap-4 py-4">
                         <div className="min-w-0">
                             <p className="text-sm font-medium">로그 폴더</p>
-                            <p className="mt-1 text-xs leading-5 text-muted-foreground">Jungle Bell 전용 로그 디렉터리를 파일 탐색기에서 엽니다.</p>
+                            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                                Jungle Bell 전용 로그 디렉터리를 파일 탐색기에서 엽니다.
+                            </p>
                         </div>
-                        <Button variant="outline" disabled={openLogs.isPending} onClick={() => openLogs.mutate()}>
-                            <FolderOpen aria-hidden="true"/>
+                        <Button
+                            variant="outline"
+                            disabled={openLogs.isPending}
+                            onClick={() => openLogs.mutate()}
+                        >
+                            <FolderOpen aria-hidden="true" />
                             {openLogs.isPending ? '여는 중' : '열기'}
                         </Button>
                     </div>
                 </CardContent>
             </Card>
 
-            {(save.isError || openLogs.isError) ? (
+            {save.isError || openLogs.isError ? (
                 <Alert variant="destructive">
-                    <CircleAlert/>
+                    <CircleAlert />
                     <AlertTitle>서비스 설정을 처리하지 못했습니다.</AlertTitle>
                     <AlertDescription>잠시 후 다시 시도하세요.</AlertDescription>
                 </Alert>
@@ -226,12 +268,15 @@ function DesktopServiceSettings() {
                     <AlertDialogHeader>
                         <AlertDialogTitle>자동 업데이트를 끌까요?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            외부 서비스가 변경되면 출석 확인과 알림이 정상적으로 작동하지 않을 수 있습니다.
+                            외부 서비스가 변경되면 출석 확인과 알림이 정상적으로 작동하지 않을 수
+                            있습니다.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel>취소</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => update('autoUpdate', false)}>그래도 끄기</AlertDialogAction>
+                        <AlertDialogAction onClick={() => update('autoUpdate', false)}>
+                            그래도 끄기
+                        </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
@@ -241,7 +286,8 @@ function DesktopServiceSettings() {
                     <AlertDialogHeader>
                         <AlertDialogTitle>디버그 모드를 켤까요?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            평소보다 많은 진단 로그가 저장됩니다. 문제 분석 같은 특별한 목적이 없다면 켜지 마세요.
+                            평소보다 많은 진단 로그가 저장됩니다. 문제 분석 같은 특별한 목적이
+                            없다면 켜지 마세요.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -258,13 +304,14 @@ function DesktopServiceSettings() {
 
 export function ServiceSettings() {
     const {platform} = useDashboardEnvironment();
-    if (platform.capabilities.desktopSettings) return <DesktopServiceSettings/>;
+    if (platform.capabilities.desktopSettings) return <DesktopServiceSettings />;
     return (
         <Alert>
-            <Laptop/>
+            <Laptop />
             <AlertTitle>PC 앱에서 설정합니다.</AlertTitle>
             <AlertDescription>
-                자동 시작, 업데이트, 사용 통계와 진단 로그는 각 PC에만 적용되므로 PC 앱에서 변경할 수 있습니다.
+                자동 시작, 업데이트, 사용 통계와 진단 로그는 각 PC에만 적용되므로 PC 앱에서 변경할
+                수 있습니다.
             </AlertDescription>
         </Alert>
     );

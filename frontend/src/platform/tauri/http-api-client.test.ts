@@ -1,36 +1,43 @@
 import {readFileSync} from 'node:fs';
+
 import {describe, expect, test, vi} from 'vitest';
-import {createDesktopHttpSessionManager} from './desktop-http-session';
+
 import {createHttpApiClient} from '@/api/http-api-client';
 import {hasOwn} from '@/lib/object';
 
+import {createDesktopHttpSessionManager} from './desktop-http-session';
+
 const token = (character: string) => `jbui_${character.repeat(64)}`;
-const json = (status = 200) => new Response('{}', {
-    status,
-    headers: {'content-type': 'application/json'},
-});
+const json = (status = 200) =>
+    new Response('{}', {
+        status,
+        headers: {'content-type': 'application/json'},
+    });
 
 function delayedJsonBody(body = '{}', status = 200) {
     let released = false;
     let release!: () => void;
     const bytes = new TextEncoder().encode(body);
-    const response = new Response(new ReadableStream<Uint8Array>({
-        start(controller) {
-            release = () => {
-                if (released) return;
-                released = true;
-                controller.enqueue(bytes);
-                controller.close();
-            };
+    const response = new Response(
+        new ReadableStream<Uint8Array>({
+            start(controller) {
+                release = () => {
+                    if (released) return;
+                    released = true;
+                    controller.enqueue(bytes);
+                    controller.close();
+                };
+            },
+        }),
+        {
+            status,
+            statusText: status === 200 ? 'Verified' : undefined,
+            headers: {
+                'content-type': 'application/json',
+                'x-response-contract': 'preserved',
+            },
         },
-    }), {
-        status,
-        statusText: status === 200 ? 'Verified' : undefined,
-        headers: {
-            'content-type': 'application/json',
-            'x-response-contract': 'preserved',
-        },
-    });
+    );
     return {release, response};
 }
 
@@ -51,25 +58,39 @@ describe('desktop HTTP session', () => {
         });
 
         const leases = await Promise.all(Array.from({length: 50}, () => manager.getSessionLease()));
-        expect(leases.map((lease) => lease.accessToken))
-            .toEqual(Array.from({length: 50}, () => token('a')));
+        expect(leases.map((lease) => lease.accessToken)).toEqual(
+            Array.from({length: 50}, () => token('a')),
+        );
         expect(new Set(leases.map((lease) => lease.generation))).toEqual(new Set([0]));
         expect(bootstrapDesktopHttpSession).toHaveBeenCalledTimes(1);
     });
 
     test('refreshes proactively within 60 seconds of expiry', async () => {
         let now = 0;
-        const bootstrapDesktopHttpSession = vi.fn()
-            .mockResolvedValueOnce({accessToken: token('a'), expiresAt: new Date(120_001).toISOString()})
-            .mockResolvedValueOnce({accessToken: token('b'), expiresAt: new Date(240_001).toISOString()});
+        const bootstrapDesktopHttpSession = vi
+            .fn()
+            .mockResolvedValueOnce({
+                accessToken: token('a'),
+                expiresAt: new Date(120_001).toISOString(),
+            })
+            .mockResolvedValueOnce({
+                accessToken: token('b'),
+                expiresAt: new Date(240_001).toISOString(),
+            });
         const manager = createDesktopHttpSessionManager({
             nativeBridge: {bootstrapDesktopHttpSession},
             now: () => now,
         });
 
-        await expect(manager.getSessionLease()).resolves.toMatchObject({accessToken: token('a'), generation: 0});
+        await expect(manager.getSessionLease()).resolves.toMatchObject({
+            accessToken: token('a'),
+            generation: 0,
+        });
         now = 60_001;
-        await expect(manager.getSessionLease()).resolves.toMatchObject({accessToken: token('b'), generation: 0});
+        await expect(manager.getSessionLease()).resolves.toMatchObject({
+            accessToken: token('b'),
+            generation: 0,
+        });
         expect(bootstrapDesktopHttpSession).toHaveBeenCalledTimes(2);
     });
 
@@ -78,9 +99,13 @@ describe('desktop HTTP session', () => {
         const first = new Promise<{accessToken: string; expiresAt: string}>((resolve) => {
             resolveFirst = resolve;
         });
-        const bootstrapDesktopHttpSession = vi.fn()
+        const bootstrapDesktopHttpSession = vi
+            .fn()
             .mockReturnValueOnce(first)
-            .mockResolvedValueOnce({accessToken: token('b'), expiresAt: new Date(420_000).toISOString()});
+            .mockResolvedValueOnce({
+                accessToken: token('b'),
+                expiresAt: new Date(420_000).toISOString(),
+            });
         const manager = createDesktopHttpSessionManager({
             nativeBridge: {bootstrapDesktopHttpSession},
             now: () => 0,
@@ -91,7 +116,10 @@ describe('desktop HTTP session', () => {
         resolveFirst({accessToken: token('a'), expiresAt: new Date(420_000).toISOString()});
 
         await expect(oldIdentityRequest).rejects.toThrow('DESKTOP_HTTP_SESSION_INVALIDATED');
-        await expect(manager.getSessionLease()).resolves.toMatchObject({accessToken: token('b'), generation: 1});
+        await expect(manager.getSessionLease()).resolves.toMatchObject({
+            accessToken: token('b'),
+            generation: 1,
+        });
         expect(bootstrapDesktopHttpSession).toHaveBeenCalledTimes(2);
     });
 
@@ -135,10 +163,12 @@ describe('HTTP API boundaries', () => {
             return json();
         });
         const manager = createDesktopHttpSessionManager({
-            nativeBridge: {bootstrapDesktopHttpSession: async () => ({
-                accessToken: token('a'),
-                expiresAt: new Date(420_000).toISOString(),
-            })},
+            nativeBridge: {
+                bootstrapDesktopHttpSession: async () => ({
+                    accessToken: token('a'),
+                    expiresAt: new Date(420_000).toISOString(),
+                }),
+            },
             now: () => 0,
         });
         const desktopClient = createHttpApiClient({
@@ -154,7 +184,10 @@ describe('HTTP API boundaries', () => {
             accountAuthentication: {kind: 'cookie'},
         });
 
-        const attemptedHeaders = {authorization: 'Bearer should-not-cross', cookie: 'manual=unsafe'};
+        const attemptedHeaders = {
+            authorization: 'Bearer should-not-cross',
+            cookie: 'manual=unsafe',
+        };
         await browserClient.publicResponse('/api/public/laundry', {headers: attemptedHeaders});
         await browserClient.accountResponse('/api/me/attendance', {headers: attemptedHeaders});
         await desktopClient.accountResponse('/api/me/attendance', {headers: attemptedHeaders});
@@ -189,8 +222,9 @@ describe('HTTP API boundaries', () => {
             accountAuthentication: {kind: 'none'},
         });
 
-        await expect(client.accountResponse('/api/me/session'))
-            .rejects.toThrow('ACCOUNT_AUTHENTICATION_UNAVAILABLE');
+        await expect(client.accountResponse('/api/me/session')).rejects.toThrow(
+            'ACCOUNT_AUTHENTICATION_UNAVAILABLE',
+        );
         expect(fetcher).not.toHaveBeenCalled();
     });
 
@@ -207,13 +241,18 @@ describe('HTTP API boundaries', () => {
             fetcher: async () => upstream,
             publicBase: '',
             platformBase: '',
-            accountAuthentication: {kind: 'desktop-session', session: createDesktopHttpSessionManager({
-                nativeBridge: {bootstrapDesktopHttpSession: async () => ({
-                    accessToken: token('a'),
-                    expiresAt: new Date(420_000).toISOString(),
-                })},
-                now: () => 0,
-            })},
+            accountAuthentication: {
+                kind: 'desktop-session',
+                session: createDesktopHttpSessionManager({
+                    nativeBridge: {
+                        bootstrapDesktopHttpSession: async () => ({
+                            accessToken: token('a'),
+                            expiresAt: new Date(420_000).toISOString(),
+                        }),
+                    },
+                    now: () => 0,
+                }),
+            },
         });
 
         const response = await client.accountResponse('/api/me/attendance');
@@ -241,20 +280,26 @@ describe('HTTP API boundaries', () => {
             statusText: 'Empty',
             headers: {'x-response-contract': 'zero-length'},
         });
-        const fetcher = vi.fn()
+        const fetcher = vi
+            .fn()
             .mockResolvedValueOnce(nullBody)
             .mockResolvedValueOnce(zeroLengthBody);
         const client = createHttpApiClient({
             fetcher,
             publicBase: '',
             platformBase: '',
-            accountAuthentication: {kind: 'desktop-session', session: createDesktopHttpSessionManager({
-                nativeBridge: {bootstrapDesktopHttpSession: async () => ({
-                    accessToken: token('a'),
-                    expiresAt: new Date(420_000).toISOString(),
-                })},
-                now: () => 0,
-            })},
+            accountAuthentication: {
+                kind: 'desktop-session',
+                session: createDesktopHttpSessionManager({
+                    nativeBridge: {
+                        bootstrapDesktopHttpSession: async () => ({
+                            accessToken: token('a'),
+                            expiresAt: new Date(420_000).toISOString(),
+                        }),
+                    },
+                    now: () => 0,
+                }),
+            },
         });
 
         const verifiedNullBody = await client.accountResponse('/api/me/mobile-sessions');
@@ -284,16 +329,21 @@ describe('HTTP API boundaries', () => {
             fetcher,
             publicBase: '',
             platformBase: '',
-            accountAuthentication: {kind: 'desktop-session', session: createDesktopHttpSessionManager({
-                nativeBridge: {bootstrapDesktopHttpSession},
-                now: () => 0,
-            })},
+            accountAuthentication: {
+                kind: 'desktop-session',
+                session: createDesktopHttpSessionManager({
+                    nativeBridge: {bootstrapDesktopHttpSession},
+                    now: () => 0,
+                }),
+            },
         });
 
-        expect(() => client.accountResponse('/api/me/../desktop' as never))
-            .toThrow('API_CLIENT_INVALID_ARGUMENT');
-        expect(() => client.accountResponse('/api/me-evil/attendance' as never))
-            .toThrow('API_CLIENT_INVALID_ARGUMENT');
+        expect(() => client.accountResponse('/api/me/../desktop' as never)).toThrow(
+            'API_CLIENT_INVALID_ARGUMENT',
+        );
+        expect(() => client.accountResponse('/api/me-evil/attendance' as never)).toThrow(
+            'API_CLIENT_INVALID_ARGUMENT',
+        );
         expect(fetcher).not.toHaveBeenCalled();
         expect(bootstrapDesktopHttpSession).not.toHaveBeenCalled();
     });
@@ -310,21 +360,24 @@ describe('HTTP API boundaries', () => {
         const fetcher = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) =>
             new Headers(init?.headers).get('authorization') === `Bearer ${token('a')}`
                 ? json(401)
-                : json());
+                : json(),
+        );
         const client = createHttpApiClient({
             fetcher,
             publicBase: '',
             platformBase: '',
-            accountAuthentication: {kind: 'desktop-session', session: createDesktopHttpSessionManager({
-                nativeBridge: {bootstrapDesktopHttpSession},
-                now: () => 0,
-            })},
+            accountAuthentication: {
+                kind: 'desktop-session',
+                session: createDesktopHttpSessionManager({
+                    nativeBridge: {bootstrapDesktopHttpSession},
+                    now: () => 0,
+                }),
+            },
         });
 
-        const responses = await Promise.all(Array.from(
-            {length: 50},
-            () => client.accountResponse('/api/me/attendance'),
-        ));
+        const responses = await Promise.all(
+            Array.from({length: 50}, () => client.accountResponse('/api/me/attendance')),
+        );
         expect(responses.every((response) => response.status === 200)).toBe(true);
         expect(bootstrapDesktopHttpSession).toHaveBeenCalledTimes(2);
         expect(fetcher).toHaveBeenCalledTimes(100);
@@ -334,10 +387,12 @@ describe('HTTP API boundaries', () => {
         const delayed = delayedJsonBody('{"attendance":{"private":true}}');
         const fetcher = vi.fn(async () => delayed.response);
         const manager = createDesktopHttpSessionManager({
-            nativeBridge: {bootstrapDesktopHttpSession: async () => ({
-                accessToken: token('a'),
-                expiresAt: new Date(420_000).toISOString(),
-            })},
+            nativeBridge: {
+                bootstrapDesktopHttpSession: async () => ({
+                    accessToken: token('a'),
+                    expiresAt: new Date(420_000).toISOString(),
+                }),
+            },
             now: () => 0,
         });
         const client = createHttpApiClient({
@@ -360,12 +415,16 @@ describe('HTTP API boundaries', () => {
 
     test('discards a PUT body that completes after identity reset', async () => {
         const delayed = delayedJsonBody('{"enabled":true}');
-        const fetcher = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => delayed.response);
+        const fetcher = vi.fn(
+            async (_input: RequestInfo | URL, _init?: RequestInit) => delayed.response,
+        );
         const manager = createDesktopHttpSessionManager({
-            nativeBridge: {bootstrapDesktopHttpSession: async () => ({
-                accessToken: token('a'),
-                expiresAt: new Date(420_000).toISOString(),
-            })},
+            nativeBridge: {
+                bootstrapDesktopHttpSession: async () => ({
+                    accessToken: token('a'),
+                    expiresAt: new Date(420_000).toISOString(),
+                }),
+            },
             now: () => 0,
         });
         const client = createHttpApiClient({
@@ -398,10 +457,19 @@ describe('HTTP API boundaries', () => {
         const firstResponse = new Promise<Response>((resolve) => {
             resolveFirstResponse = resolve;
         });
-        const fetcher = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => firstResponse);
-        const bootstrapDesktopHttpSession = vi.fn()
-            .mockResolvedValueOnce({accessToken: token('a'), expiresAt: new Date(420_000).toISOString()})
-            .mockResolvedValueOnce({accessToken: token('b'), expiresAt: new Date(420_000).toISOString()});
+        const fetcher = vi.fn(
+            async (_input: RequestInfo | URL, _init?: RequestInit) => firstResponse,
+        );
+        const bootstrapDesktopHttpSession = vi
+            .fn()
+            .mockResolvedValueOnce({
+                accessToken: token('a'),
+                expiresAt: new Date(420_000).toISOString(),
+            })
+            .mockResolvedValueOnce({
+                accessToken: token('b'),
+                expiresAt: new Date(420_000).toISOString(),
+            });
         const manager = createDesktopHttpSessionManager({
             nativeBridge: {bootstrapDesktopHttpSession},
             now: () => 0,
@@ -445,14 +513,16 @@ describe('HTTP API boundaries', () => {
             fetcher,
             publicBase: '',
             platformBase: '',
-            accountAuthentication: {kind: 'desktop-session', session: createDesktopHttpSessionManager({
-                nativeBridge: {bootstrapDesktopHttpSession},
-                now: () => 0,
-            })},
+            accountAuthentication: {
+                kind: 'desktop-session',
+                session: createDesktopHttpSessionManager({
+                    nativeBridge: {bootstrapDesktopHttpSession},
+                    now: () => 0,
+                }),
+            },
         });
 
-        await expect(client.accountResponse('/api/me/attendance'))
-            .resolves.toMatchObject({status});
+        await expect(client.accountResponse('/api/me/attendance')).resolves.toMatchObject({status});
         expect(fetcher).toHaveBeenCalledTimes(1);
         expect(bootstrapDesktopHttpSession).toHaveBeenCalledTimes(1);
     });
@@ -462,15 +532,20 @@ describe('HTTP API boundaries', () => {
             accessToken: token('a'),
             expiresAt: new Date(420_000).toISOString(),
         }));
-        const fetcher = vi.fn(async () => { throw new TypeError('offline'); });
+        const fetcher = vi.fn(async () => {
+            throw new TypeError('offline');
+        });
         const client = createHttpApiClient({
             fetcher,
             publicBase: '',
             platformBase: '',
-            accountAuthentication: {kind: 'desktop-session', session: createDesktopHttpSessionManager({
-                nativeBridge: {bootstrapDesktopHttpSession},
-                now: () => 0,
-            })},
+            accountAuthentication: {
+                kind: 'desktop-session',
+                session: createDesktopHttpSessionManager({
+                    nativeBridge: {bootstrapDesktopHttpSession},
+                    now: () => 0,
+                }),
+            },
         });
 
         await expect(client.accountResponse('/api/me/attendance')).rejects.toThrow('offline');

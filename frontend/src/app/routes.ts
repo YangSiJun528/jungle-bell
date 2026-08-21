@@ -36,15 +36,9 @@ const PERSONAL_UTILITY_ROUTES = [
     'connections',
 ] as const satisfies readonly DashboardRoute[];
 
-const SUPPORT_ROUTES = [
-    'install',
-] as const satisfies readonly DashboardRoute[];
+const SUPPORT_ROUTES = ['install'] as const satisfies readonly DashboardRoute[];
 
-const ALL_ROUTES = [
-    ...NAVIGATION_ROUTES,
-    ...PERSONAL_UTILITY_ROUTES,
-    ...SUPPORT_ROUTES,
-] as const;
+const ALL_ROUTES = [...NAVIGATION_ROUTES, ...PERSONAL_UTILITY_ROUTES, ...SUPPORT_ROUTES] as const;
 
 /**
  * Primary navigation stays limited to campus tasks. Notification and device
@@ -67,10 +61,11 @@ export function dashboardRouteHref(route: DashboardRoute): `#${DashboardRoutePat
 }
 
 export function dashboardRouteFromPath(pathname: string): DashboardRoute {
-    const value = pathname.trim().toLowerCase().replace(/^\/+|\/+$/gu, '');
-    return ALL_ROUTES.includes(value as DashboardRoute)
-        ? value as DashboardRoute
-        : 'home';
+    const value = pathname
+        .trim()
+        .toLowerCase()
+        .replace(/^\/+|\/+$/gu, '');
+    return ALL_ROUTES.includes(value as DashboardRoute) ? (value as DashboardRoute) : 'home';
 }
 
 export function dashboardRouteFromHash(hash: string): DashboardRoute {
@@ -81,8 +76,6 @@ export function normalizeLegacyDashboardHash(hash: string): `#${DashboardRoutePa
     const value = hash.trim().toLowerCase().replace(/^#/u, '');
     if (value === 'setup' || value === '/setup') return '#/install';
     if (value.startsWith('/')) return null;
-    const route = ALL_ROUTES.includes(value as DashboardRoute)
-        ? value as DashboardRoute
-        : null;
+    const route = ALL_ROUTES.includes(value as DashboardRoute) ? (value as DashboardRoute) : null;
     return route ? dashboardRouteHref(route) : null;
 }

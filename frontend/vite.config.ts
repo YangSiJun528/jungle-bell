@@ -1,6 +1,7 @@
 import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {createRequire} from 'node:module';
 import {resolve} from 'node:path';
+
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import {defineConfig, transformWithOxc, type Plugin} from 'vite';
@@ -24,14 +25,17 @@ export function frontendTarget(mode: string): FrontendTarget {
 
 export function normalizeDevApiOrigin(value: string): string {
     const parsed = new URL(value);
-    const localHttp = parsed.protocol === 'http:'
-        && (parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost');
-    if ((parsed.protocol !== 'https:' && !localHttp)
-        || parsed.username
-        || parsed.password
-        || parsed.pathname !== '/'
-        || parsed.search
-        || parsed.hash) {
+    const localHttp =
+        parsed.protocol === 'http:' &&
+        (parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost');
+    if (
+        (parsed.protocol !== 'https:' && !localHttp) ||
+        parsed.username ||
+        parsed.password ||
+        parsed.pathname !== '/' ||
+        parsed.search ||
+        parsed.hash
+    ) {
         throw new Error('JUNGLE_BELL_DEV_API_ORIGIN_INVALID');
     }
     return parsed.origin;
@@ -119,19 +123,22 @@ export default defineConfig(({command, mode}) => {
     const target = frontendTarget(mode);
     const outDir = `dist/${target}`;
     const platformApiOrigin = buildApiOrigin(command, target, process.env);
-    const devApiOrigin = command === 'serve'
-        ? target === 'desktop'
-            ? platformApiOrigin as string
-            : normalizeDevApiOrigin(
-                process.env.JUNGLE_BELL_DEV_API_ORIGIN ?? defaultDevApiOrigin,
-            )
-        : null;
+    const devApiOrigin =
+        command === 'serve'
+            ? target === 'desktop'
+                ? (platformApiOrigin as string)
+                : normalizeDevApiOrigin(
+                      process.env.JUNGLE_BELL_DEV_API_ORIGIN ?? defaultDevApiOrigin,
+                  )
+            : null;
     const developmentTauriOrigin = command === 'serve' ? tauriDevOrigin(target) : null;
     const define: Record<string, string> = {
         __JUNGLE_BELL_TARGET__: JSON.stringify(target),
-        __JUNGLE_BELL_BUILD_CONFIG__: JSON.stringify(target === 'desktop'
-            ? {target, platformApiUrl: platformApiOrigin as string}
-            : {target, platformApiUrl: null}),
+        __JUNGLE_BELL_BUILD_CONFIG__: JSON.stringify(
+            target === 'desktop'
+                ? {target, platformApiUrl: platformApiOrigin as string}
+                : {target, platformApiUrl: null},
+        ),
     };
 
     return {
@@ -141,26 +148,26 @@ export default defineConfig(({command, mode}) => {
             ...(target === 'desktop'
                 ? [injectionScriptPlugin(outDir)]
                 : [
-                    pwaHtmlPlugin(),
-                    ...VitePWA({
-                        strategies: 'injectManifest',
-                        srcDir: 'src/platform/pwa/service-worker',
-                        filename: 'sw.js',
-                        injectRegister: false,
-                        registerType: 'prompt',
-                        manifest: false,
-                        injectManifest: {
-                            rollupFormat: 'iife',
-                            globPatterns: [
-                                'index.html',
-                                'manifest.webmanifest',
-                                'icons/**/*.{png,svg,ico}',
-                                'assets/**/*.{js,css,png,woff2,txt}',
-                            ],
-                        },
-                        devOptions: {enabled: false},
-                    }),
-                ]),
+                      pwaHtmlPlugin(),
+                      ...VitePWA({
+                          strategies: 'injectManifest',
+                          srcDir: 'src/platform/pwa/service-worker',
+                          filename: 'sw.js',
+                          injectRegister: false,
+                          registerType: 'prompt',
+                          manifest: false,
+                          injectManifest: {
+                              rollupFormat: 'iife',
+                              globPatterns: [
+                                  'index.html',
+                                  'manifest.webmanifest',
+                                  'icons/**/*.{png,svg,ico}',
+                                  'assets/**/*.{js,css,png,woff2,txt}',
+                              ],
+                          },
+                          devOptions: {enabled: false},
+                      }),
+                  ]),
         ],
         resolve: {
             alias: {
@@ -170,30 +177,34 @@ export default defineConfig(({command, mode}) => {
         cacheDir: 'node_modules/.vite',
         base: './',
         clearScreen: false,
-        publicDir: target === 'web'
-            ? resolve(import.meta.dirname, 'src/platform/pwa/public')
-            : false,
+        publicDir:
+            target === 'web' ? resolve(import.meta.dirname, 'src/platform/pwa/public') : false,
         define,
-        server: command === 'serve' ? {
-            host: host ?? '127.0.0.1',
-            port: 5173,
-            strictPort: true,
-            proxy: {
-                '/api/me': {
-                    target: devApiOrigin as string,
-                    changeOrigin: true,
-                    secure: true,
-                    ...(developmentTauriOrigin ? {headers: {origin: developmentTauriOrigin}} : {}),
-                },
-                '/api': {
-                    target: devApiOrigin as string,
-                    changeOrigin: true,
-                    secure: true,
-                    headers: {origin: devApiOrigin as string},
-                    bypass: (request) => bypassDevApiModuleRequest(request.url),
-                },
-            },
-        } : undefined,
+        server:
+            command === 'serve'
+                ? {
+                      host: host ?? '127.0.0.1',
+                      port: 5173,
+                      strictPort: true,
+                      proxy: {
+                          '/api/me': {
+                              target: devApiOrigin as string,
+                              changeOrigin: true,
+                              secure: true,
+                              ...(developmentTauriOrigin
+                                  ? {headers: {origin: developmentTauriOrigin}}
+                                  : {}),
+                          },
+                          '/api': {
+                              target: devApiOrigin as string,
+                              changeOrigin: true,
+                              secure: true,
+                              headers: {origin: devApiOrigin as string},
+                              bypass: (request) => bypassDevApiModuleRequest(request.url),
+                          },
+                      },
+                  }
+                : undefined,
         // Tauri signing variables are consumed by Node-side configuration only.
         envPrefix: ['VITE_'],
         build: {

@@ -1,5 +1,6 @@
-import * as React from 'react';
 import {Progress as ProgressPrimitive} from 'radix-ui';
+import * as React from 'react';
+
 import {cn} from '@/lib/utils';
 
 function Progress({
@@ -7,9 +8,7 @@ function Progress({
     value,
     ...props
 }: React.ComponentProps<typeof ProgressPrimitive.Root>) {
-    const normalizedValue = typeof value === 'number'
-        ? Math.min(100, Math.max(0, value))
-        : 0;
+    const normalizedValue = typeof value === 'number' ? Math.min(100, Math.max(0, value)) : 0;
 
     return (
         <ProgressPrimitive.Root

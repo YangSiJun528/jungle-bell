@@ -1,4 +1,5 @@
 import {describe, expect, test} from 'vitest';
+
 import {accountAuthenticationRequired} from './account-authentication';
 
 describe('accountAuthenticationRequired', () => {

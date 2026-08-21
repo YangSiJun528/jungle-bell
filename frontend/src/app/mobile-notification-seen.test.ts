@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+
 import {test} from 'vitest';
+
 import {
     mergeSeenMobileNotificationIds,
     readSeenMobileNotificationIds,
@@ -10,7 +12,9 @@ function memoryStorage(initial: Record<string, string> = {}) {
     const values = new Map(Object.entries(initial));
     return {
         getItem: (key: string) => values.get(key) ?? null,
-        setItem: (key: string, value: string) => { values.set(key, value); },
+        setItem: (key: string, value: string) => {
+            values.set(key, value);
+        },
         values,
     };
 }
@@ -30,7 +34,10 @@ test('seen notification storage reads and writes the bounded current schema', ()
 test('seen notification merge preserves identity when no new IDs are added', () => {
     const current = new Set(['one', 'two']);
     assert.equal(mergeSeenMobileNotificationIds(current, ['two', 'one']), current);
-    assert.deepEqual([...mergeSeenMobileNotificationIds(current, ['three'])], ['three', 'one', 'two']);
+    assert.deepEqual(
+        [...mergeSeenMobileNotificationIds(current, ['three'])],
+        ['three', 'one', 'two'],
+    );
 });
 
 test('개별 알림을 본 처리하면 다른 새 알림은 유지한다', () => {

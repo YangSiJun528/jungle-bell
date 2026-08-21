@@ -104,7 +104,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function hasExactKeys(value: Record<string, unknown>, keys: string[]): boolean {
     const actual = Object.keys(value).sort();
     const expected = [...keys].sort();
-    return actual.length === expected.length && actual.every((key, index) => key === expected[index]);
+    return (
+        actual.length === expected.length && actual.every((key, index) => key === expected[index])
+    );
 }
 
 function errorMessage(error: unknown): string {
@@ -122,7 +124,11 @@ function expectAcknowledged(value: unknown): void {
 }
 
 function jsLog(level: LogLevel, message: string): void {
-    const normalized = message.replace(/[\u0000-\u001f\u007f]/gu, ' ').trim().slice(0, 512) || 'checker log';
+    const normalized =
+        message
+            .replace(/[\u0000-\u001f\u007f]/gu, ' ')
+            .trim()
+            .slice(0, 512) || 'checker log';
     void reportCheckerEvent({type: 'log', level, message: normalized})
         .then(expectAcknowledged)
         .catch(() => undefined);
@@ -194,35 +200,47 @@ function normalizeCohortOptions(cohorts: RawCohort[]): CohortOption[] {
         .filter((cohort): cohort is CohortOption => cohort !== null);
 }
 
-async function resolveCohortOptions(cohortOptions: CohortOption[], today: string): Promise<CohortSelection> {
+async function resolveCohortOptions(
+    cohortOptions: CohortOption[],
+    today: string,
+): Promise<CohortSelection> {
     const response = await reportCheckerEvent({type: 'resolveCohort', cohortOptions});
-    if (!isRecord(response)
-        || !hasExactKeys(response, ['type', 'selection'])
-        || response.type !== 'cohortSelection'
-        || !isRecord(response.selection)) {
+    if (
+        !isRecord(response) ||
+        !hasExactKeys(response, ['type', 'selection']) ||
+        response.type !== 'cohortSelection' ||
+        !isRecord(response.selection)
+    ) {
         throw new Error('INVALID_COHORT_SELECTION_RESPONSE');
     }
     const selection = response.selection;
-    if (!hasExactKeys(selection, [
-        'cohort_id',
-        'cohort_status',
-        'cohort_start_date',
-        'cohort_end_date',
-    ])) {
+    if (
+        !hasExactKeys(selection, [
+            'cohort_id',
+            'cohort_status',
+            'cohort_start_date',
+            'cohort_end_date',
+        ])
+    ) {
         throw new Error('INVALID_COHORT_SELECTION_RESPONSE');
     }
     const cohortId = selection.cohort_id;
     const cohortStatus = selection.cohort_status;
     const startDate = selection.cohort_start_date;
     const endDate = selection.cohort_end_date;
-    const validDate = (value: unknown): value is string | null => value === null
-        || (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/u.test(value));
-    if ((cohortId !== null && (typeof cohortId !== 'string'
-        || !cohortId || cohortId.length > 128 || cohortId.trim() !== cohortId))
-        || typeof cohortStatus !== 'string'
-        || !['active', 'upcoming', 'unknown', 'ended', 'none'].includes(cohortStatus)
-        || !validDate(startDate)
-        || !validDate(endDate)) {
+    const validDate = (value: unknown): value is string | null =>
+        value === null || (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/u.test(value));
+    if (
+        (cohortId !== null &&
+            (typeof cohortId !== 'string' ||
+                !cohortId ||
+                cohortId.length > 128 ||
+                cohortId.trim() !== cohortId)) ||
+        typeof cohortStatus !== 'string' ||
+        !['active', 'upcoming', 'unknown', 'ended', 'none'].includes(cohortStatus) ||
+        !validDate(startDate) ||
+        !validDate(endDate)
+    ) {
         throw new Error('INVALID_COHORT_SELECTION_RESPONSE');
     }
     return {
@@ -250,7 +268,10 @@ async function fetchCohortSelection(): Promise<CohortSelection> {
             credentials: 'include',
             headers: {accept: 'application/json'},
         });
-        jsLog('debug', `fetchCohortSelection: response status=${response.status} statusText=${response.statusText}`);
+        jsLog(
+            'debug',
+            `fetchCohortSelection: response status=${response.status} statusText=${response.statusText}`,
+        );
 
         if (response.status === 401) {
             jsLog('info', 'fetchCohortSelection: status=401 (login required)');
@@ -311,7 +332,10 @@ async function fetchAttendance(cohortId: string): Promise<AttendanceFetchResult>
             credentials: 'include',
             headers: {accept: 'application/json'},
         });
-        jsLog('debug', `fetchAttendance: response status=${response.status} statusText=${response.statusText}`);
+        jsLog(
+            'debug',
+            `fetchAttendance: response status=${response.status} statusText=${response.statusText}`,
+        );
 
         if (response.status === 401) {
             jsLog('info', 'fetchAttendance: status=401 (login required)');
@@ -352,18 +376,19 @@ async function checkAttendance(): Promise<AttendanceResult> {
     }
 
     const today = currentKstDateString();
-    const selection = cachedCohortOptions && cachedCohortDate === today
-        ? await resolveCohortOptions(cachedCohortOptions, today).catch((error: unknown) => {
-            jsLog('error', `resolveCohortOptions failed: ${errorMessage(error)}`);
-            return {
-                api_error: true,
-                cohort_id: null,
-                cohort_status: 'unknown',
-                cohort_start_date: null,
-                cohort_end_date: null,
-            } satisfies CohortSelection;
-        })
-        : await fetchCohortSelection();
+    const selection =
+        cachedCohortOptions && cachedCohortDate === today
+            ? await resolveCohortOptions(cachedCohortOptions, today).catch((error: unknown) => {
+                  jsLog('error', `resolveCohortOptions failed: ${errorMessage(error)}`);
+                  return {
+                      api_error: true,
+                      cohort_id: null,
+                      cohort_status: 'unknown',
+                      cohort_start_date: null,
+                      cohort_end_date: null,
+                  } satisfies CohortSelection;
+              })
+            : await fetchCohortSelection();
 
     if (selection.api_error) {
         return {needs_login: false, morning_done: false, evening_done: false, api_error: true};
@@ -419,7 +444,10 @@ async function checkAttendance(): Promise<AttendanceResult> {
         };
     }
 
-    jsLog('debug', `checkAttendance: morning_done=${attendance.morning_done} evening_done=${attendance.evening_done}`);
+    jsLog(
+        'debug',
+        `checkAttendance: morning_done=${attendance.morning_done} evening_done=${attendance.evening_done}`,
+    );
     return {
         needs_login: false,
         morning_done: attendance.morning_done,
@@ -462,27 +490,35 @@ function runCheck(reason: string): void {
 
     checkInFlight = true;
     jsLog('debug', `check started: ${reason}`);
-    void checkAttendance().then((result) => reportResult(result, generation)).finally(() => {
-        checkInFlight = false;
-        if (queuedCheckGeneration !== null) {
-            const queuedGeneration = queuedCheckGeneration;
-            queuedCheckGeneration = null;
-            if (queuedGeneration === currentGeneration) runCheck('queued-trigger');
-        }
-    });
+    void checkAttendance()
+        .then((result) => reportResult(result, generation))
+        .finally(() => {
+            checkInFlight = false;
+            if (queuedCheckGeneration !== null) {
+                const queuedGeneration = queuedCheckGeneration;
+                queuedCheckGeneration = null;
+                if (queuedGeneration === currentGeneration) runCheck('queued-trigger');
+            }
+        });
 }
 
-void window.__TAURI__.event.listen<TriggerCheckPayload>('trigger-check', (event) => {
-    const generation = event.payload?.generation;
-    if (!Number.isSafeInteger(generation) || typeof generation !== 'number' || generation <= 0) {
-        jsLog('warn', 'invalid trigger-check generation');
-        return;
-    }
-    currentGeneration = generation;
-    reportCheckerReady();
-    runCheck('rust-trigger');
-}).catch((error: unknown) => {
-    jsLog('error', `trigger-check listener failed: ${errorMessage(error)}`);
-});
+void window.__TAURI__.event
+    .listen<TriggerCheckPayload>('trigger-check', (event) => {
+        const generation = event.payload?.generation;
+        if (
+            !Number.isSafeInteger(generation) ||
+            typeof generation !== 'number' ||
+            generation <= 0
+        ) {
+            jsLog('warn', 'invalid trigger-check generation');
+            return;
+        }
+        currentGeneration = generation;
+        reportCheckerReady();
+        runCheck('rust-trigger');
+    })
+    .catch((error: unknown) => {
+        jsLog('error', `trigger-check listener failed: ${errorMessage(error)}`);
+    });
 
 jsLog('info', 'checker loaded, waiting for trigger');

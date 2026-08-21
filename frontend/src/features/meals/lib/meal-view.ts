@@ -1,7 +1,4 @@
-import type {
-    DashboardMealPost,
-    DashboardWeeklyMealMenu,
-} from '@/api/dashboard-api';
+import type {DashboardMealPost, DashboardWeeklyMealMenu} from '@/api/dashboard-api';
 import {mealPeriodLabel, mealServiceDate} from '@/domain/meals/today';
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
@@ -86,9 +83,12 @@ function compareMealPeriod(left: DashboardMealPost, right: DashboardMealPost): n
 
 function calendarDateKey(year: number, month: number, day: number): string | null {
     const value = new Date(Date.UTC(year, month - 1, day));
-    if (value.getUTCFullYear() !== year
-        || value.getUTCMonth() !== month - 1
-        || value.getUTCDate() !== day) return null;
+    if (
+        value.getUTCFullYear() !== year ||
+        value.getUTCMonth() !== month - 1 ||
+        value.getUTCDate() !== day
+    )
+        return null;
     return value.toISOString().slice(0, 10);
 }
 

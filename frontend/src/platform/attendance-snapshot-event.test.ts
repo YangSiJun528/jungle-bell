@@ -1,4 +1,5 @@
 import {describe, expect, test} from 'vitest';
+
 import {parseAttendanceSnapshotEvent} from './attendance-snapshot-event';
 
 const snapshot = {
@@ -14,10 +15,17 @@ const snapshot = {
 
 describe('parseAttendanceSnapshotEvent', () => {
     test('검증된 로컬 관측과 서버 동기화 완료 이벤트를 구분한다', () => {
-        expect(parseAttendanceSnapshotEvent({kind: 'observed', snapshot})).toEqual({kind: 'observed', snapshot});
-        expect(parseAttendanceSnapshotEvent({kind: 'synced', revision: 1})).toEqual({kind: 'synced', revision: 1});
-        expect(parseAttendanceSnapshotEvent({kind: 'synced', revision: Number.MAX_SAFE_INTEGER}))
-            .toEqual({kind: 'synced', revision: Number.MAX_SAFE_INTEGER});
+        expect(parseAttendanceSnapshotEvent({kind: 'observed', snapshot})).toEqual({
+            kind: 'observed',
+            snapshot,
+        });
+        expect(parseAttendanceSnapshotEvent({kind: 'synced', revision: 1})).toEqual({
+            kind: 'synced',
+            revision: 1,
+        });
+        expect(
+            parseAttendanceSnapshotEvent({kind: 'synced', revision: Number.MAX_SAFE_INTEGER}),
+        ).toEqual({kind: 'synced', revision: Number.MAX_SAFE_INTEGER});
     });
 
     test.each([

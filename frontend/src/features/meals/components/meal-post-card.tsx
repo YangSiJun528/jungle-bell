@@ -1,16 +1,12 @@
-import {useState} from 'react';
 import {Clock3, ExternalLink, ImageOff} from 'lucide-react';
-import {Button} from '@/components/ui/button';
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
+import {useState} from 'react';
+
 import type {DashboardMealPost} from '@/api/dashboard-api';
+import {Button} from '@/components/ui/button';
+import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@/components/ui/card';
 import {dateTimeLabel} from '@/lib/format';
 import {cn} from '@/lib/utils';
+
 import type {TodayMealPeriod} from '../lib/meal-view';
 
 function MealImage({
@@ -36,7 +32,7 @@ function MealImage({
                 )}
                 role="img"
             >
-                <ImageOff aria-hidden="true" className="size-6"/>
+                <ImageOff aria-hidden="true" className="size-6" />
             </div>
         );
     }
@@ -44,7 +40,7 @@ function MealImage({
     return (
         <a
             aria-label={`${label} 새 탭에서 열기`}
-            className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+            className="block focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset"
             href={image.url}
             rel="noopener noreferrer"
             target="_blank"
@@ -108,7 +104,9 @@ export function MealPostCard({
                 <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                         <CardTitle className="line-clamp-2 text-base leading-6">{title}</CardTitle>
-                        <CardDescription className="mt-1">{dateTimeLabel(meal.publishedAt)}</CardDescription>
+                        <CardDescription className="mt-1">
+                            {dateTimeLabel(meal.publishedAt)}
+                        </CardDescription>
                     </div>
                     {meal.permalink ? (
                         <Button asChild size="icon-sm" variant="ghost">
@@ -118,7 +116,7 @@ export function MealPostCard({
                                 rel="noreferrer"
                                 target="_blank"
                             >
-                                <ExternalLink/>
+                                <ExternalLink />
                             </a>
                         </Button>
                     ) : null}
@@ -126,10 +124,12 @@ export function MealPostCard({
             </CardHeader>
             <CardContent className="px-5 pb-5">
                 {text ? (
-                    <p className={cn(
-                        'whitespace-pre-wrap text-sm leading-6 text-foreground/85',
-                        compact && 'line-clamp-5',
-                    )}>
+                    <p
+                        className={cn(
+                            'text-sm leading-6 whitespace-pre-wrap text-foreground/85',
+                            compact && 'line-clamp-5',
+                        )}
+                    >
                         {text}
                     </p>
                 ) : (
@@ -150,13 +150,11 @@ export function MissingMealPostCard({period}: {period: TodayMealPeriod}) {
                 className="flex aspect-[4/3] items-center justify-center border-b bg-muted/60 text-muted-foreground"
                 role="img"
             >
-                <Clock3 aria-hidden="true" className="size-6"/>
+                <Clock3 aria-hidden="true" className="size-6" />
             </div>
             <CardHeader className="p-5">
                 <CardTitle className="text-base leading-6">{period}</CardTitle>
-                <CardDescription className="mt-1">
-                    아직 올라오지 않았습니다.
-                </CardDescription>
+                <CardDescription className="mt-1">아직 올라오지 않았습니다.</CardDescription>
             </CardHeader>
         </Card>
     );

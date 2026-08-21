@@ -63,18 +63,22 @@ export function dashboardAccountStatus(
         };
     }
 
-    const serverSession: ServerSessionStatus = query.data.state === 'reset-required'
-        ? 'recovery-required'
-        : query.data.state === 'connected'
-            ? (query.data.credentialPersistent ? 'stored' : 'memory-only')
-            : query.data.state === 'disconnected'
+    const serverSession: ServerSessionStatus =
+        query.data.state === 'reset-required'
+            ? 'recovery-required'
+            : query.data.state === 'connected'
+              ? query.data.credentialPersistent
+                  ? 'stored'
+                  : 'memory-only'
+              : query.data.state === 'disconnected'
                 ? 'missing'
                 : 'checking';
-    const lmsAuthentication: LmsAuthenticationStatus = query.data.lmsSessionState === 'connected'
-        ? 'authenticated'
-        : query.data.lmsSessionState === 'login-required'
-            ? 'required'
-            : 'checking';
+    const lmsAuthentication: LmsAuthenticationStatus =
+        query.data.lmsSessionState === 'connected'
+            ? 'authenticated'
+            : query.data.lmsSessionState === 'login-required'
+              ? 'required'
+              : 'checking';
 
     return {serverSession, lmsAuthentication};
 }

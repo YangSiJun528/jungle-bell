@@ -1,6 +1,7 @@
 import {describe, expect, test, vi} from 'vitest';
-import {createNativeBridge} from './native-bridge';
+
 import {createDashboardDesktopSettingsApi} from './desktop-settings';
+import {createNativeBridge} from './native-bridge';
 
 describe('desktop update adapter', () => {
     test('parses the exact update status and installs through the native bridge', async () => {

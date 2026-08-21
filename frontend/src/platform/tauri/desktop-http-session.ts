@@ -1,10 +1,10 @@
+import {hasOwn} from '@/lib/object';
 import type {
     AccountAuthProvider,
     AccountSessionLease,
     DesktopHttpSessionBootstrap,
     NativeBridge,
 } from '@/platform/contracts';
-import {hasOwn} from '@/lib/object';
 
 const DEFAULT_REFRESH_SKEW_MS = 60_000;
 const MIN_SESSION_LIFETIME_MS = 30_000;
@@ -32,7 +32,8 @@ export function createDesktopHttpSessionManager(options: {
     const refresh = (): Promise<DesktopHttpSession> => {
         if (refreshPromise) return refreshPromise;
         const refreshGeneration = generation;
-        const pending = options.nativeBridge.bootstrapDesktopHttpSession()
+        const pending = options.nativeBridge
+            .bootstrapDesktopHttpSession()
             .then((wire) => validateSession(wire, now()))
             .then((session) => {
                 if (refreshGeneration !== generation) {
@@ -48,9 +49,8 @@ export function createDesktopHttpSessionManager(options: {
         return pending;
     };
 
-    const session = (): Promise<DesktopHttpSession> => usable(current)
-        ? Promise.resolve(current)
-        : refresh();
+    const session = (): Promise<DesktopHttpSession> =>
+        usable(current) ? Promise.resolve(current) : refresh();
 
     const assertCurrent = (lease: AccountSessionLease): void => {
         if (lease.generation !== generation) {
@@ -84,22 +84,29 @@ export function createDesktopHttpSessionManager(options: {
     };
 }
 
-function validateSession(wire: DesktopHttpSessionBootstrap, nowEpochMs: number): DesktopHttpSession {
+function validateSession(
+    wire: DesktopHttpSessionBootstrap,
+    nowEpochMs: number,
+): DesktopHttpSession {
     if (!wire || typeof wire !== 'object' || Array.isArray(wire)) throw invalidResponse();
     const source = wire as unknown as Record<string, unknown>;
-    if (Object.keys(source).length !== 2
-        || !hasOwn(source, 'accessToken')
-        || !hasOwn(source, 'expiresAt')
-        || typeof source.accessToken !== 'string'
-        || typeof source.expiresAt !== 'string'
-        || !/^jbui_[0-9a-f]{64}$/u.test(source.accessToken)) {
+    if (
+        Object.keys(source).length !== 2 ||
+        !hasOwn(source, 'accessToken') ||
+        !hasOwn(source, 'expiresAt') ||
+        typeof source.accessToken !== 'string' ||
+        typeof source.expiresAt !== 'string' ||
+        !/^jbui_[0-9a-f]{64}$/u.test(source.accessToken)
+    ) {
         throw invalidResponse();
     }
     const expiresAtEpochMs = Date.parse(source.expiresAt);
-    if (!Number.isFinite(expiresAtEpochMs)
-        || new Date(expiresAtEpochMs).toISOString() !== source.expiresAt
-        || expiresAtEpochMs <= nowEpochMs + MIN_SESSION_LIFETIME_MS
-        || expiresAtEpochMs > nowEpochMs + MAX_SESSION_LIFETIME_MS) {
+    if (
+        !Number.isFinite(expiresAtEpochMs) ||
+        new Date(expiresAtEpochMs).toISOString() !== source.expiresAt ||
+        expiresAtEpochMs <= nowEpochMs + MIN_SESSION_LIFETIME_MS ||
+        expiresAtEpochMs > nowEpochMs + MAX_SESSION_LIFETIME_MS
+    ) {
         throw invalidResponse();
     }
     return {accessToken: source.accessToken, expiresAtEpochMs};

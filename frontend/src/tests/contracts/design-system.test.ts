@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {existsSync, readFileSync} from 'node:fs';
+
 import {test} from 'vitest';
 
 const srcRoot = new URL('../../', import.meta.url);
@@ -71,7 +72,11 @@ test('Tailwind 4와 shadcn 토큰은 하나의 전역 스타일 진입점에서 
         'sidebar',
     ]) {
         assert.match(globals, new RegExp(`--${token}:`), `--${token} 토큰이 없습니다.`);
-        assert.match(globals, new RegExp(`--color-${token}:\\s*var\\(--${token}\\)`), `--${token} Tailwind 매핑이 없습니다.`);
+        assert.match(
+            globals,
+            new RegExp(`--color-${token}:\\s*var\\(--${token}\\)`),
+            `--${token} Tailwind 매핑이 없습니다.`,
+        );
     }
     assert.match(globals, /--radius-sm:\s*calc\(var\(--radius\) - 4px\)/);
     assert.match(globals, /--radius-lg:\s*var\(--radius\)/);
@@ -122,7 +127,11 @@ test('버튼과 알림은 공통 variant를 제공하고 화면은 이를 조합
 });
 
 test('공통 상호작용 컴포넌트는 키보드 포커스와 비활성 상태를 시각화한다', () => {
-    for (const path of ['./components/ui/button-variants.ts', './components/ui/input.tsx', './components/ui/switch.tsx']) {
+    for (const path of [
+        './components/ui/button-variants.ts',
+        './components/ui/input.tsx',
+        './components/ui/switch.tsx',
+    ]) {
         const component = source(path);
         assert.match(component, /focus-visible:/, `${path}에 키보드 포커스 스타일이 없습니다.`);
         assert.match(component, /disabled:/, `${path}에 disabled 스타일이 없습니다.`);
@@ -137,7 +146,10 @@ test('README 트레이 아이콘은 런타임과 같이 나침반 바깥의 배�
 
         assert.match(icon, /<mask id="compass-field"/);
         assert.match(icon, /<circle cx="22" cy="22" r="16" fill="black"/);
-        assert.match(icon, /width="38" height="38"[^>]*fill="currentColor"[^>]*mask="url\(#compass-field\)"/);
+        assert.match(
+            icon,
+            /width="38" height="38"[^>]*fill="currentColor"[^>]*mask="url\(#compass-field\)"/,
+        );
         assert.match(icon, /<rect x="3" y="3" width="38" height="38" rx="10" fill="none"/);
         assert.match(icon, /stroke="currentColor" stroke-width="1\.6"/);
         assert.match(icon, /M512 896a384 384 0 1 0 0-768/);

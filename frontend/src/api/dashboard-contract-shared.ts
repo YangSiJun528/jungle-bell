@@ -9,10 +9,7 @@ export const isoDateTimeSchema = textSchema(64).refine(
 
 export const calendarDateSchema = z.iso.date();
 
-export const safeEpochMillisecondsSchema = z.number()
-    .int()
-    .min(0)
-    .max(Number.MAX_SAFE_INTEGER);
+export const safeEpochMillisecondsSchema = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
 
 export const boundedLaundryCountSchema = z.number().int().min(0).max(64);
 

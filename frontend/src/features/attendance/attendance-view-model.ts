@@ -1,8 +1,4 @@
-import type {
-    AttendanceDashboard,
-    AttendanceSnapshot,
-    DesktopDevice,
-} from '@/api/dashboard-api';
+import type {AttendanceDashboard, AttendanceSnapshot, DesktopDevice} from '@/api/dashboard-api';
 import type {AttendancePreferences} from '@/api/personal-api';
 import {ATTENDANCE_FRESHNESS_MS} from '@/domain/attendance/freshness';
 
@@ -12,13 +8,13 @@ export type AttendanceDetailModel =
     | {kind: 'auth-required'}
     | {kind: 'unavailable'}
     | {
-        kind: 'available';
-        freshness: 'fresh' | 'stale';
-        lastSyncedAt: string;
-        snapshot: AttendanceSnapshot;
-        source?: 'server' | 'desktop';
-        syncState?: 'synced' | 'pending';
-    };
+          kind: 'available';
+          freshness: 'fresh' | 'stale';
+          lastSyncedAt: string;
+          snapshot: AttendanceSnapshot;
+          source?: 'server' | 'desktop';
+          syncState?: 'synced' | 'pending';
+      };
 
 export function attendanceDetailModel(input: {
     isPending: boolean;
@@ -35,8 +31,9 @@ export function attendanceDetailModel(input: {
         return {kind: 'unavailable'};
     }
     const attendance = input.data.attendance;
-    const localObservationExpired = attendance.source === 'desktop'
-        && (input.now ?? Date.now()) - Date.parse(attendance.lastSyncedAt) > ATTENDANCE_FRESHNESS_MS;
+    const localObservationExpired =
+        attendance.source === 'desktop' &&
+        (input.now ?? Date.now()) - Date.parse(attendance.lastSyncedAt) > ATTENDANCE_FRESHNESS_MS;
     return {
         kind: 'available',
         freshness: attendance.freshness === 'stale' || localObservationExpired ? 'stale' : 'fresh',
@@ -51,23 +48,22 @@ export function attendancePreferencesEqual(
     left: AttendancePreferences | null,
     right: AttendancePreferences | null,
 ): boolean {
-    return left !== null
-        && right !== null
-        && left.enabled === right.enabled
-        && left.morning === right.morning
-        && left.evening === right.evening
-        && left.morningStartHour === right.morningStartHour
-        && left.eveningEndHour === right.eveningEndHour
-        && left.morningIntervalMinutes === right.morningIntervalMinutes
-        && left.eveningIntervalMinutes === right.eveningIntervalMinutes
-        && left.skipSunday === right.skipSunday
-        && left.skipAttendanceDate === right.skipAttendanceDate;
+    return (
+        left !== null &&
+        right !== null &&
+        left.enabled === right.enabled &&
+        left.morning === right.morning &&
+        left.evening === right.evening &&
+        left.morningStartHour === right.morningStartHour &&
+        left.eveningEndHour === right.eveningEndHour &&
+        left.morningIntervalMinutes === right.morningIntervalMinutes &&
+        left.eveningIntervalMinutes === right.eveningIntervalMinutes &&
+        left.skipSunday === right.skipSunday &&
+        left.skipAttendanceDate === right.skipAttendanceDate
+    );
 }
 
-export function attendanceSkipDate(
-    checked: boolean,
-    attendanceDate: string | null,
-): string | null {
+export function attendanceSkipDate(checked: boolean, attendanceDate: string | null): string | null {
     return checked ? attendanceDate : null;
 }
 

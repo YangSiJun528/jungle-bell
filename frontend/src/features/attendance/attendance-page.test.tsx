@@ -1,7 +1,9 @@
 import {readFileSync} from 'node:fs';
+
 import {describe, expect, test} from 'vitest';
 
 const source = readFileSync(new URL('./attendance-page.tsx', import.meta.url), 'utf8');
+const normalizedSource = source.replace(/\s+/gu, ' ');
 
 describe('AttendancePage LMS gate', () => {
     test('인증 전에는 출석 결과 대신 로그인 UI를 우선 표시한다', () => {
@@ -14,7 +16,7 @@ describe('AttendancePage LMS gate', () => {
     test('출석 상세에서도 현재 기수 D-Day 카드를 표시한다', () => {
         expect(source).toContain("import {DdayCard} from '@/components/dashboard/dday-card'");
         expect(source).toContain("import {selectDdayView} from '@/domain/attendance/dday-view'");
-        expect(source).toContain('<DdayCard view={dday}/>');
+        expect(source).toContain('<DdayCard view={dday} />');
     });
 
     test('일반 웹에서는 출석 로딩 대신 앱 연결 안내를 표시한다', () => {
@@ -24,7 +26,7 @@ describe('AttendancePage LMS gate', () => {
 
     test('PC 로컬 관측이 있으면 서버 동기화와 무관하게 출석을 표시한다', () => {
         expect(source).toContain('desktopLocalAttendanceAvailable');
-        expect(source).toContain('다른 기기 동기화 대기 중');
+        expect(normalizedSource).toContain('다른 기기 동기화 대기 중');
         expect(source).toContain("detail.source === 'desktop' ? '마지막 확인' : '마지막 동기화'");
     });
 });

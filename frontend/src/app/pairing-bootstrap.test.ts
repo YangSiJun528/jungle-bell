@@ -1,5 +1,7 @@
 import {readFileSync} from 'node:fs';
+
 import {describe, expect, test, vi} from 'vitest';
+
 import {parseAndScrubInitialPairing} from './pairing-bootstrap';
 
 describe('initial QR pairing bootstrap', () => {
@@ -23,11 +25,7 @@ describe('initial QR pairing bootstrap', () => {
             link: {pairingId: 'jbp_123', challenge: 'jbpc_one-time-secret'},
         });
         expect(replaceState).toHaveBeenCalledOnce();
-        expect(replaceState).toHaveBeenCalledWith(
-            {navigation: 1},
-            '',
-            '/?source=qr#/home',
-        );
+        expect(replaceState).toHaveBeenCalledWith({navigation: 1}, '', '/?source=qr#/home');
     });
 
     test('데스크톱은 모바일용 QR secret을 보존하지 않는다', () => {
@@ -87,15 +85,17 @@ describe('initial QR pairing bootstrap', () => {
 
     test('일반 경로는 history를 변경하지 않는다', () => {
         const replaceState = vi.fn();
-        expect(parseAndScrubInitialPairing({
-            hash: '#laundry',
-            authentication: 'none',
-            mobileInstallClient: true,
-            pathname: '/',
-            search: '',
-            historyState: null,
-            replaceState,
-        })).toBeNull();
+        expect(
+            parseAndScrubInitialPairing({
+                hash: '#laundry',
+                authentication: 'none',
+                mobileInstallClient: true,
+                pathname: '/',
+                search: '',
+                historyState: null,
+                replaceState,
+            }),
+        ).toBeNull();
         expect(replaceState).not.toHaveBeenCalled();
     });
 
@@ -104,7 +104,9 @@ describe('initial QR pairing bootstrap', () => {
         const bootstrap = readFileSync(new URL('./pairing-bootstrap.ts', import.meta.url), 'utf8');
 
         expect(main.indexOf('captureInitialPairingFromWindow(')).toBeGreaterThan(-1);
-        expect(main.indexOf('captureInitialPairingFromWindow(')).toBeLessThan(main.indexOf('createRoot(root).render('));
+        expect(main.indexOf('captureInitialPairingFromWindow(')).toBeLessThan(
+            main.indexOf('createRoot(root).render('),
+        );
         expect(bootstrap).not.toMatch(/localStorage|sessionStorage/u);
     });
 });

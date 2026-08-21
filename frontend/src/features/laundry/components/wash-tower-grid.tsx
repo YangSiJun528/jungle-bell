@@ -1,14 +1,16 @@
 import {TriangleAlert} from 'lucide-react';
+
+import {laundryZonePresentation} from '@/components/dashboard/laundry-zone-presentation';
 import type {DashboardLaundryMachine} from '@/domain/laundry/capacity';
+
+import {visibleLaundryRiskLevel} from '../lib/laundry-risk';
+import {LAUNDRY_WARNING_CLASS_NAME} from '../lib/laundry-warning';
 import {
     sortWashTowers,
     washTowerCellView,
     washTowerHeading,
     WASH_TOWER_ROWS,
 } from '../lib/wash-tower';
-import {laundryZonePresentation} from '@/components/dashboard/laundry-zone-presentation';
-import {LAUNDRY_WARNING_CLASS_NAME} from '../lib/laundry-warning';
-import {visibleLaundryRiskLevel} from '../lib/laundry-risk';
 
 export interface WashTowerGridProps {
     machines: readonly DashboardLaundryMachine[];
@@ -27,7 +29,7 @@ export function WashTowerGrid({
     return (
         <div
             aria-label="워시타워 상태표"
-            className="overflow-x-auto pb-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="overflow-x-auto pb-1 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             role="region"
             tabIndex={0}
         >
@@ -80,11 +82,12 @@ export function WashTowerGrid({
                                 const riskLevel = showRiskIndicators
                                     ? visibleLaundryRiskLevel(machine[row.kind])
                                     : null;
-                                const tone = cell.state === 'available'
-                                    ? laundryZonePresentation(machine.zone).surfaceClassName
-                                    : cell.state === 'error'
-                                        ? LAUNDRY_WARNING_CLASS_NAME
-                                        : 'bg-muted text-muted-foreground';
+                                const tone =
+                                    cell.state === 'available'
+                                        ? laundryZonePresentation(machine.zone).surfaceClassName
+                                        : cell.state === 'error'
+                                          ? LAUNDRY_WARNING_CLASS_NAME
+                                          : 'bg-muted text-muted-foreground';
 
                                 return (
                                     <td className="h-10 p-0" key={`${row.kind}-${machine.id}`}>
@@ -99,22 +102,32 @@ export function WashTowerGrid({
                                         >
                                             {cell.state === 'error' ? (
                                                 <>
-                                                    <TriangleAlert aria-hidden="true" className="size-4"/>
+                                                    <TriangleAlert
+                                                        aria-hidden="true"
+                                                        className="size-4"
+                                                    />
                                                     <span className="sr-only">경고</span>
                                                 </>
-                                            ) : cell.text}
+                                            ) : (
+                                                cell.text
+                                            )}
                                             {riskLevel ? (
                                                 <>
                                                     <span
                                                         aria-hidden="true"
-                                                        className={`absolute right-1 top-1 size-2 rounded-full ${riskLevel === 'caution'
-                                                            ? 'bg-destructive'
-                                                            : 'bg-orange-500'}`}
+                                                        className={`absolute top-1 right-1 size-2 rounded-full ${
+                                                            riskLevel === 'caution'
+                                                                ? 'bg-destructive'
+                                                                : 'bg-orange-500'
+                                                        }`}
                                                         data-laundry-risk-indicator="true"
                                                         data-risk-level={riskLevel}
                                                     />
                                                     <span className="sr-only">
-                                                        최근 7일 에러 {riskLevel === 'caution' ? '주의' : '약간 주의'}
+                                                        최근 7일 에러{' '}
+                                                        {riskLevel === 'caution'
+                                                            ? '주의'
+                                                            : '약간 주의'}
                                                     </span>
                                                 </>
                                             ) : null}

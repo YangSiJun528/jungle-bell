@@ -1,5 +1,7 @@
 import {describe, expect, it} from 'vitest';
+
 import type {DashboardMealsSnapshot} from '@/api/dashboard-api';
+
 import {mealPeriodLabel, mealServiceDate, selectTodayMeals} from './today';
 
 const snapshot: DashboardMealsSnapshot = {
@@ -8,7 +10,13 @@ const snapshot: DashboardMealsSnapshot = {
     data: {
         schemaVersion: 2,
         dailyMenus: [
-            {id: 'dinner', title: '8월 11일 석식', text: '저녁', publishedAt: null, permalink: null},
+            {
+                id: 'dinner',
+                title: '8월 11일 석식',
+                text: '저녁',
+                publishedAt: null,
+                permalink: null,
+            },
             {id: 'lunch', title: '8월 11일 중식', text: '점심', publishedAt: null, permalink: null},
         ],
         pinnedMenus: [],
@@ -32,14 +40,24 @@ describe('selectTodayMeals', () => {
             ...snapshot,
             data: {
                 schemaVersion: 2,
-                dailyMenus: [{
-                    id: 'yesterday', title: '8월 10일 중식', text: '어제 메뉴',
-                    publishedAt: '2026-08-10T02:00:00.000Z', permalink: null,
-                }],
-                pinnedMenus: [{
-                    id: 'weekly', title: '8월 2주차 식단표', text: '',
-                    publishedAt: '2026-08-10T00:00:00.000Z', permalink: null,
-                }],
+                dailyMenus: [
+                    {
+                        id: 'yesterday',
+                        title: '8월 10일 중식',
+                        text: '어제 메뉴',
+                        publishedAt: '2026-08-10T02:00:00.000Z',
+                        permalink: null,
+                    },
+                ],
+                pinnedMenus: [
+                    {
+                        id: 'weekly',
+                        title: '8월 2주차 식단표',
+                        text: '',
+                        publishedAt: '2026-08-10T00:00:00.000Z',
+                        permalink: null,
+                    },
+                ],
                 recentMenus: [],
                 currentWeeklyMenu: null,
                 weeklyMenus: [],
@@ -63,16 +81,26 @@ describe('mealPeriodLabel', () => {
 
 describe('mealServiceDate', () => {
     it('게시 제목의 월일을 발행 시각의 KST 연도와 결합한다', () => {
-        expect(mealServiceDate({
-            id: 'lunch', title: '8월 10일(월) 중식 메뉴', text: '',
-            publishedAt: '2026-08-10T02:07:38.000Z', permalink: null,
-        })).toBe('2026-08-10');
+        expect(
+            mealServiceDate({
+                id: 'lunch',
+                title: '8월 10일(월) 중식 메뉴',
+                text: '',
+                publishedAt: '2026-08-10T02:07:38.000Z',
+                permalink: null,
+            }),
+        ).toBe('2026-08-10');
     });
 
     it('제목에 날짜가 없으면 발행 시각의 KST 날짜를 쓴다', () => {
-        expect(mealServiceDate({
-            id: 'lunch', title: '오늘 중식', text: '',
-            publishedAt: '2026-08-10T16:00:00.000Z', permalink: null,
-        })).toBe('2026-08-11');
+        expect(
+            mealServiceDate({
+                id: 'lunch',
+                title: '오늘 중식',
+                text: '',
+                publishedAt: '2026-08-10T16:00:00.000Z',
+                permalink: null,
+            }),
+        ).toBe('2026-08-11');
     });
 });

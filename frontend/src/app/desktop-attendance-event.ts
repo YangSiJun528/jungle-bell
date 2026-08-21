@@ -1,10 +1,9 @@
 import type {QueryClient} from '@tanstack/react-query';
-import type {
-    AttendanceDashboard,
-    AttendanceSnapshot,
-} from '@/api/dashboard-api';
+
+import type {AttendanceDashboard, AttendanceSnapshot} from '@/api/dashboard-api';
 import {ATTENDANCE_FRESHNESS_MS} from '@/domain/attendance/freshness';
 import {parseAttendanceSnapshotEvent} from '@/platform/attendance-snapshot-event';
+
 import {queryKeys} from './dashboard-context';
 
 function dashboardWithLocalObservation(
@@ -14,9 +13,11 @@ function dashboardWithLocalObservation(
     if (current?.state === 'loaded' && current.attendance.status === 'available') {
         const currentCollectedAt = Date.parse(current.attendance.lastSyncedAt);
         const observedAt = Date.parse(snapshot.collectedAt);
-        if (Number.isFinite(currentCollectedAt)
-            && Number.isFinite(observedAt)
-            && currentCollectedAt >= observedAt) {
+        if (
+            Number.isFinite(currentCollectedAt) &&
+            Number.isFinite(observedAt) &&
+            currentCollectedAt >= observedAt
+        ) {
             return current;
         }
     }
@@ -39,16 +40,17 @@ export function preferDesktopAttendance(
     fetched: AttendanceDashboard,
     now = Date.now(),
 ): AttendanceDashboard {
-    if (current?.state !== 'loaded'
-        || current.attendance.status !== 'available'
-        || current.attendance.source !== 'desktop'
-        || current.attendance.syncState !== 'pending') {
+    if (
+        current?.state !== 'loaded' ||
+        current.attendance.status !== 'available' ||
+        current.attendance.source !== 'desktop' ||
+        current.attendance.syncState !== 'pending'
+    ) {
         return fetched;
     }
 
     const localCollectedAt = Date.parse(current.attendance.lastSyncedAt);
-    if (!Number.isFinite(localCollectedAt)
-        || now - localCollectedAt > ATTENDANCE_FRESHNESS_MS) {
+    if (!Number.isFinite(localCollectedAt) || now - localCollectedAt > ATTENDANCE_FRESHNESS_MS) {
         return fetched;
     }
     if (fetched.state !== 'loaded' || fetched.attendance.status !== 'available') {
@@ -68,9 +70,8 @@ export async function handleAttendanceSnapshotUpdated(
     const event = parseAttendanceSnapshotEvent(payload);
     if (!event) return;
     if (event.kind === 'observed') {
-        client.setQueryData<AttendanceDashboard>(
-            queryKeys.attendance('desktop'),
-            (current) => dashboardWithLocalObservation(current, event.snapshot),
+        client.setQueryData<AttendanceDashboard>(queryKeys.attendance('desktop'), (current) =>
+            dashboardWithLocalObservation(current, event.snapshot),
         );
         return;
     }

@@ -1,5 +1,5 @@
-import type {AccountAuthentication} from '@/platform/contracts';
 import {mobilePairingLinkFromHash, type MobilePairingLink} from '@/domain/connections/pairing-link';
+import type {AccountAuthentication} from '@/platform/contracts';
 
 export type InitialPairingEntry =
     | {kind: 'companion'; link: MobilePairingLink}
@@ -29,11 +29,7 @@ export function parseAndScrubInitialPairing(input: InitialPairingInput): Initial
 
     const installedCompanion = input.authentication === 'cookie';
     const installHandoff = input.authentication === 'none' && input.mobileInstallClient;
-    const nextHash = installedCompanion
-        ? '#/home'
-        : installHandoff
-            ? '#/install'
-            : '#/home';
+    const nextHash = installedCompanion ? '#/home' : installHandoff ? '#/install' : '#/home';
     input.replaceState(input.historyState, '', `${input.pathname}${input.search}${nextHash}`);
 
     if (installedCompanion) return {kind: 'companion', link};

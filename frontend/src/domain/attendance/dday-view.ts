@@ -1,14 +1,10 @@
+import {dashboardDdayLabel, dashboardDdayPeriod, type DdayAttendanceSnapshot} from './dday-label';
 import {
     buildDdayProgress,
     kstDateString,
     type DdayPeriod,
     type DdayProgress,
 } from './dday-progress';
-import {
-    dashboardDdayLabel,
-    dashboardDdayPeriod,
-    type DdayAttendanceSnapshot,
-} from './dday-label';
 
 export interface DdayView {
     text: string;
@@ -31,7 +27,8 @@ export interface DdayAttendanceDashboard {
 }
 
 function personalAttendanceSnapshot(attendance?: DdayAttendanceDashboard) {
-    if (attendance?.state !== 'loaded' || attendance.attendance?.status !== 'available') return null;
+    if (attendance?.state !== 'loaded' || attendance.attendance?.status !== 'available')
+        return null;
     return attendance.attendance.snapshot;
 }
 

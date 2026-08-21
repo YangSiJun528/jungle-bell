@@ -10,9 +10,11 @@ function parseSeenIds(value: string | null): Set<string> {
     if (value === null) return new Set();
     const parsed: unknown = JSON.parse(value);
     if (!Array.isArray(parsed)) return new Set();
-    return new Set(parsed
-        .filter((id): id is string => typeof id === 'string')
-        .slice(0, MAX_SEEN_NOTIFICATION_IDS));
+    return new Set(
+        parsed
+            .filter((id): id is string => typeof id === 'string')
+            .slice(0, MAX_SEEN_NOTIFICATION_IDS),
+    );
 }
 
 export function readSeenMobileNotificationIds(

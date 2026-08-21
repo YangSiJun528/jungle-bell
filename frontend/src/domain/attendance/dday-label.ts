@@ -21,10 +21,7 @@ export function dashboardDdayPeriod(
     };
 }
 
-export function dashboardDdayLabel(
-    snapshot: DdayAttendanceSnapshot,
-    today: string,
-): string | null {
+export function dashboardDdayLabel(snapshot: DdayAttendanceSnapshot, today: string): string | null {
     const period = dashboardDdayPeriod(snapshot);
     const todayTimestamp = calendarTimestamp(today);
     if (!period || todayTimestamp === null) return null;
@@ -46,9 +43,9 @@ function calendarTimestamp(value: string | null): number | null {
     const day = Number(match[3]);
     const timestamp = Date.UTC(year, month - 1, day);
     const parsed = new Date(timestamp);
-    return parsed.getUTCFullYear() === year
-        && parsed.getUTCMonth() === month - 1
-        && parsed.getUTCDate() === day
+    return parsed.getUTCFullYear() === year &&
+        parsed.getUTCMonth() === month - 1 &&
+        parsed.getUTCDate() === day
         ? timestamp
         : null;
 }

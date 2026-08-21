@@ -1,4 +1,5 @@
 import {describe, expect, test} from 'vitest';
+
 import {mobilePairingLinkFromHash} from './pairing-link';
 
 describe('mobile pairing link', () => {

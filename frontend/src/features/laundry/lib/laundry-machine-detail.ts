@@ -1,3 +1,7 @@
+import {
+    laundryZonePresentation,
+    type LaundryZone,
+} from '@/components/dashboard/laundry-zone-presentation';
 import type {DashboardLaundryMachine} from '@/domain/laundry/capacity';
 import {
     laundryAvailabilityState,
@@ -7,18 +11,9 @@ import {
     laundryStartAt,
     type LaundryStatusAppliance,
 } from '@/domain/laundry/status';
-import {
-    washTowerHeading,
-    type WashTowerApplianceKind,
-} from './wash-tower';
-import {
-    laundryZonePresentation,
-    type LaundryZone,
-} from '@/components/dashboard/laundry-zone-presentation';
-import {
-    laundryRiskNotice,
-    type LaundryRiskNotice,
-} from './laundry-risk';
+
+import {laundryRiskNotice, type LaundryRiskNotice} from './laundry-risk';
+import {washTowerHeading, type WashTowerApplianceKind} from './wash-tower';
 
 export type LaundryApplianceTone =
     | 'active'
@@ -81,9 +76,7 @@ function validStartedAt(
     const timestamp = Date.parse(value);
     const earliestCurrentSession = nowMs - 24 * 60 * 60 * 1_000;
     const latestPlausibleStart = nowMs + 5 * 60 * 1_000;
-    return timestamp >= earliestCurrentSession && timestamp <= latestPlausibleStart
-        ? value
-        : null;
+    return timestamp >= earliestCurrentSession && timestamp <= latestPlausibleStart ? value : null;
 }
 
 function normalizedErrorCode(appliance?: LaundryStatusAppliance | null): string | null {
@@ -124,9 +117,10 @@ function applianceStatus(
         };
     }
 
-    const warning = projectionStatus === 'PAUSED'
-        || appliance.operationalStatus === 'PAUSED'
-        || appliance.state?.code === 'PAUSE';
+    const warning =
+        projectionStatus === 'PAUSED' ||
+        appliance.operationalStatus === 'PAUSED' ||
+        appliance.state?.code === 'PAUSE';
     if (warning) {
         return {
             statusLabel: laundryOperationLabel(appliance) ?? '일시 정지',
@@ -140,9 +134,10 @@ function applianceStatus(
     }
 
     return {
-        statusLabel: laundryOperationLabel(appliance)
-            ?? PROJECTION_STATUS_LABELS[projectionStatus]
-            ?? '작동 중',
+        statusLabel:
+            laundryOperationLabel(appliance) ??
+            PROJECTION_STATUS_LABELS[projectionStatus] ??
+            '작동 중',
         tone: projectionStatus === 'UNKNOWN' ? 'neutral' : 'active',
         helpText: null,
     };
@@ -176,24 +171,24 @@ export function laundryApplianceDetail(
     nowMs = Date.now(),
 ): LaundryApplianceDetailView {
     const status = applianceStatus(appliance);
-    const progress = status.tone === 'error'
-        ? 0
-        : status.tone === 'confirming'
-            ? 100
-            : status.tone === 'active' || status.tone === 'warning'
+    const progress =
+        status.tone === 'error'
+            ? 0
+            : status.tone === 'confirming'
+              ? 100
+              : status.tone === 'active' || status.tone === 'warning'
                 ? laundryProgress(appliance, nowMs)
                 : null;
-    const showSessionTiming = status.tone === 'active'
-        || status.tone === 'confirming'
-        || status.tone === 'warning';
+    const showSessionTiming =
+        status.tone === 'active' || status.tone === 'confirming' || status.tone === 'warning';
     const estimated = appliance?.projection?.estimated === true && showSessionTiming;
     const riskNotice = appliance?.riskLevel
         ? laundryRiskNotice({
-            attempts: appliance.attempts ?? 0,
-            errors: appliance.errors ?? 0,
-            rate: appliance.rate ?? 0,
-            riskLevel: appliance.riskLevel,
-        })
+              attempts: appliance.attempts ?? 0,
+              errors: appliance.errors ?? 0,
+              rate: appliance.rate ?? 0,
+              riskLevel: appliance.riskLevel,
+          })
         : null;
 
     return {

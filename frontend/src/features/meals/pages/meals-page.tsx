@@ -1,10 +1,6 @@
+import {CalendarDays, CircleAlert, RefreshCw, Utensils} from 'lucide-react';
 import {useMemo} from 'react';
-import {
-    CalendarDays,
-    CircleAlert,
-    RefreshCw,
-    Utensils,
-} from 'lucide-react';
+
 import {useCampusManualRefresh, useSuspenseMealsQuery} from '@/app/use-dashboard-queries';
 import {EmptyState} from '@/components/dashboard/async-state';
 import {PageHeader} from '@/components/dashboard/page-header';
@@ -13,6 +9,7 @@ import {Button} from '@/components/ui/button';
 import {selectTodayMeals} from '@/domain/meals/today';
 import {relativeTimeLabel} from '@/lib/format';
 import {cn} from '@/lib/utils';
+
 import {MealHistorySection} from '../components/meal-history-section';
 import {TodayMealGrid} from '../components/today-meal-grid';
 import {WeeklyMealMenu} from '../components/weekly-meal-menu';
@@ -34,55 +31,55 @@ export function MealsPage() {
         <div className="space-y-6">
             <PageHeader
                 title="급식"
-                actions={(
+                actions={
                     <Button
                         disabled={refreshing}
                         variant="outline"
                         onClick={() => manualRefresh.mutate()}
                     >
-                        <RefreshCw className={cn(refreshing && 'animate-spin')}/>
+                        <RefreshCw className={cn(refreshing && 'animate-spin')} />
                         {refreshing ? '새로고침 중' : '새로고침'}
                     </Button>
-                )}
+                }
             />
 
             {refreshFailed ? (
-                        <Alert variant="destructive">
-                            <CircleAlert/>
-                            <AlertTitle>최신 식단을 불러오지 못했습니다.</AlertTitle>
-                            <AlertDescription>마지막으로 확인한 게시 정보를 표시합니다.</AlertDescription>
-                        </Alert>
-                    ) : null}
+                <Alert variant="destructive">
+                    <CircleAlert />
+                    <AlertTitle>최신 식단을 불러오지 못했습니다.</AlertTitle>
+                    <AlertDescription>마지막으로 확인한 게시 정보를 표시합니다.</AlertDescription>
+                </Alert>
+            ) : null}
 
-                    <section aria-labelledby="today-meals-title">
-                        <div className="mb-3">
-                            <h2 className="flex items-center gap-2 font-semibold" id="today-meals-title">
-                                <Utensils className="size-4 text-primary"/>
-                                오늘 식단
-                            </h2>
-                            <p className="mt-1 text-xs text-muted-foreground">
-                                마지막 확인 {relativeTimeLabel(meals.data.lastCheckedAt ?? meals.data.asOf)}
-                            </p>
-                        </div>
-                        <TodayMealGrid meals={todayMeals}/>
-                    </section>
+            <section aria-labelledby="today-meals-title">
+                <div className="mb-3">
+                    <h2 className="flex items-center gap-2 font-semibold" id="today-meals-title">
+                        <Utensils className="size-4 text-primary" />
+                        오늘 식단
+                    </h2>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                        마지막 확인 {relativeTimeLabel(meals.data.lastCheckedAt ?? meals.data.asOf)}
+                    </p>
+                </div>
+                <TodayMealGrid meals={todayMeals} />
+            </section>
 
-                    <section aria-labelledby="weekly-meal-title">
-                        <h2 className="mb-3 flex items-center gap-2 font-semibold" id="weekly-meal-title">
-                            <CalendarDays className="size-4 text-primary"/>
-                            이번 주 급식표
-                        </h2>
-                        {weeklyMeal && weeklyKey ? (
-                            <WeeklyMealMenu meal={weeklyMeal} weekKey={weeklyKey}/>
-                        ) : (
-                            <EmptyState
-                                title="이번 주 급식표 없음"
-                                description="새 급식표가 확인되면 표시합니다."
-                            />
-                        )}
-                    </section>
+            <section aria-labelledby="weekly-meal-title">
+                <h2 className="mb-3 flex items-center gap-2 font-semibold" id="weekly-meal-title">
+                    <CalendarDays className="size-4 text-primary" />
+                    이번 주 급식표
+                </h2>
+                {weeklyMeal && weeklyKey ? (
+                    <WeeklyMealMenu meal={weeklyMeal} weekKey={weeklyKey} />
+                ) : (
+                    <EmptyState
+                        title="이번 주 급식표 없음"
+                        description="새 급식표가 확인되면 표시합니다."
+                    />
+                )}
+            </section>
 
-            <MealHistorySection meals={meals.data}/>
+            <MealHistorySection meals={meals.data} />
         </div>
     );
 }

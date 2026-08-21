@@ -1,8 +1,9 @@
-import {useCallback, useEffect, useState} from 'react';
 import {Download, MonitorDown, X} from 'lucide-react';
+import {useCallback, useEffect, useState} from 'react';
+
+import {useDashboardEnvironment} from '@/app/dashboard-context';
 import {Button} from '@/components/ui/button';
 import {Card, CardContent} from '@/components/ui/card';
-import {useDashboardEnvironment} from '@/app/dashboard-context';
 import type {PwaInstallPrompt} from '@/platform/contracts';
 
 interface InstallPromptProps {
@@ -54,11 +55,13 @@ export function InstallPrompt({open, onOpenChange}: InstallPromptProps) {
         <Card className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] z-50 mx-auto max-w-2xl border-primary/25 bg-card/96 py-3 shadow-xl backdrop-blur md:bottom-5">
             <CardContent className="flex flex-col gap-3 px-3 sm:flex-row sm:items-center sm:px-4">
                 <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
-                    <MonitorDown aria-hidden="true" className="size-5"/>
+                    <MonitorDown aria-hidden="true" className="size-5" />
                 </span>
                 <div className="min-w-0 flex-1">
                     <strong className="block text-sm">{title}</strong>
-                    <span className="block text-xs leading-5 text-muted-foreground">{description}</span>
+                    <span className="block text-xs leading-5 text-muted-foreground">
+                        {description}
+                    </span>
                 </div>
                 <div className="flex shrink-0 items-center gap-1 self-end sm:self-auto">
                     {mobile && prompt ? (
@@ -70,12 +73,13 @@ export function InstallPrompt({open, onOpenChange}: InstallPromptProps) {
                                 if (choice === 'accepted') onOpenChange(false);
                             }}
                         >
-                            <Download aria-hidden="true" className="size-4"/>홈 화면에 추가
+                            <Download aria-hidden="true" className="size-4" />홈 화면에 추가
                         </Button>
                     ) : !mobile ? (
                         <Button asChild size="sm">
                             <a href={RELEASE_URL} target="_blank" rel="noopener noreferrer">
-                                <Download aria-hidden="true" className="size-4"/>PC 앱 다운로드
+                                <Download aria-hidden="true" className="size-4" />
+                                PC 앱 다운로드
                             </a>
                         </Button>
                     ) : null}
@@ -85,7 +89,7 @@ export function InstallPrompt({open, onOpenChange}: InstallPromptProps) {
                         aria-label="설치 안내 닫기"
                         onClick={() => onOpenChange(false)}
                     >
-                        <X aria-hidden="true" className="size-4"/>
+                        <X aria-hidden="true" className="size-4" />
                     </Button>
                 </div>
             </CardContent>

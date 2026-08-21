@@ -22,7 +22,9 @@ const mealOrder = (title: string | null): number => {
     return 3;
 };
 
-export function mealPeriodLabel(title: string | null): '\uC870\uC2DD' | '\uC911\uC2DD' | '\uC11D\uC2DD' | '\uC2DD\uB2E8' {
+export function mealPeriodLabel(
+    title: string | null,
+): '\uC870\uC2DD' | '\uC911\uC2DD' | '\uC11D\uC2DD' | '\uC2DD\uB2E8' {
     if (title?.includes('\uC870\uC2DD')) return '\uC870\uC2DD';
     if (title?.includes('\uC911\uC2DD')) return '\uC911\uC2DD';
     if (title?.includes('\uC11D\uC2DD')) return '\uC11D\uC2DD';
@@ -34,7 +36,10 @@ export function kstDateKey(reference: Date): string {
     return new Date(reference.getTime() + KST_OFFSET_MS).toISOString().slice(0, 10);
 }
 
-export function mealServiceDate<RecordType extends MealRecord>(meal: RecordType, reference = new Date()): string | null {
+export function mealServiceDate<RecordType extends MealRecord>(
+    meal: RecordType,
+    reference = new Date(),
+): string | null {
     const timestamp = meal.publishedAt ?? meal.firstSeenAt ?? null;
     const anchor = timestamp ? new Date(timestamp) : reference;
     const validAnchor = Number.isFinite(anchor.getTime()) ? anchor : reference;
@@ -43,19 +48,18 @@ export function mealServiceDate<RecordType extends MealRecord>(meal: RecordType,
         const month = Number(match[2]);
         const day = Number(match[3]);
         const anchorYear = Number(kstDateKey(validAnchor).slice(0, 4));
-        const years = match[1]
-            ? [Number(match[1])]
-            : [anchorYear, anchorYear - 1, anchorYear + 1];
+        const years = match[1] ? [Number(match[1])] : [anchorYear, anchorYear - 1, anchorYear + 1];
         const candidates = years
             .map((year) => calendarDateKey(year, month, day))
             .filter((value): value is string => value !== null);
         if (candidates.length > 0) {
             const anchorDay = Date.parse(`${kstDateKey(validAnchor)}T00:00:00.000Z`);
             return candidates.reduce((selected, candidate) =>
-                Math.abs(Date.parse(`${candidate}T00:00:00.000Z`) - anchorDay)
-                    < Math.abs(Date.parse(`${selected}T00:00:00.000Z`) - anchorDay)
+                Math.abs(Date.parse(`${candidate}T00:00:00.000Z`) - anchorDay) <
+                Math.abs(Date.parse(`${selected}T00:00:00.000Z`) - anchorDay)
                     ? candidate
-                    : selected);
+                    : selected,
+            );
         }
     }
     return timestamp && Number.isFinite(new Date(timestamp).getTime())
@@ -79,8 +83,11 @@ export function selectTodayMeals<RecordType extends MealRecord>(
 
 function calendarDateKey(year: number, month: number, day: number): string | null {
     const value = new Date(Date.UTC(year, month - 1, day));
-    if (value.getUTCFullYear() !== year
-        || value.getUTCMonth() !== month - 1
-        || value.getUTCDate() !== day) return null;
+    if (
+        value.getUTCFullYear() !== year ||
+        value.getUTCMonth() !== month - 1 ||
+        value.getUTCDate() !== day
+    )
+        return null;
     return value.toISOString().slice(0, 10);
 }

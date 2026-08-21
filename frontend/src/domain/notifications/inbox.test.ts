@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+
 import {test} from 'vitest';
 
 import {
@@ -59,39 +60,56 @@ test('알림함 snapshot은 잘못된 ID, 시각, 액션과 미읽음 개수 불
     const base = {
         revision: 1,
         unreadCount: 1,
-        items: [{
-            id: '1',
-            title: '제목',
-            body: '본문',
-            createdAt: Date.parse('2026-07-29T04:24:00Z'),
-            readAt: null,
-            action: 'openAttendance',
-        }],
+        items: [
+            {
+                id: '1',
+                title: '제목',
+                body: '본문',
+                createdAt: Date.parse('2026-07-29T04:24:00Z'),
+                readAt: null,
+                action: 'openAttendance',
+            },
+        ],
     };
 
     assert.equal(normalizeNotificationInboxSnapshot({...base, revision: -1}), null);
     assert.equal(normalizeNotificationInboxSnapshot({...base, unreadCount: 0}), null);
     assert.equal(normalizeNotificationInboxSnapshot({...base, legacyUnread: 1}), null);
-    assert.equal(normalizeNotificationInboxSnapshot({
-        ...base,
-        items: [{...base.items[0], legacyAction: 'openLaundry'}],
-    }), null);
-    assert.equal(normalizeNotificationInboxSnapshot({
-        ...base,
-        items: [{...base.items[0], id: 'notification-1'}],
-    }), null);
-    assert.equal(normalizeNotificationInboxSnapshot({
-        ...base,
-        items: [{...base.items[0], createdAt: Number.NaN}],
-    }), null);
-    assert.equal(normalizeNotificationInboxSnapshot({
-        ...base,
-        items: [{...base.items[0], readAt: 0}],
-    }), null);
-    assert.equal(normalizeNotificationInboxSnapshot({
-        ...base,
-        items: [{...base.items[0], action: 'openSettings'}],
-    }), null);
+    assert.equal(
+        normalizeNotificationInboxSnapshot({
+            ...base,
+            items: [{...base.items[0], legacyAction: 'openLaundry'}],
+        }),
+        null,
+    );
+    assert.equal(
+        normalizeNotificationInboxSnapshot({
+            ...base,
+            items: [{...base.items[0], id: 'notification-1'}],
+        }),
+        null,
+    );
+    assert.equal(
+        normalizeNotificationInboxSnapshot({
+            ...base,
+            items: [{...base.items[0], createdAt: Number.NaN}],
+        }),
+        null,
+    );
+    assert.equal(
+        normalizeNotificationInboxSnapshot({
+            ...base,
+            items: [{...base.items[0], readAt: 0}],
+        }),
+        null,
+    );
+    assert.equal(
+        normalizeNotificationInboxSnapshot({
+            ...base,
+            items: [{...base.items[0], action: 'openSettings'}],
+        }),
+        null,
+    );
 });
 
 test('알림 본 처리는 해당 항목과 미읽음 개수만 낙관적으로 갱신한다', () => {
@@ -100,10 +118,20 @@ test('알림 본 처리는 해당 항목과 미읽음 개수만 낙관적으로 
         unreadCount: 2,
         items: [
             {
-                id: '2', title: '둘', body: '본문', createdAt: 1_000, readAt: null, action: null,
+                id: '2',
+                title: '둘',
+                body: '본문',
+                createdAt: 1_000,
+                readAt: null,
+                action: null,
             },
             {
-                id: '1', title: '하나', body: '본문', createdAt: 900, readAt: null, action: null,
+                id: '1',
+                title: '하나',
+                body: '본문',
+                createdAt: 900,
+                readAt: null,
+                action: null,
             },
         ],
     });
@@ -124,13 +152,28 @@ test('새 알림 전체 본 처리는 읽지 않은 항목만 같은 시각으�
         unreadCount: 2,
         items: [
             {
-                id: '3', title: '셋', body: '본문', createdAt: 1_100, readAt: null, action: null,
+                id: '3',
+                title: '셋',
+                body: '본문',
+                createdAt: 1_100,
+                readAt: null,
+                action: null,
             },
             {
-                id: '2', title: '둘', body: '본문', createdAt: 1_000, readAt: 1_500, action: null,
+                id: '2',
+                title: '둘',
+                body: '본문',
+                createdAt: 1_000,
+                readAt: 1_500,
+                action: null,
             },
             {
-                id: '1', title: '하나', body: '본문', createdAt: 900, readAt: null, action: null,
+                id: '1',
+                title: '하나',
+                body: '본문',
+                createdAt: 900,
+                readAt: null,
+                action: null,
             },
         ],
     });
@@ -139,6 +182,9 @@ test('새 알림 전체 본 처리는 읽지 않은 항목만 같은 시각으�
     const next = markAllNotificationInboxItemsRead(snapshot, 2_000);
     assert.notEqual(next, snapshot);
     assert.equal(next.unreadCount, 0);
-    assert.deepEqual(next.items.map((item) => item.readAt), [2_000, 1_500, 2_000]);
+    assert.deepEqual(
+        next.items.map((item) => item.readAt),
+        [2_000, 1_500, 2_000],
+    );
     assert.equal(markAllNotificationInboxItemsRead(next, 3_000), next);
 });

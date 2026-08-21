@@ -1,9 +1,11 @@
 import {z} from 'zod';
+
 import {normalizeManualPairingCode} from '@/domain/connections/manual-pairing-code';
 import {
     normalizeNotificationInboxSnapshot,
     type NotificationInboxSnapshot,
 } from '@/domain/notifications/inbox';
+
 import {parseResponse} from './api-response';
 import {
     calendarDateSchema,
@@ -14,47 +16,66 @@ import {
 
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
 
-export const pairingIdSchema = z.string().max(64).regex(new RegExp(`^jbp_${UUID}$`, 'u'));
+export const pairingIdSchema = z
+    .string()
+    .max(64)
+    .regex(new RegExp(`^jbp_${UUID}$`, 'u'));
 export const claimIdSchema = pairingIdSchema;
 export const pairingChallengeSchema = z.string().regex(/^jbpc_[0-9a-f]{64}$/u);
-export const uuidIdentifierSchema = z.string().max(36).regex(new RegExp(`^${UUID}$`, 'u'));
-export const pushSubscriptionIdSchema = z.string().max(69).regex(/^jbps_[0-9a-f]{64}$/u);
-export const mobileInstallationIdSchema = z.string().max(37).regex(/^jbmi_[0-9a-f]{32}$/u);
-export const mobileSessionIdSchema = z.string().max(64).regex(new RegExp(`^jbsi_${UUID}$`, 'u'));
+export const uuidIdentifierSchema = z
+    .string()
+    .max(36)
+    .regex(new RegExp(`^${UUID}$`, 'u'));
+export const pushSubscriptionIdSchema = z
+    .string()
+    .max(69)
+    .regex(/^jbps_[0-9a-f]{64}$/u);
+export const mobileInstallationIdSchema = z
+    .string()
+    .max(37)
+    .regex(/^jbmi_[0-9a-f]{32}$/u);
+export const mobileSessionIdSchema = z
+    .string()
+    .max(64)
+    .regex(new RegExp(`^jbsi_${UUID}$`, 'u'));
 export const notificationInboxIdSchema = z.string().regex(/^\d+$/u);
 
-const canonicalTextSchema = (maximum: number) => textSchema(maximum).refine(
-    (value) => value.trim() === value,
-    '앞뒤 공백은 허용되지 않습니다.',
-);
+const canonicalTextSchema = (maximum: number) =>
+    textSchema(maximum).refine((value) => value.trim() === value, '앞뒤 공백은 허용되지 않습니다.');
 
-export const attendanceSnapshotSchema = z.strictObject({
-    attendanceDate: calendarDateSchema,
-    cohortId: textSchema(128).nullable(),
-    cohortStatus: z.enum(['active', 'upcoming', 'ended', 'none', 'unknown']),
-    cohortStartDate: calendarDateSchema.nullable(),
-    cohortEndDate: calendarDateSchema.nullable(),
-    morningChecked: z.boolean(),
-    eveningChecked: z.boolean(),
-    collectedAt: isoDateTimeSchema,
-}).superRefine((value, context) => {
-    const invalid = (value.cohortStartDate !== null
-            && value.cohortEndDate !== null
-            && value.cohortStartDate > value.cohortEndDate)
-        || (value.cohortStatus === 'active' && value.cohortId === null)
-        || ((value.cohortStatus === 'upcoming' || value.cohortStatus === 'ended')
-            && (value.cohortId !== null || value.morningChecked || value.eveningChecked))
-        || (value.cohortStatus === 'none'
-            && (value.cohortId !== null
-                || value.cohortStartDate !== null
-                || value.cohortEndDate !== null
-                || value.morningChecked
-                || value.eveningChecked))
-        || (value.cohortStatus === 'unknown' && value.cohortId !== null);
-    if (invalid) {
-        context.addIssue({code: 'custom', message: '출석 기수 상태 불변식이 올바르지 않습니다.'});
-    }
-});
+export const attendanceSnapshotSchema = z
+    .strictObject({
+        attendanceDate: calendarDateSchema,
+        cohortId: textSchema(128).nullable(),
+        cohortStatus: z.enum(['active', 'upcoming', 'ended', 'none', 'unknown']),
+        cohortStartDate: calendarDateSchema.nullable(),
+        cohortEndDate: calendarDateSchema.nullable(),
+        morningChecked: z.boolean(),
+        eveningChecked: z.boolean(),
+        collectedAt: isoDateTimeSchema,
+    })
+    .superRefine((value, context) => {
+        const invalid =
+            (value.cohortStartDate !== null &&
+                value.cohortEndDate !== null &&
+                value.cohortStartDate > value.cohortEndDate) ||
+            (value.cohortStatus === 'active' && value.cohortId === null) ||
+            ((value.cohortStatus === 'upcoming' || value.cohortStatus === 'ended') &&
+                (value.cohortId !== null || value.morningChecked || value.eveningChecked)) ||
+            (value.cohortStatus === 'none' &&
+                (value.cohortId !== null ||
+                    value.cohortStartDate !== null ||
+                    value.cohortEndDate !== null ||
+                    value.morningChecked ||
+                    value.eveningChecked)) ||
+            (value.cohortStatus === 'unknown' && value.cohortId !== null);
+        if (invalid) {
+            context.addIssue({
+                code: 'custom',
+                message: '출석 기수 상태 불변식이 올바르지 않습니다.',
+            });
+        }
+    });
 
 export interface AttendanceSnapshot {
     attendanceDate: string;
@@ -69,19 +90,19 @@ export interface AttendanceSnapshot {
 
 export type AttendanceData =
     | {
-        status: 'available';
-        freshness: 'fresh' | 'stale';
-        lastSyncedAt: string;
-        snapshot: AttendanceSnapshot;
-        source?: 'server' | 'desktop';
-        syncState?: 'synced' | 'pending';
-    }
+          status: 'available';
+          freshness: 'fresh' | 'stale';
+          lastSyncedAt: string;
+          snapshot: AttendanceSnapshot;
+          source?: 'server' | 'desktop';
+          syncState?: 'synced' | 'pending';
+      }
     | {
-        status: 'unavailable';
-        freshness: 'missing';
-        lastSyncedAt: null;
-        snapshot: null;
-    };
+          status: 'unavailable';
+          freshness: 'missing';
+          lastSyncedAt: null;
+          snapshot: null;
+      };
 
 const desktopDeviceSchema = z.strictObject({
     id: textSchema(128),
@@ -94,15 +115,20 @@ const desktopDeviceSchema = z.strictObject({
 
 export type DesktopDevice = z.infer<typeof desktopDeviceSchema>;
 
-const attendanceDashboardPayloadSchema = z.strictObject({
-    attendance: attendanceSnapshotSchema.nullable(),
-    freshness: z.enum(['fresh', 'stale', 'missing']),
-    devices: z.array(desktopDeviceSchema).max(32),
-}).superRefine((value, context) => {
-    if ((value.attendance === null) !== (value.freshness === 'missing')) {
-        context.addIssue({code: 'custom', message: '출석 데이터와 freshness가 일치하지 않습니다.'});
-    }
-});
+const attendanceDashboardPayloadSchema = z
+    .strictObject({
+        attendance: attendanceSnapshotSchema.nullable(),
+        freshness: z.enum(['fresh', 'stale', 'missing']),
+        devices: z.array(desktopDeviceSchema).max(32),
+    })
+    .superRefine((value, context) => {
+        if ((value.attendance === null) !== (value.freshness === 'missing')) {
+            context.addIssue({
+                code: 'custom',
+                message: '출석 데이터와 freshness가 일치하지 않습니다.',
+            });
+        }
+    });
 
 export interface AttendanceDashboardPayload {
     attendance: AttendanceData;
@@ -112,16 +138,17 @@ export interface AttendanceDashboardPayload {
 export function parseAttendanceDashboardPayload(value: unknown): AttendanceDashboardPayload {
     const parsed = parseResponse(attendanceDashboardPayloadSchema, value);
     return {
-        attendance: parsed.attendance === null
-            ? {status: 'unavailable', freshness: 'missing', lastSyncedAt: null, snapshot: null}
-            : {
-                status: 'available',
-                freshness: parsed.freshness as 'fresh' | 'stale',
-                lastSyncedAt: parsed.attendance.collectedAt,
-                snapshot: parsed.attendance,
-                source: 'server',
-                syncState: 'synced',
-            },
+        attendance:
+            parsed.attendance === null
+                ? {status: 'unavailable', freshness: 'missing', lastSyncedAt: null, snapshot: null}
+                : {
+                      status: 'available',
+                      freshness: parsed.freshness as 'fresh' | 'stale',
+                      lastSyncedAt: parsed.attendance.collectedAt,
+                      snapshot: parsed.attendance,
+                      source: 'server',
+                      syncState: 'synced',
+                  },
         devices: parsed.devices,
     };
 }
@@ -149,7 +176,9 @@ export function parseDesktopConnection(value: unknown): DesktopConnectionState {
     return {
         state: parsed.identityResetRequired
             ? 'reset-required'
-            : parsed.authenticated ? 'connected' : 'disconnected',
+            : parsed.authenticated
+              ? 'connected'
+              : 'disconnected',
         credentialPersistent: parsed.credentialPersistent,
         lastVerifiedAt: parsed.lastServerContact,
         lastSeenAt: parsed.lastServerContact,
@@ -158,7 +187,8 @@ export function parseDesktopConnection(value: unknown): DesktopConnectionState {
     };
 }
 
-const manualPairingCodeSchema = z.string()
+const manualPairingCodeSchema = z
+    .string()
     .min(1)
     .max(32)
     .transform(normalizeManualPairingCode)
@@ -199,20 +229,23 @@ export const mobilePairingStatusSchema = z.discriminatedUnion('status', [
 
 export type MobilePairingStatus = z.infer<typeof mobilePairingStatusSchema>;
 
-const mobileSessionSchema = z.strictObject({
-    deviceId: mobileSessionIdSchema,
-    deviceLabel: textSchema(80),
-    installationId: mobileInstallationIdSchema,
-    createdAt: isoDateTimeSchema,
-    expiresAt: isoDateTimeSchema,
-    lastSeenAt: isoDateTimeSchema,
-    pushEnabled: z.boolean(),
-    status: z.enum(['active', 'revoked', 'expired']),
-}).refine(
-    (value) => Date.parse(value.expiresAt) > Date.parse(value.createdAt)
-        && Date.parse(value.lastSeenAt) >= Date.parse(value.createdAt),
-    '모바일 세션 시간 순서가 올바르지 않습니다.',
-);
+const mobileSessionSchema = z
+    .strictObject({
+        deviceId: mobileSessionIdSchema,
+        deviceLabel: textSchema(80),
+        installationId: mobileInstallationIdSchema,
+        createdAt: isoDateTimeSchema,
+        expiresAt: isoDateTimeSchema,
+        lastSeenAt: isoDateTimeSchema,
+        pushEnabled: z.boolean(),
+        status: z.enum(['active', 'revoked', 'expired']),
+    })
+    .refine(
+        (value) =>
+            Date.parse(value.expiresAt) > Date.parse(value.createdAt) &&
+            Date.parse(value.lastSeenAt) >= Date.parse(value.createdAt),
+        '모바일 세션 시간 순서가 올바르지 않습니다.',
+    );
 
 export const mobileSessionsSchema = z.strictObject({
     devices: z.array(mobileSessionSchema).max(128),
@@ -220,41 +253,48 @@ export const mobileSessionsSchema = z.strictObject({
 
 export type MobileSession = z.infer<typeof mobileSessionSchema>;
 
-const notificationPathSchema = z.string()
+const notificationPathSchema = z
+    .string()
     .min(1)
     .max(128)
     .regex(/^\/#\/?(?:attendance|laundry|meals|notifications|connections)$/u)
     .transform((path) => path.replace(/^\/#\/?/u, '/#/'));
 
-const notificationKindSchema = z.enum([
-    'meal-published',
-    'laundry-finishing',
-    'laundry-completion-expected',
-    'laundry-completed',
-    'laundry-available',
-    'laundry-attention',
-    'attendance-action-required',
-    'attendance-morning',
-    'attendance-evening',
-    'login-required',
-    'test',
-]).transform((kind) => kind === 'attendance-morning' || kind === 'attendance-evening'
-    ? 'attendance-action-required' as const
-    : kind);
+const notificationKindSchema = z
+    .enum([
+        'meal-published',
+        'laundry-finishing',
+        'laundry-completion-expected',
+        'laundry-completed',
+        'laundry-available',
+        'laundry-attention',
+        'attendance-action-required',
+        'attendance-morning',
+        'attendance-evening',
+        'login-required',
+        'test',
+    ])
+    .transform((kind) =>
+        kind === 'attendance-morning' || kind === 'attendance-evening'
+            ? ('attendance-action-required' as const)
+            : kind,
+    );
 
-const dashboardNotificationSchema = z.strictObject({
-    id: uuidIdentifierSchema,
-    kind: notificationKindSchema,
-    title: textSchema(256),
-    body: textSchema(2_048),
-    path: notificationPathSchema,
-    createdAtEpochMs: safeEpochMillisecondsSchema,
-    expiresAtEpochMs: safeEpochMillisecondsSchema,
-    attempt: z.number().int().min(0).max(1_000),
-}).refine(
-    (value) => value.expiresAtEpochMs >= value.createdAtEpochMs,
-    '알림 만료 시각이 생성 시각보다 빨라서는 안 됩니다.',
-);
+const dashboardNotificationSchema = z
+    .strictObject({
+        id: uuidIdentifierSchema,
+        kind: notificationKindSchema,
+        title: textSchema(256),
+        body: textSchema(2_048),
+        path: notificationPathSchema,
+        createdAtEpochMs: safeEpochMillisecondsSchema,
+        expiresAtEpochMs: safeEpochMillisecondsSchema,
+        attempt: z.number().int().min(0).max(1_000),
+    })
+    .refine(
+        (value) => value.expiresAtEpochMs >= value.createdAtEpochMs,
+        '알림 만료 시각이 생성 시각보다 빨라서는 안 됩니다.',
+    );
 
 export const dashboardNotificationsSchema = z.strictObject({
     notifications: z.array(dashboardNotificationSchema).max(128),

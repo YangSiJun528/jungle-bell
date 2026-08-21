@@ -1,6 +1,8 @@
 import {useState} from 'react';
+
 import {NotificationOnboardingCard} from '@/features/notifications/notification-delivery-setup';
 import type {PlatformAdapter} from '@/platform/contracts';
+
 import {useDashboardAccount} from './dashboard-account';
 import {useDashboardEnvironment} from './dashboard-context';
 import {
@@ -15,9 +17,12 @@ type NotificationOnboardingDecisions = Record<
     NotificationOnboardingDecision | null
 >;
 
-function notificationOnboardingSurface(platform: PlatformAdapter): NotificationOnboardingSurface | null {
+function notificationOnboardingSurface(
+    platform: PlatformAdapter,
+): NotificationOnboardingSurface | null {
     if (platform.kind === 'desktop' && platform.capabilities.localNotifications) return 'desktop';
-    if (platform.kind === 'browser' && platform.pwa.installed && platform.capabilities.webPush) return 'pwa';
+    if (platform.kind === 'browser' && platform.pwa.installed && platform.capabilities.webPush)
+        return 'pwa';
     return null;
 }
 
@@ -35,7 +40,8 @@ export function NotificationOnboardingNotice() {
     const [decisions, setDecisions] = useState<NotificationOnboardingDecisions>(initialDecisions);
     const surface = notificationOnboardingSurface(platform);
 
-    if (!surface || personalAccess.status !== 'connected' || decisions[surface] !== null) return null;
+    if (!surface || personalAccess.status !== 'connected' || decisions[surface] !== null)
+        return null;
 
     const decide = (decision: NotificationOnboardingDecision) => {
         writeNotificationOnboardingDecision(window.localStorage, surface, decision);

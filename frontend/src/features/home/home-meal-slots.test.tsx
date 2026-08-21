@@ -1,7 +1,8 @@
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, it} from 'vitest';
-import type {HomeMealSlots} from './home-view-model';
+
 import {HomeMealSlotsList} from './home-meal-slots';
+import type {HomeMealSlots} from './home-view-model';
 
 describe('HomeMealSlotsList', () => {
     it('keeps lunch above dinner and shows a visible empty state for a missing meal', () => {
@@ -19,10 +20,11 @@ describe('HomeMealSlotsList', () => {
             {period: '석식', meal: null},
         ];
 
-        const html = renderToStaticMarkup(<HomeMealSlotsList slots={slots}/>);
+        const html = renderToStaticMarkup(<HomeMealSlotsList slots={slots} />);
 
-        expect(html.indexOf('data-meal-period="중식"'))
-            .toBeLessThan(html.indexOf('data-meal-period="석식"'));
+        expect(html.indexOf('data-meal-period="중식"')).toBeLessThan(
+            html.indexOf('data-meal-period="석식"'),
+        );
         expect(html).toContain('data-meal-empty="false"');
         expect(html).toContain('data-meal-empty="true"');
         expect(html).toContain('data-meal-state="published"');
@@ -41,20 +43,26 @@ describe('HomeMealSlotsList', () => {
             {
                 period: '중식',
                 meal: {
-                    id: 'lunch', title: '8월 11일 중식', text: '점심',
-                    publishedAt: null, permalink: null,
+                    id: 'lunch',
+                    title: '8월 11일 중식',
+                    text: '점심',
+                    publishedAt: null,
+                    permalink: null,
                 },
             },
             {
                 period: '석식',
                 meal: {
-                    id: 'dinner', title: '8월 11일 석식', text: '저녁',
-                    publishedAt: null, permalink: null,
+                    id: 'dinner',
+                    title: '8월 11일 석식',
+                    text: '저녁',
+                    publishedAt: null,
+                    permalink: null,
                 },
             },
         ];
 
-        const html = renderToStaticMarkup(<HomeMealSlotsList slots={slots}/>);
+        const html = renderToStaticMarkup(<HomeMealSlotsList slots={slots} />);
 
         expect(html).not.toContain('data-slot="skeleton"');
         expect(html).not.toContain('data-meal-state="empty"');

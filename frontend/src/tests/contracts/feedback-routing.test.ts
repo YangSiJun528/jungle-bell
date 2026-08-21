@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {existsSync, readFileSync} from 'node:fs';
+
 import {test} from 'vitest';
 
 const repositoryRoot = new URL('../../../../', import.meta.url);
@@ -13,7 +14,11 @@ test('버그·기능 요청·질문은 모두 GitHub Issues 양식으로 접수�
     ];
 
     for (const template of templates) {
-        assert.equal(existsSync(new URL(template, repositoryRoot)), true, `${template}이 없습니다.`);
+        assert.equal(
+            existsSync(new URL(template, repositoryRoot)),
+            true,
+            `${template}이 없습니다.`,
+        );
     }
 
     const config = readRepositoryFile('.github/ISSUE_TEMPLATE/config.yml');

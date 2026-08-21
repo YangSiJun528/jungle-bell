@@ -1,5 +1,6 @@
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, test, vi} from 'vitest';
+
 import {PlatformAuthenticationGate} from './platform-authentication-gate';
 
 const {account, environment} = vi.hoisted(() => ({
@@ -73,7 +74,7 @@ function renderGate(options: {
             connectionContent={<p>기기 연결 화면</p>}
             notice={<p data-update-notice="true">업데이트 안내</p>}
         >
-            <RouteContent/>
+            <RouteContent />
         </PlatformAuthenticationGate>,
     );
 }
@@ -92,7 +93,9 @@ describe('PlatformAuthenticationGate', () => {
     });
 
     test('PWA의 정착된 세션 상태에 따라 전체 화면을 분기한다', () => {
-        expect(renderGate({authentication: 'cookie', personalAccess: 'connected'})).toContain('대시보드');
+        expect(renderGate({authentication: 'cookie', personalAccess: 'connected'})).toContain(
+            '대시보드',
+        );
 
         const checking = renderGate({authentication: 'cookie', personalAccess: 'checking'});
         expect(checking).toContain('PC 연결 상태를 확인하고 있습니다.');
@@ -131,17 +134,19 @@ describe('PlatformAuthenticationGate', () => {
         if (lmsAuthentication === 'unavailable') expect(markup).toContain('상태 다시 확인');
     });
 
-    test.each(['missing', 'unavailable', 'recovery-required'])
-    ('PC의 LMS 인증이 확인되면 서버 세션이 %s여도 대시보드를 연다', (serverSession) => {
-        const markup = renderGate({
-            authentication: 'desktop-session',
-            desktopAccount: true,
-            lmsAuthentication: 'authenticated',
-            serverSession,
-        });
+    test.each(['missing', 'unavailable', 'recovery-required'])(
+        'PC의 LMS 인증이 확인되면 서버 세션이 %s여도 대시보드를 연다',
+        (serverSession) => {
+            const markup = renderGate({
+                authentication: 'desktop-session',
+                desktopAccount: true,
+                lmsAuthentication: 'authenticated',
+                serverSession,
+            });
 
-        expect(markup).toContain('대시보드');
-        expect(markup).not.toContain('data-authentication-gate');
-        expect(routeRenderCount).toBe(1);
-    });
+            expect(markup).toContain('대시보드');
+            expect(markup).not.toContain('data-authentication-gate');
+            expect(routeRenderCount).toBe(1);
+        },
+    );
 });

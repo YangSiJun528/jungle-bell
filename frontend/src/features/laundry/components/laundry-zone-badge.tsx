@@ -1,8 +1,8 @@
-import {Badge} from '@/components/ui/badge';
 import {
     laundryZonePresentation,
     type LaundryZone,
 } from '@/components/dashboard/laundry-zone-presentation';
+import {Badge} from '@/components/ui/badge';
 
 export function LaundryZoneBadge({zone}: {zone: LaundryZone}) {
     const meta = laundryZonePresentation(zone);

@@ -1,8 +1,10 @@
 import {createElement} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, it} from 'vitest';
+
 import {buildDdayProgress} from '@/domain/attendance/dday-progress';
 import type {DdayView} from '@/domain/attendance/dday-view';
+
 import {DdayCard} from './dday-card';
 
 const period = {startDate: '2026-01-29', endDate: '2026-03-02'};
@@ -38,7 +40,9 @@ describe('DdayCard', () => {
         expect(markup).toContain('aria-expanded="true"');
         expect(markup).toContain('과정 달력 접기');
         expect(markup).toContain('role="img"');
-        expect(markup).toContain('aria-label="코스 진행률 12.1%, 완료 4일, 오늘 진행 중, 남음 28일"');
+        expect(markup).toContain(
+            'aria-label="코스 진행률 12.1%, 완료 4일, 오늘 진행 중, 남음 28일"',
+        );
         expect(markup.match(/data-dday-cell="true"/gu)).toHaveLength(93);
         expect(markup.match(/data-dday-day-axis="true"/gu)).toHaveLength(31);
         expect(markup).toContain('>1</span>');
@@ -55,9 +59,11 @@ describe('DdayCard', () => {
     });
 
     it('keeps a text-only state visible but disables expansion', () => {
-        const markup = renderToStaticMarkup(createElement(DdayCard, {
-            view: {text: '수료일 정보 없음', period: null, progress: null},
-        }));
+        const markup = renderToStaticMarkup(
+            createElement(DdayCard, {
+                view: {text: '수료일 정보 없음', period: null, progress: null},
+            }),
+        );
 
         expect(markup).toContain('수료일 정보 없음');
         expect(markup).toContain('disabled=""');

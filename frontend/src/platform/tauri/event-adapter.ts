@@ -1,4 +1,5 @@
 import {listen} from '@tauri-apps/api/event';
+
 import type {PlatformEventAdapter} from '@/platform/contracts';
 
 export function createTauriEventAdapter(): PlatformEventAdapter {

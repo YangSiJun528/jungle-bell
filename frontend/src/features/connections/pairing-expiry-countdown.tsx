@@ -1,4 +1,5 @@
 import {useEffect, useState} from 'react';
+
 import {pairingRemainingLabel} from './lib/pairing-expiry';
 
 export function PairingExpiryCountdown({expiresAt}: {expiresAt: string}) {

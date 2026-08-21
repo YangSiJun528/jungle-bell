@@ -1,16 +1,16 @@
 import {ExternalLink} from 'lucide-react';
-import {Button} from '@/components/ui/button';
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
+
 import type {DashboardMealPost} from '@/api/dashboard-api';
+import {Button} from '@/components/ui/button';
+import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@/components/ui/card';
+
 import {weekRangeLabel} from '../lib/meal-view';
 
-export function WeeklyMealMenu({meal, weekKey, showSourceLink = true}: {
+export function WeeklyMealMenu({
+    meal,
+    weekKey,
+    showSourceLink = true,
+}: {
     meal: DashboardMealPost;
     weekKey: string;
     showSourceLink?: boolean;
@@ -32,7 +32,7 @@ export function WeeklyMealMenu({meal, weekKey, showSourceLink = true}: {
                             {images.map((image, index) => (
                                 <a
                                     aria-label={`${title} 급식표${images.length > 1 ? ` ${index + 1}` : ''} 새 탭에서 열기`}
-                                    className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                    className="block rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                                     href={image.url}
                                     key={image.sha}
                                     rel="noopener noreferrer"
@@ -54,7 +54,9 @@ export function WeeklyMealMenu({meal, weekKey, showSourceLink = true}: {
                     {textAlternative ? (
                         <section aria-label="급식표 텍스트 내용" className="grid gap-2">
                             <h3 className="text-sm font-semibold">급식표 텍스트 내용</h3>
-                            <p className="whitespace-pre-wrap text-sm leading-6">{textAlternative}</p>
+                            <p className="text-sm leading-6 whitespace-pre-wrap">
+                                {textAlternative}
+                            </p>
                         </section>
                     ) : images.length === 0 ? (
                         <p className="text-sm text-muted-foreground" role="status">
@@ -64,7 +66,7 @@ export function WeeklyMealMenu({meal, weekKey, showSourceLink = true}: {
                     {showSourceLink && meal.permalink ? (
                         <Button asChild className="justify-self-start" variant="outline">
                             <a href={meal.permalink} rel="noreferrer" target="_blank">
-                                <ExternalLink/>
+                                <ExternalLink />
                                 급식표 보러가기
                             </a>
                         </Button>

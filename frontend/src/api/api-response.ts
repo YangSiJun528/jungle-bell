@@ -35,10 +35,7 @@ export async function responseJson(response: Response): Promise<unknown> {
     }
 }
 
-export async function responseValue<T>(
-    schema: ZodType<T>,
-    response: Response,
-): Promise<T> {
+export async function responseValue<T>(schema: ZodType<T>, response: Response): Promise<T> {
     return parseResponse(schema, await responseJson(response));
 }
 

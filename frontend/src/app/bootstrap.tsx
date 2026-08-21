@@ -1,11 +1,14 @@
+import {RouterProvider} from '@tanstack/react-router';
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
-import {RouterProvider} from '@tanstack/react-router';
-import {DashboardProviders} from './dashboard-providers';
+
 import {captureInitialPairingFromWindow} from '@/app/pairing-bootstrap';
 import type {PlatformAdapter} from '@/platform/contracts';
+
+import {DashboardProviders} from './dashboard-providers';
 import {createDashboardRouter} from './dashboard-router';
 import {normalizeLegacyDashboardHash} from './routes';
+
 import './styles/globals.css';
 
 export function bootstrapDashboard(platform: PlatformAdapter): void {
@@ -35,7 +38,7 @@ export function bootstrapDashboard(platform: PlatformAdapter): void {
     createRoot(root).render(
         <StrictMode>
             <DashboardProviders platform={platform}>
-                <RouterProvider router={router}/>
+                <RouterProvider router={router} />
             </DashboardProviders>
         </StrictMode>,
     );

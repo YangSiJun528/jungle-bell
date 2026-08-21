@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+
 import {test} from 'vitest';
 
 const srcRoot = new URL('../../', import.meta.url);
@@ -22,7 +23,11 @@ test('구형 설정·온보딩·캠퍼스·출석 전용 창은 만들지 않는
 });
 
 test('대시보드 창은 사이드바와 내용을 표시할 크기에서 시작하고 최대화할 수 있다', () => {
-    const dashboard = sourceBetween(tray, 'fn build_dashboard_window', 'pub fn open_dashboard_window');
+    const dashboard = sourceBetween(
+        tray,
+        'fn build_dashboard_window',
+        'pub fn open_dashboard_window',
+    );
 
     assert.match(tray, /const DASHBOARD_WINDOW_WIDTH: f64 = 1180\.0;/);
     assert.match(tray, /const DASHBOARD_WINDOW_HEIGHT: f64 = 780\.0;/);
@@ -43,5 +48,8 @@ test('트레이 클릭은 별도 목록 창 없이 대시보드 홈을 연다', 
 
     assert.match(setup, /on_tray_icon_event[\s\S]*open_dashboard_window\(tray\.app_handle\(\)\)/);
     assert.match(tray, /pub fn open_dashboard_window[\s\S]*DashboardRoute::Home/);
-    assert.doesNotMatch(tray, /TRAY_PANEL_(?:WIDTH|HEIGHT)|build_tray_panel_window|toggle_tray_panel/);
+    assert.doesNotMatch(
+        tray,
+        /TRAY_PANEL_(?:WIDTH|HEIGHT)|build_tray_panel_window|toggle_tray_panel/,
+    );
 });

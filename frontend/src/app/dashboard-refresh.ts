@@ -16,10 +16,7 @@ export async function runAttendanceRefresh(tasks: AttendanceRefreshTasks): Promi
 }
 
 export async function runDashboardRefresh(tasks: DashboardRefreshTasks): Promise<void> {
-    const campusRefresh = Promise.all([
-        tasks.refreshLaundry(),
-        tasks.refreshMeals(),
-    ]);
+    const campusRefresh = Promise.all([tasks.refreshLaundry(), tasks.refreshMeals()]);
     const platformRefresh = tasks.refreshPlatform?.();
     const personalRefresh = (async () => {
         if (platformRefresh) await platformRefresh;

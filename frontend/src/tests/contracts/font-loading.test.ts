@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {existsSync, readFileSync} from 'node:fs';
+
 import {test} from 'vitest';
 
 const srcRoot = new URL('../../', import.meta.url);
@@ -38,7 +39,9 @@ test('화면 컴포넌트는 font-family를 개별 지정하지 않고 전역 �
         './features/meals/pages/meals-page.tsx',
         './features/notifications/notifications-page.tsx',
         './features/connections/connections-page.tsx',
-    ].map(source).join('\n');
+    ]
+        .map(source)
+        .join('\n');
 
     assert.doesNotMatch(componentSources, /font-family\s*:/i);
     assert.doesNotMatch(componentSources, /\b(?:Roboto|Inter|Noto Sans|SF Pro|Cascadia Code)\b/i);

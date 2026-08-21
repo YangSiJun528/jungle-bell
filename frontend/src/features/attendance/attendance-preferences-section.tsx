@@ -1,11 +1,12 @@
-import {useEffect, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {BellRing} from 'lucide-react';
-import type {AttendancePreferences} from '@/api/personal-api';
-import {queryKeys, useDashboardEnvironment} from '@/app/dashboard-context';
+import {useEffect, useState} from 'react';
+
 import {accountAuthenticationRequired} from '@/api/account-authentication';
-import {useAttendanceQuery} from '@/app/use-dashboard-queries';
+import type {AttendancePreferences} from '@/api/personal-api';
 import {useDashboardAccount} from '@/app/dashboard-account';
+import {queryKeys, useDashboardEnvironment} from '@/app/dashboard-context';
+import {useAttendanceQuery} from '@/app/use-dashboard-queries';
 import {EmptyState, ErrorState, LoadingState} from '@/components/dashboard/async-state';
 import {Button} from '@/components/ui/button';
 import {
@@ -26,13 +27,20 @@ import {
 } from '@/components/ui/select';
 import {Separator} from '@/components/ui/separator';
 import {Switch} from '@/components/ui/switch';
+
 import {attendancePreferencesEqual, attendanceSkipDate} from './attendance-view-model';
 
 const MORNING_START_HOURS = [4, 5, 6, 7, 8, 9] as const;
 const EVENING_END_HOURS = [0, 1, 2, 3, 4] as const;
 const INTERVAL_MINUTES = [1, 3, 5, 10, 15, 30] as const;
 
-function PreferenceSwitchRow({title, description, checked, disabled, onCheckedChange}: {
+function PreferenceSwitchRow({
+    title,
+    description,
+    checked,
+    disabled,
+    onCheckedChange,
+}: {
     title: string;
     description: string;
     checked: boolean;
@@ -55,7 +63,15 @@ function PreferenceSwitchRow({title, description, checked, disabled, onCheckedCh
     );
 }
 
-function NumberSelect({id, label, value, options, disabled, format, onValueChange}: {
+function NumberSelect({
+    id,
+    label,
+    value,
+    options,
+    disabled,
+    format,
+    onValueChange,
+}: {
     id: string;
     label: string;
     value: number;
@@ -76,11 +92,13 @@ function NumberSelect({id, label, value, options, disabled, format, onValueChang
                 }}
             >
                 <SelectTrigger id={id} aria-label={label} className="w-full">
-                    <SelectValue/>
+                    <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                     {options.map((option) => (
-                        <SelectItem key={option} value={String(option)}>{format(option)}</SelectItem>
+                        <SelectItem key={option} value={String(option)}>
+                            {format(option)}
+                        </SelectItem>
                     ))}
                 </SelectContent>
             </Select>
@@ -119,25 +137,24 @@ export function AttendancePreferencesSection() {
         },
         onSettled: () => client.invalidateQueries({queryKey: queryKeys.attendancePreferences}),
     });
-    const attendanceDate = attendance.data?.state === 'loaded'
-        && attendance.data.attendance.status === 'available'
-        ? attendance.data.attendance.snapshot.attendanceDate
-        : null;
+    const attendanceDate =
+        attendance.data?.state === 'loaded' && attendance.data.attendance.status === 'available'
+            ? attendance.data.attendance.snapshot.attendanceDate
+            : null;
     const dirty = !attendancePreferencesEqual(draft, preferences.data ?? null);
-    const authRequired = preferences.isError
-        && accountAuthenticationRequired(preferences.error);
+    const authRequired = preferences.isError && accountAuthenticationRequired(preferences.error);
     const updateDraft = <Key extends keyof AttendancePreferences>(
         key: Key,
         value: AttendancePreferences[Key],
     ): void => {
-        setDraft((current) => current ? {...current, [key]: value} : current);
+        setDraft((current) => (current ? {...current, [key]: value} : current));
     };
 
     return (
         <Card>
             <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                    <BellRing className="size-4 text-primary"/>
+                    <BellRing className="size-4 text-primary" />
                     출석 알림 설정
                 </CardTitle>
                 <CardDescription>
@@ -145,10 +162,13 @@ export function AttendancePreferencesSection() {
                 </CardDescription>
             </CardHeader>
             <CardContent>
-                {preferences.isPending || draft === null && !preferences.isError ? (
-                    <LoadingState label="출석 알림 설정을 불러오고 있습니다."/>
+                {preferences.isPending || (draft === null && !preferences.isError) ? (
+                    <LoadingState label="출석 알림 설정을 불러오고 있습니다." />
                 ) : authRequired ? (
-                    <EmptyState title="PC 연결이 필요합니다." description="PC와 연결한 뒤 출석 알림을 설정할 수 있습니다."/>
+                    <EmptyState
+                        title="PC 연결이 필요합니다."
+                        description="PC와 연결한 뒤 출석 알림을 설정할 수 있습니다."
+                    />
                 ) : preferences.isError || draft === null ? (
                     <ErrorState
                         title="출석 알림 설정을 불러오지 못했습니다."
@@ -163,7 +183,7 @@ export function AttendancePreferencesSection() {
                             disabled={savePreferences.isPending}
                             onCheckedChange={(enabled) => updateDraft('enabled', enabled)}
                         />
-                        <Separator/>
+                        <Separator />
                         <div className="py-4">
                             <PreferenceSwitchRow
                                 title="학습 시작 알림"
@@ -178,25 +198,37 @@ export function AttendancePreferencesSection() {
                                     label="학습 시작 확인 시각"
                                     value={draft.morningStartHour}
                                     options={MORNING_START_HOURS}
-                                    disabled={!draft.enabled || !draft.morning || savePreferences.isPending}
+                                    disabled={
+                                        !draft.enabled ||
+                                        !draft.morning ||
+                                        savePreferences.isPending
+                                    }
                                     format={hourLabel}
-                                    onValueChange={(value) => updateDraft('morningStartHour', value)}
+                                    onValueChange={(value) =>
+                                        updateDraft('morningStartHour', value)
+                                    }
                                 />
                                 <NumberSelect
                                     id="attendance-morning-interval"
                                     label="학습 시작 확인 간격"
                                     value={draft.morningIntervalMinutes}
                                     options={INTERVAL_MINUTES}
-                                    disabled={!draft.enabled || !draft.morning || savePreferences.isPending}
+                                    disabled={
+                                        !draft.enabled ||
+                                        !draft.morning ||
+                                        savePreferences.isPending
+                                    }
                                     format={(value) => `${value}분`}
-                                    onValueChange={(value) => updateDraft(
-                                        'morningIntervalMinutes',
-                                        value as AttendancePreferences['morningIntervalMinutes'],
-                                    )}
+                                    onValueChange={(value) =>
+                                        updateDraft(
+                                            'morningIntervalMinutes',
+                                            value as AttendancePreferences['morningIntervalMinutes'],
+                                        )
+                                    }
                                 />
                             </div>
                         </div>
-                        <Separator/>
+                        <Separator />
                         <div className="py-4">
                             <PreferenceSwitchRow
                                 title="학습 종료 알림"
@@ -211,7 +243,11 @@ export function AttendancePreferencesSection() {
                                     label="학습 종료 확인 종료 시각"
                                     value={draft.eveningEndHour}
                                     options={EVENING_END_HOURS}
-                                    disabled={!draft.enabled || !draft.evening || savePreferences.isPending}
+                                    disabled={
+                                        !draft.enabled ||
+                                        !draft.evening ||
+                                        savePreferences.isPending
+                                    }
                                     format={hourLabel}
                                     onValueChange={(value) => updateDraft('eveningEndHour', value)}
                                 />
@@ -220,16 +256,22 @@ export function AttendancePreferencesSection() {
                                     label="학습 종료 확인 간격"
                                     value={draft.eveningIntervalMinutes}
                                     options={INTERVAL_MINUTES}
-                                    disabled={!draft.enabled || !draft.evening || savePreferences.isPending}
+                                    disabled={
+                                        !draft.enabled ||
+                                        !draft.evening ||
+                                        savePreferences.isPending
+                                    }
                                     format={(value) => `${value}분`}
-                                    onValueChange={(value) => updateDraft(
-                                        'eveningIntervalMinutes',
-                                        value as AttendancePreferences['eveningIntervalMinutes'],
-                                    )}
+                                    onValueChange={(value) =>
+                                        updateDraft(
+                                            'eveningIntervalMinutes',
+                                            value as AttendancePreferences['eveningIntervalMinutes'],
+                                        )
+                                    }
                                 />
                             </div>
                         </div>
-                        <Separator/>
+                        <Separator />
                         <PreferenceSwitchRow
                             title="일요일 제외"
                             description="일요일에는 출석 알림을 계획하지 않습니다."
@@ -237,18 +279,29 @@ export function AttendancePreferencesSection() {
                             disabled={!draft.enabled || savePreferences.isPending}
                             onCheckedChange={(skipSunday) => updateDraft('skipSunday', skipSunday)}
                         />
-                        <Separator/>
+                        <Separator />
                         <PreferenceSwitchRow
                             title="이번 출석일 건너뛰기"
-                            description={attendanceDate
-                                ? `${attendanceDate} 하루만 알림을 쉽니다.`
-                                : '출석 기준일이 확인되면 선택할 수 있습니다.'}
-                            checked={attendanceDate !== null && draft.skipAttendanceDate === attendanceDate}
-                            disabled={!draft.enabled || savePreferences.isPending || attendanceDate === null}
-                            onCheckedChange={(checked) => updateDraft(
-                                'skipAttendanceDate',
-                                attendanceSkipDate(checked, attendanceDate),
-                            )}
+                            description={
+                                attendanceDate
+                                    ? `${attendanceDate} 하루만 알림을 쉽니다.`
+                                    : '출석 기준일이 확인되면 선택할 수 있습니다.'
+                            }
+                            checked={
+                                attendanceDate !== null &&
+                                draft.skipAttendanceDate === attendanceDate
+                            }
+                            disabled={
+                                !draft.enabled ||
+                                savePreferences.isPending ||
+                                attendanceDate === null
+                            }
+                            onCheckedChange={(checked) =>
+                                updateDraft(
+                                    'skipAttendanceDate',
+                                    attendanceSkipDate(checked, attendanceDate),
+                                )
+                            }
                         />
                     </div>
                 )}
@@ -261,9 +314,19 @@ export function AttendancePreferencesSection() {
                     >
                         {savePreferences.isPending ? '저장 중' : '출석 알림 저장'}
                     </Button>
-                    {dirty ? <p className="text-xs text-amber-700 dark:text-amber-300">저장하지 않은 변경이 있습니다.</p> : null}
-                    {savePreferences.isSuccess && !dirty ? <p className="text-xs text-emerald-700 dark:text-emerald-300">설정을 저장했습니다.</p> : null}
-                    {savePreferences.isError ? <p className="text-xs text-destructive">설정을 저장하지 못했습니다.</p> : null}
+                    {dirty ? (
+                        <p className="text-xs text-amber-700 dark:text-amber-300">
+                            저장하지 않은 변경이 있습니다.
+                        </p>
+                    ) : null}
+                    {savePreferences.isSuccess && !dirty ? (
+                        <p className="text-xs text-emerald-700 dark:text-emerald-300">
+                            설정을 저장했습니다.
+                        </p>
+                    ) : null}
+                    {savePreferences.isError ? (
+                        <p className="text-xs text-destructive">설정을 저장하지 못했습니다.</p>
+                    ) : null}
                 </CardFooter>
             ) : null}
         </Card>

@@ -1,5 +1,6 @@
 import {existsSync, globSync, readFileSync, readdirSync} from 'node:fs';
 import {resolve} from 'node:path';
+
 import {describe, expect, test} from 'vitest';
 
 const root = resolve(import.meta.dirname, '../../..');
@@ -21,8 +22,9 @@ describe('React renewal architecture', () => {
             expect(read(path), path).not.toMatch(/['"]@\/features\//u);
         }
 
-        const domainFiles = globSync('src/domain/**/*.{ts,tsx}', {cwd: root})
-            .filter((path) => !path.includes('.test.'));
+        const domainFiles = globSync('src/domain/**/*.{ts,tsx}', {cwd: root}).filter(
+            (path) => !path.includes('.test.'),
+        );
         for (const path of domainFiles) {
             expect(read(path), path).not.toMatch(/['"]@\/(?:api|app|features)\//u);
         }
@@ -34,7 +36,9 @@ describe('React renewal architecture', () => {
                 read(path).matchAll(/(?:from\s+|import\()\s*['"]@\/features\/([^/'"]+)/gu),
                 (match) => match[1],
             );
-            expect(importedFeatures, path).toEqual(importedFeatures.filter((feature) => feature === owner));
+            expect(importedFeatures, path).toEqual(
+                importedFeatures.filter((feature) => feature === owner),
+            );
         }
     });
 
@@ -67,7 +71,9 @@ describe('React renewal architecture', () => {
     });
 
     test('the dashboard reserves generic badges for laundry identification and the sidebar unread count', () => {
-        const dashboardFiles = globSync('src/{app,components/dashboard,features}/**/*.tsx', {cwd: root});
+        const dashboardFiles = globSync('src/{app,components/dashboard,features}/**/*.tsx', {
+            cwd: root,
+        });
         const badgeAllowedFiles = new Set([
             'src/features/laundry/components/laundry-zone-badge.tsx',
             'src/features/laundry/components/laundry-warning-badge.tsx',
@@ -77,7 +83,9 @@ describe('React renewal architecture', () => {
         expect(existsSync(resolve(root, 'src/components/dashboard/status-badge.tsx'))).toBe(false);
         for (const path of dashboardFiles) {
             if (badgeAllowedFiles.has(path)) continue;
-            expect(read(path), path).not.toMatch(/components\/(?:ui\/badge|dashboard\/status-badge)/u);
+            expect(read(path), path).not.toMatch(
+                /components\/(?:ui\/badge|dashboard\/status-badge)/u,
+            );
             expect(read(path), path).not.toMatch(/<(?:Badge|StatusBadge)\b/u);
         }
 
@@ -102,7 +110,9 @@ describe('React renewal architecture', () => {
         const sourceFiles = globSync('src/**/*.{css,html,tsx}', {cwd: root});
 
         for (const path of sourceFiles) {
-            expect(read(path), path).not.toMatch(/(?:bg-gradient|linear-gradient|radial-gradient|conic-gradient)/u);
+            expect(read(path), path).not.toMatch(
+                /(?:bg-gradient|linear-gradient|radial-gradient|conic-gradient)/u,
+            );
         }
     });
 

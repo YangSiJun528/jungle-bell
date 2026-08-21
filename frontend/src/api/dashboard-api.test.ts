@@ -1,18 +1,21 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+
 import {test} from 'vitest';
-import {
-    createDashboardApi as createDashboardApiImplementation,
-    type DashboardApiOptions,
-} from './dashboard-api';
-import {createNativeBridge} from '@/platform/tauri/native-bridge';
-import {createTauriPlatformAdapter} from '@/platform/tauri/adapter';
-import {createWebPlatformAdapter} from '@/platform/web/adapter';
+
 import {
     type NativeInvoke,
     unavailableEventAdapter,
     unavailablePwaAdapter,
 } from '@/platform/contracts';
+import {createTauriPlatformAdapter} from '@/platform/tauri/adapter';
+import {createNativeBridge} from '@/platform/tauri/native-bridge';
+import {createWebPlatformAdapter} from '@/platform/web/adapter';
+
+import {
+    createDashboardApi as createDashboardApiImplementation,
+    type DashboardApiOptions,
+} from './dashboard-api';
 
 type TestDashboardApiOptions = DashboardApiOptions & {
     desktopRuntime?: boolean;
@@ -21,22 +24,25 @@ type TestDashboardApiOptions = DashboardApiOptions & {
 };
 
 function createDashboardApi(options: TestDashboardApiOptions = {}) {
-    const {desktopRuntime = false, installedPwa = true, invokeCommand, ...implementationOptions} = options;
-    const nativeBridge = desktopRuntime
-        ? createNativeBridge(invokeCommand)
-        : undefined;
+    const {
+        desktopRuntime = false,
+        installedPwa = true,
+        invokeCommand,
+        ...implementationOptions
+    } = options;
+    const nativeBridge = desktopRuntime ? createNativeBridge(invokeCommand) : undefined;
     return createDashboardApiImplementation({
         ...implementationOptions,
         platformAdapter: desktopRuntime
             ? createTauriPlatformAdapter({
-                nativeBridge,
-                events: unavailableEventAdapter(),
-            })
+                  nativeBridge,
+                  events: unavailableEventAdapter(),
+              })
             : createWebPlatformAdapter({
-                ...unavailablePwaAdapter(),
-                available: true,
-                installed: installedPwa,
-            }),
+                  ...unavailablePwaAdapter(),
+                  available: true,
+                  installed: installedPwa,
+              }),
     });
 }
 
@@ -160,37 +166,40 @@ test('세탁 수집 서버 상태 플래그는 불리언 값만 허용한다', a
 
 test('UNKNOWN 세탁 상태의 null 잔여 시간을 허용한다', async () => {
     const api = createDashboardApi({
-        fetcher: async () => jsonResponse({
-            schemaVersion: 1,
-            asOf: '2026-08-21T11:04:00.000Z',
-            final: false,
-            quality: {
-                collectorHealthy: true,
-                collection: 'SUCCESS',
-                sourceFreshness: 'WITHIN_REFRESH_WINDOW',
-                lastCheckedAt: '2026-08-21T11:03:32.000Z',
-                expectedRefreshIntervalSeconds: 300,
-            },
-            machines: [{
-                id: '워시타워_7',
-                washer: null,
-                dryer: {
-                    appliance: 'dryer',
-                    operationalStatus: 'UNKNOWN',
-                    projection: {
-                        status: 'UNKNOWN',
-                        remainingMinutes: null,
-                        estimated: false,
-                    },
-                    state: {code: 'UNKNOWN'},
-                    remainingMinutes: 87,
-                    startedAt: '2026-08-21T08:23:08.000Z',
-                    estimatedFinishAt: null,
-                    sessionId: '워시타워_7:dryer:session',
-                    errorCode: null,
+        fetcher: async () =>
+            jsonResponse({
+                schemaVersion: 1,
+                asOf: '2026-08-21T11:04:00.000Z',
+                final: false,
+                quality: {
+                    collectorHealthy: true,
+                    collection: 'SUCCESS',
+                    sourceFreshness: 'WITHIN_REFRESH_WINDOW',
+                    lastCheckedAt: '2026-08-21T11:03:32.000Z',
+                    expectedRefreshIntervalSeconds: 300,
                 },
-            }],
-        }),
+                machines: [
+                    {
+                        id: '워시타워_7',
+                        washer: null,
+                        dryer: {
+                            appliance: 'dryer',
+                            operationalStatus: 'UNKNOWN',
+                            projection: {
+                                status: 'UNKNOWN',
+                                remainingMinutes: null,
+                                estimated: false,
+                            },
+                            state: {code: 'UNKNOWN'},
+                            remainingMinutes: 87,
+                            startedAt: '2026-08-21T08:23:08.000Z',
+                            estimatedFinishAt: null,
+                            sessionId: '워시타워_7:dryer:session',
+                            errorCode: null,
+                        },
+                    },
+                ],
+            }),
     });
 
     assert.equal(
@@ -222,20 +231,21 @@ test('세탁 가능 횟수는 서버 authoritative capacity 계약을 엄격히 
         },
     };
     const api = createDashboardApi({
-        fetcher: async () => jsonResponse({
-            schemaVersion: 1,
-            asOf: '2026-08-03T09:00:00.000Z',
-            final: false,
-            quality: {
-                collectorHealthy: true,
-                collection: 'SUCCESS',
-                sourceFreshness: 'REFRESH_OBSERVED',
-                lastCheckedAt: '2026-08-03T09:00:00.000Z',
-                expectedRefreshIntervalSeconds: 300,
-            },
-            machines: [],
-            capacity,
-        }),
+        fetcher: async () =>
+            jsonResponse({
+                schemaVersion: 1,
+                asOf: '2026-08-03T09:00:00.000Z',
+                final: false,
+                quality: {
+                    collectorHealthy: true,
+                    collection: 'SUCCESS',
+                    sourceFreshness: 'REFRESH_OBSERVED',
+                    lastCheckedAt: '2026-08-03T09:00:00.000Z',
+                    expectedRefreshIntervalSeconds: 300,
+                },
+                machines: [],
+                capacity,
+            }),
         invokeCommand: async () => undefined,
     });
 
@@ -260,24 +270,25 @@ test('서버 capacity가 내부 불변식을 어기면 응답 전체를 거부�
         {...base, startableLoads: 1.5},
     ]) {
         const api = createDashboardApi({
-            fetcher: async () => jsonResponse({
-                schemaVersion: 1,
-                asOf: '2026-08-03T09:00:00.000Z',
-                final: false,
-                quality: {
-                    collectorHealthy: true,
-                    collection: 'SUCCESS',
-                    sourceFreshness: 'REFRESH_OBSERVED',
-                    lastCheckedAt: null,
-                    expectedRefreshIntervalSeconds: 300,
-                },
-                machines: [],
-                capacity: {
-                    basis: 'WASHER_AND_DRYER_HEADROOM_60_MIN',
-                    men,
-                    women: {...base, access: 'women'},
-                },
-            }),
+            fetcher: async () =>
+                jsonResponse({
+                    schemaVersion: 1,
+                    asOf: '2026-08-03T09:00:00.000Z',
+                    final: false,
+                    quality: {
+                        collectorHealthy: true,
+                        collection: 'SUCCESS',
+                        sourceFreshness: 'REFRESH_OBSERVED',
+                        lastCheckedAt: null,
+                        expectedRefreshIntervalSeconds: 300,
+                    },
+                    machines: [],
+                    capacity: {
+                        basis: 'WASHER_AND_DRYER_HEADROOM_60_MIN',
+                        men,
+                        women: {...base, access: 'women'},
+                    },
+                }),
             invokeCommand: async () => undefined,
         });
         await assert.rejects(api.getPublicLaundry(), /API_RESPONSE_INVALID/);
@@ -334,25 +345,62 @@ test('세탁 기기 최근 7일 위험 지표를 검증해 보존한다', async 
 
 test('급식 원문 링크는 Kakao HTTPS allowlist만 화면 모델에 남긴다', async () => {
     const api = createDashboardApi({
-        fetcher: async () => jsonResponse({
-            asOf: '2026-08-03T09:00:00.000Z',
-            lastCheckedAt: '2026-08-03T09:00:00.000Z',
-            data: {
-                schemaVersion: 2,
-                dailyMenus: [
-                    {id: '1', title: '중식', text: '밥', publishedAt: null, permalink: 'javascript:alert(1)'},
-                    {id: '2', title: '석식', text: '밥', publishedAt: null, permalink: 'http://pf.kakao.com/_xhzNjn/114130545'},
-                    {id: '3', title: '간식', text: '빵', publishedAt: null, permalink: 'https://evil.example/posts'},
-                    {id: '4', title: '야식', text: '죽', publishedAt: null, permalink: 'https://pf.kakao.com:444/_xhzNjn/114130545'},
-                    {id: '5', title: '새참', text: '떡', publishedAt: null, permalink: 'https://pf.kakao.com/_other/114130545'},
-                    {id: '6', title: '후식', text: '과일', publishedAt: null, permalink: 'https://pf.kakao.com/_xhzNjn/114130545?redirect=1'},
-                ],
-                pinnedMenus: [],
-                recentMenus: [],
-                currentWeeklyMenu: null,
-                weeklyMenus: [],
-            },
-        }),
+        fetcher: async () =>
+            jsonResponse({
+                asOf: '2026-08-03T09:00:00.000Z',
+                lastCheckedAt: '2026-08-03T09:00:00.000Z',
+                data: {
+                    schemaVersion: 2,
+                    dailyMenus: [
+                        {
+                            id: '1',
+                            title: '중식',
+                            text: '밥',
+                            publishedAt: null,
+                            permalink: 'javascript:alert(1)',
+                        },
+                        {
+                            id: '2',
+                            title: '석식',
+                            text: '밥',
+                            publishedAt: null,
+                            permalink: 'http://pf.kakao.com/_xhzNjn/114130545',
+                        },
+                        {
+                            id: '3',
+                            title: '간식',
+                            text: '빵',
+                            publishedAt: null,
+                            permalink: 'https://evil.example/posts',
+                        },
+                        {
+                            id: '4',
+                            title: '야식',
+                            text: '죽',
+                            publishedAt: null,
+                            permalink: 'https://pf.kakao.com:444/_xhzNjn/114130545',
+                        },
+                        {
+                            id: '5',
+                            title: '새참',
+                            text: '떡',
+                            publishedAt: null,
+                            permalink: 'https://pf.kakao.com/_other/114130545',
+                        },
+                        {
+                            id: '6',
+                            title: '후식',
+                            text: '과일',
+                            publishedAt: null,
+                            permalink: 'https://pf.kakao.com/_xhzNjn/114130545?redirect=1',
+                        },
+                    ],
+                    pinnedMenus: [],
+                    recentMenus: [],
+                    currentWeeklyMenu: null,
+                    weeklyMenus: [],
+                },
+            }),
         invokeCommand: async () => undefined,
     });
 
@@ -414,42 +462,47 @@ test('급식 응답의 아카이브 이미지와 주간 식단을 검증해 보�
         text: '잡곡밥, 육개장',
         publishedAt: '2026-08-11T02:00:00.000Z',
         permalink: 'https://pf.kakao.com/_xhzNjn/114222378',
-        images: [{
-            sha,
-            url: `https://campus.example.com/api/public/assets/${sha}.jpg`,
-            contentType: 'image/jpeg',
-            extension: 'jpg',
-            width: 1600,
-            height: 1200,
-            byteLength: 120_000,
-        }],
+        images: [
+            {
+                sha,
+                url: `https://campus.example.com/api/public/assets/${sha}.jpg`,
+                contentType: 'image/jpeg',
+                extension: 'jpg',
+                width: 1600,
+                height: 1200,
+                byteLength: 120_000,
+            },
+        ],
     };
     const api = createDashboardApi({
         campusApiBaseUrl: 'https://campus.example.com',
-        fetcher: async () => jsonResponse({
-            asOf: '2026-08-11T09:00:00.000Z',
-            lastCheckedAt: '2026-08-11T09:00:00.000Z',
-            data: {
-                schemaVersion: 2,
-                dailyMenus: [post],
-                pinnedMenus: [],
-                recentMenus: [post],
-                currentWeeklyMenu: {
-                    targetWeekKey: '2026-08-10',
-                    status: 'AVAILABLE',
-                    contentSha: sha,
-                    post,
+        fetcher: async () =>
+            jsonResponse({
+                asOf: '2026-08-11T09:00:00.000Z',
+                lastCheckedAt: '2026-08-11T09:00:00.000Z',
+                data: {
+                    schemaVersion: 2,
+                    dailyMenus: [post],
+                    pinnedMenus: [],
+                    recentMenus: [post],
+                    currentWeeklyMenu: {
+                        targetWeekKey: '2026-08-10',
+                        status: 'AVAILABLE',
+                        contentSha: sha,
+                        post,
+                    },
+                    weeklyMenus: [{weekKey: '2026-08-10', contentSha: sha, post}],
                 },
-                weeklyMenus: [{weekKey: '2026-08-10', contentSha: sha, post}],
-            },
-        }),
+            }),
         invokeCommand: async () => undefined,
     });
 
     const meals = await api.getPublicMeals();
 
-    assert.equal(meals.data.dailyMenus[0]?.images?.[0]?.url,
-        `https://campus.example.com/api/public/assets/${sha}.jpg`);
+    assert.equal(
+        meals.data.dailyMenus[0]?.images?.[0]?.url,
+        `https://campus.example.com/api/public/assets/${sha}.jpg`,
+    );
     assert.equal(meals.data.currentWeeklyMenu?.targetWeekKey, '2026-08-10');
     assert.equal(meals.data.weeklyMenus?.[0]?.post.id, 'meal-1');
 });
@@ -476,21 +529,28 @@ test('급식 이미지는 검증된 공개 asset 경로만 허용한다', async 
     ]) {
         const api = createDashboardApi({
             campusApiBaseUrl: 'https://campus.example.com',
-            fetcher: async () => jsonResponse({
-                asOf: '2026-08-11T09:00:00.000Z',
-                lastCheckedAt: null,
-                data: {
-                    schemaVersion: 2,
-                    dailyMenus: [{
-                        id: 'meal-1', title: '중식', text: '밥', publishedAt: null, permalink: null,
-                        images: [image],
-                    }],
-                    pinnedMenus: [],
-                    recentMenus: [],
-                    currentWeeklyMenu: null,
-                    weeklyMenus: [],
-                },
-            }),
+            fetcher: async () =>
+                jsonResponse({
+                    asOf: '2026-08-11T09:00:00.000Z',
+                    lastCheckedAt: null,
+                    data: {
+                        schemaVersion: 2,
+                        dailyMenus: [
+                            {
+                                id: 'meal-1',
+                                title: '중식',
+                                text: '밥',
+                                publishedAt: null,
+                                permalink: null,
+                                images: [image],
+                            },
+                        ],
+                        pinnedMenus: [],
+                        recentMenus: [],
+                        currentWeeklyMenu: null,
+                        weeklyMenus: [],
+                    },
+                }),
             invokeCommand: async () => undefined,
         });
         await assert.rejects(api.getPublicMeals(), /API_RESPONSE_INVALID/);
@@ -511,9 +571,7 @@ test('달력 월 이동은 해당 KST 월의 급식 기록만 공개 API로 요�
     assert.deepEqual(await api.getPublicMealHistoryMonth('2026-07'), {
         posts: [],
     });
-    assert.deepEqual(calls, [
-        'https://campus.example.com/api/public/meals/history?month=2026-07',
-    ]);
+    assert.deepEqual(calls, ['https://campus.example.com/api/public/meals/history?month=2026-07']);
     await assert.rejects(api.getPublicMealHistoryMonth('2026-7'), /API_CLIENT_INVALID_ARGUMENT/);
     await assert.rejects(api.getPublicMealHistoryMonth('2026-13'), /API_CLIENT_INVALID_ARGUMENT/);
 });
@@ -548,16 +606,18 @@ test('모바일 알림 내역은 서버의 epoch 응답 필드를 그대로 검�
         fetcher: async (input, init) => {
             calls.push({url: String(input), init});
             return jsonResponse({
-                notifications: [{
-                    id: '13fdbe73-d8d0-46a4-9fb5-85026f7162fe',
-                    kind: 'attendance-action-required',
-                    title: '학습 시작 체크가 필요합니다',
-                    body: 'LMS에서 직접 확인해 주세요.',
-                    path: '/#attendance',
-                    createdAtEpochMs: 1_785_727_000_000,
-                    expiresAtEpochMs: 1_785_727_600_000,
-                    attempt: 1,
-                }],
+                notifications: [
+                    {
+                        id: '13fdbe73-d8d0-46a4-9fb5-85026f7162fe',
+                        kind: 'attendance-action-required',
+                        title: '학습 시작 체크가 필요합니다',
+                        body: 'LMS에서 직접 확인해 주세요.',
+                        path: '/#attendance',
+                        createdAtEpochMs: 1_785_727_000_000,
+                        expiresAtEpochMs: 1_785_727_600_000,
+                        attempt: 1,
+                    },
+                ],
             });
         },
         invokeCommand: async () => undefined,
@@ -566,16 +626,18 @@ test('모바일 알림 내역은 서버의 epoch 응답 필드를 그대로 검�
     const notifications = await api.getNotifications();
 
     assert.equal(calls[0]?.url, 'https://platform.example.com/api/me/notifications?limit=20');
-    assert.deepEqual(notifications, [{
-        id: '13fdbe73-d8d0-46a4-9fb5-85026f7162fe',
-        kind: 'attendance-action-required',
-        title: '학습 시작 체크가 필요합니다',
-        body: 'LMS에서 직접 확인해 주세요.',
-        path: '/#/attendance',
-        createdAtEpochMs: 1_785_727_000_000,
-        expiresAtEpochMs: 1_785_727_600_000,
-        attempt: 1,
-    }]);
+    assert.deepEqual(notifications, [
+        {
+            id: '13fdbe73-d8d0-46a4-9fb5-85026f7162fe',
+            kind: 'attendance-action-required',
+            title: '학습 시작 체크가 필요합니다',
+            body: 'LMS에서 직접 확인해 주세요.',
+            path: '/#/attendance',
+            createdAtEpochMs: 1_785_727_000_000,
+            expiresAtEpochMs: 1_785_727_600_000,
+            attempt: 1,
+        },
+    ]);
 });
 
 test('모바일 알림의 위조된 경로나 ISO 문자열 시간은 거부한다', async () => {
@@ -624,9 +686,10 @@ test('완료 예상 세탁 알림 종류를 알림함 응답으로 허용한다'
 
 test('이전 출석 알림 종류를 현재 계약으로 정규화한다', async () => {
     const notification = (kind: 'attendance-morning' | 'attendance-evening', offset: number) => ({
-        id: offset === 0
-            ? '13fdbe73-d8d0-46a4-9fb5-85026f7162fe'
-            : '23fdbe73-d8d0-46a4-9fb5-85026f7162fe',
+        id:
+            offset === 0
+                ? '13fdbe73-d8d0-46a4-9fb5-85026f7162fe'
+                : '23fdbe73-d8d0-46a4-9fb5-85026f7162fe',
         kind,
         title: '출석 확인',
         body: 'LMS에서 확인해 주세요.',
@@ -636,12 +699,13 @@ test('이전 출석 알림 종류를 현재 계약으로 정규화한다', async
         attempt: 0,
     });
     const api = createDashboardApi({
-        fetcher: async () => jsonResponse({
-            notifications: [
-                notification('attendance-morning', 0),
-                notification('attendance-evening', 1),
-            ],
-        }),
+        fetcher: async () =>
+            jsonResponse({
+                notifications: [
+                    notification('attendance-morning', 0),
+                    notification('attendance-evening', 1),
+                ],
+            }),
         invokeCommand: async () => undefined,
     });
 
@@ -682,10 +746,21 @@ test('출석 envelope의 stale freshness를 snapshot과 함께 보존한다', as
         collectedAt: '2026-08-03T09:00:00.000Z',
     };
     const api = createDashboardApi({
-        fetcher: async () => jsonResponse({attendance: snapshot, freshness: 'stale', devices: [{
-            id: 'desktop-1', deviceLabel: 'PC 앱', lastSeenAt: '2026-08-03T09:01:00.000Z',
-            lmsSessionState: 'connected', health: 'online', appVersion: '0.5.0',
-        }]}),
+        fetcher: async () =>
+            jsonResponse({
+                attendance: snapshot,
+                freshness: 'stale',
+                devices: [
+                    {
+                        id: 'desktop-1',
+                        deviceLabel: 'PC 앱',
+                        lastSeenAt: '2026-08-03T09:01:00.000Z',
+                        lmsSessionState: 'connected',
+                        health: 'online',
+                        appVersion: '0.5.0',
+                    },
+                ],
+            }),
         invokeCommand: async () => undefined,
     });
 
@@ -728,12 +803,13 @@ test('출석 snapshot에 freshness가 없거나 invalid이면 fresh로 추측하
 
 test('개인 출석 envelope는 current-only 필드 외의 호환 필드를 거부한다', async () => {
     const api = createDashboardApi({
-        fetcher: async () => jsonResponse({
-            attendance: null,
-            freshness: 'missing',
-            devices: [],
-            snapshots: [],
-        }),
+        fetcher: async () =>
+            jsonResponse({
+                attendance: null,
+                freshness: 'missing',
+                devices: [],
+                snapshots: [],
+            }),
         invokeCommand: async () => undefined,
     });
 
@@ -768,11 +844,10 @@ test('데스크톱 서버 데이터는 단기 세션 HTTP, 네이티브 기능�
     await api.getAttendance();
     await api.refreshPlatformSync();
 
-    assert.deepEqual(calls.map(({command}) => command), [
-        'get_connected_service_status',
-        'bootstrap_desktop_http_session',
-        'refresh_platform_sync',
-    ]);
+    assert.deepEqual(
+        calls.map(({command}) => command),
+        ['get_connected_service_status', 'bootstrap_desktop_http_session', 'refresh_platform_sync'],
+    );
     assert.equal(requests[0]?.url, 'https://platform.example.com/api/me/attendance');
     assert.equal(requests[0]?.init?.credentials, 'omit');
     assert.equal(
@@ -785,7 +860,9 @@ test('데스크톱 credential 복구는 명시적 확인이 포함된 새 identi
     const calls: Array<{command: string; args?: Record<string, unknown>}> = [];
     const api = createDashboardApi({
         desktopRuntime: true,
-        fetcher: async () => { throw new Error('unexpected fetch'); },
+        fetcher: async () => {
+            throw new Error('unexpected fetch');
+        },
         invokeCommand: async (command, args) => {
             calls.push({command, args});
             return {
@@ -840,10 +917,13 @@ test('설치 handoff는 QR proof를 쿠키로 준비하고 PWA 기기 정보로 
         fetcher: async (input, init) => {
             requests.push({url: String(input), init});
             if (String(input).endsWith('/handoff')) return new Response(null, {status: 204});
-            return jsonResponse({
-                claimId: pairingId,
-                status: 'awaiting-desktop-approval',
-            }, 201);
+            return jsonResponse(
+                {
+                    claimId: pairingId,
+                    status: 'awaiting-desktop-approval',
+                },
+                201,
+            );
         },
         invokeCommand: async () => undefined,
     });
@@ -857,31 +937,34 @@ test('설치 handoff는 QR proof를 쿠키로 준비하고 PWA 기기 정보로 
         {claimId: pairingId, status: 'awaiting-desktop-approval'},
     );
 
-    assert.deepEqual(requests.map(({url, init}) => ({
-        url,
-        method: init?.method,
-        credentials: init?.credentials,
-        cache: init?.cache,
-        body: JSON.parse(String(init?.body)),
-    })), [
-        {
-            url: `https://platform.example.com/api/pairings/${pairingId}/handoff`,
-            method: 'POST',
-            credentials: 'include',
-            cache: 'no-store',
-            body: {challenge},
-        },
-        {
-            url: 'https://platform.example.com/api/pairings/handoffs/claims',
-            method: 'POST',
-            credentials: 'include',
-            cache: 'no-store',
-            body: {
-                deviceLabel: '설치된 Jungle Bell',
-                installationId: 'jbmi_0123456789abcdef0123456789abcdef',
+    assert.deepEqual(
+        requests.map(({url, init}) => ({
+            url,
+            method: init?.method,
+            credentials: init?.credentials,
+            cache: init?.cache,
+            body: JSON.parse(String(init?.body)),
+        })),
+        [
+            {
+                url: `https://platform.example.com/api/pairings/${pairingId}/handoff`,
+                method: 'POST',
+                credentials: 'include',
+                cache: 'no-store',
+                body: {challenge},
             },
-        },
-    ]);
+            {
+                url: 'https://platform.example.com/api/pairings/handoffs/claims',
+                method: 'POST',
+                credentials: 'include',
+                cache: 'no-store',
+                body: {
+                    deviceLabel: '설치된 Jungle Bell',
+                    installationId: 'jbmi_0123456789abcdef0123456789abcdef',
+                },
+            },
+        ],
+    );
 });
 
 test('설치 handoff cookie가 없으면 자동 claim을 정상적인 미발견으로 처리한다', async () => {
@@ -890,10 +973,13 @@ test('설치 handoff cookie가 없으면 자동 claim을 정상적인 미발견�
         invokeCommand: async () => undefined,
     });
 
-    assert.equal(await api.claimPairingHandoff({
-        deviceLabel: '설치된 Jungle Bell',
-        installationId: 'jbmi_0123456789abcdef0123456789abcdef',
-    }), null);
+    assert.equal(
+        await api.claimPairingHandoff({
+            deviceLabel: '설치된 Jungle Bell',
+            installationId: 'jbmi_0123456789abcdef0123456789abcdef',
+        }),
+        null,
+    );
 });
 
 test('데스크톱 생활 정보도 공개 HTTP API를 직접 사용한다', async () => {
@@ -905,34 +991,38 @@ test('데스크톱 생활 정보도 공개 HTTP API를 직접 사용한다', asy
         fetcher: async (input) => {
             const url = String(input);
             urls.push(url);
-            return jsonResponse(url.endsWith('/laundry')
-                ? {
-                    schemaVersion: 1,
-                    asOf: '2026-08-03T09:00:00.000Z',
-                    final: false,
-                    quality: {
-                        collectorHealthy: true,
-                        collection: 'SUCCESS',
-                        sourceFreshness: 'REFRESH_OBSERVED',
-                        lastCheckedAt: '2026-08-03T09:00:00.000Z',
-                        expectedRefreshIntervalSeconds: 300,
-                    },
-                    machines: [],
-                }
-                : {
-                    asOf: '2026-08-03T09:00:00.000Z',
-                    lastCheckedAt: '2026-08-03T09:00:00.000Z',
-                    data: {
-                        schemaVersion: 2,
-                        dailyMenus: [],
-                        pinnedMenus: [],
-                        recentMenus: [],
-                        currentWeeklyMenu: null,
-                        weeklyMenus: [],
-                    },
-                });
+            return jsonResponse(
+                url.endsWith('/laundry')
+                    ? {
+                          schemaVersion: 1,
+                          asOf: '2026-08-03T09:00:00.000Z',
+                          final: false,
+                          quality: {
+                              collectorHealthy: true,
+                              collection: 'SUCCESS',
+                              sourceFreshness: 'REFRESH_OBSERVED',
+                              lastCheckedAt: '2026-08-03T09:00:00.000Z',
+                              expectedRefreshIntervalSeconds: 300,
+                          },
+                          machines: [],
+                      }
+                    : {
+                          asOf: '2026-08-03T09:00:00.000Z',
+                          lastCheckedAt: '2026-08-03T09:00:00.000Z',
+                          data: {
+                              schemaVersion: 2,
+                              dailyMenus: [],
+                              pinnedMenus: [],
+                              recentMenus: [],
+                              currentWeeklyMenu: null,
+                              weeklyMenus: [],
+                          },
+                      },
+            );
         },
-        invokeCommand: async (command) => { commands.push(command); },
+        invokeCommand: async (command) => {
+            commands.push(command);
+        },
     });
 
     await api.getPublicLaundry();
@@ -955,10 +1045,10 @@ test('데스크톱 페어링 상태는 서버의 expired 종료 상태를 허용
         },
     });
 
-    assert.deepEqual(
-        await api.getMobilePairingStatus('jbp_01234567-89ab-4def-8123-456789abcdef'),
-        {status: 'expired', claim: null},
-    );
+    assert.deepEqual(await api.getMobilePairingStatus('jbp_01234567-89ab-4def-8123-456789abcdef'), {
+        status: 'expired',
+        claim: null,
+    });
 });
 
 test('데스크톱 페어링 승인은 actual claimId를 strict desktop-ui body로 보낸다', async () => {
@@ -1051,14 +1141,15 @@ test('페어링 확인 코드는 4자리 ASCII 영문·숫자만 허용한다', 
     for (const confirmationCode of ['ABC', 'ABCDE', 'AB-1', '가나다라']) {
         const api = createDashboardApi({
             desktopRuntime: true,
-            fetcher: async () => jsonResponse({
-                status: 'claimed',
-                claim: {
-                    claimId: 'jbp_01234567-89ab-4def-8123-456789abcdef',
-                    deviceLabel: '모바일',
-                    confirmationCode,
-                },
-            }),
+            fetcher: async () =>
+                jsonResponse({
+                    status: 'claimed',
+                    claim: {
+                        claimId: 'jbp_01234567-89ab-4def-8123-456789abcdef',
+                        deviceLabel: '모바일',
+                        confirmationCode,
+                    },
+                }),
             invokeCommand: async () => desktopHttpSession(),
         });
         await assert.rejects(
@@ -1070,7 +1161,10 @@ test('페어링 확인 코드는 4자리 ASCII 영문·숫자만 허용한다', 
 
 test('인증 토큰을 브라우저 영속 저장소에 기록하지 않는다', () => {
     const source = readFileSync(new URL('./dashboard-api.ts', import.meta.url), 'utf8');
-    assert.doesNotMatch(source, /(?:local|session)Storage\.setItem\([^\n]*(?:token|authorization|bearer)/i);
+    assert.doesNotMatch(
+        source,
+        /(?:local|session)Storage\.setItem\([^\n]*(?:token|authorization|bearer)/i,
+    );
 });
 
 test('데스크톱 알림함은 Tauri IPC snapshot을 검증하고 개별·전체 읽음 처리와 알림 활성화를 전달한다', async () => {
@@ -1078,18 +1172,22 @@ test('데스크톱 알림함은 Tauri IPC snapshot을 검증하고 개별·전�
     const snapshot = {
         revision: 2,
         unreadCount: 1,
-        items: [{
-            id: '42',
-            title: '학습 시작을 확인해 주세요',
-            body: '공식 정글캠퍼스에서 출석 상태를 확인하세요.',
-            createdAt: 1_785_727_000_000,
-            readAt: null,
-            action: 'openAttendance',
-        }],
+        items: [
+            {
+                id: '42',
+                title: '학습 시작을 확인해 주세요',
+                body: '공식 정글캠퍼스에서 출석 상태를 확인하세요.',
+                createdAt: 1_785_727_000_000,
+                readAt: null,
+                action: 'openAttendance',
+            },
+        ],
     };
     const api = createDashboardApi({
         desktopRuntime: true,
-        fetcher: async () => { throw new Error('unexpected fetch'); },
+        fetcher: async () => {
+            throw new Error('unexpected fetch');
+        },
         invokeCommand: async (command, args) => {
             calls.push({command, args});
             return snapshot;
@@ -1116,17 +1214,26 @@ test('테스트 알림은 PC에서는 OS 알림 IPC, 모바일에서는 인증�
     const snapshot = {
         revision: 1,
         unreadCount: 1,
-        items: [{
-            id: '1', title: 'Jungle Bell 테스트 알림', body: '정상적으로 연결되었습니다.',
-            createdAt: 1_785_727_000_000, readAt: null, action: null,
-        }],
+        items: [
+            {
+                id: '1',
+                title: 'Jungle Bell 테스트 알림',
+                body: '정상적으로 연결되었습니다.',
+                createdAt: 1_785_727_000_000,
+                readAt: null,
+                action: null,
+            },
+        ],
     };
     const api = createDashboardApi({
         desktopRuntime: true,
         platformApiBaseUrl: 'https://platform.example.com',
         fetcher: async (input, init) => {
             fetches.push({url: String(input), init});
-            return jsonResponse({notificationId: '13fdbe73-d8d0-46a4-9fb5-85026f7162fe', queued: 1}, 202);
+            return jsonResponse(
+                {notificationId: '13fdbe73-d8d0-46a4-9fb5-85026f7162fe', queued: 1},
+                202,
+            );
         },
         invokeCommand: async (command, args) => {
             invokes.push({command, args});
@@ -1135,7 +1242,11 @@ test('테스트 알림은 PC에서는 OS 알림 IPC, 모바일에서는 인증�
         },
     });
 
-    assert.deepEqual(await api.sendDesktopTestNotification(), {snapshot, systemDelivered: true, mobileQueued: 2});
+    assert.deepEqual(await api.sendDesktopTestNotification(), {
+        snapshot,
+        systemDelivered: true,
+        mobileQueued: 2,
+    });
     await api.sendMobileTestNotification();
     assert.deepEqual(invokes, [
         {command: 'send_test_notification', args: undefined},
@@ -1190,18 +1301,26 @@ test('데스크톱 서비스 설정은 canonical current-only commands와 exact 
         debugMode: false,
         selectedCohortId: null,
         effectiveCohortId: 'cohort-1',
-        cohortOptions: [{
-            id: 'cohort-1', label: '정글 10기', startDate: '2026-07-01',
-            endDate: '2026-08-31', isActive: true,
-        }],
+        cohortOptions: [
+            {
+                id: 'cohort-1',
+                label: '정글 10기',
+                startDate: '2026-07-01',
+                endDate: '2026-08-31',
+                isActive: true,
+            },
+        ],
     };
     const updated = {...initial, autoStart: true};
     const api = createDashboardApi({
         desktopRuntime: true,
-        fetcher: async () => { throw new Error('unexpected fetch'); },
+        fetcher: async () => {
+            throw new Error('unexpected fetch');
+        },
         invokeCommand: async (command, args) => {
             calls.push({command, args});
-            if (command === 'open_log_folder' || command === 'open_system_notification_settings') return undefined;
+            if (command === 'open_log_folder' || command === 'open_system_notification_settings')
+                return undefined;
             return command === 'update_desktop_settings' ? updated : initial;
         },
     });
@@ -1212,12 +1331,17 @@ test('데스크톱 서비스 설정은 canonical current-only commands와 exact 
     await api.openSystemNotificationSettings();
     assert.deepEqual(calls, [
         {command: 'get_desktop_settings', args: undefined},
-        {command: 'update_desktop_settings', args: {input: {
-            autoStart: true,
-            autoUpdate: true,
-            debugMode: false,
-            selectedCohortId: null,
-        }}},
+        {
+            command: 'update_desktop_settings',
+            args: {
+                input: {
+                    autoStart: true,
+                    autoUpdate: true,
+                    debugMode: false,
+                    selectedCohortId: null,
+                },
+            },
+        },
         {command: 'open_log_folder', args: undefined},
         {command: 'open_system_notification_settings', args: undefined},
     ]);
@@ -1227,28 +1351,47 @@ test('데스크톱 서비스 설정은 unknown field와 non-boolean을 거부한
     for (const response of [
         {
             appVersion: '0.5.0-beta.1',
-            autoStart: false, autoUpdate: true, debugMode: false,
-            selectedCohortId: null, effectiveCohortId: null, cohortOptions: [], unknown: true,
+            autoStart: false,
+            autoUpdate: true,
+            debugMode: false,
+            selectedCohortId: null,
+            effectiveCohortId: null,
+            cohortOptions: [],
+            unknown: true,
         },
         {
             appVersion: '0.5.0-beta.1',
-            autoStart: 'true', autoUpdate: true, debugMode: false,
-            selectedCohortId: null, effectiveCohortId: null, cohortOptions: [],
+            autoStart: 'true',
+            autoUpdate: true,
+            debugMode: false,
+            selectedCohortId: null,
+            effectiveCohortId: null,
+            cohortOptions: [],
         },
         {
             appVersion: '0.5.0-beta.1',
-            autoStart: false, autoUpdate: true, debugMode: false,
-            selectedCohortId: '\nforged', effectiveCohortId: null, cohortOptions: [],
+            autoStart: false,
+            autoUpdate: true,
+            debugMode: false,
+            selectedCohortId: '\nforged',
+            effectiveCohortId: null,
+            cohortOptions: [],
         },
         {
             appVersion: 'beta',
-            autoStart: false, autoUpdate: true, debugMode: false,
-            selectedCohortId: null, effectiveCohortId: null, cohortOptions: [],
+            autoStart: false,
+            autoUpdate: true,
+            debugMode: false,
+            selectedCohortId: null,
+            effectiveCohortId: null,
+            cohortOptions: [],
         },
     ]) {
         const api = createDashboardApi({
             desktopRuntime: true,
-            fetcher: async () => { throw new Error('unexpected fetch'); },
+            fetcher: async () => {
+                throw new Error('unexpected fetch');
+            },
             invokeCommand: async () => response,
         });
         await assert.rejects(api.getDesktopSettings(), /API_RESPONSE_INVALID/);
@@ -1280,29 +1423,49 @@ test('데스크톱 개인 생활 설정은 desktop-ui HTTP namespace와 단기 b
     });
 
     assert.deepEqual(await api.getAttendancePreferences(), attendancePreferences);
-    assert.deepEqual(await api.updateAttendancePreferences({
-        ...attendancePreferences, morning: false, skipSunday: true, skipAttendanceDate: '2026-08-10',
-    }), attendancePreferences);
+    assert.deepEqual(
+        await api.updateAttendancePreferences({
+            ...attendancePreferences,
+            morning: false,
+            skipSunday: true,
+            skipAttendanceDate: '2026-08-10',
+        }),
+        attendancePreferences,
+    );
     assert.deepEqual(await api.getMealPreferences(), mealPreferences);
-    assert.deepEqual(await api.updateMealPreferences({
-        enabled: true, lunch: true, dinner: true,
-    }), mealPreferences);
+    assert.deepEqual(
+        await api.updateMealPreferences({
+            enabled: true,
+            lunch: true,
+            dinner: true,
+        }),
+        mealPreferences,
+    );
     assert.deepEqual(await api.listLaundryWatches(), [laundryWatch]);
-    assert.deepEqual(await api.createLaundryWatch({
-        machineId: '워시타워_1', appliance: 'washer', sessionId: 'session-1',
-        notificationMode: 'before-completion', notifyBeforeMinutes: 10,
-    }), laundryWatch);
+    assert.deepEqual(
+        await api.createLaundryWatch({
+            machineId: '워시타워_1',
+            appliance: 'washer',
+            sessionId: 'session-1',
+            notificationMode: 'before-completion',
+            notifyBeforeMinutes: 10,
+        }),
+        laundryWatch,
+    );
     await api.deleteLaundryWatch(laundryWatch.id);
     assert.deepEqual(commands, ['bootstrap_desktop_http_session']);
-    assert.deepEqual(requests.map(({url}) => new URL(url).pathname), [
-        '/api/me/attendance/preferences',
-        '/api/me/attendance/preferences',
-        '/api/me/meal-preferences',
-        '/api/me/meal-preferences',
-        '/api/me/laundry-watches',
-        '/api/me/laundry-watches',
-        `/api/me/laundry-watches/${laundryWatch.id}`,
-    ]);
+    assert.deepEqual(
+        requests.map(({url}) => new URL(url).pathname),
+        [
+            '/api/me/attendance/preferences',
+            '/api/me/attendance/preferences',
+            '/api/me/meal-preferences',
+            '/api/me/meal-preferences',
+            '/api/me/laundry-watches',
+            '/api/me/laundry-watches',
+            `/api/me/laundry-watches/${laundryWatch.id}`,
+        ],
+    );
     assert.deepEqual(JSON.parse(String(requests[5]?.init?.body)), {
         machineId: '워시타워_1',
         appliance: 'washer',
@@ -1312,7 +1475,10 @@ test('데스크톱 개인 생활 설정은 desktop-ui HTTP namespace와 단기 b
     });
     for (const {init} of requests) {
         assert.equal(init?.credentials, 'omit');
-        assert.equal(new Headers(init?.headers).get('authorization'), `Bearer ${desktopHttpSession().accessToken}`);
+        assert.equal(
+            new Headers(init?.headers).get('authorization'),
+            `Bearer ${desktopHttpSession().accessToken}`,
+        );
     }
 });
 
@@ -1329,24 +1495,34 @@ test('PWA 개인 생활 설정은 mobile canonical API와 HttpOnly cookie만 사
                 return jsonResponse({watches: [laundryWatch]});
             }
             if (url.endsWith('/laundry-watches')) return jsonResponse(laundryWatch, 201);
-            if (url.endsWith(`/laundry-watches/${laundryWatch.id}`)) return new Response(null, {status: 204});
+            if (url.endsWith(`/laundry-watches/${laundryWatch.id}`))
+                return new Response(null, {status: 204});
             throw new Error(`unexpected URL: ${url}`);
         },
-        invokeCommand: async () => { throw new Error('unexpected invoke'); },
+        invokeCommand: async () => {
+            throw new Error('unexpected invoke');
+        },
     });
 
     await api.getAttendancePreferences();
     await api.updateAttendancePreferences({
-        ...attendancePreferences, evening: false, skipSunday: true,
+        ...attendancePreferences,
+        evening: false,
+        skipSunday: true,
     });
     await api.getMealPreferences();
     await api.updateMealPreferences({
-        enabled: false, lunch: true, dinner: false,
+        enabled: false,
+        lunch: true,
+        dinner: false,
     });
     await api.listLaundryWatches();
     await api.createLaundryWatch({
-        machineId: '워시타워_1', appliance: 'washer', sessionId: 'session-1',
-        notificationMode: 'confirmed-completion', notifyBeforeMinutes: 0,
+        machineId: '워시타워_1',
+        appliance: 'washer',
+        sessionId: 'session-1',
+        notificationMode: 'confirmed-completion',
+        notifyBeforeMinutes: 0,
     });
     await api.deleteLaundryWatch(laundryWatch.id);
     assert.deepEqual(JSON.parse(String(calls[5]?.init?.body)), {
@@ -1356,28 +1532,91 @@ test('PWA 개인 생활 설정은 mobile canonical API와 HttpOnly cookie만 사
         notificationMode: 'confirmed-completion',
         notifyBeforeMinutes: 0,
     });
-    assert.deepEqual(calls.map(({url, init}) => ({
-        path: new URL(url).pathname,
-        method: init?.method,
-        credentials: init?.credentials,
-        cache: init?.cache,
-        authorization: new Headers(init?.headers).has('authorization'),
-        accept: new Headers(init?.headers).get('accept'),
-        contentType: new Headers(init?.headers).get('content-type'),
-    })), [
-        {path: '/api/me/attendance/preferences', method: 'GET', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: null},
-        {path: '/api/me/attendance/preferences', method: 'PUT', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: 'application/json'},
-        {path: '/api/me/meal-preferences', method: 'GET', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: null},
-        {path: '/api/me/meal-preferences', method: 'PUT', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: 'application/json'},
-        {path: '/api/me/laundry-watches', method: 'GET', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: null},
-        {path: '/api/me/laundry-watches', method: 'POST', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: 'application/json'},
-        {path: `/api/me/laundry-watches/${laundryWatch.id}`, method: 'DELETE', credentials: 'include', cache: 'no-store', authorization: false, accept: 'application/json', contentType: null},
-    ]);
+    assert.deepEqual(
+        calls.map(({url, init}) => ({
+            path: new URL(url).pathname,
+            method: init?.method,
+            credentials: init?.credentials,
+            cache: init?.cache,
+            authorization: new Headers(init?.headers).has('authorization'),
+            accept: new Headers(init?.headers).get('accept'),
+            contentType: new Headers(init?.headers).get('content-type'),
+        })),
+        [
+            {
+                path: '/api/me/attendance/preferences',
+                method: 'GET',
+                credentials: 'include',
+                cache: 'no-store',
+                authorization: false,
+                accept: 'application/json',
+                contentType: null,
+            },
+            {
+                path: '/api/me/attendance/preferences',
+                method: 'PUT',
+                credentials: 'include',
+                cache: 'no-store',
+                authorization: false,
+                accept: 'application/json',
+                contentType: 'application/json',
+            },
+            {
+                path: '/api/me/meal-preferences',
+                method: 'GET',
+                credentials: 'include',
+                cache: 'no-store',
+                authorization: false,
+                accept: 'application/json',
+                contentType: null,
+            },
+            {
+                path: '/api/me/meal-preferences',
+                method: 'PUT',
+                credentials: 'include',
+                cache: 'no-store',
+                authorization: false,
+                accept: 'application/json',
+                contentType: 'application/json',
+            },
+            {
+                path: '/api/me/laundry-watches',
+                method: 'GET',
+                credentials: 'include',
+                cache: 'no-store',
+                authorization: false,
+                accept: 'application/json',
+                contentType: null,
+            },
+            {
+                path: '/api/me/laundry-watches',
+                method: 'POST',
+                credentials: 'include',
+                cache: 'no-store',
+                authorization: false,
+                accept: 'application/json',
+                contentType: 'application/json',
+            },
+            {
+                path: `/api/me/laundry-watches/${laundryWatch.id}`,
+                method: 'DELETE',
+                credentials: 'include',
+                cache: 'no-store',
+                authorization: false,
+                accept: 'application/json',
+                contentType: null,
+            },
+        ],
+    );
     assert.deepEqual(JSON.parse(String(calls[1]?.init?.body)), {
-        ...attendancePreferences, evening: false, skipSunday: true,
+        ...attendancePreferences,
+        evening: false,
+        skipSunday: true,
     });
     assert.deepEqual(JSON.parse(String(calls[3]?.init?.body)), {
-        enabled: false, lunch: true, dinner: false,
+        enabled: false,
+        lunch: true,
+        dinner: false,
     });
 });
 
@@ -1399,8 +1638,8 @@ test('개인 생활 설정 DTO는 unknown field와 깨진 상태 불변식을 �
             operation === 'attendance'
                 ? api.getAttendancePreferences()
                 : operation === 'meal'
-                ? api.getMealPreferences()
-                : api.listLaundryWatches(),
+                  ? api.getMealPreferences()
+                  : api.listLaundryWatches(),
             /API_RESPONSE_INVALID/,
         );
     }
@@ -1408,17 +1647,15 @@ test('개인 생활 설정 DTO는 unknown field와 깨진 상태 불변식을 �
 
 test('개인 생활 설정 API는 손상된 JSON 응답을 안정된 오류 코드로 변환한다', async () => {
     const api = createDashboardApi({
-        fetcher: async () => new Response('{', {
-            status: 200,
-            headers: {'content-type': 'application/json'},
-        }),
+        fetcher: async () =>
+            new Response('{', {
+                status: 200,
+                headers: {'content-type': 'application/json'},
+            }),
         invokeCommand: async () => undefined,
     });
 
-    await assert.rejects(
-        api.getMealPreferences(),
-        /API_RESPONSE_INVALID/,
-    );
+    await assert.rejects(api.getMealPreferences(), /API_RESPONSE_INVALID/);
 });
 
 test('pairing complete는 receipt를 JSON에 노출하지 않고 HttpOnly pending cookie만 사용한다', async () => {
@@ -1436,7 +1673,10 @@ test('pairing complete는 receipt를 JSON에 노출하지 않고 HttpOnly pendin
         await api.completePairing('jbp_01234567-89ab-4def-8123-456789abcdef'),
         'completed',
     );
-    assert.equal(calls[0]?.url, 'https://platform.example.com/api/pairings/jbp_01234567-89ab-4def-8123-456789abcdef/complete');
+    assert.equal(
+        calls[0]?.url,
+        'https://platform.example.com/api/pairings/jbp_01234567-89ab-4def-8123-456789abcdef/complete',
+    );
     assert.equal(calls[0]?.init?.credentials, 'include');
     assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), {});
     assert.doesNotMatch(String(calls[0]?.init?.body), /receipt|token|bearer/i);

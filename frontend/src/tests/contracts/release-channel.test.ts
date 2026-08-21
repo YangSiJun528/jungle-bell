@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+
 import {test} from 'vitest';
 
 const repoRoot = new URL('../../../../', import.meta.url);
@@ -102,7 +103,9 @@ test('v2 업데이트 매니페스트는 초안 릴리스 안에서만 생성해
     assert.match(releaseWorkflow, /gh release delete-asset "\$TAG" latest\.json --yes/);
 
     const uploadV2 = releaseWorkflow.indexOf('"$MANIFEST_DIR/latest-v2.json"');
-    const deleteLegacy = releaseWorkflow.indexOf('gh release delete-asset "$TAG" latest.json --yes');
+    const deleteLegacy = releaseWorkflow.indexOf(
+        'gh release delete-asset "$TAG" latest.json --yes',
+    );
     assert.ok(uploadV2 >= 0 && deleteLegacy > uploadV2);
 
     const publishRelease = releaseWorkflow.indexOf('publish-release:');

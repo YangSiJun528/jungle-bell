@@ -1,16 +1,17 @@
-import {useEffect, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {BellRing, CircleAlert, LoaderCircle, Smartphone} from 'lucide-react';
-import {queryKeys, useDashboardEnvironment} from '@/app/dashboard-context';
+import {useEffect, useState} from 'react';
+
+import {accountAuthenticationRequired} from '@/api/account-authentication';
+import type {MealPreferences, MealPreferencesInput} from '@/api/dashboard-api';
 import {useDashboardAccount} from '@/app/dashboard-account';
+import {queryKeys, useDashboardEnvironment} from '@/app/dashboard-context';
 import {ErrorState, LoadingState} from '@/components/dashboard/async-state';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@/components/ui/card';
 import {Separator} from '@/components/ui/separator';
 import {Switch} from '@/components/ui/switch';
-import type {MealPreferences, MealPreferencesInput} from '@/api/dashboard-api';
-import {accountAuthenticationRequired} from '@/api/account-authentication';
 
 const asInput = (preferences: MealPreferences): MealPreferencesInput => ({
     enabled: preferences.enabled,
@@ -19,9 +20,9 @@ const asInput = (preferences: MealPreferences): MealPreferencesInput => ({
 });
 
 function preferencesEqual(left: MealPreferencesInput, right: MealPreferences): boolean {
-    return left.enabled === right.enabled
-        && left.lunch === right.lunch
-        && left.dinner === right.dinner;
+    return (
+        left.enabled === right.enabled && left.lunch === right.lunch && left.dinner === right.dinner
+    );
 }
 
 function PreferenceRow({
@@ -76,7 +77,7 @@ function MealPreferencesEditor({
                 label="급식 알림 사용"
                 onCheckedChange={(checked) => updateDraft('enabled', checked)}
             />
-            <Separator/>
+            <Separator />
             <div className="pl-4">
                 <PreferenceRow
                     checked={draft.lunch}
@@ -84,7 +85,7 @@ function MealPreferencesEditor({
                     label="중식"
                     onCheckedChange={(checked) => updateDraft('lunch', checked)}
                 />
-                <Separator/>
+                <Separator />
                 <PreferenceRow
                     checked={draft.dinner}
                     disabled={!draft.enabled || saving}
@@ -95,7 +96,7 @@ function MealPreferencesEditor({
             <div className="mt-4 flex flex-wrap items-center justify-end gap-3 border-t pt-4">
                 {saved ? <span className="text-xs text-primary">저장했습니다.</span> : null}
                 <Button disabled={!dirty || saving} onClick={() => onSave(draft)}>
-                    {saving ? <LoaderCircle className="animate-spin"/> : null}
+                    {saving ? <LoaderCircle className="animate-spin" /> : null}
                     설정 저장
                 </Button>
             </div>
@@ -135,11 +136,9 @@ export function MealPreferencesSection() {
     if (authRequired) {
         return (
             <Alert>
-                <Smartphone/>
+                <Smartphone />
                 <AlertTitle>PC 연결이 필요합니다.</AlertTitle>
-                <AlertDescription>
-                    PC 앱 연결 후 급식 알림 설정 가능
-                </AlertDescription>
+                <AlertDescription>PC 앱 연결 후 급식 알림 설정 가능</AlertDescription>
             </Alert>
         );
     }
@@ -149,14 +148,14 @@ export function MealPreferencesSection() {
             <Card className="gap-4">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                        <BellRing className="size-4 text-primary"/>
+                        <BellRing className="size-4 text-primary" />
                         급식 알림
                     </CardTitle>
                     <CardDescription>새 식단 게시물 중 선택한 식사 시간대만 알림</CardDescription>
                 </CardHeader>
                 <CardContent>
                     {preferences.isPending && !preferences.data ? (
-                        <LoadingState label="급식 알림 설정 불러오는 중"/>
+                        <LoadingState label="급식 알림 설정 불러오는 중" />
                     ) : preferences.isError && !preferences.data ? (
                         <ErrorState
                             description="PC 연결 상태를 확인하세요."
@@ -177,7 +176,7 @@ export function MealPreferencesSection() {
 
             {error ? (
                 <Alert variant="destructive">
-                    <CircleAlert/>
+                    <CircleAlert />
                     <AlertTitle>급식 알림 설정 저장 실패</AlertTitle>
                     <AlertDescription>연결 상태를 확인하고 새로고침하세요.</AlertDescription>
                 </Alert>

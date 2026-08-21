@@ -1,4 +1,5 @@
 import {ko} from 'react-day-picker/locale/ko';
+
 import {Calendar} from '@/components/ui/calendar';
 
 const KST_TIME_ZONE = 'Asia/Seoul';
@@ -53,12 +54,15 @@ export function MealHistoryCalendar({
                 formatWeekdayName: (date) => KOREAN_WEEKDAY_FORMATTER.format(date),
             }}
             labels={{
-                labelDayButton: (date, modifiers) => [
-                    KOREAN_DATE_FORMATTER.format(date),
-                    modifiers.hasMeal ? '급식 기록 있음' : '급식 기록 없음',
-                    modifiers.today ? '오늘' : null,
-                    modifiers.selected ? '선택됨' : null,
-                ].filter(Boolean).join(', '),
+                labelDayButton: (date, modifiers) =>
+                    [
+                        KOREAN_DATE_FORMATTER.format(date),
+                        modifiers.hasMeal ? '급식 기록 있음' : '급식 기록 없음',
+                        modifiers.today ? '오늘' : null,
+                        modifiers.selected ? '선택됨' : null,
+                    ]
+                        .filter(Boolean)
+                        .join(', '),
                 labelGrid: (month) => `${formatMonth(month)} 급식 기록 달력`,
                 labelNav: () => '달력 월 이동',
                 labelNext: () => '다음 달',
@@ -68,7 +72,8 @@ export function MealHistoryCalendar({
             mode="single"
             modifiers={{hasMeal}}
             modifiersClassNames={{
-                hasMeal: '[&_button]:bg-primary/10 [&_button]:font-semibold [&_button]:text-primary [&_button]:hover:bg-primary/15',
+                hasMeal:
+                    '[&_button]:bg-primary/10 [&_button]:font-semibold [&_button]:text-primary [&_button]:hover:bg-primary/15',
             }}
             noonSafe
             required

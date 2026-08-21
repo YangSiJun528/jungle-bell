@@ -1,5 +1,6 @@
 import {createMemoryHistory} from '@tanstack/react-router';
 import {describe, expect, test} from 'vitest';
+
 import {createDashboardRouter} from './dashboard-router';
 import {normalizeLegacyDashboardHash} from './routes';
 

@@ -1,11 +1,10 @@
 import {QueryClient} from '@tanstack/react-query';
 import {expect, test} from 'vitest';
+
 import type {AttendanceDashboard} from '@/api/dashboard-api';
-import {
-    handleAttendanceSnapshotUpdated,
-    preferDesktopAttendance,
-} from './desktop-attendance-event';
+
 import {queryKeys} from './dashboard-context';
+import {handleAttendanceSnapshotUpdated, preferDesktopAttendance} from './desktop-attendance-event';
 
 test('업로드 완료 이벤트는 데스크톱 출석 캐시만 stale 처리한다', async () => {
     const client = new QueryClient();
@@ -43,7 +42,12 @@ test('로컬 checker 관측은 서버 왕복 전에 데스크톱 출석 캐시�
     const devices = [{id: 'desktop-1'}];
     client.setQueryData(queryKeys.attendance('desktop'), {
         state: 'loaded',
-        attendance: {status: 'unavailable', freshness: 'missing', lastSyncedAt: null, snapshot: null},
+        attendance: {
+            status: 'unavailable',
+            freshness: 'missing',
+            lastSyncedAt: null,
+            snapshot: null,
+        },
         devices,
     });
 
@@ -112,8 +116,12 @@ test('서버 재조회가 더 오래된 경우 방금 관측한 PC 상태를 덮
         devices: [],
     };
 
-    expect(preferDesktopAttendance(local, server, Date.parse('2026-08-19T16:14:00.000Z'))).toBe(local);
-    expect(preferDesktopAttendance(local, server, Date.parse('2026-08-19T16:29:00.001Z'))).toBe(server);
+    expect(preferDesktopAttendance(local, server, Date.parse('2026-08-19T16:14:00.000Z'))).toBe(
+        local,
+    );
+    expect(preferDesktopAttendance(local, server, Date.parse('2026-08-19T16:29:00.001Z'))).toBe(
+        server,
+    );
 });
 
 test('서버에 같은 시각의 snapshot이 도착하면 동기화 완료 응답을 사용한다', () => {
@@ -140,5 +148,7 @@ test('서버에 같은 시각의 snapshot이 도착하면 동기화 완료 응�
         devices: [],
     };
 
-    expect(preferDesktopAttendance(local, server, Date.parse('2026-08-19T16:14:00.000Z'))).toBe(server);
+    expect(preferDesktopAttendance(local, server, Date.parse('2026-08-19T16:14:00.000Z'))).toBe(
+        server,
+    );
 });

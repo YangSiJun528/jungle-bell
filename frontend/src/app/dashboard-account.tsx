@@ -1,21 +1,15 @@
-import {
-    createContext,
-    useContext,
-    useMemo,
-    type PropsWithChildren,
-} from 'react';
-import {
-    useQuery,
-    type UseQueryResult,
-} from '@tanstack/react-query';
+import {useQuery, type UseQueryResult} from '@tanstack/react-query';
+import {createContext, useContext, useMemo, type PropsWithChildren} from 'react';
+
 import type {BrowserAccountSession, DesktopConnectionState} from '@/api/dashboard-api';
-import {queryKeys, useDashboardEnvironment} from './dashboard-context';
+
 import {
     dashboardAccountStatus,
     personalAccessState,
     type DashboardAccountStatus,
     type PersonalAccessState,
 } from './dashboard-account-state';
+import {queryKeys, useDashboardEnvironment} from './dashboard-context';
 
 interface DashboardAccountContextValue {
     status: DashboardAccountStatus;

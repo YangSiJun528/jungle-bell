@@ -1,4 +1,7 @@
-import {createMobileInstallationIdProvider, MOBILE_INSTALLATION_KEY} from './lib/mobile-installation';
+import {
+    createMobileInstallationIdProvider,
+    MOBILE_INSTALLATION_KEY,
+} from './lib/mobile-installation';
 
 export const mobileInstallationId = createMobileInstallationIdProvider({
     read: () => window.localStorage.getItem(MOBILE_INSTALLATION_KEY),

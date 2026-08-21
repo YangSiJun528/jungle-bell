@@ -1,6 +1,9 @@
 import {readFileSync} from 'node:fs';
+
 import {describe, expect, test} from 'vitest';
+
 import type {DesktopConnectionState} from '@/api/dashboard-api';
+
 import {desktopConnectionUiState} from './desktop-connection-state';
 
 const connection = (state: DesktopConnectionState['state']): DesktopConnectionState => ({
@@ -46,7 +49,9 @@ describe('desktop connection state UI', () => {
 
     test('연결 화면은 생성 mutation도 상태로 방어하고 identity 복구 CTA를 연결한다', () => {
         const source = readFileSync(new URL('./connections-page.tsx', import.meta.url), 'utf8');
-        expect(source).toMatch(/connection\.data\?\.state !== 'connected'[\s\S]*connection\.data\?\.state !== 'disconnected'[\s\S]*DESKTOP_CONNECTION_REQUIRED/u);
+        expect(source).toMatch(
+            /connection\.data\?\.state !== 'connected'[\s\S]*connection\.data\?\.state !== 'disconnected'[\s\S]*DESKTOP_CONNECTION_REQUIRED/u,
+        );
         expect(source).toMatch(/!connectionUi\.canCreatePairing/u);
         expect(source).toMatch(/api\.resetDesktopIdentity\(\)/u);
         expect(source).toMatch(/invalidateQueries\(\{queryKey: queryKeys\.desktopConnection\}\)/u);

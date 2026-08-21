@@ -1,5 +1,7 @@
 import {describe, expect, it} from 'vitest';
+
 import type {LaundryCapacitySnapshot} from '@/domain/laundry/capacity';
+
 import {capacityCards} from './laundry-page-view';
 
 const capacity: LaundryCapacitySnapshot = {
@@ -27,8 +29,18 @@ const capacity: LaundryCapacitySnapshot = {
 describe('capacityCards', () => {
     it('서버가 신뢰 가능하다고 표시한 수치만 시작 가능 횟수로 노출한다', () => {
         expect(capacityCards(capacity, true)).toEqual([
-            expect.objectContaining({access: 'men', count: 1, label: '남성 가능', status: 'available'}),
-            expect.objectContaining({access: 'women', count: null, label: '여성 가능', status: 'checking'}),
+            expect.objectContaining({
+                access: 'men',
+                count: 1,
+                label: '남성 가능',
+                status: 'available',
+            }),
+            expect.objectContaining({
+                access: 'women',
+                count: null,
+                label: '여성 가능',
+                status: 'checking',
+            }),
         ]);
     });
 

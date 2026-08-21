@@ -1,7 +1,10 @@
 import {readFileSync} from 'node:fs';
+
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, it} from 'vitest';
+
 import type {DashboardWeeklyMealMenu} from '@/api/dashboard-api';
+
 import {weeklyMenuForDate} from '../lib/meal-view';
 import {MealHistoryCalendar} from './meal-history-calendar';
 import {WeeklyMealMenu} from './weekly-meal-menu';
@@ -44,8 +47,12 @@ describe('MealHistoryCalendar', () => {
         expect(source).not.toContain('navLayout="around"');
         expect(source).not.toContain('calendarMonthCells');
         expect(source).not.toContain('useEffect');
-        expect(calendarSource).toContain('import { buttonVariants } from "@/components/ui/button-variants"');
-        expect(calendarSource.match(/buttonVariants\(\{ variant: buttonVariant \}\)/gu)).toHaveLength(2);
+        expect(calendarSource).toContain(
+            "import {buttonVariants} from '@/components/ui/button-variants'",
+        );
+        expect(calendarSource.match(/buttonVariants\(\{variant: buttonVariant\}\)/gu)).toHaveLength(
+            2,
+        );
         expect(calendarSource).not.toContain('PreviousMonthButton:');
         expect(calendarSource).not.toContain('NextMonthButton:');
     });
@@ -70,7 +77,7 @@ describe('MealHistoryCalendar', () => {
         (calendar.props as {onSelect: (date: Date) => void}).onSelect(new Date(2026, 7, 18));
         const after = weeklyMenuForDate(weeklyMenus, selectedDate)!;
         const markup = renderToStaticMarkup(
-            <WeeklyMealMenu meal={after.post} weekKey={after.weekKey}/>,
+            <WeeklyMealMenu meal={after.post} weekKey={after.weekKey} />,
         );
 
         expect(before.post.title).toBe('둘째 주');
