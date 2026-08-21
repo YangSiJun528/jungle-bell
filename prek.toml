@@ -1,0 +1,131 @@
+#:schema https://www.schemastore.org/prek.json
+
+minimum_prek_version = "0.4.9"
+default_install_hook_types = ["pre-commit", "pre-push"]
+
+[[repos]]
+repo = "builtin"
+
+[[repos.hooks]]
+id = "check-added-large-files"
+args = ["--maxkb=2500"]
+stages = ["pre-commit"]
+groups = ["hygiene"]
+
+[[repos.hooks]]
+id = "check-case-conflict"
+stages = ["pre-commit"]
+groups = ["hygiene"]
+
+[[repos.hooks]]
+id = "check-json"
+stages = ["pre-commit"]
+groups = ["hygiene"]
+
+[[repos.hooks]]
+id = "check-merge-conflict"
+stages = ["pre-commit"]
+groups = ["hygiene"]
+
+[[repos.hooks]]
+id = "check-symlinks"
+stages = ["pre-commit"]
+groups = ["hygiene"]
+
+[[repos.hooks]]
+id = "check-toml"
+stages = ["pre-commit"]
+groups = ["hygiene"]
+
+[[repos.hooks]]
+id = "check-yaml"
+stages = ["pre-commit"]
+groups = ["hygiene"]
+
+[[repos.hooks]]
+id = "detect-private-key"
+stages = ["pre-commit"]
+groups = ["hygiene"]
+
+[[repos.hooks]]
+id = "no-commit-to-branch"
+args = ["--branch", "main"]
+always_run = true
+stages = ["pre-commit"]
+
+[[repos]]
+repo = "local"
+
+[[repos.hooks]]
+id = "staged-diff-check"
+name = "staged diff check"
+entry = "git diff --cached --check"
+language = "system"
+pass_filenames = false
+always_run = true
+stages = ["pre-commit"]
+
+[[repos.hooks]]
+id = "frontend-format"
+name = "frontend format"
+entry = "npm --prefix frontend run format:check"
+language = "system"
+pass_filenames = false
+files = "^frontend/"
+stages = ["pre-commit"]
+
+[[repos.hooks]]
+id = "frontend-lint"
+name = "frontend lint"
+entry = "npm --prefix frontend run lint"
+language = "system"
+pass_filenames = false
+files = "^frontend/"
+stages = ["pre-commit"]
+
+[[repos.hooks]]
+id = "desktop-rustfmt"
+name = "desktop rustfmt"
+entry = "cargo fmt --manifest-path desktop/Cargo.toml --check"
+language = "system"
+pass_filenames = false
+files = "^desktop/.*\\.rs$"
+stages = ["pre-commit"]
+
+[[repos.hooks]]
+id = "frontend-check"
+name = "frontend check"
+entry = "npm --prefix frontend run check"
+language = "system"
+pass_filenames = false
+files = "^(frontend|desktop)/"
+stages = ["pre-push"]
+
+[[repos.hooks]]
+id = "server-check"
+name = "server check"
+entry = "./server/gradlew --no-daemon -p server check"
+language = "system"
+pass_filenames = false
+files = "^server/"
+stages = ["pre-push"]
+
+[[repos.hooks]]
+id = "desktop-test"
+name = "desktop test"
+entry = "cargo test --manifest-path desktop/Cargo.toml --all-targets"
+language = "system"
+pass_filenames = false
+files = "^desktop/"
+stages = ["pre-push"]
+env = { JUNGLE_BELL_DATA_API_URL = "https://jungle-bell.sijun-yang.com" }
+
+[[repos.hooks]]
+id = "desktop-clippy"
+name = "desktop clippy"
+entry = "cargo clippy --manifest-path desktop/Cargo.toml --all-targets -- -D warnings"
+language = "system"
+pass_filenames = false
+files = "^desktop/"
+stages = ["pre-push"]
+env = { JUNGLE_BELL_DATA_API_URL = "https://jungle-bell.sijun-yang.com" }

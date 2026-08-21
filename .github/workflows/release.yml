@@ -1,54 +1,137 @@
-name: Release
-run-name: Release ${{ inputs.tag }}
+name: Desktop Release
+run-name: Desktop Release ${{ inputs.tag }}
 
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag name (e.g. v0.2.2-beta.1)'
+        description: 'Tag name (e.g. v0.5.7 or v0.5.8-beta.1)'
         required: true
         type: string
 
+concurrency:
+  group: desktop-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
 jobs:
-  get-release-info:
-    runs-on: ubuntu-latest
+  prepare-release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
-      contents: write
+      actions: read
+      contents: read
     outputs:
       tag: ${{ steps.info.outputs.tag }}
+      sha: ${{ steps.info.outputs.sha }}
+      version: ${{ steps.info.outputs.version }}
       release_id: ${{ steps.info.outputs.release_id }}
       is_prerelease: ${{ steps.info.outputs.is_prerelease }}
+      ci_run_id: ${{ steps.info.outputs.ci_run_id }}
     steps:
-      - name: Validate draft release
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Validate tag, draft release, and exact-SHA CI
         id: info
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           INPUT_TAG: ${{ inputs.tag }}
+          DISPATCH_REF: ${{ github.ref }}
         run: |
           set -euo pipefail
 
+          if [ "$DISPATCH_REF" != "refs/heads/main" ]; then
+            echo "Desktop releases must be dispatched from main." >&2
+            exit 1
+          fi
+
           TAG="$INPUT_TAG"
+          SHA=$(git rev-parse "refs/tags/$TAG^{commit}")
+
+          if ! git merge-base --is-ancestor "$SHA" origin/main; then
+            echo "Release tag $TAG does not point to a commit on main." >&2
+            exit 1
+          fi
+
+          git checkout --detach "$SHA"
+          VERSION=$(node scripts/verify-release-version.mjs "$TAG")
+
           RELEASE_INFO=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
             --json databaseId,isDraft,isPrerelease,tagName)
-          RELEASE_ID=$(echo "$RELEASE_INFO" | jq -r '.databaseId')
-          IS_DRAFT=$(echo "$RELEASE_INFO" | jq -r '.isDraft')
-          IS_PRERELEASE=$(echo "$RELEASE_INFO" | jq -r '.isPrerelease')
+          RELEASE_ID=$(jq -r '.databaseId' <<<"$RELEASE_INFO")
+          IS_DRAFT=$(jq -r '.isDraft' <<<"$RELEASE_INFO")
+          IS_PRERELEASE=$(jq -r '.isPrerelease' <<<"$RELEASE_INFO")
+          RELEASE_TAG=$(jq -r '.tagName' <<<"$RELEASE_INFO")
 
           if [ "$IS_DRAFT" != "true" ]; then
             echo "The v2 updater manifest may only be assembled inside a draft release." >&2
             exit 1
           fi
+          if [ "$RELEASE_TAG" != "$TAG" ]; then
+            echo "Draft release tag $RELEASE_TAG does not match $TAG." >&2
+            exit 1
+          fi
 
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "release_id=$RELEASE_ID" >> $GITHUB_OUTPUT
-          echo "is_prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
+          EXPECTED_PRERELEASE=false
+          if [[ "$VERSION" == *-* ]]; then
+            EXPECTED_PRERELEASE=true
+          fi
+          if [ "$IS_PRERELEASE" != "$EXPECTED_PRERELEASE" ]; then
+            echo "Draft prerelease setting does not match version $VERSION." >&2
+            exit 1
+          fi
+
+          CI_RUNS=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml \
+            --branch main --commit "$SHA" --event push --status success --limit 20 \
+            --json databaseId,headSha,headBranch,event,conclusion,url)
+          CI_RUN_ID=$(jq -r --arg sha "$SHA" '
+            [.[] | select(
+              .headSha == $sha
+              and .headBranch == "main"
+              and .event == "push"
+              and .conclusion == "success"
+            )][0].databaseId // empty
+          ' <<<"$CI_RUNS")
+          if [ -z "$CI_RUN_ID" ]; then
+            echo "No successful main CI run exists for release SHA $SHA." >&2
+            exit 1
+          fi
+
+          REQUIRED_RESULT=$(gh run view "$CI_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --json jobs --jq '[.jobs[] | select(.name == "required")][0].conclusion // ""')
+          if [ "$REQUIRED_RESULT" != "success" ]; then
+            echo "CI run $CI_RUN_ID does not contain a successful required job." >&2
+            exit 1
+          fi
+
+          {
+            echo "tag=$TAG"
+            echo "sha=$SHA"
+            echo "version=$VERSION"
+            echo "release_id=$RELEASE_ID"
+            echo "is_prerelease=$IS_PRERELEASE"
+            echo "ci_run_id=$CI_RUN_ID"
+          } >> "$GITHUB_OUTPUT"
 
   publish-tauri:
-    needs: [get-release-info]
+    needs: [prepare-release]
+    runs-on: ${{ matrix.platform }}
+    timeout-minutes: 45
+    environment: desktop-signing
     permissions:
       contents: write
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         include:
           - platform: macos-latest
@@ -57,17 +140,16 @@ jobs:
             args: --target x86_64-apple-darwin
           - platform: windows-latest
             args: '--bundles nsis'
-
-    runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ needs.get-release-info.outputs.tag }}
+          ref: ${{ needs.prepare-release.outputs.sha }}
+          persist-credentials: false
 
-      - name: setup node
+      - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: lts/*
+          node-version: 24
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
@@ -87,16 +169,16 @@ jobs:
           prefix-key: "v${{ vars.CACHE_VERSION }}"
           cache-on-failure: false
 
-      - name: Build and upload to release
-        uses: tauri-apps/tauri-action@v0
+      - name: Build and upload to draft release
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           JUNGLE_BELL_DATA_API_URL: https://jungle-bell.sijun-yang.com
         with:
-          releaseId: ${{ needs.get-release-info.outputs.release_id }}
-          tagName: ${{ needs.get-release-info.outputs.tag }}
+          releaseId: ${{ needs.prepare-release.outputs.release_id }}
+          tagName: ${{ needs.prepare-release.outputs.tag }}
           args: ${{ matrix.args }}
           projectPath: desktop
           tauriScript: npm run --prefix ../frontend tauri
@@ -108,7 +190,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ needs.get-release-info.outputs.tag }}
+          TAG: ${{ needs.prepare-release.outputs.tag }}
         run: |
           set -euo pipefail
           VER="${TAG#v}"
@@ -129,47 +211,51 @@ jobs:
           gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber "$ASSET"
 
   publish-installer-scripts:
-    needs: [publish-tauri, get-release-info]
-    runs-on: ubuntu-latest
+    needs: [publish-tauri, prepare-release]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ needs.get-release-info.outputs.tag }}
+          ref: ${{ needs.prepare-release.outputs.sha }}
+          persist-credentials: false
 
       - name: Render and upload installer scripts
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ needs.get-release-info.outputs.tag }}
+          TAG: ${{ needs.prepare-release.outputs.tag }}
+          VERSION: ${{ needs.prepare-release.outputs.version }}
         run: |
           set -euo pipefail
-          VER="${TAG#v}"
           mkdir -p out
-          sed "s/__VERSION__/${VER}/g" install/jungle-bell.sh.tmpl  > out/jungle-bell.sh
-          sed "s/__VERSION__/${VER}/g" install/jungle-bell.ps1.tmpl > out/jungle-bell.ps1
+          sed "s/__VERSION__/${VERSION}/g" install/jungle-bell.sh.tmpl > out/jungle-bell.sh
+          sed "s/__VERSION__/${VERSION}/g" install/jungle-bell.ps1.tmpl > out/jungle-bell.ps1
           gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
             out/jungle-bell.sh out/jungle-bell.ps1
 
   publish-v2-updater-manifest:
-    needs: [publish-tauri, get-release-info]
-    runs-on: ubuntu-latest
+    needs: [publish-tauri, prepare-release]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
       - name: Promote updater manifest to the v2 channel
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ needs.get-release-info.outputs.tag }}
+          TAG: ${{ needs.prepare-release.outputs.tag }}
+          VERSION: ${{ needs.prepare-release.outputs.version }}
         run: |
           set -euo pipefail
 
-          VERSION="${TAG#v}"
           MANIFEST_DIR="$(mktemp -d)"
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
             --pattern latest.json --dir "$MANIFEST_DIR"
 
-          jq -e --arg version "$VERSION" '
+          jq -e --arg version "$VERSION" \
+            --arg prefix "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/" '
             . as $manifest
             | ($manifest.version == $version)
               and ([
@@ -178,7 +264,7 @@ jobs:
                 "windows-x86_64"
               ] | all(. as $platform
                 | ($manifest.platforms[$platform].signature | type == "string" and length > 0)
-                  and ($manifest.platforms[$platform].url | type == "string" and length > 0)
+                  and ($manifest.platforms[$platform].url | type == "string" and startswith($prefix))
               ))
           ' "$MANIFEST_DIR/latest.json"
 
@@ -191,35 +277,154 @@ jobs:
             --jq '[.assets[].name] | (index("latest-v2.json") != null) and (index("latest.json") == null)' \
             | grep -qx true
 
+  verify-draft-release:
+    needs: [publish-v2-updater-manifest, publish-installer-scripts, prepare-release]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare-release.outputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify immutable tag and complete draft assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.prepare-release.outputs.tag }}
+          SHA: ${{ needs.prepare-release.outputs.sha }}
+          VERSION: ${{ needs.prepare-release.outputs.version }}
+          IS_PRERELEASE: ${{ needs.prepare-release.outputs.is_prerelease }}
+        run: |
+          set -euo pipefail
+
+          CURRENT_SHA=$(git rev-parse "refs/tags/$TAG^{commit}")
+          if [ "$CURRENT_SHA" != "$SHA" ]; then
+            echo "Release tag moved from $SHA to $CURRENT_SHA." >&2
+            exit 1
+          fi
+
+          RELEASE_INFO=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --json assets,isDraft,isPrerelease)
+          jq -e --argjson prerelease "$IS_PRERELEASE" '
+            .isDraft == true and .isPrerelease == $prerelease
+          ' <<<"$RELEASE_INFO"
+          ASSET_NAMES=$(jq -c '[.assets[].name]' <<<"$RELEASE_INFO")
+          for required_asset in \
+            jungle-bell.sh \
+            jungle-bell.ps1 \
+            latest-v2.json \
+            "Jungle.Bell_${VERSION}_aarch64.tar.gz" \
+            "Jungle.Bell_${VERSION}_x64.tar.gz" \
+            "Jungle.Bell_${VERSION}_x64-setup.exe"; do
+            jq -e --arg name "$required_asset" 'index($name) != null' <<<"$ASSET_NAMES" >/dev/null
+          done
+          jq -e 'index("latest.json") == null' <<<"$ASSET_NAMES" >/dev/null
+
+          MANIFEST_DIR="$(mktemp -d)"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern latest-v2.json --dir "$MANIFEST_DIR"
+          jq -e --arg version "$VERSION" \
+            --arg prefix "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/" '
+            .version == $version
+              and ([
+                "darwin-aarch64",
+                "darwin-x86_64",
+                "windows-x86_64"
+              ] | all(. as $platform
+                | (.platforms[$platform].signature | type == "string" and length > 0)
+                  and (.platforms[$platform].url | type == "string" and startswith($prefix))
+              ))
+          ' "$MANIFEST_DIR/latest-v2.json"
+
+          while IFS= read -r asset_url; do
+            asset_name="${asset_url##*/}"
+            jq -e --arg name "$asset_name" 'index($name) != null' <<<"$ASSET_NAMES" >/dev/null
+            jq -e --arg name "${asset_name}.sig" 'index($name) != null' <<<"$ASSET_NAMES" >/dev/null
+          done < <(jq -r '.platforms[].url' "$MANIFEST_DIR/latest-v2.json")
+
   publish-release:
-    needs: [publish-v2-updater-manifest, publish-installer-scripts, get-release-info]
-    runs-on: ubuntu-latest
+    needs: [verify-draft-release, prepare-release]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: desktop-release
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ needs.get-release-info.outputs.tag }}
+          ref: ${{ needs.prepare-release.outputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
 
-      - name: Publish release
+      - name: Revalidate and publish release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.prepare-release.outputs.tag }}
+          SHA: ${{ needs.prepare-release.outputs.sha }}
+          VERSION: ${{ needs.prepare-release.outputs.version }}
+          IS_PRERELEASE: ${{ needs.prepare-release.outputs.is_prerelease }}
         run: |
           set -euo pipefail
 
-          TAG="${{ needs.get-release-info.outputs.tag }}"
-          IS_PRERELEASE="${{ needs.get-release-info.outputs.is_prerelease }}"
-          REPO="${{ github.repository }}"
+          CURRENT_SHA=$(git rev-parse "refs/tags/$TAG^{commit}")
+          if [ "$CURRENT_SHA" != "$SHA" ]; then
+            echo "Release tag moved from $SHA to $CURRENT_SHA." >&2
+            exit 1
+          fi
+
+          RELEASE_INFO=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --json assets,body,isDraft,isPrerelease)
+          jq -e --argjson prerelease "$IS_PRERELEASE" '
+            .isDraft == true
+              and .isPrerelease == $prerelease
+          ' <<<"$RELEASE_INFO"
+          ASSET_NAMES=$(jq -c '[.assets[].name]' <<<"$RELEASE_INFO")
+          for required_asset in \
+            jungle-bell.sh \
+            jungle-bell.ps1 \
+            latest-v2.json \
+            "Jungle.Bell_${VERSION}_aarch64.tar.gz" \
+            "Jungle.Bell_${VERSION}_x64.tar.gz" \
+            "Jungle.Bell_${VERSION}_x64-setup.exe"; do
+            jq -e --arg name "$required_asset" 'index($name) != null' <<<"$ASSET_NAMES" >/dev/null
+          done
+          jq -e 'index("latest.json") == null' <<<"$ASSET_NAMES" >/dev/null
+
+          MANIFEST_DIR="$(mktemp -d)"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern latest-v2.json --dir "$MANIFEST_DIR"
+          jq -e --arg version "$VERSION" \
+            --arg prefix "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/" '
+            .version == $version
+              and ([
+                "darwin-aarch64",
+                "darwin-x86_64",
+                "windows-x86_64"
+              ] | all(. as $platform
+                | (.platforms[$platform].signature | type == "string" and length > 0)
+                  and (.platforms[$platform].url | type == "string" and startswith($prefix))
+              ))
+          ' "$MANIFEST_DIR/latest-v2.json"
+
+          while IFS= read -r asset_url; do
+            asset_name="${asset_url##*/}"
+            jq -e --arg name "$asset_name" 'index($name) != null' <<<"$ASSET_NAMES" >/dev/null
+            jq -e --arg name "${asset_name}.sig" 'index($name) != null' <<<"$ASSET_NAMES" >/dev/null
+          done < <(jq -r '.platforms[].url' "$MANIFEST_DIR/latest-v2.json")
 
           if [ "$IS_PRERELEASE" = "true" ]; then
-            gh release edit "$TAG" --repo "$REPO" --draft=false
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false
           else
             BODY_FILE="$(mktemp)"
             CLEAN_BODY_FILE="$(mktemp)"
             NOTES_FILE="$(mktemp)"
 
-            gh release view "$TAG" --repo "$REPO" --json body --jq '.body // ""' > "$BODY_FILE"
-            sed '/<!-- jungle-bell-install-help:start -->/,/<!-- jungle-bell-install-help:end -->/d' "$BODY_FILE" > "$CLEAN_BODY_FILE"
+            jq -r '.body // ""' <<<"$RELEASE_INFO" > "$BODY_FILE"
+            sed '/<!-- jungle-bell-install-help:start -->/,/<!-- jungle-bell-install-help:end -->/d' \
+              "$BODY_FILE" > "$CLEAN_BODY_FILE"
 
             {
               cat "$CLEAN_BODY_FILE"
@@ -229,5 +434,6 @@ jobs:
               cat install/release-install-help.md
             } > "$NOTES_FILE"
 
-            gh release edit "$TAG" --repo "$REPO" --notes-file "$NOTES_FILE" --draft=false --latest
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" \
+              --notes-file "$NOTES_FILE" --draft=false --latest
           fi
