@@ -1,5 +1,5 @@
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
-import {CircleAlert, FolderOpen, Laptop, RefreshCw} from 'lucide-react';
+import {CircleAlert, FolderOpen, Laptop} from 'lucide-react';
 import {useState} from 'react';
 
 import {queryKeys, useDashboardEnvironment} from '@/app/dashboard-context';
@@ -75,6 +75,8 @@ function DesktopServiceSettings() {
             await client.invalidateQueries({queryKey: queryKeys.desktopSettings});
         },
     });
+    // Opening an OS folder does not mutate query-backed application state.
+    // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation
     const openLogs = useMutation({mutationFn: () => api.openLogFolder()});
     const value = settings.data;
     const update = (key: 'autoStart' | 'autoUpdate' | 'debugMode', checked: boolean) => {
@@ -131,8 +133,8 @@ function DesktopServiceSettings() {
                         <Select
                             disabled={save.isPending || value.cohortOptions.length === 0}
                             value={displayedCohortId ?? 'automatic'}
-                            onValueChange={(value) =>
-                                setCohortDraft(value === 'automatic' ? null : value)
+                            onValueChange={(nextValue) =>
+                                setCohortDraft(nextValue === 'automatic' ? null : nextValue)
                             }
                         >
                             <SelectTrigger aria-label="출석 확인 기수" className="w-full sm:w-64">

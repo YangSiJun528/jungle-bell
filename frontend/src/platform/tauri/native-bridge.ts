@@ -1,6 +1,6 @@
 import {invoke as tauriInvoke} from '@tauri-apps/api/core';
 
-import {hasOwn} from '@/lib/object';
+import {hasOwn, isRecord} from '@/lib/object';
 import type {DesktopHttpSessionBootstrap, NativeBridge, NativeInvoke} from '@/platform/contracts';
 
 export type {NativeBridge, NativeInvoke} from '@/platform/contracts';
@@ -33,8 +33,8 @@ export function createNativeBridge(
 }
 
 function parseDesktopHttpSessionBootstrap(value: unknown): DesktopHttpSessionBootstrap {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidResponse();
-    const source = value as Record<string, unknown>;
+    if (!isRecord(value)) throw invalidResponse();
+    const source = value;
     if (
         Object.keys(source).length !== 2 ||
         !hasOwn(source, 'accessToken') ||

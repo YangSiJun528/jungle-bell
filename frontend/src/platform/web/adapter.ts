@@ -19,6 +19,16 @@ const BASE_CAPABILITIES: PlatformCapabilities = {
     webPush: false,
 };
 
+function unsupportedNativeCapability(capability: keyof PlatformCapabilities): () => Promise<never> {
+    return async () => {
+        throw new PlatformCapabilityUnavailableError(capability);
+    };
+}
+
+async function unsupportedDesktopSetting(): Promise<never> {
+    throw new PlatformCapabilityUnavailableError('desktopSettings');
+}
+
 export function createWebPlatformAdapter(pwa: PwaCapabilityAdapter): PlatformAdapter {
     const native = unsupportedNativeBridge();
     const installedPwa = pwa.available && pwa.installed;
@@ -39,39 +49,33 @@ export function createWebPlatformAdapter(pwa: PwaCapabilityAdapter): PlatformAda
 }
 
 function unsupportedNativeBridge(): NativeBridge {
-    const unsupported = (capability: keyof PlatformCapabilities) => async (): Promise<never> => {
-        throw new PlatformCapabilityUnavailableError(capability);
-    };
     return {
-        bootstrapDesktopHttpSession: unsupported('desktopAccount'),
-        getDesktopSettings: unsupported('desktopSettings'),
-        updateDesktopSettings: unsupported('desktopSettings'),
-        checkDesktopUpdate: unsupported('desktopSettings'),
-        installDesktopUpdate: unsupported('desktopSettings'),
-        openLogFolder: unsupported('desktopSettings'),
-        openSystemNotificationSettings: unsupported('localNotifications'),
-        getDesktopConnectionState: unsupported('desktopAccount'),
-        resetDesktopIdentity: unsupported('desktopAccount'),
-        refreshPlatformSync: unsupported('desktopAccount'),
-        openLmsLogin: unsupported('lmsWindow'),
-        getNotificationInboxSnapshot: unsupported('localNotifications'),
-        markNotificationRead: unsupported('localNotifications'),
-        markAllNotificationsRead: unsupported('localNotifications'),
-        activateNotification: unsupported('localNotifications'),
-        sendTestNotification: unsupported('localNotifications'),
+        bootstrapDesktopHttpSession: unsupportedNativeCapability('desktopAccount'),
+        getDesktopSettings: unsupportedNativeCapability('desktopSettings'),
+        updateDesktopSettings: unsupportedNativeCapability('desktopSettings'),
+        checkDesktopUpdate: unsupportedNativeCapability('desktopSettings'),
+        installDesktopUpdate: unsupportedNativeCapability('desktopSettings'),
+        openLogFolder: unsupportedNativeCapability('desktopSettings'),
+        openSystemNotificationSettings: unsupportedNativeCapability('localNotifications'),
+        getDesktopConnectionState: unsupportedNativeCapability('desktopAccount'),
+        resetDesktopIdentity: unsupportedNativeCapability('desktopAccount'),
+        refreshPlatformSync: unsupportedNativeCapability('desktopAccount'),
+        openLmsLogin: unsupportedNativeCapability('lmsWindow'),
+        getNotificationInboxSnapshot: unsupportedNativeCapability('localNotifications'),
+        markNotificationRead: unsupportedNativeCapability('localNotifications'),
+        markAllNotificationsRead: unsupportedNativeCapability('localNotifications'),
+        activateNotification: unsupportedNativeCapability('localNotifications'),
+        sendTestNotification: unsupportedNativeCapability('localNotifications'),
     };
 }
 
 function unsupportedDesktopSettings(): DesktopSettingsAdapter {
-    const unsupported = async (): Promise<never> => {
-        throw new PlatformCapabilityUnavailableError('desktopSettings');
-    };
     return {
-        getDesktopSettings: unsupported,
-        updateDesktopSettings: unsupported,
-        checkDesktopUpdate: unsupported,
-        installDesktopUpdate: unsupported,
-        openLogFolder: unsupported,
-        openSystemNotificationSettings: unsupported,
+        getDesktopSettings: unsupportedDesktopSetting,
+        updateDesktopSettings: unsupportedDesktopSetting,
+        checkDesktopUpdate: unsupportedDesktopSetting,
+        installDesktopUpdate: unsupportedDesktopSetting,
+        openLogFolder: unsupportedDesktopSetting,
+        openSystemNotificationSettings: unsupportedDesktopSetting,
     };
 }

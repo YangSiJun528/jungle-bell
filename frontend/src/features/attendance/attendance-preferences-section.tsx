@@ -1,6 +1,6 @@
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {BellRing} from 'lucide-react';
-import {useEffect, useState} from 'react';
+import {useState} from 'react';
 
 import {accountAuthenticationRequired} from '@/api/account-authentication';
 import type {AttendancePreferences} from '@/api/personal-api';
@@ -63,7 +63,7 @@ function PreferenceSwitchRow({
     );
 }
 
-function NumberSelect({
+function NumberSelect<const Value extends number>({
     id,
     label,
     value,
@@ -74,11 +74,11 @@ function NumberSelect({
 }: {
     id: string;
     label: string;
-    value: number;
-    options: readonly number[];
+    value: Value;
+    options: readonly Value[];
     disabled: boolean;
-    format: (value: number) => string;
-    onValueChange: (value: number) => void;
+    format: (value: Value) => string;
+    onValueChange: (value: Value) => void;
 }) {
     return (
         <div className="grid gap-2">
@@ -121,19 +121,14 @@ export function AttendancePreferencesSection() {
         queryFn: () => api.getAttendancePreferences(),
         enabled: account.personalAccess.status === 'connected',
     });
-    const [draft, setDraft] = useState<AttendancePreferences | null>(
-        () => preferences.data ?? null,
-    );
-
-    useEffect(() => {
-        if (preferences.data) setDraft(preferences.data);
-    }, [preferences.data]);
+    const [draftOverride, setDraftOverride] = useState<AttendancePreferences | null>(null);
+    const draft = draftOverride ?? preferences.data ?? null;
 
     const savePreferences = useMutation({
         mutationFn: (input: AttendancePreferences) => api.updateAttendancePreferences(input),
         onSuccess: (saved) => {
             client.setQueryData(queryKeys.attendancePreferences, saved);
-            setDraft(saved);
+            setDraftOverride(null);
         },
         onSettled: () => client.invalidateQueries({queryKey: queryKeys.attendancePreferences}),
     });
@@ -147,7 +142,10 @@ export function AttendancePreferencesSection() {
         key: Key,
         value: AttendancePreferences[Key],
     ): void => {
-        setDraft((current) => (current ? {...current, [key]: value} : current));
+        setDraftOverride((current) => {
+            const base = current ?? preferences.data;
+            return base ? {...base, [key]: value} : null;
+        });
     };
 
     return (
@@ -220,10 +218,7 @@ export function AttendancePreferencesSection() {
                                     }
                                     format={(value) => `${value}분`}
                                     onValueChange={(value) =>
-                                        updateDraft(
-                                            'morningIntervalMinutes',
-                                            value as AttendancePreferences['morningIntervalMinutes'],
-                                        )
+                                        updateDraft('morningIntervalMinutes', value)
                                     }
                                 />
                             </div>
@@ -263,10 +258,7 @@ export function AttendancePreferencesSection() {
                                     }
                                     format={(value) => `${value}분`}
                                     onValueChange={(value) =>
-                                        updateDraft(
-                                            'eveningIntervalMinutes',
-                                            value as AttendancePreferences['eveningIntervalMinutes'],
-                                        )
+                                        updateDraft('eveningIntervalMinutes', value)
                                     }
                                 />
                             </div>

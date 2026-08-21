@@ -50,14 +50,9 @@ import {
     parseDashboardMealHistoryMonth,
     parseDashboardMealsSnapshot,
     safeMealPermalink,
-    type DashboardCurrentWeeklyMealMenu,
-    type DashboardLaundryAppliance,
     type DashboardLaundrySnapshot,
     type DashboardMealHistoryMonth,
-    type DashboardMealImage,
-    type DashboardMealPost,
     type DashboardMealsSnapshot,
-    type DashboardWeeklyMealMenu,
 } from './dashboard-campus-contract';
 import {createHttpApiClient, type AccountApiPath, type PairingApiPath} from './http-api-client';
 import {createDashboardPersonalApi, type DashboardPersonalApi} from './personal-api';

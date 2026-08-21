@@ -16,9 +16,9 @@ const {environment, queryKeys} = vi.hoisted(() => ({
     },
     environment: {
         api: {
-            getDesktopSettings: vi.fn(),
-            checkDesktopUpdate: vi.fn(),
-            installDesktopUpdate: vi.fn(),
+            getDesktopSettings: vi.fn<() => Promise<DesktopSettings>>(),
+            checkDesktopUpdate: vi.fn<() => Promise<unknown>>(),
+            installDesktopUpdate: vi.fn<() => Promise<void>>(),
         },
         platform: {kind: 'desktop', capabilities: {desktopSettings: true}},
     },

@@ -13,9 +13,10 @@ const normalizedSource = source.replace(/\s+/gu, ' ');
 
 const {api, environment, queryKeys} = vi.hoisted(() => ({
     api: {
-        getDesktopSettings: vi.fn(),
-        updateDesktopSettings: vi.fn(),
-        openLogFolder: vi.fn(),
+        getDesktopSettings: vi.fn<() => Promise<DesktopSettings>>(),
+        updateDesktopSettings:
+            vi.fn<(input: Partial<DesktopSettings>) => Promise<DesktopSettings>>(),
+        openLogFolder: vi.fn<() => Promise<void>>(),
     },
     environment: {platform: {capabilities: {desktopSettings: true}}},
     queryKeys: {desktopSettings: ['desktop-settings'] as const},
@@ -73,7 +74,7 @@ describe('ServiceSettings', () => {
         expect(markup).toContain('자동 선택');
         expect(source).toContain('{cohort.label}');
         expect(markup).toContain('변경사항 적용');
-        expect(source).toContain("setCohortDraft(value === 'automatic' ? null : value)");
+        expect(source).toContain("setCohortDraft(nextValue === 'automatic' ? null : nextValue)");
         expect(source).toContain('updateSelectedCohort(cohortDraft)');
         expect(source).not.toContain('onValueChange={(value) => updateSelectedCohort');
     });

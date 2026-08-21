@@ -10,8 +10,9 @@ import {AttendancePreferencesSection} from './attendance-preferences-section';
 
 const {api, queryKeys} = vi.hoisted(() => ({
     api: {
-        getAttendancePreferences: vi.fn(),
-        updateAttendancePreferences: vi.fn(),
+        getAttendancePreferences: vi.fn<() => Promise<AttendancePreferences>>(),
+        updateAttendancePreferences:
+            vi.fn<(input: AttendancePreferences) => Promise<AttendancePreferences>>(),
     },
     queryKeys: {
         attendancePreferences: ['personal', 'attendance-preferences'] as const,

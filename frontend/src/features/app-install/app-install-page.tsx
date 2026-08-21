@@ -171,7 +171,7 @@ export function AppInstallPage({
     onRetryMobileHandoff?: () => void;
 }) {
     useEffect(() => {
-        if (!focusMobileInstall) return;
+        if (!focusMobileInstall) return undefined;
         const frame = window.requestAnimationFrame(() => scrollToGuide('mobile-install'));
         return () => window.cancelAnimationFrame(frame);
     }, [focusMobileInstall]);

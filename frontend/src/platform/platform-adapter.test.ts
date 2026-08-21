@@ -7,25 +7,27 @@ import {createWebPlatformAdapter} from './web/adapter';
 
 function nativeBridge(): NativeBridge {
     return {
-        bootstrapDesktopHttpSession: vi.fn(async () => ({
-            accessToken: `jbui_${'a'.repeat(64)}`,
-            expiresAt: '2026-08-13T12:00:00.000Z',
-        })),
-        getDesktopSettings: vi.fn(),
-        updateDesktopSettings: vi.fn(),
-        checkDesktopUpdate: vi.fn(),
-        installDesktopUpdate: vi.fn(),
-        openLogFolder: vi.fn(),
-        openSystemNotificationSettings: vi.fn(),
-        getDesktopConnectionState: vi.fn(),
-        resetDesktopIdentity: vi.fn(),
-        refreshPlatformSync: vi.fn(),
-        openLmsLogin: vi.fn(),
-        getNotificationInboxSnapshot: vi.fn(),
-        markNotificationRead: vi.fn(),
-        markAllNotificationsRead: vi.fn(),
-        activateNotification: vi.fn(),
-        sendTestNotification: vi.fn(),
+        bootstrapDesktopHttpSession: vi.fn<NativeBridge['bootstrapDesktopHttpSession']>(
+            async () => ({
+                accessToken: `jbui_${'a'.repeat(64)}`,
+                expiresAt: '2026-08-13T12:00:00.000Z',
+            }),
+        ),
+        getDesktopSettings: vi.fn<NativeBridge['getDesktopSettings']>(),
+        updateDesktopSettings: vi.fn<NativeBridge['updateDesktopSettings']>(),
+        checkDesktopUpdate: vi.fn<NativeBridge['checkDesktopUpdate']>(),
+        installDesktopUpdate: vi.fn<NativeBridge['installDesktopUpdate']>(),
+        openLogFolder: vi.fn<NativeBridge['openLogFolder']>(),
+        openSystemNotificationSettings: vi.fn<NativeBridge['openSystemNotificationSettings']>(),
+        getDesktopConnectionState: vi.fn<NativeBridge['getDesktopConnectionState']>(),
+        resetDesktopIdentity: vi.fn<NativeBridge['resetDesktopIdentity']>(),
+        refreshPlatformSync: vi.fn<NativeBridge['refreshPlatformSync']>(),
+        openLmsLogin: vi.fn<NativeBridge['openLmsLogin']>(),
+        getNotificationInboxSnapshot: vi.fn<NativeBridge['getNotificationInboxSnapshot']>(),
+        markNotificationRead: vi.fn<NativeBridge['markNotificationRead']>(),
+        markAllNotificationsRead: vi.fn<NativeBridge['markAllNotificationsRead']>(),
+        activateNotification: vi.fn<NativeBridge['activateNotification']>(),
+        sendTestNotification: vi.fn<NativeBridge['sendTestNotification']>(),
     };
 }
 
@@ -33,11 +35,13 @@ function pwaAdapter(installed: boolean): PwaCapabilityAdapter {
     return {
         available: true,
         installed,
-        registerServiceWorker: vi.fn(),
-        preparePush: vi.fn(async () => undefined),
-        subscribeInstallPrompt: vi.fn(() => () => undefined),
-        isMobileInstallClient: vi.fn(() => false),
-        subscribePush: vi.fn(),
+        registerServiceWorker: vi.fn<PwaCapabilityAdapter['registerServiceWorker']>(),
+        preparePush: vi.fn<PwaCapabilityAdapter['preparePush']>(async () => undefined),
+        subscribeInstallPrompt: vi.fn<PwaCapabilityAdapter['subscribeInstallPrompt']>(
+            () => () => undefined,
+        ),
+        isMobileInstallClient: vi.fn<PwaCapabilityAdapter['isMobileInstallClient']>(() => false),
+        subscribePush: vi.fn<PwaCapabilityAdapter['subscribePush']>(),
     };
 }
 

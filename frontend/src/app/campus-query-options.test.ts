@@ -49,7 +49,9 @@ describe('campus query options', () => {
     });
 
     it('builds TanStack queryOptions from the same laundry contract', async () => {
-        const getPublicLaundry = vi.fn(async () => laundrySnapshot);
+        const getPublicLaundry = vi.fn<() => Promise<DashboardLaundrySnapshot>>(
+            async () => laundrySnapshot,
+        );
         const options = laundryQueryOptions({getPublicLaundry});
 
         expect(options.queryKey).toBe(laundryQueryContract.queryKey);
@@ -60,7 +62,9 @@ describe('campus query options', () => {
     });
 
     it('builds TanStack queryOptions from the same meals contract', async () => {
-        const getPublicMeals = vi.fn(async () => mealsSnapshot);
+        const getPublicMeals = vi.fn<() => Promise<DashboardMealsSnapshot>>(
+            async () => mealsSnapshot,
+        );
         const options = mealsQueryOptions({getPublicMeals});
 
         expect(options.queryKey).toBe(mealsQueryContract.queryKey);

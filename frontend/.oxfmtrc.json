@@ -16,6 +16,14 @@
     "objectWrap": "preserve",
     "proseWrap": "preserve",
     "embeddedLanguageFormatting": "auto",
+    "overrides": [
+        {
+            "files": ["package.json"],
+            "options": {
+                "tabWidth": 2
+            }
+        }
+    ],
     "ignorePatterns": ["dist/**", "coverage/**"],
     "sortImports": {
         "partitionByComment": true,

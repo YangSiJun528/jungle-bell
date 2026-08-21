@@ -104,8 +104,8 @@ async function flushTasks(): Promise<void> {
     }
 }
 
-function localValue<T>(value: unknown): T {
-    return structuredClone(value) as T;
+function localValue(value: unknown): unknown {
+    return structuredClone(value);
 }
 
 test('checker는 positive trigger 뒤 단일 tagged IPC로 ready·resolve·snapshot을 보고한다', async () => {

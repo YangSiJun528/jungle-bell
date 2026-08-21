@@ -14,8 +14,8 @@ import {queryKeys, useDashboardEnvironment} from './dashboard-context';
 interface DashboardAccountContextValue {
     status: DashboardAccountStatus;
     personalAccess: PersonalAccessState;
-    connectionQuery: UseQueryResult<DesktopConnectionState, Error>;
-    browserSessionQuery: UseQueryResult<BrowserAccountSession | null, Error>;
+    connectionQuery: UseQueryResult<DesktopConnectionState>;
+    browserSessionQuery: UseQueryResult<BrowserAccountSession | null>;
 }
 
 const DashboardAccountContext = createContext<DashboardAccountContextValue | null>(null);

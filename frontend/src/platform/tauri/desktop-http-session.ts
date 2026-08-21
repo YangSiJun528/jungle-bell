@@ -1,4 +1,4 @@
-import {hasOwn} from '@/lib/object';
+import {hasOwn, isRecord} from '@/lib/object';
 import type {
     AccountAuthProvider,
     AccountSessionLease,
@@ -88,8 +88,8 @@ function validateSession(
     wire: DesktopHttpSessionBootstrap,
     nowEpochMs: number,
 ): DesktopHttpSession {
-    if (!wire || typeof wire !== 'object' || Array.isArray(wire)) throw invalidResponse();
-    const source = wire as unknown as Record<string, unknown>;
+    const source: unknown = wire;
+    if (!isRecord(source)) throw invalidResponse();
     if (
         Object.keys(source).length !== 2 ||
         !hasOwn(source, 'accessToken') ||

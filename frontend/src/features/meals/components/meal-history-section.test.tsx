@@ -4,7 +4,7 @@ import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, test, vi} from 'vitest';
 
-import type {DashboardMealsSnapshot} from '@/api/dashboard-api';
+import type {DashboardMealHistoryMonth, DashboardMealsSnapshot} from '@/api/dashboard-api';
 import {kstDateKey} from '@/domain/meals/today';
 
 import {MealHistorySection} from './meal-history-section';
@@ -12,7 +12,9 @@ import {MealHistorySection} from './meal-history-section';
 const source = readFileSync(new URL('./meal-history-section.tsx', import.meta.url), 'utf8');
 
 const api = vi.hoisted(() => ({
-    getPublicMealHistoryMonth: vi.fn(async () => ({posts: []})),
+    getPublicMealHistoryMonth: vi.fn<(month: string) => Promise<DashboardMealHistoryMonth>>(
+        async () => ({posts: []}),
+    ),
 }));
 
 vi.mock('@/app/dashboard-context', () => ({

@@ -26,7 +26,7 @@ function PlatformEventBridge({platform}: {platform: PlatformAdapter}) {
     const client = useQueryClient();
 
     useEffect(() => {
-        if (!platform.events.enabled) return;
+        if (!platform.events.enabled) return undefined;
         const registry = createDesktopSubscriptionRegistry();
 
         void registerDesktopSubscriptions(registry, [

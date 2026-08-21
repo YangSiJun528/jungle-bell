@@ -1,5 +1,7 @@
 import {describe, expect, it, vi} from 'vitest';
 
+import type {PwaInstallPrompt} from '@/platform/contracts';
+
 import {createPwaCapabilityAdapter} from './adapter';
 
 function browserObjects(
@@ -9,20 +11,24 @@ function browserObjects(
     } = {},
 ) {
     const subscription = {
-        toJSON: vi.fn(() => ({endpoint: 'https://push.example/subscription'})),
+        toJSON: vi.fn<PushSubscription['toJSON']>(() => ({
+            endpoint: 'https://push.example/subscription',
+        })),
     } as unknown as PushSubscription;
     const pushManager = {
-        subscribe: vi.fn(async () => subscription),
+        subscribe: vi.fn<PushManager['subscribe']>(async () => subscription),
     };
     const registration = {pushManager} as unknown as ServiceWorkerRegistration;
-    const register = vi.fn(async () => registration);
+    const register = vi.fn<ServiceWorkerContainer['register']>(async () => registration);
     const serviceWorker = {
         register,
         ready: Promise.resolve(registration),
     };
     const windowObject = Object.assign(new EventTarget(), {
         PushManager: class {},
-        matchMedia: vi.fn(() => ({matches: options.standalone ?? false})),
+        matchMedia: vi.fn<(query: string) => {matches: boolean}>(() => ({
+            matches: options.standalone ?? false,
+        })),
     }) as unknown as Window;
     const navigatorObject = {
         userAgent: 'Mozilla/5.0 (Linux; Android 16)',
@@ -80,8 +86,8 @@ describe('PwaCapabilityAdapter', () => {
 
     it('설치 프롬프트를 이벤트에서 어댑터 계약으로 변환하고 해제한다', async () => {
         const browser = browserObjects();
-        const nativePrompt = vi.fn(async () => undefined);
-        const listener = vi.fn();
+        const nativePrompt = vi.fn<() => Promise<void>>(async () => undefined);
+        const listener = vi.fn<(prompt: PwaInstallPrompt) => void>();
         const adapter = createPwaCapabilityAdapter({
             production: false,
             windowObject: browser.windowObject,

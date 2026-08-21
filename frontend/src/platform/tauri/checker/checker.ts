@@ -17,6 +17,7 @@ interface TauriGlobal {
     };
 }
 
+// oxlint-disable-next-line eslint/no-unused-vars -- Augments the classic script's global Window type.
 interface Window {
     __TAURI__: TauriGlobal;
 }
@@ -126,7 +127,7 @@ function expectAcknowledged(value: unknown): void {
 function jsLog(level: LogLevel, message: string): void {
     const normalized =
         message
-            .replace(/[\u0000-\u001f\u007f]/gu, ' ')
+            .replace(/\p{Cc}/gu, ' ')
             .trim()
             .slice(0, 512) || 'checker log';
     void reportCheckerEvent({type: 'log', level, message: normalized})
@@ -151,7 +152,7 @@ function currentKstDateString(): string {
 }
 
 function normalizeDateString(value: unknown): string | null {
-    if (!value) return null;
+    if (!value || (typeof value !== 'string' && typeof value !== 'number')) return null;
 
     const text = String(value);
     if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
@@ -200,6 +201,20 @@ function normalizeCohortOptions(cohorts: RawCohort[]): CohortOption[] {
         .filter((cohort): cohort is CohortOption => cohort !== null);
 }
 
+function isNullableDate(value: unknown): value is string | null {
+    return value === null || (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/u.test(value));
+}
+
+function isCohortStatus(value: unknown): value is CohortStatus {
+    return (
+        value === 'active' ||
+        value === 'upcoming' ||
+        value === 'unknown' ||
+        value === 'ended' ||
+        value === 'none'
+    );
+}
+
 async function resolveCohortOptions(
     cohortOptions: CohortOption[],
     today: string,
@@ -228,24 +243,21 @@ async function resolveCohortOptions(
     const cohortStatus = selection.cohort_status;
     const startDate = selection.cohort_start_date;
     const endDate = selection.cohort_end_date;
-    const validDate = (value: unknown): value is string | null =>
-        value === null || (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/u.test(value));
     if (
         (cohortId !== null &&
             (typeof cohortId !== 'string' ||
                 !cohortId ||
                 cohortId.length > 128 ||
                 cohortId.trim() !== cohortId)) ||
-        typeof cohortStatus !== 'string' ||
-        !['active', 'upcoming', 'unknown', 'ended', 'none'].includes(cohortStatus) ||
-        !validDate(startDate) ||
-        !validDate(endDate)
+        !isCohortStatus(cohortStatus) ||
+        !isNullableDate(startDate) ||
+        !isNullableDate(endDate)
     ) {
         throw new Error('INVALID_COHORT_SELECTION_RESPONSE');
     }
     return {
         cohort_id: cohortId,
-        cohort_status: cohortStatus as CohortStatus,
+        cohort_status: cohortStatus,
         cohort_start_date: startDate,
         cohort_end_date: endDate,
         fetched_date: today,

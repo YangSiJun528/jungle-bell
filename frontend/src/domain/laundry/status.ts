@@ -74,7 +74,7 @@ export function laundryRemainingMinutes(
     nowMs = Date.now(),
 ): number | null {
     const fallback = appliance?.projection?.remainingMinutes;
-    if (!Number.isFinite(fallback)) return null;
+    if (typeof fallback !== 'number' || !Number.isFinite(fallback)) return null;
 
     const finishAt = Date.parse(appliance?.estimatedFinishAt ?? '');
     const projectionStatus = appliance?.projection?.status;
@@ -84,7 +84,7 @@ export function laundryRemainingMinutes(
         Number.isFinite(finishAt);
     return countsDown
         ? Math.max(0, Math.ceil((finishAt - nowMs) / 60_000))
-        : Math.max(0, Math.ceil(fallback as number));
+        : Math.max(0, Math.ceil(fallback));
 }
 
 export function laundryOverviewText(

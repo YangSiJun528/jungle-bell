@@ -35,6 +35,15 @@ const SIDEBAR_RESIZE_MIN_WIDTH = 192;
 const SIDEBAR_RESIZE_MAX_WIDTH = 384;
 const SIDEBAR_DEFAULT_WIDTH_PX = 256;
 
+type SidebarStyle = React.CSSProperties & {
+    '--sidebar-width'?: string;
+    '--sidebar-width-icon'?: string;
+    '--skeleton-width'?: string;
+};
+
+const MOBILE_SIDEBAR_STYLE: SidebarStyle = {'--sidebar-width': SIDEBAR_WIDTH_MOBILE};
+const SKELETON_STYLE: SidebarStyle = {'--skeleton-width': '70%'};
+
 function sidebarElements(target: HTMLButtonElement) {
     const sidebar = target.closest<HTMLElement>('[data-slot="sidebar"]');
     return {
@@ -115,7 +124,9 @@ function SidebarProvider({
 
     // Helper to toggle the sidebar.
     const toggleSidebar = React.useCallback(() => {
-        return isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open);
+        return isMobile
+            ? setOpenMobile((currentOpen) => !currentOpen)
+            : setOpen((currentOpen) => !currentOpen);
     }, [isMobile, setOpen, setOpenMobile]);
 
     // Adds a keyboard shortcut to toggle the sidebar.
@@ -163,6 +174,11 @@ function SidebarProvider({
             normalizedResizeMaxWidth,
         ],
     );
+    const wrapperStyle: SidebarStyle = {
+        '--sidebar-width': SIDEBAR_WIDTH,
+        '--sidebar-width-icon': SIDEBAR_WIDTH_ICON,
+        ...style,
+    };
 
     return (
         <SidebarContext.Provider value={contextValue}>
@@ -170,13 +186,7 @@ function SidebarProvider({
                 <div
                     data-slot="sidebar-wrapper"
                     data-sidebar-resizable={resizable ? 'true' : undefined}
-                    style={
-                        {
-                            '--sidebar-width': SIDEBAR_WIDTH,
-                            '--sidebar-width-icon': SIDEBAR_WIDTH_ICON,
-                            ...style,
-                        } as React.CSSProperties
-                    }
+                    style={wrapperStyle}
                     className={cn(
                         'group/sidebar-wrapper flex min-h-svh w-full has-data-[variant=inset]:bg-sidebar',
                         className,
@@ -227,11 +237,7 @@ function Sidebar({
                     data-slot="sidebar"
                     data-mobile="true"
                     className="w-(--sidebar-width) bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
-                    style={
-                        {
-                            '--sidebar-width': SIDEBAR_WIDTH_MOBILE,
-                        } as React.CSSProperties
-                    }
+                    style={MOBILE_SIDEBAR_STYLE}
                     side={side}
                 >
                     <SheetHeader className="sr-only">
@@ -802,11 +808,6 @@ function SidebarMenuSkeleton({
 }: React.ComponentProps<'div'> & {
     showIcon?: boolean;
 }) {
-    // Random width between 50 to 90%.
-    const width = React.useMemo(() => {
-        return `${Math.floor(Math.random() * 40) + 50}%`;
-    }, []);
-
     return (
         <div
             data-slot="sidebar-menu-skeleton"
@@ -820,11 +821,7 @@ function SidebarMenuSkeleton({
             <Skeleton
                 className="h-4 max-w-(--skeleton-width) flex-1"
                 data-sidebar="menu-skeleton-text"
-                style={
-                    {
-                        '--skeleton-width': width,
-                    } as React.CSSProperties
-                }
+                style={SKELETON_STYLE}
             />
         </div>
     );

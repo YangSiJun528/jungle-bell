@@ -20,12 +20,13 @@ export function laundrySituationDataIsReliable(state: LaundrySituationDataState)
         !state.hasData ||
         state.error ||
         !RELIABLE_SOURCE_FRESHNESS.has(state.sourceFreshness ?? '') ||
+        typeof state.snapshotSavedAt !== 'number' ||
         !Number.isFinite(state.snapshotSavedAt)
     ) {
         return false;
     }
 
-    const ageMs = state.nowMs - (state.snapshotSavedAt as number);
+    const ageMs = state.nowMs - state.snapshotSavedAt;
     const expectedRefreshIntervalSeconds =
         state.expectedRefreshIntervalSeconds ?? DEFAULT_EXPECTED_REFRESH_INTERVAL_SECONDS;
     if (!Number.isFinite(expectedRefreshIntervalSeconds) || expectedRefreshIntervalSeconds <= 0) {

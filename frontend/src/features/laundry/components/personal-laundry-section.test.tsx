@@ -2,7 +2,7 @@ import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, test, vi} from 'vitest';
 
-import type {DashboardLaundrySnapshot, LaundryWatch} from '@/api/dashboard-api';
+import type {DashboardLaundrySnapshot, LaundryWatch, LaundryWatchInput} from '@/api/dashboard-api';
 
 import {PersonalLaundrySection} from './personal-laundry-section';
 
@@ -11,10 +11,10 @@ const {api, queryKeys, state} = vi.hoisted(() => ({
         laundryWatches: ['personal', 'laundry-watches'] as const,
     },
     api: {
-        listLaundryWatches: vi.fn(),
-        createLaundryWatch: vi.fn(),
-        deleteLaundryWatch: vi.fn(),
-        openLmsLogin: vi.fn(),
+        listLaundryWatches: vi.fn<() => Promise<LaundryWatch[]>>(),
+        createLaundryWatch: vi.fn<(input: LaundryWatchInput) => Promise<LaundryWatch>>(),
+        deleteLaundryWatch: vi.fn<(id: string) => Promise<void>>(),
+        openLmsLogin: vi.fn<() => Promise<void>>(),
     },
     state: {
         lmsAuthentication: 'authenticated',
@@ -43,8 +43,8 @@ vi.mock('@/app/dashboard-account', () => ({
             lmsAuthentication: state.lmsAuthentication,
         },
         personalAccess: {status: state.personalAccess},
-        connectionQuery: {refetch: vi.fn()},
-        browserSessionQuery: {refetch: vi.fn()},
+        connectionQuery: {refetch: vi.fn<() => void>()},
+        browserSessionQuery: {refetch: vi.fn<() => void>()},
     }),
 }));
 
@@ -83,9 +83,9 @@ vi.mock('@/app/use-dashboard-queries', () => ({
         },
         isPending: false,
         isError: false,
-        refetch: vi.fn(),
+        refetch: vi.fn<() => void>(),
     }),
-    useRefreshAttendanceMutation: () => ({isPending: false, mutate: vi.fn()}),
+    useRefreshAttendanceMutation: () => ({isPending: false, mutate: vi.fn<() => void>()}),
 }));
 
 const machines: DashboardLaundrySnapshot['machines'] = [

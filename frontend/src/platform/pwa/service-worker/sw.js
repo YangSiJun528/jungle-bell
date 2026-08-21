@@ -24,7 +24,7 @@ const noHttpCachePlugin = {
     },
 };
 
-function isEligibleGetRequest({request, url, sameOrigin}) {
+function isEligibleGetRequest({request, sameOrigin}) {
     if (!sameOrigin || request.method !== 'GET') return false;
     return true;
 }

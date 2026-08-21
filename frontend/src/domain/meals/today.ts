@@ -2,6 +2,7 @@ const KST_OFFSET_MS = 9 * 60 * 60 * 1_000;
 const TITLED_DATE = /(?:(\d{4})\uB144\s*)?(\d{1,2})\uC6D4\s*(\d{1,2})\uC77C/u;
 
 interface MealRecord {
+    [key: string]: unknown;
     id: string;
     title: string | null;
     publishedAt: string | null;
@@ -36,10 +37,7 @@ export function kstDateKey(reference: Date): string {
     return new Date(reference.getTime() + KST_OFFSET_MS).toISOString().slice(0, 10);
 }
 
-export function mealServiceDate<RecordType extends MealRecord>(
-    meal: RecordType,
-    reference = new Date(),
-): string | null {
+export function mealServiceDate(meal: MealRecord, reference = new Date()): string | null {
     const timestamp = meal.publishedAt ?? meal.firstSeenAt ?? null;
     const anchor = timestamp ? new Date(timestamp) : reference;
     const validAnchor = Number.isFinite(anchor.getTime()) ? anchor : reference;

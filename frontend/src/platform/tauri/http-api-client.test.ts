@@ -2,12 +2,14 @@ import {readFileSync} from 'node:fs';
 
 import {describe, expect, test, vi} from 'vitest';
 
-import {createHttpApiClient} from '@/api/http-api-client';
+import {createHttpApiClient, type HttpFetch} from '@/api/http-api-client';
 import {hasOwn} from '@/lib/object';
+import type {DesktopHttpSessionBootstrap} from '@/platform/contracts';
 
 import {createDesktopHttpSessionManager} from './desktop-http-session';
 
 const token = (character: string) => `jbui_${character.repeat(64)}`;
+type BootstrapDesktopHttpSession = () => Promise<DesktopHttpSessionBootstrap>;
 const json = (status = 200) =>
     new Response('{}', {
         status,
@@ -48,7 +50,7 @@ describe('desktop HTTP session', () => {
     });
 
     test('50 concurrent callers share one memory-only bootstrap', async () => {
-        const bootstrapDesktopHttpSession = vi.fn(async () => ({
+        const bootstrapDesktopHttpSession = vi.fn<BootstrapDesktopHttpSession>(async () => ({
             accessToken: token('a'),
             expiresAt: new Date(420_000).toISOString(),
         }));
@@ -68,7 +70,7 @@ describe('desktop HTTP session', () => {
     test('refreshes proactively within 60 seconds of expiry', async () => {
         let now = 0;
         const bootstrapDesktopHttpSession = vi
-            .fn()
+            .fn<BootstrapDesktopHttpSession>()
             .mockResolvedValueOnce({
                 accessToken: token('a'),
                 expiresAt: new Date(120_001).toISOString(),
@@ -100,7 +102,7 @@ describe('desktop HTTP session', () => {
             resolveFirst = resolve;
         });
         const bootstrapDesktopHttpSession = vi
-            .fn()
+            .fn<BootstrapDesktopHttpSession>()
             .mockReturnValueOnce(first)
             .mockResolvedValueOnce({
                 accessToken: token('b'),
@@ -131,7 +133,7 @@ describe('desktop HTTP session', () => {
             {accessToken: token('a'), expiresAt: new Date(420_000).toISOString(), extra: true},
         ]) {
             const manager = createDesktopHttpSessionManager({
-                nativeBridge: {bootstrapDesktopHttpSession: async () => value as never},
+                nativeBridge: {bootstrapDesktopHttpSession: async () => value},
                 now: () => 0,
             });
             await expect(manager.getSessionLease()).rejects.toThrow('API_RESPONSE_INVALID');
@@ -158,7 +160,7 @@ describe('desktop HTTP session', () => {
 describe('HTTP API boundaries', () => {
     test('separates public omit, browser cookies, and desktop bearer namespaces', async () => {
         const calls: Array<[RequestInfo | URL, RequestInit | undefined]> = [];
-        const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const fetcher = vi.fn<HttpFetch>(async (input, init) => {
             calls.push([input, init]);
             return json();
         });
@@ -214,7 +216,7 @@ describe('HTTP API boundaries', () => {
     });
 
     test('일반 웹은 개인 API를 네트워크 호출 전에 차단한다', async () => {
-        const fetcher = vi.fn(async () => json());
+        const fetcher = vi.fn<HttpFetch>(async () => json());
         const client = createHttpApiClient({
             fetcher,
             publicBase: '',
@@ -281,7 +283,7 @@ describe('HTTP API boundaries', () => {
             headers: {'x-response-contract': 'zero-length'},
         });
         const fetcher = vi
-            .fn()
+            .fn<HttpFetch>()
             .mockResolvedValueOnce(nullBody)
             .mockResolvedValueOnce(zeroLengthBody);
         const client = createHttpApiClient({
@@ -320,8 +322,8 @@ describe('HTTP API boundaries', () => {
     });
 
     test('rejects namespace prefix bypass and traversal before fetch or bootstrap', async () => {
-        const fetcher = vi.fn(async () => json());
-        const bootstrapDesktopHttpSession = vi.fn(async () => ({
+        const fetcher = vi.fn<HttpFetch>(async () => json());
+        const bootstrapDesktopHttpSession = vi.fn<BootstrapDesktopHttpSession>(async () => ({
             accessToken: token('a'),
             expiresAt: new Date(420_000).toISOString(),
         }));
@@ -338,7 +340,7 @@ describe('HTTP API boundaries', () => {
             },
         });
 
-        expect(() => client.accountResponse('/api/me/../desktop' as never)).toThrow(
+        expect(() => client.accountResponse('/api/me/../desktop')).toThrow(
             'API_CLIENT_INVALID_ARGUMENT',
         );
         expect(() => client.accountResponse('/api/me-evil/attendance' as never)).toThrow(
@@ -350,14 +352,14 @@ describe('HTTP API boundaries', () => {
 
     test('50 concurrent 401 responses cause one refresh and one retry each', async () => {
         let generation = 0;
-        const bootstrapDesktopHttpSession = vi.fn(async () => {
+        const bootstrapDesktopHttpSession = vi.fn<BootstrapDesktopHttpSession>(async () => {
             generation += 1;
             return {
                 accessToken: token(generation === 1 ? 'a' : 'b'),
                 expiresAt: new Date(420_000).toISOString(),
             };
         });
-        const fetcher = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) =>
+        const fetcher = vi.fn<HttpFetch>(async (_input, init) =>
             new Headers(init?.headers).get('authorization') === `Bearer ${token('a')}`
                 ? json(401)
                 : json(),
@@ -385,7 +387,7 @@ describe('HTTP API boundaries', () => {
 
     test('discards a GET body that completes after identity reset', async () => {
         const delayed = delayedJsonBody('{"attendance":{"private":true}}');
-        const fetcher = vi.fn(async () => delayed.response);
+        const fetcher = vi.fn<HttpFetch>(async () => delayed.response);
         const manager = createDesktopHttpSessionManager({
             nativeBridge: {
                 bootstrapDesktopHttpSession: async () => ({
@@ -406,18 +408,15 @@ describe('HTTP API boundaries', () => {
         await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
         await vi.waitFor(() => expect(delayed.response.bodyUsed).toBe(true));
         manager.clear();
-        const assertion = expect(pending).rejects.toThrow('DESKTOP_HTTP_SESSION_INVALIDATED');
         delayed.release();
 
-        await assertion;
+        await expect(pending).rejects.toThrow('DESKTOP_HTTP_SESSION_INVALIDATED');
         expect(fetcher).toHaveBeenCalledTimes(1);
     });
 
     test('discards a PUT body that completes after identity reset', async () => {
         const delayed = delayedJsonBody('{"enabled":true}');
-        const fetcher = vi.fn(
-            async (_input: RequestInfo | URL, _init?: RequestInit) => delayed.response,
-        );
+        const fetcher = vi.fn<HttpFetch>(async () => delayed.response);
         const manager = createDesktopHttpSessionManager({
             nativeBridge: {
                 bootstrapDesktopHttpSession: async () => ({
@@ -441,10 +440,9 @@ describe('HTTP API boundaries', () => {
         await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
         await vi.waitFor(() => expect(delayed.response.bodyUsed).toBe(true));
         manager.clear();
-        const assertion = expect(pending).rejects.toThrow('DESKTOP_HTTP_SESSION_INVALIDATED');
         delayed.release();
 
-        await assertion;
+        await expect(pending).rejects.toThrow('DESKTOP_HTTP_SESSION_INVALIDATED');
         expect(fetcher).toHaveBeenCalledTimes(1);
         expect(fetcher.mock.calls[0]?.[1]).toMatchObject({
             method: 'PUT',
@@ -457,11 +455,9 @@ describe('HTTP API boundaries', () => {
         const firstResponse = new Promise<Response>((resolve) => {
             resolveFirstResponse = resolve;
         });
-        const fetcher = vi.fn(
-            async (_input: RequestInfo | URL, _init?: RequestInit) => firstResponse,
-        );
+        const fetcher = vi.fn<HttpFetch>(async () => firstResponse);
         const bootstrapDesktopHttpSession = vi
-            .fn()
+            .fn<BootstrapDesktopHttpSession>()
             .mockResolvedValueOnce({
                 accessToken: token('a'),
                 expiresAt: new Date(420_000).toISOString(),
@@ -491,10 +487,9 @@ describe('HTTP API boundaries', () => {
             accessToken: token('b'),
             generation: 1,
         });
-        const assertion = expect(pending).rejects.toThrow('DESKTOP_HTTP_SESSION_INVALIDATED');
         resolveFirstResponse(json(401));
 
-        await assertion;
+        await expect(pending).rejects.toThrow('DESKTOP_HTTP_SESSION_INVALIDATED');
         expect(fetcher).toHaveBeenCalledTimes(1);
         expect(bootstrapDesktopHttpSession).toHaveBeenCalledTimes(2);
         expect(fetcher.mock.calls[0]?.[1]).toMatchObject({
@@ -504,11 +499,11 @@ describe('HTTP API boundaries', () => {
     });
 
     test.each([403, 500])('does not refresh or retry HTTP %s', async (status) => {
-        const bootstrapDesktopHttpSession = vi.fn(async () => ({
+        const bootstrapDesktopHttpSession = vi.fn<BootstrapDesktopHttpSession>(async () => ({
             accessToken: token('a'),
             expiresAt: new Date(420_000).toISOString(),
         }));
-        const fetcher = vi.fn(async () => json(status));
+        const fetcher = vi.fn<HttpFetch>(async () => json(status));
         const client = createHttpApiClient({
             fetcher,
             publicBase: '',
@@ -528,11 +523,11 @@ describe('HTTP API boundaries', () => {
     });
 
     test('does not retry network failure', async () => {
-        const bootstrapDesktopHttpSession = vi.fn(async () => ({
+        const bootstrapDesktopHttpSession = vi.fn<BootstrapDesktopHttpSession>(async () => ({
             accessToken: token('a'),
             expiresAt: new Date(420_000).toISOString(),
         }));
-        const fetcher = vi.fn(async () => {
+        const fetcher = vi.fn<HttpFetch>(async () => {
             throw new TypeError('offline');
         });
         const client = createHttpApiClient({

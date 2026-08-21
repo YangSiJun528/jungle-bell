@@ -226,12 +226,13 @@ function mealImageSchema(expectedAssetOrigin: string | null) {
         })
         .transform((image) => ({
             ...image,
-            url: normalizedMealAssetUrl(
-                image.url,
-                image.sha,
-                image.extension,
-                expectedAssetOrigin,
-            ) as string,
+            url:
+                normalizedMealAssetUrl(
+                    image.url,
+                    image.sha,
+                    image.extension,
+                    expectedAssetOrigin,
+                ) ?? image.url,
         }));
 }
 

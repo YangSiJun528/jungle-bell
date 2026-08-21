@@ -116,7 +116,7 @@ function calendarRows(start: ParsedDate, end: ParsedDate, today: ParsedDate): Dd
             key: `${year}-${pad(month)}`,
             label: `${year}년 ${month}월`,
             shortLabel: `${month}월`,
-            cells: Array.from({length: 31}, (_, dayIndex) => {
+            cells: Array.from({length: 31}, (_unusedCell, dayIndex) => {
                 const day = dayIndex + 1;
                 const timestamp = Date.UTC(year, month - 1, day);
                 const date = new Date(timestamp);

@@ -10,13 +10,13 @@ const {account, environment} = vi.hoisted(() => ({
         serverSession: 'not-applicable',
         browserFetching: false,
         connectionFetching: false,
-        refetchBrowser: vi.fn(),
-        refetchConnection: vi.fn(),
+        refetchBrowser: vi.fn<() => Promise<unknown>>(),
+        refetchConnection: vi.fn<() => Promise<unknown>>(),
     },
     environment: {
         authentication: 'none',
         desktopAccount: false,
-        openLmsLogin: vi.fn(),
+        openLmsLogin: vi.fn<() => Promise<void>>(),
     },
 }));
 
@@ -131,7 +131,7 @@ describe('PlatformAuthenticationGate', () => {
         expect(markup).toContain('data-update-notice="true"');
         expect(markup).not.toContain('data-route-content');
         expect(routeRenderCount).toBe(0);
-        if (lmsAuthentication === 'unavailable') expect(markup).toContain('상태 다시 확인');
+        expect(markup.includes('상태 다시 확인')).toBe(lmsAuthentication === 'unavailable');
     });
 
     test.each(['missing', 'unavailable', 'recovery-required'])(

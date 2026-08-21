@@ -58,6 +58,18 @@ interface LaundryWatchCardProps {
     onRemove: (id: string) => void;
 }
 
+function isLaundryApplianceKind(value: string): value is LaundryApplianceKind {
+    return value === 'washer' || value === 'dryer';
+}
+
+function isLaundryNotificationMode(value: string): value is LaundryNotificationMode {
+    return (
+        value === 'before-completion' ||
+        value === 'estimated-completion' ||
+        value === 'confirmed-completion'
+    );
+}
+
 function LaundryWatchCard({
     activeWatches,
     adding,
@@ -126,9 +138,11 @@ function LaundryWatchCard({
                                     <Label>세탁기 또는 건조기</Label>
                                     <Select
                                         value={selectedTarget?.appliance ?? ''}
-                                        onValueChange={(value) =>
-                                            onApplianceChange(value as LaundryApplianceKind)
-                                        }
+                                        onValueChange={(value) => {
+                                            if (isLaundryApplianceKind(value)) {
+                                                onApplianceChange(value);
+                                            }
+                                        }}
                                     >
                                         <SelectTrigger
                                             aria-label="세탁기 또는 건조기"
@@ -153,9 +167,11 @@ function LaundryWatchCard({
                                     <Label>알림 시점</Label>
                                     <Select
                                         value={notificationMode}
-                                        onValueChange={(value) =>
-                                            onModeChange(value as LaundryNotificationMode)
-                                        }
+                                        onValueChange={(value) => {
+                                            if (isLaundryNotificationMode(value)) {
+                                                onModeChange(value);
+                                            }
+                                        }}
                                     >
                                         <SelectTrigger
                                             aria-label="알림 시점"

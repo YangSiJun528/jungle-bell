@@ -8,8 +8,8 @@ import {MealPreferencesSection} from './meal-preferences-section';
 
 const {api, queryKeys} = vi.hoisted(() => ({
     api: {
-        getMealPreferences: vi.fn(),
-        updateMealPreferences: vi.fn(),
+        getMealPreferences: vi.fn<() => Promise<MealPreferences>>(),
+        updateMealPreferences: vi.fn<(input: MealPreferences) => Promise<MealPreferences>>(),
     },
     queryKeys: {
         mealPreferences: ['personal', 'meal-preferences'] as const,

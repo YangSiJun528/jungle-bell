@@ -154,12 +154,15 @@ export function unavailablePwaAdapter(): PwaCapabilityAdapter {
     };
 }
 
+async function unavailableSubscription(): Promise<PlatformUnlisten> {
+    return () => undefined;
+}
+
 export function unavailableEventAdapter(): PlatformEventAdapter {
-    const subscribe = async (): Promise<PlatformUnlisten> => () => undefined;
     return {
         enabled: false,
-        subscribeNotificationInboxUpdated: subscribe,
-        subscribeAttendanceSnapshotUpdated: subscribe,
-        subscribeLmsSessionStateUpdated: subscribe,
+        subscribeNotificationInboxUpdated: unavailableSubscription,
+        subscribeAttendanceSnapshotUpdated: unavailableSubscription,
+        subscribeLmsSessionStateUpdated: unavailableSubscription,
     };
 }

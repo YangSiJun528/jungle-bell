@@ -2,9 +2,11 @@ import {describe, expect, test, vi} from 'vitest';
 
 import {reportWebUiOpened, startWebUsageReporting} from './usage-reporting';
 
+type UsageFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+
 describe('web usage reporting', () => {
     test('ordinary web uses only the anonymous allowlisted event', async () => {
-        const fetcher = vi.fn(async () => new Response(null, {status: 204}));
+        const fetcher = vi.fn<UsageFetch>(async () => new Response(null, {status: 204}));
 
         await reportWebUiOpened(false, fetcher);
 
@@ -20,7 +22,7 @@ describe('web usage reporting', () => {
     });
 
     test('PWA uses its authenticated session and falls back only after 401', async () => {
-        const connected = vi.fn(
+        const connected = vi.fn<UsageFetch>(
             async (_input: RequestInfo | URL, _init?: RequestInit) =>
                 new Response(null, {status: 204}),
         );
@@ -29,7 +31,7 @@ describe('web usage reporting', () => {
         expect(connected.mock.calls[0]?.[0]).toBe('/api/me/usage/ui-opened');
 
         let requestCount = 0;
-        const disconnected = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
+        const disconnected = vi.fn<UsageFetch>(async () => {
             requestCount += 1;
             return new Response(null, {status: requestCount === 1 ? 401 : 204});
         });
@@ -45,7 +47,7 @@ describe('web usage reporting', () => {
         let visibilityState: DocumentVisibilityState = 'visible';
         let listener: (() => void) | undefined;
         let resolveRequest: (() => void) | undefined;
-        const fetcher = vi.fn(
+        const fetcher = vi.fn<UsageFetch>(
             () =>
                 new Promise<Response>((resolve) => {
                     resolveRequest = () => resolve(new Response(null, {status: 204}));
@@ -58,7 +60,7 @@ describe('web usage reporting', () => {
             addEventListener: (_type: 'visibilitychange', value: () => void) => {
                 listener = value;
             },
-            removeEventListener: vi.fn(),
+            removeEventListener: vi.fn<(type: 'visibilitychange', listener: () => void) => void>(),
         };
 
         const stop = startWebUsageReporting({installedPwa: false, fetcher, documentObject});

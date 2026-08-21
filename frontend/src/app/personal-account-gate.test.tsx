@@ -9,7 +9,7 @@ import {PersonalAccountGate} from './personal-account-gate';
 const {account, environment} = vi.hoisted(() => ({
     account: {
         personalAccess: 'unconnected',
-        browserSessionRefetch: vi.fn(),
+        browserSessionRefetch: vi.fn<() => void>(),
     },
     environment: {
         platformKind: 'browser',
@@ -20,14 +20,14 @@ vi.mock('./dashboard-account', () => ({
     useDashboardAccount: () => ({
         personalAccess: {status: account.personalAccess},
         status: {lmsAuthentication: 'not-applicable', serverSession: 'not-applicable'},
-        connectionQuery: {refetch: vi.fn()},
+        connectionQuery: {refetch: vi.fn<() => void>()},
         browserSessionQuery: {refetch: account.browserSessionRefetch},
     }),
 }));
 
 vi.mock('./dashboard-context', () => ({
     useDashboardEnvironment: () => ({
-        api: {openLmsLogin: vi.fn()},
+        api: {openLmsLogin: vi.fn<() => Promise<void>>()},
         platform: {
             kind: environment.platformKind,
             capabilities: {desktopAccount: environment.platformKind === 'desktop'},
@@ -36,7 +36,7 @@ vi.mock('./dashboard-context', () => ({
 }));
 
 vi.mock('./use-dashboard-queries', () => ({
-    useRefreshAttendanceMutation: () => ({isPending: false, mutate: vi.fn()}),
+    useRefreshAttendanceMutation: () => ({isPending: false, mutate: vi.fn<() => void>()}),
 }));
 
 function renderGate(status: string): string {

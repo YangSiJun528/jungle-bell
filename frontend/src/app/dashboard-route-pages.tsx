@@ -1,5 +1,7 @@
 import {useMutation} from '@tanstack/react-query';
-import {lazy, useEffect, useMemo} from 'react';
+import {lazy, useEffect, useState} from 'react';
+
+import type {MobilePairingLink} from '@/domain/connections/pairing-link';
 
 import {useDashboardEnvironment} from './dashboard-context';
 import {useDashboardRouteRuntime} from './dashboard-route-runtime';
@@ -39,12 +41,12 @@ export function HomeRoutePage() {
 export function AppInstallRoutePage() {
     const {openInstallPrompt} = useDashboardRouteRuntime();
     const {api, platform} = useDashboardEnvironment();
-    const initialPairing = useMemo(readInitialPairingEntry, []);
+    const [initialPairing] = useState(readInitialPairingEntry);
     const handoffLink = initialPairing?.kind === 'install-handoff' ? initialPairing.link : null;
     // This only prepares an HttpOnly cookie; it does not mutate query-backed state.
     // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation
     const prepareHandoff = useMutation({
-        mutationFn: api.prepareQrPairingHandoff,
+        mutationFn: (input: MobilePairingLink) => api.prepareQrPairingHandoff(input),
         onSuccess: clearInitialPairingEntry,
     });
     const startHandoff = prepareHandoff.mutate;

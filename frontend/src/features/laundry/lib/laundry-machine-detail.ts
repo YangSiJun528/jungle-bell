@@ -160,8 +160,8 @@ function applianceRemainingLabel(
 
 function totalTimeLabel(appliance?: LaundryStatusAppliance | null): string | null {
     const value = appliance?.totalMinutes;
-    return Number.isFinite(value) && (value as number) > 0
-        ? `총 ${Math.round(value as number)}분`
+    return typeof value === 'number' && Number.isFinite(value) && value > 0
+        ? `총 ${Math.round(value)}분`
         : null;
 }
 

@@ -38,7 +38,6 @@ const personalLaundry = source('./features/laundry/components/personal-laundry-s
 const washTower = source('./features/laundry/components/wash-tower-grid.tsx');
 const meals = source('./features/meals/pages/meals-page.tsx');
 const mealPreferences = source('./features/meals/components/meal-preferences-section.tsx');
-const notifications = source('./features/notifications/notifications-page.tsx');
 const notificationDeliverySetup = source(
     './features/notifications/notification-delivery-setup.tsx',
 );
@@ -377,13 +376,10 @@ test('PWA 메타데이터·서비스 워커·설치 프롬프트는 React 진입
     assert.match(html, /prefers-color-scheme: light/);
     assert.match(html, /prefers-color-scheme: dark/);
     assert.doesNotMatch(html, /manifest\.webmanifest|apple-touch-icon/);
-    assert.doesNotMatch(html, /rel=\"icon\"/);
-    assert.match(
-        vite,
-        /rel=\"icon\" href=\"\.\/icons\/icon-32\.png\" type=\"image\/png\" sizes=\"32x32\"/,
-    );
-    assert.match(vite, /rel=\"icon\" href=\"\.\/icons\/icon\.svg\" type=\"image\/svg\+xml\"/);
-    assert.match(vite, /rel=\"manifest\" href=\"\.\/manifest\.webmanifest\"/);
+    assert.doesNotMatch(html, /rel="icon"/);
+    assert.match(vite, /rel="icon" href="\.\/icons\/icon-32\.png" type="image\/png" sizes="32x32"/);
+    assert.match(vite, /rel="icon" href="\.\/icons\/icon\.svg" type="image\/svg\+xml"/);
+    assert.match(vite, /rel="manifest" href="\.\/manifest\.webmanifest"/);
     assert.match(pwaAdapter, /navigatorObject\.serviceWorker[\s\S]{0,80}\.register\('\.\/sw\.js'/);
     assert.match(pwaAdapter, /beforeinstallprompt/);
     assert.match(installPrompt, /platform\.pwa\.available/);

@@ -1,5 +1,7 @@
 import {describe, expect, test, vi} from 'vitest';
 
+import type {NativeInvoke} from '@/platform/contracts';
+
 import {createNativeBridge} from './native-bridge';
 
 const validSession = {
@@ -9,7 +11,7 @@ const validSession = {
 
 describe('NativeBridge', () => {
     test('bootstraps with the exact no-argument command and strict DTO', async () => {
-        const invoke = vi.fn(async () => validSession);
+        const invoke = vi.fn<NativeInvoke>(async () => validSession);
         const bridge = createNativeBridge(invoke);
 
         await expect(bridge.bootstrapDesktopHttpSession()).resolves.toEqual(validSession);
@@ -26,7 +28,7 @@ describe('NativeBridge', () => {
     });
 
     test('maps identity reset, settings, updates, and local notification operations narrowly', async () => {
-        const invoke = vi.fn(async () => null);
+        const invoke = vi.fn<NativeInvoke>(async () => null);
         const bridge = createNativeBridge(invoke);
 
         await bridge.resetDesktopIdentity();

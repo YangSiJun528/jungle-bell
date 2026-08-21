@@ -52,14 +52,21 @@ function isNonEmptyText(value: unknown, maxLength: number): value is string {
         typeof value === 'string' &&
         value.trim().length > 0 &&
         value.length <= maxLength &&
-        !/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(value)
+        !/\p{Cc}/u.test(value)
     );
 }
 
 function isTimestamp(value: unknown): value is number {
     return (
-        Number.isSafeInteger(value) && (value as number) > 0 && (value as number) <= MAX_TIMESTAMP
+        typeof value === 'number' &&
+        Number.isSafeInteger(value) &&
+        value > 0 &&
+        value <= MAX_TIMESTAMP
     );
+}
+
+function isNonNegativeSafeInteger(value: unknown): value is number {
+    return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }
 
 function isNotificationAction(value: unknown): value is NotificationAction {
@@ -73,10 +80,8 @@ export function normalizeNotificationInboxSnapshot(
     const candidate = value as Partial<NotificationInboxSnapshot>;
     if (
         !hasExactKeys(candidate, ['revision', 'unreadCount', 'items']) ||
-        !Number.isSafeInteger(candidate.revision) ||
-        (candidate.revision ?? -1) < 0 ||
-        !Number.isSafeInteger(candidate.unreadCount) ||
-        (candidate.unreadCount ?? -1) < 0 ||
+        !isNonNegativeSafeInteger(candidate.revision) ||
+        !isNonNegativeSafeInteger(candidate.unreadCount) ||
         !Array.isArray(candidate.items) ||
         candidate.items.length > MAX_NOTIFICATION_ITEMS
     ) {
@@ -85,9 +90,9 @@ export function normalizeNotificationInboxSnapshot(
 
     const ids = new Set<string>();
     const items: NotificationInboxItem[] = [];
-    for (const value of candidate.items) {
-        if (!value || typeof value !== 'object') return null;
-        const item = value as Partial<NotificationInboxItem>;
+    for (const candidateItem of candidate.items) {
+        if (!candidateItem || typeof candidateItem !== 'object') return null;
+        const item = candidateItem as Partial<NotificationInboxItem>;
         if (
             !hasExactKeys(item, ['id', 'title', 'body', 'createdAt', 'readAt', 'action']) ||
             !isNonEmptyText(item.id, 32) ||
@@ -117,7 +122,7 @@ export function normalizeNotificationInboxSnapshot(
     if (candidate.unreadCount !== unreadCount) return null;
 
     return {
-        revision: candidate.revision as number,
+        revision: candidate.revision,
         unreadCount,
         items,
     };

@@ -126,7 +126,7 @@ export function MealPreferencesSection() {
     });
 
     useEffect(() => {
-        if (!saved) return;
+        if (!saved) return undefined;
         const timer = window.setTimeout(() => setSaved(false), 3_000);
         return () => window.clearTimeout(timer);
     }, [saved]);

@@ -75,15 +75,17 @@ function useNotificationDeliverySetup() {
                 setDeliveryMessage(desktopTestNotificationMessage(result));
                 setShowSystemSettingsShortcut(!result.systemDelivered);
                 setDesktopDeliveryConfirmed(result.systemDelivered);
-            } else {
+            } else if (typeof result === 'number') {
                 setDeliveryMessage(
-                    `연결된 모바일 ${String(result)}대의 테스트 푸시를 전송 대기열에 추가했습니다. 1분 안에 도착합니다.`,
+                    `연결된 모바일 ${result}대의 테스트 푸시를 전송 대기열에 추가했습니다. 1분 안에 도착합니다.`,
                 );
                 setMobileArrival('confirming');
                 await Promise.all([
                     client.invalidateQueries({queryKey: queryKeys.notifications('browser')}),
                     client.invalidateQueries({queryKey: queryKeys.mobileSessions}),
                 ]);
+            } else {
+                throw new Error('TEST_NOTIFICATION_RESULT_INVALID');
             }
         },
     });

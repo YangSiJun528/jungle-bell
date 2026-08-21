@@ -1,11 +1,13 @@
 import {describe, expect, test, vi} from 'vitest';
 
+import type {NativeInvoke} from '@/platform/contracts';
+
 import {createDashboardDesktopSettingsApi} from './desktop-settings';
 import {createNativeBridge} from './native-bridge';
 
 describe('desktop update adapter', () => {
     test('parses the exact update status and installs through the native bridge', async () => {
-        const invoke = vi.fn(async (command: string) => {
+        const invoke = vi.fn<NativeInvoke>(async (command) => {
             if (command === 'check_desktop_update') {
                 return {currentVersion: '0.5.0', availableVersion: '0.6.0', mandatory: true};
             }

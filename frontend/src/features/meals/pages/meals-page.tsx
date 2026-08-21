@@ -17,10 +17,7 @@ import {WeeklyMealMenu} from '../components/weekly-meal-menu';
 export function MealsPage() {
     const meals = useSuspenseMealsQuery();
     const manualRefresh = useCampusManualRefresh('meals');
-    const todayMeals = useMemo(
-        () => selectTodayMeals(meals.data),
-        [meals.data, meals.dataUpdatedAt],
-    );
+    const todayMeals = useMemo(() => selectTodayMeals(meals.data), [meals.data]);
     const currentWeekly = meals.data.data.currentWeeklyMenu;
     const weeklyMeal = currentWeekly?.status === 'AVAILABLE' ? currentWeekly.post : null;
     const weeklyKey = currentWeekly?.targetWeekKey ?? null;

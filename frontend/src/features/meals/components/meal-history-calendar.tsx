@@ -63,7 +63,7 @@ export function MealHistoryCalendar({
                     ]
                         .filter(Boolean)
                         .join(', '),
-                labelGrid: (month) => `${formatMonth(month)} 급식 기록 달력`,
+                labelGrid: (calendarMonth) => `${formatMonth(calendarMonth)} 급식 기록 달력`,
                 labelNav: () => '달력 월 이동',
                 labelNext: () => '다음 달',
                 labelPrevious: () => '이전 달',

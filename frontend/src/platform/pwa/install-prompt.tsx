@@ -8,15 +8,15 @@ import type {PwaInstallPrompt} from '@/platform/contracts';
 
 interface InstallPromptProps {
     open: boolean;
-    onOpenChange(open: boolean): void;
+    onOpenChange: (open: boolean) => void;
 }
 
 const RELEASE_URL = 'https://github.com/YangSiJun528/jungle-bell/releases/latest';
 
 export function useInstallPromptVisibility(): {
     installPromptOpen: boolean;
-    openInstallPrompt(): void;
-    setInstallPromptVisibility(open: boolean): void;
+    openInstallPrompt: () => void;
+    setInstallPromptVisibility: (open: boolean) => void;
 } {
     const [installPromptOpen, setInstallPromptOpen] = useState(false);
 
@@ -37,7 +37,7 @@ export function InstallPrompt({open, onOpenChange}: InstallPromptProps) {
     const [mobile] = useState(() => platform.pwa.isMobileInstallClient());
 
     useEffect(() => {
-        if (!platform.pwa.available) return;
+        if (!platform.pwa.available) return undefined;
         return platform.pwa.subscribeInstallPrompt(setPrompt);
     }, [platform.pwa]);
 

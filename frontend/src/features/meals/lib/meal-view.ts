@@ -70,15 +70,16 @@ function uniqueMeals(meals: readonly DashboardMealPost[]): DashboardMealPost[] {
     return [...unique.values()];
 }
 
+function mealPeriodOrder(title: string | null): number {
+    const period = mealPeriodLabel(title);
+    if (period === '\uC870\uC2DD') return 0;
+    if (period === '\uC911\uC2DD') return 1;
+    if (period === '\uC11D\uC2DD') return 2;
+    return 3;
+}
+
 function compareMealPeriod(left: DashboardMealPost, right: DashboardMealPost): number {
-    const order = (title: string | null): number => {
-        const period = mealPeriodLabel(title);
-        if (period === '\uC870\uC2DD') return 0;
-        if (period === '\uC911\uC2DD') return 1;
-        if (period === '\uC11D\uC2DD') return 2;
-        return 3;
-    };
-    return order(left.title) - order(right.title);
+    return mealPeriodOrder(left.title) - mealPeriodOrder(right.title);
 }
 
 function calendarDateKey(year: number, month: number, day: number): string | null {

@@ -135,6 +135,11 @@ export interface AttendanceDashboardPayload {
     devices: DesktopDevice[];
 }
 
+function availableAttendanceFreshness(value: 'fresh' | 'missing' | 'stale'): 'fresh' | 'stale' {
+    if (value === 'fresh' || value === 'stale') return value;
+    throw new Error('API_RESPONSE_INVALID');
+}
+
 export function parseAttendanceDashboardPayload(value: unknown): AttendanceDashboardPayload {
     const parsed = parseResponse(attendanceDashboardPayloadSchema, value);
     return {
@@ -143,7 +148,7 @@ export function parseAttendanceDashboardPayload(value: unknown): AttendanceDashb
                 ? {status: 'unavailable', freshness: 'missing', lastSyncedAt: null, snapshot: null}
                 : {
                       status: 'available',
-                      freshness: parsed.freshness as 'fresh' | 'stale',
+                      freshness: availableAttendanceFreshness(parsed.freshness),
                       lastSyncedAt: parsed.attendance.collectedAt,
                       snapshot: parsed.attendance,
                       source: 'server',

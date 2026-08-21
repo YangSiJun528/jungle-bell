@@ -4,11 +4,13 @@ import {describe, expect, test, vi} from 'vitest';
 
 import {parseAndScrubInitialPairing} from './pairing-bootstrap';
 
+type ReplaceState = (data: unknown, unused: string, url?: string | URL | null) => void;
+
 describe('initial QR pairing bootstrap', () => {
     const hash = '#pairing=jbp_123&challenge=jbpc_one-time-secret';
 
     test('설치형 PWA는 secret을 메모리에만 반환하고 앱 홈에서 직접 연결한다', () => {
-        const replaceState = vi.fn();
+        const replaceState = vi.fn<ReplaceState>();
 
         const entry = parseAndScrubInitialPairing({
             hash,
@@ -29,7 +31,7 @@ describe('initial QR pairing bootstrap', () => {
     });
 
     test('데스크톱은 모바일용 QR secret을 보존하지 않는다', () => {
-        const replaceState = vi.fn();
+        const replaceState = vi.fn<ReplaceState>();
 
         const entry = parseAndScrubInitialPairing({
             hash,
@@ -47,7 +49,7 @@ describe('initial QR pairing bootstrap', () => {
     });
 
     test('일반 모바일 브라우저는 QR을 설치 안내 handoff로 처리한다', () => {
-        const replaceState = vi.fn();
+        const replaceState = vi.fn<ReplaceState>();
 
         const entry = parseAndScrubInitialPairing({
             hash,
@@ -67,7 +69,7 @@ describe('initial QR pairing bootstrap', () => {
     });
 
     test('데스크톱 일반 웹은 QR secret을 제거하고 공개 홈으로 복귀한다', () => {
-        const replaceState = vi.fn();
+        const replaceState = vi.fn<ReplaceState>();
 
         const entry = parseAndScrubInitialPairing({
             hash,
@@ -84,7 +86,7 @@ describe('initial QR pairing bootstrap', () => {
     });
 
     test('일반 경로는 history를 변경하지 않는다', () => {
-        const replaceState = vi.fn();
+        const replaceState = vi.fn<ReplaceState>();
         expect(
             parseAndScrubInitialPairing({
                 hash: '#laundry',

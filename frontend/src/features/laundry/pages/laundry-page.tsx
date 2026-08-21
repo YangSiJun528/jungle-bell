@@ -35,6 +35,7 @@ export function LaundryPage() {
     const [showRisk, setShowRisk] = useState(riskIndicatorAvailable);
 
     const snapshot = laundry.data;
+    const nowMs = laundry.dataUpdatedAt;
     const reliable =
         snapshot.quality.collectorHealthy &&
         snapshot.quality.collection === 'SUCCESS' &&
@@ -44,7 +45,7 @@ export function LaundryPage() {
             sourceFreshness: snapshot.quality.sourceFreshness,
             expectedRefreshIntervalSeconds: snapshot.quality.expectedRefreshIntervalSeconds,
             snapshotSavedAt: Date.parse(snapshot.asOf),
-            nowMs: Date.now(),
+            nowMs,
         });
     const summaries = capacityCards(snapshot.capacity, reliable);
     const refreshFailed = laundry.isError || manualRefresh.isError;
@@ -154,7 +155,11 @@ export function LaundryPage() {
                 ) : null}
                 <CardContent className="px-4 pt-0 pb-3 sm:px-6">
                     {snapshot.machines.length > 0 ? (
-                        <WashTowerGrid machines={snapshot.machines} showRiskIndicators={showRisk} />
+                        <WashTowerGrid
+                            machines={snapshot.machines}
+                            nowMs={nowMs}
+                            showRiskIndicators={showRisk}
+                        />
                     ) : (
                         <p className="py-5 text-center text-sm text-muted-foreground">
                             표시할 워시타워가 없습니다.
@@ -163,7 +168,11 @@ export function LaundryPage() {
                 </CardContent>
             </Card>
 
-            <LaundryMachineList machines={snapshot.machines} showRiskWarnings={showRisk} />
+            <LaundryMachineList
+                machines={snapshot.machines}
+                nowMs={nowMs}
+                showRiskWarnings={showRisk}
+            />
 
             <PersonalLaundrySection machines={snapshot.machines} />
         </div>

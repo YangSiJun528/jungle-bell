@@ -12,6 +12,7 @@ import {
     dashboardRouteHref,
     dashboardRoutePath,
     dashboardUtilityRoutes,
+    type DashboardRoute,
 } from '../routes';
 import {DashboardShell} from './DashboardShell';
 
@@ -59,7 +60,7 @@ describe('DashboardShell', () => {
             <DashboardShell
                 platform="browser"
                 activeRoute="home"
-                navigate={vi.fn()}
+                navigate={vi.fn<(route: DashboardRoute) => void>()}
                 unreadCount={0}
             >
                 <section data-page-content>공개 홈</section>
@@ -104,7 +105,7 @@ describe('DashboardShell', () => {
             <DashboardShell
                 platform="browser"
                 activeRoute="notifications"
-                navigate={vi.fn()}
+                navigate={vi.fn<(route: DashboardRoute) => void>()}
                 unreadCount={120}
             >
                 <section>알림 목록</section>
@@ -144,7 +145,7 @@ describe('DashboardShell', () => {
             <DashboardShell
                 platform="desktop"
                 activeRoute="home"
-                navigate={vi.fn()}
+                navigate={vi.fn<(route: DashboardRoute) => void>()}
                 unreadCount={7}
             >
                 <section>홈</section>
@@ -154,7 +155,7 @@ describe('DashboardShell', () => {
             <DashboardShell
                 platform="desktop"
                 activeRoute="home"
-                navigate={vi.fn()}
+                navigate={vi.fn<(route: DashboardRoute) => void>()}
                 unreadCount={0}
             >
                 <section>홈</section>
@@ -170,7 +171,7 @@ describe('DashboardShell', () => {
             <DashboardShell
                 platform="browser"
                 activeRoute="home"
-                navigate={vi.fn()}
+                navigate={vi.fn<(route: DashboardRoute) => void>()}
                 unreadCount={0}
             >
                 <section>홈</section>

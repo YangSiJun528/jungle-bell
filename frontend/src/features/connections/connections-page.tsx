@@ -99,6 +99,8 @@ function DesktopConnections() {
         account.status.lmsAuthentication === 'authenticated' && serverSessionReady(account.status);
 
     const connection = useDesktopConnectionQuery();
+    const connectionState = connection.data?.state;
+    const refetchConnection = connection.refetch;
     const sessions = useQuery({
         queryKey: queryKeys.mobileSessions,
         queryFn: () => api.listMobileSessions(),
@@ -122,10 +124,14 @@ function DesktopConnections() {
     }, [client, pairingStatus.data?.status]);
 
     useEffect(() => {
-        if (connection.data?.state === 'disconnected' && sessions.isSuccess) {
-            void connection.refetch();
+        if (
+            connectionState === 'disconnected' &&
+            sessions.isSuccess &&
+            sessions.dataUpdatedAt > 0
+        ) {
+            void refetchConnection();
         }
-    }, [connection.data?.state, connection.refetch, sessions.dataUpdatedAt, sessions.isSuccess]);
+    }, [connectionState, refetchConnection, sessions.dataUpdatedAt, sessions.isSuccess]);
 
     const createPairing = useMutation({
         mutationFn: () => {
@@ -525,7 +531,8 @@ export function CompanionConnections({
     const [manualCode, setManualCode] = useState('');
     const [message, setMessage] = useState('');
     const pairingStartGate = useRef({inFlight: false, automaticHandled: false});
-    const initialPairing = useMemo(readInitialPairingEntry, []);
+    const [automaticPairingHandled, setAutomaticPairingHandled] = useState(false);
+    const [initialPairing] = useState(readInitialPairingEntry);
     const pairingLink = initialPairing?.kind === 'companion' ? initialPairing.link : null;
     const [restoredPairing] = useState(() => {
         const storage = pairingSessionStorage();
@@ -604,6 +611,7 @@ export function CompanionConnections({
         onMutate: () => client.cancelQueries({queryKey: queryKeys.accountSession, exact: true}),
         onSuccess: () => {
             removeBrowserPersonalQueries(client);
+            setAutomaticPairingHandled(true);
             setMessage('이 모바일 연결을 해제했습니다.');
         },
     });
@@ -612,6 +620,9 @@ export function CompanionConnections({
     const startClaim = useCallback(
         (input: PairingClaimStart) => {
             if (!tryReservePairingStart(pairingStartGate.current)) return;
+            // Reservation is a pairing state-machine transition, not synchronization from props.
+            // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change
+            setAutomaticPairingHandled(true);
             claim.mutate(input, {
                 onSettled: () => releasePairingStart(pairingStartGate.current),
             });
@@ -622,7 +633,7 @@ export function CompanionConnections({
     useEffect(() => {
         const action = automaticPairingAction({
             account: account.personalAccess.status,
-            alreadyHandled: pairingStartGate.current.automaticHandled,
+            alreadyHandled: automaticPairingHandled,
             hasRestoredPairing: restoredPairing !== null,
             hasQrLink: pairingLink !== null,
             canClaimHandoff: platform.pwa.installed,
@@ -646,6 +657,7 @@ export function CompanionConnections({
         }
     }, [
         account.personalAccess.status,
+        automaticPairingHandled,
         pairingLink,
         platform.pwa.installed,
         restoredPairing,
@@ -654,7 +666,8 @@ export function CompanionConnections({
 
     const automaticCheckPending =
         account.personalAccess.status === 'unconnected' &&
-        !pairingStartGate.current.automaticHandled;
+        !automaticPairingHandled &&
+        (restoredPairing !== null || pairingLink !== null || platform.pwa.installed);
     const checking = account.personalAccess.status === 'checking' || automaticCheckPending;
 
     return (

@@ -7,6 +7,15 @@ interface BeforeInstallPromptEvent extends Event {
     userChoice: Promise<{outcome: 'accepted' | 'dismissed'}>;
 }
 
+function isBeforeInstallPromptEvent(event: Event): event is BeforeInstallPromptEvent {
+    return (
+        'prompt' in event &&
+        typeof event.prompt === 'function' &&
+        'userChoice' in event &&
+        event.userChoice instanceof Promise
+    );
+}
+
 export function createPwaCapabilityAdapter(options: {
     production: boolean;
     windowObject?: Window;
@@ -56,8 +65,9 @@ export function createPwaCapabilityAdapter(options: {
         },
         subscribeInstallPrompt(listener): PlatformUnlisten {
             const handle = (event: Event) => {
+                if (!isBeforeInstallPromptEvent(event)) return;
                 event.preventDefault();
-                listener(installPrompt(event as BeforeInstallPromptEvent));
+                listener(installPrompt(event));
             };
             windowObject.addEventListener('beforeinstallprompt', handle);
             return () => windowObject.removeEventListener('beforeinstallprompt', handle);
@@ -89,8 +99,7 @@ function installedPwa(windowObject: Window, navigatorObject: Navigator): boolean
     const standaloneDisplay =
         typeof windowObject.matchMedia === 'function' &&
         windowObject.matchMedia('(display-mode: standalone)').matches;
-    const iosStandalone =
-        (navigatorObject as Navigator & {standalone?: boolean}).standalone === true;
+    const iosStandalone = 'standalone' in navigatorObject && navigatorObject.standalone === true;
     return standaloneDisplay || iosStandalone;
 }
 
@@ -107,5 +116,5 @@ function decodeApplicationServerKey(value: string): ArrayBuffer {
     const padding = '='.repeat((4 - (value.length % 4)) % 4);
     const binary = atob((value + padding).replace(/-/gu, '+').replace(/_/gu, '/'));
     const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
-    return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+    return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 }

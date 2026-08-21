@@ -1,4 +1,4 @@
-import {hasOwn} from '@/lib/object';
+import {hasOwn, isRecord} from '@/lib/object';
 import type {
     DesktopCohortOption,
     DesktopSettings,
@@ -54,8 +54,8 @@ export function createDashboardDesktopSettingsApi(
 }
 
 function parseDesktopUpdateStatus(value: unknown): DesktopUpdateStatus {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidResponse();
-    const source = value as Record<string, unknown>;
+    if (!isRecord(value)) throw invalidResponse();
+    const source = value;
     const keys = ['currentVersion', 'availableVersion', 'mandatory'] as const;
     if (Object.keys(source).length !== keys.length || keys.some((key) => !hasOwn(source, key))) {
         throw invalidResponse();
@@ -80,14 +80,14 @@ function parseDesktopUpdateStatus(value: unknown): DesktopUpdateStatus {
         throw invalidResponse();
     return {
         currentVersion: source.currentVersion,
-        availableVersion: source.availableVersion as string | null,
+        availableVersion: source.availableVersion,
         mandatory: source.mandatory,
     };
 }
 
 function parseDesktopSettings(value: unknown): DesktopSettings {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidResponse();
-    const source = value as Record<string, unknown>;
+    if (!isRecord(value)) throw invalidResponse();
+    const source = value;
     const keys = [
         'appVersion',
         'autoStart',
@@ -100,12 +100,14 @@ function parseDesktopSettings(value: unknown): DesktopSettings {
     if (Object.keys(source).length !== keys.length || keys.some((key) => !hasOwn(source, key))) {
         throw invalidResponse();
     }
+    const {autoStart, autoUpdate, debugMode} = source;
     if (
-        [source.autoStart, source.autoUpdate, source.debugMode].some(
-            (value) => typeof value !== 'boolean',
-        )
-    )
+        typeof autoStart !== 'boolean' ||
+        typeof autoUpdate !== 'boolean' ||
+        typeof debugMode !== 'boolean'
+    ) {
         throw invalidResponse();
+    }
     if (typeof source.appVersion !== 'string' || !APP_VERSION_PATTERN.test(source.appVersion)) {
         throw invalidResponse();
     }
@@ -114,9 +116,9 @@ function parseDesktopSettings(value: unknown): DesktopSettings {
     const effectiveCohortId = nullableCohortId(source.effectiveCohortId);
     return {
         appVersion: source.appVersion,
-        autoStart: source.autoStart as boolean,
-        autoUpdate: source.autoUpdate as boolean,
-        debugMode: source.debugMode as boolean,
+        autoStart,
+        autoUpdate,
+        debugMode,
         selectedCohortId,
         effectiveCohortId,
         cohortOptions,
@@ -149,8 +151,8 @@ function parseCohortOptions(value: unknown): DesktopCohortOption[] {
     if (!Array.isArray(value) || value.length > 32) throw invalidResponse();
     const ids = new Set<string>();
     return value.map((entry) => {
-        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw invalidResponse();
-        const source = entry as Record<string, unknown>;
+        if (!isRecord(entry)) throw invalidResponse();
+        const source = entry;
         const keys = ['id', 'label', 'startDate', 'endDate', 'isActive'];
         if (
             Object.keys(source).length !== keys.length ||
@@ -160,6 +162,7 @@ function parseCohortOptions(value: unknown): DesktopCohortOption[] {
         }
         const id = nullableCohortId(source.id);
         const label = source.label;
+        const isActive = source.isActive;
         if (
             !id ||
             ids.has(id) ||
@@ -167,14 +170,14 @@ function parseCohortOptions(value: unknown): DesktopCohortOption[] {
             label.length < 1 ||
             label.length > 80 ||
             label.trim() !== label ||
-            typeof source.isActive !== 'boolean'
+            typeof isActive !== 'boolean'
         )
             throw invalidResponse();
         const startDate = calendarDate(source.startDate);
         const endDate = source.endDate === null ? null : calendarDate(source.endDate);
         if (endDate && endDate < startDate) throw invalidResponse();
         ids.add(id);
-        return {id, label, startDate, endDate, isActive: source.isActive};
+        return {id, label, startDate, endDate, isActive};
     });
 }
 
@@ -185,7 +188,7 @@ function nullableCohortId(value: unknown, code = 'API_RESPONSE_INVALID'): string
         value.length < 1 ||
         value.length > 128 ||
         value.trim() !== value ||
-        [...value].some((character) => /[\u0000-\u001f\u007f]/u.test(character))
+        Array.from(value).some((character) => /\p{Cc}/u.test(character))
     ) {
         throw new Error(code);
     }

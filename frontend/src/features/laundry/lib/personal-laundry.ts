@@ -93,6 +93,7 @@ export function watchConditionLabel(watch: LaundryWatch): string {
         case 'confirmed-completion':
             return '완료 확정 시점 알림';
     }
+    throw new Error('UNSUPPORTED_LAUNDRY_NOTIFICATION_MODE');
 }
 
 export function buildLaundryWatchInput(

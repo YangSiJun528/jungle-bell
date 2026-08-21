@@ -172,7 +172,9 @@ describe('LaundryMachineList', () => {
             washer: null,
             dryer: null,
         }));
-        const markup = renderToStaticMarkup(<LaundryMachineList machines={nineMachines} />);
+        const markup = renderToStaticMarkup(
+            <LaundryMachineList machines={nineMachines} nowMs={NOW_MS} />,
+        );
 
         expect(markup.match(/data-laundry-machine-card="true"/gu)).toHaveLength(9);
         expect(markup).toContain('auto-rows-fr');

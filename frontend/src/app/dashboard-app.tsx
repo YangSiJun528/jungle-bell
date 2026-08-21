@@ -68,8 +68,18 @@ function DashboardContent() {
     const [notificationPanelRequestedOpen, setNotificationPanelRequestedOpen] = useState(false);
     const [notificationBackgroundRoute, setNotificationBackgroundRoute] =
         useState<DashboardContentRoute>(() => notificationPanelBackgroundRoute('home', route));
+    const [renderedRoute, setRenderedRoute] = useState(route);
     const {installPromptOpen, openInstallPrompt, setInstallPromptVisibility} =
         useInstallPromptVisibility();
+
+    if (renderedRoute !== route) {
+        setRenderedRoute(route);
+        if (route !== 'notifications') {
+            setNotificationBackgroundRoute(route);
+            setNotificationPanelRequestedOpen(false);
+        }
+    }
+
     const contentRoute = notificationPanelBackgroundRoute(notificationBackgroundRoute, route);
     const notificationPanelOpen = route === 'notifications' || notificationPanelRequestedOpen;
 
@@ -92,13 +102,8 @@ function DashboardContent() {
     }, [route]);
 
     useEffect(() => {
-        window.scrollTo({top: 0, left: 0, behavior: 'auto'});
-    }, [contentRoute]);
-
-    useEffect(() => {
         if (route === 'notifications') return;
-        setNotificationBackgroundRoute(route);
-        setNotificationPanelRequestedOpen(false);
+        window.scrollTo({top: 0, left: 0, behavior: 'auto'});
     }, [route]);
 
     const markMobileNotificationsSeen = useCallback((ids: readonly string[]) => {

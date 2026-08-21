@@ -39,6 +39,14 @@ export interface DashboardPersonalApi {
     deleteLaundryWatch(id: string): Promise<void>;
 }
 
+async function responseData<T>(schema: ZodType<T>, response: () => Promise<Response>): Promise<T> {
+    return responseValue(schema, await response());
+}
+
+async function expectNoContent(responseRequest: () => Promise<Response>): Promise<void> {
+    await responseNoContent(await responseRequest());
+}
+
 export function createDashboardPersonalApi(options: {
     httpClient: HttpApiClient;
 }): DashboardPersonalApi {
@@ -59,45 +67,42 @@ export function createDashboardPersonalApi(options: {
         return options.httpClient.accountResponse(accountPath, init);
     };
 
-    const value = async <T>(schema: ZodType<T>, response: () => Promise<Response>): Promise<T> =>
-        responseValue(schema, await response());
-
-    const noContent = async (responseRequest: () => Promise<Response>): Promise<void> => {
-        await responseNoContent(await responseRequest());
-    };
-
     return {
         async getAttendancePreferences() {
-            return value(attendancePreferencesSchema, () =>
+            return responseData(attendancePreferencesSchema, () =>
                 request('GET', '/attendance/preferences'),
             );
         },
         async updateAttendancePreferences(input) {
             const body = parseInput(attendancePreferencesSchema, input);
-            return value(attendancePreferencesSchema, () =>
+            return responseData(attendancePreferencesSchema, () =>
                 request('PUT', '/attendance/preferences', body),
             );
         },
         async getMealPreferences() {
-            return value(mealPreferencesSchema, () => request('GET', '/meal-preferences'));
+            return responseData(mealPreferencesSchema, () => request('GET', '/meal-preferences'));
         },
         async updateMealPreferences(input) {
             const body = parseInput(mealPreferencesInputSchema, input);
-            return value(mealPreferencesSchema, () => request('PUT', '/meal-preferences', body));
+            return responseData(mealPreferencesSchema, () =>
+                request('PUT', '/meal-preferences', body),
+            );
         },
         async listLaundryWatches() {
-            const result = await value(laundryWatchListSchema, () =>
+            const result = await responseData(laundryWatchListSchema, () =>
                 request('GET', '/laundry-watches'),
             );
             return result.watches;
         },
         async createLaundryWatch(input) {
             const body = parseInput(laundryWatchInputSchema, input);
-            return value(laundryWatchSchema, () => request('POST', '/laundry-watches', body));
+            return responseData(laundryWatchSchema, () =>
+                request('POST', '/laundry-watches', body),
+            );
         },
         async deleteLaundryWatch(id) {
             const watchId = parseInput(laundryWatchIdSchema, id);
-            await noContent(() =>
+            await expectNoContent(() =>
                 request('DELETE', `/laundry-watches/${encodeURIComponent(watchId)}`),
             );
         },

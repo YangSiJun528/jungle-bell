@@ -14,15 +14,11 @@ import {
 
 export interface WashTowerGridProps {
     machines: readonly DashboardLaundryMachine[];
-    nowMs?: number;
+    nowMs: number;
     showRiskIndicators?: boolean;
 }
 
-export function WashTowerGrid({
-    machines,
-    nowMs = Date.now(),
-    showRiskIndicators = false,
-}: WashTowerGridProps) {
+export function WashTowerGrid({machines, nowMs, showRiskIndicators = false}: WashTowerGridProps) {
     const towers = sortWashTowers(machines);
     if (towers.length === 0) return null;
 

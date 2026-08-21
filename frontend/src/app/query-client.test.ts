@@ -22,7 +22,7 @@ describe('query retry policy', () => {
         'CONNECTED_SERVICE_CREDENTIAL_STORAGE_FAILED',
         'LMS_AUTH_REQUIRED',
     ])('does not retry terminal session error %s', async (code) => {
-        const queryFn = vi.fn(async () => {
+        const queryFn = vi.fn<() => Promise<never>>(async () => {
             throw new Error(code);
         });
         const client = createJungleBellQueryClient();
@@ -36,7 +36,7 @@ describe('query retry policy', () => {
 
     test('retries one transient failure', async () => {
         const queryFn = vi
-            .fn()
+            .fn<() => Promise<string>>()
             .mockRejectedValueOnce(new Error('HTTP_500'))
             .mockResolvedValueOnce('ok');
         const client = createJungleBellQueryClient();

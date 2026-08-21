@@ -40,6 +40,10 @@ const SUPPORT_ROUTES = ['install'] as const satisfies readonly DashboardRoute[];
 
 const ALL_ROUTES = [...NAVIGATION_ROUTES, ...PERSONAL_UTILITY_ROUTES, ...SUPPORT_ROUTES] as const;
 
+function isDashboardRoute(value: string): value is DashboardRoute {
+    return ALL_ROUTES.some((route) => route === value);
+}
+
 /**
  * Primary navigation stays limited to campus tasks. Notification and device
  * management routes are exposed separately through dashboardUtilityRoutes.
@@ -65,7 +69,7 @@ export function dashboardRouteFromPath(pathname: string): DashboardRoute {
         .trim()
         .toLowerCase()
         .replace(/^\/+|\/+$/gu, '');
-    return ALL_ROUTES.includes(value as DashboardRoute) ? (value as DashboardRoute) : 'home';
+    return isDashboardRoute(value) ? value : 'home';
 }
 
 export function dashboardRouteFromHash(hash: string): DashboardRoute {
@@ -76,6 +80,6 @@ export function normalizeLegacyDashboardHash(hash: string): `#${DashboardRoutePa
     const value = hash.trim().toLowerCase().replace(/^#/u, '');
     if (value === 'setup' || value === '/setup') return '#/install';
     if (value.startsWith('/')) return null;
-    const route = ALL_ROUTES.includes(value as DashboardRoute) ? (value as DashboardRoute) : null;
+    const route = isDashboardRoute(value) ? value : null;
     return route ? dashboardRouteHref(route) : null;
 }

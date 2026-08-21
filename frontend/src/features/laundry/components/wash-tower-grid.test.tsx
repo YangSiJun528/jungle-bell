@@ -88,7 +88,7 @@ describe('WashTowerGrid', () => {
             washer: null,
             dryer: null,
         }));
-        const markup = renderToStaticMarkup(<WashTowerGrid machines={allTowers} />);
+        const markup = renderToStaticMarkup(<WashTowerGrid machines={allTowers} nowMs={NOW_MS} />);
         const positions = Array.from({length: 9}, (_, index) =>
             markup.indexOf(`aria-label="${index + 1}번,`),
         );

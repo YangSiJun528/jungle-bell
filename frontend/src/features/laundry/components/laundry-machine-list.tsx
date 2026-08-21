@@ -22,7 +22,7 @@ import {LaundryZoneBadge} from './laundry-zone-badge';
 
 export interface LaundryMachineListProps {
     machines: readonly DashboardLaundryMachine[];
-    nowMs?: number;
+    nowMs: number;
     showRiskWarnings?: boolean;
 }
 
@@ -176,7 +176,7 @@ function ApplianceDetail({
 
 export function LaundryMachineList({
     machines,
-    nowMs = Date.now(),
+    nowMs,
     showRiskWarnings = false,
 }: LaundryMachineListProps) {
     const titleId = useId();

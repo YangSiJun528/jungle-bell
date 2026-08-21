@@ -6,8 +6,8 @@ import {DesktopUpdateGate} from './desktop-update-gate';
 const {environment, updateQuery} = vi.hoisted(() => ({
     environment: {
         platform: {kind: 'browser', capabilities: {desktopSettings: false}},
-        checkDesktopUpdate: vi.fn(),
-        installDesktopUpdate: vi.fn(),
+        checkDesktopUpdate: vi.fn<() => Promise<unknown>>(),
+        installDesktopUpdate: vi.fn<() => Promise<void>>(),
     },
     updateQuery: {
         data: undefined as
@@ -20,7 +20,7 @@ const {environment, updateQuery} = vi.hoisted(() => ({
         isError: false,
         isPending: false,
         isFetching: false,
-        refetch: vi.fn(),
+        refetch: vi.fn<() => Promise<unknown>>(),
     },
 }));
 

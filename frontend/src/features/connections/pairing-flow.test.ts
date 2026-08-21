@@ -10,8 +10,10 @@ import {
 
 describe('mobile pairing flow', () => {
     test('루트 게이트의 연결 완료는 현재 URL을 유지한 채 세션만 다시 확인한다', async () => {
-        const navigate = vi.fn().mockResolvedValue(undefined);
-        const refreshSession = vi.fn().mockResolvedValue(undefined);
+        const navigate = vi
+            .fn<(path: '/connections' | '/home') => Promise<unknown>>()
+            .mockResolvedValue(undefined);
+        const refreshSession = vi.fn<() => Promise<unknown>>().mockResolvedValue(undefined);
 
         await finishCompanionPairing({completionPath: null, navigate, refreshSession});
 
@@ -21,11 +23,11 @@ describe('mobile pairing flow', () => {
 
     test('일시적인 네트워크 오류 뒤 완료를 계속 확인한다', async () => {
         const complete = vi
-            .fn()
+            .fn<(pairingId: string) => Promise<'completed' | 'waiting'>>()
             .mockRejectedValueOnce(new Error('NETWORK_ERROR'))
             .mockResolvedValueOnce('waiting')
             .mockResolvedValueOnce('completed');
-        const pause = vi.fn().mockResolvedValue(undefined);
+        const pause = vi.fn<(milliseconds: number) => Promise<void>>().mockResolvedValue(undefined);
 
         await waitForPairingCompletion({pairingId: 'pairing', complete, pause});
 
@@ -35,8 +37,10 @@ describe('mobile pairing flow', () => {
     });
 
     test('만료 오류는 즉시 중단한다', async () => {
-        const complete = vi.fn().mockRejectedValue(new Error('PAIRING_EXPIRED'));
-        const pause = vi.fn().mockResolvedValue(undefined);
+        const complete = vi
+            .fn<(pairingId: string) => Promise<'completed' | 'waiting'>>()
+            .mockRejectedValue(new Error('PAIRING_EXPIRED'));
+        const pause = vi.fn<(milliseconds: number) => Promise<void>>().mockResolvedValue(undefined);
         await expect(
             waitForPairingCompletion({pairingId: 'pairing', complete, pause}),
         ).rejects.toThrow('PAIRING_EXPIRED');
@@ -44,8 +48,10 @@ describe('mobile pairing flow', () => {
     });
 
     test('기본 승인 대기는 10분 pairing 유효 시간에 맞춰 600회 확인한다', async () => {
-        const complete = vi.fn().mockResolvedValue('waiting');
-        const pause = vi.fn().mockResolvedValue(undefined);
+        const complete = vi
+            .fn<(pairingId: string) => Promise<'completed' | 'waiting'>>()
+            .mockResolvedValue('waiting');
+        const pause = vi.fn<(milliseconds: number) => Promise<void>>().mockResolvedValue(undefined);
 
         await expect(
             waitForPairingCompletion({pairingId: 'pairing', complete, pause}),
@@ -57,8 +63,12 @@ describe('mobile pairing flow', () => {
 
     test('pending receipt가 없거나 잘못된 복원은 즉시 중단한다', async () => {
         for (const code of ['PAIRING_RECEIPT_INVALID', 'PAIRING_RECEIPT_MISSING']) {
-            const complete = vi.fn().mockRejectedValue(new Error(code));
-            const pause = vi.fn().mockResolvedValue(undefined);
+            const complete = vi
+                .fn<(pairingId: string) => Promise<'completed' | 'waiting'>>()
+                .mockRejectedValue(new Error(code));
+            const pause = vi
+                .fn<(milliseconds: number) => Promise<void>>()
+                .mockResolvedValue(undefined);
 
             await expect(
                 waitForPairingCompletion({pairingId: 'pairing', complete, pause}),

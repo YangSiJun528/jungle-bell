@@ -31,6 +31,7 @@ describe('notification panel routing', () => {
         expect(dashboardAppSource).toContain(
             "if (!open && route === 'notifications') navigate(contentRoute, true);",
         );
-        expect(dashboardAppSource).toContain('}, [contentRoute]);');
+        expect(dashboardAppSource).toContain('if (renderedRoute !== route) {');
+        expect(dashboardAppSource).toContain("if (route === 'notifications') return;");
     });
 });

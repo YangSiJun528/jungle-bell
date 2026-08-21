@@ -1,4 +1,4 @@
-import {hasOwn} from '@/lib/object';
+import {hasOwn, isRecord} from '@/lib/object';
 
 export const PENDING_MOBILE_PAIRING_KEY = 'jungle-bell:pending-mobile-pairing';
 const PENDING_MOBILE_PAIRING_TTL_MS = 10 * 60_000;
@@ -62,16 +62,10 @@ export function clearPendingMobilePairing(storage: PairingSessionStorage): void 
 }
 
 function validPending(value: unknown, nowEpochMs: number): value is PendingMobilePairing {
-    if (
-        !Number.isSafeInteger(nowEpochMs) ||
-        nowEpochMs < 0 ||
-        !value ||
-        typeof value !== 'object' ||
-        Array.isArray(value)
-    ) {
+    if (!Number.isSafeInteger(nowEpochMs) || nowEpochMs < 0 || !isRecord(value)) {
         return false;
     }
-    const source = value as Record<string, unknown>;
+    const source = value;
     const keys = Object.keys(source);
     if (
         keys.length !== 3 ||

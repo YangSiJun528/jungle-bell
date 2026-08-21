@@ -27,11 +27,8 @@ test('manifest는 모바일 standalone 설치와 최소 아이콘을 선언한�
 });
 
 test('PWA 아이콘과 웹 파비콘은 정글벨 나침반 심볼을 공유한다', () => {
-    assert.match(
-        vite,
-        /rel=\"icon\" href=\"\.\/icons\/icon-32\.png\" type=\"image\/png\" sizes=\"32x32\"/,
-    );
-    assert.match(vite, /rel=\"icon\" href=\"\.\/icons\/icon\.svg\" type=\"image\/svg\+xml\"/);
+    assert.match(vite, /rel="icon" href="\.\/icons\/icon-32\.png" type="image\/png" sizes="32x32"/);
+    assert.match(vite, /rel="icon" href="\.\/icons\/icon\.svg" type="image\/svg\+xml"/);
     assert.match(webIcon, /fill="#00CF8A"/);
     assert.match(webIcon, /M512 896a384 384 0 1 0 0-768/);
     assert.match(webIcon, /M725\.888 315\.008C676\.48 428\.672/);

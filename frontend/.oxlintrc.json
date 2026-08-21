@@ -1,0 +1,124 @@
+{
+    "$schema": "./node_modules/oxlint/configuration_schema.json",
+    "plugins": [
+        "eslint",
+        "typescript",
+        "unicorn",
+        "oxc",
+        "react",
+        "import",
+        "vitest",
+        "jsx-a11y",
+        "promise",
+        "node"
+    ],
+    "categories": {
+        "correctness": "error",
+        "suspicious": "error"
+    },
+    "env": {
+        "browser": true,
+        "es2022": true
+    },
+    "globals": {
+        "__JUNGLE_BELL_TARGET__": "readonly",
+        "__JUNGLE_BELL_BUILD_CONFIG__": "readonly"
+    },
+    "settings": {
+        "react": {
+            "version": "19.2"
+        }
+    },
+    "ignorePatterns": ["dist/**", "coverage/**"],
+    "options": {
+        "typeAware": true,
+        "typeCheck": false,
+        "denyWarnings": true,
+        "reportUnusedDisableDirectives": "error",
+        "respectEslintDisableDirectives": false
+    },
+    "rules": {
+        "react/react-in-jsx-scope": "off",
+        "react/no-unstable-nested-components": [
+            "error",
+            {
+                "allowAsProps": true
+            }
+        ],
+        "unicorn/no-array-sort": "off",
+        "import/no-unassigned-import": [
+            "error",
+            {
+                "allow": ["**/*.css"]
+            }
+        ],
+        "eslint/no-underscore-dangle": [
+            "error",
+            {
+                "allow": [
+                    "__JUNGLE_BELL_TARGET__",
+                    "__JUNGLE_BELL_BUILD_CONFIG__",
+                    "__TAURI__",
+                    "__WB_MANIFEST"
+                ]
+            }
+        ]
+    },
+    "overrides": [
+        {
+            "files": ["vite.config.ts", "scripts/**/*.mjs"],
+            "env": {
+                "browser": false,
+                "node": true
+            },
+            "rules": {
+                "typescript/no-unsafe-type-assertion": "off"
+            }
+        },
+        {
+            "files": ["src/platform/pwa/service-worker/**/*.js"],
+            "env": {
+                "browser": false,
+                "serviceworker": true
+            }
+        },
+        {
+            "files": ["**/*.test.ts", "**/*.test.tsx"],
+            "env": {
+                "node": true
+            },
+            "rules": {
+                "typescript/no-unsafe-type-assertion": "off",
+                "typescript/no-base-to-string": "off",
+                "typescript/no-extraneous-class": "off",
+                "react/globals": "off",
+                "unicorn/consistent-function-scoping": "off"
+            }
+        },
+        {
+            "files": ["src/tests/contracts/**/*.test.ts"],
+            "rules": {
+                "vitest/valid-expect": "off"
+            }
+        },
+        {
+            "files": [
+                "src/components/app-showcase/tray-icon.tsx",
+                "src/components/dashboard/async-state.tsx",
+                "src/components/dashboard/dday-card.tsx",
+                "src/features/laundry/components/wash-tower-grid.tsx",
+                "src/features/meals/components/meal-post-card.tsx",
+                "src/features/meals/components/weekly-meal-menu.tsx"
+            ],
+            "rules": {
+                "jsx-a11y/prefer-tag-over-role": "off"
+            }
+        },
+        {
+            "files": ["src/features/laundry/components/wash-tower-grid.tsx"],
+            "rules": {
+                "jsx-a11y/no-noninteractive-tabindex": "off"
+            }
+        }
+    ]
+}
