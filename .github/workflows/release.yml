@@ -22,7 +22,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       actions: read
-      contents: read
+      contents: write
     outputs:
       tag: ${{ steps.info.outputs.tag }}
       sha: ${{ steps.info.outputs.sha }}

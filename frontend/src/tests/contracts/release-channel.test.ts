@@ -139,6 +139,11 @@ test('데스크톱 릴리스는 exact SHA의 CI 통과 후 서명·공개 환경
     assert.match(releaseWorkflow, /cancel-in-progress:\s*false/u);
     assert.match(releaseWorkflow, /^\s*prepare-release:\s*$/mu);
     assert.match(releaseWorkflow, /actions:\s*read/u);
+    const prepareRelease = releaseWorkflow.slice(
+        releaseWorkflow.indexOf('  prepare-release:'),
+        releaseWorkflow.indexOf('  publish-tauri:'),
+    );
+    assert.match(prepareRelease, /permissions:\s*\n\s+actions:\s*read\s*\n\s+contents:\s*write/u);
     assert.match(releaseWorkflow, /git merge-base --is-ancestor "\$SHA" origin\/main/u);
     assert.match(
         releaseWorkflow,
