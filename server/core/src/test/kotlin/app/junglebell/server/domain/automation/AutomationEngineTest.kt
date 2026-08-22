@@ -146,12 +146,13 @@ class AutomationEngineTest {
     }
 
     @Test
-    fun `attendance fallback guidance keeps the deadline countdown`() {
+    fun `attendance fallback guidance reports unavailable state without claiming action is required`() {
         val offline = attendanceRecordAt(
             "2026-08-20T09:30:00+09:00",
             phase = "morning",
             devices = emptyList(),
         )
+        assertEquals("학습 시작 상태를 확인할 수 없습니다", offline.title)
         assertEquals(
             "10:00 마감까지 30분 남았습니다. " +
                 "PC가 연결되지 않아 출석 상태를 확인할 수 없습니다. LMS에서 직접 확인해 주세요.",
@@ -159,15 +160,145 @@ class AutomationEngineTest {
         )
 
         val loginRequired = attendanceRecordAt(
-            "2026-08-21T03:45:00+09:00",
+            "2026-08-21T00:30:00+09:00",
             phase = "evening",
-            devices = listOf(DesktopState(epoch("2026-08-21T03:45:00+09:00"), "login-required")),
+            devices = listOf(DesktopState(epoch("2026-08-21T00:30:00+09:00"), "login-required")),
         )
+        assertEquals("학습 종료 상태를 확인할 수 없습니다", loginRequired.title)
         assertEquals(
-            "04:00 마감까지 15분 남았습니다. " +
+            "04:00 마감까지 3시간 30분 남았습니다. " +
                 "PC의 LMS 로그인이 만료되어 출석 상태를 확인할 수 없습니다. LMS에서 직접 확인해 주세요.",
             loginRequired.body,
         )
+
+        val morningDeadline = attendanceRecordAt(
+            "2026-08-20T10:05:00+09:00",
+            phase = "morning",
+            devices = emptyList(),
+        )
+        val eveningDeadline = attendanceRecordAt(
+            "2026-08-21T00:05:00+09:00",
+            phase = "evening",
+            eveningEndHour = 0,
+            devices = emptyList(),
+        )
+        assertEquals("학습 시작 상태를 확인할 수 없습니다", morningDeadline.title)
+        assertEquals("학습 종료 상태를 확인할 수 없습니다", eveningDeadline.title)
+        assertNull(
+            attendanceRecordAtOrNull(
+                "2026-08-21T00:10:00+09:00",
+                phase = "evening",
+                eveningEndHour = 0,
+                devices = emptyList(),
+            ),
+        )
+    }
+
+    @Test
+    fun `unavailable morning attendance uses at most first followup and deadline slots`() {
+        val records = listOf(
+            attendanceRecordAt("2026-08-20T04:00:00+09:00", "morning", morningStartHour = 4, devices = emptyList()),
+            attendanceRecordAt("2026-08-20T05:59:00+09:00", "morning", morningStartHour = 4, devices = emptyList()),
+            attendanceRecordAt("2026-08-20T06:00:00+09:00", "morning", morningStartHour = 4, devices = emptyList()),
+            attendanceRecordAt("2026-08-20T09:59:00+09:00", "morning", morningStartHour = 4, devices = emptyList()),
+            attendanceRecordAt("2026-08-20T10:00:00+09:00", "morning", morningStartHour = 4, devices = emptyList()),
+            attendanceRecordAt("2026-08-20T10:09:00+09:00", "morning", morningStartHour = 4, devices = emptyList()),
+        )
+
+        assertEquals(
+            listOf(
+                "attendance:2026-08-20:morning:0400",
+                "attendance:2026-08-20:morning:0400",
+                "attendance:2026-08-20:morning:0600",
+                "attendance:2026-08-20:morning:0600",
+                "attendance:2026-08-20:morning:1000",
+                "attendance:2026-08-20:morning:1000",
+            ),
+            records.map(NotificationRecord::sourceEventId),
+        )
+        assertNull(
+            attendanceRecordAtOrNull(
+                "2026-08-20T10:10:00+09:00",
+                "morning",
+                morningStartHour = 4,
+                devices = emptyList(),
+            ),
+        )
+    }
+
+    @Test
+    fun `unavailable evening attendance only uses eleven and midnight slots`() {
+        val offlineAtEleven = attendanceRecordAt(
+            "2026-08-20T23:30:00+09:00",
+            "evening",
+            devices = emptyList(),
+        )
+        val loginRequiredAtMidnight = attendanceRecordAt(
+            "2026-08-21T00:30:00+09:00",
+            "evening",
+            devices = listOf(DesktopState(epoch("2026-08-21T00:30:00+09:00"), "login-required")),
+        )
+        val loginRequiredAtEleven = attendanceRecordAt(
+            "2026-08-20T23:45:00+09:00",
+            "evening",
+            devices = listOf(DesktopState(epoch("2026-08-20T23:45:00+09:00"), "login-required")),
+        )
+        val unknownAtEleven = attendanceRecordAt(
+            "2026-08-20T23:50:00+09:00",
+            "evening",
+            devices = listOf(DesktopState(epoch("2026-08-20T23:50:00+09:00"), "unknown")),
+        )
+
+        assertEquals("attendance:2026-08-20:evening:2300", offlineAtEleven.sourceEventId)
+        assertEquals(offlineAtEleven.sourceEventId, loginRequiredAtEleven.sourceEventId)
+        assertEquals(offlineAtEleven.sourceEventId, unknownAtEleven.sourceEventId)
+        assertEquals("attendance:2026-08-20:evening:0000", loginRequiredAtMidnight.sourceEventId)
+        for (time in listOf("2026-08-21T01:00:00+09:00", "2026-08-21T03:45:00+09:00", "2026-08-21T04:05:00+09:00")) {
+            assertNull(attendanceRecordAtOrNull(time, "evening", devices = emptyList()), time)
+        }
+        assertNull(
+            attendanceRecordAtOrNull(
+                "2026-08-21T03:45:00+09:00",
+                "evening",
+                snapshotAgeMinutes = 16,
+            ),
+        )
+    }
+
+    @Test
+    fun `connected attendance keeps the configured interval slots`() {
+        assertEquals(
+            "attendance:2026-08-20:evening:0000",
+            attendanceRecordAt(
+                "2026-08-21T00:29:00+09:00",
+                "evening",
+                intervalMinutes = 30,
+            ).sourceEventId,
+        )
+        assertEquals(
+            "attendance:2026-08-20:evening:0030",
+            attendanceRecordAt(
+                "2026-08-21T00:30:00+09:00",
+                "evening",
+                intervalMinutes = 30,
+            ).sourceEventId,
+        )
+        assertEquals(
+            "attendance:2026-08-20:evening:0400",
+            attendanceRecordAt("2026-08-21T04:05:00+09:00", "evening").sourceEventId,
+        )
+        assertEquals(
+            "attendance:2026-08-20:evening:0345",
+            attendanceRecordAt(
+                "2026-08-21T03:45:00+09:00",
+                "evening",
+                devices = listOf(
+                    DesktopState(epoch("2026-08-21T03:45:00+09:00"), "connected"),
+                    DesktopState(epoch("2026-08-21T03:45:00+09:00"), "login-required"),
+                ),
+            ).sourceEventId,
+        )
+        assertNull(attendanceRecordAtOrNull("2026-08-21T04:10:00+09:00", "evening"))
     }
 
     @Test
@@ -287,7 +418,29 @@ class AutomationEngineTest {
         morningStartHour: Int = 9,
         eveningEndHour: Int = 4,
         devices: List<DesktopState>? = null,
-    ): NotificationRecord {
+        snapshotAgeMinutes: Long = 0,
+        intervalMinutes: Int = 15,
+    ): NotificationRecord = checkNotNull(
+        attendanceRecordAtOrNull(
+            localTime,
+            phase,
+            morningStartHour,
+            eveningEndHour,
+            devices,
+            snapshotAgeMinutes,
+            intervalMinutes,
+        ),
+    ) { "Expected an attendance notification at $localTime for $phase." }
+
+    private fun attendanceRecordAtOrNull(
+        localTime: String,
+        phase: String,
+        morningStartHour: Int = 9,
+        eveningEndHour: Int = 4,
+        devices: List<DesktopState>? = null,
+        snapshotAgeMinutes: Long = 0,
+        intervalMinutes: Int = 15,
+    ): NotificationRecord? {
         val now = epoch(localTime)
         val local = Instant.ofEpochMilli(now).atZone(ZoneId.of("Asia/Seoul"))
         val attendanceDate = if (phase == "evening" && local.hour < 23) {
@@ -302,15 +455,15 @@ class AutomationEngineTest {
             evening = phase == "evening",
             morningStartHour = morningStartHour,
             eveningEndHour = eveningEndHour,
-            morningIntervalMinutes = 15,
-            eveningIntervalMinutes = 15,
+            morningIntervalMinutes = intervalMinutes,
+            eveningIntervalMinutes = intervalMinutes,
             skipSunday = false,
             skipAttendanceDate = null,
             attendanceDate = attendanceDate.toString(),
             cohortStatus = "active",
             morningChecked = phase == "evening",
             eveningChecked = false,
-            collectedAtEpochMs = now,
+            collectedAtEpochMs = now - snapshotAgeMinutes * 60_000,
         )
         val automation = mock(AutomationStore::class.java)
         `when`(automation.attendancePreferences()).thenReturn(listOf(candidate))
@@ -328,8 +481,8 @@ class AutomationEngineTest {
 
         engine.planAttendance(now)
 
-        val creation = mockingDetails(notifications).invocations.single { it.method.name == "create" }
-        return creation.arguments.single() as NotificationRecord
+        val creation = mockingDetails(notifications).invocations.singleOrNull { it.method.name == "create" }
+        return creation?.arguments?.single() as NotificationRecord?
     }
 
     private fun epoch(value: String): Long = OffsetDateTime.parse(value).toInstant().toEpochMilli()

@@ -16,6 +16,8 @@ import java.util.UUID
 
 private const val MINUTE_MILLIS = 60_000L
 private val ATTENDANCE_TIME_ZONE = ZoneId.of("Asia/Seoul")
+private val ATTENDANCE_SNAPSHOT_FRESHNESS = Duration.ofMinutes(15)
+private val DESKTOP_HEARTBEAT_FRESHNESS = Duration.ofMinutes(10)
 
 internal data class AttendanceNotificationCopy(
     val kind: String,
@@ -80,6 +82,7 @@ internal fun attendanceNotificationCopy(
     }
     val morningGrace = phase == "morning" && deadline && timing.remainingMinutes != null
     val title = when {
+        fallbackReason != null -> "$label 상태를 확인할 수 없습니다"
         morningGrace -> "학습 시작 체크 지각 임박"
         deadline -> "$label 체크 마감"
         else -> "$label 체크가 필요합니다"
@@ -97,6 +100,8 @@ internal fun attendanceNotificationCopy(
         "desktop-offline" -> "PC가 연결되지 않아 출석 상태를 확인할 수 없습니다. LMS에서 직접 확인해 주세요."
         "login-required" ->
             "PC의 LMS 로그인이 만료되어 출석 상태를 확인할 수 없습니다. LMS에서 직접 확인해 주세요."
+        "status-unknown" ->
+            "PC에서 최신 출석 상태를 확인하지 못했습니다. LMS에서 직접 확인해 주세요."
         else -> if (deadline && timing.remainingMinutes == null) "지금 LMS에서 확인해 주세요." else null
     }
     val body = listOfNotNull(timingBody, guidance).joinToString(" ")
@@ -160,11 +165,21 @@ class AutomationEngine(
         val desktopStates = automation.desktopStatesByUser()
         for (candidate in automation.attendancePreferences()) {
             for (phase in listOf("morning", "evening")) {
-                val window = attendanceWindow(candidate, phase, now) ?: continue
-                if (candidate.skipAttendanceDate == window.attendanceDate.toString()) continue
-                if (candidate.skipSunday && window.attendanceDate.dayOfWeek == DayOfWeek.SUNDAY) continue
-                if (attendanceAlreadyHandled(candidate, phase, window, now)) continue
-                val reason = attendanceFallbackReason(desktopStates[candidate.userId].orEmpty(), now)
+                val activeWindow = attendanceWindow(candidate, phase, now) ?: continue
+                if (candidate.skipAttendanceDate == activeWindow.attendanceDate.toString()) continue
+                if (candidate.skipSunday && activeWindow.attendanceDate.dayOfWeek == DayOfWeek.SUNDAY) continue
+                if (attendanceAlreadyHandled(candidate, phase, activeWindow, now)) continue
+                val reason = attendanceFallbackReason(
+                    candidate,
+                    desktopStates[candidate.userId].orEmpty(),
+                    activeWindow.attendanceDate,
+                    now,
+                )
+                val window = if (reason == null) {
+                    activeWindow
+                } else {
+                    unavailableAttendanceWindow(candidate, phase, activeWindow.attendanceDate, now) ?: continue
+                }
                 val record = attendanceNotification(candidate.userId, phase, window, reason, now)
                 if (notifications.create(record)) created += 1
             }
@@ -274,18 +289,29 @@ class AutomationEngine(
         if (candidate.attendanceDate != window.attendanceDate.toString()) return false
         if (phase == "morning" && candidate.morningChecked == true) return true
         if (phase == "evening" && candidate.eveningChecked == true) return true
-        val fresh = candidate.collectedAtEpochMs?.let { now - it in 0..Duration.ofMinutes(15).toMillis() } == true
+        val fresh = candidate.collectedAtEpochMs?.let { now - it in 0..ATTENDANCE_SNAPSHOT_FRESHNESS.toMillis() } == true
         return fresh && candidate.cohortStatus in setOf("upcoming", "ended", "none")
     }
 
-    private fun attendanceFallbackReason(devices: List<DesktopState>, now: Long): String? {
+    private fun attendanceFallbackReason(
+        candidate: AttendanceCandidate,
+        devices: List<DesktopState>,
+        attendanceDate: LocalDate,
+        now: Long,
+    ): String? {
         val recent = devices.filter { device ->
-            device.lastSeenAtEpochMs?.let { now - it in 0..Duration.ofMinutes(10).toMillis() } == true
+            device.lastSeenAtEpochMs?.let { now - it in 0..DESKTOP_HEARTBEAT_FRESHNESS.toMillis() } == true
         }
+        val snapshotFresh = candidate.attendanceDate == attendanceDate.toString() &&
+            candidate.collectedAtEpochMs?.let {
+                now - it in 0..ATTENDANCE_SNAPSHOT_FRESHNESS.toMillis()
+            } == true
         return when {
             recent.isEmpty() -> "desktop-offline"
-            recent.all { it.lmsSessionState != "connected" } && recent.any { it.lmsSessionState == "login-required" } ->
+            recent.none { it.lmsSessionState == "connected" } && recent.any { it.lmsSessionState == "login-required" } ->
                 "login-required"
+            recent.none { it.lmsSessionState == "connected" } -> "status-unknown"
+            !snapshotFresh -> "status-unknown"
             else -> null
         }
     }
@@ -349,6 +375,46 @@ class AutomationEngine(
             val deadline = attendanceDate.plusDays(1).atTime(candidate.eveningEndHour, 0).atZone(kst)
             alignedWindow(local, start, deadline, candidate.eveningIntervalMinutes, attendanceDate, phase)
         }
+    }
+
+    private fun unavailableAttendanceWindow(
+        candidate: AttendanceCandidate,
+        phase: String,
+        attendanceDate: LocalDate,
+        now: Long,
+    ): AttendanceWindow? {
+        val local = Instant.ofEpochMilli(now).atZone(kst)
+        val (due, ends, deadline) = if (phase == "morning") {
+            val start = attendanceDate.atTime(candidate.morningStartHour, 0).atZone(kst)
+            val deadline = attendanceDate.atTime(10, 0).atZone(kst)
+            val graceEnd = deadline.plusMinutes(10)
+            val followUp = start.plusHours(2)
+            when {
+                !local.isBefore(deadline) -> Triple(deadline, graceEnd, deadline)
+                followUp.isBefore(deadline) && !local.isBefore(followUp) -> Triple(followUp, deadline, deadline)
+                else -> Triple(start, minOf(followUp, deadline), deadline)
+            }
+        } else {
+            val start = attendanceDate.atTime(23, 0).atZone(kst)
+            val midnight = attendanceDate.plusDays(1).atStartOfDay(kst)
+            val deadline = attendanceDate.plusDays(1).atTime(candidate.eveningEndHour, 0).atZone(kst)
+            val unavailableEnd = minOf(midnight.plusHours(1), deadline.plusMinutes(10))
+            if (!local.isBefore(unavailableEnd)) return null
+            if (local.isBefore(midnight)) {
+                Triple(start, midnight, deadline)
+            } else {
+                Triple(midnight, unavailableEnd, deadline)
+            }
+        }
+        return AttendanceWindow(
+            attendanceDate = attendanceDate,
+            phase = phase,
+            slot = "%02d%02d".format(due.hour, due.minute),
+            deadline = !local.isBefore(deadline),
+            deadlineAtEpochMs = deadline.toInstant().toEpochMilli(),
+            dueAtEpochMs = due.toInstant().toEpochMilli(),
+            endsAtEpochMs = ends.toInstant().toEpochMilli(),
+        )
     }
 
     private fun alignedWindow(
