@@ -2,6 +2,7 @@ name: CI
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   push:
     branches: [main]
   workflow_dispatch:
@@ -15,6 +16,7 @@ permissions:
 
 jobs:
   hygiene:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -29,6 +31,7 @@ jobs:
       - run: prek run --all-files --group hygiene --show-diff-on-failure
 
   web:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -46,6 +49,7 @@ jobs:
         working-directory: frontend
 
   server:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -80,6 +84,7 @@ jobs:
         run: docker build --target worker-runtime --file server/Dockerfile .
 
   desktop:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     name: desktop (${{ matrix.os }})
     strategy:
       fail-fast: false
@@ -112,7 +117,7 @@ jobs:
 
   required:
     name: required
-    if: ${{ always() }}
+    if: ${{ always() && (github.event_name != 'pull_request' || github.event.pull_request.draft == false) }}
     needs: [hygiene, web, server, desktop]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
