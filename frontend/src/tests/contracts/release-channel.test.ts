@@ -166,6 +166,9 @@ test('데스크톱 릴리스는 exact SHA의 CI 통과 후 서명·공개 환경
     assert.match(releaseWorkflow, /Jungle\.Bell_\$\{VERSION\}_aarch64\.tar\.gz/u);
     assert.match(releaseWorkflow, /Jungle\.Bell_\$\{VERSION\}_x64\.tar\.gz/u);
     assert.match(releaseWorkflow, /Jungle\.Bell_\$\{VERSION\}_x64-setup\.exe/u);
+    assert.equal(releaseWorkflow.match(/\. as \$manifest/gu)?.length, 3);
+    assert.equal(releaseWorkflow.match(/\$manifest\.platforms\[\$platform\]/gu)?.length, 6);
+    assert.doesNotMatch(releaseWorkflow, /\(\.platforms\[\$platform\]/u);
 
     const publishRelease = releaseWorkflow.indexOf('publish-release:');
     assert.ok(publishRelease >= 0);

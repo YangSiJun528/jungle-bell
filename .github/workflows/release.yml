@@ -328,14 +328,15 @@ jobs:
             --pattern latest-v2.json --dir "$MANIFEST_DIR"
           jq -e --arg version "$VERSION" \
             --arg prefix "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/" '
-            .version == $version
+            . as $manifest
+            | ($manifest.version == $version)
               and ([
                 "darwin-aarch64",
                 "darwin-x86_64",
                 "windows-x86_64"
               ] | all(. as $platform
-                | (.platforms[$platform].signature | type == "string" and length > 0)
-                  and (.platforms[$platform].url | type == "string" and startswith($prefix))
+                | ($manifest.platforms[$platform].signature | type == "string" and length > 0)
+                  and ($manifest.platforms[$platform].url | type == "string" and startswith($prefix))
               ))
           ' "$MANIFEST_DIR/latest-v2.json"
 
@@ -398,14 +399,15 @@ jobs:
             --pattern latest-v2.json --dir "$MANIFEST_DIR"
           jq -e --arg version "$VERSION" \
             --arg prefix "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/" '
-            .version == $version
+            . as $manifest
+            | ($manifest.version == $version)
               and ([
                 "darwin-aarch64",
                 "darwin-x86_64",
                 "windows-x86_64"
               ] | all(. as $platform
-                | (.platforms[$platform].signature | type == "string" and length > 0)
-                  and (.platforms[$platform].url | type == "string" and startswith($prefix))
+                | ($manifest.platforms[$platform].signature | type == "string" and length > 0)
+                  and ($manifest.platforms[$platform].url | type == "string" and startswith($prefix))
               ))
           ' "$MANIFEST_DIR/latest-v2.json"
 
