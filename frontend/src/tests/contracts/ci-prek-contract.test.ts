@@ -54,7 +54,20 @@ test('CI는 hygiene와 제품 검증을 고정 required 잡으로 집계한다',
         ciWorkflow,
         /cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}/u,
     );
-    assert.match(ciWorkflow, /if: \$\{\{ always\(\) \}\}/u);
+    assert.match(
+        ciWorkflow,
+        /types: \[opened, synchronize, reopened, ready_for_review, converted_to_draft\]/u,
+    );
+    assert.equal(
+        ciWorkflow.split(
+            "if: github.event_name != 'pull_request' || github.event.pull_request.draft == false",
+        ).length - 1,
+        4,
+    );
+    assert.match(
+        ciWorkflow,
+        /if: \$\{\{ always\(\) && \(github\.event_name != 'pull_request' \|\| github\.event\.pull_request\.draft == false\) \}\}/u,
+    );
     assert.match(ciWorkflow, /needs: \[hygiene, web, server, desktop\]/u);
     assert.match(ciWorkflow, /test "\$HYGIENE_RESULT" = "success"/u);
     assert.match(ciWorkflow, /test "\$WEB_RESULT" = "success"/u);
