@@ -156,7 +156,8 @@ export function AttendancePreferencesSection() {
                     출석 알림 설정
                 </CardTitle>
                 <CardDescription>
-                    연결된 PC가 동기화한 출석 상태를 기준으로 모든 기기에 알림을 보냅니다.
+                    PC에서 미완료가 확인되면 설정 간격으로, 상태를 확인할 수 없으면 제한된 시각에
+                    알립니다.
                 </CardDescription>
             </CardHeader>
             <CardContent>
@@ -185,7 +186,7 @@ export function AttendancePreferencesSection() {
                         <div className="py-4">
                             <PreferenceSwitchRow
                                 title="학습 시작 알림"
-                                description="학습 시작이 확인되지 않으면 선택한 간격으로 알려드립니다."
+                                description="미완료 확인 시 선택한 간격으로, 상태 확인 불가 시 시작 시각·2시간 뒤·10시에 알립니다."
                                 checked={draft.morning}
                                 disabled={!draft.enabled || savePreferences.isPending}
                                 onCheckedChange={(morning) => updateDraft('morning', morning)}
@@ -208,7 +209,7 @@ export function AttendancePreferencesSection() {
                                 />
                                 <NumberSelect
                                     id="attendance-morning-interval"
-                                    label="학습 시작 확인 간격"
+                                    label="학습 시작 미완료 알림 간격"
                                     value={draft.morningIntervalMinutes}
                                     options={INTERVAL_MINUTES}
                                     disabled={
@@ -227,7 +228,7 @@ export function AttendancePreferencesSection() {
                         <div className="py-4">
                             <PreferenceSwitchRow
                                 title="학습 종료 알림"
-                                description="학습 종료가 확인되지 않으면 선택한 간격으로 알려드립니다."
+                                description="미완료 확인 시 선택한 간격으로, 상태 확인 불가 시 23시와 자정에만 알립니다."
                                 checked={draft.evening}
                                 disabled={!draft.enabled || savePreferences.isPending}
                                 onCheckedChange={(evening) => updateDraft('evening', evening)}
@@ -248,7 +249,7 @@ export function AttendancePreferencesSection() {
                                 />
                                 <NumberSelect
                                     id="attendance-evening-interval"
-                                    label="학습 종료 확인 간격"
+                                    label="학습 종료 미완료 알림 간격"
                                     value={draft.eveningIntervalMinutes}
                                     options={INTERVAL_MINUTES}
                                     disabled={
