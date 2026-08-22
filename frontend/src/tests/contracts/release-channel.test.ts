@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import {execFileSync} from 'node:child_process';
 import {readFileSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
 
 import {test} from 'vitest';
 
@@ -71,6 +73,21 @@ test('Gradle·Vite·Tauri 릴리스 버전은 같은 허용 SemVer다', () => {
     assert.doesNotMatch(repoSource('server/Dockerfile'), /SNAPSHOT/u);
 });
 
+test('릴리스 입력 검증기는 현재 버전 태그만 허용한다', () => {
+    const frontendPackage = JSON.parse(repoSource('frontend/package.json')) as {
+        version?: string;
+    };
+    const canonicalVersion = frontendPackage.version;
+    assert.ok(canonicalVersion);
+
+    const script = fileURLToPath(new URL('scripts/verify-release-version.mjs', repoRoot));
+    const acceptedVersion = execFileSync(process.execPath, [script, `v${canonicalVersion}`], {
+        encoding: 'utf8',
+    }).trim();
+    assert.equal(acceptedVersion, canonicalVersion);
+    assert.throws(() => execFileSync(process.execPath, [script, 'v999.0.0'], {stdio: 'pipe'}));
+});
+
 test('리뉴얼 앱은 기존 앱과 다른 식별자와 v2 업데이트 채널을 사용한다', () => {
     assert.equal(tauriConfig.identifier, 'dev.sijun-yang.jungle-bell.v2');
     assert.notEqual(tauriConfig.identifier, 'dev.sijun-yang.jungle-bell');
@@ -112,6 +129,41 @@ test('v2 업데이트 매니페스트는 초안 릴리스 안에서만 생성해
     assert.ok(publishRelease >= 0);
     assert.match(
         releaseWorkflow.slice(publishRelease),
-        /needs:\s*\[[^\]]*publish-v2-updater-manifest[^\]]*\]/,
+        /needs:\s*\[[^\]]*verify-draft-release[^\]]*\]/,
     );
+});
+
+test('데스크톱 릴리스는 exact SHA의 CI 통과 후 서명·공개 환경을 거친다', () => {
+    assert.match(releaseWorkflow, /^permissions:\s*\n\s+contents:\s*read\s*$/mu);
+    assert.match(releaseWorkflow, /group:\s*desktop-release/u);
+    assert.match(releaseWorkflow, /cancel-in-progress:\s*false/u);
+    assert.match(releaseWorkflow, /^\s*prepare-release:\s*$/mu);
+    assert.match(releaseWorkflow, /actions:\s*read/u);
+    assert.match(releaseWorkflow, /git merge-base --is-ancestor "\$SHA" origin\/main/u);
+    assert.match(
+        releaseWorkflow,
+        /git checkout --detach "\$SHA"[\s\S]*node scripts\/verify-release-version\.mjs "\$TAG"/u,
+    );
+    assert.match(releaseWorkflow, /gh run list[\s\S]*--workflow ci\.yml/u);
+    assert.match(releaseWorkflow, /headSha/u);
+    assert.match(releaseWorkflow, /\.name == "required"/u);
+    assert.match(releaseWorkflow, /ref:\s*\$\{\{ needs\.prepare-release\.outputs\.sha \}\}/u);
+    assert.match(releaseWorkflow, /node-version:\s*24/u);
+    assert.match(releaseWorkflow, /environment:\s*desktop-signing/u);
+    assert.match(releaseWorkflow, /max-parallel:\s*1/u);
+    assert.match(releaseWorkflow, /tauri-apps\/tauri-action@[0-9a-f]{40}/u);
+    assert.match(releaseWorkflow, /^\s*verify-draft-release:\s*$/mu);
+    assert.match(releaseWorkflow, /Jungle\.Bell_\$\{VERSION\}_aarch64\.tar\.gz/u);
+    assert.match(releaseWorkflow, /Jungle\.Bell_\$\{VERSION\}_x64\.tar\.gz/u);
+    assert.match(releaseWorkflow, /Jungle\.Bell_\$\{VERSION\}_x64-setup\.exe/u);
+
+    const publishRelease = releaseWorkflow.indexOf('publish-release:');
+    assert.ok(publishRelease >= 0);
+    const publishSource = releaseWorkflow.slice(publishRelease);
+    assert.match(publishSource, /environment:\s*desktop-release/u);
+    assert.match(publishSource, /contents:\s*write/u);
+    assert.match(publishSource, /git rev-parse "refs\/tags\/\$TAG\^\{commit\}"/u);
+    assert.match(publishSource, /gh release download "\$TAG"[\s\S]*latest-v2\.json/u);
+    assert.match(publishSource, /"darwin-aarch64"[\s\S]*"windows-x86_64"/u);
+    assert.match(publishSource, /"\$\{asset_name\}\.sig"/u);
 });

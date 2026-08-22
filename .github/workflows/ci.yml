@@ -8,12 +8,26 @@ on:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
 
 jobs:
+  hygiene:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: j178/prek-action@4e14d07f9231acabce116ccfca13b13dd9755ece # v3.0.0
+        with:
+          prek-version: "0.4.14"
+          install-only: true
+      - run: prek validate-config prek.toml
+      - run: prek run --all-files --group hygiene --show-diff-on-failure
+
   web:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -30,11 +44,6 @@ jobs:
         working-directory: frontend
       - run: npm run verify:web
         working-directory: frontend
-      - uses: actions/upload-artifact@v7
-        with:
-          name: app-assets
-          path: frontend/dist/web
-          retention-days: 1
 
   server:
     runs-on: ubuntu-24.04
@@ -100,3 +109,22 @@ jobs:
         working-directory: frontend
       - run: npm run verify:desktop
         working-directory: frontend
+
+  required:
+    name: required
+    if: ${{ always() }}
+    needs: [hygiene, web, server, desktop]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every CI job to succeed
+        env:
+          HYGIENE_RESULT: ${{ needs.hygiene.result }}
+          WEB_RESULT: ${{ needs.web.result }}
+          SERVER_RESULT: ${{ needs.server.result }}
+          DESKTOP_RESULT: ${{ needs.desktop.result }}
+        run: |
+          test "$HYGIENE_RESULT" = "success"
+          test "$WEB_RESULT" = "success"
+          test "$SERVER_RESULT" = "success"
+          test "$DESKTOP_RESULT" = "success"
