@@ -158,6 +158,11 @@ test('데스크톱 릴리스는 exact SHA의 CI 통과 후 서명·공개 환경
     assert.match(releaseWorkflow, /max-parallel:\s*1/u);
     assert.match(releaseWorkflow, /tauri-apps\/tauri-action@[0-9a-f]{40}/u);
     assert.match(releaseWorkflow, /^\s*verify-draft-release:\s*$/mu);
+    const verifyDraftRelease = releaseWorkflow.slice(
+        releaseWorkflow.indexOf('  verify-draft-release:'),
+        releaseWorkflow.indexOf('  publish-release:'),
+    );
+    assert.match(verifyDraftRelease, /permissions:\s*\n\s+contents:\s*write/u);
     assert.match(releaseWorkflow, /Jungle\.Bell_\$\{VERSION\}_aarch64\.tar\.gz/u);
     assert.match(releaseWorkflow, /Jungle\.Bell_\$\{VERSION\}_x64\.tar\.gz/u);
     assert.match(releaseWorkflow, /Jungle\.Bell_\$\{VERSION\}_x64-setup\.exe/u);
