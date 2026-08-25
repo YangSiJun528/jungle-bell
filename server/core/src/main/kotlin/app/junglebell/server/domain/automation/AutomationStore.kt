@@ -11,6 +11,7 @@ interface AutomationStore {
     fun recentMealPublications(since: Instant): List<MealPublication>
     fun mealSubscriberUserIds(period: String): List<UUID>
     fun activeLaundryWatches(): List<ActiveLaundryWatch>
+    fun markLaundryWatchResumed(id: String, now: Long): Boolean
     fun completeLaundryWatch(id: String, now: Long): Boolean
     fun claimPushDeliveries(now: Long, leaseToken: String, limit: Int): List<PushDelivery>
     fun settlePush(
@@ -61,6 +62,11 @@ data class ActiveLaundryWatch(
     val sessionId: String?,
     val notificationMode: String,
     val notifyBeforeMinutes: Int,
+    val attentionUnresolved: Boolean = false,
+    val attentionUnresolvedAtEpochMs: Long? = null,
+    val pendingAttentionStatus: String? = null,
+    val pendingAttentionIncidentId: String? = null,
+    val attentionRecovered: Boolean = false,
 )
 
 data class PushDelivery(

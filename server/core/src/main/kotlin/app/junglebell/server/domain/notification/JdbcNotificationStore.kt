@@ -67,12 +67,32 @@ class JdbcNotificationStore(
         completeWatch: Boolean,
         now: Long,
     ): Boolean {
+        val active = jdbc.sql(
+            """
+            SELECT id FROM laundry_watch
+            WHERE id = :watchId AND user_id = :userId AND status = 'active'
+            FOR UPDATE
+            """.trimIndent(),
+        ).param("watchId", watchId).param("userId", record.userId)
+            .query(String::class.java).optional().isPresent
+        if (!active) return false
+
         val created = create(record)
-        if (completeWatch) {
+        if (record.kind == "laundry-attention") {
             jdbc.sql(
                 """
                 UPDATE laundry_watch
-                SET status = 'completed', updated_at_epoch_ms = :now
+                SET attention_unresolved = true, attention_unresolved_at_epoch_ms = :now,
+                    updated_at_epoch_ms = :now
+                WHERE id = :watchId AND status = 'active' AND NOT attention_unresolved
+                """.trimIndent(),
+            ).param("now", now).param("watchId", watchId).update()
+        } else if (completeWatch) {
+            jdbc.sql(
+                """
+                UPDATE laundry_watch
+                SET status = 'completed', attention_unresolved = false,
+                    attention_unresolved_at_epoch_ms = NULL, updated_at_epoch_ms = :now
                 WHERE id = :watchId AND status = 'active'
                 RETURNING id
                 """.trimIndent(),

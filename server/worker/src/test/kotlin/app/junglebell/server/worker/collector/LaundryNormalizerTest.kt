@@ -65,4 +65,67 @@ class LaundryNormalizerTest {
             normalizer.normalize(raw, "d".repeat(64), observedAt, null)
         }
     }
+
+    @Test
+    fun `records error and pause transitions before the dryer powers off`() {
+        val running = normalizer.normalize(
+            dryerRaw("RUNNING", remainingMinutes = 49),
+            "running",
+            observedAt,
+            null,
+        )
+        val error = normalizer.normalize(
+            dryerRaw("RUNNING", remainingMinutes = 49, error = "EMPTY_WATER_ALERT_ERROR"),
+            "error",
+            observedAt.plusSeconds(60),
+            running,
+        )
+        val idleAfterError = normalizer.normalize(
+            dryerRaw("POWER_OFF", remainingMinutes = 0),
+            "idle-after-error",
+            observedAt.plusSeconds(120),
+            error,
+        )
+        val errorCleared = idleAfterError.events.single { it.type == "ERROR_CLEARED" }
+
+        assertEquals("RUNNING", errorCleared.previousState)
+        assertEquals("POWER_OFF", errorCleared.currentState)
+        assertEquals(idleAfterError.machines.single().dryer?.sessionId, errorCleared.sessionId)
+
+        val paused = normalizer.normalize(
+            dryerRaw("PAUSE", remainingMinutes = 49),
+            "paused",
+            observedAt.plusSeconds(60),
+            running,
+        )
+        val idleAfterPause = normalizer.normalize(
+            dryerRaw("POWER_OFF", remainingMinutes = 0),
+            "idle-after-pause",
+            observedAt.plusSeconds(120),
+            paused,
+        )
+        val pauseChanged = idleAfterPause.events.single { it.type == "STATE_CHANGED" }
+
+        assertEquals("PAUSE", pauseChanged.previousState)
+        assertEquals("POWER_OFF", pauseChanged.currentState)
+        assertEquals(idleAfterPause.machines.single().dryer?.sessionId, pauseChanged.sessionId)
+    }
+
+    private fun dryerRaw(state: String, remainingMinutes: Int, error: String? = null) = mapper.readTree(
+        """
+        {
+          "워시타워_1": {
+            "dryer": {
+              "runState": {"currentState": "$state"},
+              "timer": {
+                "remainHour": 0,
+                "remainMinute": $remainingMinutes,
+                "totalHour": 1,
+                "totalMinute": 0
+              }${error?.let { ",\n              \"error\": \"$it\"" }.orEmpty()}
+            }
+          }
+        }
+        """.trimIndent(),
+    )
 }

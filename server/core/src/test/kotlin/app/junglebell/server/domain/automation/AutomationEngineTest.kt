@@ -3,6 +3,8 @@ package app.junglebell.server.domain.automation
 import app.junglebell.server.domain.notification.NotificationRecord
 import app.junglebell.server.domain.notification.NotificationStore
 import app.junglebell.server.domain.publicapi.LaundryAppliance
+import app.junglebell.server.domain.publicapi.LaundryMachine
+import app.junglebell.server.domain.publicapi.LaundryVersion
 import app.junglebell.server.domain.publicapi.NormalizedEnum
 import app.junglebell.server.domain.publicapi.PublicDataStore
 import org.mockito.ArgumentMatchers.anyInt
@@ -313,7 +315,7 @@ class AutomationEngineTest {
 
         assertEquals("laundry-finishing", decision?.notification?.kind)
         assertEquals("세탁 종료 10분 전", decision?.notification?.title)
-        assertEquals(true, decision?.completeWatch)
+        assertEquals(false, decision?.completeWatch)
         assertNull(
             laundryNotificationDecision(
                 watch(mode = "before-completion", notifyBeforeMinutes = 5),
@@ -335,7 +337,7 @@ class AutomationEngineTest {
 
         assertEquals("laundry-completion-expected", decision?.notification?.kind)
         assertEquals("세탁 완료 예상", decision?.notification?.title)
-        assertEquals(true, decision?.completeWatch)
+        assertEquals(false, decision?.completeWatch)
         assertNull(
             laundryNotificationDecision(
                 watch(mode = "confirmed-completion"),
@@ -343,6 +345,18 @@ class AutomationEngineTest {
                 now,
             ),
         )
+    }
+
+    @Test
+    fun `laundry estimated completion mode completes the watch at a terminal state`() {
+        val decision = laundryNotificationDecision(
+            watch(mode = "estimated-completion"),
+            appliance(operationalStatus = "IDLE", remainingMinutes = 0, estimatedFinishAt = null),
+            Instant.parse("2026-08-19T10:00:00Z").toEpochMilli(),
+        )
+
+        assertEquals("laundry-completion-expected", decision?.notification?.kind)
+        assertEquals(true, decision?.completeWatch)
     }
 
     @Test
@@ -382,25 +396,565 @@ class AutomationEngineTest {
         )
     }
 
-    private fun watch(mode: String, notifyBeforeMinutes: Int = 0) = ActiveLaundryWatch(
+    @Test
+    fun `dryer errors and pauses share one attention notification identity`() {
+        val now = Instant.parse("2026-08-19T10:00:00Z").toEpochMilli()
+        val dryerWatch = watch(
+            mode = "confirmed-completion",
+            appliance = "dryer",
+            pendingAttentionIncidentId = "incident-1",
+        )
+        val error = laundryNotificationDecision(
+            dryerWatch,
+            appliance(
+                appliance = "dryer",
+                operationalStatus = "ERROR",
+                remainingMinutes = 49,
+                estimatedFinishAt = null,
+                errorCode = "EMPTY_WATER_ALERT_ERROR",
+            ),
+            now,
+        )
+        val paused = laundryNotificationDecision(
+            dryerWatch,
+            appliance(
+                appliance = "dryer",
+                operationalStatus = "PAUSED",
+                remainingMinutes = 49,
+                estimatedFinishAt = null,
+            ),
+            now,
+        )
+        val repeatedError = laundryNotificationDecision(
+            dryerWatch,
+            appliance(
+                appliance = "dryer",
+                operationalStatus = "ERROR",
+                remainingMinutes = 44,
+                estimatedFinishAt = null,
+                errorCode = "EMPTY_WATER_ALERT_ERROR",
+                observedAt = "2026-08-19T10:02:00Z",
+            ),
+            now,
+        )
+        val doorOpen = laundryNotificationDecision(
+            dryerWatch,
+            appliance(
+                appliance = "dryer",
+                operationalStatus = "ERROR",
+                remainingMinutes = 44,
+                estimatedFinishAt = null,
+                errorCode = "DOOR_OPEN_ERROR",
+            ),
+            now,
+        )
+        val genericError = laundryNotificationDecision(
+            dryerWatch,
+            appliance(
+                appliance = "dryer",
+                operationalStatus = "ERROR",
+                remainingMinutes = 44,
+                estimatedFinishAt = null,
+                errorCode = "UNKNOWN_ERROR",
+            ),
+            now,
+        )
+        val nextIncident = laundryNotificationDecision(
+            dryerWatch.copy(pendingAttentionIncidentId = "incident-2"),
+            appliance(
+                appliance = "dryer",
+                operationalStatus = "ERROR",
+                remainingMinutes = 40,
+                estimatedFinishAt = null,
+                observedAt = "2026-08-19T10:10:00Z",
+            ),
+            now,
+        )
+
+        assertEquals("laundry-attention", error?.notification?.kind)
+        assertEquals("건조기가 멈췄습니다", error?.notification?.title)
+        assertEquals("1번 건조기 물통을 비우고 건조 상태를 확인해 주세요.", error?.notification?.body)
+        assertEquals("ERROR", error?.notification?.payload?.get("attentionStatus"))
+        assertEquals("EMPTY_WATER_ALERT_ERROR", error?.notification?.payload?.get("errorCode"))
+        assertEquals(false, error?.completeWatch)
+        assertEquals("laundry-attention", paused?.notification?.kind)
+        assertEquals("건조기가 일시 정지됐습니다", paused?.notification?.title)
+        assertEquals(error?.notification?.sourceEventId, paused?.notification?.sourceEventId)
+        assertEquals(error?.notification?.sourceEventId, repeatedError?.notification?.sourceEventId)
+        assertEquals(false, error?.notification?.sourceEventId == nextIncident?.notification?.sourceEventId)
+        assertEquals("1번 건조기 문을 닫고 건조 상태를 확인해 주세요.", doorOpen?.notification?.body)
+        assertEquals(
+            "1번 건조기에 오류가 발생했습니다. 건조 상태를 확인해 주세요.",
+            genericError?.notification?.body,
+        )
+        assertEquals(false, paused?.completeWatch)
+
+        for (mode in listOf("before-completion", "estimated-completion", "confirmed-completion")) {
+            for (status in listOf("ERROR", "PAUSED")) {
+                val decision = laundryNotificationDecision(
+                    watch(
+                        mode = mode,
+                        notifyBeforeMinutes = if (mode == "before-completion") 10 else 0,
+                        appliance = "dryer",
+                    ),
+                    appliance(
+                        appliance = "dryer",
+                        operationalStatus = status,
+                        remainingMinutes = 0,
+                        estimatedFinishAt = "2026-08-19T10:00:00Z",
+                    ),
+                    now,
+                )
+                assertEquals("laundry-attention", decision?.notification?.kind, "$mode/$status")
+                assertEquals(false, decision?.completeWatch, "$mode/$status")
+            }
+        }
+    }
+
+    @Test
+    fun `laundry attention only applies to the selected dryer session`() {
+        val now = Instant.parse("2026-08-19T10:00:00Z").toEpochMilli()
+        assertNull(
+            laundryNotificationDecision(
+                watch(mode = "confirmed-completion"),
+                appliance(operationalStatus = "ERROR", remainingMinutes = 30, estimatedFinishAt = null),
+                now,
+            ),
+        )
+        val differentSession = appliance(
+            appliance = "dryer",
+            operationalStatus = "ERROR",
+            remainingMinutes = 30,
+            estimatedFinishAt = null,
+            sessionId = "session-2",
+        )
+        assertEquals(
+            true,
+            laundryWatchShouldCompleteSilently(
+                watch(mode = "confirmed-completion", appliance = "dryer"),
+                differentSession,
+            ),
+        )
+        for (state in listOf("COOLING", "WRINKLE_CARE")) {
+            assertNull(
+                laundryNotificationDecision(
+                    watch(mode = "confirmed-completion", appliance = "dryer"),
+                    appliance(
+                        appliance = "dryer",
+                        remainingMinutes = 0,
+                        estimatedFinishAt = null,
+                        stateCode = state,
+                    ),
+                    now,
+                ),
+                state,
+            )
+        }
+        assertNull(
+            laundryNotificationDecision(
+                watch(mode = "confirmed-completion", appliance = "dryer"),
+                appliance(
+                    appliance = "dryer",
+                    operationalStatus = "ERROR",
+                    remainingMinutes = 30,
+                    estimatedFinishAt = null,
+                    sessionId = "session-2",
+                ),
+                now,
+            ),
+        )
+    }
+
+    @Test
+    fun `unresolved dryer attention suppresses idle completion and completes silently`() {
+        val watch = watch(
+            mode = "confirmed-completion",
+            appliance = "dryer",
+            attentionUnresolved = true,
+        )
+        val idle = appliance(
+            appliance = "dryer",
+            operationalStatus = "IDLE",
+            remainingMinutes = 0,
+            estimatedFinishAt = null,
+        )
+
+        assertNull(
+            laundryNotificationDecision(
+                watch,
+                idle,
+                Instant.parse("2026-08-19T10:00:00Z").toEpochMilli(),
+            ),
+        )
+        assertEquals(true, laundryWatchShouldCompleteSilently(watch, idle))
+        for (status in listOf("ERROR", "PAUSED")) {
+            assertNull(
+                laundryNotificationDecision(
+                    watch,
+                    appliance(
+                        appliance = "dryer",
+                        operationalStatus = status,
+                        remainingMinutes = 30,
+                        estimatedFinishAt = null,
+                    ),
+                    Instant.parse("2026-08-19T10:00:00Z").toEpochMilli(),
+                ),
+                status,
+            )
+        }
+
+        val completed = appliance(
+            appliance = "dryer",
+            operationalStatus = "COMPLETED",
+            remainingMinutes = 0,
+            estimatedFinishAt = null,
+        )
+        assertEquals(
+            "laundry-completed",
+            laundryNotificationDecision(
+                watch,
+                completed,
+                Instant.parse("2026-08-19T10:00:00Z").toEpochMilli(),
+            )?.notification?.kind,
+        )
+    }
+
+    @Test
+    fun `unresolved idle attention completes without another notification`() {
+        val now = Instant.parse("2026-08-19T10:00:00Z").toEpochMilli()
+        val automation = mock(AutomationStore::class.java)
+        val notifications = mock(NotificationStore::class.java)
+        val publicData = mock(PublicDataStore::class.java)
+        val idle = appliance(
+            appliance = "dryer",
+            operationalStatus = "IDLE",
+            remainingMinutes = 0,
+            estimatedFinishAt = null,
+        )
+        `when`(automation.activeLaundryWatches()).thenReturn(
+            listOf(
+                watch(
+                    mode = "confirmed-completion",
+                    appliance = "dryer",
+                    attentionUnresolved = true,
+                ),
+            ),
+        )
+        `when`(publicData.latestLaundryVersion()).thenReturn(
+            LaundryVersion(
+                sourceVersionSha = "sha",
+                observedAt = idle.observedAt,
+                machines = listOf(LaundryMachine("워시타워_1", null, idle)),
+                events = emptyList(),
+                unknownEnums = emptyList(),
+            ),
+        )
+        val engine = AutomationEngine(
+            automation,
+            notifications,
+            publicData,
+            mock(PushSender::class.java),
+            Clock.fixed(Instant.ofEpochMilli(now), ZoneOffset.UTC),
+        )
+
+        assertEquals(0, engine.applyLaundryWatches(now))
+        verify(automation).completeLaundryWatch("watch-1", now)
+        assertEquals(
+            emptyList(),
+            mockingDetails(notifications).invocations.filter { it.method.name == "createFromLaundryWatch" },
+        )
+    }
+
+    @Test
+    fun `an error or pause transition immediately followed by idle still emits attention`() {
+        val now = Instant.parse("2026-08-19T10:00:00Z").toEpochMilli()
+        val cases = listOf("ERROR", "PAUSED")
+
+        for (expectedStatus in cases) {
+            val automation = mock(AutomationStore::class.java)
+            val notifications = mock(NotificationStore::class.java)
+            val publicData = mock(PublicDataStore::class.java)
+            val idle = appliance(
+                appliance = "dryer",
+                operationalStatus = "IDLE",
+                remainingMinutes = 0,
+                estimatedFinishAt = null,
+                sessionId = if (expectedStatus == "ERROR") "stale-session" else "session-1",
+            )
+            `when`(automation.activeLaundryWatches()).thenReturn(
+                listOf(
+                    watch(
+                        mode = "confirmed-completion",
+                        appliance = "dryer",
+                        pendingAttentionStatus = expectedStatus,
+                    ),
+                ),
+            )
+            `when`(publicData.latestLaundryVersion()).thenReturn(
+                LaundryVersion(
+                    sourceVersionSha = "sha-$expectedStatus",
+                    observedAt = idle.observedAt,
+                    machines = listOf(LaundryMachine("워시타워_1", null, idle)),
+                    events = emptyList(),
+                    unknownEnums = emptyList(),
+                ),
+            )
+            val engine = AutomationEngine(
+                automation,
+                notifications,
+                publicData,
+                mock(PushSender::class.java),
+                Clock.fixed(Instant.ofEpochMilli(now), ZoneOffset.UTC),
+            )
+
+            assertEquals(0, engine.applyLaundryWatches(now))
+            val notification = mockingDetails(notifications).invocations
+                .single { it.method.name == "createFromLaundryWatch" }
+                .arguments[0] as NotificationRecord
+            assertEquals("laundry-attention", notification.kind, expectedStatus)
+            assertEquals(expectedStatus, notification.payload["attentionStatus"], expectedStatus)
+            assertEquals(
+                emptyList(),
+                mockingDetails(automation).invocations.filter { it.method.name == "completeLaundryWatch" },
+            )
+        }
+    }
+
+    @Test
+    fun `idle transition attention rejects unrelated or normal stop events`() {
+        val dryerWatch = watch(
+            mode = "confirmed-completion",
+            appliance = "dryer",
+            pendingAttentionStatus = "ERROR",
+        )
+        val idle = appliance(
+            appliance = "dryer",
+            operationalStatus = "IDLE",
+            remainingMinutes = 0,
+            estimatedFinishAt = null,
+        )
+        assertEquals("ERROR", laundryTransitionAttentionStatus(dryerWatch, idle))
+        assertEquals(
+            "PAUSED",
+            laundryTransitionAttentionStatus(
+                dryerWatch.copy(pendingAttentionStatus = "PAUSED"),
+                idle,
+            ),
+        )
+        assertNull(
+            laundryTransitionAttentionStatus(
+                dryerWatch.copy(pendingAttentionStatus = null),
+                idle,
+            ),
+        )
+        assertEquals(
+            "ERROR",
+            laundryTransitionAttentionStatus(
+                dryerWatch,
+                idle.copy(sessionId = "session-2"),
+            ),
+        )
+        assertNull(
+            laundryTransitionAttentionStatus(
+                dryerWatch.copy(attentionUnresolved = true),
+                idle,
+            ),
+        )
+        assertNull(
+            laundryTransitionAttentionStatus(
+                dryerWatch,
+                appliance(
+                    appliance = "dryer",
+                    operationalStatus = "RUNNING",
+                    remainingMinutes = 30,
+                    estimatedFinishAt = "2026-08-19T10:30:00Z",
+                ),
+            ),
+        )
+        for (status in listOf("RUNNING", "COMPLETED")) {
+            assertEquals(
+                "ERROR",
+                laundryTransitionAttentionStatus(
+                    dryerWatch,
+                    appliance(
+                        appliance = "dryer",
+                        operationalStatus = status,
+                        remainingMinutes = if (status == "RUNNING") 30 else 0,
+                        estimatedFinishAt = if (status == "RUNNING") "2026-08-19T10:30:00Z" else null,
+                        sessionId = "replacement-session",
+                    ),
+                ),
+                status,
+            )
+        }
+    }
+
+    @Test
+    fun `durable attention does not use an unrelated snapshot error copy`() {
+        val watch = watch(
+            mode = "confirmed-completion",
+            appliance = "dryer",
+            pendingAttentionStatus = "PAUSED",
+        )
+        val staleError = appliance(
+            appliance = "dryer",
+            operationalStatus = "ERROR",
+            remainingMinutes = 30,
+            estimatedFinishAt = null,
+            errorCode = "DOOR_OPEN_ERROR",
+            sessionId = "different-session",
+        )
+        val transitionStatus = laundryTransitionAttentionStatus(watch, staleError)
+        val decision = laundryNotificationDecision(
+            watch,
+            staleError,
+            Instant.parse("2026-08-19T10:00:00Z").toEpochMilli(),
+            transitionStatus,
+        )
+
+        assertEquals("건조기가 일시 정지됐습니다", decision?.notification?.title)
+        assertEquals(null, decision?.notification?.payload?.get("errorCode"))
+        assertEquals(null, decision?.notification?.payload?.get("remainingMinutes"))
+    }
+
+    @Test
+    fun `running after attention marks the watch resumed`() {
+        val now = Instant.parse("2026-08-19T10:00:00Z").toEpochMilli()
+        val automation = mock(AutomationStore::class.java)
+        val notifications = mock(NotificationStore::class.java)
+        val publicData = mock(PublicDataStore::class.java)
+        val dryer = appliance(
+            appliance = "dryer",
+            operationalStatus = "RUNNING",
+            remainingMinutes = 30,
+            estimatedFinishAt = "2026-08-19T10:30:00Z",
+        )
+        `when`(automation.activeLaundryWatches()).thenReturn(
+            listOf(
+                watch(
+                    mode = "confirmed-completion",
+                    appliance = "dryer",
+                    attentionUnresolved = true,
+                ),
+            ),
+        )
+        `when`(publicData.latestLaundryVersion()).thenReturn(
+            LaundryVersion(
+                sourceVersionSha = "sha",
+                observedAt = dryer.observedAt,
+                machines = listOf(LaundryMachine("워시타워_1", null, dryer)),
+                events = emptyList(),
+                unknownEnums = emptyList(),
+            ),
+        )
+        val engine = AutomationEngine(
+            automation,
+            notifications,
+            publicData,
+            mock(PushSender::class.java),
+            Clock.fixed(Instant.ofEpochMilli(now), ZoneOffset.UTC),
+        )
+
+        assertEquals(0, engine.applyLaundryWatches(now))
+        verify(automation).markLaundryWatchResumed("watch-1", now)
+    }
+
+    @Test
+    fun `a durable recovery restores terminal notifications after attention`() {
+        val now = Instant.parse("2026-08-19T10:00:00Z").toEpochMilli()
+        for ((mode, expectedKind) in listOf(
+            "confirmed-completion" to "laundry-completed",
+            "estimated-completion" to "laundry-completion-expected",
+        )) {
+            val automation = mock(AutomationStore::class.java)
+            val notifications = mock(NotificationStore::class.java)
+            val publicData = mock(PublicDataStore::class.java)
+            val idle = appliance(
+                appliance = "dryer",
+                operationalStatus = "IDLE",
+                remainingMinutes = 0,
+                estimatedFinishAt = null,
+            )
+            `when`(automation.activeLaundryWatches()).thenReturn(
+                listOf(
+                    watch(
+                        mode = mode,
+                        appliance = "dryer",
+                        attentionUnresolved = true,
+                        attentionRecovered = true,
+                    ),
+                ),
+            )
+            `when`(publicData.latestLaundryVersion()).thenReturn(
+                LaundryVersion(
+                    sourceVersionSha = "sha-$mode",
+                    observedAt = idle.observedAt,
+                    machines = listOf(LaundryMachine("워시타워_1", null, idle)),
+                    events = emptyList(),
+                    unknownEnums = emptyList(),
+                ),
+            )
+            val engine = AutomationEngine(
+                automation,
+                notifications,
+                publicData,
+                mock(PushSender::class.java),
+                Clock.fixed(Instant.ofEpochMilli(now), ZoneOffset.UTC),
+            )
+
+            assertEquals(0, engine.applyLaundryWatches(now))
+            verify(automation).markLaundryWatchResumed("watch-1", now)
+            val invocation = mockingDetails(notifications).invocations
+                .single { it.method.name == "createFromLaundryWatch" }
+            assertEquals(expectedKind, (invocation.arguments[0] as NotificationRecord).kind, mode)
+            assertEquals(true, invocation.arguments[2], mode)
+        }
+    }
+
+    private fun watch(
+        mode: String,
+        notifyBeforeMinutes: Int = 0,
+        appliance: String = "washer",
+        attentionUnresolved: Boolean = false,
+        attentionUnresolvedAtEpochMs: Long? = null,
+        pendingAttentionStatus: String? = null,
+        pendingAttentionIncidentId: String? = null,
+        attentionRecovered: Boolean = false,
+    ) = ActiveLaundryWatch(
         id = "watch-1",
         userId = UUID.fromString("00000000-0000-0000-0000-000000000001"),
         machineId = "워시타워_1",
-        appliance = "washer",
+        appliance = appliance,
         sessionId = "session-1",
         notificationMode = mode,
         notifyBeforeMinutes = notifyBeforeMinutes,
+        attentionUnresolved = attentionUnresolved,
+        attentionUnresolvedAtEpochMs = attentionUnresolvedAtEpochMs,
+        pendingAttentionStatus = pendingAttentionStatus,
+        pendingAttentionIncidentId = pendingAttentionIncidentId,
+        attentionRecovered = attentionRecovered,
     )
 
     private fun appliance(
+        appliance: String = "washer",
         operationalStatus: String = "RUNNING",
         remainingMinutes: Int,
         estimatedFinishAt: String?,
+        errorCode: String? = null,
+        sessionId: String = "session-1",
+        observedAt: String = "2026-08-19T09:52:00Z",
+        stateCode: String = when (operationalStatus) {
+            "ERROR" -> "ERROR"
+            "PAUSED" -> "PAUSE"
+            "COMPLETED" -> "END"
+            "IDLE" -> "POWER_OFF"
+            else -> if (appliance == "washer") "WASHING" else "RUNNING"
+        },
     ) = LaundryAppliance(
         machineId = "워시타워_1",
-        appliance = "washer",
-        observedAt = "2026-08-19T09:52:00Z",
-        state = NormalizedEnum("WASHING", null, true),
+        appliance = appliance,
+        observedAt = observedAt,
+        state = NormalizedEnum(stateCode, null, true),
         operationalStatus = operationalStatus,
         remainingMinutes = remainingMinutes,
         totalMinutes = 60,
@@ -408,8 +962,8 @@ class AutomationEngineTest {
         estimatedFinishAt = estimatedFinishAt,
         remoteControlEnabled = null,
         cycleCount = null,
-        sessionId = "session-1",
-        errorCode = null,
+        sessionId = sessionId,
+        errorCode = errorCode,
     )
 
     private fun attendanceRecordAt(

@@ -270,6 +270,8 @@ CREATE TABLE IF NOT EXISTS laundry_watch (
         CHECK (notification_mode IN ('before-completion', 'estimated-completion', 'confirmed-completion')),
     notify_before_minutes integer NOT NULL CHECK (notify_before_minutes BETWEEN 0 AND 180),
     notify_when_available boolean NOT NULL,
+    attention_unresolved boolean NOT NULL DEFAULT false,
+    attention_unresolved_at_epoch_ms bigint,
     status text NOT NULL CHECK (status IN ('active', 'completed', 'cancelled')),
     created_at_epoch_ms bigint NOT NULL,
     updated_at_epoch_ms bigint NOT NULL CHECK (updated_at_epoch_ms >= created_at_epoch_ms)
@@ -278,6 +280,12 @@ CREATE TABLE IF NOT EXISTS laundry_watch (
 ALTER TABLE laundry_watch
     ADD COLUMN IF NOT EXISTS notification_mode text NOT NULL DEFAULT 'confirmed-completion'
     CHECK (notification_mode IN ('before-completion', 'estimated-completion', 'confirmed-completion'));
+
+ALTER TABLE laundry_watch
+    ADD COLUMN IF NOT EXISTS attention_unresolved boolean NOT NULL DEFAULT false;
+
+ALTER TABLE laundry_watch
+    ADD COLUMN IF NOT EXISTS attention_unresolved_at_epoch_ms bigint;
 
 UPDATE laundry_watch
 SET notification_mode = 'before-completion'

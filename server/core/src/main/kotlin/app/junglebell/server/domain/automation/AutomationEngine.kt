@@ -239,9 +239,17 @@ class AutomationEngine(
         var created = 0
         for (watch in automation.activeLaundryWatches()) {
             val appliance = appliances["${watch.machineId}:${watch.appliance}"] ?: continue
-            val decision = laundryNotificationDecision(watch, appliance, now)
+            val recovered = watch.attentionUnresolved &&
+                (watch.attentionRecovered ||
+                    (watch.sessionId == appliance.sessionId && appliance.operationalStatus == "RUNNING"))
+            val evaluatedWatch = if (recovered) {
+                automation.markLaundryWatchResumed(watch.id, now)
+                watch.copy(attentionUnresolved = false)
+            } else watch
+            val transitionAttentionStatus = laundryTransitionAttentionStatus(evaluatedWatch, appliance)
+            val decision = laundryNotificationDecision(evaluatedWatch, appliance, now, transitionAttentionStatus)
             if (decision == null) {
-                if (laundryWatchShouldCompleteSilently(watch, appliance)) {
+                if (laundryWatchShouldCompleteSilently(evaluatedWatch, appliance)) {
                     automation.completeLaundryWatch(watch.id, now)
                 }
                 continue
@@ -499,11 +507,18 @@ internal fun laundryNotificationDecision(
     watch: ActiveLaundryWatch,
     appliance: LaundryAppliance,
     now: Long,
+    transitionAttentionStatus: String? = null,
 ): LaundryDecision? {
     val terminal = appliance.operationalStatus in setOf("COMPLETED", "IDLE") ||
         appliance.projection?.status == "CONFIRMED_COMPLETED"
-    val sessionMatches = watch.sessionId == appliance.sessionId || watch.sessionId == null && terminal
+    val hasDurableAttention = watch.appliance == "dryer" &&
+        transitionAttentionStatus in setOf("ERROR", "PAUSED")
+    val snapshotSessionMatches = watch.sessionId != null && watch.sessionId == appliance.sessionId
+    val durableSessionMismatch = hasDurableAttention && !snapshotSessionMatches
+    val sessionMatches = snapshotSessionMatches ||
+        (watch.sessionId == null && terminal) || hasDurableAttention
     if (!sessionMatches) return null
+    if (watch.attentionUnresolved && appliance.operationalStatus in setOf("ERROR", "PAUSED", "IDLE")) return null
 
     val remainingMinutes = projectedRemainingMinutes(appliance, now)
     val estimatedCompletionReached = appliance.projection?.status == "AWAITING_COMPLETION_CONFIRMATION" ||
@@ -511,7 +526,16 @@ internal fun laundryNotificationDecision(
     val machine = Regex("\\d+$").find(watch.machineId)?.value?.let { "${it}번" } ?: watch.machineId
     val device = if (watch.appliance == "washer") "세탁기" else "건조기"
     val action = if (watch.appliance == "washer") "세탁" else "건조"
+    val attentionStatus = when {
+        watch.appliance != "dryer" -> null
+        durableSessionMismatch -> transitionAttentionStatus
+        appliance.operationalStatus == "ERROR" || transitionAttentionStatus == "ERROR" -> "ERROR"
+        appliance.operationalStatus == "PAUSED" || transitionAttentionStatus == "PAUSED" -> "PAUSED"
+        else -> null
+    }
+    val attentionErrorCode = appliance.errorCode.takeUnless { durableSessionMismatch }
     val copy = when {
+        attentionStatus != null -> laundryAttentionCopy(machine, attentionStatus, attentionErrorCode)
         watch.notificationMode == "before-completion" &&
             appliance.operationalStatus == "RUNNING" &&
             remainingMinutes in 1..watch.notifyBeforeMinutes -> LaundryNotificationCopy(
@@ -532,7 +556,9 @@ internal fun laundryNotificationDecision(
         else -> return null
     }
     val id = UUID.randomUUID()
-    val expiresAt = now + if (copy.kind == "laundry-completed") {
+    val attentionIncidentId = watch.pendingAttentionIncidentId
+        ?: "snapshot:${appliance.observedAt}"
+    val expiresAt = now + if (copy.kind in setOf("laundry-completed", "laundry-attention")) {
         Duration.ofHours(6).toMillis()
     } else {
         Duration.ofHours(2).toMillis()
@@ -541,7 +567,11 @@ internal fun laundryNotificationDecision(
         notification = NotificationRecord(
             id = id,
             userId = watch.userId,
-            sourceEventId = "${copy.kind}:${watch.id}:${watch.sessionId ?: "none"}:${watch.notificationMode}",
+            sourceEventId = if (copy.kind == "laundry-attention") {
+                "laundry-attention:${watch.id}:${watch.sessionId ?: "none"}:$attentionIncidentId"
+            } else {
+                "${copy.kind}:${watch.id}:${watch.sessionId ?: "none"}:${watch.notificationMode}"
+            },
             kind = copy.kind,
             title = copy.title,
             body = copy.body,
@@ -556,7 +586,10 @@ internal fun laundryNotificationDecision(
                 "appliance" to watch.appliance,
                 "sessionId" to watch.sessionId,
                 "notificationMode" to watch.notificationMode,
-                "remainingMinutes" to remainingMinutes,
+                "attentionStatus" to attentionStatus,
+                "attentionIncidentId" to attentionIncidentId.takeIf { attentionStatus != null },
+                "errorCode" to attentionErrorCode,
+                "remainingMinutes" to remainingMinutes.takeUnless { durableSessionMismatch },
                 "createdAtEpochMs" to now,
                 "expiresAtEpochMs" to expiresAt,
             ),
@@ -564,11 +597,58 @@ internal fun laundryNotificationDecision(
             dueAtEpochMs = now,
             expiresAtEpochMs = expiresAt,
         ),
-        completeWatch = true,
+        completeWatch = when (copy.kind) {
+            "laundry-completed" -> true
+            "laundry-completion-expected" -> terminal
+            else -> false
+        },
     )
 }
 
+internal fun laundryTransitionAttentionStatus(
+    watch: ActiveLaundryWatch,
+    appliance: LaundryAppliance,
+): String? {
+    if (
+        watch.appliance != "dryer" || watch.attentionUnresolved || watch.sessionId == null
+    ) return null
+    val pendingStatus = watch.pendingAttentionStatus?.takeIf { it in setOf("ERROR", "PAUSED") } ?: return null
+    val replacedSession = appliance.sessionId != null && appliance.sessionId != watch.sessionId
+    if (replacedSession) return pendingStatus
+    if (appliance.operationalStatus in setOf("ERROR", "PAUSED")) return pendingStatus
+    if (appliance.operationalStatus != "IDLE") return null
+    val terminalState = appliance.state.raw ?: appliance.state.code
+    return pendingStatus.takeIf { terminalState in setOf("POWER_OFF", "INITIAL") }
+}
+
 private data class LaundryNotificationCopy(val kind: String, val title: String, val body: String)
+
+private fun laundryAttentionCopy(
+    machine: String,
+    status: String,
+    errorCode: String?,
+): LaundryNotificationCopy = when {
+    status == "PAUSED" -> LaundryNotificationCopy(
+        kind = "laundry-attention",
+        title = "건조기가 일시 정지됐습니다",
+        body = "$machine 건조기 상태를 확인해 주세요.",
+    )
+    errorCode == "EMPTY_WATER_ALERT_ERROR" -> LaundryNotificationCopy(
+        kind = "laundry-attention",
+        title = "건조기가 멈췄습니다",
+        body = "$machine 건조기 물통을 비우고 건조 상태를 확인해 주세요.",
+    )
+    errorCode == "DOOR_OPEN_ERROR" -> LaundryNotificationCopy(
+        kind = "laundry-attention",
+        title = "건조기가 멈췄습니다",
+        body = "$machine 건조기 문을 닫고 건조 상태를 확인해 주세요.",
+    )
+    else -> LaundryNotificationCopy(
+        kind = "laundry-attention",
+        title = "건조기가 멈췄습니다",
+        body = "$machine 건조기에 오류가 발생했습니다. 건조 상태를 확인해 주세요.",
+    )
+}
 
 private fun projectedRemainingMinutes(appliance: LaundryAppliance, now: Long): Int {
     val estimatedFinishAt = appliance.estimatedFinishAt ?: return appliance.projection?.remainingMinutes
@@ -579,7 +659,7 @@ private fun projectedRemainingMinutes(appliance: LaundryAppliance, now: Long): I
     return if (seconds <= 0) 0 else ((seconds + 59) / 60).toInt()
 }
 
-private fun laundryWatchShouldCompleteSilently(
+internal fun laundryWatchShouldCompleteSilently(
     watch: ActiveLaundryWatch,
     appliance: LaundryAppliance,
 ): Boolean {
