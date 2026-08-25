@@ -51,6 +51,24 @@ class UsageRecorderTest {
         UsageRecorder(failedStore, properties(), clock)
             .recordFeature(principal(SessionKind.DESKTOP), UsageFeature.MOBILE_DEVICE_PAIRED)
         assertTrue(failedStore.features.isEmpty())
+
+        val preferenceFailedStore = RecordingUsageStore(preferenceFail = true)
+        UsageRecorder(preferenceFailedStore, properties(), clock)
+            .recordUiOpened(principal(SessionKind.DESKTOP))
+        assertTrue(preferenceFailedStore.userActivities.isEmpty())
+    }
+
+    @Test
+    fun `undecided or opted out accounts do not record authenticated usage`() {
+        val undecided = RecordingUsageStore(preferenceEnabled = null)
+        UsageRecorder(undecided, properties(), clock)
+            .recordUiOpened(principal(SessionKind.DESKTOP))
+        assertTrue(undecided.userActivities.isEmpty())
+
+        val disabled = RecordingUsageStore(preferenceEnabled = false)
+        UsageRecorder(disabled, properties(), clock)
+            .recordFeature(principal(SessionKind.MOBILE), UsageFeature.LAUNDRY_WATCH_CREATED)
+        assertTrue(disabled.features.isEmpty())
     }
 
     @Test
@@ -93,12 +111,26 @@ class UsageRecorderTest {
     private data class FeatureActivity(val date: LocalDate, val userId: UUID, val client: UsageClient)
     private data class AnonymousActivity(val visitorHash: String)
 
-    private class RecordingUsageStore(private val fail: Boolean = false) : UsageStore {
+    private class RecordingUsageStore(
+        private val fail: Boolean = false,
+        private val preferenceFail: Boolean = false,
+        private var preferenceEnabled: Boolean? = true,
+    ) : UsageStore {
         val userActivities = mutableListOf<UserActivity>()
         val features = mutableListOf<FeatureActivity>()
         val anonymousActivities = mutableListOf<AnonymousActivity>()
 
         override fun tryAcquireAggregationLease(name: String, now: Long, durationMs: Long, token: String) = true
+
+        override fun usagePreference(userId: UUID): UsagePreference {
+            if (preferenceFail) error("preference unavailable")
+            return UsagePreference(preferenceEnabled)
+        }
+
+        override fun putUsagePreference(userId: UUID, enabled: Boolean, now: Long): UsagePreference {
+            preferenceEnabled = enabled
+            return UsagePreference(enabled)
+        }
 
         override fun recordUserActivity(
             date: LocalDate,

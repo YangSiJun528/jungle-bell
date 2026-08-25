@@ -10,6 +10,7 @@ data class DesktopInstallationRequest(
     @field:Size(min = 8, max = 128)
     @field:Pattern(regexp = "^[A-Za-z0-9][A-Za-z0-9._:-]+$")
     val installationId: String,
+    val usageAnalyticsEnabled: Boolean? = null,
 )
 
 data class AccessTokenResponse(val accessToken: String, val expiresAt: String)

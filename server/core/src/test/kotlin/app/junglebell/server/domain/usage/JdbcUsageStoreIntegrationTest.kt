@@ -47,6 +47,24 @@ class JdbcUsageStoreIntegrationTest {
     }
 
     @Test
+    fun `existing account preference is undecided until explicitly stored`() {
+        val userId = createUser(usageEnabled = null)
+        val day = LocalDate.of(2026, 8, 20)
+
+        assertEquals(UsagePreference(null), store.usagePreference(userId))
+        assertFalse(store.recordUserActivity(day, userId, UsageClient.DESKTOP, UsageActivity.UI_OPENED))
+        assertEquals(
+            0L,
+            store.incrementFeature(day, userId, UsageClient.DESKTOP, UsageFeature.LAUNDRY_WATCH_CREATED),
+        )
+        assertEquals(UsagePreference(true), store.putUsagePreference(userId, true, 1_000))
+        assertEquals(UsagePreference(true), store.usagePreference(userId))
+        assertEquals(UsagePreference(false), store.putUsagePreference(userId, false, 2_000))
+        assertEquals(UsagePreference(false), store.usagePreference(userId))
+        assertFalse(store.recordUserActivity(day, userId, UsageClient.PWA, UsageActivity.UI_OPENED))
+    }
+
+    @Test
     fun `summary keeps per-client counts and deduplicates the same user across clients`() {
         val day = LocalDate.of(2026, 8, 20)
         val first = createUser()
@@ -160,9 +178,14 @@ class JdbcUsageStoreIntegrationTest {
         assertEquals(uniqueSubjects to totalCount, actual)
     }
 
-    private fun createUser(): UUID = UUID.randomUUID().also { id ->
+    private fun createUser(usageEnabled: Boolean? = true): UUID = UUID.randomUUID().also { id ->
         jdbc.sql("INSERT INTO app_user(id, created_at_epoch_ms) VALUES (:id, 0)")
             .param("id", id).update()
+        if (usageEnabled != null) {
+            jdbc.sql(
+                "INSERT INTO usage_preference(user_id, enabled, updated_at_epoch_ms) VALUES (:id, :enabled, 0)",
+            ).param("id", id).param("enabled", usageEnabled).update()
+        }
     }
 
     private companion object {

@@ -40,8 +40,8 @@ class AccountService(
                         10,
                     ),
                 ),
-                ENROLLMENT_WINDOW.toMillis(), UUID.randomUUID(), request.installationId, UUID.randomUUID(),
-                tokens.sessionHash(accessToken), now, expiresAt,
+                ENROLLMENT_WINDOW.toMillis(), UUID.randomUUID(), request.installationId,
+                request.usageAnalyticsEnabled, UUID.randomUUID(), tokens.sessionHash(accessToken), now, expiresAt,
             )
         } catch (_: DesktopEnrollmentRateLimitedException) {
             logger.warn("Desktop enrollment rejected. reason=rate_limited")

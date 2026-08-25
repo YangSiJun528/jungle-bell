@@ -15,6 +15,7 @@ class JdbcAccountStore(private val jdbc: JdbcClient) : AccountStore {
         rateWindowMs: Long,
         userId: UUID,
         installationId: String,
+        usageAnalyticsEnabled: Boolean?,
         sessionId: UUID,
         tokenHash: String,
         now: Long,
@@ -29,7 +30,7 @@ class JdbcAccountStore(private val jdbc: JdbcClient) : AccountStore {
         if (desktopExists(installationId)) {
             throw DesktopAlreadyEnrolledException()
         }
-        createDesktop(userId, installationId, sessionId, tokenHash, now, expiresAt)
+        createDesktop(userId, installationId, usageAnalyticsEnabled, sessionId, tokenHash, now, expiresAt)
     }
 
     private fun consumeEnrollmentAttempt(
@@ -63,6 +64,7 @@ class JdbcAccountStore(private val jdbc: JdbcClient) : AccountStore {
     private fun createDesktop(
         userId: UUID,
         installationId: String,
+        usageAnalyticsEnabled: Boolean?,
         sessionId: UUID,
         tokenHash: String,
         now: Long,
@@ -92,6 +94,12 @@ class JdbcAccountStore(private val jdbc: JdbcClient) : AccountStore {
             "INSERT INTO meal_preference(user_id, enabled, lunch, dinner, updated_at_epoch_ms) " +
                 "VALUES (:userId, true, true, true, :now)",
         ).param("userId", userId).param("now", now).update()
+        if (usageAnalyticsEnabled != null) {
+            jdbc.sql(
+                "INSERT INTO usage_preference(user_id, enabled, updated_at_epoch_ms) " +
+                    "VALUES (:userId, :enabled, :now)",
+            ).param("userId", userId).param("enabled", usageAnalyticsEnabled).param("now", now).update()
+        }
     }
 
     override fun rotateDesktop(

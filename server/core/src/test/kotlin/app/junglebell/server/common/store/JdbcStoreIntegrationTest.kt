@@ -55,6 +55,27 @@ class JdbcStoreIntegrationTest {
     }
 
     @Test
+    fun `desktop enrollment enables usage collection for a new account`() {
+        val userId = UUID.randomUUID()
+        JdbcAccountStore(jdbc).enrollDesktop(
+            rateLimits = emptyList(),
+            rateWindowMs = 60_000,
+            userId = userId,
+            installationId = "desktop-new-account",
+            usageAnalyticsEnabled = true,
+            sessionId = UUID.randomUUID(),
+            tokenHash = randomHash(),
+            now = 1_000,
+            expiresAt = 2_000,
+        )
+
+        assertTrue(
+            jdbc.sql("SELECT enabled FROM usage_preference WHERE user_id = :userId")
+                .param("userId", userId).query(Boolean::class.java).single(),
+        )
+    }
+
+    @Test
     fun `laundry notification mode is shared by personal and automation stores`() {
         val userId = createUser()
         val watch = LaundryWatch(
@@ -244,10 +265,13 @@ class JdbcStoreIntegrationTest {
             """.trimIndent(),
         ).param("id", "jbps_${randomHash()}").param("userId", userId)
             .param("sessionId", mobileSessionId).update()
+        jdbc.sql(
+            "INSERT INTO usage_preference(user_id, enabled, updated_at_epoch_ms) VALUES (:userId, true, 0)",
+        ).param("userId", userId).update()
         val principal = SessionPrincipal(desktopSessionId, userId, installationId, SessionKind.DESKTOP)
 
         assertTrue(JdbcAccountStore(jdbc).deleteDesktopIdentity(principal))
-        for (table in listOf("app_user", "desktop_device", "app_session", "push_subscription")) {
+        for (table in listOf("app_user", "desktop_device", "app_session", "push_subscription", "usage_preference")) {
             assertEquals(
                 0,
                 jdbc.sql("SELECT count(*) FROM $table WHERE ${if (table == "app_user") "id" else "user_id"} = :userId")

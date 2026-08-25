@@ -23,7 +23,7 @@ class UsageRecorder(
     private val zoneId = ZoneId.of(settings.zoneId)
     private val logger = LoggerFactory.getLogger(javaClass)
 
-    fun recordUiOpened(principal: SessionPrincipal) = bestEffort("ui_opened") {
+    fun recordUiOpened(principal: SessionPrincipal) = bestEffort(principal, "ui_opened") {
         store.recordUserActivity(
             LocalDate.now(clock.withZone(zoneId)),
             principal.userId,
@@ -32,7 +32,7 @@ class UsageRecorder(
         )
     }
 
-    fun recordFeature(principal: SessionPrincipal, feature: UsageFeature) = bestEffort(feature.value) {
+    fun recordFeature(principal: SessionPrincipal, feature: UsageFeature) = bestEffort(principal, feature.value) {
         store.incrementFeature(
             LocalDate.now(clock.withZone(zoneId)),
             principal.userId,
@@ -41,9 +41,10 @@ class UsageRecorder(
         )
     }
 
-    private inline fun bestEffort(metric: String, operation: () -> Unit) {
+    private inline fun bestEffort(principal: SessionPrincipal, metric: String, operation: () -> Unit) {
         if (!settings.enabled) return
         try {
+            if (store.usagePreference(principal.userId).enabled != true) return
             operation()
         } catch (error: Exception) {
             logger.warn("Usage metric recording failed. metric={} errorType={}", metric, error.javaClass.simpleName)

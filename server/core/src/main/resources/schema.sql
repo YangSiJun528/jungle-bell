@@ -241,6 +241,12 @@ CREATE TABLE IF NOT EXISTS meal_preference (
     updated_at_epoch_ms bigint NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS usage_preference (
+    user_id uuid PRIMARY KEY REFERENCES app_user(id) ON DELETE CASCADE,
+    enabled boolean NOT NULL,
+    updated_at_epoch_ms bigint NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS meal_preference_lunch_subscriber
     ON meal_preference (user_id) WHERE enabled AND lunch;
 CREATE INDEX IF NOT EXISTS meal_preference_dinner_subscriber

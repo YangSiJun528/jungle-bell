@@ -27,6 +27,8 @@ enum class UsageSummaryScope {
     ANONYMOUS_ACTIVITY,
 }
 
+data class UsagePreference(val enabled: Boolean?)
+
 data class UsagePurgeResult(
     val anonymousRows: Int,
     val userActivityRows: Int,

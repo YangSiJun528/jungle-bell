@@ -32,7 +32,10 @@ class AccountServiceTest {
         val store = enrollmentStore()
         val service = service(store)
 
-        val response = service.enroll(DesktopInstallationRequest("desktop-installation-1"), "203.0.113.7")
+        val response = service.enroll(
+            DesktopInstallationRequest("desktop-installation-1", usageAnalyticsEnabled = false),
+            "203.0.113.7",
+        )
 
         assertTrue(response.accessToken.matches(Regex("^jbd_[a-f0-9]{64}$")))
         assertEquals(now.plusSeconds(90L * 24 * 60 * 60).toString(), response.expiresAt)
@@ -51,9 +54,10 @@ class AccountServiceTest {
         )
         assertEquals(600_000L, enrollment.arguments[1])
         assertEquals("desktop-installation-1", enrollment.arguments[3])
-        assertTrue((enrollment.arguments[5] as String).matches(Regex("^[a-f0-9]{64}$")))
-        assertEquals(now.toEpochMilli(), enrollment.arguments[6])
-        assertEquals(now.plusSeconds(90L * 24 * 60 * 60).toEpochMilli(), enrollment.arguments[7])
+        assertEquals(false, enrollment.arguments[4])
+        assertTrue((enrollment.arguments[6] as String).matches(Regex("^[a-f0-9]{64}$")))
+        assertEquals(now.toEpochMilli(), enrollment.arguments[7])
+        assertEquals(now.plusSeconds(90L * 24 * 60 * 60).toEpochMilli(), enrollment.arguments[8])
     }
 
     @Test

@@ -6,6 +6,9 @@ import java.util.UUID
 interface UsageStore {
     fun tryAcquireAggregationLease(name: String, now: Long, durationMs: Long, token: String): Boolean
 
+    fun usagePreference(userId: UUID): UsagePreference
+    fun putUsagePreference(userId: UUID, enabled: Boolean, now: Long): UsagePreference
+
     fun recordUserActivity(
         date: LocalDate,
         userId: UUID,

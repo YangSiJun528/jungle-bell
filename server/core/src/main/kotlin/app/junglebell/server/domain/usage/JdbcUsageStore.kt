@@ -22,6 +22,26 @@ class JdbcUsageStore(private val jdbc: JdbcClient) : UsageStore {
         ).param("name", name).param("now", now).param("token", token)
             .param("expiresBefore", now - durationMs).query(String::class.java).optional().isPresent
 
+    override fun usagePreference(userId: UUID): UsagePreference = UsagePreference(
+        jdbc.sql("SELECT enabled FROM usage_preference WHERE user_id = :userId")
+            .param("userId", userId).query(Boolean::class.java).optional().orElse(null),
+    )
+
+    override fun putUsagePreference(userId: UUID, enabled: Boolean, now: Long): UsagePreference {
+        val stored = jdbc.sql(
+            """
+            INSERT INTO usage_preference(user_id, enabled, updated_at_epoch_ms)
+            SELECT id, :enabled, :now FROM app_user WHERE id = :userId
+            ON CONFLICT (user_id) DO UPDATE SET
+                enabled = EXCLUDED.enabled,
+                updated_at_epoch_ms = EXCLUDED.updated_at_epoch_ms
+            RETURNING enabled
+            """.trimIndent(),
+        ).param("userId", userId).param("enabled", enabled).param("now", now)
+            .query(Boolean::class.java).single()
+        return UsagePreference(stored)
+    }
+
     override fun recordUserActivity(
         date: LocalDate,
         userId: UUID,
@@ -30,7 +50,9 @@ class JdbcUsageStore(private val jdbc: JdbcClient) : UsageStore {
     ): Boolean = jdbc.sql(
         """
         INSERT INTO usage_user_day(usage_date, user_id, client, activity)
-        VALUES (:date, :userId, :client, :activity)
+        SELECT :date, preference.user_id, :client, :activity
+        FROM usage_preference preference
+        WHERE preference.user_id = :userId AND preference.enabled
         ON CONFLICT DO NOTHING
         RETURNING user_id
         """.trimIndent(),
@@ -64,13 +86,15 @@ class JdbcUsageStore(private val jdbc: JdbcClient) : UsageStore {
     ): Long = jdbc.sql(
         """
         INSERT INTO usage_feature_day(usage_date, user_id, client, feature_code, use_count)
-        VALUES (:date, :userId, :client, :feature, 1)
+        SELECT :date, preference.user_id, :client, :feature, 1
+        FROM usage_preference preference
+        WHERE preference.user_id = :userId AND preference.enabled
         ON CONFLICT (usage_date, user_id, client, feature_code)
         DO UPDATE SET use_count = usage_feature_day.use_count + 1
         RETURNING use_count
         """.trimIndent(),
     ).param("date", date).param("userId", userId).param("client", client.value)
-        .param("feature", feature.value).query(Long::class.java).single()
+        .param("feature", feature.value).query(Long::class.java).optional().orElse(0L)
 
     @Transactional
     override fun rebuildSummary(

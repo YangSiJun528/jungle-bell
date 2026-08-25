@@ -164,6 +164,84 @@ class SecurityFilterChainIntegrationTest(
     }
 
     @Test
+    fun `existing account remains untracked until usage preference is enabled`() {
+        val token = "jbs_" + "4".repeat(64)
+        val sessionId = createAppSession("mobile", token, usageEnabled = null)
+
+        mockMvc.perform(get("/api/me/usage-preference").cookie(Cookie("jb_device", token)))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.enabled").value(org.hamcrest.Matchers.nullValue()))
+        mockMvc.perform(post("/api/me/usage/ui-opened").cookie(Cookie("jb_device", token)))
+            .andExpect(status().isNoContent)
+        assertUsageCount(sessionId, 0)
+
+        mockMvc.perform(
+            put("/api/me/usage-preference")
+                .cookie(Cookie("jb_device", token))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"enabled":true}"""),
+        ).andExpect(status().isOk)
+            .andExpect(jsonPath("$.enabled").value(true))
+        mockMvc.perform(post("/api/me/usage/ui-opened").cookie(Cookie("jb_device", token)))
+            .andExpect(status().isNoContent)
+        assertUsageCount(sessionId, 1)
+
+        mockMvc.perform(
+            put("/api/me/usage-preference")
+                .cookie(Cookie("jb_device", token))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"enabled":false}"""),
+        ).andExpect(status().isOk)
+            .andExpect(jsonPath("$.enabled").value(false))
+    }
+
+    @Test
+    fun `explicitly disabled account receives 204 without storing usage`() {
+        val token = "jbs_" + "7".repeat(64)
+        val sessionId = createAppSession("mobile", token, usageEnabled = false)
+
+        mockMvc.perform(post("/api/me/usage/ui-opened").cookie(Cookie("jb_device", token)))
+            .andExpect(status().isNoContent)
+
+        assertUsageCount(sessionId, 0)
+    }
+
+    @Test
+    fun `desktop bearer can read and update the shared usage preference`() {
+        val desktopToken = "jbd_" + "9".repeat(64)
+        val desktopSessionId = createAppSession("desktop", desktopToken)
+        val userId = sessionUserId(desktopSessionId)
+        val mobileToken = "jbs_" + "6".repeat(64)
+        createAppSession("mobile", mobileToken, existingUserId = userId)
+
+        mockMvc.perform(
+            put("/api/desktop/usage-preference")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer $desktopToken")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"enabled":false}"""),
+        ).andExpect(status().isOk)
+            .andExpect(jsonPath("$.enabled").value(false))
+        mockMvc.perform(
+            get("/api/me/usage-preference")
+                .cookie(Cookie("jb_device", mobileToken)),
+        ).andExpect(status().isOk)
+            .andExpect(jsonPath("$.enabled").value(false))
+
+        mockMvc.perform(
+            put("/api/me/usage-preference")
+                .cookie(Cookie("jb_device", mobileToken))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"enabled":true}"""),
+        ).andExpect(status().isOk)
+            .andExpect(jsonPath("$.enabled").value(true))
+        mockMvc.perform(
+            get("/api/desktop/usage-preference")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer $desktopToken"),
+        ).andExpect(status().isOk)
+            .andExpect(jsonPath("$.enabled").value(true))
+    }
+
+    @Test
     fun `anonymous UI open issues a short lived first party visitor cookie`() {
         val result = mockMvc.perform(
             post("/api/public/usage/ui-opened")
@@ -327,13 +405,26 @@ class SecurityFilterChainIntegrationTest(
             .andExpect(jsonPath("$.error").value("ORIGIN_NOT_ALLOWED"))
     }
 
-    private fun createAppSession(kind: String, token: String): UUID {
-        val userId = UUID.randomUUID()
+    private fun createAppSession(
+        kind: String,
+        token: String,
+        usageEnabled: Boolean? = true,
+        existingUserId: UUID? = null,
+    ): UUID {
+        val userId = existingUserId ?: UUID.randomUUID()
         val sessionId = UUID.randomUUID()
         val installationId = "$kind-${UUID.randomUUID()}"
         val now = System.currentTimeMillis()
-        jdbc.sql("INSERT INTO app_user(id, created_at_epoch_ms) VALUES (:userId, :now)")
-            .param("userId", userId).param("now", now).update()
+        if (existingUserId == null) {
+            jdbc.sql("INSERT INTO app_user(id, created_at_epoch_ms) VALUES (:userId, :now)")
+                .param("userId", userId).param("now", now).update()
+            if (usageEnabled != null) {
+                jdbc.sql(
+                    "INSERT INTO usage_preference(user_id, enabled, updated_at_epoch_ms) " +
+                        "VALUES (:userId, :enabled, :now)",
+                ).param("userId", userId).param("enabled", usageEnabled).param("now", now).update()
+            }
+        }
         if (kind == "desktop") {
             jdbc.sql(
                 """
@@ -358,6 +449,10 @@ class SecurityFilterChainIntegrationTest(
             .param("now", now).param("expiresAt", now + 60_000).update()
         return sessionId
     }
+
+    private fun sessionUserId(sessionId: UUID): UUID = jdbc.sql(
+        "SELECT user_id FROM app_session WHERE id = :sessionId",
+    ).param("sessionId", sessionId).query(UUID::class.java).single()
 
     private fun createDesktopUiSession(token: String, origin: String) {
         val parentToken = "jbd_" + UUID.randomUUID().toString().replace("-", "").repeat(2)
@@ -392,6 +487,18 @@ class SecurityFilterChainIntegrationTest(
             """.trimIndent(),
         ).param("sessionId", sessionId).param("client", client).query(Int::class.java).single()
         kotlin.test.assertEquals(1, count)
+    }
+
+    private fun assertUsageCount(sessionId: UUID, expected: Int) {
+        val count = jdbc.sql(
+            """
+            SELECT count(*)
+            FROM usage_user_day usage
+            JOIN app_session session ON session.user_id = usage.user_id
+            WHERE session.id = :sessionId
+            """.trimIndent(),
+        ).param("sessionId", sessionId).query(Int::class.java).single()
+        kotlin.test.assertEquals(expected, count)
     }
 
     companion object {

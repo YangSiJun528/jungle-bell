@@ -4,6 +4,8 @@ import app.junglebell.server.api.security.CurrentSession
 import app.junglebell.server.domain.security.SessionPrincipal
 import app.junglebell.server.domain.usage.AnonymousUsageRecorder
 import app.junglebell.server.domain.usage.UsageClient
+import app.junglebell.server.domain.usage.UsagePreference
+import app.junglebell.server.domain.usage.UsagePreferenceService
 import app.junglebell.server.domain.usage.UsageRecorder
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
@@ -13,7 +15,9 @@ import java.time.Duration
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseCookie
+import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
@@ -23,11 +27,24 @@ data class AnonymousUiOpenedRequest(
     val client: String,
 )
 
+data class UsagePreferenceRequest(val enabled: Boolean)
+
 @RestController
 class UsageController(
     private val authenticated: UsageRecorder,
     private val anonymous: AnonymousUsageRecorder,
+    private val preferences: UsagePreferenceService,
 ) {
+    @GetMapping("/api/me/usage-preference", "/api/desktop/usage-preference")
+    fun usagePreference(@CurrentSession principal: SessionPrincipal): UsagePreference =
+        preferences.get(principal.userId)
+
+    @PutMapping("/api/me/usage-preference", "/api/desktop/usage-preference")
+    fun putUsagePreference(
+        @CurrentSession principal: SessionPrincipal,
+        @Valid @RequestBody body: UsagePreferenceRequest,
+    ): UsagePreference = preferences.put(principal.userId, body.enabled)
+
     @PostMapping("/api/me/usage/ui-opened")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     fun authenticatedUiOpened(@CurrentSession principal: SessionPrincipal) {

@@ -115,6 +115,9 @@ class UsageAggregationServiceTest {
             return leaseGranted
         }
 
+        override fun usagePreference(userId: UUID) = UsagePreference(true)
+        override fun putUsagePreference(userId: UUID, enabled: Boolean, now: Long) = UsagePreference(enabled)
+
         override fun rawDatesOnOrAfter(date: LocalDate): Set<LocalDate> = rawDates
         override fun rebuildSummary(
             date: LocalDate,
