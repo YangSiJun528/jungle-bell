@@ -1,6 +1,16 @@
 use super::*;
 use reqwest::header::CACHE_CONTROL;
 
+#[cfg(test)]
+type UsagePreferenceTestResult = Arc<std::sync::Mutex<Option<Result<Option<bool>, ServiceError>>>>;
+
+#[cfg(test)]
+#[derive(Clone)]
+struct UsagePreferencePutBarrier {
+    started: Arc<Notify>,
+    release: Arc<Notify>,
+}
+
 #[derive(Clone)]
 pub(crate) struct RemoteApi {
     origin: Url,
@@ -11,6 +21,12 @@ pub(crate) struct RemoteApi {
     identity_deletion_result: Arc<std::sync::Mutex<Option<Result<(), ServiceError>>>>,
     #[cfg(test)]
     ui_opened_result: Arc<std::sync::Mutex<Option<Result<(), ServiceError>>>>,
+    #[cfg(test)]
+    usage_preference_get_result: UsagePreferenceTestResult,
+    #[cfg(test)]
+    usage_preference_put_result: UsagePreferenceTestResult,
+    #[cfg(test)]
+    usage_preference_put_barrier: Option<UsagePreferencePutBarrier>,
 }
 
 impl RemoteApi {
@@ -35,6 +51,12 @@ impl RemoteApi {
             identity_deletion_result: Arc::new(std::sync::Mutex::new(None)),
             #[cfg(test)]
             ui_opened_result: Arc::new(std::sync::Mutex::new(None)),
+            #[cfg(test)]
+            usage_preference_get_result: Arc::new(std::sync::Mutex::new(None)),
+            #[cfg(test)]
+            usage_preference_put_result: Arc::new(std::sync::Mutex::new(None)),
+            #[cfg(test)]
+            usage_preference_put_barrier: None,
         })
     }
 
@@ -59,6 +81,28 @@ impl RemoteApi {
         api
     }
 
+    #[cfg(test)]
+    pub(crate) fn with_usage_preference_results(
+        get: Option<Result<Option<bool>, ServiceError>>,
+        put: Option<Result<Option<bool>, ServiceError>>,
+    ) -> Self {
+        let mut api = Self::new("https://bell.example.com").unwrap();
+        api.usage_preference_get_result = Arc::new(std::sync::Mutex::new(get));
+        api.usage_preference_put_result = Arc::new(std::sync::Mutex::new(put));
+        api
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_blocked_usage_preference_put(
+        result: Result<Option<bool>, ServiceError>,
+        started: Arc<Notify>,
+        release: Arc<Notify>,
+    ) -> Self {
+        let mut api = Self::with_usage_preference_results(None, Some(result));
+        api.usage_preference_put_barrier = Some(UsagePreferencePutBarrier { started, release });
+        api
+    }
+
     pub(crate) fn endpoint(&self, path: &str) -> Result<Url, ServiceError> {
         if !is_canonical_server_path(path) {
             return Err(ServiceError::Rejected);
@@ -66,12 +110,17 @@ impl RemoteApi {
         self.origin.join(path).map_err(|_| ServiceError::InvalidResponse)
     }
 
-    pub(crate) async fn register_installation(&self, installation_id: &str) -> Result<BearerCredential, ServiceError> {
+    pub(crate) async fn register_installation(
+        &self,
+        installation_id: &str,
+        usage_analytics_enabled: Option<bool>,
+    ) -> Result<BearerCredential, ServiceError> {
         let response = self
             .client
             .post(self.endpoint(INSTALLATIONS_PATH)?)
             .json(&DesktopInstallationRequest {
                 installation_id: installation_id.to_owned(),
+                usage_analytics_enabled,
             })
             .send()
             .await
@@ -170,6 +219,55 @@ impl RemoteApi {
         ensure_authenticated_status(&response, &[StatusCode::OK, StatusCode::NO_CONTENT])
     }
 
+    pub(crate) async fn usage_preference(&self, bearer: &str) -> Result<Option<bool>, ServiceError> {
+        #[cfg(test)]
+        if let Some(result) = self.usage_preference_get_result.lock().unwrap().take() {
+            return result;
+        }
+        let response = self
+            .client
+            .get(self.endpoint(USAGE_PREFERENCE_PATH)?)
+            .bearer_auth(bearer)
+            .header(CACHE_CONTROL, "no-store")
+            .send()
+            .await
+            .map_err(|_| ServiceError::Unavailable)?;
+        ensure_authenticated_status(&response, &[StatusCode::OK])?;
+        Ok(decode_json_limited::<UsagePreferenceResponse>(response).await?.enabled)
+    }
+
+    pub(crate) async fn put_usage_preference(&self, bearer: &str, enabled: bool) -> Result<(), ServiceError> {
+        #[cfg(test)]
+        {
+            if let Some(barrier) = &self.usage_preference_put_barrier {
+                barrier.started.notify_one();
+                barrier.release.notified().await;
+            }
+            if let Some(result) = self.usage_preference_put_result.lock().unwrap().take() {
+                return match result? {
+                    Some(stored) if stored == enabled => Ok(()),
+                    _ => Err(ServiceError::InvalidResponse),
+                };
+            }
+        }
+        let response = self
+            .client
+            .put(self.endpoint(USAGE_PREFERENCE_PATH)?)
+            .bearer_auth(bearer)
+            .header(CACHE_CONTROL, "no-store")
+            .json(&UsagePreferenceRequest { enabled })
+            .send()
+            .await
+            .map_err(|_| ServiceError::Unavailable)?;
+        ensure_authenticated_status(&response, &[StatusCode::OK])?;
+        let stored = decode_json_limited::<UsagePreferenceResponse>(response).await?.enabled;
+        if stored == Some(enabled) {
+            Ok(())
+        } else {
+            Err(ServiceError::InvalidResponse)
+        }
+    }
+
     pub(crate) async fn record_ui_opened(&self, bearer: &str) -> Result<(), ServiceError> {
         #[cfg(test)]
         if let Some(result) = self.ui_opened_result.lock().unwrap().take() {
@@ -259,6 +357,7 @@ pub(crate) fn is_canonical_server_path(path: &str) -> bool {
             | CURRENT_WEBVIEW_SESSION_PATH
             | ATTENDANCE_SNAPSHOT_PATH
             | HEARTBEAT_PATH
+            | USAGE_PREFERENCE_PATH
             | NOTIFICATIONS_PATH
             | UI_OPENED_PATH
     ) || path == format!("{NOTIFICATIONS_PATH}/test")

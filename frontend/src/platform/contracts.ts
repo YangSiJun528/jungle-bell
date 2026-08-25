@@ -66,6 +66,8 @@ export interface DesktopSettings {
     appVersion: string;
     autoStart: boolean;
     autoUpdate: boolean;
+    usageAnalytics: boolean | null;
+    usageAnalyticsSyncPending: boolean;
     debugMode: boolean;
     selectedCohortId: string | null;
     effectiveCohortId: string | null;
@@ -74,7 +76,7 @@ export interface DesktopSettings {
 
 export type DesktopSettingsUpdate = Pick<
     DesktopSettings,
-    'autoStart' | 'autoUpdate' | 'debugMode' | 'selectedCohortId'
+    'autoStart' | 'autoUpdate' | 'usageAnalytics' | 'debugMode' | 'selectedCohortId'
 >;
 
 export interface DesktopUpdateStatus {

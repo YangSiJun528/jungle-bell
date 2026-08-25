@@ -91,7 +91,8 @@ const fn configured_log_level(debug_mode: bool) -> log::LevelFilter {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let launched_from_autostart = std::env::args().any(|argument| argument == AUTOSTART_ARGUMENT);
-    let config = Config::load();
+    let loaded_config = Config::load();
+    let config = loaded_config.config.clone();
     let log_level = configured_log_level(config.debug_mode);
     let shared_state = Arc::new(Mutex::new(AppState::new(config)));
     let notification_inbox_service = Arc::new(NotificationInboxService::load());
@@ -144,7 +145,7 @@ pub fn run() {
         .manage(shared_state.clone())
         .manage(notification_inbox_service.clone())
         .manage(notification_service.clone())
-        .manage(settings_service)
+        .manage(settings_service.clone())
         // JS에서 `window.__TAURI__.core.invoke()`로 호출할 수 있는 Tauri 커맨드 등록.
         .invoke_handler(tauri::generate_handler![
             commands::report_checker_event,
@@ -179,6 +180,20 @@ pub fn run() {
             let remote_sync_service = Arc::new(tauri::async_runtime::block_on(
                 remote_sync::RemoteSyncService::configured(app.handle()),
             )?);
+            let startup_usage = loaded_config.startup_usage_analytics(remote_sync_service.clean_new_installation());
+            let effective_usage = if startup_usage != loaded_config.config.usage_analytics {
+                match tauri::async_runtime::block_on(settings_service.initialize_usage_analytics(startup_usage)) {
+                    Ok(saved) => saved.usage_analytics,
+                    Err(error) => {
+                        log::warn!("[usage] 신규 설치 통계 기본값 저장 실패로 전송을 비활성화합니다: {error}");
+                        None
+                    }
+                }
+            } else {
+                loaded_config.config.usage_analytics
+            };
+            let runtime_usage = loaded_config.runtime_usage_analytics(effective_usage);
+            tauri::async_runtime::block_on(remote_sync_service.set_usage_analytics_preference(runtime_usage));
             app.manage(remote_sync_service.clone());
             tray::setup_tray(app)?;
             if let Err(error) = notification_service.initialize_system_backend() {
@@ -209,6 +224,7 @@ pub fn run() {
             remote_sync::start_background_loop(
                 app.handle().clone(),
                 remote_sync_service,
+                settings_service.clone(),
                 shared_state.clone(),
                 notification_service.clone(),
             );

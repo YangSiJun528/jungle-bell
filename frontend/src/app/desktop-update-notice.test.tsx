@@ -33,6 +33,8 @@ const settings: DesktopSettings = {
     appVersion: '0.5.0',
     autoStart: true,
     autoUpdate: false,
+    usageAnalytics: false,
+    usageAnalyticsSyncPending: false,
     debugMode: false,
     selectedCohortId: null,
     effectiveCohortId: null,

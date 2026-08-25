@@ -167,6 +167,9 @@ class SecurityFilterChainIntegrationTest(
     fun `existing account remains untracked until usage preference is enabled`() {
         val token = "jbs_" + "4".repeat(64)
         val sessionId = createAppSession("mobile", token, usageEnabled = null)
+        val userId = sessionUserId(sessionId)
+        val desktopToken = "jbd_" + "5".repeat(64)
+        createAppSession("desktop", desktopToken, existingUserId = userId)
 
         mockMvc.perform(get("/api/me/usage-preference").cookie(Cookie("jb_device", token)))
             .andExpect(status().isOk)
@@ -176,8 +179,8 @@ class SecurityFilterChainIntegrationTest(
         assertUsageCount(sessionId, 0)
 
         mockMvc.perform(
-            put("/api/me/usage-preference")
-                .cookie(Cookie("jb_device", token))
+            put("/api/desktop/usage-preference")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer $desktopToken")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""{"enabled":true}"""),
         ).andExpect(status().isOk)
@@ -187,8 +190,8 @@ class SecurityFilterChainIntegrationTest(
         assertUsageCount(sessionId, 1)
 
         mockMvc.perform(
-            put("/api/me/usage-preference")
-                .cookie(Cookie("jb_device", token))
+            put("/api/desktop/usage-preference")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer $desktopToken")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""{"enabled":false}"""),
         ).andExpect(status().isOk)
@@ -207,7 +210,7 @@ class SecurityFilterChainIntegrationTest(
     }
 
     @Test
-    fun `desktop bearer can read and update the shared usage preference`() {
+    fun `desktop bearer controls the shared usage preference and mobile can read it`() {
         val desktopToken = "jbd_" + "9".repeat(64)
         val desktopSessionId = createAppSession("desktop", desktopToken)
         val userId = sessionUserId(desktopSessionId)
@@ -232,13 +235,13 @@ class SecurityFilterChainIntegrationTest(
                 .cookie(Cookie("jb_device", mobileToken))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""{"enabled":true}"""),
-        ).andExpect(status().isOk)
-            .andExpect(jsonPath("$.enabled").value(true))
+        ).andExpect(status().isForbidden)
+            .andExpect(jsonPath("$.error").value("SESSION_KIND_DENIED"))
         mockMvc.perform(
             get("/api/desktop/usage-preference")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer $desktopToken"),
         ).andExpect(status().isOk)
-            .andExpect(jsonPath("$.enabled").value(true))
+            .andExpect(jsonPath("$.enabled").value(false))
     }
 
     @Test

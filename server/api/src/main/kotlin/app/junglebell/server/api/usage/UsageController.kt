@@ -39,7 +39,7 @@ class UsageController(
     fun usagePreference(@CurrentSession principal: SessionPrincipal): UsagePreference =
         preferences.get(principal.userId)
 
-    @PutMapping("/api/me/usage-preference", "/api/desktop/usage-preference")
+    @PutMapping("/api/desktop/usage-preference")
     fun putUsagePreference(
         @CurrentSession principal: SessionPrincipal,
         @Valid @RequestBody body: UsagePreferenceRequest,

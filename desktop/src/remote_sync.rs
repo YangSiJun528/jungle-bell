@@ -23,6 +23,7 @@ use zeroize::Zeroizing;
 use crate::{
     attendance::{AttendanceReport, CohortReportStatus},
     attendance_day,
+    desktop_settings::DesktopSettingsService,
     notification_service::{NotificationAction, NotificationRequest, NotificationService},
     secure_credential::{self, CredentialStore, PlatformCredentialStoreKind},
     state::AppState,
@@ -39,6 +40,7 @@ const CURRENT_WEBVIEW_SESSION_PATH: &str = "/api/desktop/webview-sessions/curren
 const ATTENDANCE_SNAPSHOT_PATH: &str = "/api/desktop/attendance";
 const ATTENDANCE_SNAPSHOT_UPDATED_EVENT: &str = "attendance-snapshot-updated";
 const HEARTBEAT_PATH: &str = "/api/desktop/heartbeat";
+const USAGE_PREFERENCE_PATH: &str = "/api/desktop/usage-preference";
 const NOTIFICATIONS_PATH: &str = "/api/desktop/notifications";
 const UI_OPENED_PATH: &str = "/api/me/usage/ui-opened";
 const MAX_RESPONSE_BYTES: u64 = 512 * 1024;
@@ -182,6 +184,7 @@ async fn deliver_server_notifications(
 pub(crate) fn start_background_loop(
     app: tauri::AppHandle,
     service: Arc<RemoteSyncService>,
+    settings: Arc<DesktopSettingsService>,
     state: Arc<Mutex<AppState>>,
     notifications: Arc<NotificationService>,
 ) {
@@ -190,6 +193,8 @@ pub(crate) fn start_background_loop(
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
             interval.tick().await;
+
+            sync_usage_analytics_setting(&settings, &service).await;
 
             let session_state = {
                 let state = state.lock().await;
@@ -209,6 +214,28 @@ pub(crate) fn start_background_loop(
             }
         }
     });
+}
+
+pub(crate) async fn sync_usage_analytics_setting(settings: &DesktopSettingsService, service: &RemoteSyncService) {
+    match service.sync_usage_analytics_preference().await {
+        Ok(UsagePreferenceSync::Current) => {}
+        Ok(UsagePreferenceSync::RemoteDecision { enabled, revision }) => {
+            match settings.adopt_usage_analytics_if_undecided(enabled).await {
+                Ok(true) => {
+                    if !service.accept_remote_usage_preference(enabled, revision).await {
+                        let current = settings.settings().await.usage_analytics;
+                        service.set_usage_analytics_preference(current).await;
+                    }
+                }
+                Ok(false) => {
+                    let current = settings.settings().await.usage_analytics;
+                    service.set_usage_analytics_preference(current).await;
+                }
+                Err(error) => log::warn!("[usage] 계정 통계 설정을 로컬에 저장하지 못했습니다: {error}"),
+            }
+        }
+        Err(error) => log::debug!("[usage] 계정 통계 설정 동기화 지연: {}", error.code()),
+    }
 }
 
 pub(crate) async fn get_connected_service_status(
@@ -661,6 +688,7 @@ mod tests {
             "/api/desktop/webview-sessions/current",
             "/api/desktop/heartbeat",
             "/api/desktop/attendance",
+            "/api/desktop/usage-preference",
             "/api/desktop/notifications",
             "/api/desktop/notifications/test",
             "/api/me/usage/ui-opened",
@@ -771,23 +799,64 @@ mod tests {
             Arc::new(MemoryCredentialStore::new(None)),
         )
         .unwrap();
+        service.set_usage_analytics_preference(Some(false)).await;
 
         let status = service.reset_identity("tauri://localhost").await.unwrap();
 
         assert!(!status.authenticated);
         assert_eq!(status.last_error.as_deref(), Some(ServiceError::Unavailable.code()));
         assert_ne!(service.installation_id_for_test().await, original_id);
+        assert_eq!(service.usage_analytics_preference().await, Some(false));
     }
 
     #[test]
     fn installation_registration_contains_no_lms_identity_or_cookie() {
         let request = DesktopInstallationRequest {
             installation_id: "550e8400-e29b-41d4-a716-446655440000".into(),
+            usage_analytics_enabled: Some(false),
         };
         let encoded = serde_json::to_string(&request).unwrap();
-        assert_eq!(encoded, r#"{"installationId":"550e8400-e29b-41d4-a716-446655440000"}"#);
+        assert_eq!(
+            encoded,
+            r#"{"installationId":"550e8400-e29b-41d4-a716-446655440000","usageAnalyticsEnabled":false}"#
+        );
         for forbidden in ["cookie", "access_token", "refresh_token", "lms", "subject"] {
             assert!(!encoded.to_ascii_lowercase().contains(forbidden));
         }
+
+        let undecided = DesktopInstallationRequest {
+            installation_id: "550e8400-e29b-41d4-a716-446655440000".into(),
+            usage_analytics_enabled: None,
+        };
+        assert!(serde_json::to_string(&undecided)
+            .unwrap()
+            .contains(r#""usageAnalyticsEnabled":null"#));
+    }
+
+    #[test]
+    fn usage_preference_contract_requires_exact_nullable_enabled() {
+        for (value, expected) in [
+            (serde_json::json!({"enabled": true}), Some(true)),
+            (serde_json::json!({"enabled": false}), Some(false)),
+            (serde_json::json!({"enabled": null}), None),
+        ] {
+            assert_eq!(
+                serde_json::from_value::<UsagePreferenceResponse>(value)
+                    .unwrap()
+                    .enabled,
+                expected
+            );
+        }
+        for invalid in [
+            serde_json::json!({}),
+            serde_json::json!({"enabled": "true"}),
+            serde_json::json!({"enabled": true, "legacy": false}),
+        ] {
+            assert!(serde_json::from_value::<UsagePreferenceResponse>(invalid).is_err());
+        }
+        assert_eq!(
+            serde_json::to_value(UsagePreferenceRequest { enabled: false }).unwrap(),
+            serde_json::json!({"enabled": false})
+        );
     }
 }

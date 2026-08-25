@@ -70,16 +70,19 @@ function DesktopServiceSettings() {
     });
     const save = useMutation({
         mutationFn: (input: DesktopSettingsUpdate) => api.updateDesktopSettings(input),
-        onSuccess: async (value) => {
+        onSuccess: (value) => {
             client.setQueryData(queryKeys.desktopSettings, value);
-            await client.invalidateQueries({queryKey: queryKeys.desktopSettings});
         },
+        onSettled: () => client.invalidateQueries({queryKey: queryKeys.desktopSettings}),
     });
     // Opening an OS folder does not mutate query-backed application state.
     // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation
     const openLogs = useMutation({mutationFn: () => api.openLogFolder()});
     const value = settings.data;
-    const update = (key: 'autoStart' | 'autoUpdate' | 'debugMode', checked: boolean) => {
+    const update = (
+        key: 'autoStart' | 'autoUpdate' | 'usageAnalytics' | 'debugMode',
+        checked: boolean,
+    ) => {
         if (!value) return;
         save.mutate({...value, [key]: checked});
     };
@@ -173,6 +176,37 @@ function DesktopServiceSettings() {
                     {cohortDirty ? (
                         <p className="text-xs text-amber-700 dark:text-amber-300">
                             적용하지 않은 기수 변경이 있습니다.
+                        </p>
+                    ) : null}
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle>개인정보</CardTitle>
+                    <CardDescription>
+                        계정에 연결된 기기에서 최소한의 사용 통계를 전송할지 정합니다.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <ServiceSettingRow
+                        title="사용 통계"
+                        description="화면 열림과 성공한 기능 이용 횟수를 수집합니다. 이 PC와 이 계정에 연결된 PWA에 같은 설정이 적용됩니다."
+                        checked={value.usageAnalytics === true}
+                        disabled={save.isPending}
+                        onCheckedChange={(checked) => update('usageAnalytics', checked)}
+                    />
+                    {value.usageAnalytics === null ? (
+                        <p className="pb-4 text-xs text-amber-700 dark:text-amber-300">
+                            {value.usageAnalyticsSyncPending
+                                ? '이 PC에서는 전송하지 않습니다. 연결된 PWA의 계정 설정은 서버 연결 후 확인됩니다.'
+                                : '기존 선택을 확인할 수 없어 이 PC와 연결된 PWA 모두 전송하지 않습니다. 스위치를 선택하면 계정 설정으로 저장됩니다.'}
+                        </p>
+                    ) : value.usageAnalyticsSyncPending ? (
+                        <p className="pb-4 text-xs text-amber-700 dark:text-amber-300">
+                            {value.usageAnalytics
+                                ? '서버에서 허용을 확인하기 전까지 전송하지 않습니다. 계정 설정을 동기화하고 있습니다.'
+                                : '이 PC의 전송은 중지했습니다. 연결된 PWA의 계정 설정은 서버 연결 후 적용됩니다.'}
                         </p>
                     ) : null}
                 </CardContent>
@@ -312,8 +346,8 @@ export function ServiceSettings() {
             <Laptop />
             <AlertTitle>PC 앱에서 설정합니다.</AlertTitle>
             <AlertDescription>
-                자동 시작, 업데이트, 사용 통계와 진단 로그는 각 PC에만 적용되므로 PC 앱에서 변경할
-                수 있습니다.
+                자동 시작, 업데이트와 진단 로그는 각 PC에 적용됩니다. 계정 사용 통계 설정은 현재 PC
+                앱에서 변경할 수 있으며 이 계정에 연결된 PWA에도 함께 적용됩니다.
             </AlertDescription>
         </Alert>
     );

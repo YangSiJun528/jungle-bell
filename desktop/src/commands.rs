@@ -303,16 +303,25 @@ pub async fn report_checker_event(
 pub struct DesktopSettingsInput {
     auto_start: bool,
     auto_update: bool,
+    #[serde(deserialize_with = "deserialize_required_nullable_bool")]
+    usage_analytics: Option<bool>,
     debug_mode: bool,
-    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[serde(deserialize_with = "deserialize_required_nullable_string")]
     selected_cohort_id: Option<String>,
 }
 
-fn deserialize_required_nullable<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+fn deserialize_required_nullable_string<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
 where
     D: Deserializer<'de>,
 {
     Option::<String>::deserialize(deserializer)
+}
+
+fn deserialize_required_nullable_bool<'de, D>(deserializer: D) -> Result<Option<bool>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Option::<bool>::deserialize(deserializer)
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -321,18 +330,25 @@ pub struct DesktopSettings {
     app_version: String,
     auto_start: bool,
     auto_update: bool,
+    usage_analytics: Option<bool>,
+    usage_analytics_sync_pending: bool,
     debug_mode: bool,
     selected_cohort_id: Option<String>,
     effective_cohort_id: Option<String>,
     cohort_options: Vec<attendance::CohortOption>,
 }
 
-impl From<crate::desktop_settings::DesktopSettingsSnapshot> for DesktopSettings {
-    fn from(value: crate::desktop_settings::DesktopSettingsSnapshot) -> Self {
+impl DesktopSettings {
+    fn from_snapshot(
+        value: crate::desktop_settings::DesktopSettingsSnapshot,
+        usage_analytics_sync_pending: bool,
+    ) -> Self {
         Self {
             app_version: env!("CARGO_PKG_VERSION").to_owned(),
             auto_start: value.config.auto_start,
             auto_update: value.config.auto_update,
+            usage_analytics: value.config.usage_analytics,
+            usage_analytics_sync_pending,
             debug_mode: value.config.debug_mode,
             selected_cohort_id: value.config.selected_cohort_id,
             effective_cohort_id: value.effective_cohort_id,
@@ -345,9 +361,13 @@ impl From<crate::desktop_settings::DesktopSettingsSnapshot> for DesktopSettings 
 pub async fn get_desktop_settings(
     window: tauri::WebviewWindow,
     settings: tauri::State<'_, Arc<DesktopSettingsService>>,
+    remote_sync_service: tauri::State<'_, Arc<RemoteSyncService>>,
 ) -> Result<DesktopSettings, String> {
     remote_sync::ensure_dashboard_window(&window)?;
-    Ok(settings.snapshot().await.into())
+    Ok(DesktopSettings::from_snapshot(
+        settings.snapshot().await,
+        remote_sync_service.usage_preference_sync_pending().await,
+    ))
 }
 
 #[tauri::command]
@@ -370,23 +390,40 @@ pub async fn update_desktop_settings(
     app: tauri::AppHandle,
     window: tauri::WebviewWindow,
     settings: tauri::State<'_, Arc<DesktopSettingsService>>,
+    remote_sync_service: tauri::State<'_, Arc<RemoteSyncService>>,
     input: DesktopSettingsInput,
 ) -> Result<DesktopSettings, String> {
     remote_sync::ensure_dashboard_window(&window)?;
-    let previous = settings.settings().await;
     let next = crate::config::Config {
         auto_start: input.auto_start,
         auto_update: input.auto_update,
+        usage_analytics: input.usage_analytics,
         debug_mode: input.debug_mode,
         selected_cohort_id: input.selected_cohort_id,
     };
     log::info!(
-        "[settings] 데스크톱 서비스 설정 변경: auto_start={} auto_update={} debug={}",
+        "[settings] 데스크톱 서비스 설정 변경: auto_start={} auto_update={} analytics={:?} debug={}",
         next.auto_start,
         next.auto_update,
+        next.usage_analytics,
         next.debug_mode,
     );
-    let saved = settings.update(&app, next).await?;
+    let desired_usage_analytics = next.usage_analytics;
+    let (previous, saved) = remote_sync_service
+        .persist_then_set_usage_analytics(desired_usage_analytics, async {
+            let previous = settings.settings().await;
+            let saved = settings.update(&app, next).await?;
+            Ok((previous, saved))
+        })
+        .await?;
+
+    if previous.usage_analytics != saved.usage_analytics {
+        let settings = Arc::clone(settings.inner());
+        let service = Arc::clone(remote_sync_service.inner());
+        tauri::async_runtime::spawn(async move {
+            remote_sync::sync_usage_analytics_setting(&settings, &service).await;
+        });
+    }
 
     if previous.debug_mode != saved.debug_mode {
         log::set_max_level(if saved.debug_mode {
@@ -406,7 +443,10 @@ pub async fn update_desktop_settings(
         // 열려 있어도 지연되지 않도록 페이지 reload 대신 즉시 조회를 요청한다.
         checker::trigger_current_check(&app).await;
     }
-    Ok(settings.snapshot().await.into())
+    Ok(DesktopSettings::from_snapshot(
+        settings.snapshot().await,
+        remote_sync_service.usage_preference_sync_pending().await,
+    ))
 }
 
 /// 대시보드가 사용자 경로를 전달하지 못하게 하고, 앱 전용 로그 디렉터리만 연다.
@@ -549,17 +589,19 @@ mod tests {
 
     #[test]
     fn 데스크톱_설정은_현재_앱_버전을_노출한다() {
-        let settings: DesktopSettings = crate::desktop_settings::DesktopSettingsSnapshot {
-            config: crate::config::Config::default(),
-            cohort_options: Vec::new(),
-            effective_cohort_id: None,
-        }
-        .into();
-
-        assert_eq!(
-            serde_json::to_value(settings).unwrap()["appVersion"],
-            env!("CARGO_PKG_VERSION")
+        let settings = DesktopSettings::from_snapshot(
+            crate::desktop_settings::DesktopSettingsSnapshot {
+                config: crate::config::Config::default(),
+                cohort_options: Vec::new(),
+                effective_cohort_id: None,
+            },
+            true,
         );
+
+        let value = serde_json::to_value(settings).unwrap();
+        assert_eq!(value["appVersion"], env!("CARGO_PKG_VERSION"));
+        assert!(value["usageAnalytics"].is_null());
+        assert_eq!(value["usageAnalyticsSyncPending"], true);
     }
 
     #[test]
@@ -602,23 +644,26 @@ mod tests {
     }
 
     #[test]
-    fn 데스크톱_설정은_nullable_기수_선택을_필수로_받는다() {
+    fn 데스크톱_설정은_nullable_통계와_기수_선택을_필수로_받는다() {
         let current = serde_json::json!({
             "autoStart": false,
             "autoUpdate": true,
+            "usageAnalytics": null,
             "debugMode": false,
             "selectedCohortId": null
         });
-        assert!(serde_json::from_value::<DesktopSettingsInput>(current).is_ok());
+        assert!(serde_json::from_value::<DesktopSettingsInput>(current.clone()).is_ok());
         for invalid in [
             serde_json::json!({
                 "autoStart": false,
                 "autoUpdate": true,
+                "usageAnalytics": null,
                 "debugMode": false
             }),
             serde_json::json!({
                 "autoStart": false,
                 "autoUpdate": true,
+                "usageAnalytics": null,
                 "debugMode": false,
                 "selectedCohortId": null,
                 "legacy": true
@@ -626,6 +671,9 @@ mod tests {
         ] {
             assert!(serde_json::from_value::<DesktopSettingsInput>(invalid).is_err());
         }
+        let mut invalid_usage = current;
+        invalid_usage["usageAnalytics"] = serde_json::json!("false");
+        assert!(serde_json::from_value::<DesktopSettingsInput>(invalid_usage).is_err());
     }
 
     #[test]
