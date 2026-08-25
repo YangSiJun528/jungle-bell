@@ -48,15 +48,16 @@ async function requestWithRetry(
     options: UsageReportOptions,
 ): Promise<Response | undefined> {
     const delay = options.delay ?? defaultRetryDelay;
+    const shouldStop = () => options.signal?.aborted || !canAttempt();
 
     for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt += 1) {
-        if (options.signal?.aborted || !canAttempt()) return undefined;
+        if (shouldStop()) return undefined;
 
         let response: Response;
         try {
             response = await fetcher(path, init);
         } catch {
-            if (options.signal?.aborted || !canAttempt()) return undefined;
+            if (shouldStop()) return undefined;
             const retryDelay = RETRY_DELAYS_MS[attempt];
             if (retryDelay === undefined) return undefined;
             await delay(retryDelay, options.signal);
@@ -64,7 +65,7 @@ async function requestWithRetry(
         }
 
         if (!RETRYABLE_STATUSES.has(response.status)) return response;
-        if (options.signal?.aborted || !canAttempt()) return response;
+        if (shouldStop()) return response;
         const retryDelay = RETRY_DELAYS_MS[attempt];
         if (retryDelay === undefined) return response;
 
