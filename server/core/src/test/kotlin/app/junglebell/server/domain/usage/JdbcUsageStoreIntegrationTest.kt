@@ -60,7 +60,7 @@ class JdbcUsageStoreIntegrationTest {
         store.recordAnonymousActivity(day, "a".repeat(64), UsageClient.WEB, UsageActivity.UI_OPENED)
         store.recordAnonymousActivity(day, "b".repeat(64), UsageClient.WEB, UsageActivity.UI_OPENED)
 
-        store.rebuildSummary(day, 10_000)
+        store.rebuildSummary(day, 10_000, UsageSummaryScope.entries.toSet())
 
         assertSummary(day, "authenticated", "activity", "desktop", "ui_opened", 1, 1)
         assertSummary(day, "authenticated", "activity", "pwa", "ui_opened", 2, 2)
@@ -68,7 +68,7 @@ class JdbcUsageStoreIntegrationTest {
         assertSummary(day, "authenticated", "feature", "all", "attendance_settings_changed", 1, 3)
         assertSummary(day, "anonymous", "activity", "all", "ui_opened", 2, 2)
 
-        store.rebuildSummary(day, 20_000)
+        store.rebuildSummary(day, 20_000, UsageSummaryScope.entries.toSet())
         assertEquals(
             8,
             jdbc.sql("SELECT count(*) FROM usage_daily_summary WHERE usage_date = :day")
@@ -77,12 +77,34 @@ class JdbcUsageStoreIntegrationTest {
 
         jdbc.sql("DELETE FROM app_user WHERE id IN (:first, :second)")
             .param("first", first).param("second", second).update()
-        store.rebuildSummary(day, 30_000)
+        store.rebuildSummary(day, 30_000, UsageSummaryScope.entries.toSet())
         assertEquals(
             2,
             jdbc.sql("SELECT count(*) FROM usage_daily_summary WHERE usage_date = :day")
                 .param("day", day).query(Int::class.java).single(),
         )
+    }
+
+    @Test
+    fun `feature-only rebuild preserves activity summaries after their raw retention expires`() {
+        val day = LocalDate.of(2026, 7, 22)
+        val userId = createUser()
+        store.recordUserActivity(day, userId, UsageClient.DESKTOP, UsageActivity.UI_OPENED)
+        store.incrementFeature(day, userId, UsageClient.DESKTOP, UsageFeature.LAUNDRY_WATCH_CREATED)
+        store.recordAnonymousActivity(day, "e".repeat(64), UsageClient.WEB, UsageActivity.UI_OPENED)
+        store.rebuildSummary(day, 1_000, UsageSummaryScope.entries.toSet())
+
+        store.purge(
+            anonymousBefore = day.plusDays(1),
+            userActivityBefore = day.plusDays(1),
+            featureBefore = day,
+            summaryBefore = day.minusYears(1),
+        )
+        store.rebuildSummary(day, 2_000, setOf(UsageSummaryScope.AUTHENTICATED_FEATURE))
+
+        assertSummary(day, "authenticated", "activity", "all", "ui_opened", 1, 1)
+        assertSummary(day, "anonymous", "activity", "all", "ui_opened", 1, 1)
+        assertSummary(day, "authenticated", "feature", "all", "laundry_watch_created", 1, 1)
     }
 
     @Test
@@ -96,8 +118,8 @@ class JdbcUsageStoreIntegrationTest {
         store.incrementFeature(recentDay, userId, UsageClient.DESKTOP, UsageFeature.MOBILE_DEVICE_PAIRED)
         store.recordAnonymousActivity(oldDay, "c".repeat(64), UsageClient.WEB, UsageActivity.UI_OPENED)
         store.recordAnonymousActivity(recentDay, "d".repeat(64), UsageClient.WEB, UsageActivity.UI_OPENED)
-        store.rebuildSummary(oldDay, 1_000)
-        store.rebuildSummary(recentDay, 2_000)
+        store.rebuildSummary(oldDay, 1_000, UsageSummaryScope.entries.toSet())
+        store.rebuildSummary(recentDay, 2_000, UsageSummaryScope.entries.toSet())
 
         val result = store.purge(
             anonymousBefore = LocalDate.of(2026, 8, 18),

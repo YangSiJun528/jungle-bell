@@ -133,7 +133,11 @@ class UsageRecorderTest {
             return true
         }
 
-        override fun rebuildSummary(date: LocalDate, calculatedAtEpochMs: Long) = Unit
+        override fun rebuildSummary(
+            date: LocalDate,
+            calculatedAtEpochMs: Long,
+            scopes: Set<UsageSummaryScope>,
+        ) = Unit
         override fun rawDatesOnOrAfter(date: LocalDate): Set<LocalDate> = emptySet()
         override fun purge(
             anonymousBefore: LocalDate,

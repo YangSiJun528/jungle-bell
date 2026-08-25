@@ -28,6 +28,9 @@ class UsageAggregationService(
         }
 
         val today = LocalDate.now(clock.withZone(zoneId))
+        val anonymousBefore = today.minusDays(settings.anonymousRetentionDays)
+        val userActivityBefore = today.minusDays(settings.userActivityRetentionDays)
+        val featureBefore = today.minusDays(settings.featureRetentionDays)
         val dates = if (settings.enabled) {
             val oldestRawDate = today.minusDays(
                 maxOf(
@@ -44,12 +47,19 @@ class UsageAggregationService(
         } else {
             emptyList()
         }
-        dates.forEach { store.rebuildSummary(it, now) }
+        dates.forEach { date ->
+            val scopes = buildSet {
+                if (!date.isBefore(userActivityBefore)) add(UsageSummaryScope.AUTHENTICATED_ACTIVITY)
+                if (!date.isBefore(featureBefore)) add(UsageSummaryScope.AUTHENTICATED_FEATURE)
+                if (!date.isBefore(anonymousBefore)) add(UsageSummaryScope.ANONYMOUS_ACTIVITY)
+            }
+            store.rebuildSummary(date, now, scopes)
+        }
 
         val purge = store.purge(
-            anonymousBefore = today.minusDays(settings.anonymousRetentionDays),
-            userActivityBefore = today.minusDays(settings.userActivityRetentionDays),
-            featureBefore = today.minusDays(settings.featureRetentionDays),
+            anonymousBefore = anonymousBefore,
+            userActivityBefore = userActivityBefore,
+            featureBefore = featureBefore,
             summaryBefore = today.minusDays(settings.summaryRetentionDays),
         )
         return UsageAggregationResult(dates.size, purge)

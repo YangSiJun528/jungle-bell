@@ -21,6 +21,12 @@ enum class UsageFeature(val value: String) {
     PUSH_SUBSCRIPTION_REMOVED("push_subscription_removed"),
 }
 
+enum class UsageSummaryScope {
+    AUTHENTICATED_ACTIVITY,
+    AUTHENTICATED_FEATURE,
+    ANONYMOUS_ACTIVITY,
+}
+
 data class UsagePurgeResult(
     val anonymousRows: Int,
     val userActivityRows: Int,

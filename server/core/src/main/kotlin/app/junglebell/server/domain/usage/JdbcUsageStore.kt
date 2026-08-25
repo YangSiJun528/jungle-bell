@@ -73,14 +73,24 @@ class JdbcUsageStore(private val jdbc: JdbcClient) : UsageStore {
         .param("feature", feature.value).query(Long::class.java).single()
 
     @Transactional
-    override fun rebuildSummary(date: LocalDate, calculatedAtEpochMs: Long) {
-        insertAuthenticatedActivities(date, calculatedAtEpochMs, byClient = true)
-        insertAuthenticatedActivities(date, calculatedAtEpochMs, byClient = false)
-        insertFeatures(date, calculatedAtEpochMs, byClient = true)
-        insertFeatures(date, calculatedAtEpochMs, byClient = false)
-        insertAnonymousActivities(date, calculatedAtEpochMs, byClient = true)
-        insertAnonymousActivities(date, calculatedAtEpochMs, byClient = false)
-        deleteStaleSummaryRows(date)
+    override fun rebuildSummary(
+        date: LocalDate,
+        calculatedAtEpochMs: Long,
+        scopes: Set<UsageSummaryScope>,
+    ) {
+        if (UsageSummaryScope.AUTHENTICATED_ACTIVITY in scopes) {
+            insertAuthenticatedActivities(date, calculatedAtEpochMs, byClient = true)
+            insertAuthenticatedActivities(date, calculatedAtEpochMs, byClient = false)
+        }
+        if (UsageSummaryScope.AUTHENTICATED_FEATURE in scopes) {
+            insertFeatures(date, calculatedAtEpochMs, byClient = true)
+            insertFeatures(date, calculatedAtEpochMs, byClient = false)
+        }
+        if (UsageSummaryScope.ANONYMOUS_ACTIVITY in scopes) {
+            insertAnonymousActivities(date, calculatedAtEpochMs, byClient = true)
+            insertAnonymousActivities(date, calculatedAtEpochMs, byClient = false)
+        }
+        deleteStaleSummaryRows(date, scopes)
     }
 
     override fun rawDatesOnOrAfter(date: LocalDate): Set<LocalDate> = jdbc.sql(
@@ -173,11 +183,19 @@ class JdbcUsageStore(private val jdbc: JdbcClient) : UsageStore {
         ).param("date", date).param("calculatedAt", calculatedAt).update()
     }
 
-    private fun deleteStaleSummaryRows(date: LocalDate) {
+    private fun deleteStaleSummaryRows(date: LocalDate, scopes: Set<UsageSummaryScope>) {
         jdbc.sql(
             """
             DELETE FROM usage_daily_summary summary
             WHERE summary.usage_date = :date
+              AND (
+                (:authenticatedActivity
+                  AND summary.audience = 'authenticated' AND summary.metric_kind = 'activity')
+                OR (:authenticatedFeature
+                  AND summary.audience = 'authenticated' AND summary.metric_kind = 'feature')
+                OR (:anonymousActivity
+                  AND summary.audience = 'anonymous' AND summary.metric_kind = 'activity')
+              )
               AND NOT (
                 (summary.audience = 'authenticated' AND summary.metric_kind = 'activity' AND EXISTS (
                     SELECT 1 FROM usage_user_day raw
@@ -199,7 +217,11 @@ class JdbcUsageStore(private val jdbc: JdbcClient) : UsageStore {
                 ))
               )
             """.trimIndent(),
-        ).param("date", date).update()
+        ).param("date", date)
+            .param("authenticatedActivity", UsageSummaryScope.AUTHENTICATED_ACTIVITY in scopes)
+            .param("authenticatedFeature", UsageSummaryScope.AUTHENTICATED_FEATURE in scopes)
+            .param("anonymousActivity", UsageSummaryScope.ANONYMOUS_ACTIVITY in scopes)
+            .update()
     }
 
     private fun deleteBefore(table: String, cutoff: LocalDate): Int {

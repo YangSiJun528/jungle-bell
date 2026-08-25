@@ -27,7 +27,11 @@ interface UsageStore {
         feature: UsageFeature,
     ): Long
 
-    fun rebuildSummary(date: LocalDate, calculatedAtEpochMs: Long)
+    fun rebuildSummary(
+        date: LocalDate,
+        calculatedAtEpochMs: Long,
+        scopes: Set<UsageSummaryScope>,
+    )
     fun rawDatesOnOrAfter(date: LocalDate): Set<LocalDate>
     fun purge(
         anonymousBefore: LocalDate,

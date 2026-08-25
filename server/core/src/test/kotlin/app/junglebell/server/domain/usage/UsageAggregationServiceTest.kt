@@ -23,10 +23,16 @@ class UsageAggregationServiceTest {
 
         assertEquals(
             listOf(
-                LocalDate.of(2026, 7, 22),
-                LocalDate.of(2026, 8, 10),
-                LocalDate.of(2026, 8, 19),
-                LocalDate.of(2026, 8, 20),
+                SummaryRebuild(
+                    LocalDate.of(2026, 7, 22),
+                    setOf(UsageSummaryScope.AUTHENTICATED_FEATURE),
+                ),
+                SummaryRebuild(
+                    LocalDate.of(2026, 8, 10),
+                    setOf(UsageSummaryScope.AUTHENTICATED_FEATURE),
+                ),
+                SummaryRebuild(LocalDate.of(2026, 8, 19), UsageSummaryScope.entries.toSet()),
+                SummaryRebuild(LocalDate.of(2026, 8, 20), UsageSummaryScope.entries.toSet()),
             ),
             store.rebuilt,
         )
@@ -91,12 +97,17 @@ class UsageAggregationServiceTest {
         val summaryBefore: LocalDate,
     )
 
+    private data class SummaryRebuild(
+        val date: LocalDate,
+        val scopes: Set<UsageSummaryScope>,
+    )
+
     private class AggregationStore(
         private val leaseGranted: Boolean = true,
         private val rawDates: Set<LocalDate> = emptySet(),
     ) : UsageStore {
         var leaseAttempts = 0
-        val rebuilt = mutableListOf<LocalDate>()
+        val rebuilt = mutableListOf<SummaryRebuild>()
         var cutoffs: UsageCutoffs? = null
 
         override fun tryAcquireAggregationLease(name: String, now: Long, durationMs: Long, token: String): Boolean {
@@ -105,8 +116,12 @@ class UsageAggregationServiceTest {
         }
 
         override fun rawDatesOnOrAfter(date: LocalDate): Set<LocalDate> = rawDates
-        override fun rebuildSummary(date: LocalDate, calculatedAtEpochMs: Long) {
-            rebuilt += date
+        override fun rebuildSummary(
+            date: LocalDate,
+            calculatedAtEpochMs: Long,
+            scopes: Set<UsageSummaryScope>,
+        ) {
+            rebuilt += SummaryRebuild(date, scopes)
         }
 
         override fun purge(
