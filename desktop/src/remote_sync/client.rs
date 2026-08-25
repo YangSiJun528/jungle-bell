@@ -1,14 +1,32 @@
 use super::*;
 use reqwest::header::CACHE_CONTROL;
 
+pub(crate) const UI_OPENED_RETRY_DELAYS: [Duration; 2] = [Duration::from_millis(250), Duration::from_secs(1)];
+
 #[cfg(test)]
 type UsagePreferenceTestResult = Arc<std::sync::Mutex<Option<Result<Option<bool>, ServiceError>>>>;
+
+#[cfg(test)]
+type UiOpenedTestResults = Arc<std::sync::Mutex<std::collections::VecDeque<Result<StatusCode, ServiceError>>>>;
 
 #[cfg(test)]
 #[derive(Clone)]
 struct UsagePreferencePutBarrier {
     started: Arc<Notify>,
     release: Arc<Notify>,
+}
+
+#[cfg(test)]
+#[derive(Clone)]
+struct UiOpenedTestBarrier {
+    started: Arc<Notify>,
+    release: Arc<Notify>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct UiOpenedFailure {
+    pub(crate) error: ServiceError,
+    pub(crate) retryable: bool,
 }
 
 #[derive(Clone)]
@@ -20,7 +38,11 @@ pub(crate) struct RemoteApi {
     #[cfg(test)]
     identity_deletion_result: Arc<std::sync::Mutex<Option<Result<(), ServiceError>>>>,
     #[cfg(test)]
-    ui_opened_result: Arc<std::sync::Mutex<Option<Result<(), ServiceError>>>>,
+    ui_opened_results: UiOpenedTestResults,
+    #[cfg(test)]
+    ui_opened_attempt_count: Arc<std::sync::atomic::AtomicUsize>,
+    #[cfg(test)]
+    ui_opened_barrier: Option<UiOpenedTestBarrier>,
     #[cfg(test)]
     usage_preference_get_result: UsagePreferenceTestResult,
     #[cfg(test)]
@@ -50,7 +72,11 @@ impl RemoteApi {
             #[cfg(test)]
             identity_deletion_result: Arc::new(std::sync::Mutex::new(None)),
             #[cfg(test)]
-            ui_opened_result: Arc::new(std::sync::Mutex::new(None)),
+            ui_opened_results: Arc::new(std::sync::Mutex::new(std::collections::VecDeque::new())),
+            #[cfg(test)]
+            ui_opened_attempt_count: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            #[cfg(test)]
+            ui_opened_barrier: None,
             #[cfg(test)]
             usage_preference_get_result: Arc::new(std::sync::Mutex::new(None)),
             #[cfg(test)]
@@ -76,9 +102,47 @@ impl RemoteApi {
 
     #[cfg(test)]
     pub(crate) fn with_ui_opened_result(result: Result<(), ServiceError>) -> Self {
+        match result {
+            Ok(()) => Self::with_ui_opened_results([Ok(StatusCode::NO_CONTENT)]),
+            Err(ServiceError::Unavailable) => Self::with_ui_opened_results([
+                Err(ServiceError::Unavailable),
+                Err(ServiceError::Unavailable),
+                Err(ServiceError::Unavailable),
+            ]),
+            Err(error) => Self::with_ui_opened_results([Err(error)]),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_ui_opened_results(results: impl IntoIterator<Item = Result<StatusCode, ServiceError>>) -> Self {
         let mut api = Self::new("https://bell.example.com").unwrap();
-        api.ui_opened_result = Arc::new(std::sync::Mutex::new(Some(result)));
+        api.ui_opened_results = Arc::new(std::sync::Mutex::new(results.into_iter().collect()));
         api
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_blocked_ui_opened_result(
+        result: Result<(), ServiceError>,
+        started: Arc<Notify>,
+        release: Arc<Notify>,
+    ) -> Self {
+        Self::with_blocked_ui_opened_results([result.map(|()| StatusCode::NO_CONTENT)], started, release)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_blocked_ui_opened_results(
+        results: impl IntoIterator<Item = Result<StatusCode, ServiceError>>,
+        started: Arc<Notify>,
+        release: Arc<Notify>,
+    ) -> Self {
+        let mut api = Self::with_ui_opened_results(results);
+        api.ui_opened_barrier = Some(UiOpenedTestBarrier { started, release });
+        api
+    }
+
+    #[cfg(test)]
+    pub(crate) fn ui_opened_attempt_count(&self) -> usize {
+        self.ui_opened_attempt_count.load(std::sync::atomic::Ordering::Acquire)
     }
 
     #[cfg(test)]
@@ -268,19 +332,41 @@ impl RemoteApi {
         }
     }
 
-    pub(crate) async fn record_ui_opened(&self, bearer: &str) -> Result<(), ServiceError> {
+    pub(crate) async fn record_ui_opened_attempt(&self, bearer: &str) -> Result<(), UiOpenedFailure> {
         #[cfg(test)]
-        if let Some(result) = self.ui_opened_result.lock().unwrap().take() {
-            return result;
+        {
+            self.ui_opened_attempt_count
+                .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+            let result = self.ui_opened_results.lock().unwrap().pop_front();
+            if let Some(result) = result {
+                if let Some(barrier) = &self.ui_opened_barrier {
+                    barrier.started.notify_one();
+                    barrier.release.notified().await;
+                }
+                return match result {
+                    Ok(status) => classify_ui_opened_status(status),
+                    Err(error) => Err(UiOpenedFailure {
+                        error,
+                        retryable: error == ServiceError::Unavailable,
+                    }),
+                };
+            }
         }
+        let endpoint = self.endpoint(UI_OPENED_PATH).map_err(|error| UiOpenedFailure {
+            error,
+            retryable: false,
+        })?;
         let response = self
             .client
-            .post(self.endpoint(UI_OPENED_PATH)?)
+            .post(endpoint)
             .bearer_auth(bearer)
             .send()
             .await
-            .map_err(|_| ServiceError::Unavailable)?;
-        ensure_authenticated_status(&response, &[StatusCode::NO_CONTENT])
+            .map_err(|_| UiOpenedFailure {
+                error: ServiceError::Unavailable,
+                retryable: true,
+            })?;
+        classify_ui_opened_status(response.status())
     }
 
     pub(crate) async fn notifications(&self, bearer: &str) -> Result<Vec<RemoteNotification>, ServiceError> {
@@ -372,12 +458,8 @@ pub(crate) fn is_canonical_server_path(path: &str) -> bool {
 pub(crate) fn ensure_status(response: &Response, expected: &[StatusCode]) -> Result<(), ServiceError> {
     if expected.contains(&response.status()) {
         Ok(())
-    } else if matches!(response.status(), StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN) {
-        Err(ServiceError::AuthenticationRequired)
-    } else if response.status().is_server_error() {
-        Err(ServiceError::Unavailable)
     } else {
-        Err(ServiceError::Rejected)
+        Err(service_error_for_status(response.status()))
     }
 }
 
@@ -397,4 +479,96 @@ async fn decode_json_limited<T: DeserializeOwned>(response: Response) -> Result<
         return Err(ServiceError::InvalidResponse);
     }
     serde_json::from_slice(&bytes).map_err(|_| ServiceError::InvalidResponse)
+}
+
+fn service_error_for_status(status: StatusCode) -> ServiceError {
+    if matches!(status, StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN) {
+        ServiceError::AuthenticationRequired
+    } else if status.is_server_error() {
+        ServiceError::Unavailable
+    } else {
+        ServiceError::Rejected
+    }
+}
+
+fn classify_ui_opened_status(status: StatusCode) -> Result<(), UiOpenedFailure> {
+    if status == StatusCode::NO_CONTENT {
+        Ok(())
+    } else if is_retryable_ui_opened_status(status) {
+        Err(UiOpenedFailure {
+            error: ServiceError::Unavailable,
+            retryable: true,
+        })
+    } else {
+        Err(UiOpenedFailure {
+            error: service_error_for_status(status),
+            retryable: false,
+        })
+    }
+}
+
+fn is_retryable_ui_opened_status(status: StatusCode) -> bool {
+    matches!(
+        status,
+        StatusCode::BAD_GATEWAY | StatusCode::SERVICE_UNAVAILABLE | StatusCode::GATEWAY_TIMEOUT
+    )
+}
+
+pub(crate) async fn wait_before_ui_opened_retry(delay: Duration) {
+    #[cfg(not(test))]
+    tokio::time::sleep(delay).await;
+    #[cfg(test)]
+    {
+        let _ = delay;
+        tokio::task::yield_now().await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const TEST_BEARER: &str = "jbd_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+    #[tokio::test]
+    async fn ui_opened_accepts_204() {
+        let api = RemoteApi::with_ui_opened_results([Ok(StatusCode::NO_CONTENT)]);
+
+        assert_eq!(api.record_ui_opened_attempt(TEST_BEARER).await, Ok(()));
+        assert_eq!(api.ui_opened_attempt_count(), 1);
+    }
+
+    #[tokio::test]
+    async fn ui_opened_marks_only_transport_and_502_503_504_as_retryable() {
+        for result in [
+            Err(ServiceError::Unavailable),
+            Ok(StatusCode::BAD_GATEWAY),
+            Ok(StatusCode::SERVICE_UNAVAILABLE),
+            Ok(StatusCode::GATEWAY_TIMEOUT),
+        ] {
+            let api = RemoteApi::with_ui_opened_results([result]);
+
+            let failure = api.record_ui_opened_attempt(TEST_BEARER).await.unwrap_err();
+            assert_eq!(failure.error, ServiceError::Unavailable);
+            assert!(failure.retryable);
+            assert_eq!(api.ui_opened_attempt_count(), 1);
+        }
+    }
+
+    #[tokio::test]
+    async fn ui_opened_marks_500_and_client_errors_as_non_retryable() {
+        for (status, expected) in [
+            (StatusCode::INTERNAL_SERVER_ERROR, ServiceError::Unavailable),
+            (StatusCode::BAD_REQUEST, ServiceError::Rejected),
+            (StatusCode::UNAUTHORIZED, ServiceError::AuthenticationRequired),
+            (StatusCode::FORBIDDEN, ServiceError::AuthenticationRequired),
+        ] {
+            let api = RemoteApi::with_ui_opened_results([Ok(status)]);
+
+            let failure = api.record_ui_opened_attempt(TEST_BEARER).await.unwrap_err();
+            assert_eq!(failure.error, expected, "{status}");
+            assert!(!failure.retryable, "{status}");
+            assert_eq!(api.ui_opened_attempt_count(), 1, "{status}");
+        }
+    }
 }

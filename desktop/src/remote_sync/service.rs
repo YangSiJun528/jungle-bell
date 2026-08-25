@@ -63,6 +63,7 @@ pub(crate) struct RemoteSyncService {
     identity_generation: AtomicU64,
     webview_session_transition: Mutex<()>,
     usage_metric_transition: RwLock<()>,
+    ui_opened_recording: Mutex<()>,
     usage_preference: Mutex<UsagePreferenceRuntime>,
     usage_preference_sync: Mutex<()>,
     pub(crate) runtime: Mutex<SyncRuntime>,
@@ -168,6 +169,7 @@ impl RemoteSyncService {
             identity_generation: AtomicU64::new(0),
             webview_session_transition: Mutex::new(()),
             usage_metric_transition: RwLock::new(()),
+            ui_opened_recording: Mutex::new(()),
             usage_preference: Mutex::new(UsagePreferenceRuntime::default()),
             usage_preference_sync: Mutex::new(()),
             runtime: Mutex::new(runtime),
@@ -256,6 +258,10 @@ impl RemoteSyncService {
     }
 
     pub(crate) async fn record_ui_opened_best_effort(&self) {
+        let Ok(_recording) = self.ui_opened_recording.try_lock() else {
+            log::debug!("[usage] UI open metric coalesced with an in-flight attempt");
+            return;
+        };
         let (desired, _, _) = self.usage_preference_snapshot().await;
         if desired != Some(true) {
             log::debug!("[usage] UI open metric skipped by local preference");
@@ -274,15 +280,69 @@ impl RemoteSyncService {
                 return;
             }
         };
-        let _usage_transition = self.usage_metric_transition.read().await;
-        if !self.usage_analytics_enabled().await {
-            log::debug!("[usage] UI open metric waits for confirmed preference");
-            return;
+        let (_, usage_revision, _) = self.usage_preference_snapshot().await;
+        match self.record_ui_opened_for_request(&request, usage_revision).await {
+            Ok(true) => {}
+            Ok(false) => {
+                log::debug!("[usage] UI open metric cancelled by a newer preference");
+            }
+            Err(error) => {
+                // 통계 요청은 연결 상태, credential, 업무 기능의 성공 여부를 바꾸지 않는다.
+                log::debug!("[usage] UI open metric deferred: {}", error.code());
+            }
         }
-        if let Err(error) = self.api.record_ui_opened(&request.bearer).await {
-            // 통계 요청은 연결 상태, credential, 업무 기능의 성공 여부를 바꾸지 않는다.
-            log::debug!("[usage] UI open metric deferred: {}", error.code());
+    }
+
+    async fn record_ui_opened_for_request(
+        &self,
+        request: &AuthenticatedRequest,
+        expected_usage_revision: u64,
+    ) -> Result<bool, ServiceError> {
+        for (attempt, delay) in std::iter::once(None)
+            .chain(UI_OPENED_RETRY_DELAYS.iter().copied().map(Some))
+            .enumerate()
+        {
+            if let Some(delay) = delay {
+                wait_before_ui_opened_retry(delay).await;
+            }
+
+            // 한 HTTP attempt만 OFF/identity reset과 직렬화한다. 실패 후 backoff에는
+            // guard를 풀어 대기 중인 writer가 다음 retry보다 먼저 완료되게 한다.
+            let usage_transition = self.usage_metric_transition.read().await;
+            let preference_is_current = {
+                let preference = self.usage_preference.lock().await;
+                preference.desired == Some(true)
+                    && preference.revision == expected_usage_revision
+                    && preference.synced_revision == preference.revision
+            };
+            if !preference_is_current {
+                return Ok(false);
+            }
+
+            let identity_transition = self.identity_transition.read().await;
+            if self.identity_generation.load(Ordering::Acquire) != request.identity_generation {
+                return Ok(false);
+            }
+            let bearer_is_current = {
+                let credential = self.credential.read().await;
+                credential.as_ref().is_some_and(|credential| {
+                    credential.is_valid_at(Utc::now()) && credential.token.as_str() == request.bearer.as_str()
+                })
+            };
+            if !bearer_is_current {
+                return Ok(false);
+            }
+
+            let result = self.api.record_ui_opened_attempt(&request.bearer).await;
+            drop(identity_transition);
+            drop(usage_transition);
+            match result {
+                Ok(()) => return Ok(true),
+                Err(failure) if failure.retryable && attempt < UI_OPENED_RETRY_DELAYS.len() => continue,
+                Err(failure) => return Err(failure.error),
+            }
         }
+        unreachable!("UI open retry loop always returns")
     }
 
     pub(crate) fn registration_needed(&self) -> bool {
@@ -861,6 +921,28 @@ mod initialization_tests {
     use std::sync::{Arc as StdArc, Mutex as StdMutex};
     use tokio::sync::oneshot;
 
+    async fn enabled_usage_service(api: RemoteApi) -> RemoteSyncService {
+        let directory = tempfile::tempdir().unwrap();
+        let service = RemoteSyncService::with_store(
+            api,
+            directory.path().to_path_buf(),
+            uuid::Uuid::new_v4().hyphenated().to_string(),
+            true,
+            StdArc::new(crate::secure_credential::MemoryCredentialStore::new(None)),
+        )
+        .unwrap();
+        service
+            .install_credential(BearerCredential {
+                token: Zeroizing::new(format!("jbd_{}", "a".repeat(64))),
+                expires_at: Utc::now() + chrono::Duration::days(30),
+            })
+            .await;
+        service.set_usage_analytics_preference(Some(true)).await;
+        let (_, revision, _) = service.usage_preference_snapshot().await;
+        service.mark_usage_preference_synced(revision).await;
+        service
+    }
+
     #[tokio::test(flavor = "current_thread")]
     async fn configured_initialization_runs_on_the_blocking_pool_and_is_awaited() {
         let caller = std::thread::current().id();
@@ -1225,13 +1307,174 @@ mod initialization_tests {
             runtime.last_server_contact = None;
             runtime.last_error = None;
         }
+        let status_before = service.status().await;
 
         service.record_ui_opened_best_effort().await;
 
         assert!(service.current_bearer().await.is_some());
-        let status = service.status().await;
-        assert!(status.last_server_contact.is_none());
-        assert!(status.last_error.is_none());
+        assert_eq!(service.api.ui_opened_attempt_count(), 1);
+        assert_eq!(service.status().await, status_before);
+    }
+
+    #[tokio::test]
+    async fn ui_opened_retries_503_twice_then_accepts_204() {
+        let service = enabled_usage_service(RemoteApi::with_ui_opened_results([
+            Ok(StatusCode::SERVICE_UNAVAILABLE),
+            Ok(StatusCode::SERVICE_UNAVAILABLE),
+            Ok(StatusCode::NO_CONTENT),
+        ]))
+        .await;
+
+        service.record_ui_opened_best_effort().await;
+
+        assert_eq!(service.api.ui_opened_attempt_count(), 3);
+    }
+
+    #[tokio::test]
+    async fn ui_opened_retries_transport_failure_then_accepts_204() {
+        let service = enabled_usage_service(RemoteApi::with_ui_opened_results([
+            Err(ServiceError::Unavailable),
+            Ok(StatusCode::NO_CONTENT),
+        ]))
+        .await;
+
+        service.record_ui_opened_best_effort().await;
+
+        assert_eq!(service.api.ui_opened_attempt_count(), 2);
+    }
+
+    #[tokio::test]
+    async fn ui_opened_stops_after_three_retryable_attempts() {
+        let service = enabled_usage_service(RemoteApi::with_ui_opened_results([
+            Ok(StatusCode::BAD_GATEWAY),
+            Ok(StatusCode::SERVICE_UNAVAILABLE),
+            Ok(StatusCode::GATEWAY_TIMEOUT),
+            Ok(StatusCode::NO_CONTENT),
+        ]))
+        .await;
+
+        service.record_ui_opened_best_effort().await;
+
+        assert_eq!(service.api.ui_opened_attempt_count(), 3);
+    }
+
+    #[tokio::test]
+    async fn ui_opened_attempt_requires_the_same_identity_generation_and_bearer() {
+        let service = enabled_usage_service(RemoteApi::with_ui_opened_results([Ok(StatusCode::NO_CONTENT)])).await;
+        let bearer = service.current_bearer().await.unwrap();
+        let generation = service.identity_generation.load(Ordering::Acquire);
+        let (_, revision, _) = service.usage_preference_snapshot().await;
+
+        assert_eq!(
+            service
+                .record_ui_opened_for_request(
+                    &AuthenticatedRequest {
+                        bearer: Zeroizing::new(bearer.to_string()),
+                        identity_generation: generation.wrapping_add(1),
+                    },
+                    revision,
+                )
+                .await,
+            Ok(false)
+        );
+        assert_eq!(
+            service
+                .record_ui_opened_for_request(
+                    &AuthenticatedRequest {
+                        bearer: Zeroizing::new(format!("jbd_{}", "b".repeat(64))),
+                        identity_generation: generation,
+                    },
+                    revision,
+                )
+                .await,
+            Ok(false)
+        );
+        assert_eq!(service.api.ui_opened_attempt_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn concurrent_ui_opened_calls_are_coalesced_while_one_is_in_flight() {
+        let directory = tempfile::tempdir().unwrap();
+        let started = StdArc::new(Notify::new());
+        let release = StdArc::new(Notify::new());
+        let service = StdArc::new(
+            RemoteSyncService::with_store(
+                RemoteApi::with_blocked_ui_opened_result(Ok(()), StdArc::clone(&started), StdArc::clone(&release)),
+                directory.path().to_path_buf(),
+                uuid::Uuid::new_v4().hyphenated().to_string(),
+                true,
+                StdArc::new(crate::secure_credential::MemoryCredentialStore::new(None)),
+            )
+            .unwrap(),
+        );
+        service
+            .install_credential(BearerCredential {
+                token: Zeroizing::new(format!("jbd_{}", "a".repeat(64))),
+                expires_at: Utc::now() + chrono::Duration::days(30),
+            })
+            .await;
+        service.set_usage_analytics_preference(Some(true)).await;
+        let (_, revision, _) = service.usage_preference_snapshot().await;
+        service.mark_usage_preference_synced(revision).await;
+
+        let recording = StdArc::clone(&service);
+        let first = tokio::spawn(async move { recording.record_ui_opened_best_effort().await });
+        started.notified().await;
+
+        service.record_ui_opened_best_effort().await;
+        assert_eq!(service.api.ui_opened_attempt_count(), 1);
+
+        release.notify_one();
+        first.await.unwrap();
+        assert_eq!(service.api.ui_opened_attempt_count(), 1);
+    }
+
+    #[tokio::test]
+    async fn usage_off_queued_during_an_attempt_finishes_before_any_retry() {
+        let started = StdArc::new(Notify::new());
+        let release = StdArc::new(Notify::new());
+        let service = StdArc::new(
+            enabled_usage_service(RemoteApi::with_blocked_ui_opened_results(
+                [Ok(StatusCode::SERVICE_UNAVAILABLE), Ok(StatusCode::NO_CONTENT)],
+                StdArc::clone(&started),
+                StdArc::clone(&release),
+            ))
+            .await,
+        );
+
+        let recording = StdArc::clone(&service);
+        let recording_task = tokio::spawn(async move { recording.record_ui_opened_best_effort().await });
+        started.notified().await;
+
+        let disabling = StdArc::clone(&service);
+        let disable_started = StdArc::new(Notify::new());
+        let disable_started_task = StdArc::clone(&disable_started);
+        let mut disable_task = tokio::spawn(async move {
+            disable_started_task.notify_one();
+            disabling
+                .persist_then_set_usage_analytics(Some(false), async { Ok::<(), String>(()) })
+                .await
+        });
+        disable_started.notified().await;
+        assert!(tokio::time::timeout(Duration::from_millis(10), &mut disable_task)
+            .await
+            .is_err());
+
+        release.notify_one();
+        assert_eq!(
+            tokio::time::timeout(Duration::from_secs(1), disable_task)
+                .await
+                .unwrap()
+                .unwrap(),
+            Ok(())
+        );
+        tokio::time::timeout(Duration::from_secs(1), recording_task)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(service.usage_analytics_preference().await, Some(false));
+        assert_eq!(service.api.ui_opened_attempt_count(), 1);
     }
 
     #[tokio::test]

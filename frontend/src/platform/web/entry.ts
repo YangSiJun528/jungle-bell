@@ -10,6 +10,7 @@ export function startWebApp(): void {
     const usagePrivacy = createWebUsagePrivacyAdapter({});
     startWebUsageReporting({
         installedPwa: pwa.installed,
+        enabled: import.meta.env.PROD,
         allowsAnonymousReporting: () => usagePrivacy.allowsAnonymousReporting(),
     });
     bootstrapDashboard(createWebPlatformAdapter(pwa, usagePrivacy));
