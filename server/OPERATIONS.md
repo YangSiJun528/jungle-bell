@@ -18,6 +18,8 @@ https://jungle-bell.sijun-yang.com
 - API, Worker, PostgreSQL은 한 Docker Compose 프로젝트로 실행합니다.
 - named Cloudflare Tunnel을 정식 ingress로 사용하고 API port는 호스트 loopback에만
   노출합니다.
+- Actuator는 API와 분리한 management port를 호스트 loopback에만 노출합니다. Cloudflare
+  Tunnel에는 연결하지 않고, 원격 운영자는 Tailscale SSH 후에만 조회합니다.
 - React 정적 자산과 REST API는 Spring Boot API가 같은 origin에서 제공합니다.
 - `PUBLIC_BASE_URL`은 정적 자산, 공개 API 자산 URL, pairing QR 등 서버가 만드는 외부
   URL의 기준입니다.
@@ -91,6 +93,7 @@ chmod 600 server/deploy/.env.production
 다음 값을 확인하거나 설정합니다.
 
 - `PUBLIC_BASE_URL=https://jungle-bell.sijun-yang.com`
+- `MANAGEMENT_PORT=8081`
 - 다섯 secret 파일의 절대 경로
 - `CLOUDFLARE_TUNNEL_TOKEN`
 - `LAUNDRY_SOURCE_URL`
@@ -110,7 +113,8 @@ Cloudflare Tunnel의 public hostname을 다음과 같이 설정합니다.
 | Service URL | `api:8080` |
 
 Tunnel token은 `.env.production`의 `CLOUDFLARE_TUNNEL_TOKEN`에만 둡니다. 운영 DNS와
-smoke test는 Quick Tunnel URL을 사용하지 않습니다.
+smoke test는 Quick Tunnel URL을 사용하지 않습니다. Service URL은 API port `8080`을
+유지하고 management port `8081`이나 `/actuator/*` route를 추가하지 않습니다.
 
 ## 일반 배포
 
@@ -181,11 +185,14 @@ SELECT
 아니라 일별 요약과 보존기간 삭제를 담당합니다. 다음 절차에서는 계정 UUID, 익명 HMAC,
 lease token을 출력하지 않습니다.
 
-먼저 API readiness와 공개 사용량 상태를 확인합니다.
+먼저 Tailscale SSH로 운영 호스트에 접속한 뒤 management loopback에서 API readiness와
+사용량 상태를 확인합니다. `MANAGEMENT_PORT`의 운영 기본값은 `8081`입니다.
 
 ```bash
-curl --fail --silent https://jungle-bell.sijun-yang.com/actuator/health/readiness
-curl --fail --silent https://jungle-bell.sijun-yang.com/actuator/info
+ssh -i ~/.ssh/oci_a1_flex ubuntu@oci-server.tail3cbec1.ts.net \
+  'curl --fail --silent http://127.0.0.1:8081/actuator/health/readiness'
+ssh -i ~/.ssh/oci_a1_flex ubuntu@oci-server.tail3cbec1.ts.net \
+  'curl --fail --silent http://127.0.0.1:8081/actuator/info'
 ```
 
 readiness는 `readinessState`와 `db`를 포함하지만 `show-details=never`이므로 정상 응답은
@@ -199,7 +206,8 @@ readiness는 `readinessState`와 `db`를 포함하지만 `show-details=never`이
 - `aggregation=unavailable`: marker 조회 실패
 - `lastSuccessfulAggregationAt`: marker가 있을 때의 Worker 전체 완료 시각
 
-이 endpoint에는 사용량 수치, UUID, HMAC, 원자료 최근 시각이 나오지 않습니다. 또한
+이 management endpoint에는 사용량 수치, UUID, HMAC, 원자료 최근 시각이 나오지
+않습니다. 또한
 `configured`는 API 설정만 나타냅니다. API와 Worker가 같은
 `USAGE_METRICS_ENABLED`를 받는지는 배포 환경 파일과 Compose 설정으로 별도 확인합니다.
 
@@ -339,18 +347,24 @@ aggregate 변화, Worker 완료와 요약 계산 시각을 함께 확인해 판�
 
 ## 배포 확인
 
-모든 외부 검증은 공식 origin에서 실행합니다.
+외부 서비스 검증은 공식 origin에서 실행합니다. Actuator는 외부 검증 대상이 아니며
+공식 origin에서 두 management 경로가 모두 `404`여야 합니다.
 
 ```bash
 curl --fail --silent https://jungle-bell.sijun-yang.com/ >/dev/null
-curl --fail --silent https://jungle-bell.sijun-yang.com/actuator/health/readiness
-curl --fail --silent https://jungle-bell.sijun-yang.com/actuator/info
 curl --fail --silent https://jungle-bell.sijun-yang.com/api/health
 curl --fail --silent https://jungle-bell.sijun-yang.com/api/public/status
 curl --fail --silent https://jungle-bell.sijun-yang.com/api/public/laundry
 curl --fail --silent https://jungle-bell.sijun-yang.com/api/public/meals
 server/tools/smoke-api.sh https://jungle-bell.sijun-yang.com
+curl --silent --output /dev/null --write-out '%{http_code}\n' \
+  https://jungle-bell.sijun-yang.com/actuator/health/readiness
+curl --silent --output /dev/null --write-out '%{http_code}\n' \
+  https://jungle-bell.sijun-yang.com/actuator/info
 ```
+
+마지막 두 명령의 출력은 각각 `404`여야 합니다. readiness와 내부 상태는 Tailscale SSH
+후 `http://127.0.0.1:8081/actuator/...`에서 별도로 확인합니다.
 
 스모크 스크립트는 임시 PC 계정을 만든 뒤 인증된
 `DELETE /api/desktop/installations/current`로 계정과 종속 데이터를 삭제합니다. 실패

@@ -155,7 +155,9 @@ Worker의 삭제 cutoff이지 해당 기간 동안 데이터 제공을 보장하
 preference 변경을 이유로 역삭제하지 않습니다. 계정 자체를 삭제하면 foreign key로 연결된
 인증 원자료는 즉시 삭제되고, 아직 원자료 보존 범위인 최근 요약은 다음 재집계에서 조정될
 수 있습니다. API의 `204`, API readiness, Worker 집계 성공은 서로 다른 신호이며 Worker
-성공은 `/actuator/info`의 `usageMetrics.aggregation`과 마지막 성공 시각으로 확인합니다.
+성공은 Tailscale SSH로 운영 서버에 접속한 뒤 호스트 loopback의
+`/actuator/info`에서 `usageMetrics.aggregation`과 마지막 성공 시각을 확인합니다.
+Actuator는 공개 API port와 Cloudflare Tunnel에 등록하지 않습니다.
 
 ## 공개 데이터와 자동화
 

@@ -3,13 +3,23 @@ package app.junglebell.server.api.security
 import app.junglebell.server.domain.security.TokenCodec
 import app.junglebell.server.api.logging.REQUEST_ID_HEADER
 import jakarta.servlet.http.Cookie
+import java.net.URI
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
+import java.time.Duration
 import java.util.UUID
 import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.health.actuate.endpoint.HealthEndpointGroups
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.test.web.server.LocalServerPort
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.http.HttpHeaders
@@ -33,12 +43,17 @@ import org.testcontainers.postgresql.PostgreSQLContainer
 
 @Testcontainers(disabledWithoutDocker = true)
 @AutoConfigureMockMvc
-@SpringBootTest
+@SpringBootTest(
+    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+    properties = ["management.server.port=0"],
+)
 class SecurityFilterChainIntegrationTest(
     @param:Autowired private val mockMvc: MockMvc,
     @param:Autowired private val jdbc: JdbcClient,
     @param:Autowired private val tokens: TokenCodec,
     @param:Autowired private val healthEndpointGroups: HealthEndpointGroups,
+    @param:LocalServerPort private val applicationPort: Int,
+    @param:Value("\${local.management.port}") private val managementPort: Int,
 ) {
     @Test
     fun `React SPA is served at the root without legacy entry routes`() {
@@ -55,24 +70,34 @@ class SecurityFilterChainIntegrationTest(
     }
 
     @Test
-    fun `readiness remains available while the Prometheus endpoint is absent`() {
+    fun `actuator is isolated from the application port and exposes only health and info`() {
         assertTrue(assertNotNull(healthEndpointGroups.get("readiness")).isMember("db"))
-        mockMvc.perform(get("/actuator/health/readiness"))
-            .andExpect(status().isOk)
-        mockMvc.perform(get("/actuator/prometheus"))
-            .andExpect(status().isNotFound)
-    }
+        assertNotEquals(applicationPort, managementPort)
 
-    @Test
-    fun `public info exposes only safe usage aggregation status`() {
-        mockMvc.perform(get("/actuator/info"))
-            .andExpect(status().isOk)
-            .andExpect(jsonPath("$.usageMetrics.configured").value(true))
-            .andExpect(jsonPath("$.usageMetrics.database").value("available"))
-            .andExpect(jsonPath("$.usageMetrics.aggregation").exists())
-            .andExpect(jsonPath("$.usageMetrics.counts").doesNotExist())
-            .andExpect(jsonPath("$.usageMetrics.userIds").doesNotExist())
-            .andExpect(jsonPath("$.usageMetrics.rawRecency").doesNotExist())
+        listOf(
+            "/actuator",
+            "/actuator/health",
+            "/actuator/health/readiness",
+            "/actuator/info",
+            "/actuator/prometheus",
+        ).forEach { path ->
+            assertEquals(404, httpGet(applicationPort, path).statusCode(), path)
+        }
+
+        val readiness = httpGet(managementPort, "/actuator/health/readiness")
+        assertEquals(200, readiness.statusCode())
+        assertTrue(readiness.body().contains("\"status\":\"UP\""))
+
+        val info = httpGet(managementPort, "/actuator/info")
+        assertEquals(200, info.statusCode())
+        assertTrue(info.body().contains("\"configured\":true"))
+        assertTrue(info.body().contains("\"database\":\"available\""))
+        assertTrue(info.body().contains("\"aggregation\":"))
+        assertFalse(info.body().contains("counts"))
+        assertFalse(info.body().contains("userIds"))
+        assertFalse(info.body().contains("rawRecency"))
+
+        assertEquals(404, httpGet(managementPort, "/actuator/prometheus").statusCode())
     }
 
     @Test
@@ -616,7 +641,19 @@ class SecurityFilterChainIntegrationTest(
         kotlin.test.assertEquals(expected, count)
     }
 
+    private fun httpGet(port: Int, path: String): HttpResponse<String> = httpClient.send(
+        HttpRequest.newBuilder(URI.create("http://127.0.0.1:$port$path"))
+            .timeout(Duration.ofSeconds(5))
+            .GET()
+            .build(),
+        HttpResponse.BodyHandlers.ofString(),
+    )
+
     companion object {
+        private val httpClient: HttpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(5))
+            .build()
+
         @Container
         @ServiceConnection
         @JvmStatic

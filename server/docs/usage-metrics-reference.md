@@ -151,8 +151,9 @@ scope는 각 원자료 보존기간과 일치합니다.
 
 ## 운영 상태
 
-API의 공개 `GET /actuator/info`는 다음 `usageMetrics` 필드만 노출합니다. 수치, 계정
-UUID, HMAC, 원자료 최근 시각은 노출하지 않습니다.
+API의 내부 management `GET /actuator/info`는 다음 `usageMetrics` 필드만 제공합니다.
+운영에서는 Tailscale SSH 후 호스트 loopback으로 조회하며 Cloudflare Tunnel에는
+연결하지 않습니다. 수치, 계정 UUID, HMAC, 원자료 최근 시각은 포함하지 않습니다.
 
 | 필드 | 의미 |
 | --- | --- |

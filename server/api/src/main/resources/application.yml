@@ -31,6 +31,8 @@ server:
     min-response-size: 1024
 
 management:
+  server:
+    port: 8081
   endpoints:
     web:
       exposure:

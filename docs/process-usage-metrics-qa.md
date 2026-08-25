@@ -186,7 +186,8 @@ cd server
 
 ## 7. Worker 집계와 운영 상태
 
-- [ ] **AGG-001 [P0] API 상태** — `/actuator/info`의 `usageMetrics`에
+- [ ] **AGG-001 [P0] 내부 API 상태** — Tailscale SSH 후 호스트 loopback
+  `/actuator/info`의 `usageMetrics`에
   `configured`, `database`, `aggregation`과 조건부 `lastSuccessfulAggregationAt`만
   나오고 수치·UUID·HMAC·원자료 최근 시각은 나오지 않습니다.
 - [ ] **AGG-002 [P0] 실행 분리** — API가 원자료를 기록하고 Worker는 원자료 ingestion
@@ -199,6 +200,10 @@ cd server
   `total_count`가 같은 날짜·audience·client·code의 원자료 aggregate와 일치합니다.
 - [ ] **AGG-006 [P1] 전역 OFF** — 전역 OFF에서는 재집계를 생략하되 purge와 성공
   marker 갱신은 계속합니다.
+- [ ] **AGG-007 [P0] 관리 경계** — 공식 origin과 API port의 `/actuator`,
+  `/actuator/health/readiness`, `/actuator/info`는 모두 `404`이고, 호스트 loopback
+  관리 port에서만 health와 info가 `200`입니다. 관리 port는 Docker host의
+  `127.0.0.1`에만 publish하고 외부 interface나 Cloudflare Tunnel에는 연결하지 않습니다.
 
 ## 8. 보존과 삭제
 

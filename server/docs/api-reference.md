@@ -30,13 +30,17 @@ cookie는 token resolver에서 Bearer 인증으로 변환하고, 권한과 WebVi
 
 ## 상태와 정적 자산
 
-| Method | 경로 | 설명 |
-| --- | --- | --- |
-| `GET` | `/actuator/health/readiness` | 운영 readiness health check |
-| `GET` | `/actuator/info` | 수치나 식별자 없이 사용량 설정·DB·집계 상태 제공 |
-| `GET` | `/api/health` | 수집 source를 포함한 서비스 health |
-| `GET` | `/api/public/status` | source별 최근 시도·성공·실패 상태 |
-| `GET` | `/`, `/index.html` | 내장 React SPA HTML |
+Actuator는 공개 HTTP API가 아닙니다. 운영에서는 별도 management port를 호스트
+loopback에만 publish하며, Tailscale SSH 후 조회합니다. Cloudflare Tunnel의 API port에서
+`/actuator/*`는 `404`입니다.
+
+| 범위 | Method | 경로 | 설명 |
+| --- | --- | --- | --- |
+| 내부 management | `GET` | `/actuator/health/readiness` | 운영 readiness health check |
+| 내부 management | `GET` | `/actuator/info` | 수치나 식별자 없이 사용량 설정·DB·집계 상태 제공 |
+| 공개 API | `GET` | `/api/health` | 수집 source를 포함한 서비스 health |
+| 공개 API | `GET` | `/api/public/status` | source별 최근 시도·성공·실패 상태 |
+| 공개 자산 | `GET` | `/`, `/index.html` | 내장 React SPA HTML |
 
 Vite로 빌드한 React SPA는 Spring Boot JAR의 정적 자산으로 배포됩니다. 화면 이동은 `/#/home`, `/#/attendance`, `/#/laundry`, `/#/meals` hash 경로를 사용하고 개인정보 처리 안내는 인증과 무관하게 `/#/privacy`에서 엽니다.
 

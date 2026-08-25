@@ -30,6 +30,7 @@ EXISTS`로 적용됩니다. Worker의 SQL 초기화는 꺼져 있습니다. 현�
 | 변수 | 기본값 | 설명 |
 | --- | --- | --- |
 | `PORT` | `8080` | API HTTP port. Worker는 HTTP server를 열지 않음 |
+| `MANAGEMENT_SERVER_PORT` | `8081` | API와 분리한 Spring Boot Actuator management port |
 | `PUBLIC_BASE_URL` | 로컬 직접 실행 `http://127.0.0.1:8080`, 운영 Compose 필수 | 정적 자산, 공개 API 자산 URL, pairing URL의 외부 origin |
 | `PAIRING_SECRET` | config tree `pairing-secret` | pairing 서명 secret, 32자 이상 |
 | `PAIRING_SECRET_FILE` | 필수 | Compose pairing secret 파일 |
@@ -40,6 +41,11 @@ Desktop UI origin allowlist는 코드에서 고정합니다.
 - `tauri://localhost`
 - `http://tauri.localhost`
 - `http://127.0.0.1:5173`
+
+운영 Compose는 컨테이너 `8081`을 `127.0.0.1:${MANAGEMENT_PORT}`에만 publish합니다.
+Cloudflare Tunnel은 `api:8080`만 origin으로 사용하며 management port나
+`/actuator/*` route를 연결하지 않습니다. 원격 운영자는 Tailscale SSH로 호스트에
+접속한 뒤 loopback에서 Actuator를 조회합니다.
 
 `CF-Connecting-IP`는 enrollment rate limit의 client key로만 사용하며, 값은 hash한 뒤
 저장합니다. header가 없으면 socket remote address를 사용합니다.
@@ -86,12 +92,12 @@ housekeeping도 Worker에서 실행됩니다. 각 source의 최근 시도·성�
 이 값은 Worker가 실행하는 삭제 cutoff이며 최소 보존이나 가용성 SLA가 아닙니다. Worker
 장애 중에는 요약 생성과 삭제가 늦어질 수 있습니다.
 
-API 요청 thread가 원자료를 동기식으로 기록하고 Worker는 요약·삭제만 수행합니다. API의
-`GET /actuator/info`는 `usageMetrics.configured`, DB marker 조회 가능 여부, 집계 상태와
-마지막 성공 시각만 제공합니다. 성공 marker가 130분을 넘으면 `stale`입니다.
+API 요청 thread가 원자료를 동기식으로 기록하고 Worker는 요약·삭제만 수행합니다. 내부
+management의 `GET /actuator/info`는 `usageMetrics.configured`, DB marker 조회 가능 여부,
+집계 상태와 마지막 성공 시각만 제공합니다. 성공 marker가 130분을 넘으면 `stale`입니다.
 `GET /actuator/health/readiness`에는 `readinessState`와 `db`가 포함되지만 상세 내용은
-노출하지 않습니다. Worker는 HTTP server를 열지 않으므로 Worker 상태는 marker와 로그로
-확인합니다.
+노출하지 않습니다. 두 endpoint는 공개 API port에 존재하지 않습니다. Worker는 HTTP
+server를 열지 않으므로 Worker 상태는 marker와 로그로 확인합니다.
 
 원자료와 요약 스키마·응답 의미는
 [사용량 메트릭 레퍼런스](./usage-metrics-reference.md), 운영 확인 명령은
@@ -117,6 +123,7 @@ private key는 저장소, PostgreSQL, 로그에 기록하지 않습니다. key p
 | `API_IMAGE` | 필수 | API 이미지 tag |
 | `WORKER_IMAGE` | 필수 | Worker 이미지 tag |
 | `API_PORT` | 필수 | API의 호스트 loopback port |
+| `MANAGEMENT_PORT` | 필수 | Actuator의 호스트 loopback port. 운영 예시값 `8081` |
 | `CLOUDFLARE_TUNNEL_TOKEN` | 필수 | 운영 named Tunnel token |
 
 `CLOUDFLARE_TUNNEL_TOKEN`은 저장소 밖의 운영 `.env.production`에서 관리합니다.
