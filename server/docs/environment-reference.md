@@ -65,13 +65,37 @@ housekeeping도 Worker에서 실행됩니다. 각 source의 최근 시도·성�
 
 | 변수 | 기본값 | 설명 |
 | --- | --- | --- |
-| `USAGE_METRICS_ENABLED` | `true` | API 신규 기록과 Worker 요약 재집계를 함께 활성화. 비활성화해도 보존기간 삭제는 계속 실행 |
+| `USAGE_METRICS_ENABLED` | `true` | API 신규 기록과 Worker 요약 재집계를 함께 활성화하는 전역 kill switch |
 | `USAGE_HASH_SECRET` | config tree `usage-hash-secret` | 익명 방문자 쿠키를 날짜별 HMAC으로 변환하는 전용 secret, 32자 이상 |
 | `USAGE_HASH_SECRET_FILE` | 운영 Compose 필수 | API와 Worker에 동일하게 mount하는 Compose secret 파일 |
 
 `usage-hash-secret`은 pairing secret과 분리하고 저장소나 로그에 기록하지 않습니다.
-원자료와 요약 보존기간, 집계 조회 방법은 [사용량 메트릭 레퍼런스](./usage-metrics-reference.md)를
-따릅니다.
+
+`USAGE_METRICS_ENABLED`는 개별 사용자의 통계 거부 설정이 아닙니다. `false`로 바꿔도
+계정 preference나 익명 opt-out 쿠키를 변경하지 않고 기존 행을 즉시 삭제하지도
+않습니다. API는 신규 원자료 기록을 생략하고 Worker는 요약 재집계를 생략하지만, 다음
+고정 보존기간에 따른 삭제와 `usage-daily-summary-v1:success` marker 갱신은 계속합니다.
+
+| 데이터 | 고정 보존기간 |
+| --- | --- |
+| 익명 활동 원자료 | 2일 |
+| 인증 활동 원자료 | 7일 |
+| 인증 기능 원자료 | 30일 |
+| 개인 식별자 없는 일별 요약 | 730일 |
+
+이 값은 Worker가 실행하는 삭제 cutoff이며 최소 보존이나 가용성 SLA가 아닙니다. Worker
+장애 중에는 요약 생성과 삭제가 늦어질 수 있습니다.
+
+API 요청 thread가 원자료를 동기식으로 기록하고 Worker는 요약·삭제만 수행합니다. API의
+`GET /actuator/info`는 `usageMetrics.configured`, DB marker 조회 가능 여부, 집계 상태와
+마지막 성공 시각만 제공합니다. 성공 marker가 130분을 넘으면 `stale`입니다.
+`GET /actuator/health/readiness`에는 `readinessState`와 `db`가 포함되지만 상세 내용은
+노출하지 않습니다. Worker는 HTTP server를 열지 않으므로 Worker 상태는 marker와 로그로
+확인합니다.
+
+원자료와 요약 스키마·응답 의미는
+[사용량 메트릭 레퍼런스](./usage-metrics-reference.md), 운영 확인 명령은
+[서버 운영 절차](../OPERATIONS.md#사용량-수집과-집계-확인)를 따릅니다.
 
 ## Web Push
 
