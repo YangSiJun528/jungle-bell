@@ -1,5 +1,6 @@
 package app.junglebell.server.api.usage
 
+import app.junglebell.server.api.common.ApiErrorResponse
 import app.junglebell.server.domain.security.SessionKind
 import app.junglebell.server.domain.security.SessionPrincipal
 import app.junglebell.server.domain.usage.AnonymousUsageIdentity
@@ -56,6 +57,7 @@ class UsageControllerTest {
 
         assertEquals(HttpStatus.SERVICE_UNAVAILABLE, result.statusCode)
         assertEquals("1", result.headers.getFirst(HttpHeaders.RETRY_AFTER))
+        assertEquals(ApiErrorResponse("USAGE_METRICS_UNAVAILABLE"), result.body)
     }
 
     @Test
@@ -91,6 +93,7 @@ class UsageControllerTest {
 
         assertEquals(HttpStatus.SERVICE_UNAVAILABLE, result.statusCode)
         assertEquals("1", result.headers.getFirst(HttpHeaders.RETRY_AFTER))
+        assertEquals(ApiErrorResponse("USAGE_METRICS_UNAVAILABLE"), result.body)
         assertTrue(
             response.getHeaders(HttpHeaders.SET_COOKIE).any {
                 it.startsWith("__Host-jb_usage=$token;") && it.contains("Max-Age=86400")

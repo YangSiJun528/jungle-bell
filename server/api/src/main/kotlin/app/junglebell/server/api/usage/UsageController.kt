@@ -1,5 +1,6 @@
 package app.junglebell.server.api.usage
 
+import app.junglebell.server.api.common.ApiErrorResponse
 import app.junglebell.server.api.security.CurrentSession
 import app.junglebell.server.domain.security.SessionPrincipal
 import app.junglebell.server.domain.usage.AnonymousUsageRecorder
@@ -78,7 +79,9 @@ class UsageController(
     }
 
     @PostMapping("/api/me/usage/ui-opened")
-    fun authenticatedUiOpened(@CurrentSession principal: SessionPrincipal): ResponseEntity<Void> =
+    fun authenticatedUiOpened(
+        @CurrentSession principal: SessionPrincipal,
+    ): ResponseEntity<ApiErrorResponse> =
         usageRecordingResponse(authenticated.recordUiOpened(principal))
 
     @PostMapping("/api/public/usage/ui-opened")
@@ -86,7 +89,7 @@ class UsageController(
         @Valid @RequestBody body: AnonymousUiOpenedRequest,
         request: HttpServletRequest,
         response: HttpServletResponse,
-    ): ResponseEntity<Void> {
+    ): ResponseEntity<ApiErrorResponse> {
         if (hasAnonymousOptOut(request)) return ResponseEntity.noContent().build()
         val existing = request.cookies?.firstOrNull { it.name == secureCookieName(request) }?.value
             ?: request.cookies?.firstOrNull { it.name == COOKIE_NAME }?.value
@@ -105,7 +108,9 @@ class UsageController(
         return usageRecordingResponse(recording.outcome)
     }
 
-    private fun usageRecordingResponse(outcome: UsageRecordingOutcome): ResponseEntity<Void> = when (outcome) {
+    private fun usageRecordingResponse(
+        outcome: UsageRecordingOutcome,
+    ): ResponseEntity<ApiErrorResponse> = when (outcome) {
         UsageRecordingOutcome.RECORDED,
         UsageRecordingOutcome.NO_CHANGE,
         UsageRecordingOutcome.SKIPPED,
@@ -114,7 +119,7 @@ class UsageController(
         UsageRecordingOutcome.UNAVAILABLE ->
             ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .header(HttpHeaders.RETRY_AFTER, RETRY_AFTER_SECONDS)
-                .build()
+                .body(ApiErrorResponse(USAGE_METRICS_UNAVAILABLE))
     }
 
     private fun secureCookieName(request: HttpServletRequest): String =
@@ -167,6 +172,7 @@ class UsageController(
         const val COOKIE_NAME = "jb_usage"
         const val ANONYMOUS_OPT_OUT_COOKIE_NAME = "jb_usage_opt_out"
         const val RETRY_AFTER_SECONDS = "1"
+        const val USAGE_METRICS_UNAVAILABLE = "USAGE_METRICS_UNAVAILABLE"
         val ANONYMOUS_OPT_OUT_MAX_AGE: Duration = Duration.ofDays(365)
     }
 }
