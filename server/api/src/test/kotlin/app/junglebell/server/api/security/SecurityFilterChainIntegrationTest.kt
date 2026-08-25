@@ -275,6 +275,101 @@ class SecurityFilterChainIntegrationTest(
     }
 
     @Test
+    fun `anonymous opt out cookie blocks collection and clears the visitor cookie`() {
+        val before = jdbc.sql("SELECT count(*) FROM usage_anonymous_day")
+            .query(Int::class.java).single()
+        mockMvc.perform(get("/api/public/usage-preference"))
+            .andExpect(status().isOk)
+            .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+            .andExpect(jsonPath("$.enabled").value(true))
+        val disabled = mockMvc.perform(
+            put("/api/public/usage-preference")
+                .header("X-Forwarded-Proto", "https")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"enabled":false}"""),
+        ).andExpect(status().isOk)
+            .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+            .andExpect(jsonPath("$.enabled").value(false))
+            .andReturn()
+
+        val disabledCookies = disabled.response.getHeaders(HttpHeaders.SET_COOKIE)
+        kotlin.test.assertTrue(
+            disabledCookies.any {
+                it.contains("__Host-jb_usage_opt_out=1") &&
+                    it.contains("Max-Age=31536000") && it.contains("HttpOnly") &&
+                    it.contains("Secure") && it.contains("SameSite=Strict")
+            },
+        )
+        kotlin.test.assertTrue(
+            disabledCookies.any { it.startsWith("jb_usage=;") && it.contains("Max-Age=0") },
+        )
+        kotlin.test.assertTrue(
+            disabledCookies.any { it.startsWith("__Host-jb_usage=;") && it.contains("Max-Age=0") },
+        )
+
+        mockMvc.perform(
+            get("/api/public/usage-preference")
+                .header("X-Forwarded-Proto", "https")
+                .cookie(Cookie("__Host-jb_usage_opt_out", "corrupt")),
+        ).andExpect(status().isOk)
+            .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+            .andExpect(jsonPath("$.enabled").value(false))
+        mockMvc.perform(
+            post("/api/public/usage/ui-opened")
+                .header("X-Forwarded-Proto", "https")
+                .cookie(
+                    Cookie("__Host-jb_usage_opt_out", "1"),
+                    Cookie("__Host-jb_usage", "jbv_${"f".repeat(64)}"),
+                )
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"client":"web"}"""),
+        ).andExpect(status().isNoContent)
+            .andExpect(header().doesNotExist(HttpHeaders.SET_COOKIE))
+        kotlin.test.assertEquals(
+            before,
+            jdbc.sql("SELECT count(*) FROM usage_anonymous_day").query(Int::class.java).single(),
+        )
+
+        val enabled = mockMvc.perform(
+            put("/api/public/usage-preference")
+                .header("X-Forwarded-Proto", "https")
+                .cookie(Cookie("__Host-jb_usage_opt_out", "1"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"enabled":true}"""),
+        ).andExpect(status().isOk)
+            .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+            .andExpect(jsonPath("$.enabled").value(true))
+            .andReturn()
+        kotlin.test.assertTrue(
+            enabled.response.getHeaders(HttpHeaders.SET_COOKIE).any {
+                it.startsWith("__Host-jb_usage_opt_out=;") && it.contains("Max-Age=0")
+            },
+        )
+        kotlin.test.assertTrue(
+            enabled.response.getHeaders(HttpHeaders.SET_COOKIE).any {
+                it.startsWith("jb_usage_opt_out=;") && it.contains("Max-Age=0")
+            },
+        )
+
+        val insecure = mockMvc.perform(
+            put("/api/public/usage-preference")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"enabled":false}"""),
+        ).andExpect(status().isOk)
+            .andReturn()
+        kotlin.test.assertTrue(
+            insecure.response.getHeaders(HttpHeaders.SET_COOKIE).any {
+                it.startsWith("jb_usage_opt_out=1;") && !it.contains("Secure")
+            },
+        )
+        kotlin.test.assertTrue(
+            insecure.response.getHeaders(HttpHeaders.SET_COOKIE).none {
+                it.startsWith("__Host-jb_usage_opt_out=")
+            },
+        )
+    }
+
+    @Test
     fun `feature usage is recorded only after an allowlisted server operation succeeds`() {
         val token = "jbs_" + "3".repeat(64)
         val sessionId = createAppSession("mobile", token)

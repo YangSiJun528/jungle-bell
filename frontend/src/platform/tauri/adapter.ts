@@ -4,7 +4,7 @@ import type {
     PlatformEventAdapter,
     PwaCapabilityAdapter,
 } from '@/platform/contracts';
-import {unavailablePwaAdapter} from '@/platform/contracts';
+import {unavailablePwaAdapter, unavailableUsagePrivacyAdapter} from '@/platform/contracts';
 
 import {createDesktopHttpSessionManager} from './desktop-http-session';
 import {createDashboardDesktopSettingsApi} from './desktop-settings';
@@ -39,5 +39,6 @@ export function createTauriPlatformAdapter(
         desktopSettings: createDashboardDesktopSettingsApi(native),
         events: options.events ?? createTauriEventAdapter(),
         pwa: options.pwa ?? unavailablePwaAdapter(),
+        usagePrivacy: unavailableUsagePrivacyAdapter(),
     };
 }

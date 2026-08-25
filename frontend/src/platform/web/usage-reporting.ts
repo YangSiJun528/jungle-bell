@@ -6,7 +6,11 @@ interface VisibilityDocument {
     removeEventListener(type: 'visibilitychange', listener: () => void): void;
 }
 
-export async function reportWebUiOpened(installedPwa: boolean, fetcher: UsageFetch): Promise<void> {
+export async function reportWebUiOpened(
+    installedPwa: boolean,
+    fetcher: UsageFetch,
+    allowsAnonymousReporting: () => boolean = () => true,
+): Promise<void> {
     try {
         if (installedPwa) {
             const authenticated = await fetcher('/api/me/usage/ui-opened', {
@@ -17,6 +21,7 @@ export async function reportWebUiOpened(installedPwa: boolean, fetcher: UsageFet
             });
             if (authenticated.status !== 401) return;
         }
+        if (!allowsAnonymousReporting()) return;
         await fetcher('/api/public/usage/ui-opened', {
             method: 'POST',
             credentials: 'include',
@@ -34,6 +39,7 @@ export function startWebUsageReporting(options: {
     installedPwa: boolean;
     fetcher?: UsageFetch;
     documentObject?: VisibilityDocument;
+    allowsAnonymousReporting?: () => boolean;
 }): () => void {
     const fetcher = options.fetcher ?? window.fetch.bind(window);
     const documentObject = options.documentObject ?? document;
@@ -41,7 +47,11 @@ export function startWebUsageReporting(options: {
     const reportVisible = () => {
         if (documentObject.visibilityState !== 'visible' || inFlight) return;
         inFlight = true;
-        void reportWebUiOpened(options.installedPwa, fetcher).finally(() => {
+        void reportWebUiOpened(
+            options.installedPwa,
+            fetcher,
+            options.allowsAnonymousReporting,
+        ).finally(() => {
             inFlight = false;
         });
     };

@@ -121,6 +121,20 @@ export interface PwaCapabilityAdapter {
     subscribePush(applicationServerKey: string): Promise<PushSubscriptionJSON>;
 }
 
+export type UsagePreferenceScope = 'anonymous';
+
+export interface UsagePreferenceSnapshot {
+    enabled: boolean;
+    scope: UsagePreferenceScope;
+}
+
+export interface UsagePrivacyAdapter {
+    available: boolean;
+    get(): Promise<UsagePreferenceSnapshot>;
+    update(enabled: boolean): Promise<UsagePreferenceSnapshot>;
+    allowsAnonymousReporting(): boolean;
+}
+
 export interface PlatformAdapter {
     kind: PlatformKind;
     capabilities: PlatformCapabilities;
@@ -129,6 +143,7 @@ export interface PlatformAdapter {
     desktopSettings: DesktopSettingsAdapter;
     events: PlatformEventAdapter;
     pwa: PwaCapabilityAdapter;
+    usagePrivacy: UsagePrivacyAdapter;
 }
 
 export class PlatformCapabilityUnavailableError extends Error {
@@ -164,5 +179,18 @@ export function unavailableEventAdapter(): PlatformEventAdapter {
         subscribeNotificationInboxUpdated: unavailableSubscription,
         subscribeAttendanceSnapshotUpdated: unavailableSubscription,
         subscribeLmsSessionStateUpdated: unavailableSubscription,
+    };
+}
+
+export function unavailableUsagePrivacyAdapter(): UsagePrivacyAdapter {
+    return {
+        available: false,
+        get: async () => {
+            throw new Error('USAGE_PRIVACY_UNAVAILABLE');
+        },
+        update: async () => {
+            throw new Error('USAGE_PRIVACY_UNAVAILABLE');
+        },
+        allowsAnonymousReporting: () => false,
     };
 }

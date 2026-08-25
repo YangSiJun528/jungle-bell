@@ -1,6 +1,10 @@
+import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Link, Outlet} from '@tanstack/react-router';
 import {ArrowLeft, ShieldCheck} from 'lucide-react';
 
+import {Switch} from '@/components/ui/switch';
+
+import {queryKeys, useDashboardEnvironment} from './dashboard-context';
 import {DashboardFooter} from './shell/DashboardFooter';
 
 const SERVICE_URL = 'https://jungle-bell.sijun-yang.com';
@@ -46,6 +50,87 @@ function PolicySection({
     );
 }
 
+function UsagePrivacySettings() {
+    const {platform} = useDashboardEnvironment();
+    const client = useQueryClient();
+    const adapter = platform.usagePrivacy;
+    const preference = useQuery({
+        queryKey: queryKeys.anonymousUsagePreference,
+        queryFn: () => adapter.get(),
+        enabled: adapter.available,
+        retry: false,
+    });
+    const update = useMutation({
+        mutationFn: (enabled: boolean) => adapter.update(enabled),
+        onMutate: async (enabled) => {
+            await client.cancelQueries({queryKey: queryKeys.anonymousUsagePreference});
+            if (!enabled) {
+                client.setQueryData(queryKeys.anonymousUsagePreference, {
+                    enabled: false,
+                    scope: 'anonymous',
+                });
+            }
+        },
+        onSuccess: (saved) => client.setQueryData(queryKeys.anonymousUsagePreference, saved),
+    });
+
+    if (!adapter.available) return null;
+    const enabled = preference.data?.enabled === true;
+
+    return (
+        <div className="rounded-xl border bg-card p-5">
+            <div className="flex items-start justify-between gap-4">
+                <div>
+                    <h3 className="font-semibold">익명 방문 통계 수집</h3>
+                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                        이 브라우저의 일반 Web·연결 전 PWA 화면 열림 기록에만 적용됩니다.
+                    </p>
+                </div>
+                <Switch
+                    checked={enabled}
+                    disabled={
+                        !preference.data ||
+                        preference.isError ||
+                        preference.isPending ||
+                        preference.isFetching ||
+                        update.isPending
+                    }
+                    onCheckedChange={(checked) => update.mutate(checked)}
+                    aria-label="익명 방문 통계 수집"
+                />
+            </div>
+            {preference.isPending ? (
+                <p className="mt-3 text-sm text-muted-foreground">설정을 확인하고 있습니다.</p>
+            ) : null}
+            {preference.data ? (
+                <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                    거부 상태는 이 브라우저의 로컬 저장소와 최대 1년간 유지되는 opt-out 쿠키에
+                    저장됩니다. 사이트 데이터를 삭제하면 기본 설정인 허용 상태로 돌아갑니다.
+                </p>
+            ) : null}
+            {preference.isError ? (
+                <p className="mt-3 text-sm text-destructive" role="alert">
+                    설정을 불러오지 못했습니다.
+                    <button
+                        type="button"
+                        className="ml-2 font-medium underline underline-offset-4"
+                        onClick={() => void preference.refetch()}
+                    >
+                        다시 시도
+                    </button>
+                </p>
+            ) : null}
+            {update.isError ? (
+                <p className="mt-3 text-sm text-destructive" role="alert">
+                    {update.variables
+                        ? '서버 설정을 저장하지 못했습니다. 다시 시도해 주세요.'
+                        : '이 브라우저의 전송은 중단했지만 서버 쿠키를 저장하지 못했습니다.'}
+                </p>
+            ) : null}
+        </div>
+    );
+}
+
 export function PublicRouteOutlet() {
     return <Outlet />;
 }
@@ -83,7 +168,7 @@ export function PrivacyPage() {
                         개인정보 처리방침을 수립·공개합니다.
                     </p>
                     <p className="mt-3 text-xs font-medium text-muted-foreground">
-                        시행일: 2026-08-20 <span aria-hidden="true">|</span> 버전: 1.0
+                        시행일: 2026-08-25 <span aria-hidden="true">|</span> 버전: 1.1
                     </p>
                 </header>
 
@@ -156,7 +241,17 @@ export function PrivacyPage() {
                     </div>
                 </PolicySection>
 
-                <PolicySection id="security-title" title="4. 개인정보의 안전성 확보조치">
+                <PolicySection id="usage-choice-title" title="4. 사용 통계 수집 거부">
+                    <p className="text-sm leading-6 text-muted-foreground">
+                        아래 설정을 끄면 일반 Web 및 연결되지 않은 PWA의 익명 화면 열림 기록을 새로
+                        수집하지 않습니다. 연결된 계정의 PC·PWA 화면 활동과 기능 이용 기록에는
+                        적용되지 않습니다. 이미 수집된 원자료는 위 보유기간에 따라 파기하며, 개인을
+                        다시 식별하기 위한 값이 없는 일별 집계 결과는 역으로 삭제하지 않습니다.
+                    </p>
+                    <UsagePrivacySettings />
+                </PolicySection>
+
+                <PolicySection id="security-title" title="5. 개인정보의 안전성 확보조치">
                     <dl className="rounded-xl border bg-card p-5">
                         <dt className="font-semibold">관리적 조치</dt>
                         <dd className="mt-2 text-sm leading-6 text-muted-foreground">
@@ -169,7 +264,7 @@ export function PrivacyPage() {
                     </dl>
                 </PolicySection>
 
-                <PolicySection id="rights-title" title="5. 정보주체의 권리·의무 및 행사방법">
+                <PolicySection id="rights-title" title="6. 정보주체의 권리·의무 및 행사방법">
                     <p className="text-sm leading-6 text-muted-foreground">
                         정보주체는 개인정보 열람, 정정·삭제, 처리정지 및 동의 철회를 요구할 수
                         있습니다. 권리 행사와 개인정보 관련 고충은 이메일로 접수합니다.
@@ -200,9 +295,9 @@ export function PrivacyPage() {
                     </a>
                 </PolicySection>
 
-                <PolicySection id="changes-title" title="6. 개인정보 처리방침의 변경">
+                <PolicySection id="changes-title" title="7. 개인정보 처리방침의 변경">
                     <p className="text-sm leading-6 text-muted-foreground">
-                        이 개인정보 처리방침은 2026-08-20부터 적용됩니다.
+                        이 개인정보 처리방침은 2026-08-25부터 적용됩니다.
                     </p>
                     <p className="text-sm leading-6 text-muted-foreground">
                         변경 고지 방법: 앱 내 공지

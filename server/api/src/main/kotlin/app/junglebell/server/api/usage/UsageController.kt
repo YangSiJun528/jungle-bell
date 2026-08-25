@@ -45,6 +45,37 @@ class UsageController(
         @Valid @RequestBody body: UsagePreferenceRequest,
     ): UsagePreference = preferences.put(principal.userId, body.enabled)
 
+    @GetMapping("/api/public/usage-preference")
+    fun anonymousUsagePreference(
+        request: HttpServletRequest,
+        response: HttpServletResponse,
+    ): UsagePreference {
+        response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store")
+        return UsagePreference(enabled = !hasAnonymousOptOut(request))
+    }
+
+    @PutMapping("/api/public/usage-preference")
+    fun putAnonymousUsagePreference(
+        @Valid @RequestBody body: UsagePreferenceRequest,
+        request: HttpServletRequest,
+        response: HttpServletResponse,
+    ): UsagePreference {
+        response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store")
+        if (body.enabled) {
+            expireCookies(response, request, ANONYMOUS_OPT_OUT_COOKIE_NAME)
+        } else {
+            setCookie(
+                response,
+                cookieName(request, ANONYMOUS_OPT_OUT_COOKIE_NAME),
+                "1",
+                isSecure(request),
+                ANONYMOUS_OPT_OUT_MAX_AGE,
+            )
+            expireCookies(response, request, COOKIE_NAME)
+        }
+        return UsagePreference(body.enabled)
+    }
+
     @PostMapping("/api/me/usage/ui-opened")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     fun authenticatedUiOpened(@CurrentSession principal: SessionPrincipal) {
@@ -58,6 +89,7 @@ class UsageController(
         request: HttpServletRequest,
         response: HttpServletResponse,
     ) {
+        if (hasAnonymousOptOut(request)) return
         val existing = request.cookies?.firstOrNull { it.name == secureCookieName(request) }?.value
             ?: request.cookies?.firstOrNull { it.name == COOKIE_NAME }?.value
         val client = if (body.client == UsageClient.PWA.value) UsageClient.PWA else UsageClient.WEB
@@ -65,26 +97,64 @@ class UsageController(
         if (!identity.newToken) return
 
         val secure = isSecure(request)
-        response.addHeader(
-            HttpHeaders.SET_COOKIE,
-            ResponseCookie.from(if (secure) "__Host-$COOKIE_NAME" else COOKIE_NAME, identity.token)
-                .httpOnly(true)
-                .secure(secure)
-                .sameSite("Strict")
-                .path("/")
-                .maxAge(Duration.ofHours(24))
-                .build()
-                .toString(),
+        setCookie(
+            response,
+            cookieName(request, COOKIE_NAME),
+            identity.token,
+            secure,
+            Duration.ofHours(24),
         )
     }
 
     private fun secureCookieName(request: HttpServletRequest): String =
-        if (isSecure(request)) "__Host-$COOKIE_NAME" else COOKIE_NAME
+        cookieName(request, COOKIE_NAME)
+
+    private fun hasAnonymousOptOut(request: HttpServletRequest): Boolean =
+        request.cookies?.any {
+            (it.name == ANONYMOUS_OPT_OUT_COOKIE_NAME ||
+                it.name == "__Host-$ANONYMOUS_OPT_OUT_COOKIE_NAME")
+        } == true
+
+    private fun cookieName(request: HttpServletRequest, baseName: String): String =
+        if (isSecure(request)) "__Host-$baseName" else baseName
+
+    private fun expireCookies(
+        response: HttpServletResponse,
+        request: HttpServletRequest,
+        baseName: String,
+    ) {
+        setCookie(response, baseName, "", secure = false, maxAge = Duration.ZERO)
+        if (isSecure(request)) {
+            setCookie(response, "__Host-$baseName", "", secure = true, maxAge = Duration.ZERO)
+        }
+    }
+
+    private fun setCookie(
+        response: HttpServletResponse,
+        name: String,
+        value: String,
+        secure: Boolean,
+        maxAge: Duration,
+    ) {
+        response.addHeader(
+            HttpHeaders.SET_COOKIE,
+            ResponseCookie.from(name, value)
+                .httpOnly(true)
+                .secure(secure)
+                .sameSite("Strict")
+                .path("/")
+                .maxAge(maxAge)
+                .build()
+                .toString(),
+        )
+    }
 
     private fun isSecure(request: HttpServletRequest): Boolean =
         request.isSecure || request.getHeader("X-Forwarded-Proto") == "https"
 
     private companion object {
         const val COOKIE_NAME = "jb_usage"
+        const val ANONYMOUS_OPT_OUT_COOKIE_NAME = "jb_usage_opt_out"
+        val ANONYMOUS_OPT_OUT_MAX_AGE: Duration = Duration.ofDays(365)
     }
 }

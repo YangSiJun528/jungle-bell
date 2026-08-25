@@ -43,6 +43,17 @@ describe('web usage reporting', () => {
         expect(disconnected.mock.calls[1]?.[1]?.body).toBe(JSON.stringify({client: 'pwa'}));
     });
 
+    test('anonymous opt out blocks ordinary web and disconnected PWA fallback', async () => {
+        const web = vi.fn<UsageFetch>(async () => new Response(null, {status: 204}));
+        await reportWebUiOpened(false, web, () => false);
+        expect(web).not.toHaveBeenCalled();
+
+        const pwa = vi.fn<UsageFetch>(async () => new Response(null, {status: 401}));
+        await reportWebUiOpened(true, pwa, () => false);
+        expect(pwa).toHaveBeenCalledOnce();
+        expect(pwa.mock.calls[0]?.[0]).toBe('/api/me/usage/ui-opened');
+    });
+
     test('reports initial and restored visibility without allowing overlapping requests', async () => {
         let visibilityState: DocumentVisibilityState = 'visible';
         let listener: (() => void) | undefined;

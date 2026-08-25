@@ -20,6 +20,7 @@ export const queryKeys = {
     mealPreferences: ['personal', 'meal-preferences'] as const,
     laundryWatches: ['personal', 'laundry-watches'] as const,
     mobileSessions: ['mobile-sessions'] as const,
+    anonymousUsagePreference: ['anonymous-usage-preference'] as const,
 };
 
 export interface DashboardEnvironment {
