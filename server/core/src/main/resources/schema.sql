@@ -24,6 +24,14 @@ CREATE TABLE IF NOT EXISTS laundry_version (
 CREATE INDEX IF NOT EXISTS laundry_version_latest
     ON laundry_version (last_seen_at DESC);
 
+CREATE TABLE IF NOT EXISTS laundry_current (
+    source text PRIMARY KEY CHECK (source = 'laundry'),
+    sha text NOT NULL REFERENCES laundry_version(sha) CHECK (sha ~ '^[0-9a-f]{64}$'),
+    normalized jsonb NOT NULL CHECK (jsonb_typeof(normalized) = 'object'),
+    first_seen_at timestamptz NOT NULL,
+    last_seen_at timestamptz NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS minute_observation (
     source text NOT NULL,
     minute_epoch bigint NOT NULL,
@@ -262,6 +270,8 @@ CREATE TABLE IF NOT EXISTS laundry_watch (
         CHECK (notification_mode IN ('before-completion', 'estimated-completion', 'confirmed-completion')),
     notify_before_minutes integer NOT NULL CHECK (notify_before_minutes BETWEEN 0 AND 180),
     notify_when_available boolean NOT NULL,
+    attention_unresolved boolean NOT NULL DEFAULT false,
+    attention_unresolved_at_epoch_ms bigint,
     status text NOT NULL CHECK (status IN ('active', 'completed', 'cancelled')),
     created_at_epoch_ms bigint NOT NULL,
     updated_at_epoch_ms bigint NOT NULL CHECK (updated_at_epoch_ms >= created_at_epoch_ms)
@@ -270,6 +280,12 @@ CREATE TABLE IF NOT EXISTS laundry_watch (
 ALTER TABLE laundry_watch
     ADD COLUMN IF NOT EXISTS notification_mode text NOT NULL DEFAULT 'confirmed-completion'
     CHECK (notification_mode IN ('before-completion', 'estimated-completion', 'confirmed-completion'));
+
+ALTER TABLE laundry_watch
+    ADD COLUMN IF NOT EXISTS attention_unresolved boolean NOT NULL DEFAULT false;
+
+ALTER TABLE laundry_watch
+    ADD COLUMN IF NOT EXISTS attention_unresolved_at_epoch_ms bigint;
 
 UPDATE laundry_watch
 SET notification_mode = 'before-completion'

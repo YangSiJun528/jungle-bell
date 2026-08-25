@@ -109,11 +109,73 @@ class JdbcAutomationStore(private val jdbc: JdbcClient) : AutomationStore {
 
     override fun activeLaundryWatches(): List<ActiveLaundryWatch> = jdbc.sql(
         """
-        SELECT id, user_id, machine_id, appliance, session_id,
-               notification_mode, notify_before_minutes
-        FROM laundry_watch
-        WHERE status = 'active'
-        ORDER BY created_at_epoch_ms, id
+        SELECT watch.id, watch.user_id, watch.machine_id, watch.appliance, watch.session_id,
+               watch.notification_mode, watch.notify_before_minutes, watch.attention_unresolved,
+               watch.attention_unresolved_at_epoch_ms,
+               (
+                   SELECT CASE incident.type
+                       WHEN 'ERROR_ENTERED' THEN 'ERROR'
+                       WHEN 'PAUSED' THEN 'PAUSED'
+                       ELSE NULL
+                   END
+                   FROM laundry_event incident
+                   WHERE watch.appliance = 'dryer'
+                     AND incident.machine_id = watch.machine_id
+                     AND incident.appliance = watch.appliance
+                     AND incident.session_id = watch.session_id
+                     AND incident.observed_at >= TO_TIMESTAMP(watch.created_at_epoch_ms / 1000.0)
+                     AND incident.type IN ('ERROR_ENTERED', 'PAUSED')
+                     AND NOT EXISTS (
+                         SELECT 1
+                         FROM laundry_event recovery
+                         WHERE recovery.machine_id = incident.machine_id
+                           AND recovery.appliance = incident.appliance
+                           AND recovery.session_id = incident.session_id
+                           AND recovery.type IN ('STARTED', 'COMPLETED')
+                           AND recovery.observed_at >= incident.observed_at
+                     )
+                   ORDER BY CASE incident.type WHEN 'ERROR_ENTERED' THEN 2 ELSE 1 END DESC,
+                       incident.observed_at DESC, incident.id DESC
+                   LIMIT 1
+               ) AS pending_attention_status,
+               (
+                   SELECT incident.id::text
+                   FROM laundry_event incident
+                   WHERE watch.appliance = 'dryer'
+                     AND incident.machine_id = watch.machine_id
+                     AND incident.appliance = watch.appliance
+                     AND incident.session_id = watch.session_id
+                     AND incident.observed_at >= TO_TIMESTAMP(watch.created_at_epoch_ms / 1000.0)
+                     AND incident.type IN ('ERROR_ENTERED', 'PAUSED')
+                     AND NOT EXISTS (
+                         SELECT 1
+                         FROM laundry_event recovery
+                         WHERE recovery.machine_id = incident.machine_id
+                           AND recovery.appliance = incident.appliance
+                           AND recovery.session_id = incident.session_id
+                           AND recovery.type IN ('STARTED', 'COMPLETED')
+                           AND recovery.observed_at >= incident.observed_at
+                     )
+                   ORDER BY incident.observed_at, incident.id
+                   LIMIT 1
+               ) AS pending_attention_incident_id,
+               COALESCE(
+                   watch.attention_unresolved AND watch.attention_unresolved_at_epoch_ms IS NOT NULL AND EXISTS (
+                       SELECT 1
+                       FROM laundry_event recovery
+                       WHERE watch.appliance = 'dryer'
+                         AND recovery.machine_id = watch.machine_id
+                         AND recovery.appliance = watch.appliance
+                         AND recovery.session_id = watch.session_id
+                         AND recovery.type IN ('STARTED', 'COMPLETED')
+                         AND recovery.observed_at >=
+                             TO_TIMESTAMP(watch.attention_unresolved_at_epoch_ms / 1000.0)
+                   ),
+                   false
+               ) AS attention_recovered
+        FROM laundry_watch watch
+        WHERE watch.status = 'active'
+        ORDER BY watch.created_at_epoch_ms, watch.id
         """.trimIndent(),
     ).query { row, _ ->
         ActiveLaundryWatch(
@@ -124,13 +186,30 @@ class JdbcAutomationStore(private val jdbc: JdbcClient) : AutomationStore {
             sessionId = row.getString("session_id"),
             notificationMode = row.getString("notification_mode"),
             notifyBeforeMinutes = row.getInt("notify_before_minutes"),
+            attentionUnresolved = row.getBoolean("attention_unresolved"),
+            attentionUnresolvedAtEpochMs = row.getObject("attention_unresolved_at_epoch_ms")
+                ?.let { row.getLong("attention_unresolved_at_epoch_ms") },
+            pendingAttentionStatus = row.getString("pending_attention_status"),
+            pendingAttentionIncidentId = row.getString("pending_attention_incident_id"),
+            attentionRecovered = row.getBoolean("attention_recovered"),
         )
     }.list()
+
+    override fun markLaundryWatchResumed(id: String, now: Long): Boolean = jdbc.sql(
+        """
+        UPDATE laundry_watch
+        SET attention_unresolved = false, attention_unresolved_at_epoch_ms = NULL,
+            updated_at_epoch_ms = :now
+        WHERE id = :id AND status = 'active' AND attention_unresolved
+        RETURNING id
+        """.trimIndent(),
+    ).param("now", now).param("id", id).query(String::class.java).optional().isPresent
 
     override fun completeLaundryWatch(id: String, now: Long): Boolean = jdbc.sql(
         """
         UPDATE laundry_watch
-        SET status = 'completed', updated_at_epoch_ms = :now
+        SET status = 'completed', attention_unresolved = false,
+            attention_unresolved_at_epoch_ms = NULL, updated_at_epoch_ms = :now
         WHERE id = :id AND status = 'active'
         RETURNING id
         """.trimIndent(),

@@ -38,6 +38,7 @@ class JdbcPublicDataStore(
         observation: MinuteObservation,
     ) {
         saveLaundryVersion(version, firstSeenAt)
+        saveLaundryCurrent(version, firstSeenAt, observation.changed)
         saveLaundryEvents(version.events)
         saveObservation(observation)
         recordSourceSuccess("laundry", version.sourceVersionSha, Instant.parse(version.observedAt))
@@ -128,17 +129,59 @@ class JdbcPublicDataStore(
             .param("lastSeenAt", Timestamp.from(Instant.parse(version.observedAt))).update()
     }
 
+    private fun saveLaundryCurrent(version: LaundryVersion, firstSeenAt: Instant, changed: Boolean) {
+        val json = objectMapper.writeValueAsString(version)
+        jdbc.sql(
+            """
+            INSERT INTO laundry_current(source, sha, normalized, first_seen_at, last_seen_at)
+            SELECT 'laundry', immutable.sha,
+                   CASE WHEN :changed THEN CAST(:normalized AS jsonb) ELSE immutable.normalized END,
+                   CASE WHEN :changed THEN :firstSeenAt ELSE immutable.first_seen_at END,
+                   :lastSeenAt
+            FROM laundry_version immutable
+            WHERE immutable.sha = :sha
+            ON CONFLICT (source) DO UPDATE SET
+                sha = CASE WHEN :changed THEN EXCLUDED.sha ELSE laundry_current.sha END,
+                normalized = CASE
+                    WHEN :changed THEN EXCLUDED.normalized
+                    ELSE laundry_current.normalized
+                END,
+                first_seen_at = CASE
+                    WHEN :changed THEN EXCLUDED.first_seen_at
+                    ELSE laundry_current.first_seen_at
+                END,
+                last_seen_at = EXCLUDED.last_seen_at
+            """.trimIndent(),
+        ).param("sha", version.sourceVersionSha).param("normalized", json)
+            .param("firstSeenAt", Timestamp.from(firstSeenAt))
+            .param("lastSeenAt", Timestamp.from(Instant.parse(version.observedAt)))
+            .param("changed", changed).update()
+    }
+
     override fun latestLaundryVersion(): LaundryVersion? = jdbc.sql(
         """
-        SELECT normalized::text
-        FROM laundry_version
-        WHERE EXISTS (
-            SELECT 1
-            FROM jsonb_array_elements(normalized -> 'machines') AS machine
-            WHERE jsonb_typeof(machine -> 'washer') = 'object'
-               OR jsonb_typeof(machine -> 'dryer') = 'object'
+        WITH candidates AS (
+            SELECT normalized, 0 AS priority, last_seen_at
+            FROM laundry_current
+            WHERE source = 'laundry' AND EXISTS (
+                SELECT 1
+                FROM jsonb_array_elements(normalized -> 'machines') AS machine
+                WHERE jsonb_typeof(machine -> 'washer') = 'object'
+                   OR jsonb_typeof(machine -> 'dryer') = 'object'
+            )
+            UNION ALL
+            SELECT normalized, 1 AS priority, last_seen_at
+            FROM laundry_version
+            WHERE EXISTS (
+                SELECT 1
+                FROM jsonb_array_elements(normalized -> 'machines') AS machine
+                WHERE jsonb_typeof(machine -> 'washer') = 'object'
+                   OR jsonb_typeof(machine -> 'dryer') = 'object'
+            )
         )
-        ORDER BY last_seen_at DESC
+        SELECT normalized::text
+        FROM candidates
+        ORDER BY priority, last_seen_at DESC
         LIMIT 1
         """.trimIndent(),
     ).query(String::class.java).optional().map { objectMapper.readValue(it, LaundryVersion::class.java) }.orElse(null)

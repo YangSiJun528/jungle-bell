@@ -135,6 +135,174 @@ class JdbcStoreIntegrationTest {
     }
 
     @Test
+    fun `laundry attention is deduplicated and tracks unresolved state`() {
+        val userId = createUser()
+        val watch = LaundryWatch(
+            id = "jbw_${"b".repeat(64)}",
+            machineId = "워시타워_1",
+            appliance = "dryer",
+            sessionId = "dryer-session-1",
+            notificationMode = "confirmed-completion",
+            notifyBeforeMinutes = 0,
+            status = "active",
+            createdAtEpochMs = 1_000,
+            updatedAtEpochMs = 1_000,
+        )
+        assertTrue(JdbcPersonalStore(jdbc).createWatch(userId, watch))
+        val mapper = JsonMapper.builder().addModule(KotlinModule.Builder().build()).build()
+        val notifications = JdbcNotificationStore(jdbc, mapper)
+        val automation = JdbcAutomationStore(jdbc)
+        val sessionId = checkNotNull(watch.sessionId)
+
+        insertLaundryEvent(watch.machineId, watch.appliance, sessionId, "ERROR_ENTERED", 500)
+        assertEquals(null, automation.activeLaundryWatches().single { it.id == watch.id }.pendingAttentionStatus)
+        insertLaundryEvent(watch.machineId, watch.appliance, "different-session", "ERROR_ENTERED", 1_200)
+        assertEquals(null, automation.activeLaundryWatches().single { it.id == watch.id }.pendingAttentionStatus)
+        insertLaundryEvent(watch.machineId, watch.appliance, sessionId, "STOPPED_UNEXPECTEDLY", 1_500)
+        assertEquals(null, automation.activeLaundryWatches().single { it.id == watch.id }.pendingAttentionStatus)
+        val firstIncidentId = insertLaundryEvent(
+            watch.machineId,
+            watch.appliance,
+            sessionId,
+            "ERROR_ENTERED",
+            2_000,
+        )
+        var lifecycle = automation.activeLaundryWatches().single { it.id == watch.id }
+        assertEquals("ERROR", lifecycle.pendingAttentionStatus)
+        assertEquals(firstIncidentId.toString(), lifecycle.pendingAttentionIncidentId)
+        assertFalse(lifecycle.attentionRecovered)
+        insertLaundryEvent(watch.machineId, watch.appliance, sessionId, "PAUSED", 2_500)
+        assertEquals("ERROR", automation.activeLaundryWatches().single { it.id == watch.id }.pendingAttentionStatus)
+        insertLaundryEvent(watch.machineId, watch.appliance, sessionId, "STARTED", 3_000)
+        lifecycle = automation.activeLaundryWatches().single { it.id == watch.id }
+        assertEquals(null, lifecycle.pendingAttentionStatus)
+        assertEquals(null, lifecycle.pendingAttentionIncidentId)
+        assertFalse(lifecycle.attentionRecovered)
+        val alertedIncidentId = insertLaundryEvent(
+            watch.machineId,
+            watch.appliance,
+            sessionId,
+            "PAUSED",
+            4_000,
+        )
+        lifecycle = automation.activeLaundryWatches().single { it.id == watch.id }
+        assertEquals("PAUSED", lifecycle.pendingAttentionStatus)
+        assertEquals(alertedIncidentId.toString(), lifecycle.pendingAttentionIncidentId)
+        assertFalse(lifecycle.attentionRecovered)
+
+        val attention = NotificationRecord(
+            UUID.randomUUID(), userId,
+            "laundry-attention:${watch.id}:${watch.sessionId}:$alertedIncidentId",
+            "laundry-attention", "건조기가 멈췄습니다", "상태를 확인해 주세요.", "/#/laundry",
+            emptyMap(), 5_000, 5_000, 20_000,
+        )
+
+        assertTrue(notifications.createFromLaundryWatch(attention, watch.id, completeWatch = false, now = 5_000))
+        lifecycle = automation.activeLaundryWatches().single { it.id == watch.id }
+        assertTrue(lifecycle.attentionUnresolved)
+        assertEquals(5_000L, lifecycle.attentionUnresolvedAtEpochMs)
+        assertFalse(lifecycle.attentionRecovered)
+        assertFalse(
+            notifications.createFromLaundryWatch(
+                attention.copy(id = UUID.randomUUID()),
+                watch.id,
+                completeWatch = false,
+                now = 6_000,
+            ),
+        )
+        assertEquals(
+            1,
+            jdbc.sql("SELECT count(*) FROM notification WHERE user_id = :userId AND source_event_id = :sourceEventId")
+                .param("userId", userId).param("sourceEventId", attention.sourceEventId)
+                .query(Int::class.java).single(),
+        )
+
+        insertLaundryEvent(watch.machineId, watch.appliance, sessionId, "STARTED", 7_000)
+        lifecycle = automation.activeLaundryWatches().single { it.id == watch.id }
+        assertTrue(lifecycle.attentionUnresolved)
+        assertTrue(lifecycle.attentionRecovered)
+        assertTrue(automation.markLaundryWatchResumed(watch.id, 7_000))
+        assertFalse(automation.activeLaundryWatches().single { it.id == watch.id }.attentionUnresolved)
+        assertEquals(null, automation.activeLaundryWatches().single { it.id == watch.id }.pendingAttentionStatus)
+        val nextIncidentId = insertLaundryEvent(
+            watch.machineId,
+            watch.appliance,
+            sessionId,
+            "ERROR_ENTERED",
+            8_000,
+        )
+        val nextAttention = attention.copy(
+            id = UUID.randomUUID(),
+            sourceEventId = "laundry-attention:${watch.id}:${watch.sessionId}:$nextIncidentId",
+        )
+        assertTrue(
+            notifications.createFromLaundryWatch(
+                nextAttention,
+                watch.id,
+                completeWatch = false,
+                now = 9_000,
+            ),
+        )
+        val repeatedIncident = automation.activeLaundryWatches().single { it.id == watch.id }
+        assertTrue(repeatedIncident.attentionUnresolved)
+        assertEquals("ERROR", repeatedIncident.pendingAttentionStatus)
+        assertEquals(nextIncidentId.toString(), repeatedIncident.pendingAttentionIncidentId)
+        assertEquals(9_000L, repeatedIncident.attentionUnresolvedAtEpochMs)
+        assertEquals(
+            2,
+            jdbc.sql("SELECT count(*) FROM notification WHERE user_id = :userId AND kind = 'laundry-attention'")
+                .param("userId", userId).query(Int::class.java).single(),
+        )
+
+        assertTrue(automation.completeLaundryWatch(watch.id, 10_000))
+        assertEquals("completed", JdbcPersonalStore(jdbc).watches(userId).single { it.id == watch.id }.status)
+        assertFalse(
+            notifications.createFromLaundryWatch(
+                attention.copy(id = UUID.randomUUID(), sourceEventId = "attention-after-completion"),
+                watch.id,
+                completeWatch = false,
+                now = 11_000,
+            ),
+        )
+    }
+
+    @Test
+    fun `duplicate terminal notification still completes an active laundry watch`() {
+        val userId = createUser()
+        val watch = LaundryWatch(
+            id = "jbw_${"c".repeat(64)}",
+            machineId = "워시타워_2",
+            appliance = "dryer",
+            sessionId = "dryer-session-2",
+            notificationMode = "estimated-completion",
+            notifyBeforeMinutes = 0,
+            status = "active",
+            createdAtEpochMs = 1_000,
+            updatedAtEpochMs = 1_000,
+        )
+        assertTrue(JdbcPersonalStore(jdbc).createWatch(userId, watch))
+        val mapper = JsonMapper.builder().addModule(KotlinModule.Builder().build()).build()
+        val notifications = JdbcNotificationStore(jdbc, mapper)
+        val expected = NotificationRecord(
+            UUID.randomUUID(), userId, "laundry-completion-expected:${watch.id}:${watch.sessionId}:estimated-completion",
+            "laundry-completion-expected", "건조 완료 예상", "상태를 확인해 주세요.", "/#/laundry",
+            emptyMap(), 2_000, 2_000, 20_000,
+        )
+
+        assertTrue(notifications.createFromLaundryWatch(expected, watch.id, completeWatch = false, now = 2_000))
+        assertEquals("active", JdbcPersonalStore(jdbc).watches(userId).single { it.id == watch.id }.status)
+        assertFalse(
+            notifications.createFromLaundryWatch(
+                expected.copy(id = UUID.randomUUID()),
+                watch.id,
+                completeWatch = true,
+                now = 3_000,
+            ),
+        )
+        assertEquals("completed", JdbcPersonalStore(jdbc).watches(userId).single { it.id == watch.id }.status)
+    }
+
+    @Test
     fun `legacy attendance notification kinds are normalized when read`() {
         val userId = createUser()
         val mapper = JsonMapper.builder().addModule(KotlinModule.Builder().build()).build()
@@ -360,6 +528,36 @@ class JdbcStoreIntegrationTest {
     }
 
     private fun randomHash(): String = UUID.randomUUID().toString().replace("-", "").repeat(2)
+
+    private fun insertLaundryEvent(
+        machineId: String,
+        appliance: String,
+        sessionId: String,
+        type: String,
+        observedAtEpochMs: Long,
+    ): UUID {
+        val id = UUID.randomUUID()
+        val currentState = when (type) {
+            "ERROR_ENTERED" -> "ERROR"
+            "PAUSED" -> "PAUSE"
+            "COMPLETED" -> "END"
+            "STOPPED_UNEXPECTEDLY" -> "POWER_OFF"
+            else -> "RUNNING"
+        }
+        jdbc.sql(
+            """
+            INSERT INTO laundry_event(
+                id, machine_id, appliance, session_id, type, observed_at,
+                current_state, detail
+            ) VALUES (:id, :machineId, :appliance, :sessionId, :type, :observedAt,
+                :currentState, '{}'::jsonb)
+            """.trimIndent(),
+        ).param("id", id).param("machineId", machineId).param("appliance", appliance)
+            .param("sessionId", sessionId).param("type", type)
+            .param("observedAt", java.sql.Timestamp.from(java.time.Instant.ofEpochMilli(observedAtEpochMs)))
+            .param("currentState", currentState).update()
+        return id
+    }
 
     private fun createDesktop(userId: UUID, installationId: String, tokenHash: String, expiresAt: Long): UUID {
         val sessionId = UUID.randomUUID()
