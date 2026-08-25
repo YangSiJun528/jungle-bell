@@ -461,6 +461,10 @@ fn focus_window(window: &WebviewWindow<tauri::Wry>) {
 }
 
 fn record_ui_opened(app: &tauri::AppHandle) {
+    if !desktop_usage_reporting_enabled(cfg!(debug_assertions)) {
+        log::debug!("[usage] UI open metric skipped in a debug build");
+        return;
+    }
     let Some(service) = app.try_state::<Arc<crate::remote_sync::RemoteSyncService>>() else {
         log::debug!("[usage] UI open metric skipped before connected service initialization");
         return;
@@ -469,6 +473,10 @@ fn record_ui_opened(app: &tauri::AppHandle) {
     tauri::async_runtime::spawn(async move {
         service.record_ui_opened_best_effort().await;
     });
+}
+
+const fn desktop_usage_reporting_enabled(debug_build: bool) -> bool {
+    !debug_build
 }
 
 fn foreground_window_skip_taskbar(_app: &tauri::AppHandle) -> bool {
@@ -1268,6 +1276,12 @@ mod tests {
         assert!(!tray_click_opens_dashboard(MouseButton::Middle, MouseButtonState::Up));
         assert!(!tray_click_opens_dashboard(MouseButton::Left, MouseButtonState::Down));
         assert!(!tray_click_opens_dashboard(MouseButton::Right, MouseButtonState::Down));
+    }
+
+    #[test]
+    fn pc_사용_통계는_release_빌드에서만_전송한다() {
+        assert!(!desktop_usage_reporting_enabled(true));
+        assert!(desktop_usage_reporting_enabled(false));
     }
 
     #[test]
