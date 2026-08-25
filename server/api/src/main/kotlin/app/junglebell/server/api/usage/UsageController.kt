@@ -7,6 +7,7 @@ import app.junglebell.server.domain.usage.UsageClient
 import app.junglebell.server.domain.usage.UsagePreference
 import app.junglebell.server.domain.usage.UsagePreferenceService
 import app.junglebell.server.domain.usage.UsageRecorder
+import app.junglebell.server.domain.usage.UsageRecordingOutcome
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import jakarta.validation.Valid
@@ -14,12 +15,12 @@ import jakarta.validation.constraints.Pattern
 import java.time.Duration
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
+import org.springframework.http.ResponseEntity
 import org.springframework.http.ResponseCookie
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
-import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 
 data class AnonymousUiOpenedRequest(
@@ -77,33 +78,43 @@ class UsageController(
     }
 
     @PostMapping("/api/me/usage/ui-opened")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    fun authenticatedUiOpened(@CurrentSession principal: SessionPrincipal) {
-        authenticated.recordUiOpened(principal)
-    }
+    fun authenticatedUiOpened(@CurrentSession principal: SessionPrincipal): ResponseEntity<Void> =
+        usageRecordingResponse(authenticated.recordUiOpened(principal))
 
     @PostMapping("/api/public/usage/ui-opened")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
     fun anonymousUiOpened(
         @Valid @RequestBody body: AnonymousUiOpenedRequest,
         request: HttpServletRequest,
         response: HttpServletResponse,
-    ) {
-        if (hasAnonymousOptOut(request)) return
+    ): ResponseEntity<Void> {
+        if (hasAnonymousOptOut(request)) return ResponseEntity.noContent().build()
         val existing = request.cookies?.firstOrNull { it.name == secureCookieName(request) }?.value
             ?: request.cookies?.firstOrNull { it.name == COOKIE_NAME }?.value
         val client = if (body.client == UsageClient.PWA.value) UsageClient.PWA else UsageClient.WEB
-        val identity = anonymous.recordUiOpened(existing, client) ?: return
-        if (!identity.newToken) return
+        val recording = anonymous.recordUiOpened(existing, client)
+        recording.identity?.takeIf { it.newToken }?.let { identity ->
+            val secure = isSecure(request)
+            setCookie(
+                response,
+                cookieName(request, COOKIE_NAME),
+                identity.token,
+                secure,
+                Duration.ofHours(24),
+            )
+        }
+        return usageRecordingResponse(recording.outcome)
+    }
 
-        val secure = isSecure(request)
-        setCookie(
-            response,
-            cookieName(request, COOKIE_NAME),
-            identity.token,
-            secure,
-            Duration.ofHours(24),
-        )
+    private fun usageRecordingResponse(outcome: UsageRecordingOutcome): ResponseEntity<Void> = when (outcome) {
+        UsageRecordingOutcome.RECORDED,
+        UsageRecordingOutcome.NO_CHANGE,
+        UsageRecordingOutcome.SKIPPED,
+        -> ResponseEntity.noContent().build()
+
+        UsageRecordingOutcome.UNAVAILABLE ->
+            ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .header(HttpHeaders.RETRY_AFTER, RETRY_AFTER_SECONDS)
+                .build()
     }
 
     private fun secureCookieName(request: HttpServletRequest): String =
@@ -155,6 +166,7 @@ class UsageController(
     private companion object {
         const val COOKIE_NAME = "jb_usage"
         const val ANONYMOUS_OPT_OUT_COOKIE_NAME = "jb_usage_opt_out"
+        const val RETRY_AFTER_SECONDS = "1"
         val ANONYMOUS_OPT_OUT_MAX_AGE: Duration = Duration.ofDays(365)
     }
 }

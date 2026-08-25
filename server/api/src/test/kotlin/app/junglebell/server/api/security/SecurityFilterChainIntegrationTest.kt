@@ -5,7 +5,10 @@ import app.junglebell.server.api.logging.REQUEST_ID_HEADER
 import jakarta.servlet.http.Cookie
 import java.util.UUID
 import kotlin.test.Test
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.boot.health.actuate.endpoint.HealthEndpointGroups
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
@@ -35,6 +38,7 @@ class SecurityFilterChainIntegrationTest(
     @param:Autowired private val mockMvc: MockMvc,
     @param:Autowired private val jdbc: JdbcClient,
     @param:Autowired private val tokens: TokenCodec,
+    @param:Autowired private val healthEndpointGroups: HealthEndpointGroups,
 ) {
     @Test
     fun `React SPA is served at the root without legacy entry routes`() {
@@ -52,10 +56,23 @@ class SecurityFilterChainIntegrationTest(
 
     @Test
     fun `readiness remains available while the Prometheus endpoint is absent`() {
+        assertTrue(assertNotNull(healthEndpointGroups.get("readiness")).isMember("db"))
         mockMvc.perform(get("/actuator/health/readiness"))
             .andExpect(status().isOk)
         mockMvc.perform(get("/actuator/prometheus"))
             .andExpect(status().isNotFound)
+    }
+
+    @Test
+    fun `public info exposes only safe usage aggregation status`() {
+        mockMvc.perform(get("/actuator/info"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.usageMetrics.configured").value(true))
+            .andExpect(jsonPath("$.usageMetrics.database").value("available"))
+            .andExpect(jsonPath("$.usageMetrics.aggregation").exists())
+            .andExpect(jsonPath("$.usageMetrics.counts").doesNotExist())
+            .andExpect(jsonPath("$.usageMetrics.userIds").doesNotExist())
+            .andExpect(jsonPath("$.usageMetrics.rawRecency").doesNotExist())
     }
 
     @Test

@@ -23,7 +23,14 @@ class UsageAggregationService(
 
     fun runHourly(): UsageAggregationResult? {
         val now = clock.millis()
-        if (!store.tryAcquireAggregationLease(LEASE_NAME, now, LEASE_DURATION_MS, UUID.randomUUID().toString())) {
+        if (
+            !store.tryAcquireAggregationLease(
+                USAGE_AGGREGATION_LEASE_NAME,
+                now,
+                LEASE_DURATION_MS,
+                UUID.randomUUID().toString(),
+            )
+        ) {
             return null
         }
 
@@ -62,11 +69,11 @@ class UsageAggregationService(
             featureBefore = featureBefore,
             summaryBefore = today.minusDays(settings.summaryRetentionDays),
         )
+        store.markAggregationSuccess(USAGE_AGGREGATION_SUCCESS_MARKER_NAME, clock.millis())
         return UsageAggregationResult(dates.size, purge)
     }
 
     private companion object {
-        const val LEASE_NAME = "usage-daily-summary-v1"
         const val LEASE_DURATION_MS = 55 * 60_000L
     }
 }

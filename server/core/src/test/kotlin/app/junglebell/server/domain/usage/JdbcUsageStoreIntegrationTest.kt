@@ -36,6 +36,23 @@ class JdbcUsageStoreIntegrationTest {
     }
 
     @Test
+    fun `aggregation success marker is separate from the lease and never moves backwards`() {
+        assertTrue(store.tryAcquireAggregationLease(USAGE_AGGREGATION_LEASE_NAME, 10_000, 3_000, "lease"))
+        assertEquals(null, store.lastAggregationSuccess(USAGE_AGGREGATION_SUCCESS_MARKER_NAME))
+
+        store.markAggregationSuccess(USAGE_AGGREGATION_SUCCESS_MARKER_NAME, 12_000)
+        store.markAggregationSuccess(USAGE_AGGREGATION_SUCCESS_MARKER_NAME, 11_000)
+
+        assertEquals(12_000L, store.lastAggregationSuccess(USAGE_AGGREGATION_SUCCESS_MARKER_NAME))
+        assertEquals(
+            2,
+            jdbc.sql(
+                "SELECT count(*) FROM maintenance_state WHERE name LIKE 'usage-daily-summary-v1%'",
+            ).query(Int::class.java).single(),
+        )
+    }
+
+    @Test
     fun `daily user activity is idempotent while feature usage increments atomically`() {
         val day = LocalDate.of(2026, 8, 20)
         val userId = createUser()

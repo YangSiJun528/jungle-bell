@@ -9,6 +9,7 @@ import java.time.ZoneOffset
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 
 class UsageAggregationServiceTest {
@@ -46,6 +47,10 @@ class UsageAggregationServiceTest {
             store.cutoffs,
         )
         assertEquals(4, result?.rebuiltDays)
+        assertEquals(
+            listOf(USAGE_AGGREGATION_SUCCESS_MARKER_NAME to now.toEpochMilli()),
+            store.successMarkers,
+        )
     }
 
     @Test
@@ -69,6 +74,10 @@ class UsageAggregationServiceTest {
             ),
             disabledStore.cutoffs,
         )
+        assertEquals(
+            listOf(USAGE_AGGREGATION_SUCCESS_MARKER_NAME to now.toEpochMilli()),
+            disabledStore.successMarkers,
+        )
     }
 
     @Test
@@ -77,6 +86,30 @@ class UsageAggregationServiceTest {
         assertNull(UsageAggregationService(leasedStore, properties(), Clock.fixed(now, ZoneOffset.UTC)).runHourly())
         assertEquals(emptyList(), leasedStore.rebuilt)
         assertNull(leasedStore.cutoffs)
+        assertEquals(emptyList(), leasedStore.successMarkers)
+    }
+
+    @Test
+    fun `rebuild failure does not update the success marker`() {
+        val failedStore = AggregationStore(failRebuild = true)
+
+        assertFailsWith<IllegalStateException> {
+            UsageAggregationService(failedStore, properties(), Clock.fixed(now, ZoneOffset.UTC)).runHourly()
+        }
+
+        assertNull(failedStore.cutoffs)
+        assertEquals(emptyList(), failedStore.successMarkers)
+    }
+
+    @Test
+    fun `purge failure does not update the success marker`() {
+        val failedStore = AggregationStore(failPurge = true)
+
+        assertFailsWith<IllegalStateException> {
+            UsageAggregationService(failedStore, properties(), Clock.fixed(now, ZoneOffset.UTC)).runHourly()
+        }
+
+        assertEquals(emptyList(), failedStore.successMarkers)
     }
 
     private fun properties(enabled: Boolean = true) = JungleBellProperties(
@@ -105,9 +138,12 @@ class UsageAggregationServiceTest {
     private class AggregationStore(
         private val leaseGranted: Boolean = true,
         private val rawDates: Set<LocalDate> = emptySet(),
+        private val failRebuild: Boolean = false,
+        private val failPurge: Boolean = false,
     ) : UsageStore {
         var leaseAttempts = 0
         val rebuilt = mutableListOf<SummaryRebuild>()
+        val successMarkers = mutableListOf<Pair<String, Long>>()
         var cutoffs: UsageCutoffs? = null
 
         override fun tryAcquireAggregationLease(name: String, now: Long, durationMs: Long, token: String): Boolean {
@@ -124,6 +160,7 @@ class UsageAggregationServiceTest {
             calculatedAtEpochMs: Long,
             scopes: Set<UsageSummaryScope>,
         ) {
+            check(!failRebuild) { "rebuild failed" }
             rebuilt += SummaryRebuild(date, scopes)
         }
 
@@ -133,9 +170,18 @@ class UsageAggregationServiceTest {
             featureBefore: LocalDate,
             summaryBefore: LocalDate,
         ): UsagePurgeResult {
+            check(!failPurge) { "purge failed" }
             cutoffs = UsageCutoffs(anonymousBefore, userActivityBefore, featureBefore, summaryBefore)
             return UsagePurgeResult(1, 2, 3, 4)
         }
+
+        override fun markAggregationSuccess(name: String, completedAtEpochMs: Long) {
+            check(cutoffs != null) { "success marker must follow purge" }
+            successMarkers += name to completedAtEpochMs
+        }
+
+        override fun lastAggregationSuccess(name: String): Long? =
+            successMarkers.lastOrNull { it.first == name }?.second
 
         override fun recordUserActivity(
             date: LocalDate,

@@ -22,6 +22,25 @@ class JdbcUsageStore(private val jdbc: JdbcClient) : UsageStore {
         ).param("name", name).param("now", now).param("token", token)
             .param("expiresBefore", now - durationMs).query(String::class.java).optional().isPresent
 
+    override fun markAggregationSuccess(name: String, completedAtEpochMs: Long) {
+        jdbc.sql(
+            """
+            INSERT INTO maintenance_state(name, last_run_at_epoch_ms, run_token)
+            VALUES (:name, :completedAt, 'success')
+            ON CONFLICT (name) DO UPDATE
+            SET last_run_at_epoch_ms = GREATEST(
+                    maintenance_state.last_run_at_epoch_ms,
+                    EXCLUDED.last_run_at_epoch_ms
+                ),
+                run_token = EXCLUDED.run_token
+            """.trimIndent(),
+        ).param("name", name).param("completedAt", completedAtEpochMs).update()
+    }
+
+    override fun lastAggregationSuccess(name: String): Long? = jdbc.sql(
+        "SELECT last_run_at_epoch_ms FROM maintenance_state WHERE name = :name",
+    ).param("name", name).query(Long::class.java).optional().orElse(null)
+
     override fun usagePreference(userId: UUID): UsagePreference = UsagePreference(
         jdbc.sql("SELECT enabled FROM usage_preference WHERE user_id = :userId")
             .param("userId", userId).query(Boolean::class.java).optional().orElse(null),
