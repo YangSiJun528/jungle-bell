@@ -24,6 +24,14 @@ CREATE TABLE IF NOT EXISTS laundry_version (
 CREATE INDEX IF NOT EXISTS laundry_version_latest
     ON laundry_version (last_seen_at DESC);
 
+CREATE TABLE IF NOT EXISTS laundry_current (
+    source text PRIMARY KEY CHECK (source = 'laundry'),
+    sha text NOT NULL REFERENCES laundry_version(sha) CHECK (sha ~ '^[0-9a-f]{64}$'),
+    normalized jsonb NOT NULL CHECK (jsonb_typeof(normalized) = 'object'),
+    first_seen_at timestamptz NOT NULL,
+    last_seen_at timestamptz NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS minute_observation (
     source text NOT NULL,
     minute_epoch bigint NOT NULL,

@@ -184,7 +184,79 @@ class JdbcPublicDataStoreIntegrationTest {
         assertEquals(validSha, store.latestLaundryVersion()?.sourceVersionSha)
     }
 
-    private fun observation(at: Instant, sha: String) = MinuteObservation(
+    @Test
+    fun `current laundry context follows sha occurrences without rewriting immutable versions`() {
+        fun version(sha: String, at: Instant, sessionId: String) = LaundryVersion(
+            sourceVersionSha = sha,
+            observedAt = at.toString(),
+            machines = listOf(
+                LaundryMachine(
+                    "워시타워_context",
+                    null,
+                    LaundryAppliance(
+                        machineId = "워시타워_context",
+                        appliance = "dryer",
+                        observedAt = at.toString(),
+                        state = NormalizedEnum("POWER_OFF", null, true),
+                        operationalStatus = "IDLE",
+                        remainingMinutes = 0,
+                        totalMinutes = 60,
+                        startedAt = "1970-01-01T00:00:00Z",
+                        estimatedFinishAt = null,
+                        remoteControlEnabled = false,
+                        cycleCount = null,
+                        sessionId = sessionId,
+                        errorCode = null,
+                    ),
+                ),
+            ),
+            events = emptyList(),
+            unknownEnums = emptyList(),
+        )
+
+        val shaA = randomSha()
+        val shaB = randomSha()
+        val firstAt = Instant.parse("2199-01-01T00:00:00Z")
+        val consecutiveAt = firstAt.plusSeconds(60)
+        val middleAt = firstAt.plusSeconds(120)
+        val reappearedAt = firstAt.plusSeconds(180)
+        val repeatedAt = firstAt.plusSeconds(240)
+
+        store.recordLaundrySuccess(
+            version(shaA, firstAt, "first-a"),
+            firstAt,
+            observation(firstAt, shaA),
+        )
+        jdbc.sql("DELETE FROM laundry_current WHERE source = 'laundry'").update()
+        store.recordLaundrySuccess(
+            version(shaA, consecutiveAt, "drifted-a"),
+            firstAt,
+            observation(consecutiveAt, shaA, changed = false),
+        )
+        assertEquals("first-a", store.latestLaundryVersion()?.machines?.single()?.dryer?.sessionId)
+
+        store.recordLaundrySuccess(
+            version(shaB, middleAt, "middle-b"),
+            middleAt,
+            observation(middleAt, shaB),
+        )
+        store.recordLaundrySuccess(
+            version(shaA, reappearedAt, "second-a"),
+            reappearedAt,
+            observation(reappearedAt, shaA),
+        )
+        assertEquals("second-a", store.latestLaundryVersion()?.machines?.single()?.dryer?.sessionId)
+        assertEquals("first-a", store.laundryVersion(shaA)?.machines?.single()?.dryer?.sessionId)
+
+        store.recordLaundrySuccess(
+            version(shaA, repeatedAt, "drifted-second-a"),
+            reappearedAt,
+            observation(repeatedAt, shaA, changed = false),
+        )
+        assertEquals("second-a", store.latestLaundryVersion()?.machines?.single()?.dryer?.sessionId)
+    }
+
+    private fun observation(at: Instant, sha: String, changed: Boolean = true) = MinuteObservation(
         source = "laundry",
         minuteEpoch = at.epochSecond / 60,
         scheduledAt = at.toString(),
@@ -192,7 +264,7 @@ class JdbcPublicDataStoreIntegrationTest {
         status = "SUCCESS",
         versionSha = sha,
         versionFirstSeenAt = at.toString(),
-        changed = true,
+        changed = changed,
         durationMs = 1,
         httpStatus = 200,
         error = null,
