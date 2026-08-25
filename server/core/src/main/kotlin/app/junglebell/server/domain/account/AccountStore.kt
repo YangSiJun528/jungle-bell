@@ -14,6 +14,7 @@ interface AccountStore {
         rateWindowMs: Long,
         userId: UUID,
         installationId: String,
+        usageAnalyticsEnabled: Boolean?,
         sessionId: UUID,
         tokenHash: String,
         now: Long,

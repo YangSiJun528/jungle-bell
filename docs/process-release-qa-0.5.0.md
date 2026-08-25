@@ -253,7 +253,7 @@ Jungle Bell 0.5.0 리뉴얼 버전의 출석 상태 수집·표시, 플랫폼별
 - [ ] **COMMON-010 [P1] 밝은·어두운 테마** — 텍스트, 상태색, 경고, 비활성 컨트롤의 대비가 충분하다.
 - [ ] **COMMON-011 [P1] 시간 표시** — 서버 UTC 시각이 사용자 로컬 시각과 상대 시간으로 정확히 표시된다.
 - [ ] **COMMON-012 [P1] 정적 자산 캐시** — 새 배포 뒤 오래된 JS/CSS와 새 API 계약이 섞여 흰 화면이나 무한 새로고침을 만들지 않는다.
-- [ ] **COMMON-013 [P1] 서비스 상태** — `/actuator/health/readiness`, `/api/health`, `/api/public/status`가 실제 DB·수집 상태를 구분해 반환한다.
+- [ ] **COMMON-013 [P1] 서비스 상태** — Tailscale SSH 후 호스트 loopback의 `/actuator/health/readiness`와 공개 `/api/health`, `/api/public/status`가 실제 DB·수집 상태를 구분해 반환한다. 공개 origin의 `/actuator/*`는 `404`다.
 - [ ] **COMMON-014 [P1] 실행부 격리** — 세탁·급식·알림 작업 하나의 실패가 API와 다른 scheduler 작업을 중단시키지 않는다.
 
 ## 최종 회귀

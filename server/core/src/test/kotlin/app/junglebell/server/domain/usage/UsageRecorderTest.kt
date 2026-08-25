@@ -3,18 +3,23 @@ package app.junglebell.server.domain.usage
 import app.junglebell.server.common.config.JungleBellProperties
 import app.junglebell.server.domain.security.SessionKind
 import app.junglebell.server.domain.security.SessionPrincipal
+import java.net.URI
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
-import java.net.URI
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import org.springframework.dao.DataAccessResourceFailureException
+import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.dao.RecoverableDataAccessException
+import org.springframework.dao.TransientDataAccessResourceException
 
 class UsageRecorderTest {
     private val instant = Instant.parse("2026-08-20T01:00:00Z")
@@ -27,7 +32,7 @@ class UsageRecorderTest {
         val desktop = principal(SessionKind.DESKTOP)
         val mobile = principal(SessionKind.MOBILE)
 
-        recorder.recordUiOpened(desktop)
+        assertEquals(UsageRecordingOutcome.RECORDED, recorder.recordUiOpened(desktop))
         recorder.recordFeature(mobile, UsageFeature.LAUNDRY_WATCH_CREATED)
 
         assertEquals(
@@ -41,16 +46,102 @@ class UsageRecorderTest {
     }
 
     @Test
-    fun `disabled or failed metrics never affect the caller`() {
+    fun `disabled UI metrics are skipped and feature failures remain best effort`() {
         val disabledStore = RecordingUsageStore()
-        UsageRecorder(disabledStore, properties(enabled = false), clock)
+        val outcome = UsageRecorder(disabledStore, properties(enabled = false), clock)
             .recordUiOpened(principal(SessionKind.DESKTOP))
+        assertEquals(UsageRecordingOutcome.SKIPPED, outcome)
         assertTrue(disabledStore.userActivities.isEmpty())
 
-        val failedStore = RecordingUsageStore(fail = true)
+        val failedStore = RecordingUsageStore(featureFailure = IllegalStateException("database unavailable"))
         UsageRecorder(failedStore, properties(), clock)
             .recordFeature(principal(SessionKind.DESKTOP), UsageFeature.MOBILE_DEVICE_PAIRED)
         assertTrue(failedStore.features.isEmpty())
+
+        val preferenceFailedStore = RecordingUsageStore(
+            preferenceFailure = IllegalStateException("preference unavailable"),
+        )
+        UsageRecorder(preferenceFailedStore, properties(), clock)
+            .recordFeature(principal(SessionKind.DESKTOP), UsageFeature.MOBILE_DEVICE_PAIRED)
+        assertTrue(preferenceFailedStore.features.isEmpty())
+    }
+
+    @Test
+    fun `undecided or opted out accounts do not record authenticated usage`() {
+        val undecided = RecordingUsageStore(preferenceEnabled = null)
+        val undecidedOutcome = UsageRecorder(undecided, properties(), clock)
+            .recordUiOpened(principal(SessionKind.DESKTOP))
+        assertEquals(UsageRecordingOutcome.SKIPPED, undecidedOutcome)
+        assertTrue(undecided.userActivities.isEmpty())
+
+        val disabled = RecordingUsageStore(preferenceEnabled = false)
+        UsageRecorder(disabled, properties(), clock)
+            .recordFeature(principal(SessionKind.MOBILE), UsageFeature.LAUNDRY_WATCH_CREATED)
+        assertTrue(disabled.features.isEmpty())
+    }
+
+    @Test
+    fun `authenticated UI open distinguishes inserts from deduplicated records`() {
+        val principal = principal(SessionKind.DESKTOP)
+        val recorded = UsageRecorder(RecordingUsageStore(), properties(), clock)
+            .recordUiOpened(principal)
+        val noChange = UsageRecorder(
+            RecordingUsageStore(userActivityRecorded = false),
+            properties(),
+            clock,
+        ).recordUiOpened(principal)
+
+        assertEquals(UsageRecordingOutcome.RECORDED, recorded)
+        assertEquals(UsageRecordingOutcome.NO_CHANGE, noChange)
+    }
+
+    @Test
+    fun `retryable data access failures report UI collection unavailable`() {
+        val failures = listOf(
+            TransientDataAccessResourceException("transient"),
+            RecoverableDataAccessException("recoverable"),
+            DataAccessResourceFailureException("resource unavailable"),
+        )
+
+        failures.forEach { failure ->
+            val outcome = UsageRecorder(
+                RecordingUsageStore(userActivityFailure = failure),
+                properties(),
+                clock,
+            ).recordUiOpened(principal(SessionKind.DESKTOP))
+
+            assertEquals(UsageRecordingOutcome.UNAVAILABLE, outcome)
+        }
+
+        val preferenceOutcome = UsageRecorder(
+            RecordingUsageStore(
+                preferenceFailure = TransientDataAccessResourceException("preference unavailable"),
+            ),
+            properties(),
+            clock,
+        ).recordUiOpened(principal(SessionKind.DESKTOP))
+        assertEquals(UsageRecordingOutcome.UNAVAILABLE, preferenceOutcome)
+    }
+
+    @Test
+    fun `unexpected UI collection failures propagate`() {
+        val nonRetryable = UsageRecorder(
+            RecordingUsageStore(userActivityFailure = DataIntegrityViolationException("invalid data")),
+            properties(),
+            clock,
+        )
+        val codingFailure = UsageRecorder(
+            RecordingUsageStore(userActivityFailure = IllegalStateException("unexpected")),
+            properties(),
+            clock,
+        )
+
+        assertFailsWith<DataIntegrityViolationException> {
+            nonRetryable.recordUiOpened(principal(SessionKind.DESKTOP))
+        }
+        assertFailsWith<IllegalStateException> {
+            codingFailure.recordUiOpened(principal(SessionKind.DESKTOP))
+        }
     }
 
     @Test
@@ -58,9 +149,9 @@ class UsageRecorderTest {
         val store = RecordingUsageStore()
         val recorder = AnonymousUsageRecorder(store, properties(), clock)
 
-        val issued = assertNotNull(recorder.recordUiOpened(null, UsageClient.WEB))
-        val reused = assertNotNull(recorder.recordUiOpened(issued.token, UsageClient.PWA))
-        val replaced = assertNotNull(recorder.recordUiOpened("invalid", UsageClient.WEB))
+        val issued = assertNotNull(recorder.recordUiOpened(null, UsageClient.WEB).identity)
+        val reused = assertNotNull(recorder.recordUiOpened(issued.token, UsageClient.PWA).identity)
+        val replaced = assertNotNull(recorder.recordUiOpened("invalid", UsageClient.WEB).identity)
 
         assertTrue(issued.newToken)
         assertFalse(reused.newToken)
@@ -69,6 +160,54 @@ class UsageRecorderTest {
         assertNotEquals(issued.token, replaced.token)
         assertTrue(store.anonymousActivities.all { it.visitorHash.matches(Regex("^[0-9a-f]{64}$")) })
         assertTrue(store.anonymousActivities.none { it.visitorHash == issued.token })
+    }
+
+    @Test
+    fun `anonymous UI open distinguishes disabled and deduplicated records`() {
+        val disabledStore = RecordingUsageStore()
+        val disabled = AnonymousUsageRecorder(disabledStore, properties(enabled = false), clock)
+            .recordUiOpened(null, UsageClient.WEB)
+        val noChange = AnonymousUsageRecorder(
+            RecordingUsageStore(anonymousActivityRecorded = false),
+            properties(),
+            clock,
+        ).recordUiOpened(null, UsageClient.WEB)
+
+        assertEquals(UsageRecordingOutcome.SKIPPED, disabled.outcome)
+        assertEquals(null, disabled.identity)
+        assertTrue(disabledStore.anonymousActivities.isEmpty())
+        assertEquals(UsageRecordingOutcome.NO_CHANGE, noChange.outcome)
+    }
+
+    @Test
+    fun `anonymous retryable failure preserves its identity for retry`() {
+        val recorder = AnonymousUsageRecorder(
+            RecordingUsageStore(
+                anonymousActivityFailure = TransientDataAccessResourceException("unavailable"),
+            ),
+            properties(),
+            clock,
+        )
+
+        val recording = recorder.recordUiOpened(null, UsageClient.WEB)
+
+        assertEquals(UsageRecordingOutcome.UNAVAILABLE, recording.outcome)
+        assertTrue(assertNotNull(recording.identity).newToken)
+    }
+
+    @Test
+    fun `anonymous unexpected data failure propagates`() {
+        val recorder = AnonymousUsageRecorder(
+            RecordingUsageStore(
+                anonymousActivityFailure = DataIntegrityViolationException("invalid data"),
+            ),
+            properties(),
+            clock,
+        )
+
+        assertFailsWith<DataIntegrityViolationException> {
+            recorder.recordUiOpened(null, UsageClient.WEB)
+        }
     }
 
     private fun properties(enabled: Boolean = true) = JungleBellProperties(
@@ -93,12 +232,32 @@ class UsageRecorderTest {
     private data class FeatureActivity(val date: LocalDate, val userId: UUID, val client: UsageClient)
     private data class AnonymousActivity(val visitorHash: String)
 
-    private class RecordingUsageStore(private val fail: Boolean = false) : UsageStore {
+    private class RecordingUsageStore(
+        private val userActivityFailure: RuntimeException? = null,
+        private val anonymousActivityFailure: RuntimeException? = null,
+        private val featureFailure: RuntimeException? = null,
+        private val preferenceFailure: RuntimeException? = null,
+        private var preferenceEnabled: Boolean? = true,
+        private val userActivityRecorded: Boolean = true,
+        private val anonymousActivityRecorded: Boolean = true,
+    ) : UsageStore {
         val userActivities = mutableListOf<UserActivity>()
         val features = mutableListOf<FeatureActivity>()
         val anonymousActivities = mutableListOf<AnonymousActivity>()
 
         override fun tryAcquireAggregationLease(name: String, now: Long, durationMs: Long, token: String) = true
+        override fun markAggregationSuccess(name: String, completedAtEpochMs: Long) = Unit
+        override fun lastAggregationSuccess(name: String): Long? = null
+
+        override fun usagePreference(userId: UUID): UsagePreference {
+            preferenceFailure?.let { throw it }
+            return UsagePreference(preferenceEnabled)
+        }
+
+        override fun putUsagePreference(userId: UUID, enabled: Boolean, now: Long): UsagePreference {
+            preferenceEnabled = enabled
+            return UsagePreference(enabled)
+        }
 
         override fun recordUserActivity(
             date: LocalDate,
@@ -106,9 +265,9 @@ class UsageRecorderTest {
             client: UsageClient,
             activity: UsageActivity,
         ): Boolean {
-            if (fail) error("database unavailable")
+            userActivityFailure?.let { throw it }
             userActivities += UserActivity(date, userId, client)
-            return true
+            return userActivityRecorded
         }
 
         override fun incrementFeature(
@@ -117,7 +276,7 @@ class UsageRecorderTest {
             client: UsageClient,
             feature: UsageFeature,
         ): Long {
-            if (fail) error("database unavailable")
+            featureFailure?.let { throw it }
             features += FeatureActivity(date, userId, client)
             return 1
         }
@@ -128,12 +287,16 @@ class UsageRecorderTest {
             client: UsageClient,
             activity: UsageActivity,
         ): Boolean {
-            if (fail) error("database unavailable")
+            anonymousActivityFailure?.let { throw it }
             anonymousActivities += AnonymousActivity(visitorHash)
-            return true
+            return anonymousActivityRecorded
         }
 
-        override fun rebuildSummary(date: LocalDate, calculatedAtEpochMs: Long) = Unit
+        override fun rebuildSummary(
+            date: LocalDate,
+            calculatedAtEpochMs: Long,
+            scopes: Set<UsageSummaryScope>,
+        ) = Unit
         override fun rawDatesOnOrAfter(date: LocalDate): Set<LocalDate> = emptySet()
         override fun purge(
             anonymousBefore: LocalDate,

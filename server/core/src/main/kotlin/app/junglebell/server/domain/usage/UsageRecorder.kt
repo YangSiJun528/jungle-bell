@@ -11,6 +11,10 @@ import java.time.ZoneId
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 import org.slf4j.LoggerFactory
+import org.springframework.dao.DataAccessException
+import org.springframework.dao.DataAccessResourceFailureException
+import org.springframework.dao.RecoverableDataAccessException
+import org.springframework.dao.TransientDataAccessException
 import org.springframework.stereotype.Service
 
 @Service
@@ -23,31 +27,55 @@ class UsageRecorder(
     private val zoneId = ZoneId.of(settings.zoneId)
     private val logger = LoggerFactory.getLogger(javaClass)
 
-    fun recordUiOpened(principal: SessionPrincipal) = bestEffort("ui_opened") {
-        store.recordUserActivity(
-            LocalDate.now(clock.withZone(zoneId)),
-            principal.userId,
-            principal.usageClient(),
-            UsageActivity.UI_OPENED,
-        )
+    fun recordUiOpened(principal: SessionPrincipal): UsageRecordingOutcome {
+        if (!settings.enabled) return UsageRecordingOutcome.SKIPPED
+        val client = principal.usageClient()
+
+        return recordUiOpen(client) {
+            if (store.usagePreference(principal.userId).enabled != true) {
+                return@recordUiOpen UsageRecordingOutcome.SKIPPED
+            }
+            store.recordUserActivity(
+                LocalDate.now(clock.withZone(zoneId)),
+                principal.userId,
+                client,
+                UsageActivity.UI_OPENED,
+            ).toRecordingOutcome()
+        }
     }
 
-    fun recordFeature(principal: SessionPrincipal, feature: UsageFeature) = bestEffort(feature.value) {
-        store.incrementFeature(
-            LocalDate.now(clock.withZone(zoneId)),
-            principal.userId,
-            principal.usageClient(),
-            feature,
-        )
-    }
-
-    private inline fun bestEffort(metric: String, operation: () -> Unit) {
+    fun recordFeature(principal: SessionPrincipal, feature: UsageFeature) {
         if (!settings.enabled) return
         try {
-            operation()
+            if (store.usagePreference(principal.userId).enabled != true) return
+            store.incrementFeature(
+                LocalDate.now(clock.withZone(zoneId)),
+                principal.userId,
+                principal.usageClient(),
+                feature,
+            )
         } catch (error: Exception) {
-            logger.warn("Usage metric recording failed. metric={} errorType={}", metric, error.javaClass.simpleName)
+            logger.warn(
+                "Usage metric recording failed. metric={} errorType={}",
+                feature.value,
+                error.javaClass.simpleName,
+            )
         }
+    }
+
+    private inline fun recordUiOpen(
+        client: UsageClient,
+        operation: () -> UsageRecordingOutcome,
+    ): UsageRecordingOutcome = try {
+        operation()
+    } catch (error: DataAccessException) {
+        if (!error.isRetryableUsageFailure()) throw error
+        logger.warn(
+            "Usage metric recording temporarily unavailable. metric=ui_opened client={} errorType={}",
+            client.value,
+            error.javaClass.simpleName,
+        )
+        UsageRecordingOutcome.UNAVAILABLE
     }
 
     private fun SessionPrincipal.usageClient(): UsageClient = when (kind) {
@@ -55,8 +83,6 @@ class UsageRecorder(
         SessionKind.MOBILE -> UsageClient.PWA
     }
 }
-
-data class AnonymousUsageIdentity(val token: String, val newToken: Boolean)
 
 @Service
 class AnonymousUsageRecorder(
@@ -70,28 +96,36 @@ class AnonymousUsageRecorder(
     private val random = SecureRandom()
     private val logger = LoggerFactory.getLogger(javaClass)
 
-    fun recordUiOpened(existingToken: String?, client: UsageClient): AnonymousUsageIdentity? {
+    fun recordUiOpened(existingToken: String?, client: UsageClient): AnonymousUsageRecording {
         require(client == UsageClient.WEB || client == UsageClient.PWA)
-        if (!settings.enabled) return null
+        if (!settings.enabled) {
+            return AnonymousUsageRecording(
+                identity = null,
+                outcome = UsageRecordingOutcome.SKIPPED,
+            )
+        }
 
         val existing = existingToken?.takeIf(VISITOR_TOKEN::matches)
         val token = existing ?: opaqueVisitorToken()
+        val identity = AnonymousUsageIdentity(token, existing == null)
         val date = LocalDate.now(clock.withZone(zoneId))
-        try {
+        val outcome = try {
             store.recordAnonymousActivity(
                 date,
                 visitorHash(date, token),
                 client,
                 UsageActivity.UI_OPENED,
-            )
-        } catch (error: Exception) {
+            ).toRecordingOutcome()
+        } catch (error: DataAccessException) {
+            if (!error.isRetryableUsageFailure()) throw error
             logger.warn(
-                "Anonymous usage metric recording failed. client={} errorType={}",
+                "Anonymous usage metric recording temporarily unavailable. client={} errorType={}",
                 client.value,
                 error.javaClass.simpleName,
             )
+            UsageRecordingOutcome.UNAVAILABLE
         }
-        return AnonymousUsageIdentity(token, existing == null)
+        return AnonymousUsageRecording(identity, outcome)
     }
 
     private fun opaqueVisitorToken(): String =
@@ -110,3 +144,11 @@ class AnonymousUsageRecorder(
         val VISITOR_TOKEN = Regex("^jbv_[a-f0-9]{64}$")
     }
 }
+
+private fun Boolean.toRecordingOutcome(): UsageRecordingOutcome =
+    if (this) UsageRecordingOutcome.RECORDED else UsageRecordingOutcome.NO_CHANGE
+
+private fun DataAccessException.isRetryableUsageFailure(): Boolean =
+    this is TransientDataAccessException ||
+        this is RecoverableDataAccessException ||
+        this is DataAccessResourceFailureException

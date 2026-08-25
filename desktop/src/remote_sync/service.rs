@@ -22,6 +22,29 @@ struct AuthenticatedRequest {
     identity_generation: u64,
 }
 
+#[derive(Debug)]
+struct UsagePreferenceRuntime {
+    desired: Option<bool>,
+    revision: u64,
+    synced_revision: u64,
+}
+
+impl Default for UsagePreferenceRuntime {
+    fn default() -> Self {
+        Self {
+            desired: None,
+            revision: 1,
+            synced_revision: 0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum UsagePreferenceSync {
+    Current,
+    RemoteDecision { enabled: bool, revision: u64 },
+}
+
 pub(crate) struct RemoteNotificationBatch {
     pub(crate) identity_generation: u64,
     pub(crate) notifications: Vec<RemoteNotification>,
@@ -31,6 +54,7 @@ pub(crate) struct RemoteSyncService {
     api: RemoteApi,
     app_data_dir: PathBuf,
     installation_id: RwLock<String>,
+    clean_new_installation: bool,
     credential_store: Arc<dyn CredentialStore>,
     credential: RwLock<Option<BearerCredential>>,
     registration: Mutex<()>,
@@ -38,6 +62,10 @@ pub(crate) struct RemoteSyncService {
     identity_transition: RwLock<()>,
     identity_generation: AtomicU64,
     webview_session_transition: Mutex<()>,
+    usage_metric_transition: RwLock<()>,
+    ui_opened_recording: Mutex<()>,
+    usage_preference: Mutex<UsagePreferenceRuntime>,
+    usage_preference_sync: Mutex<()>,
     pub(crate) runtime: Mutex<SyncRuntime>,
     pub(crate) observation_revision: AtomicU64,
     pub(crate) observation_received: Notify,
@@ -49,6 +77,10 @@ impl RemoteSyncService {
     #[cfg(test)]
     pub(crate) async fn installation_id_for_test(&self) -> String {
         self.installation_id.read().await.clone()
+    }
+
+    pub(crate) fn clean_new_installation(&self) -> bool {
+        self.clean_new_installation
     }
 
     pub(crate) async fn configured(app: &tauri::AppHandle) -> Result<Self, String> {
@@ -123,10 +155,12 @@ impl RemoteSyncService {
             enrollment_state,
             ..SyncRuntime::default()
         };
+        let clean_new_installation = identity_is_new && enrollment_state == EnrollmentState::New;
         Ok(Self {
             api,
             app_data_dir,
             installation_id: RwLock::new(installation_id),
+            clean_new_installation,
             credential_store,
             credential: RwLock::new(credential),
             registration: Mutex::new(()),
@@ -134,6 +168,10 @@ impl RemoteSyncService {
             identity_transition: RwLock::new(()),
             identity_generation: AtomicU64::new(0),
             webview_session_transition: Mutex::new(()),
+            usage_metric_transition: RwLock::new(()),
+            ui_opened_recording: Mutex::new(()),
+            usage_preference: Mutex::new(UsagePreferenceRuntime::default()),
+            usage_preference_sync: Mutex::new(()),
             runtime: Mutex::new(runtime),
             observation_revision: AtomicU64::new(0),
             observation_received: Notify::new(),
@@ -156,7 +194,85 @@ impl RemoteSyncService {
         }
     }
 
+    async fn usage_preference_snapshot(&self) -> (Option<bool>, u64, u64) {
+        let preference = self.usage_preference.lock().await;
+        (preference.desired, preference.revision, preference.synced_revision)
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn usage_analytics_preference(&self) -> Option<bool> {
+        self.usage_preference.lock().await.desired
+    }
+
+    pub(crate) async fn usage_analytics_enabled(&self) -> bool {
+        let preference = self.usage_preference.lock().await;
+        preference.desired == Some(true) && preference.synced_revision == preference.revision
+    }
+
+    pub(crate) async fn usage_preference_sync_pending(&self) -> bool {
+        let preference = self.usage_preference.lock().await;
+        preference.synced_revision != preference.revision
+    }
+
+    pub(crate) async fn set_usage_analytics_preference(&self, desired: Option<bool>) {
+        let _transition = self.usage_metric_transition.write().await;
+        self.set_usage_analytics_preference_locked(desired).await;
+    }
+
+    async fn set_usage_analytics_preference_locked(&self, desired: Option<bool>) {
+        let mut preference = self.usage_preference.lock().await;
+        if preference.desired != desired {
+            preference.desired = desired;
+            preference.revision = preference.revision.wrapping_add(1).max(1);
+        }
+    }
+
+    /// 설정 파일 저장과 런타임 수집 게이트 변경을 같은 전이 경계에서 완료한다.
+    pub(crate) async fn persist_then_set_usage_analytics<T>(
+        &self,
+        desired: Option<bool>,
+        persist: impl std::future::Future<Output = Result<T, String>>,
+    ) -> Result<T, String> {
+        let _transition = self.usage_metric_transition.write().await;
+        let saved = persist.await?;
+        self.set_usage_analytics_preference_locked(desired).await;
+        Ok(saved)
+    }
+
+    async fn mark_usage_preference_synced(&self, revision: u64) {
+        let mut preference = self.usage_preference.lock().await;
+        if preference.revision == revision {
+            preference.synced_revision = revision;
+        }
+    }
+
+    pub(crate) async fn accept_remote_usage_preference(&self, enabled: bool, expected_revision: u64) -> bool {
+        let mut preference = self.usage_preference.lock().await;
+        if preference.revision != expected_revision || preference.desired.is_some() {
+            return false;
+        }
+        preference.desired = Some(enabled);
+        preference.revision = preference.revision.wrapping_add(1).max(1);
+        preference.synced_revision = preference.revision;
+        true
+    }
+
     pub(crate) async fn record_ui_opened_best_effort(&self) {
+        let Ok(_recording) = self.ui_opened_recording.try_lock() else {
+            log::debug!("[usage] UI open metric coalesced with an in-flight attempt");
+            return;
+        };
+        let (desired, _, _) = self.usage_preference_snapshot().await;
+        if desired != Some(true) {
+            log::debug!("[usage] UI open metric skipped by local preference");
+            return;
+        }
+        if !self.usage_analytics_enabled().await {
+            if let Err(error) = self.sync_usage_analytics_preference().await {
+                log::debug!("[usage] UI open metric waits for preference sync: {}", error.code());
+                return;
+            }
+        }
         let request = match self.authenticated_request().await {
             Ok(request) => request,
             Err(error) => {
@@ -164,10 +280,69 @@ impl RemoteSyncService {
                 return;
             }
         };
-        if let Err(error) = self.api.record_ui_opened(&request.bearer).await {
-            // 통계 요청은 연결 상태, credential, 업무 기능의 성공 여부를 바꾸지 않는다.
-            log::debug!("[usage] UI open metric deferred: {}", error.code());
+        let (_, usage_revision, _) = self.usage_preference_snapshot().await;
+        match self.record_ui_opened_for_request(&request, usage_revision).await {
+            Ok(true) => {}
+            Ok(false) => {
+                log::debug!("[usage] UI open metric cancelled by a newer preference");
+            }
+            Err(error) => {
+                // 통계 요청은 연결 상태, credential, 업무 기능의 성공 여부를 바꾸지 않는다.
+                log::debug!("[usage] UI open metric deferred: {}", error.code());
+            }
         }
+    }
+
+    async fn record_ui_opened_for_request(
+        &self,
+        request: &AuthenticatedRequest,
+        expected_usage_revision: u64,
+    ) -> Result<bool, ServiceError> {
+        for (attempt, delay) in std::iter::once(None)
+            .chain(UI_OPENED_RETRY_DELAYS.iter().copied().map(Some))
+            .enumerate()
+        {
+            if let Some(delay) = delay {
+                wait_before_ui_opened_retry(delay).await;
+            }
+
+            // 한 HTTP attempt만 OFF/identity reset과 직렬화한다. 실패 후 backoff에는
+            // guard를 풀어 대기 중인 writer가 다음 retry보다 먼저 완료되게 한다.
+            let usage_transition = self.usage_metric_transition.read().await;
+            let preference_is_current = {
+                let preference = self.usage_preference.lock().await;
+                preference.desired == Some(true)
+                    && preference.revision == expected_usage_revision
+                    && preference.synced_revision == preference.revision
+            };
+            if !preference_is_current {
+                return Ok(false);
+            }
+
+            let identity_transition = self.identity_transition.read().await;
+            if self.identity_generation.load(Ordering::Acquire) != request.identity_generation {
+                return Ok(false);
+            }
+            let bearer_is_current = {
+                let credential = self.credential.read().await;
+                credential.as_ref().is_some_and(|credential| {
+                    credential.is_valid_at(Utc::now()) && credential.token.as_str() == request.bearer.as_str()
+                })
+            };
+            if !bearer_is_current {
+                return Ok(false);
+            }
+
+            let result = self.api.record_ui_opened_attempt(&request.bearer).await;
+            drop(identity_transition);
+            drop(usage_transition);
+            match result {
+                Ok(()) => return Ok(true),
+                Err(failure) if failure.retryable && attempt < UI_OPENED_RETRY_DELAYS.len() => continue,
+                Err(failure) => return Err(failure.error),
+            }
+        }
+        unreachable!("UI open retry loop always returns")
     }
 
     pub(crate) fn registration_needed(&self) -> bool {
@@ -371,8 +546,10 @@ impl RemoteSyncService {
         if self.runtime.lock().await.enrollment_state != EnrollmentState::New {
             return Err(ServiceError::IdentityResetRequired);
         }
+        let _usage_transition = self.usage_metric_transition.read().await;
         let installation_id = self.installation_id.read().await.clone();
-        let result = self.api.register_installation(&installation_id).await;
+        let (usage_analytics, usage_revision, _) = self.usage_preference_snapshot().await;
+        let result = self.api.register_installation(&installation_id, usage_analytics).await;
         match result {
             Ok(credential) => {
                 if !self
@@ -381,6 +558,7 @@ impl RemoteSyncService {
                 {
                     return Err(ServiceError::StaleIdentity);
                 }
+                self.mark_usage_preference_synced(usage_revision).await;
                 log::info!("[connected-service] desktop installation registered");
                 Ok(())
             }
@@ -442,6 +620,7 @@ impl RemoteSyncService {
     pub(crate) async fn reset_identity(&self, _origin: &str) -> Result<ConnectedServiceStatus, String> {
         let _transition = self.webview_session_transition.lock().await;
         let registration = self.registration.lock().await;
+        let usage_transition = self.usage_metric_transition.write().await;
         let identity_transition = self.identity_transition.write().await;
         if let Some(bearer) = self.current_bearer().await {
             if let Err(error) = self.api.delete_installation(&bearer).await {
@@ -464,9 +643,15 @@ impl RemoteSyncService {
             runtime.last_server_contact = None;
             runtime.last_error = None;
         }
+        {
+            let mut preference = self.usage_preference.lock().await;
+            preference.revision = preference.revision.wrapping_add(1).max(1);
+            preference.synced_revision = 0;
+        }
         drop(credential_transition);
         drop(identity_transition);
         drop(registration);
+        drop(usage_transition);
         if let Err(error) = self.ensure_registered().await {
             log::warn!(
                 "[connected-service] registration after identity reset deferred: {}",
@@ -556,6 +741,55 @@ impl RemoteSyncService {
                     Ok(())
                 } else {
                     Err(ServiceError::StaleIdentity)
+                }
+            }
+            Err(error) => {
+                if self.record_request_error(error, &request).await {
+                    Err(error)
+                } else {
+                    Err(ServiceError::StaleIdentity)
+                }
+            }
+        }
+    }
+
+    pub(crate) async fn sync_usage_analytics_preference(&self) -> Result<UsagePreferenceSync, ServiceError> {
+        let _sync = self.usage_preference_sync.lock().await;
+        let (desired, revision, synced_revision) = self.usage_preference_snapshot().await;
+        if revision == synced_revision {
+            return Ok(UsagePreferenceSync::Current);
+        }
+
+        let request = self.authenticated_request().await?;
+        let _usage_transition = self.usage_metric_transition.read().await;
+        let (current_desired, current_revision, current_synced_revision) = self.usage_preference_snapshot().await;
+        if current_revision != revision || current_desired != desired || current_synced_revision == current_revision {
+            return Ok(UsagePreferenceSync::Current);
+        }
+
+        let result = match desired {
+            Some(enabled) => self
+                .api
+                .put_usage_preference(&request.bearer, enabled)
+                .await
+                .map(|()| Some(enabled)),
+            None => self.api.usage_preference(&request.bearer).await,
+        };
+        match result {
+            Ok(remote) => {
+                if !self.complete_authenticated_success(&request).await {
+                    return Err(ServiceError::StaleIdentity);
+                }
+                let (latest_desired, latest_revision, _) = self.usage_preference_snapshot().await;
+                if latest_revision != revision || latest_desired != desired {
+                    return Ok(UsagePreferenceSync::Current);
+                }
+                match (desired, remote) {
+                    (None, Some(enabled)) => Ok(UsagePreferenceSync::RemoteDecision { enabled, revision }),
+                    _ => {
+                        self.mark_usage_preference_synced(revision).await;
+                        Ok(UsagePreferenceSync::Current)
+                    }
                 }
             }
             Err(error) => {
@@ -687,6 +921,28 @@ mod initialization_tests {
     use std::sync::{Arc as StdArc, Mutex as StdMutex};
     use tokio::sync::oneshot;
 
+    async fn enabled_usage_service(api: RemoteApi) -> RemoteSyncService {
+        let directory = tempfile::tempdir().unwrap();
+        let service = RemoteSyncService::with_store(
+            api,
+            directory.path().to_path_buf(),
+            uuid::Uuid::new_v4().hyphenated().to_string(),
+            true,
+            StdArc::new(crate::secure_credential::MemoryCredentialStore::new(None)),
+        )
+        .unwrap();
+        service
+            .install_credential(BearerCredential {
+                token: Zeroizing::new(format!("jbd_{}", "a".repeat(64))),
+                expires_at: Utc::now() + chrono::Duration::days(30),
+            })
+            .await;
+        service.set_usage_analytics_preference(Some(true)).await;
+        let (_, revision, _) = service.usage_preference_snapshot().await;
+        service.mark_usage_preference_synced(revision).await;
+        service
+    }
+
     #[tokio::test(flavor = "current_thread")]
     async fn configured_initialization_runs_on_the_blocking_pool_and_is_awaited() {
         let caller = std::thread::current().id();
@@ -702,6 +958,46 @@ mod initialization_tests {
 
         let initialized_on = initializer_thread.lock().unwrap().unwrap();
         assert_ne!(initialized_on, caller);
+    }
+
+    #[test]
+    fn clean_new_requires_a_new_identity_without_a_restored_credential() {
+        let directory = tempfile::tempdir().unwrap();
+        let new_service = RemoteSyncService::with_store(
+            RemoteApi::new("https://bell.example.com").unwrap(),
+            directory.path().to_path_buf(),
+            uuid::Uuid::new_v4().hyphenated().to_string(),
+            true,
+            StdArc::new(crate::secure_credential::MemoryCredentialStore::new(None)),
+        )
+        .unwrap();
+        assert!(new_service.clean_new_installation());
+
+        let credential = BearerCredential {
+            token: Zeroizing::new(format!("jbd_{}", "a".repeat(64))),
+            expires_at: Utc::now() + chrono::Duration::days(30),
+        };
+        let store = StdArc::new(crate::secure_credential::MemoryCredentialStore::new(None));
+        persist_credential(store.as_ref(), &credential).unwrap();
+        let restored_service = RemoteSyncService::with_store(
+            RemoteApi::new("https://bell.example.com").unwrap(),
+            directory.path().to_path_buf(),
+            uuid::Uuid::new_v4().hyphenated().to_string(),
+            true,
+            store,
+        )
+        .unwrap();
+        assert!(!restored_service.clean_new_installation());
+
+        let existing_without_credential = RemoteSyncService::with_store(
+            RemoteApi::new("https://bell.example.com").unwrap(),
+            directory.path().to_path_buf(),
+            uuid::Uuid::new_v4().hyphenated().to_string(),
+            false,
+            StdArc::new(crate::secure_credential::MemoryCredentialStore::new(None)),
+        )
+        .unwrap();
+        assert!(!existing_without_credential.clean_new_installation());
     }
 
     #[tokio::test]
@@ -805,6 +1101,187 @@ mod initialization_tests {
     }
 
     #[tokio::test]
+    async fn disabled_or_undecided_usage_never_authenticates_or_registers_for_ui_open() {
+        for preference in [None, Some(false)] {
+            let directory = tempfile::tempdir().unwrap();
+            let service = RemoteSyncService::with_store(
+                RemoteApi::new("http://127.0.0.1:9").unwrap(),
+                directory.path().to_path_buf(),
+                uuid::Uuid::new_v4().hyphenated().to_string(),
+                true,
+                StdArc::new(crate::secure_credential::MemoryCredentialStore::new(None)),
+            )
+            .unwrap();
+            service.set_usage_analytics_preference(preference).await;
+
+            service.record_ui_opened_best_effort().await;
+
+            assert!(service.current_bearer().await.is_none());
+            assert!(service.runtime.lock().await.last_error.is_none());
+        }
+    }
+
+    #[tokio::test]
+    async fn enabling_usage_opens_the_local_gate_only_after_server_confirmation() {
+        let directory = tempfile::tempdir().unwrap();
+        let service = RemoteSyncService::with_store(
+            RemoteApi::with_usage_preference_results(None, Some(Ok(Some(true)))),
+            directory.path().to_path_buf(),
+            uuid::Uuid::new_v4().hyphenated().to_string(),
+            true,
+            StdArc::new(crate::secure_credential::MemoryCredentialStore::new(None)),
+        )
+        .unwrap();
+        service
+            .install_credential(BearerCredential {
+                token: Zeroizing::new(format!("jbd_{}", "a".repeat(64))),
+                expires_at: Utc::now() + chrono::Duration::days(30),
+            })
+            .await;
+
+        service.set_usage_analytics_preference(Some(true)).await;
+        assert!(!service.usage_analytics_enabled().await);
+
+        assert_eq!(
+            service.sync_usage_analytics_preference().await,
+            Ok(UsagePreferenceSync::Current)
+        );
+        assert!(service.usage_analytics_enabled().await);
+    }
+
+    #[tokio::test]
+    async fn disabling_usage_closes_the_gate_even_when_server_sync_fails() {
+        let directory = tempfile::tempdir().unwrap();
+        let service = RemoteSyncService::with_store(
+            RemoteApi::with_usage_preference_results(None, Some(Err(ServiceError::Unavailable))),
+            directory.path().to_path_buf(),
+            uuid::Uuid::new_v4().hyphenated().to_string(),
+            true,
+            StdArc::new(crate::secure_credential::MemoryCredentialStore::new(None)),
+        )
+        .unwrap();
+        service
+            .install_credential(BearerCredential {
+                token: Zeroizing::new(format!("jbd_{}", "a".repeat(64))),
+                expires_at: Utc::now() + chrono::Duration::days(30),
+            })
+            .await;
+        service.set_usage_analytics_preference(Some(false)).await;
+
+        assert_eq!(
+            service.sync_usage_analytics_preference().await,
+            Err(ServiceError::Unavailable)
+        );
+        assert_eq!(service.usage_analytics_preference().await, Some(false));
+        assert!(!service.usage_analytics_enabled().await);
+        assert!(service.usage_preference_sync_pending().await);
+    }
+
+    #[tokio::test]
+    async fn in_flight_enable_sync_finishes_before_a_new_disable_revision() {
+        let directory = tempfile::tempdir().unwrap();
+        let started = StdArc::new(Notify::new());
+        let release = StdArc::new(Notify::new());
+        let service = StdArc::new(
+            RemoteSyncService::with_store(
+                RemoteApi::with_blocked_usage_preference_put(
+                    Ok(Some(true)),
+                    StdArc::clone(&started),
+                    StdArc::clone(&release),
+                ),
+                directory.path().to_path_buf(),
+                uuid::Uuid::new_v4().hyphenated().to_string(),
+                true,
+                StdArc::new(crate::secure_credential::MemoryCredentialStore::new(None)),
+            )
+            .unwrap(),
+        );
+        service
+            .install_credential(BearerCredential {
+                token: Zeroizing::new(format!("jbd_{}", "a".repeat(64))),
+                expires_at: Utc::now() + chrono::Duration::days(30),
+            })
+            .await;
+        service.set_usage_analytics_preference(Some(true)).await;
+
+        let syncing = StdArc::clone(&service);
+        let sync_task = tokio::spawn(async move { syncing.sync_usage_analytics_preference().await });
+        started.notified().await;
+
+        let disabling = StdArc::clone(&service);
+        let disable_started = StdArc::new(Notify::new());
+        let disable_started_task = StdArc::clone(&disable_started);
+        let mut disable_task = tokio::spawn(async move {
+            disable_started_task.notify_one();
+            disabling.set_usage_analytics_preference(Some(false)).await;
+        });
+        disable_started.notified().await;
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(10), &mut disable_task)
+                .await
+                .is_err()
+        );
+
+        release.notify_one();
+        assert_eq!(sync_task.await.unwrap(), Ok(UsagePreferenceSync::Current));
+        disable_task.await.unwrap();
+        assert_eq!(service.usage_analytics_preference().await, Some(false));
+        assert!(service.usage_preference_sync_pending().await);
+        assert!(!service.usage_analytics_enabled().await);
+    }
+
+    #[tokio::test]
+    async fn concurrent_persisted_preferences_keep_the_last_serialized_value() {
+        let directory = tempfile::tempdir().unwrap();
+        let service = StdArc::new(
+            RemoteSyncService::with_store(
+                RemoteApi::new("https://bell.example.com").unwrap(),
+                directory.path().to_path_buf(),
+                uuid::Uuid::new_v4().hyphenated().to_string(),
+                true,
+                StdArc::new(crate::secure_credential::MemoryCredentialStore::new(None)),
+            )
+            .unwrap(),
+        );
+        service.set_usage_analytics_preference(Some(false)).await;
+
+        let first_started = StdArc::new(Notify::new());
+        let release_first = StdArc::new(Notify::new());
+        let first = {
+            let service = StdArc::clone(&service);
+            let first_started = StdArc::clone(&first_started);
+            let release_first = StdArc::clone(&release_first);
+            tokio::spawn(async move {
+                service
+                    .persist_then_set_usage_analytics(Some(true), async move {
+                        first_started.notify_one();
+                        release_first.notified().await;
+                        Ok(())
+                    })
+                    .await
+            })
+        };
+        first_started.notified().await;
+
+        let second = {
+            let service = StdArc::clone(&service);
+            tokio::spawn(async move {
+                service
+                    .persist_then_set_usage_analytics(Some(false), async { Ok(()) })
+                    .await
+            })
+        };
+        tokio::task::yield_now().await;
+        release_first.notify_one();
+
+        assert_eq!(first.await.unwrap(), Ok(()));
+        assert_eq!(second.await.unwrap(), Ok(()));
+        assert_eq!(service.usage_analytics_preference().await, Some(false));
+        assert!(service.usage_preference_sync_pending().await);
+        assert!(!service.usage_analytics_enabled().await);
+    }
+
+    #[tokio::test]
     async fn ui_opened_실패는_credential과_연결상태를_변경하지_않는다() {
         let directory = tempfile::tempdir().unwrap();
         let store = StdArc::new(crate::secure_credential::MemoryCredentialStore::new(None));
@@ -822,18 +1299,182 @@ mod initialization_tests {
                 expires_at: Utc::now() + chrono::Duration::days(30),
             })
             .await;
+        service.set_usage_analytics_preference(Some(true)).await;
+        let (_, revision, _) = service.usage_preference_snapshot().await;
+        service.mark_usage_preference_synced(revision).await;
         {
             let mut runtime = service.runtime.lock().await;
             runtime.last_server_contact = None;
             runtime.last_error = None;
         }
+        let status_before = service.status().await;
 
         service.record_ui_opened_best_effort().await;
 
         assert!(service.current_bearer().await.is_some());
-        let status = service.status().await;
-        assert!(status.last_server_contact.is_none());
-        assert!(status.last_error.is_none());
+        assert_eq!(service.api.ui_opened_attempt_count(), 1);
+        assert_eq!(service.status().await, status_before);
+    }
+
+    #[tokio::test]
+    async fn ui_opened_retries_503_twice_then_accepts_204() {
+        let service = enabled_usage_service(RemoteApi::with_ui_opened_results([
+            Ok(StatusCode::SERVICE_UNAVAILABLE),
+            Ok(StatusCode::SERVICE_UNAVAILABLE),
+            Ok(StatusCode::NO_CONTENT),
+        ]))
+        .await;
+
+        service.record_ui_opened_best_effort().await;
+
+        assert_eq!(service.api.ui_opened_attempt_count(), 3);
+    }
+
+    #[tokio::test]
+    async fn ui_opened_retries_transport_failure_then_accepts_204() {
+        let service = enabled_usage_service(RemoteApi::with_ui_opened_results([
+            Err(ServiceError::Unavailable),
+            Ok(StatusCode::NO_CONTENT),
+        ]))
+        .await;
+
+        service.record_ui_opened_best_effort().await;
+
+        assert_eq!(service.api.ui_opened_attempt_count(), 2);
+    }
+
+    #[tokio::test]
+    async fn ui_opened_stops_after_three_retryable_attempts() {
+        let service = enabled_usage_service(RemoteApi::with_ui_opened_results([
+            Ok(StatusCode::BAD_GATEWAY),
+            Ok(StatusCode::SERVICE_UNAVAILABLE),
+            Ok(StatusCode::GATEWAY_TIMEOUT),
+            Ok(StatusCode::NO_CONTENT),
+        ]))
+        .await;
+
+        service.record_ui_opened_best_effort().await;
+
+        assert_eq!(service.api.ui_opened_attempt_count(), 3);
+    }
+
+    #[tokio::test]
+    async fn ui_opened_attempt_requires_the_same_identity_generation_and_bearer() {
+        let service = enabled_usage_service(RemoteApi::with_ui_opened_results([Ok(StatusCode::NO_CONTENT)])).await;
+        let bearer = service.current_bearer().await.unwrap();
+        let generation = service.identity_generation.load(Ordering::Acquire);
+        let (_, revision, _) = service.usage_preference_snapshot().await;
+
+        assert_eq!(
+            service
+                .record_ui_opened_for_request(
+                    &AuthenticatedRequest {
+                        bearer: Zeroizing::new(bearer.to_string()),
+                        identity_generation: generation.wrapping_add(1),
+                    },
+                    revision,
+                )
+                .await,
+            Ok(false)
+        );
+        assert_eq!(
+            service
+                .record_ui_opened_for_request(
+                    &AuthenticatedRequest {
+                        bearer: Zeroizing::new(format!("jbd_{}", "b".repeat(64))),
+                        identity_generation: generation,
+                    },
+                    revision,
+                )
+                .await,
+            Ok(false)
+        );
+        assert_eq!(service.api.ui_opened_attempt_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn concurrent_ui_opened_calls_are_coalesced_while_one_is_in_flight() {
+        let directory = tempfile::tempdir().unwrap();
+        let started = StdArc::new(Notify::new());
+        let release = StdArc::new(Notify::new());
+        let service = StdArc::new(
+            RemoteSyncService::with_store(
+                RemoteApi::with_blocked_ui_opened_result(Ok(()), StdArc::clone(&started), StdArc::clone(&release)),
+                directory.path().to_path_buf(),
+                uuid::Uuid::new_v4().hyphenated().to_string(),
+                true,
+                StdArc::new(crate::secure_credential::MemoryCredentialStore::new(None)),
+            )
+            .unwrap(),
+        );
+        service
+            .install_credential(BearerCredential {
+                token: Zeroizing::new(format!("jbd_{}", "a".repeat(64))),
+                expires_at: Utc::now() + chrono::Duration::days(30),
+            })
+            .await;
+        service.set_usage_analytics_preference(Some(true)).await;
+        let (_, revision, _) = service.usage_preference_snapshot().await;
+        service.mark_usage_preference_synced(revision).await;
+
+        let recording = StdArc::clone(&service);
+        let first = tokio::spawn(async move { recording.record_ui_opened_best_effort().await });
+        started.notified().await;
+
+        service.record_ui_opened_best_effort().await;
+        assert_eq!(service.api.ui_opened_attempt_count(), 1);
+
+        release.notify_one();
+        first.await.unwrap();
+        assert_eq!(service.api.ui_opened_attempt_count(), 1);
+    }
+
+    #[tokio::test]
+    async fn usage_off_queued_during_an_attempt_finishes_before_any_retry() {
+        let started = StdArc::new(Notify::new());
+        let release = StdArc::new(Notify::new());
+        let service = StdArc::new(
+            enabled_usage_service(RemoteApi::with_blocked_ui_opened_results(
+                [Ok(StatusCode::SERVICE_UNAVAILABLE), Ok(StatusCode::NO_CONTENT)],
+                StdArc::clone(&started),
+                StdArc::clone(&release),
+            ))
+            .await,
+        );
+
+        let recording = StdArc::clone(&service);
+        let recording_task = tokio::spawn(async move { recording.record_ui_opened_best_effort().await });
+        started.notified().await;
+
+        let disabling = StdArc::clone(&service);
+        let disable_started = StdArc::new(Notify::new());
+        let disable_started_task = StdArc::clone(&disable_started);
+        let mut disable_task = tokio::spawn(async move {
+            disable_started_task.notify_one();
+            disabling
+                .persist_then_set_usage_analytics(Some(false), async { Ok::<(), String>(()) })
+                .await
+        });
+        disable_started.notified().await;
+        assert!(tokio::time::timeout(Duration::from_millis(10), &mut disable_task)
+            .await
+            .is_err());
+
+        release.notify_one();
+        assert_eq!(
+            tokio::time::timeout(Duration::from_secs(1), disable_task)
+                .await
+                .unwrap()
+                .unwrap(),
+            Ok(())
+        );
+        tokio::time::timeout(Duration::from_secs(1), recording_task)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(service.usage_analytics_preference().await, Some(false));
+        assert_eq!(service.api.ui_opened_attempt_count(), 1);
     }
 
     #[tokio::test]

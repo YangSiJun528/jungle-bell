@@ -60,6 +60,8 @@ class SecurityConfig {
                     .requestMatchers("/api/desktop/**").hasRole("DESKTOP")
                     .requestMatchers(HttpMethod.POST, "/api/me/usage/ui-opened")
                     .hasAnyRole("DESKTOP", "MOBILE")
+                    .requestMatchers(HttpMethod.PUT, "/api/me/usage-preference")
+                    .denyAll()
                     .requestMatchers(
                         "/api/me/mobile-sessions",
                         "/api/me/mobile-sessions/**",

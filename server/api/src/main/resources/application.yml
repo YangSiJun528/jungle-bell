@@ -31,6 +31,8 @@ server:
     min-response-size: 1024
 
 management:
+  server:
+    port: 8081
   endpoints:
     web:
       exposure:
@@ -39,6 +41,9 @@ management:
     health:
       probes:
         enabled: true
+      group:
+        readiness:
+          include: readinessState,db
       show-details: never
   metrics:
     tags:

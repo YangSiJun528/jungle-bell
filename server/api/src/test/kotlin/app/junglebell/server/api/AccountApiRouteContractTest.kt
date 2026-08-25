@@ -4,6 +4,7 @@ import app.junglebell.server.api.account.AccountController
 import app.junglebell.server.api.notification.NotificationController
 import app.junglebell.server.api.pairing.PairingController
 import app.junglebell.server.api.personal.PersonalController
+import app.junglebell.server.api.usage.UsageController
 import org.junit.jupiter.api.Test
 import org.springframework.core.annotation.AnnotatedElementUtils
 import org.springframework.web.bind.annotation.RequestMapping
@@ -18,6 +19,7 @@ class AccountApiRouteContractTest {
             PersonalController::class,
             PairingController::class,
             NotificationController::class,
+            UsageController::class,
         ).flatMap { controller ->
             controller.java.declaredMethods.flatMap { method ->
                 AnnotatedElementUtils.findMergedAnnotation(method, RequestMapping::class.java)
@@ -45,6 +47,8 @@ class AccountApiRouteContractTest {
                 "/api/me/push/vapid-public-key",
                 "/api/me/push/subscriptions",
                 "/api/me/push/subscriptions/{id}",
+                "/api/me/usage-preference",
+                "/api/me/usage/ui-opened",
             ),
             routes.filter { it.startsWith("/api/me/") }.toSet(),
         )

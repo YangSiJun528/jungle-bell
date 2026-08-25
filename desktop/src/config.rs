@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 const CURRENT_CONFIG_FILE_NAME: &str = "desktop-settings.json";
 const CONFIG_SCHEMA: &str = "jungle-bell.desktop-settings";
-const CONFIG_SCHEMA_VERSION: u32 = 4;
+const CONFIG_SCHEMA_VERSION: u32 = 5;
 const MIN_SUPPORTED_CONFIG_SCHEMA_VERSION: u32 = 3;
 
 pub const MORNING_START_HOUR: u32 = 4;
@@ -44,21 +44,83 @@ struct LegacyConfigV3 {
     auto_update: bool,
     usage_analytics: bool,
     debug_mode: bool,
-    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[serde(deserialize_with = "deserialize_required_nullable_string")]
     selected_cohort_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct LegacyConfigV4 {
+    auto_start: bool,
+    auto_update: bool,
+    debug_mode: bool,
+    #[serde(deserialize_with = "deserialize_required_nullable_string")]
+    selected_cohort_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ConfigProvenance {
+    Missing,
+    V3,
+    V4,
+    V5,
+    Invalid,
+    Unavailable,
+}
+
+impl ConfigProvenance {
+    fn requires_rewrite(self) -> bool {
+        matches!(self, Self::V3 | Self::V4)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LoadedConfig {
+    pub(crate) config: Config,
+    pub(crate) provenance: ConfigProvenance,
+}
+
+impl LoadedConfig {
+    fn fallback(provenance: ConfigProvenance) -> Self {
+        Self {
+            config: Config::default(),
+            provenance,
+        }
+    }
+
+    pub(crate) fn startup_usage_analytics(&self, clean_new_installation: bool) -> Option<bool> {
+        if self.provenance == ConfigProvenance::Missing && clean_new_installation {
+            Some(true)
+        } else {
+            self.config.usage_analytics
+        }
+    }
+
+    pub(crate) fn runtime_usage_analytics(&self, resolved: Option<bool>) -> Option<bool> {
+        if matches!(
+            self.provenance,
+            ConfigProvenance::Invalid | ConfigProvenance::Unavailable
+        ) {
+            Some(false)
+        } else {
+            resolved
+        }
+    }
 }
 
 /// 데스크톱에 영속하는 현재형 사용자 설정.
 ///
 /// 출석 알림, 식단, 세탁 설정은 서버가 소유한다. 이 파일에는 이 PC의
-/// 프로세스·업데이트·진단 동작에만 적용되는 설정을 저장한다.
+/// 프로세스·업데이트·진단 동작과 서버에 동기화할 통계 선택을 저장한다.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Config {
     pub auto_start: bool,
     pub auto_update: bool,
+    #[serde(deserialize_with = "deserialize_required_nullable_bool")]
+    pub usage_analytics: Option<bool>,
     pub debug_mode: bool,
-    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[serde(deserialize_with = "deserialize_required_nullable_string")]
     pub selected_cohort_id: Option<String>,
 }
 
@@ -67,17 +129,25 @@ impl Default for Config {
         Self {
             auto_start: false,
             auto_update: true,
+            usage_analytics: None,
             debug_mode: false,
             selected_cohort_id: None,
         }
     }
 }
 
-fn deserialize_required_nullable<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+fn deserialize_required_nullable_string<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
 where
     D: Deserializer<'de>,
 {
     Option::<String>::deserialize(deserializer)
+}
+
+fn deserialize_required_nullable_bool<'de, D>(deserializer: D) -> Result<Option<bool>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Option::<bool>::deserialize(deserializer)
 }
 
 pub(crate) fn config_path() -> Option<PathBuf> {
@@ -85,28 +155,28 @@ pub(crate) fn config_path() -> Option<PathBuf> {
 }
 
 impl Config {
-    pub fn load() -> Self {
+    pub(crate) fn load() -> LoadedConfig {
         let Some(path) = config_path() else {
             log::warn!("[config] 운영체제 설정 디렉토리를 확인할 수 없어 기본 설정을 사용합니다");
-            return Self::default();
+            return LoadedConfig::fallback(ConfigProvenance::Unavailable);
         };
         Self::load_from(&path)
     }
 
-    pub(crate) fn load_from(path: &Path) -> Self {
+    pub(crate) fn load_from(path: &Path) -> LoadedConfig {
         Self::load_from_with_save(path, |config, path| config.save_to(path))
     }
 
-    fn load_from_with_save(path: &Path, save: impl FnOnce(&Config, &Path) -> Result<(), String>) -> Self {
+    fn load_from_with_save(path: &Path, save: impl FnOnce(&Config, &Path) -> Result<(), String>) -> LoadedConfig {
         match fs::read_to_string(path) {
             Ok(data) => match parse_config_document(&data) {
-                Ok((config, migrated)) => {
-                    if migrated {
+                Ok((config, provenance)) => {
+                    if provenance.requires_rewrite() {
                         if let Err(error) = save(&config, path) {
-                            log::warn!("[config] v3 설정을 적용했지만 v4 파일 재작성에 실패했습니다: {error}");
+                            log::warn!("[config] 이전 설정을 적용했지만 v5 파일 재작성에 실패했습니다: {error}");
                         }
                     }
-                    config
+                    LoadedConfig { config, provenance }
                 }
                 Err(error) => {
                     log::warn!(
@@ -114,17 +184,19 @@ impl Config {
                         path.display(),
                         error
                     );
-                    Self::default()
+                    LoadedConfig::fallback(ConfigProvenance::Invalid)
                 }
             },
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Self::default(),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                LoadedConfig::fallback(ConfigProvenance::Missing)
+            }
             Err(error) => {
                 log::warn!(
                     "[config] 현재 설정 파일({}) 읽기 실패: {}. 기본 설정을 사용합니다.",
                     path.display(),
                     error
                 );
-                Self::default()
+                LoadedConfig::fallback(ConfigProvenance::Unavailable)
             }
         }
     }
@@ -150,36 +222,52 @@ fn serialize_config_document(config: &Config) -> Result<String, String> {
     .map_err(|error| format!("설정 직렬화 실패: {error}"))
 }
 
-fn parse_config_document(data: &str) -> Result<(Config, bool), String> {
+fn parse_config_document(data: &str) -> Result<(Config, ConfigProvenance), String> {
     let envelope: ConfigEnvelope = serde_json::from_str(data).map_err(|error| format!("설정 파싱 실패: {error}"))?;
     if envelope.schema != CONFIG_SCHEMA
         || !(MIN_SUPPORTED_CONFIG_SCHEMA_VERSION..=CONFIG_SCHEMA_VERSION).contains(&envelope.schema_version)
     {
         return Err("지원하지 않는 설정 스키마입니다.".into());
     }
-    let (config, migrated) = match envelope.schema_version {
+    let (config, provenance) = match envelope.schema_version {
         3 => {
             let legacy: LegacyConfigV3 =
                 serde_json::from_value(envelope.settings).map_err(|error| format!("v3 설정 파싱 실패: {error}"))?;
-            let _ = legacy.usage_analytics;
             (
                 Config {
                     auto_start: legacy.auto_start,
                     auto_update: legacy.auto_update,
+                    // v3의 기본값은 true였으므로 true만으로는 명시적 동의를 증명할 수 없다.
+                    // 기본값과 구분되는 false만 거부 의사로 승계한다.
+                    usage_analytics: (!legacy.usage_analytics).then_some(false),
                     debug_mode: legacy.debug_mode,
                     selected_cohort_id: legacy.selected_cohort_id,
                 },
-                true,
+                ConfigProvenance::V3,
             )
         }
-        4 => (
-            serde_json::from_value(envelope.settings).map_err(|error| format!("v4 설정 파싱 실패: {error}"))?,
-            false,
+        4 => {
+            let legacy: LegacyConfigV4 =
+                serde_json::from_value(envelope.settings).map_err(|error| format!("v4 설정 파싱 실패: {error}"))?;
+            (
+                Config {
+                    auto_start: legacy.auto_start,
+                    auto_update: legacy.auto_update,
+                    usage_analytics: None,
+                    debug_mode: legacy.debug_mode,
+                    selected_cohort_id: legacy.selected_cohort_id,
+                },
+                ConfigProvenance::V4,
+            )
+        }
+        5 => (
+            serde_json::from_value(envelope.settings).map_err(|error| format!("v5 설정 파싱 실패: {error}"))?,
+            ConfigProvenance::V5,
         ),
         _ => return Err("지원하지 않는 설정 스키마입니다.".into()),
     };
     validate_selected_cohort_id(config.selected_cohort_id.as_deref())?;
-    Ok((config, migrated))
+    Ok((config, provenance))
 }
 
 pub(crate) fn validate_selected_cohort_id(value: Option<&str>) -> Result<(), String> {
@@ -294,10 +382,11 @@ mod tests {
             value,
             serde_json::json!({
                 "schema": "jungle-bell.desktop-settings",
-                "schemaVersion": 4,
+                "schemaVersion": 5,
                 "settings": {
                     "autoStart": false,
                     "autoUpdate": true,
+                    "usageAnalytics": null,
                     "debugMode": false,
                     "selectedCohortId": null
                 }
@@ -312,7 +401,10 @@ mod tests {
             ..Config::default()
         };
         let serialized = serialize_config_document(&config).unwrap();
-        assert_eq!(parse_config_document(&serialized).unwrap(), (config, false));
+        assert_eq!(
+            parse_config_document(&serialized).unwrap(),
+            (config, ConfigProvenance::V5)
+        );
         assert!(serialized.contains("selectedCohortId"));
     }
 
@@ -326,19 +418,21 @@ mod tests {
             }),
             serde_json::json!({
                 "schema": "jungle-bell.desktop-settings",
-                "schemaVersion": 4,
+                "schemaVersion": 5,
                 "settings": {
                     "autoStart": true,
                     "autoUpdate": true,
+                    "usageAnalytics": null,
                     "debugMode": false
                 }
             }),
             serde_json::json!({
                 "schema": "jungle-bell.desktop-settings",
-                "schemaVersion": 4,
+                "schemaVersion": 5,
                 "settings": {
                     "autoStart": true,
                     "autoUpdate": true,
+                    "usageAnalytics": null,
                     "debugMode": false,
                     "selectedCohortId": null,
                     "unknown": true
@@ -351,7 +445,7 @@ mod tests {
     }
 
     #[test]
-    fn v3_설정은_통계_옵션만_버리고_v4로_원자적_마이그레이션한다() {
+    fn v3_설정은_통계_거부를_보존해_v5로_원자적_마이그레이션한다() {
         let path = temporary_path("v3-migration");
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(
@@ -373,14 +467,88 @@ mod tests {
 
         let loaded = Config::load_from(&path);
 
-        assert!(loaded.auto_start);
-        assert!(!loaded.auto_update);
-        assert!(loaded.debug_mode);
-        assert_eq!(loaded.selected_cohort_id.as_deref(), Some("cohort-10"));
+        assert_eq!(loaded.provenance, ConfigProvenance::V3);
+        assert!(loaded.config.auto_start);
+        assert!(!loaded.config.auto_update);
+        assert_eq!(loaded.config.usage_analytics, Some(false));
+        assert!(loaded.config.debug_mode);
+        assert_eq!(loaded.config.selected_cohort_id.as_deref(), Some("cohort-10"));
         let rewritten = fs::read_to_string(&path).unwrap();
-        assert!(rewritten.contains("\"schemaVersion\": 4"));
-        assert!(!rewritten.contains("usageAnalytics"));
+        assert!(rewritten.contains("\"schemaVersion\": 5"));
+        assert!(rewritten.contains("\"usageAnalytics\": false"));
         fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn v3의_기본_허용값은_명시적_동의로_보지_않는다() {
+        let document = serde_json::json!({
+            "schema": "jungle-bell.desktop-settings",
+            "schemaVersion": 3,
+            "settings": {
+                "autoStart": false,
+                "autoUpdate": true,
+                "usageAnalytics": true,
+                "debugMode": false,
+                "selectedCohortId": null
+            }
+        });
+
+        let (config, provenance) = parse_config_document(&document.to_string()).unwrap();
+
+        assert_eq!(provenance, ConfigProvenance::V3);
+        assert_eq!(config.usage_analytics, None);
+    }
+
+    #[test]
+    fn v4_사용자는_통계_결정을_복원할_수_없어_undecided로_마이그레이션한다() {
+        let path = temporary_path("v4-migration");
+        let document = serde_json::json!({
+            "schema": "jungle-bell.desktop-settings",
+            "schemaVersion": 4,
+            "settings": {
+                "autoStart": false,
+                "autoUpdate": true,
+                "debugMode": false,
+                "selectedCohortId": null
+            }
+        });
+        fs::write(&path, document.to_string()).unwrap();
+
+        let loaded = Config::load_from(&path);
+
+        assert_eq!(loaded.provenance, ConfigProvenance::V4);
+        assert_eq!(loaded.config.usage_analytics, None);
+        let rewritten = fs::read_to_string(&path).unwrap();
+        assert!(rewritten.contains("\"schemaVersion\": 5"));
+        assert!(rewritten.contains("\"usageAnalytics\": null"));
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn 누락과_잘못된_설정은_구분하고_통계를_기본_허용하지_않는다() {
+        let missing = Config::load_from(&temporary_path("missing"));
+        assert_eq!(missing.provenance, ConfigProvenance::Missing);
+        assert_eq!(missing.config.usage_analytics, None);
+        assert_eq!(missing.startup_usage_analytics(false), None);
+        assert_eq!(missing.startup_usage_analytics(true), Some(true));
+
+        let invalid_path = temporary_path("invalid");
+        fs::write(&invalid_path, "not-json").unwrap();
+        let invalid = Config::load_from(&invalid_path);
+        assert_eq!(invalid.provenance, ConfigProvenance::Invalid);
+        assert_eq!(invalid.config.usage_analytics, None);
+        assert_eq!(invalid.startup_usage_analytics(true), None);
+        assert_eq!(invalid.runtime_usage_analytics(None), Some(false));
+        assert_eq!(fs::read_to_string(&invalid_path).unwrap(), "not-json");
+        fs::remove_file(invalid_path).unwrap();
+
+        let unavailable_path = temporary_path("unavailable");
+        fs::create_dir(&unavailable_path).unwrap();
+        let unavailable = Config::load_from(&unavailable_path);
+        assert_eq!(unavailable.provenance, ConfigProvenance::Unavailable);
+        assert_eq!(unavailable.startup_usage_analytics(true), None);
+        assert_eq!(unavailable.runtime_usage_analytics(None), Some(false));
+        fs::remove_dir(unavailable_path).unwrap();
     }
 
     #[test]
@@ -394,7 +562,7 @@ mod tests {
                 "settings": {
                     "autoStart": true,
                     "autoUpdate": false,
-                    "usageAnalytics": true,
+                    "usageAnalytics": false,
                     "debugMode": true,
                     "selectedCohortId": null
                 }
@@ -405,9 +573,11 @@ mod tests {
 
         let loaded = Config::load_from_with_save(&path, |_, _| Err("injected write failure".into()));
 
-        assert!(loaded.auto_start);
-        assert!(!loaded.auto_update);
-        assert!(loaded.debug_mode);
+        assert_eq!(loaded.provenance, ConfigProvenance::V3);
+        assert!(loaded.config.auto_start);
+        assert!(!loaded.config.auto_update);
+        assert_eq!(loaded.config.usage_analytics, Some(false));
+        assert!(loaded.config.debug_mode);
         fs::remove_file(path).unwrap();
     }
 

@@ -3,10 +3,23 @@ package app.junglebell.server.api.security
 import app.junglebell.server.domain.security.TokenCodec
 import app.junglebell.server.api.logging.REQUEST_ID_HEADER
 import jakarta.servlet.http.Cookie
+import java.net.URI
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
+import java.time.Duration
 import java.util.UUID
 import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNotEquals
+import kotlin.test.assertTrue
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.boot.health.actuate.endpoint.HealthEndpointGroups
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.test.web.server.LocalServerPort
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.http.HttpHeaders
@@ -30,11 +43,17 @@ import org.testcontainers.postgresql.PostgreSQLContainer
 
 @Testcontainers(disabledWithoutDocker = true)
 @AutoConfigureMockMvc
-@SpringBootTest
+@SpringBootTest(
+    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+    properties = ["management.server.port=0"],
+)
 class SecurityFilterChainIntegrationTest(
     @param:Autowired private val mockMvc: MockMvc,
     @param:Autowired private val jdbc: JdbcClient,
     @param:Autowired private val tokens: TokenCodec,
+    @param:Autowired private val healthEndpointGroups: HealthEndpointGroups,
+    @param:LocalServerPort private val applicationPort: Int,
+    @param:Value("\${local.management.port}") private val managementPort: Int,
 ) {
     @Test
     fun `React SPA is served at the root without legacy entry routes`() {
@@ -51,11 +70,34 @@ class SecurityFilterChainIntegrationTest(
     }
 
     @Test
-    fun `readiness remains available while the Prometheus endpoint is absent`() {
-        mockMvc.perform(get("/actuator/health/readiness"))
-            .andExpect(status().isOk)
-        mockMvc.perform(get("/actuator/prometheus"))
-            .andExpect(status().isNotFound)
+    fun `actuator is isolated from the application port and exposes only health and info`() {
+        assertTrue(assertNotNull(healthEndpointGroups.get("readiness")).isMember("db"))
+        assertNotEquals(applicationPort, managementPort)
+
+        listOf(
+            "/actuator",
+            "/actuator/health",
+            "/actuator/health/readiness",
+            "/actuator/info",
+            "/actuator/prometheus",
+        ).forEach { path ->
+            assertEquals(404, httpGet(applicationPort, path).statusCode(), path)
+        }
+
+        val readiness = httpGet(managementPort, "/actuator/health/readiness")
+        assertEquals(200, readiness.statusCode())
+        assertTrue(readiness.body().contains("\"status\":\"UP\""))
+
+        val info = httpGet(managementPort, "/actuator/info")
+        assertEquals(200, info.statusCode())
+        assertTrue(info.body().contains("\"configured\":true"))
+        assertTrue(info.body().contains("\"database\":\"available\""))
+        assertTrue(info.body().contains("\"aggregation\":"))
+        assertFalse(info.body().contains("counts"))
+        assertFalse(info.body().contains("userIds"))
+        assertFalse(info.body().contains("rawRecency"))
+
+        assertEquals(404, httpGet(managementPort, "/actuator/prometheus").statusCode())
     }
 
     @Test
@@ -164,6 +206,87 @@ class SecurityFilterChainIntegrationTest(
     }
 
     @Test
+    fun `existing account remains untracked until usage preference is enabled`() {
+        val token = "jbs_" + "4".repeat(64)
+        val sessionId = createAppSession("mobile", token, usageEnabled = null)
+        val userId = sessionUserId(sessionId)
+        val desktopToken = "jbd_" + "5".repeat(64)
+        createAppSession("desktop", desktopToken, existingUserId = userId)
+
+        mockMvc.perform(get("/api/me/usage-preference").cookie(Cookie("jb_device", token)))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.enabled").value(org.hamcrest.Matchers.nullValue()))
+        mockMvc.perform(post("/api/me/usage/ui-opened").cookie(Cookie("jb_device", token)))
+            .andExpect(status().isNoContent)
+        assertUsageCount(sessionId, 0)
+
+        mockMvc.perform(
+            put("/api/desktop/usage-preference")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer $desktopToken")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"enabled":true}"""),
+        ).andExpect(status().isOk)
+            .andExpect(jsonPath("$.enabled").value(true))
+        mockMvc.perform(post("/api/me/usage/ui-opened").cookie(Cookie("jb_device", token)))
+            .andExpect(status().isNoContent)
+        assertUsageCount(sessionId, 1)
+
+        mockMvc.perform(
+            put("/api/desktop/usage-preference")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer $desktopToken")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"enabled":false}"""),
+        ).andExpect(status().isOk)
+            .andExpect(jsonPath("$.enabled").value(false))
+    }
+
+    @Test
+    fun `explicitly disabled account receives 204 without storing usage`() {
+        val token = "jbs_" + "7".repeat(64)
+        val sessionId = createAppSession("mobile", token, usageEnabled = false)
+
+        mockMvc.perform(post("/api/me/usage/ui-opened").cookie(Cookie("jb_device", token)))
+            .andExpect(status().isNoContent)
+
+        assertUsageCount(sessionId, 0)
+    }
+
+    @Test
+    fun `desktop bearer controls the shared usage preference and mobile can read it`() {
+        val desktopToken = "jbd_" + "9".repeat(64)
+        val desktopSessionId = createAppSession("desktop", desktopToken)
+        val userId = sessionUserId(desktopSessionId)
+        val mobileToken = "jbs_" + "6".repeat(64)
+        createAppSession("mobile", mobileToken, existingUserId = userId)
+
+        mockMvc.perform(
+            put("/api/desktop/usage-preference")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer $desktopToken")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"enabled":false}"""),
+        ).andExpect(status().isOk)
+            .andExpect(jsonPath("$.enabled").value(false))
+        mockMvc.perform(
+            get("/api/me/usage-preference")
+                .cookie(Cookie("jb_device", mobileToken)),
+        ).andExpect(status().isOk)
+            .andExpect(jsonPath("$.enabled").value(false))
+
+        mockMvc.perform(
+            put("/api/me/usage-preference")
+                .cookie(Cookie("jb_device", mobileToken))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"enabled":true}"""),
+        ).andExpect(status().isForbidden)
+            .andExpect(jsonPath("$.error").value("SESSION_KIND_DENIED"))
+        mockMvc.perform(
+            get("/api/desktop/usage-preference")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer $desktopToken"),
+        ).andExpect(status().isOk)
+            .andExpect(jsonPath("$.enabled").value(false))
+    }
+
+    @Test
     fun `anonymous UI open issues a short lived first party visitor cookie`() {
         val result = mockMvc.perform(
             post("/api/public/usage/ui-opened")
@@ -193,6 +316,101 @@ class SecurityFilterChainIntegrationTest(
             1,
             jdbc.sql("SELECT count(*) FROM usage_anonymous_day WHERE client = 'web'")
                 .query(Int::class.java).single(),
+        )
+    }
+
+    @Test
+    fun `anonymous opt out cookie blocks collection and clears the visitor cookie`() {
+        val before = jdbc.sql("SELECT count(*) FROM usage_anonymous_day")
+            .query(Int::class.java).single()
+        mockMvc.perform(get("/api/public/usage-preference"))
+            .andExpect(status().isOk)
+            .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+            .andExpect(jsonPath("$.enabled").value(true))
+        val disabled = mockMvc.perform(
+            put("/api/public/usage-preference")
+                .header("X-Forwarded-Proto", "https")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"enabled":false}"""),
+        ).andExpect(status().isOk)
+            .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+            .andExpect(jsonPath("$.enabled").value(false))
+            .andReturn()
+
+        val disabledCookies = disabled.response.getHeaders(HttpHeaders.SET_COOKIE)
+        kotlin.test.assertTrue(
+            disabledCookies.any {
+                it.contains("__Host-jb_usage_opt_out=1") &&
+                    it.contains("Max-Age=31536000") && it.contains("HttpOnly") &&
+                    it.contains("Secure") && it.contains("SameSite=Strict")
+            },
+        )
+        kotlin.test.assertTrue(
+            disabledCookies.any { it.startsWith("jb_usage=;") && it.contains("Max-Age=0") },
+        )
+        kotlin.test.assertTrue(
+            disabledCookies.any { it.startsWith("__Host-jb_usage=;") && it.contains("Max-Age=0") },
+        )
+
+        mockMvc.perform(
+            get("/api/public/usage-preference")
+                .header("X-Forwarded-Proto", "https")
+                .cookie(Cookie("__Host-jb_usage_opt_out", "corrupt")),
+        ).andExpect(status().isOk)
+            .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+            .andExpect(jsonPath("$.enabled").value(false))
+        mockMvc.perform(
+            post("/api/public/usage/ui-opened")
+                .header("X-Forwarded-Proto", "https")
+                .cookie(
+                    Cookie("__Host-jb_usage_opt_out", "1"),
+                    Cookie("__Host-jb_usage", "jbv_${"f".repeat(64)}"),
+                )
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"client":"web"}"""),
+        ).andExpect(status().isNoContent)
+            .andExpect(header().doesNotExist(HttpHeaders.SET_COOKIE))
+        kotlin.test.assertEquals(
+            before,
+            jdbc.sql("SELECT count(*) FROM usage_anonymous_day").query(Int::class.java).single(),
+        )
+
+        val enabled = mockMvc.perform(
+            put("/api/public/usage-preference")
+                .header("X-Forwarded-Proto", "https")
+                .cookie(Cookie("__Host-jb_usage_opt_out", "1"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"enabled":true}"""),
+        ).andExpect(status().isOk)
+            .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+            .andExpect(jsonPath("$.enabled").value(true))
+            .andReturn()
+        kotlin.test.assertTrue(
+            enabled.response.getHeaders(HttpHeaders.SET_COOKIE).any {
+                it.startsWith("__Host-jb_usage_opt_out=;") && it.contains("Max-Age=0")
+            },
+        )
+        kotlin.test.assertTrue(
+            enabled.response.getHeaders(HttpHeaders.SET_COOKIE).any {
+                it.startsWith("jb_usage_opt_out=;") && it.contains("Max-Age=0")
+            },
+        )
+
+        val insecure = mockMvc.perform(
+            put("/api/public/usage-preference")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"enabled":false}"""),
+        ).andExpect(status().isOk)
+            .andReturn()
+        kotlin.test.assertTrue(
+            insecure.response.getHeaders(HttpHeaders.SET_COOKIE).any {
+                it.startsWith("jb_usage_opt_out=1;") && !it.contains("Secure")
+            },
+        )
+        kotlin.test.assertTrue(
+            insecure.response.getHeaders(HttpHeaders.SET_COOKIE).none {
+                it.startsWith("__Host-jb_usage_opt_out=")
+            },
         )
     }
 
@@ -327,13 +545,26 @@ class SecurityFilterChainIntegrationTest(
             .andExpect(jsonPath("$.error").value("ORIGIN_NOT_ALLOWED"))
     }
 
-    private fun createAppSession(kind: String, token: String): UUID {
-        val userId = UUID.randomUUID()
+    private fun createAppSession(
+        kind: String,
+        token: String,
+        usageEnabled: Boolean? = true,
+        existingUserId: UUID? = null,
+    ): UUID {
+        val userId = existingUserId ?: UUID.randomUUID()
         val sessionId = UUID.randomUUID()
         val installationId = "$kind-${UUID.randomUUID()}"
         val now = System.currentTimeMillis()
-        jdbc.sql("INSERT INTO app_user(id, created_at_epoch_ms) VALUES (:userId, :now)")
-            .param("userId", userId).param("now", now).update()
+        if (existingUserId == null) {
+            jdbc.sql("INSERT INTO app_user(id, created_at_epoch_ms) VALUES (:userId, :now)")
+                .param("userId", userId).param("now", now).update()
+            if (usageEnabled != null) {
+                jdbc.sql(
+                    "INSERT INTO usage_preference(user_id, enabled, updated_at_epoch_ms) " +
+                        "VALUES (:userId, :enabled, :now)",
+                ).param("userId", userId).param("enabled", usageEnabled).param("now", now).update()
+            }
+        }
         if (kind == "desktop") {
             jdbc.sql(
                 """
@@ -358,6 +589,10 @@ class SecurityFilterChainIntegrationTest(
             .param("now", now).param("expiresAt", now + 60_000).update()
         return sessionId
     }
+
+    private fun sessionUserId(sessionId: UUID): UUID = jdbc.sql(
+        "SELECT user_id FROM app_session WHERE id = :sessionId",
+    ).param("sessionId", sessionId).query(UUID::class.java).single()
 
     private fun createDesktopUiSession(token: String, origin: String) {
         val parentToken = "jbd_" + UUID.randomUUID().toString().replace("-", "").repeat(2)
@@ -394,7 +629,31 @@ class SecurityFilterChainIntegrationTest(
         kotlin.test.assertEquals(1, count)
     }
 
+    private fun assertUsageCount(sessionId: UUID, expected: Int) {
+        val count = jdbc.sql(
+            """
+            SELECT count(*)
+            FROM usage_user_day usage
+            JOIN app_session session ON session.user_id = usage.user_id
+            WHERE session.id = :sessionId
+            """.trimIndent(),
+        ).param("sessionId", sessionId).query(Int::class.java).single()
+        kotlin.test.assertEquals(expected, count)
+    }
+
+    private fun httpGet(port: Int, path: String): HttpResponse<String> = httpClient.send(
+        HttpRequest.newBuilder(URI.create("http://127.0.0.1:$port$path"))
+            .timeout(Duration.ofSeconds(5))
+            .GET()
+            .build(),
+        HttpResponse.BodyHandlers.ofString(),
+    )
+
     companion object {
+        private val httpClient: HttpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(5))
+            .build()
+
         @Container
         @ServiceConnection
         @JvmStatic

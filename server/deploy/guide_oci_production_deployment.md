@@ -7,6 +7,10 @@ PostgreSQL 데이터를 이관한 뒤 Cloudflare named Tunnel로 공식 origin�
 공식 origin은 `https://jungle-bell.sijun-yang.com`입니다. 비밀 값, OCI OCID, 현재 공인
 IP는 이 문서에 기록하지 않습니다.
 
+Actuator는 공개 origin에 연결하지 않습니다. 운영 Compose는 management server를 API
+port와 분리하고 컨테이너 `8081`을 호스트 loopback `127.0.0.1:8081`에만 publish합니다.
+운영자는 Tailscale SSH로 서버에 접속한 뒤 호스트 loopback으로만 조회합니다.
+
 ## 전제 조건
 
 - 저장소 루트에서 명령을 실행합니다.
@@ -43,6 +47,9 @@ docker compose \
   -f server/deploy/compose.production.yml \
   config --quiet
 ```
+
+이 가이드의 명령은 `API_PORT=8080`, `MANAGEMENT_PORT=8081`을 전제로 합니다. 두 port를
+같게 설정하거나 management publish 주소를 compose의 `127.0.0.1`에서 바꾸지 않습니다.
 
 검증에 성공하면 새 운영 디렉터리를 만들고 소스를 동기화합니다.
 
@@ -220,10 +227,13 @@ docker compose \
   -f server/deploy/compose.production.yml \
   up -d --wait --wait-timeout 180 api
 
-curl --fail --silent http://127.0.0.1:8080/actuator/health/readiness
+curl --fail --silent http://127.0.0.1:8081/actuator/health/readiness
 curl --fail --silent http://127.0.0.1:8080/api/health
 curl --fail --silent http://127.0.0.1:8080/api/public/status
 ```
+
+호스트의 API port `127.0.0.1:8080`과 Cloudflare origin에는 Actuator가 없습니다.
+management publish 주소를 loopback이 아닌 주소로 바꾸지 않습니다.
 
 readiness가 통과하면 이전 PostgreSQL을 중지하고 새 Worker를 시작합니다.
 
@@ -258,6 +268,9 @@ hostname을 설정합니다.
 | Service type | `HTTP` |
 | Service URL | `http://api:8080` |
 
+Service URL은 반드시 API port `8080`을 유지합니다. management port `8081`을 Tunnel
+route 또는 public hostname에 지정하지 않습니다.
+
 `Provided Tunnel token is not valid`가 나오면 기존 토큰을 재사용하지 말고 `Add a
 replica`에서 현재 토큰을 다시 가져옵니다. 토큰 자체는 터미널 출력, 문서, Git에 남기지
 않습니다.
@@ -288,12 +301,29 @@ DNS와 공식 origin을 확인합니다.
 dig +short @1.1.1.1 jungle-bell.sijun-yang.com
 
 curl --fail --silent https://jungle-bell.sijun-yang.com/ >/dev/null
-curl --fail --silent https://jungle-bell.sijun-yang.com/actuator/health/readiness
 curl --fail --silent https://jungle-bell.sijun-yang.com/api/health
 curl --fail --silent https://jungle-bell.sijun-yang.com/api/public/status
 curl --fail --silent https://jungle-bell.sijun-yang.com/api/public/laundry
 curl --fail --silent https://jungle-bell.sijun-yang.com/api/public/meals
 server/tools/smoke-api.sh https://jungle-bell.sijun-yang.com
+```
+
+공개 origin에서 Actuator 두 경로가 모두 `404`인지 확인합니다.
+
+```bash
+curl --silent --output /dev/null --write-out '%{http_code}\n' \
+  https://jungle-bell.sijun-yang.com/actuator/health/readiness
+curl --silent --output /dev/null --write-out '%{http_code}\n' \
+  https://jungle-bell.sijun-yang.com/actuator/info
+```
+
+management 상태는 운영자 Mac에서 Tailscale SSH를 통해 별도로 확인합니다.
+
+```bash
+ssh -i ~/.ssh/oci_a1_flex ubuntu@oci-server.tail3cbec1.ts.net \
+  'curl --fail --silent http://127.0.0.1:8081/actuator/health/readiness'
+ssh -i ~/.ssh/oci_a1_flex ubuntu@oci-server.tail3cbec1.ts.net \
+  'curl --fail --silent http://127.0.0.1:8081/actuator/info'
 ```
 
 스모크 스크립트는 성공·실패 종료 시 인증된 identity 삭제 API로 임시 계정 정리를
@@ -349,3 +379,4 @@ docker compose \
 ```
 
 기존 PostgreSQL과 API가 healthy인지 확인한 뒤에만 장애가 끝난 것으로 판단합니다.
+API readiness는 Tailscale SSH 후 호스트 management loopback에서 조회합니다.

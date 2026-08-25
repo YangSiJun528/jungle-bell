@@ -128,6 +128,27 @@ pub(crate) fn lms_session_state(state: &AppState) -> LmsSessionState {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct DesktopInstallationRequest {
     pub(crate) installation_id: String,
+    pub(crate) usage_analytics_enabled: Option<bool>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct UsagePreferenceRequest {
+    pub(crate) enabled: bool,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct UsagePreferenceResponse {
+    #[serde(deserialize_with = "deserialize_required_nullable_bool")]
+    pub(crate) enabled: Option<bool>,
+}
+
+fn deserialize_required_nullable_bool<'de, D>(deserializer: D) -> Result<Option<bool>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Option::<bool>::deserialize(deserializer)
 }
 
 #[derive(Deserialize)]

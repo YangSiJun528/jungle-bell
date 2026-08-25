@@ -5,7 +5,9 @@ import {
     PlatformCapabilityUnavailableError,
     type PlatformCapabilities,
     type PwaCapabilityAdapter,
+    type UsagePrivacyAdapter,
     unavailableEventAdapter,
+    unavailableUsagePrivacyAdapter,
 } from '@/platform/contracts';
 
 const BASE_CAPABILITIES: PlatformCapabilities = {
@@ -29,7 +31,10 @@ async function unsupportedDesktopSetting(): Promise<never> {
     throw new PlatformCapabilityUnavailableError('desktopSettings');
 }
 
-export function createWebPlatformAdapter(pwa: PwaCapabilityAdapter): PlatformAdapter {
+export function createWebPlatformAdapter(
+    pwa: PwaCapabilityAdapter,
+    usagePrivacy: UsagePrivacyAdapter = unavailableUsagePrivacyAdapter(),
+): PlatformAdapter {
     const native = unsupportedNativeBridge();
     const installedPwa = pwa.available && pwa.installed;
     return {
@@ -45,6 +50,7 @@ export function createWebPlatformAdapter(pwa: PwaCapabilityAdapter): PlatformAda
         desktopSettings: unsupportedDesktopSettings(),
         events: unavailableEventAdapter(),
         pwa,
+        usagePrivacy,
     };
 }
 

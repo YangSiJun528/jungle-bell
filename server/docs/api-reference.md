@@ -30,12 +30,17 @@ cookie는 token resolver에서 Bearer 인증으로 변환하고, 권한과 WebVi
 
 ## 상태와 정적 자산
 
-| Method | 경로 | 설명 |
-| --- | --- | --- |
-| `GET` | `/actuator/health/readiness` | 운영 readiness health check |
-| `GET` | `/api/health` | 수집 source를 포함한 서비스 health |
-| `GET` | `/api/public/status` | source별 최근 시도·성공·실패 상태 |
-| `GET` | `/`, `/index.html` | 내장 React SPA HTML |
+Actuator는 공개 HTTP API가 아닙니다. 운영에서는 별도 management port를 호스트
+loopback에만 publish하며, Tailscale SSH 후 조회합니다. Cloudflare Tunnel의 API port에서
+`/actuator/*`는 `404`입니다.
+
+| 범위 | Method | 경로 | 설명 |
+| --- | --- | --- | --- |
+| 내부 management | `GET` | `/actuator/health/readiness` | 운영 readiness health check |
+| 내부 management | `GET` | `/actuator/info` | 수치나 식별자 없이 사용량 설정·DB·집계 상태 제공 |
+| 공개 API | `GET` | `/api/health` | 수집 source를 포함한 서비스 health |
+| 공개 API | `GET` | `/api/public/status` | source별 최근 시도·성공·실패 상태 |
+| 공개 자산 | `GET` | `/`, `/index.html` | 내장 React SPA HTML |
 
 Vite로 빌드한 React SPA는 Spring Boot JAR의 정적 자산으로 배포됩니다. 화면 이동은 `/#/home`, `/#/attendance`, `/#/laundry`, `/#/meals` hash 경로를 사용하고 개인정보 처리 안내는 인증과 무관하게 `/#/privacy`에서 엽니다.
 
@@ -45,9 +50,41 @@ Vite로 빌드한 React SPA는 Spring Boot JAR의 정적 자산으로 배포됩�
 | --- | --- | --- | --- |
 | `POST` | `/api/public/usage/ui-opened` | 없음 | `{ "client": "web" | "pwa" }`, 24시간 HttpOnly 방문자 쿠키 발급·일일 중복 제거 |
 | `POST` | `/api/me/usage/ui-opened` | PC 장기 bearer 또는 모바일 cookie | 인증 session에서 사용자와 Desktop/PWA를 결정해 일일 중복 제거 |
+| `GET` | `/api/public/usage-preference` | 없음 | 익명 수집 허용 여부를 `{ "enabled": boolean }`로 조회 |
+| `PUT` | `/api/public/usage-preference` | 없음 | 익명 수집 허용 여부 저장, body `{ "enabled": boolean }` |
+| `GET` | `/api/me/usage-preference` | Tauri SPA 또는 모바일 cookie | 연결 계정 값을 `{ "enabled": boolean \| null }`로 조회 |
+| `GET` | `/api/desktop/usage-preference` | PC 장기 bearer | 연결 계정 값을 `{ "enabled": boolean \| null }`로 조회 |
+| `PUT` | `/api/desktop/usage-preference` | PC 장기 bearer | 계정 값을 저장, body `{ "enabled": boolean }` |
+
+UI 열기 원자료는 endpoint를 처리하는 API 요청 thread에서 PostgreSQL에 동기식으로
+기록합니다. Worker는 ingestion을 수행하지 않고 일별 요약과 보존기간 삭제만 담당합니다.
+
+두 UI 열기 endpoint의 응답 의미는 같습니다.
+
+| 응답 | 의미 |
+| --- | --- |
+| `204 No Content` | 신규 기록, 일일 중복, 전역 비활성화 또는 preference에 따른 생략 중 하나 |
+| `503 Service Unavailable` | 일시적 DB 실패. `Retry-After: 1`과 `{ "error": "USAGE_METRICS_UNAVAILABLE" }` 포함 |
+| `500 Internal Server Error` | 예상하지 못한 DB 또는 서버 실패 |
+
+`204`는 원자료 삽입이나 Worker 집계 완료를 보장하지 않습니다. 익명 endpoint는 `503`인
+경우에도 재시도에서 같은 주체를 사용하도록 새 방문자 쿠키를 발급할 수 있습니다.
+
+계정 preference의 `null`은 결정 대기이며 유효 상태는 OFF입니다. `false`는 명시적
+OFF, `true`는 ON입니다. 현재 PC만 계정 preference를 편집합니다. 연결된 PWA는 같은
+서버 값을 읽고 적용받지만 `PUT /api/me/usage-preference`는 허용하지 않습니다.
+OFF는 이후 기록만 막으며 기존 원자료와 요약을 즉시 삭제하지 않습니다.
+
+익명 preference는 계정 preference와 별개입니다. 운영 HTTPS에서는 1년짜리
+`__Host-jb_usage_opt_out` HttpOnly·Secure·SameSite=Strict 쿠키를 사용하고, 로컬
+HTTP에서는 `jb_usage_opt_out`을 사용합니다. OFF로 바꿀 때 24시간 방문자 쿠키
+`__Host-jb_usage` 또는 `jb_usage`를 만료시킵니다. 공개 익명 preference 응답은
+`Cache-Control: no-store`를 명시합니다. 쿠키 만료는 이미 저장된 날짜별 HMAC 원자료를
+즉시 삭제하지 않습니다.
 
 클라이언트가 임의 기능 이벤트를 제출하는 API는 없습니다. 기능 사용량은 허용된 서버 기능이
-성공한 직후 내부에서만 기록합니다. 상세 스키마와 보존기간은
+성공한 직후 같은 업무 요청에서 best-effort으로 기록합니다. 메트릭 기록 실패는 성공한
+업무 응답을 실패시키지 않습니다. 상세 스키마와 보존기간은
 [사용량 메트릭 레퍼런스](./usage-metrics-reference.md)를 따릅니다.
 
 ## 공개 세탁 데이터
@@ -79,7 +116,7 @@ stale-while-revalidate를 사용합니다.
 
 | Method | 경로 | 설명 |
 | --- | --- | --- |
-| `POST` | `/api/desktop/installations` | 새 PC와 사용자 생성, `jbd_` credential 발급 |
+| `POST` | `/api/desktop/installations` | 새 PC와 사용자 생성, nullable 수집 preference 반영, `jbd_` credential 발급 |
 | `DELETE` | `/api/desktop/installations/current` | 현재 PC 사용자와 모든 session·개인 데이터 삭제 |
 | `POST` | `/api/desktop/installations/rotate` | 현재 PC credential 교체 |
 | `POST` | `/api/desktop/webview-sessions` | exact origin에 묶인 `jbui_` token 발급 |
@@ -92,6 +129,17 @@ stale-while-revalidate를 사용합니다.
 
 등록 endpoint는 10분 창에서 IP당 240회, installation ID당 10회로 제한합니다. rate
 key에는 원문 IP나 installation ID를 저장하지 않고 SHA-256 hash만 저장합니다.
+
+등록 body는 다음 형식입니다. `usageAnalyticsEnabled`는 `true`, `false`, `null`을
+허용하며 필드를 생략해도 `null`입니다. `null`은 계정 preference를 만들지 않으므로
+결정 대기·유효 OFF 상태입니다.
+
+```json
+{
+  "installationId": "desktop-installation-id",
+  "usageAnalyticsEnabled": null
+}
+```
 
 ## 공통 계정 API
 

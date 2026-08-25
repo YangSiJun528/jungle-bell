@@ -66,6 +66,8 @@ export interface DesktopSettings {
     appVersion: string;
     autoStart: boolean;
     autoUpdate: boolean;
+    usageAnalytics: boolean | null;
+    usageAnalyticsSyncPending: boolean;
     debugMode: boolean;
     selectedCohortId: string | null;
     effectiveCohortId: string | null;
@@ -74,7 +76,7 @@ export interface DesktopSettings {
 
 export type DesktopSettingsUpdate = Pick<
     DesktopSettings,
-    'autoStart' | 'autoUpdate' | 'debugMode' | 'selectedCohortId'
+    'autoStart' | 'autoUpdate' | 'usageAnalytics' | 'debugMode' | 'selectedCohortId'
 >;
 
 export interface DesktopUpdateStatus {
@@ -121,6 +123,20 @@ export interface PwaCapabilityAdapter {
     subscribePush(applicationServerKey: string): Promise<PushSubscriptionJSON>;
 }
 
+export type UsagePreferenceScope = 'anonymous';
+
+export interface UsagePreferenceSnapshot {
+    enabled: boolean;
+    scope: UsagePreferenceScope;
+}
+
+export interface UsagePrivacyAdapter {
+    available: boolean;
+    get(): Promise<UsagePreferenceSnapshot>;
+    update(enabled: boolean): Promise<UsagePreferenceSnapshot>;
+    allowsAnonymousReporting(): boolean;
+}
+
 export interface PlatformAdapter {
     kind: PlatformKind;
     capabilities: PlatformCapabilities;
@@ -129,6 +145,7 @@ export interface PlatformAdapter {
     desktopSettings: DesktopSettingsAdapter;
     events: PlatformEventAdapter;
     pwa: PwaCapabilityAdapter;
+    usagePrivacy: UsagePrivacyAdapter;
 }
 
 export class PlatformCapabilityUnavailableError extends Error {
@@ -164,5 +181,18 @@ export function unavailableEventAdapter(): PlatformEventAdapter {
         subscribeNotificationInboxUpdated: unavailableSubscription,
         subscribeAttendanceSnapshotUpdated: unavailableSubscription,
         subscribeLmsSessionStateUpdated: unavailableSubscription,
+    };
+}
+
+export function unavailableUsagePrivacyAdapter(): UsagePrivacyAdapter {
+    return {
+        available: false,
+        get: async () => {
+            throw new Error('USAGE_PRIVACY_UNAVAILABLE');
+        },
+        update: async () => {
+            throw new Error('USAGE_PRIVACY_UNAVAILABLE');
+        },
+        allowsAnonymousReporting: () => false,
     };
 }

@@ -1,6 +1,10 @@
+import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Link, Outlet} from '@tanstack/react-router';
 import {ArrowLeft, ShieldCheck} from 'lucide-react';
 
+import {Switch} from '@/components/ui/switch';
+
+import {queryKeys, useDashboardEnvironment} from './dashboard-context';
 import {DashboardFooter} from './shell/DashboardFooter';
 
 const SERVICE_URL = 'https://jungle-bell.sijun-yang.com';
@@ -22,8 +26,8 @@ const purposes = [
 
 const detailedRetention = [
     '일반 웹·연결 전 PWA의 방문자 단위 사용 기록: 2일',
-    '연결된 PWA·PC 앱의 사용자별 화면 활동 기록: 7일',
-    '사용자별 기능 이용 기록: 30일',
+    '연결된 PWA·PC 앱의 서버 계정별 화면 활동 기록: 7일',
+    '서버 계정별 기능 이용 기록: 30일',
     '개인을 다시 식별하기 위한 값이 없는 일별 집계 결과: 최대 730일',
 ] as const;
 
@@ -43,6 +47,87 @@ function PolicySection({
             </h2>
             {children}
         </section>
+    );
+}
+
+function UsagePrivacySettings() {
+    const {platform} = useDashboardEnvironment();
+    const client = useQueryClient();
+    const adapter = platform.usagePrivacy;
+    const preference = useQuery({
+        queryKey: queryKeys.anonymousUsagePreference,
+        queryFn: () => adapter.get(),
+        enabled: adapter.available,
+        retry: false,
+    });
+    const update = useMutation({
+        mutationFn: (enabled: boolean) => adapter.update(enabled),
+        onMutate: async (enabled) => {
+            await client.cancelQueries({queryKey: queryKeys.anonymousUsagePreference});
+            if (!enabled) {
+                client.setQueryData(queryKeys.anonymousUsagePreference, {
+                    enabled: false,
+                    scope: 'anonymous',
+                });
+            }
+        },
+        onSuccess: (saved) => client.setQueryData(queryKeys.anonymousUsagePreference, saved),
+    });
+
+    if (!adapter.available) return null;
+    const enabled = preference.data?.enabled === true;
+
+    return (
+        <div className="rounded-xl border bg-card p-5">
+            <div className="flex items-start justify-between gap-4">
+                <div>
+                    <h3 className="font-semibold">익명 방문 통계 수집</h3>
+                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                        이 브라우저의 일반 Web·연결 전 PWA 화면 열림 기록에만 적용됩니다.
+                    </p>
+                </div>
+                <Switch
+                    checked={enabled}
+                    disabled={
+                        !preference.data ||
+                        preference.isError ||
+                        preference.isPending ||
+                        preference.isFetching ||
+                        update.isPending
+                    }
+                    onCheckedChange={(checked) => update.mutate(checked)}
+                    aria-label="익명 방문 통계 수집"
+                />
+            </div>
+            {preference.isPending ? (
+                <p className="mt-3 text-sm text-muted-foreground">설정을 확인하고 있습니다.</p>
+            ) : null}
+            {preference.data ? (
+                <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                    거부 상태는 이 브라우저의 로컬 저장소와 최대 1년간 유지되는 opt-out 쿠키에
+                    저장됩니다. 사이트 데이터를 삭제하면 기본 설정인 허용 상태로 돌아갑니다.
+                </p>
+            ) : null}
+            {preference.isError ? (
+                <p className="mt-3 text-sm text-destructive" role="alert">
+                    설정을 불러오지 못했습니다.
+                    <button
+                        type="button"
+                        className="ml-2 font-medium underline underline-offset-4"
+                        onClick={() => void preference.refetch()}
+                    >
+                        다시 시도
+                    </button>
+                </p>
+            ) : null}
+            {update.isError ? (
+                <p className="mt-3 text-sm text-destructive" role="alert">
+                    {update.variables
+                        ? '서버 설정을 저장하지 못했습니다. 다시 시도해 주세요.'
+                        : '이 브라우저의 전송은 중단했지만 서버 쿠키를 저장하지 못했습니다.'}
+                </p>
+            ) : null}
+        </div>
     );
 }
 
@@ -83,7 +168,7 @@ export function PrivacyPage() {
                         개인정보 처리방침을 수립·공개합니다.
                     </p>
                     <p className="mt-3 text-xs font-medium text-muted-foreground">
-                        시행일: 2026-08-20 <span aria-hidden="true">|</span> 버전: 1.0
+                        시행일: 2026-08-25 <span aria-hidden="true">|</span> 버전: 1.2
                     </p>
                 </header>
 
@@ -123,6 +208,18 @@ export function PrivacyPage() {
                         사용 통계 데이터베이스에 저장하지 않으며, PostHog와 Google Analytics 같은
                         외부 분석 도구를 사용하지 않습니다.
                     </p>
+                    <p className="text-sm leading-6 text-muted-foreground">
+                        자동 화면 열림 기록은 정식 배포된 Web·PWA와 PC 앱에서만 전송합니다. 기능
+                        이용 기록은 클라이언트가 임의로 보내지 않고 서버가 허용된 기능의 성공을
+                        확인한 경우에만 기록합니다.
+                    </p>
+                    <p className="text-sm leading-6 text-muted-foreground">
+                        통계의 고유 수는 익명 방문자의 날짜별 가명값 또는 활성 서버 계정을 기준으로
+                        계산합니다. PC 앱은 무작위 installation identity(UUID)로 서버 계정을
+                        등록하고, 사용 통계는 그 서버 계정 UUID를 셉니다. 두 식별값 모두 하드웨어
+                        ID가 아니며 한 사람과 일대일로 대응하지 않으므로, 어느 수치도 실제 사람 수로
+                        해석할 수 없습니다.
+                    </p>
                 </PolicySection>
 
                 <PolicySection id="retention-title" title="3. 개인정보의 보유 기간 및 파기">
@@ -156,7 +253,47 @@ export function PrivacyPage() {
                     </div>
                 </PolicySection>
 
-                <PolicySection id="security-title" title="4. 개인정보의 안전성 확보조치">
+                <PolicySection id="usage-choice-title" title="4. 사용 통계 설정과 수집 거부">
+                    <div className="rounded-xl border bg-card p-5">
+                        <h3 className="font-semibold">계정 사용 통계</h3>
+                        <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                            계정 설정은 PC 앱의{' '}
+                            <Link
+                                to="/connections"
+                                className="font-medium text-foreground underline underline-offset-4"
+                            >
+                                설정 → 개인정보
+                            </Link>
+                            에서만 변경할 수 있습니다. 이 PC와 같은 계정에 연결된 PWA에는 서버의
+                            같은 설정이 적용됩니다.
+                        </p>
+                        <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-muted-foreground">
+                            <li>아직 선택하지 않은 상태에서는 사용 통계를 수집하지 않습니다.</li>
+                            <li>스위치를 끄면 수집을 거부하고, 켜면 수집을 허용합니다.</li>
+                            <li>
+                                과거에 명시적으로 거부한 설정은 그대로 유지합니다. 기존 선택을
+                                복원할 수 없는 설치는 사용자가 다시 선택하기 전까지 수집하지
+                                않습니다.
+                            </li>
+                            <li>
+                                PC 설정과 설치 식별값을 모두 처음 만드는 완전 신규 설치만
+                                허용(ON)으로 시작하며 언제든 끌 수 있습니다.
+                            </li>
+                        </ul>
+                    </div>
+                    <p className="text-sm leading-6 text-muted-foreground">
+                        아래 익명 설정은 일반 Web 및 계정에 연결되지 않은 PWA에만 적용됩니다. 계정
+                        사용 통계 설정과는 별도로 저장됩니다.
+                    </p>
+                    <UsagePrivacySettings />
+                    <p className="text-sm leading-6 text-muted-foreground">
+                        수집을 끄면 이후 기록부터 중단합니다. 이미 수집된 원자료는 위 보유기간이
+                        끝나면 파기하며, 개인을 다시 식별하기 위한 값이 없는 일별 집계 결과는 설정
+                        변경을 이유로 역으로 삭제하지 않습니다.
+                    </p>
+                </PolicySection>
+
+                <PolicySection id="security-title" title="5. 개인정보의 안전성 확보조치">
                     <dl className="rounded-xl border bg-card p-5">
                         <dt className="font-semibold">관리적 조치</dt>
                         <dd className="mt-2 text-sm leading-6 text-muted-foreground">
@@ -169,7 +306,7 @@ export function PrivacyPage() {
                     </dl>
                 </PolicySection>
 
-                <PolicySection id="rights-title" title="5. 정보주체의 권리·의무 및 행사방법">
+                <PolicySection id="rights-title" title="6. 정보주체의 권리·의무 및 행사방법">
                     <p className="text-sm leading-6 text-muted-foreground">
                         정보주체는 개인정보 열람, 정정·삭제, 처리정지 및 동의 철회를 요구할 수
                         있습니다. 권리 행사와 개인정보 관련 고충은 이메일로 접수합니다.
@@ -200,9 +337,9 @@ export function PrivacyPage() {
                     </a>
                 </PolicySection>
 
-                <PolicySection id="changes-title" title="6. 개인정보 처리방침의 변경">
+                <PolicySection id="changes-title" title="7. 개인정보 처리방침의 변경">
                     <p className="text-sm leading-6 text-muted-foreground">
-                        이 개인정보 처리방침은 2026-08-20부터 적용됩니다.
+                        이 개인정보 처리방침은 2026-08-25부터 적용됩니다.
                     </p>
                     <p className="text-sm leading-6 text-muted-foreground">
                         변경 고지 방법: 앱 내 공지

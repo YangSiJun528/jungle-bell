@@ -63,8 +63,11 @@ docker compose \
   up --build -d postgres api worker
 ```
 
-API는 기본적으로 `127.0.0.1:8080`에만 노출됩니다. Worker는 HTTP port를 열지
-않습니다. 개발 중 수집을 끄려면 `COLLECTORS_ENABLED=false`를 사용합니다.
+운영 Compose는 API를 `127.0.0.1:8080`, Actuator management를
+`127.0.0.1:8081`에 각각 노출합니다. Cloudflare Tunnel은 API의 컨테이너 port
+`8080`만 사용하며, Actuator는 Tailscale SSH 후 호스트 loopback에서만 조회합니다.
+Worker는 HTTP port를 열지 않습니다. 개발 중 수집을 끄려면
+`COLLECTORS_ENABLED=false`를 사용합니다.
 
 저장소 루트의 전체 검증 명령은 다음과 같습니다.
 
@@ -90,4 +93,4 @@ server/tools/smoke-api.sh https://jungle-bell.sijun-yang.com
 - HTTP endpoint: [docs/api-reference.md](./docs/api-reference.md)
 - 환경 변수: [docs/environment-reference.md](./docs/environment-reference.md)
 - 로그 형식과 필드: [docs/logging-reference.md](./docs/logging-reference.md)
-- 사용량 스키마·보존·조회: [docs/usage-metrics-reference.md](./docs/usage-metrics-reference.md)
+- 사용량 수집·식별 단위·보존·집계 계약: [docs/usage-metrics-reference.md](./docs/usage-metrics-reference.md)

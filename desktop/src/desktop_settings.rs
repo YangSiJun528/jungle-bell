@@ -13,7 +13,7 @@ pub struct DesktopSettingsSnapshot {
     pub effective_cohort_id: Option<String>,
 }
 
-/// 이 PC에만 적용되는 서비스 설정을 원자적으로 저장한다.
+/// 이 PC에 적용할 설정과 서버에 동기화할 통계 선택을 원자적으로 저장한다.
 pub struct DesktopSettingsService {
     state: Arc<Mutex<AppState>>,
     path: Option<PathBuf>,
@@ -54,6 +54,42 @@ impl DesktopSettingsService {
         tauri::async_runtime::spawn_blocking(move || config.save_to(&path))
             .await
             .map_err(|error| format!("설정 저장 작업 실행 실패: {error}"))?
+    }
+
+    /// 앱 설치 상태를 확인한 뒤에만 확정할 수 있는 통계 기본값을 저장한다.
+    /// 저장 실패 시 메모리의 fail-closed 값은 바꾸지 않는다.
+    pub async fn initialize_usage_analytics(&self, desired: Option<bool>) -> Result<Config, String> {
+        let _write_guard = self.writes.lock().await;
+        let current = self.state.lock().await.config.clone();
+        if current.usage_analytics == desired {
+            return Ok(current);
+        }
+        let mut next = current;
+        next.usage_analytics = desired;
+        self.persist(next.clone()).await?;
+        let mut state = self.state.lock().await;
+        state.config = next.clone();
+        state.notify_scheduler();
+        Ok(next)
+    }
+
+    /// 로컬에 명시적 선택이 없을 때만 계정 설정을 원자적으로 채택한다.
+    pub async fn adopt_usage_analytics_if_undecided(&self, enabled: bool) -> Result<bool, String> {
+        let _write_guard = self.writes.lock().await;
+        let current = self.state.lock().await.config.clone();
+        if current.usage_analytics.is_some() {
+            return Ok(false);
+        }
+        let mut next = current;
+        next.usage_analytics = Some(enabled);
+        self.persist(next.clone()).await?;
+        let mut state = self.state.lock().await;
+        if state.config.usage_analytics.is_some() {
+            return Ok(false);
+        }
+        state.config = next;
+        state.notify_scheduler();
+        Ok(true)
     }
 
     /// OS 자동 시작 상태와 설정 파일을 함께 변경한다. 저장 실패 시 OS 상태를
@@ -139,6 +175,7 @@ mod tests {
         let expected = Config {
             auto_start: true,
             auto_update: false,
+            usage_analytics: Some(false),
             debug_mode: true,
             selected_cohort_id: None,
         };
@@ -163,6 +200,34 @@ mod tests {
         assert!(tauri::async_runtime::block_on(service.persist(next)).is_err());
         assert!(!state.try_lock().unwrap().config.auto_start);
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn clean_new_통계_기본값은_저장에_성공한_뒤에만_적용한다() {
+        let path = test_path("clean-new-usage");
+        let state = Arc::new(Mutex::new(AppState::new(Config::default())));
+        let service = DesktopSettingsService::with_path(state.clone(), Some(path.clone()));
+
+        let saved = tauri::async_runtime::block_on(service.initialize_usage_analytics(Some(true))).unwrap();
+
+        assert_eq!(saved.usage_analytics, Some(true));
+        assert_eq!(state.try_lock().unwrap().config.usage_analytics, Some(true));
+        let reloaded = Config::load_from(&path);
+        assert_eq!(reloaded.config.usage_analytics, Some(true));
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn 서버의_명시적_선택은_undecided일_때만_채택한다() {
+        let path = test_path("remote-usage");
+        let state = Arc::new(Mutex::new(AppState::new(Config::default())));
+        let service = DesktopSettingsService::with_path(state.clone(), Some(path.clone()));
+
+        assert!(tauri::async_runtime::block_on(service.adopt_usage_analytics_if_undecided(false)).unwrap());
+        assert_eq!(state.try_lock().unwrap().config.usage_analytics, Some(false));
+        assert!(!tauri::async_runtime::block_on(service.adopt_usage_analytics_if_undecided(true)).unwrap());
+        assert_eq!(state.try_lock().unwrap().config.usage_analytics, Some(false));
+        fs::remove_file(path).unwrap();
     }
 
     #[test]

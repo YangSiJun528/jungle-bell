@@ -46,7 +46,7 @@ describe('repository platform boundaries', () => {
         expect(entry).toMatch(/__JUNGLE_BELL_TARGET__ === 'desktop'/u);
         expect(entry).toMatch(/import\('@\/platform\/tauri\/entry'\)/u);
         expect(entry).toMatch(/import\('@\/platform\/web\/entry'\)/u);
-        expect(web).toMatch(/bootstrapDashboard\(createWebPlatformAdapter\(pwa\)\)/u);
+        expect(web).toMatch(/bootstrapDashboard\(createWebPlatformAdapter\(pwa, usagePrivacy\)\)/u);
         expect(desktop).toMatch(/bootstrapDashboard\(createTauriPlatformAdapter\(\)\)/u);
         expect(bootstrap).toMatch(/<DashboardProviders platform=\{platform\}>/u);
     });

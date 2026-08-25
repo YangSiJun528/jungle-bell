@@ -18,6 +18,8 @@ https://jungle-bell.sijun-yang.com
 - API, Worker, PostgreSQL은 한 Docker Compose 프로젝트로 실행합니다.
 - named Cloudflare Tunnel을 정식 ingress로 사용하고 API port는 호스트 loopback에만
   노출합니다.
+- Actuator는 API와 분리한 management port를 호스트 loopback에만 노출합니다. Cloudflare
+  Tunnel에는 연결하지 않고, 원격 운영자는 Tailscale SSH 후에만 조회합니다.
 - React 정적 자산과 REST API는 Spring Boot API가 같은 origin에서 제공합니다.
 - `PUBLIC_BASE_URL`은 정적 자산, 공개 API 자산 URL, pairing QR 등 서버가 만드는 외부
   URL의 기준입니다.
@@ -91,6 +93,7 @@ chmod 600 server/deploy/.env.production
 다음 값을 확인하거나 설정합니다.
 
 - `PUBLIC_BASE_URL=https://jungle-bell.sijun-yang.com`
+- `MANAGEMENT_PORT=8081`
 - 다섯 secret 파일의 절대 경로
 - `CLOUDFLARE_TUNNEL_TOKEN`
 - `LAUNDRY_SOURCE_URL`
@@ -110,7 +113,8 @@ Cloudflare Tunnel의 public hostname을 다음과 같이 설정합니다.
 | Service URL | `api:8080` |
 
 Tunnel token은 `.env.production`의 `CLOUDFLARE_TUNNEL_TOKEN`에만 둡니다. 운영 DNS와
-smoke test는 Quick Tunnel URL을 사용하지 않습니다.
+smoke test는 Quick Tunnel URL을 사용하지 않습니다. Service URL은 API port `8080`을
+유지하고 management port `8081`이나 `/actuator/*` route를 추가하지 않습니다.
 
 ## 일반 배포
 
@@ -175,19 +179,192 @@ SELECT
   (SELECT count(*) FROM minute_observation) AS minute_observations;'
 ```
 
+## 사용량 수집과 집계 확인
+
+사용량 원자료는 API 요청 thread가 동기식으로 기록합니다. Worker는 원자료 ingestion이
+아니라 일별 요약과 보존기간 삭제를 담당합니다. 다음 절차에서는 계정 UUID, 익명 HMAC,
+lease token을 출력하지 않습니다.
+
+먼저 Tailscale SSH로 운영 호스트에 접속한 뒤 management loopback에서 API readiness와
+사용량 상태를 확인합니다. `MANAGEMENT_PORT`의 운영 기본값은 `8081`입니다.
+
+```bash
+ssh -i ~/.ssh/oci_a1_flex ubuntu@oci-server.tail3cbec1.ts.net \
+  'curl --fail --silent http://127.0.0.1:8081/actuator/health/readiness'
+ssh -i ~/.ssh/oci_a1_flex ubuntu@oci-server.tail3cbec1.ts.net \
+  'curl --fail --silent http://127.0.0.1:8081/actuator/info'
+```
+
+readiness는 `readinessState`와 `db`를 포함하지만 `show-details=never`이므로 정상 응답은
+전체 `UP`만 확인합니다. `/actuator/info`의 `usageMetrics`는 다음처럼 판정합니다.
+
+- `configured=true`: API 전역 수집 설정이 켜져 있음
+- `database=available`: API가 집계 성공 marker를 조회할 수 있음
+- `aggregation=never`: 성공 marker가 아직 없음
+- `aggregation=fresh`: 마지막 성공이 130분 이내
+- `aggregation=stale`: 마지막 성공이 130분보다 오래됨
+- `aggregation=unavailable`: marker 조회 실패
+- `lastSuccessfulAggregationAt`: marker가 있을 때의 Worker 전체 완료 시각
+
+이 management endpoint에는 사용량 수치, UUID, HMAC, 원자료 최근 시각이 나오지
+않습니다. 또한
+`configured`는 API 설정만 나타냅니다. API와 Worker가 같은
+`USAGE_METRICS_ENABLED`를 받는지는 배포 환경 파일과 Compose 설정으로 별도 확인합니다.
+
+네 사용량 테이블의 행 수와 날짜 범위를 aggregate로 확인합니다.
+
+```bash
+docker exec jungle-bell-postgres psql -U jungle_bell -d jungle_bell -c "
+SELECT source_table, row_count, oldest_usage_date, newest_usage_date
+FROM (
+  SELECT 'usage_anonymous_day' AS source_table, count(*) AS row_count,
+         min(usage_date) AS oldest_usage_date, max(usage_date) AS newest_usage_date
+  FROM usage_anonymous_day
+  UNION ALL
+  SELECT 'usage_user_day', count(*), min(usage_date), max(usage_date)
+  FROM usage_user_day
+  UNION ALL
+  SELECT 'usage_feature_day', count(*), min(usage_date), max(usage_date)
+  FROM usage_feature_day
+  UNION ALL
+  SELECT 'usage_daily_summary', count(*), min(usage_date), max(usage_date)
+  FROM usage_daily_summary
+) usage_inventory
+ORDER BY source_table;"
+```
+
+최근 원자료는 client와 허용 코드 단위로만 집계해 확인합니다.
+
+```bash
+docker exec jungle-bell-postgres psql -U jungle_bell -d jungle_bell -c "
+SELECT usage_date, raw_kind, client, metric_code, unique_subjects, total_count
+FROM (
+  SELECT usage_date, 'anonymous_activity' AS raw_kind, client,
+         activity AS metric_code, count(*) AS unique_subjects, count(*) AS total_count
+  FROM usage_anonymous_day
+  GROUP BY usage_date, client, activity
+  UNION ALL
+  SELECT usage_date, 'authenticated_activity', client,
+         activity, count(*), count(*)
+  FROM usage_user_day
+  GROUP BY usage_date, client, activity
+  UNION ALL
+  SELECT usage_date, 'authenticated_feature', client,
+         feature_code, count(*), sum(use_count)
+  FROM usage_feature_day
+  GROUP BY usage_date, client, feature_code
+) raw_usage
+WHERE usage_date >=
+      (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Seoul')::date - 7
+ORDER BY usage_date DESC, raw_kind, metric_code, client;"
+```
+
+최근 요약 수치와 실제 계산 시각은 식별자 없이 조회합니다.
+
+```bash
+docker exec jungle-bell-postgres psql -U jungle_bell -d jungle_bell -c "
+SELECT usage_date, audience, metric_kind, client, metric_code,
+       unique_subjects, total_count,
+       to_char(
+         to_timestamp(calculated_at_epoch_ms / 1000.0) AT TIME ZONE 'UTC',
+         'YYYY-MM-DD HH24:MI:SS.MS UTC'
+       ) AS calculated_at
+FROM usage_daily_summary
+WHERE usage_date >=
+      (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Seoul')::date - 7
+ORDER BY usage_date DESC, audience, metric_kind, metric_code, client;"
+```
+
+집계 lease와 성공 marker는 `run_token`을 제외하고 조회합니다.
+
+```bash
+docker exec jungle-bell-postgres psql -U jungle_bell -d jungle_bell -c "
+SELECT name,
+       to_char(
+         to_timestamp(last_run_at_epoch_ms / 1000.0) AT TIME ZONE 'UTC',
+         'YYYY-MM-DD HH24:MI:SS.MS UTC'
+       ) AS state_at,
+       round(
+         (
+           extract(epoch FROM (clock_timestamp() - to_timestamp(last_run_at_epoch_ms / 1000.0)))
+           / 60.0
+         )::numeric,
+         1
+       ) AS age_minutes
+FROM maintenance_state
+WHERE name IN ('usage-daily-summary-v1', 'usage-daily-summary-v1:success')
+ORDER BY name;"
+```
+
+`usage-daily-summary-v1` 시각은 lease 획득 시각이고 완료 시각이 아닙니다.
+`usage-daily-summary-v1:success`는 대상 scope 재집계와 네 테이블의 보존기간 삭제가 모두
+끝난 뒤에만 갱신됩니다. 전역 수집이 꺼져도 삭제가 성공하면 success marker는
+갱신됩니다. success marker가 오래됐다면 요약 생성뿐 아니라 보존기간 삭제도 지연됐을
+수 있습니다.
+
+Worker와 사용량 기록 로그를 확인합니다.
+
+```bash
+docker compose \
+  --env-file server/deploy/.env.production \
+  -f server/deploy/compose.production.yml \
+  logs --since 3h worker | grep -F 'Usage aggregation job'
+docker compose \
+  --env-file server/deploy/.env.production \
+  -f server/deploy/compose.production.yml \
+  logs --since 30m api | grep -E 'Usage metric recording|Anonymous usage metric'
+```
+
+- 같은 `jobRunId`의 `started` 뒤 `completed`가 있으면 재집계·삭제·success marker
+  갱신까지 끝났습니다.
+- `skipped`는 다른 instance 또는 아직 유효한 55분 lease 때문에 실행하지 않은 것입니다.
+- `failed`는 success marker를 갱신하지 않은 실패입니다. stack trace와 DB 상태를 함께
+  확인합니다.
+- API의 `temporarily unavailable` 경고는 UI 열기 요청이 `503 Retry-After: 1`을 반환한
+  경우입니다.
+- 기능 메트릭의 `recording failed` 경고는 메트릭만 생략했다는 뜻입니다. 이미 성공한
+  업무 응답은 유지됩니다.
+
+실제 트래픽을 확인할 때는 위 테이블 inventory를 기록한 뒤 정상 릴리스 클라이언트에서
+평소 UI 열기나 허용된 업무 동작을 수행하고 같은 aggregate 조회를 다시 실행합니다.
+UI 열기는 계정·client·날짜별로 중복 제거되므로 같은 주체가 같은 날 다시 열면 행 수가
+늘지 않을 수 있습니다. 기능 메트릭은 성공 횟수를 `use_count`에 누적하므로 요약의
+`total_count`는 다음 Worker 완료 뒤 반영됩니다.
+
+다음 항목은 단독으로 실제 트래픽을 증명하지 않습니다.
+
+- UI 열기 `204`: 신규 기록, 중복 제거, 전역 비활성화, 계정 `null`·`false`, 익명 거부
+  중 어느 결과인지 구분하지 않음
+- `aggregation=fresh` 또는 최신 success marker: Worker 후처리가 성공했다는 뜻이며
+  신규 원자료가 있었다는 뜻이 아님
+- `calculated_at` 갱신: 해당 요약 scope를 다시 계산했다는 뜻이며 특정 요청의 기록을
+  증명하지 않음
+- 2일·7일·30일·730일 cutoff: Worker 삭제 정책이며 그 기간의 데이터 존재를 보장하는
+  가용성 SLA가 아님
+
+수집 여부는 전역 설정, 해당 계정 또는 익명 preference, API 응답·경고 로그, 원자료
+aggregate 변화, Worker 완료와 요약 계산 시각을 함께 확인해 판정합니다.
+
 ## 배포 확인
 
-모든 외부 검증은 공식 origin에서 실행합니다.
+외부 서비스 검증은 공식 origin에서 실행합니다. Actuator는 외부 검증 대상이 아니며
+공식 origin에서 두 management 경로가 모두 `404`여야 합니다.
 
 ```bash
 curl --fail --silent https://jungle-bell.sijun-yang.com/ >/dev/null
-curl --fail --silent https://jungle-bell.sijun-yang.com/actuator/health/readiness
 curl --fail --silent https://jungle-bell.sijun-yang.com/api/health
 curl --fail --silent https://jungle-bell.sijun-yang.com/api/public/status
 curl --fail --silent https://jungle-bell.sijun-yang.com/api/public/laundry
 curl --fail --silent https://jungle-bell.sijun-yang.com/api/public/meals
 server/tools/smoke-api.sh https://jungle-bell.sijun-yang.com
+curl --silent --output /dev/null --write-out '%{http_code}\n' \
+  https://jungle-bell.sijun-yang.com/actuator/health/readiness
+curl --silent --output /dev/null --write-out '%{http_code}\n' \
+  https://jungle-bell.sijun-yang.com/actuator/info
 ```
+
+마지막 두 명령의 출력은 각각 `404`여야 합니다. readiness와 내부 상태는 Tailscale SSH
+후 `http://127.0.0.1:8081/actuator/...`에서 별도로 확인합니다.
 
 스모크 스크립트는 임시 PC 계정을 만든 뒤 인증된
 `DELETE /api/desktop/installations/current`로 계정과 종속 데이터를 삭제합니다. 실패
