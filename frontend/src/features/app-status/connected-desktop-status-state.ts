@@ -62,9 +62,9 @@ export function failedDesktopStatusProducers(
 export async function retryFailedDesktopStatusProducers(
     producers: readonly DesktopStatusProducer[],
 ): Promise<void> {
-    await Promise.allSettled(
-        producers
-            .filter(({isError}) => isError)
-            .map(({refetch}) => Promise.resolve().then(refetch)),
-    );
+    const retries: Promise<unknown>[] = [];
+    for (const {isError, refetch} of producers) {
+        if (isError) retries.push(Promise.resolve().then(refetch));
+    }
+    await Promise.allSettled(retries);
 }
