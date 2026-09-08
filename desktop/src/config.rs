@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 const CURRENT_CONFIG_FILE_NAME: &str = "desktop-settings.json";
 const CONFIG_SCHEMA: &str = "jungle-bell.desktop-settings";
-const CONFIG_SCHEMA_VERSION: u32 = 5;
+const CONFIG_SCHEMA_VERSION: u32 = 6;
 const MIN_SUPPORTED_CONFIG_SCHEMA_VERSION: u32 = 3;
 
 pub const MORNING_START_HOUR: u32 = 4;
@@ -41,7 +41,8 @@ struct ConfigEnvelope {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct LegacyConfigV3 {
     auto_start: bool,
-    auto_update: bool,
+    #[serde(rename = "autoUpdate")]
+    _auto_update: bool,
     usage_analytics: bool,
     debug_mode: bool,
     #[serde(deserialize_with = "deserialize_required_nullable_string")]
@@ -52,7 +53,21 @@ struct LegacyConfigV3 {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct LegacyConfigV4 {
     auto_start: bool,
-    auto_update: bool,
+    #[serde(rename = "autoUpdate")]
+    _auto_update: bool,
+    debug_mode: bool,
+    #[serde(deserialize_with = "deserialize_required_nullable_string")]
+    selected_cohort_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct LegacyConfigV5 {
+    auto_start: bool,
+    #[serde(rename = "autoUpdate")]
+    _auto_update: bool,
+    #[serde(deserialize_with = "deserialize_required_nullable_bool")]
+    usage_analytics: Option<bool>,
     debug_mode: bool,
     #[serde(deserialize_with = "deserialize_required_nullable_string")]
     selected_cohort_id: Option<String>,
@@ -64,13 +79,14 @@ pub(crate) enum ConfigProvenance {
     V3,
     V4,
     V5,
+    V6,
     Invalid,
     Unavailable,
 }
 
 impl ConfigProvenance {
     fn requires_rewrite(self) -> bool {
-        matches!(self, Self::V3 | Self::V4)
+        matches!(self, Self::V3 | Self::V4 | Self::V5)
     }
 }
 
@@ -111,29 +127,16 @@ impl LoadedConfig {
 /// 데스크톱에 영속하는 현재형 사용자 설정.
 ///
 /// 출석 알림, 식단, 세탁 설정은 서버가 소유한다. 이 파일에는 이 PC의
-/// 프로세스·업데이트·진단 동작과 서버에 동기화할 통계 선택을 저장한다.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// 프로세스·진단 동작과 서버에 동기화할 통계 선택을 저장한다.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Config {
     pub auto_start: bool,
-    pub auto_update: bool,
     #[serde(deserialize_with = "deserialize_required_nullable_bool")]
     pub usage_analytics: Option<bool>,
     pub debug_mode: bool,
     #[serde(deserialize_with = "deserialize_required_nullable_string")]
     pub selected_cohort_id: Option<String>,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            auto_start: false,
-            auto_update: true,
-            usage_analytics: None,
-            debug_mode: false,
-            selected_cohort_id: None,
-        }
-    }
 }
 
 fn deserialize_required_nullable_string<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
@@ -173,7 +176,7 @@ impl Config {
                 Ok((config, provenance)) => {
                     if provenance.requires_rewrite() {
                         if let Err(error) = save(&config, path) {
-                            log::warn!("[config] 이전 설정을 적용했지만 v5 파일 재작성에 실패했습니다: {error}");
+                            log::warn!("[config] 이전 설정을 적용했지만 v6 파일 재작성에 실패했습니다: {error}");
                         }
                     }
                     LoadedConfig { config, provenance }
@@ -236,7 +239,6 @@ fn parse_config_document(data: &str) -> Result<(Config, ConfigProvenance), Strin
             (
                 Config {
                     auto_start: legacy.auto_start,
-                    auto_update: legacy.auto_update,
                     // v3의 기본값은 true였으므로 true만으로는 명시적 동의를 증명할 수 없다.
                     // 기본값과 구분되는 false만 거부 의사로 승계한다.
                     usage_analytics: (!legacy.usage_analytics).then_some(false),
@@ -252,7 +254,6 @@ fn parse_config_document(data: &str) -> Result<(Config, ConfigProvenance), Strin
             (
                 Config {
                     auto_start: legacy.auto_start,
-                    auto_update: legacy.auto_update,
                     usage_analytics: None,
                     debug_mode: legacy.debug_mode,
                     selected_cohort_id: legacy.selected_cohort_id,
@@ -260,9 +261,22 @@ fn parse_config_document(data: &str) -> Result<(Config, ConfigProvenance), Strin
                 ConfigProvenance::V4,
             )
         }
-        5 => (
-            serde_json::from_value(envelope.settings).map_err(|error| format!("v5 설정 파싱 실패: {error}"))?,
-            ConfigProvenance::V5,
+        5 => {
+            let legacy: LegacyConfigV5 =
+                serde_json::from_value(envelope.settings).map_err(|error| format!("v5 설정 파싱 실패: {error}"))?;
+            (
+                Config {
+                    auto_start: legacy.auto_start,
+                    usage_analytics: legacy.usage_analytics,
+                    debug_mode: legacy.debug_mode,
+                    selected_cohort_id: legacy.selected_cohort_id,
+                },
+                ConfigProvenance::V5,
+            )
+        }
+        6 => (
+            serde_json::from_value(envelope.settings).map_err(|error| format!("v6 설정 파싱 실패: {error}"))?,
+            ConfigProvenance::V6,
         ),
         _ => return Err("지원하지 않는 설정 스키마입니다.".into()),
     };
@@ -382,10 +396,9 @@ mod tests {
             value,
             serde_json::json!({
                 "schema": "jungle-bell.desktop-settings",
-                "schemaVersion": 5,
+                "schemaVersion": 6,
                 "settings": {
                     "autoStart": false,
-                    "autoUpdate": true,
                     "usageAnalytics": null,
                     "debugMode": false,
                     "selectedCohortId": null
@@ -403,7 +416,7 @@ mod tests {
         let serialized = serialize_config_document(&config).unwrap();
         assert_eq!(
             parse_config_document(&serialized).unwrap(),
-            (config, ConfigProvenance::V5)
+            (config, ConfigProvenance::V6)
         );
         assert!(serialized.contains("selectedCohortId"));
     }
@@ -418,24 +431,22 @@ mod tests {
             }),
             serde_json::json!({
                 "schema": "jungle-bell.desktop-settings",
-                "schemaVersion": 5,
+                "schemaVersion": 6,
                 "settings": {
                     "autoStart": true,
-                    "autoUpdate": true,
                     "usageAnalytics": null,
                     "debugMode": false
                 }
             }),
             serde_json::json!({
                 "schema": "jungle-bell.desktop-settings",
-                "schemaVersion": 5,
+                "schemaVersion": 6,
                 "settings": {
                     "autoStart": true,
-                    "autoUpdate": true,
                     "usageAnalytics": null,
                     "debugMode": false,
                     "selectedCohortId": null,
-                    "unknown": true
+                    "autoUpdate": true
                 }
             }),
             serde_json::json!({ "autoStart": true }),
@@ -445,7 +456,7 @@ mod tests {
     }
 
     #[test]
-    fn v3_설정은_통계_거부를_보존해_v5로_원자적_마이그레이션한다() {
+    fn v3_설정은_통계_거부를_보존해_v6로_원자적_마이그레이션한다() {
         let path = temporary_path("v3-migration");
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(
@@ -469,12 +480,12 @@ mod tests {
 
         assert_eq!(loaded.provenance, ConfigProvenance::V3);
         assert!(loaded.config.auto_start);
-        assert!(!loaded.config.auto_update);
         assert_eq!(loaded.config.usage_analytics, Some(false));
         assert!(loaded.config.debug_mode);
         assert_eq!(loaded.config.selected_cohort_id.as_deref(), Some("cohort-10"));
         let rewritten = fs::read_to_string(&path).unwrap();
-        assert!(rewritten.contains("\"schemaVersion\": 5"));
+        assert!(rewritten.contains("\"schemaVersion\": 6"));
+        assert!(!rewritten.contains("autoUpdate"));
         assert!(rewritten.contains("\"usageAnalytics\": false"));
         fs::remove_file(path).unwrap();
     }
@@ -506,10 +517,10 @@ mod tests {
             "schema": "jungle-bell.desktop-settings",
             "schemaVersion": 4,
             "settings": {
-                "autoStart": false,
-                "autoUpdate": true,
-                "debugMode": false,
-                "selectedCohortId": null
+                "autoStart": true,
+                "autoUpdate": false,
+                "debugMode": true,
+                "selectedCohortId": "cohort-10"
             }
         });
         fs::write(&path, document.to_string()).unwrap();
@@ -517,10 +528,50 @@ mod tests {
         let loaded = Config::load_from(&path);
 
         assert_eq!(loaded.provenance, ConfigProvenance::V4);
+        assert!(loaded.config.auto_start);
         assert_eq!(loaded.config.usage_analytics, None);
+        assert!(loaded.config.debug_mode);
+        assert_eq!(loaded.config.selected_cohort_id.as_deref(), Some("cohort-10"));
         let rewritten = fs::read_to_string(&path).unwrap();
-        assert!(rewritten.contains("\"schemaVersion\": 5"));
+        assert!(rewritten.contains("\"schemaVersion\": 6"));
+        assert!(!rewritten.contains("autoUpdate"));
         assert!(rewritten.contains("\"usageAnalytics\": null"));
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn v5의_자동_업데이트_거부는_폐기하고_나머지_설정을_v6로_마이그레이션한다() {
+        let path = temporary_path("v5-migration");
+        fs::write(
+            &path,
+            serde_json::json!({
+                "schema": "jungle-bell.desktop-settings",
+                "schemaVersion": 5,
+                "settings": {
+                    "autoStart": true,
+                    "autoUpdate": false,
+                    "usageAnalytics": false,
+                    "debugMode": true,
+                    "selectedCohortId": "cohort-10"
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let loaded = Config::load_from(&path);
+
+        assert_eq!(loaded.provenance, ConfigProvenance::V5);
+        assert!(loaded.config.auto_start);
+        assert_eq!(loaded.config.usage_analytics, Some(false));
+        assert!(loaded.config.debug_mode);
+        assert_eq!(loaded.config.selected_cohort_id.as_deref(), Some("cohort-10"));
+        let rewritten: serde_json::Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(rewritten["schemaVersion"], 6);
+        assert_eq!(rewritten["settings"].get("autoUpdate"), None);
+        let reloaded = Config::load_from(&path);
+        assert_eq!(reloaded.provenance, ConfigProvenance::V6);
+        assert_eq!(reloaded.config, loaded.config);
         fs::remove_file(path).unwrap();
     }
 
@@ -575,7 +626,6 @@ mod tests {
 
         assert_eq!(loaded.provenance, ConfigProvenance::V3);
         assert!(loaded.config.auto_start);
-        assert!(!loaded.config.auto_update);
         assert_eq!(loaded.config.usage_analytics, Some(false));
         assert!(loaded.config.debug_mode);
         fs::remove_file(path).unwrap();

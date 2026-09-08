@@ -83,12 +83,11 @@ describe('DesktopUpdateGate', () => {
         expect(routeRenderCount).toBe(1);
     });
 
-    test('PC 앱은 업데이트 확인이 끝날 때까지 대시보드를 차단한다', () => {
+    test('PC 앱도 업데이트 확인 중에 대시보드를 연다', () => {
         const markup = renderGate({platform: 'desktop', pending: true});
 
-        expect(markup).toContain('최신 버전을 확인하고 있습니다.');
-        expect(markup).not.toContain('data-route-content');
-        expect(routeRenderCount).toBe(0);
+        expect(markup).toContain('대시보드');
+        expect(routeRenderCount).toBe(1);
     });
 
     test('같은 minor의 patch 업데이트는 대시보드를 차단하지 않는다', () => {
@@ -115,12 +114,21 @@ describe('DesktopUpdateGate', () => {
         expect(routeRenderCount).toBe(0);
     });
 
-    test('업데이트 확인 실패도 우회하지 않고 재시도를 제공한다', () => {
+    test('업데이트 확인 실패는 대시보드를 차단하지 않는다', () => {
         const markup = renderGate({platform: 'desktop', error: true});
 
-        expect(markup).toContain('업데이트 정보를 확인하지 못했습니다.');
-        expect(markup).toContain('다시 확인');
-        expect(markup).not.toContain('data-route-content');
-        expect(routeRenderCount).toBe(0);
+        expect(markup).toContain('대시보드');
+        expect(routeRenderCount).toBe(1);
+    });
+
+    test('실패한 재확인에 기존 mandatory 데이터가 남아 있어도 대시보드를 차단하지 않는다', () => {
+        const markup = renderGate({
+            platform: 'desktop',
+            data: {currentVersion: '0.5.4', availableVersion: '0.6.0', mandatory: true},
+            error: true,
+        });
+
+        expect(markup).toContain('대시보드');
+        expect(routeRenderCount).toBe(1);
     });
 });

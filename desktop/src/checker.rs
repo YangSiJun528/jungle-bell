@@ -383,6 +383,9 @@ pub(crate) fn build_webview(app: &tauri::AppHandle) -> tauri::Result<tauri::Webv
 }
 
 pub(crate) fn show_lms_window(app: &tauri::AppHandle) -> Result<(), String> {
+    if !crate::updater::mark_foreground_session(app) {
+        return Err("UPDATE_INSTALL_IN_PROGRESS".to_owned());
+    }
     let window = app
         .get_webview_window("checker")
         .ok_or_else(|| "LMS_CHECKER_UNAVAILABLE".to_string())?;

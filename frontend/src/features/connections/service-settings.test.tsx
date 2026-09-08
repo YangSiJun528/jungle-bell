@@ -30,7 +30,6 @@ vi.mock('@/app/dashboard-context', () => ({
 const settings: DesktopSettings = {
     appVersion: '0.5.0-beta.1',
     autoStart: true,
-    autoUpdate: true,
     usageAnalytics: null,
     usageAnalyticsSyncPending: false,
     debugMode: false,
@@ -60,9 +59,13 @@ function renderSettings(value: DesktopSettings = settings): string {
 describe('ServiceSettings', () => {
     test('데스크톱 로컬 기능을 실제 설정 컨트롤로 표시한다', () => {
         const markup = renderSettings();
-        for (const label of ['자동 시작', '자동 업데이트', '사용 통계', '디버그 모드']) {
+        for (const label of ['자동 시작', '사용 통계', '디버그 모드']) {
             expect(markup).toContain(`aria-label="${label}"`);
         }
+        expect(markup).not.toContain('aria-label="자동 업데이트"');
+        expect(source).not.toContain('자동 업데이트를 끌까요?');
+        expect(markup).toContain('항상 새 버전을 확인하며');
+        expect(markup).toContain('항상 사용');
         expect(markup).toContain('로그 폴더');
         expect(markup).toContain('앱 버전');
         expect(markup).toContain('v0.5.0-beta.1');

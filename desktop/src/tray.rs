@@ -589,6 +589,10 @@ pub fn open_dashboard_window(app: &tauri::AppHandle) {
 }
 
 fn open_dashboard_route_now(app: &tauri::AppHandle, route: DashboardRoute) {
+    if !crate::updater::mark_foreground_session(app) {
+        log::info!("[dashboard] 업데이트 설치 중이라 창 열기를 건너뜁니다");
+        return;
+    }
     log::info!("[dashboard] route opened: {}", route.as_str());
     if let Some(window) = app.get_webview_window("dashboard") {
         show_foreground_app(app);
@@ -613,7 +617,7 @@ where
 }
 
 /// 시스템 트레이 생성: 상태 아이콘, 대시보드 열기, 종료를 설정한다.
-pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+pub fn setup_tray(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let initial_view = {
         let state: tauri::State<Arc<TokioMutex<AppState>>> = app.state();
         let state = state.try_lock().map_err(|_| "초기 앱 상태 잠금 실패")?;

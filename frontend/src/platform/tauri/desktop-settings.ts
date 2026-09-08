@@ -91,7 +91,6 @@ function parseDesktopSettings(value: unknown): DesktopSettings {
     const keys = [
         'appVersion',
         'autoStart',
-        'autoUpdate',
         'usageAnalytics',
         'usageAnalyticsSyncPending',
         'debugMode',
@@ -102,10 +101,9 @@ function parseDesktopSettings(value: unknown): DesktopSettings {
     if (Object.keys(source).length !== keys.length || keys.some((key) => !hasOwn(source, key))) {
         throw invalidResponse();
     }
-    const {autoStart, autoUpdate, usageAnalyticsSyncPending, debugMode} = source;
+    const {autoStart, usageAnalyticsSyncPending, debugMode} = source;
     if (
         typeof autoStart !== 'boolean' ||
-        typeof autoUpdate !== 'boolean' ||
         typeof usageAnalyticsSyncPending !== 'boolean' ||
         typeof debugMode !== 'boolean'
     ) {
@@ -121,7 +119,6 @@ function parseDesktopSettings(value: unknown): DesktopSettings {
     return {
         appVersion: source.appVersion,
         autoStart,
-        autoUpdate,
         usageAnalytics,
         usageAnalyticsSyncPending,
         debugMode,
@@ -135,9 +132,7 @@ function desktopSettingsInput(input: DesktopSettingsUpdate): DesktopSettingsUpda
     if (
         !input ||
         typeof input !== 'object' ||
-        [input.autoStart, input.autoUpdate, input.debugMode].some(
-            (value) => typeof value !== 'boolean',
-        ) ||
+        [input.autoStart, input.debugMode].some((value) => typeof value !== 'boolean') ||
         (input.usageAnalytics !== null && typeof input.usageAnalytics !== 'boolean')
     ) {
         throw new Error('API_CLIENT_INVALID_ARGUMENT');
@@ -148,7 +143,6 @@ function desktopSettingsInput(input: DesktopSettingsUpdate): DesktopSettingsUpda
     );
     return {
         autoStart: input.autoStart,
-        autoUpdate: input.autoUpdate,
         usageAnalytics: input.usageAnalytics,
         debugMode: input.debugMode,
         selectedCohortId,

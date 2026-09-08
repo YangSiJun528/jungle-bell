@@ -46,6 +46,12 @@ impl DesktopSettingsService {
         }
     }
 
+    /// updater가 프로세스를 종료할 수 있는 구간에는 기존 저장을 기다리고 새
+    /// 설정 저장도 시작되지 않도록 guard를 호출자에게 넘긴다.
+    pub(crate) async fn lock_writes_for_update(&self) -> tokio::sync::MutexGuard<'_, ()> {
+        self.writes.lock().await
+    }
+
     async fn persist(&self, config: Config) -> Result<(), String> {
         let path = self
             .path
@@ -174,7 +180,6 @@ mod tests {
     fn 설정_읽기는_데스크톱_서비스_항목을_노출한다() {
         let expected = Config {
             auto_start: true,
-            auto_update: false,
             usage_analytics: Some(false),
             debug_mode: true,
             selected_cohort_id: None,
@@ -182,6 +187,19 @@ mod tests {
         let state = Arc::new(Mutex::new(AppState::new(expected.clone())));
         let service = DesktopSettingsService::with_path(state, None);
         assert_eq!(tauri::async_runtime::block_on(service.settings()), expected);
+    }
+
+    #[test]
+    fn 업데이트_종료_guard는_유지되는_동안_새_설정_저장을_막는다() {
+        let state = Arc::new(Mutex::new(AppState::new(Config::default())));
+        let service = DesktopSettingsService::with_path(state, None);
+
+        tauri::async_runtime::block_on(async {
+            let guard = service.lock_writes_for_update().await;
+            assert!(service.writes.try_lock().is_err());
+            drop(guard);
+            assert!(service.writes.try_lock().is_ok());
+        });
     }
 
     #[test]
