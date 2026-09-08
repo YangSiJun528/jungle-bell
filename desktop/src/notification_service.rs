@@ -1,6 +1,8 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
+#[cfg(not(target_os = "macos"))]
 use notify_rust::{Notification, NotificationResponse};
 
 use crate::notification_inbox::NotificationInboxService;
@@ -11,6 +13,14 @@ const OPEN_ACTION_ID: &str = "open";
 const SYSTEM_NOTIFICATION_TIMEOUT_MS: u32 = 14 * 60 * 1_000;
 const MAX_ACTION_RESPONSE_LISTENERS: usize = 64;
 static ACTIVE_ACTION_RESPONSE_LISTENERS: AtomicUsize = AtomicUsize::new(0);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum SystemNotificationResponse {
+    Default,
+    Action(String),
+    Reply,
+    Closed,
+}
 
 impl NotificationAction {
     fn button_label(self) -> &'static str {
@@ -69,7 +79,7 @@ impl NotificationService {
     pub fn initialize_system_backend(&self) -> Result<(), String> {
         #[cfg(target_os = "macos")]
         {
-            match notify_rust::request_auth_blocking() {
+            match mac_usernotifications::blocking::request_auth() {
                 Ok(true) => Ok(()),
                 Ok(false) => Err("macOS 알림 권한이 거부되었습니다.".into()),
                 Err(error) => Err(format!("macOS 알림 권한 확인 실패: {error}")),
@@ -154,21 +164,48 @@ impl Drop for ActionResponseListenerSlot {
     }
 }
 
-fn opens_action(response: &NotificationResponse, action: Option<NotificationAction>) -> bool {
+fn opens_action(response: &SystemNotificationResponse, action: Option<NotificationAction>) -> bool {
     match response {
-        NotificationResponse::Default => true,
-        NotificationResponse::Action(value) => {
+        SystemNotificationResponse::Default => true,
+        SystemNotificationResponse::Action(value) => {
             action.is_some_and(|action| value == OPEN_ACTION_ID || value == action.button_label())
         }
-        NotificationResponse::Reply(_) | NotificationResponse::Closed(_) => false,
+        SystemNotificationResponse::Reply | SystemNotificationResponse::Closed => false,
     }
 }
 
+fn response_timeout_duration(action: Option<NotificationAction>) -> Option<Duration> {
+    action.map(|_| Duration::from_millis(u64::from(SYSTEM_NOTIFICATION_TIMEOUT_MS)))
+}
+
+#[cfg(not(target_os = "macos"))]
 fn response_timeout(action: Option<NotificationAction>) -> notify_rust::Timeout {
-    if action.is_some() {
-        notify_rust::Timeout::Milliseconds(SYSTEM_NOTIFICATION_TIMEOUT_MS)
+    match response_timeout_duration(action) {
+        Some(_) => notify_rust::Timeout::Milliseconds(SYSTEM_NOTIFICATION_TIMEOUT_MS),
+        None => notify_rust::Timeout::Default,
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn normalize_system_response(response: &mac_usernotifications::NotificationResponse) -> SystemNotificationResponse {
+    if response.is_default_action() {
+        SystemNotificationResponse::Default
+    } else if response.is_reply() {
+        SystemNotificationResponse::Reply
+    } else if response.close_reason.is_some() {
+        SystemNotificationResponse::Closed
     } else {
-        notify_rust::Timeout::Default
+        SystemNotificationResponse::Action(response.action_identifier.clone())
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn normalize_system_response(response: &NotificationResponse) -> SystemNotificationResponse {
+    match response {
+        NotificationResponse::Default => SystemNotificationResponse::Default,
+        NotificationResponse::Action(value) => SystemNotificationResponse::Action(value.clone()),
+        NotificationResponse::Reply(_) => SystemNotificationResponse::Reply,
+        NotificationResponse::Closed(_) => SystemNotificationResponse::Closed,
     }
 }
 
@@ -222,6 +259,96 @@ pub fn show_system(
     notification_id: String,
     inbox: Arc<NotificationInboxService>,
 ) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        show_system_macos(app, title, body, action, notification_id, inbox)
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        show_system_notify_rust(app, title, body, action, notification_id, inbox)
+    }
+}
+
+fn handle_system_response(
+    app: &tauri::AppHandle,
+    inbox: &NotificationInboxService,
+    notification_id: &str,
+    action: Option<NotificationAction>,
+    response: &SystemNotificationResponse,
+) {
+    if !opens_action(response, action) {
+        return;
+    }
+    if let Err(error) = inbox.mark_read_without_activation(app, notification_id) {
+        log::warn!("[notification] inbox read failed: {error}");
+    }
+    if let Err(error) = tray::open_dashboard_route(app, system_notification_dashboard_route(action)) {
+        log::warn!("[notification] system action failed: {error}");
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn show_system_macos(
+    app: &tauri::AppHandle,
+    title: &str,
+    body: &str,
+    action: Option<NotificationAction>,
+    notification_id: String,
+    inbox: Arc<NotificationInboxService>,
+) -> Result<(), String> {
+    let mut notification = mac_usernotifications::Notification::new()
+        .title(title)
+        .message(body)
+        .sound("Ping");
+
+    if let Some(action) = action {
+        notification = notification.action(mac_usernotifications::Action::button(
+            OPEN_ACTION_ID,
+            action.button_label(),
+        ));
+        if let Some(timeout) = response_timeout_duration(Some(action)) {
+            notification = notification.timeout(timeout);
+        }
+    }
+
+    let listener_slot = ActionResponseListenerSlot::reserve();
+    let handle = notification
+        .send_blocking()
+        .map_err(|error| format!("운영체제 알림 표시 실패: {error}"))?;
+
+    let Some(listener_slot) = listener_slot else {
+        log::warn!("[notification] action response listener limit reached; notification shown without a new listener");
+        drop(handle);
+        return Ok(());
+    };
+
+    let app = app.clone();
+    // TODO(notify-rust#277): notify-rust v5에서 async `NotificationHandle::response().await`를
+    // 공개하면 이 macOS 전용 어댑터를 제거하고 notify-rust 공통 백엔드로 전환한다.
+    tauri::async_runtime::spawn(async move {
+        let _listener_slot = listener_slot;
+        match handle.response().await {
+            Ok(response) => {
+                let response = normalize_system_response(&response);
+                handle_system_response(&app, &inbox, &notification_id, action, &response);
+            }
+            Err(error) => log::debug!("[notification] response listener ended: {error}"),
+        }
+    });
+
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn show_system_notify_rust(
+    app: &tauri::AppHandle,
+    title: &str,
+    body: &str,
+    action: Option<NotificationAction>,
+    notification_id: String,
+    inbox: Arc<NotificationInboxService>,
+) -> Result<(), String> {
     let mut notification = Notification::new();
     notification
         .appname("Jungle Bell")
@@ -231,11 +358,6 @@ pub fn show_system(
 
     if let Some(action) = action {
         notification.action(OPEN_ACTION_ID, action.button_label());
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        notification.sound_name("Ping");
     }
 
     #[cfg(windows)]
@@ -256,15 +378,8 @@ pub fn show_system(
     tauri::async_runtime::spawn_blocking(move || {
         let _listener_slot = listener_slot;
         if let Err(error) = handle.wait_for_response(move |response: &NotificationResponse| {
-            if !opens_action(response, action) {
-                return;
-            }
-            if let Err(error) = inbox.mark_read_without_activation(&app, &notification_id) {
-                log::warn!("[notification] inbox read failed: {error}");
-            }
-            if let Err(error) = tray::open_dashboard_route(&app, system_notification_dashboard_route(action)) {
-                log::warn!("[notification] system action failed: {error}");
-            }
+            let response = normalize_system_response(response);
+            handle_system_response(&app, &inbox, &notification_id, action, &response);
         }) {
             log::debug!("[notification] response listener ended: {error}");
         }
@@ -307,38 +422,97 @@ mod tests {
     fn 기본_클릭과_열기_버튼만_요청된_액션을_실행한다() {
         let action = NotificationAction::Attendance;
 
-        assert!(opens_action(&NotificationResponse::Default, Some(action)));
+        assert!(opens_action(&SystemNotificationResponse::Default, Some(action)));
         assert!(opens_action(
-            &NotificationResponse::Action(OPEN_ACTION_ID.into()),
+            &SystemNotificationResponse::Action(OPEN_ACTION_ID.into()),
             Some(action)
         ));
         assert!(opens_action(
-            &NotificationResponse::Action(action.button_label().into()),
+            &SystemNotificationResponse::Action(action.button_label().into()),
             Some(action)
         ));
         assert!(!opens_action(
-            &NotificationResponse::Action("other".into()),
+            &SystemNotificationResponse::Action("other".into()),
             Some(action)
         ));
-        assert!(!opens_action(&NotificationResponse::Reply("답장".into()), Some(action)));
+        assert!(!opens_action(&SystemNotificationResponse::Reply, Some(action)));
+        assert!(!opens_action(&SystemNotificationResponse::Closed, Some(action)));
+        assert!(opens_action(&SystemNotificationResponse::Default, None));
         assert!(!opens_action(
-            &NotificationResponse::Closed(notify_rust::CloseReason::Dismissed),
-            Some(action)
-        ));
-        assert!(opens_action(&NotificationResponse::Default, None));
-        assert!(!opens_action(
-            &NotificationResponse::Action(OPEN_ACTION_ID.into()),
+            &SystemNotificationResponse::Action(OPEN_ACTION_ID.into()),
             None
         ));
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
-    fn 정보성_알림은_os_기본_만료를_사용하고_화면_이동_알림만_listener를_제한한다() {
+    fn macos_응답을_공통_액션으로_정규화한다() {
+        let default = mac_usernotifications::NotificationResponse {
+            notification_id: "default".into(),
+            action_identifier: "com.apple.UNNotificationDefaultActionIdentifier".into(),
+            reply_text: None,
+            close_reason: None,
+        };
+        let action = mac_usernotifications::NotificationResponse {
+            notification_id: "action".into(),
+            action_identifier: OPEN_ACTION_ID.into(),
+            reply_text: None,
+            close_reason: None,
+        };
+        let reply = mac_usernotifications::NotificationResponse {
+            notification_id: "reply".into(),
+            action_identifier: "reply".into(),
+            reply_text: Some("답장".into()),
+            close_reason: None,
+        };
+        let timeout = mac_usernotifications::NotificationResponse {
+            notification_id: "timeout".into(),
+            action_identifier: String::new(),
+            reply_text: None,
+            close_reason: Some(mac_usernotifications::CloseReason::Expired),
+        };
+
+        assert_eq!(normalize_system_response(&default), SystemNotificationResponse::Default);
+        assert_eq!(
+            normalize_system_response(&action),
+            SystemNotificationResponse::Action(OPEN_ACTION_ID.into())
+        );
+        assert_eq!(normalize_system_response(&reply), SystemNotificationResponse::Reply);
+        assert_eq!(normalize_system_response(&timeout), SystemNotificationResponse::Closed);
+    }
+
+    #[test]
+    fn 정보성_알림은_만료되지_않고_화면_이동_알림만_14분_뒤_만료한다() {
+        assert_eq!(response_timeout_duration(None), None);
+        assert_eq!(
+            response_timeout_duration(Some(NotificationAction::Attendance)),
+            Some(std::time::Duration::from_millis(u64::from(
+                SYSTEM_NOTIFICATION_TIMEOUT_MS
+            )))
+        );
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn notify_rust_timeout_계약을_유지한다() {
         assert_eq!(response_timeout(None), notify_rust::Timeout::Default);
         assert_eq!(
             response_timeout(Some(NotificationAction::Attendance)),
             notify_rust::Timeout::Milliseconds(SYSTEM_NOTIFICATION_TIMEOUT_MS)
         );
+    }
+
+    #[test]
+    fn 응답_listener는_64개로_제한되고_slot_drop으로_반환된다() {
+        assert_eq!(ACTIVE_ACTION_RESPONSE_LISTENERS.load(Ordering::Acquire), 0);
+
+        let slots = (0..MAX_ACTION_RESPONSE_LISTENERS)
+            .map(|_| ActionResponseListenerSlot::reserve().expect("listener slot"))
+            .collect::<Vec<_>>();
+        assert!(ActionResponseListenerSlot::reserve().is_none());
+
+        drop(slots);
+        assert_eq!(ACTIVE_ACTION_RESPONSE_LISTENERS.load(Ordering::Acquire), 0);
     }
 
     #[test]
