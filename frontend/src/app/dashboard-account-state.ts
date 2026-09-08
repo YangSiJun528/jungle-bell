@@ -199,11 +199,16 @@ export function dashboardAccountStatus(
             lmsAuthentication: 'not-applicable',
         };
     }
-    if (!query.data) {
-        const unavailable = query.isError && !query.isPending;
+    if (query.isError) {
         return {
-            serverSession: unavailable ? 'unavailable' : 'checking',
-            lmsAuthentication: unavailable ? 'unavailable' : 'checking',
+            serverSession: 'unavailable',
+            lmsAuthentication: 'unavailable',
+        };
+    }
+    if (!query.data) {
+        return {
+            serverSession: 'checking',
+            lmsAuthentication: 'checking',
         };
     }
 

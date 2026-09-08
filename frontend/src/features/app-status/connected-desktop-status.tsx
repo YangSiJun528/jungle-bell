@@ -1,10 +1,13 @@
 import {useQuery} from '@tanstack/react-query';
+import {CircleAlert, RefreshCw} from 'lucide-react';
 
 import {useDashboardAccount} from '@/app/dashboard-account';
 import {serverSessionReady} from '@/app/dashboard-account-state';
 import {queryKeys, useDashboardEnvironment} from '@/app/dashboard-context';
 import {useDesktopUpdateQuery} from '@/app/desktop-update-query';
 import {useAttendanceQuery} from '@/app/use-dashboard-queries';
+import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
+import {Button} from '@/components/ui/button';
 import {
     NOTIFICATION_TEST_QUERY_KEY,
     readNotificationTestRecord,
@@ -14,26 +17,13 @@ import {
 import type {AppStatusTab, DesktopAppStatusInput} from './app-status-model';
 import {desktopUpdateObservationFromQuery} from './app-status-observations';
 import {AppStatusPanel} from './app-status-panel';
-
-function desktopLastSyncedAt(
-    personalAccess: ReturnType<typeof useDashboardAccount>['personalAccess']['status'],
-    attendance: ReturnType<typeof useAttendanceQuery>,
-): DesktopAppStatusInput['lastSyncedAt'] {
-    if (attendance.data?.state === 'loaded') {
-        const value = attendance.data.attendance;
-        if (value.status !== 'available') return value.lastSyncedAt;
-        if (value.syncState === 'pending') {
-            return {kind: 'pending', observedAt: value.lastSyncedAt};
-        }
-        return value.freshness === 'stale'
-            ? {kind: 'stale', observedAt: value.lastSyncedAt}
-            : value.lastSyncedAt;
-    }
-    if (personalAccess !== 'connected') return 'unavailable';
-    if (attendance.isPending) return 'checking';
-    if (attendance.isError) return 'unavailable';
-    return null;
-}
+import {
+    desktopLastSyncedAt,
+    desktopMobileSessionCount,
+    failedDesktopStatusProducers,
+    retryFailedDesktopStatusProducers,
+    type DesktopStatusProducer,
+} from './connected-desktop-status-state';
 
 function useDesktopMobileSessions(personalReady: boolean) {
     const {api} = useDashboardEnvironment();
@@ -46,22 +36,48 @@ function useDesktopMobileSessions(personalReady: boolean) {
     });
 }
 
-function desktopMobileSessionCount(
-    personalReady: boolean,
-    sessions: ReturnType<typeof useDesktopMobileSessions>,
-): DesktopAppStatusInput['mobileSessionCount'] {
-    if (sessions.data) return sessions.data.filter(({status}) => status === 'active').length;
-    if (!personalReady) return 'unavailable';
-    if (sessions.isPending) return 'checking';
-    return 'unavailable';
-}
-
 function notificationTestStorage(): Storage {
     try {
         return window.localStorage;
     } catch (error) {
         throw new Error('NOTIFICATION_TEST_STORAGE_UNAVAILABLE', {cause: error});
     }
+}
+
+function DesktopStatusRefreshFailure({failures}: {failures: readonly DesktopStatusProducer[]}) {
+    if (failures.length === 0) return null;
+
+    const labels = failures.map(({label}) => label).join(', ');
+    const cachedCount = failures.filter(({data}) => data !== undefined).length;
+    const retrying = failures.some(({isFetching}) => isFetching);
+    return (
+        <Alert variant="destructive">
+            <CircleAlert aria-hidden="true" />
+            <AlertTitle>일부 앱 상태를 다시 확인하지 못했습니다.</AlertTitle>
+            <AlertDescription>
+                <p>
+                    {labels} 최신 상태를 확인하지 못했습니다.{' '}
+                    {cachedCount > 0
+                        ? '이전 확인값은 참고용으로만 유지하며 정상 상태로 판정하지 않습니다. '
+                        : null}
+                    네트워크를 확인한 뒤 다시 시도하세요.
+                </p>
+                <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={retrying}
+                    onClick={() => void retryFailedDesktopStatusProducers(failures)}
+                >
+                    <RefreshCw
+                        aria-hidden="true"
+                        className={retrying ? 'animate-spin' : undefined}
+                    />
+                    {retrying ? '다시 확인 중' : '실패한 상태 다시 확인'}
+                </Button>
+            </AlertDescription>
+        </Alert>
+    );
 }
 
 export function ConnectedDesktopStatus({onOpenTab}: {onOpenTab?: (tab: AppStatusTab) => void}) {
@@ -78,6 +94,43 @@ export function ConnectedDesktopStatus({onOpenTab}: {onOpenTab?: (tab: AppStatus
     const {update} = useDesktopUpdateQuery();
     const restoredNotificationTest: NotificationTestRecord | null =
         notificationTest.data?.surface === 'pc' ? notificationTest.data : null;
+    const failures = failedDesktopStatusProducers([
+        {
+            label: 'PC 연결',
+            data: account.connectionQuery.data,
+            isError: account.connectionQuery.isError,
+            isFetching: account.connectionQuery.isFetching,
+            refetch: () => account.connectionQuery.refetch(),
+        },
+        {
+            label: '출석 동기화',
+            data: attendance.data,
+            isError: attendance.isError,
+            isFetching: attendance.isFetching,
+            refetch: () => attendance.refetch(),
+        },
+        {
+            label: '모바일 세션',
+            data: sessions.data,
+            isError: sessions.isError,
+            isFetching: sessions.isFetching,
+            refetch: () => sessions.refetch(),
+        },
+        {
+            label: '알림 테스트 기록',
+            data: notificationTest.data,
+            isError: notificationTest.isError,
+            isFetching: notificationTest.isFetching,
+            refetch: () => notificationTest.refetch(),
+        },
+        {
+            label: '앱 업데이트',
+            data: update.data,
+            isError: update.isError,
+            isFetching: update.isFetching,
+            refetch: () => update.refetch(),
+        },
+    ]);
     const input: DesktopAppStatusInput = {
         surface: 'desktop',
         lmsAuthentication: account.status.lmsAuthentication,
@@ -91,5 +144,10 @@ export function ConnectedDesktopStatus({onOpenTab}: {onOpenTab?: (tab: AppStatus
               : restoredNotificationTest,
         update: desktopUpdateObservationFromQuery(update),
     };
-    return <AppStatusPanel input={input} onOpenTab={onOpenTab} />;
+    return (
+        <div className="space-y-4">
+            <DesktopStatusRefreshFailure failures={failures} />
+            <AppStatusPanel input={input} onOpenTab={onOpenTab} />
+        </div>
+    );
 }
