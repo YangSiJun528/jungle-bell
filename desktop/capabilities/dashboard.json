@@ -9,10 +9,21 @@
       "identifier": "opener:allow-open-url",
       "allow": [
         { "url": "https://github.com/YangSiJun528/jungle-bell" },
+        {
+          "url": "https://github.com/YangSiJun528/jungle-bell#%EC%84%A4%EC%B9%98"
+        },
         { "url": "https://github.com/YangSiJun528/jungle-bell/issues/new/choose" },
-        { "url": "https://github.com/YangSiJun528/jungle-bell/releases/latest" }
+        { "url": "https://github.com/YangSiJun528/jungle-bell/releases/latest" },
+        { "url": "https://jungle-lms.krafton.com/check-in" },
+        { "url": "https://pf.kakao.com/_xhzNjn/*" },
+        {
+          "url": "https://jungle-bell.sijun-yang.com/api/public/assets/*"
+        }
       ]
     },
+    "allow-get-desktop-lifecycle-status",
+    "allow-acknowledge-and-hide-to-tray",
+    "allow-quit-desktop-app",
     "allow-bootstrap-desktop-http-session",
     "allow-get-desktop-settings",
     "allow-check-desktop-update",

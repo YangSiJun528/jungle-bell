@@ -11,6 +11,10 @@ const manifest = JSON.parse(
 const dashboardApi = readFileSync(new URL('./api/dashboard-api.ts', srcRoot), 'utf8');
 const worker = readFileSync(new URL('./platform/pwa/service-worker/sw.js', srcRoot), 'utf8');
 const pwaAdapter = readFileSync(new URL('./platform/pwa/adapter.ts', srcRoot), 'utf8');
+const pwaUpdateLifecycle = readFileSync(
+    new URL('./platform/pwa/update-lifecycle.ts', srcRoot),
+    'utf8',
+);
 const headers = readFileSync(new URL('./platform/pwa/public/_headers', srcRoot), 'utf8');
 const webIcon = readFileSync(new URL('./platform/pwa/public/icons/icon.svg', srcRoot), 'utf8');
 const vite = readFileSync(new URL('../vite.config.ts', srcRoot), 'utf8');
@@ -69,8 +73,14 @@ test('공개 상태·세탁·급식 API는 과거 급식 페이지까지 network
     assert.match(worker, /maxAgeSeconds:\s*SEVEN_DAYS_SECONDS/);
 });
 
-test('새 service worker는 기존 React client가 닫힐 때까지 waiting 상태를 유지한다', () => {
-    assert.doesNotMatch(worker, /\bskipWaiting\s*\(/);
+test('새 service worker는 입력 보존 handshake 전까지 waiting 상태를 유지한다', () => {
+    assert.match(worker, /JUNGLE_BELL_ACTIVATE_UPDATE/);
+    assert.match(worker, /self\.addEventListener\(['"]message['"]/);
+    assert.match(worker, /self\.skipWaiting\(\)/);
+    assert.match(pwaUpdateLifecycle, /prepareForReload/);
+    assert.match(pwaUpdateLifecycle, /controllerchange/);
+    assert.match(pwaUpdateLifecycle, /JUNGLE_BELL_ACTIVATE_UPDATE/);
+    assert.doesNotMatch(worker, /self\.addEventListener\(['"]install['"][\s\S]*skipWaiting/);
     assert.doesNotMatch(pwaAdapter, /SKIP_WAITING|registration\.waiting\.postMessage/);
     assert.match(worker, /cleanupOutdatedCaches\(\)/);
     assert.match(worker, /LEGACY_CACHE_PREFIX\s*=\s*['"]jungle-bell-dashboard-['"]/);
