@@ -89,6 +89,7 @@ describe('AttendancePreferencesSection', () => {
             expect(markup).toContain(`aria-label="${label}"`);
         }
         expect(markup.match(/data-slot="switch-row"/gu)).toHaveLength(5);
+        expect(markup.match(/<label[^>]*data-slot="switch-row"/gu)).toHaveLength(5);
         expect(markup.match(/role="switch"[^>]+aria-labelledby=/gu)).toHaveLength(5);
         expect(markup).toContain('출석 알림 저장');
         expect(markup).toContain('상태 확인 불가 시 시작 시각·2시간 뒤·10시에 알립니다.');
