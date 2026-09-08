@@ -13,6 +13,7 @@ const dashboardRouter = source('./app/dashboard-router.tsx');
 const routePages = source('./app/dashboard-route-pages.tsx');
 const context = source('./app/dashboard-context.tsx');
 const personalAccountGate = source('./app/personal-account-gate.tsx');
+const platformAuthenticationGate = source('./app/platform-authentication-gate.tsx');
 const personalFeatureSlot = source('./app/personal-feature-slot.tsx');
 const providers = source('./app/dashboard-providers.tsx');
 const desktopAttendanceEvent = source('./app/desktop-attendance-event.ts');
@@ -240,8 +241,9 @@ test('세탁 화면은 워시타워 상태표와 공통 계정 기능을 함께 
     assert.match(personalLaundry, /enabled: attendanceReady/);
     assert.match(personalLaundry, /<PersonalFeatureSlot>/);
     assert.match(personalFeatureSlot, /personalAccess\.status === 'connected' \? children : null/);
-    assert.match(personalAccountGate, /LMS 로그인이 필요합니다/);
-    assert.match(personalAccountGate, /계정 연결이 필요합니다/);
+    assert.match(personalAccountGate, /<PlatformAuthenticationGate>/);
+    assert.match(platformAuthenticationGate, /LMS 로그인이 필요합니다/);
+    assert.match(platformAuthenticationGate, /계정 연결이 필요합니다/);
 });
 
 test('설정 알림 탭은 연결된 기기의 출석·급식 설정을 함께 제공한다', () => {

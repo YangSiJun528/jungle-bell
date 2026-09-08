@@ -2,7 +2,6 @@ import {Outlet, useNavigate, useRouterState} from '@tanstack/react-router';
 import {lazy, useCallback, useEffect, useMemo, useState} from 'react';
 
 import {AsyncBoundary} from '@/components/dashboard/async-boundary';
-import {LoadingState} from '@/components/dashboard/async-state';
 import {InstallPrompt, useInstallPromptVisibility} from '@/platform/pwa/install-prompt';
 
 import {useDashboardEnvironment} from './dashboard-context';
@@ -24,6 +23,7 @@ import {
     DASHBOARD_ROUTE_META,
     dashboardRouteFromPath,
     dashboardRoutePath,
+    isPersonalDashboardRoute,
     type DashboardRoute,
 } from './routes';
 import {DashboardShell} from './shell';
@@ -34,28 +34,11 @@ const NotificationPanelContent = lazy(() =>
         default: module.NotificationPanelContent,
     })),
 );
-const CompanionConnections = lazy(() =>
-    import('@/features/connections/connections-page').then((module) => ({
-        default: module.CompanionConnections,
-    })),
-);
-
 export function DashboardApp() {
     const pathname = useRouterState({select: (state) => state.location.pathname});
     if (pathname === '/privacy') return <PublicRouteOutlet />;
 
-    return (
-        <PlatformAuthenticationGate
-            notice={<DesktopUpdateNotice />}
-            connectionContent={
-                <AsyncBoundary fallback={<LoadingState label="연결 화면을 준비하고 있습니다." />}>
-                    <CompanionConnections completionPath={null} />
-                </AsyncBoundary>
-            }
-        >
-            <DashboardContent />
-        </PlatformAuthenticationGate>
-    );
+    return <DashboardContent />;
 }
 
 function DashboardContent() {
@@ -150,7 +133,9 @@ function DashboardContent() {
             <NotificationOnboardingNotice />
             <DashboardRouteRuntimeProvider value={{contentRoute, openInstallPrompt}}>
                 <AsyncBoundary resetKeys={[contentRoute]}>
-                    <Outlet />
+                    <PlatformAuthenticationGate enabled={isPersonalDashboardRoute(contentRoute)}>
+                        <Outlet />
+                    </PlatformAuthenticationGate>
                 </AsyncBoundary>
             </DashboardRouteRuntimeProvider>
             <InstallPrompt open={installPromptOpen} onOpenChange={setInstallPromptVisibility} />

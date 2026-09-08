@@ -51,4 +51,49 @@ describe('dashboard router', () => {
         expect(normalizeLegacyDashboardHash('#/attendance')).toBeNull();
         expect(normalizeLegacyDashboardHash('#pairing=secret')).toBeNull();
     });
+
+    test('validates connections search on direct load and typed navigation', async () => {
+        const history = createMemoryHistory({
+            initialEntries: ['/connections?tab=devices&returnTo=%2Fattendance'],
+        });
+        const router = createDashboardRouter(history);
+
+        await router.load();
+        expect(router.state.matches.at(-1)?.search).toEqual({
+            tab: 'devices',
+            returnTo: '/attendance',
+        });
+
+        await router.navigate({to: '/connections', search: {tab: 'services'}});
+        expect(router.state.matches.at(-1)?.search).toEqual({tab: 'services'});
+    });
+
+    test('normalizes invalid connections search without retaining an unsafe return target', () => {
+        const history = createMemoryHistory({
+            initialEntries: ['/connections?tab=invalid&returnTo=%2F%2Fevil.example%2Fcallback'],
+        });
+        const router = createDashboardRouter(history);
+        const matches = router.matchRoutes(router.state.location);
+        const strictSearch = Reflect.get(matches.at(-1) ?? {}, '_strictSearch');
+
+        expect(strictSearch).toEqual({tab: 'notifications'});
+    });
+
+    test('restores connections tabs through browser back and forward history', async () => {
+        const history = createMemoryHistory({
+            initialEntries: ['/connections?tab=notifications'],
+        });
+        const router = createDashboardRouter(history);
+        await router.load();
+        await router.navigate({to: '/connections', search: {tab: 'services'}});
+        await router.navigate({to: '/connections', search: {tab: 'devices'}});
+
+        history.back();
+        await router.load();
+        expect(router.state.matches.at(-1)?.search).toEqual({tab: 'services'});
+
+        history.forward();
+        await router.load();
+        expect(router.state.matches.at(-1)?.search).toEqual({tab: 'devices'});
+    });
 });

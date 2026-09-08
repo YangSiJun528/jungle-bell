@@ -17,6 +17,7 @@ import {
     NotificationRoutePage,
 } from './dashboard-route-pages';
 import {PrivacyPage} from './privacy-page';
+import {validateConnectionsSearch} from './routes';
 
 const rootRoute = createRootRoute({component: DashboardApp});
 const indexRoute = createRoute({
@@ -52,6 +53,7 @@ const notificationsRoute = createRoute({
 const connectionsRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: 'connections',
+    validateSearch: validateConnectionsSearch,
     component: ConnectionsRoutePage,
 });
 const installRoute = createRoute({
@@ -87,6 +89,7 @@ function buildDashboardRouter(history: RouterHistory) {
         routeTree,
         history,
         defaultPreload: 'intent',
+        search: {strict: true},
         scrollRestoration: true,
     });
 }

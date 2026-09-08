@@ -1,3 +1,5 @@
+import type {SearchSchemaInput} from '@tanstack/react-router';
+
 export type DashboardRoute =
     | 'home'
     | 'attendance'
@@ -8,6 +10,12 @@ export type DashboardRoute =
     | 'install';
 
 export type DashboardRoutePath = `/${DashboardRoute}`;
+
+export type DashboardRouteAccess = 'mixed' | 'personal' | 'public';
+
+export const CONNECTIONS_TABS = ['notifications', 'services', 'devices'] as const;
+export type ConnectionsTab = (typeof CONNECTIONS_TABS)[number];
+export type DashboardReturnTarget = '/' | '/privacy' | Exclude<DashboardRoutePath, '/connections'>;
 
 export interface DashboardRouteMeta {
     label: string;
@@ -40,6 +48,39 @@ const SUPPORT_ROUTES = ['install'] as const satisfies readonly DashboardRoute[];
 
 const ALL_ROUTES = [...NAVIGATION_ROUTES, ...PERSONAL_UTILITY_ROUTES, ...SUPPORT_ROUTES] as const;
 
+const ROUTE_ACCESS = {
+    home: 'public',
+    attendance: 'personal',
+    laundry: 'public',
+    meals: 'public',
+    notifications: 'personal',
+    connections: 'mixed',
+    install: 'public',
+} as const satisfies Readonly<Record<DashboardRoute, DashboardRouteAccess>>;
+
+const DASHBOARD_RETURN_TARGETS = [
+    '/',
+    '/home',
+    '/attendance',
+    '/laundry',
+    '/meals',
+    '/notifications',
+    '/install',
+    '/privacy',
+] as const satisfies readonly DashboardReturnTarget[];
+
+export interface ConnectionsSearchInput {
+    tab?: ConnectionsTab;
+    returnTo?: DashboardReturnTarget;
+}
+
+export interface ConnectionsSearch {
+    tab: ConnectionsTab;
+    returnTo?: DashboardReturnTarget;
+}
+
+type ConnectionsSearchValidatorInput = ConnectionsSearchInput & SearchSchemaInput;
+
 function isDashboardRoute(value: string): value is DashboardRoute {
     return ALL_ROUTES.some((route) => route === value);
 }
@@ -54,6 +95,48 @@ export function dashboardNavigationRoutes(): readonly DashboardRoute[] {
 
 export function dashboardUtilityRoutes(): readonly DashboardRoute[] {
     return PERSONAL_UTILITY_ROUTES;
+}
+
+export function dashboardRouteAccess(route: DashboardRoute): DashboardRouteAccess {
+    return ROUTE_ACCESS[route];
+}
+
+export function isPublicDashboardRoute(route: DashboardRoute): boolean {
+    return dashboardRouteAccess(route) === 'public';
+}
+
+export function isPersonalDashboardRoute(route: DashboardRoute): boolean {
+    return dashboardRouteAccess(route) === 'personal';
+}
+
+export function isMixedDashboardRoute(route: DashboardRoute): boolean {
+    return dashboardRouteAccess(route) === 'mixed';
+}
+
+export function normalizeDashboardReturnTarget(value: unknown): DashboardReturnTarget | undefined {
+    return DASHBOARD_RETURN_TARGETS.find((candidate) => candidate === value);
+}
+
+export function normalizeConnectionsSearch(search: {
+    tab?: unknown;
+    returnTo?: unknown;
+}): ConnectionsSearch {
+    const tab = CONNECTIONS_TABS.find((candidate) => candidate === search.tab) ?? 'notifications';
+    const returnTo = normalizeDashboardReturnTarget(search.returnTo);
+    return returnTo ? {tab, returnTo} : {tab};
+}
+
+export function validateConnectionsSearch(
+    search: ConnectionsSearchValidatorInput,
+): ConnectionsSearch {
+    return normalizeConnectionsSearch(search);
+}
+
+export function connectionsRouteSearch(
+    tab: ConnectionsTab,
+    returnTo?: DashboardReturnTarget,
+): ConnectionsSearch {
+    return returnTo ? {tab, returnTo} : {tab};
 }
 
 export function dashboardRoutePath(route: DashboardRoute): DashboardRoutePath {
