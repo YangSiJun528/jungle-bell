@@ -17,7 +17,7 @@ describe('WeeklyMealMenu', () => {
             images: [
                 {
                     sha,
-                    url: `https://campus.example.com/api/public/assets/${sha}.jpg`,
+                    url: `https://jungle-bell.sijun-yang.com/api/public/assets/${sha}.jpg`,
                     contentType: 'image/jpeg',
                     extension: 'jpg',
                     width: 1439,
@@ -32,7 +32,9 @@ describe('WeeklyMealMenu', () => {
         expect(markup).toContain('8월 2주차 식단표');
         expect(markup).toContain('8월 10일 ~ 8월 16일');
         expect(markup).toContain('<img');
-        expect(markup).toContain(`href="https://campus.example.com/api/public/assets/${sha}.jpg"`);
+        expect(markup).toContain(
+            `href="https://jungle-bell.sijun-yang.com/api/public/assets/${sha}.jpg"`,
+        );
         expect(markup).toContain('target="_blank"');
         expect(markup).toContain('rel="noopener noreferrer"');
         expect(markup).toContain('aria-label="8월 2주차 식단표 급식표 새 탭에서 열기"');
@@ -90,7 +92,7 @@ describe('WeeklyMealMenu', () => {
             images: [
                 {
                     sha,
-                    url: `https://campus.example.com/api/public/assets/${sha}.jpg`,
+                    url: `https://jungle-bell.sijun-yang.com/api/public/assets/${sha}.jpg`,
                     contentType: 'image/jpeg',
                     extension: 'jpg',
                     width: 1439,

@@ -1,5 +1,7 @@
 import {Link} from '@tanstack/react-router';
-import {ExternalLink} from 'lucide-react';
+import {ExternalLink as ExternalLinkIcon} from 'lucide-react';
+
+import {ExternalLink} from '@/components/ui/external-link';
 
 const PROJECT_URL = 'https://github.com/YangSiJun528/jungle-bell';
 const FEEDBACK_URL = `${PROJECT_URL}/issues/new/choose`;
@@ -7,15 +9,13 @@ const RELEASE_URL = `${PROJECT_URL}/releases/latest`;
 
 function ExternalFooterLink({href, children}: {href: string; children: string}) {
     return (
-        <a
+        <ExternalLink
             href={href}
-            target="_blank"
-            rel="noopener noreferrer"
             className="inline-flex min-h-(--hit-area-min) items-center gap-1 rounded-sm font-medium text-foreground underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
         >
             {children}
-            <ExternalLink className="size-3.5" aria-hidden="true" />
-        </a>
+            <ExternalLinkIcon className="size-3.5" aria-hidden="true" />
+        </ExternalLink>
     );
 }
 

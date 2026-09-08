@@ -16,7 +16,7 @@ const meal: DashboardMealPost = {
     images: [
         {
             sha: 'a'.repeat(64),
-            url: `https://campus.example.com/api/public/assets/${'a'.repeat(64)}.jpg`,
+            url: `https://jungle-bell.sijun-yang.com/api/public/assets/${'a'.repeat(64)}.jpg`,
             contentType: 'image/jpeg',
             extension: 'jpg',
             width: 1600,
@@ -46,11 +46,11 @@ describe('MealPostCard', () => {
 
     it('원문 링크의 실제 anchor에 접근 가능한 이름을 제공한다', () => {
         const markup = renderToStaticMarkup(
-            <MealPostCard meal={{...meal, permalink: 'https://campus.example.com/meals/lunch'}} />,
+            <MealPostCard meal={{...meal, permalink: 'https://pf.kakao.com/_xhzNjn/112664323'}} />,
         );
 
         expect(markup).toMatch(/<a[^>]+aria-label="식단 원문 열기"/u);
-        expect(markup).toContain('href="https://campus.example.com/meals/lunch"');
+        expect(markup).toContain('href="https://pf.kakao.com/_xhzNjn/112664323"');
     });
 
     it('사진이나 메뉴가 없으면 로딩 표시가 아닌 저채도 빈 상태로 구분한다', () => {

@@ -16,7 +16,7 @@ export type InstallPromptAction =
     | {type: 'prompt-dismissed'}
     | {type: 'prompt-accepted'}
     | {type: 'prompt-failed'}
-    | {type: 'retry'}
+    | {type: 'recheck'}
     | {type: 'app-installed'};
 
 export function initialInstallPromptState(installed: boolean): InstallPromptState {
@@ -38,7 +38,7 @@ export function reduceInstallPromptState(
         case 'app-installed':
             return {status: 'completed'};
         case 'prompt-failed':
-        case 'retry':
+        case 'recheck':
             return state.status === 'already-installed' || state.status === 'completed'
                 ? state
                 : {status: 'unsupported'};

@@ -73,9 +73,9 @@ describe('PWA install prompt state', () => {
         ).toEqual<InstallPromptState>({status: 'completed'});
     });
 
-    test('거절 후 재확인과 브라우저 설치 완료 이벤트를 복구 경로로 처리한다', () => {
+    test('거절 후 설치 가능 여부 재확인과 브라우저 설치 완료 이벤트를 복구 경로로 처리한다', () => {
         expect(
-            reduceInstallPromptState({status: 'dismissed'}, {type: 'retry'}),
+            reduceInstallPromptState({status: 'dismissed'}, {type: 'recheck'}),
         ).toEqual<InstallPromptState>({status: 'unsupported'});
         expect(
             reduceInstallPromptState({status: 'unsupported'}, {type: 'app-installed'}),
@@ -91,11 +91,13 @@ describe('PWA install prompt state', () => {
             '설치를 취소했습니다.',
             '설치 요청을 완료했습니다.',
             'Jungle Bell이 이미 설치되어 있습니다.',
-            '설치 다시 시도',
-            '다시 확인했지만 자동 설치 버튼이 없습니다.',
+            '설치 가능 여부 다시 확인',
+            '이 설치 요청은 다시 실행할 수 없습니다.',
+            '브라우저가 새 설치 요청을 제공하면 이 안내에 표시됩니다.',
             '수동 설치 방법',
         ]) {
             expect(source).toContain(text);
         }
+        expect(source).not.toContain('설치 다시 시도');
     });
 });

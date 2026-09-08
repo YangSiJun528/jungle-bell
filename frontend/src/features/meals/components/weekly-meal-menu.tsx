@@ -1,9 +1,10 @@
-import {ExternalLink} from 'lucide-react';
+import {ExternalLink as ExternalLinkIcon} from 'lucide-react';
 import {useState} from 'react';
 
 import type {DashboardMealPost} from '@/api/dashboard-api';
 import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@/components/ui/card';
+import {ExternalLink} from '@/components/ui/external-link';
 
 import {weekRangeLabel} from '../lib/meal-view';
 
@@ -51,14 +52,12 @@ export function WeeklyMealMenu({
                                 id={imageSectionId}
                             >
                                 {images.map((image, index) => (
-                                    <a
+                                    <ExternalLink
                                         aria-label={`${title} 급식표${images.length > 1 ? ` ${index + 1}` : ''} 새 탭에서 열기`}
                                         className="block rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                                         href={image.url}
                                         key={image.sha}
-                                        rel="noopener noreferrer"
                                         tabIndex={isImageExpanded ? undefined : -1}
-                                        target="_blank"
                                     >
                                         <img
                                             alt={`${title}, ${range} 급식표${images.length > 1 ? ` ${index + 1}` : ''}`}
@@ -69,7 +68,7 @@ export function WeeklyMealMenu({
                                             src={image.url}
                                             width={image.width ?? undefined}
                                         />
-                                    </a>
+                                    </ExternalLink>
                                 ))}
                             </div>
                             <div className="min-h-11 w-full">
@@ -91,10 +90,10 @@ export function WeeklyMealMenu({
                     )}
                     {showSourceLink && meal.permalink ? (
                         <Button asChild className="justify-self-start" variant="outline">
-                            <a href={meal.permalink} rel="noreferrer" target="_blank">
-                                <ExternalLink />
+                            <ExternalLink href={meal.permalink}>
+                                <ExternalLinkIcon />
                                 급식표 보러가기
-                            </a>
+                            </ExternalLink>
                         </Button>
                     ) : null}
                 </div>

@@ -5,7 +5,10 @@ import {AsyncBoundary} from '@/components/dashboard/async-boundary';
 import {InstallPrompt, useInstallPromptVisibility} from '@/platform/pwa/install-prompt';
 
 import {useDashboardEnvironment} from './dashboard-context';
+import {DashboardRouteAccessibility} from './dashboard-route-accessibility';
+import {DashboardRouteErrorFallback} from './dashboard-route-error';
 import {DashboardRouteRuntimeProvider} from './dashboard-route-runtime';
+import {DesktopLifecycleSummary} from './desktop-lifecycle-controller';
 import {DesktopUpdateNotice} from './desktop-update-notice';
 import {
     mergeSeenMobileNotificationIds,
@@ -20,7 +23,6 @@ import {
 import {PlatformAuthenticationGate} from './platform-authentication-gate';
 import {PublicRouteOutlet} from './privacy-page';
 import {
-    DASHBOARD_ROUTE_META,
     dashboardRouteFromPath,
     dashboardRoutePath,
     isPersonalDashboardRoute,
@@ -36,9 +38,12 @@ const NotificationPanelContent = lazy(() =>
 );
 export function DashboardApp() {
     const pathname = useRouterState({select: (state) => state.location.pathname});
-    if (pathname === '/privacy') return <PublicRouteOutlet />;
-
-    return <DashboardContent />;
+    return (
+        <>
+            <DashboardRouteAccessibility pathname={pathname} />
+            {pathname === '/privacy' ? <PublicRouteOutlet /> : <DashboardContent />}
+        </>
+    );
 }
 
 function DashboardContent() {
@@ -81,10 +86,6 @@ function DashboardContent() {
     );
 
     useEffect(() => {
-        document.title = `${DASHBOARD_ROUTE_META[route].label} · Jungle Bell`;
-    }, [route]);
-
-    useEffect(() => {
         if (route === 'notifications') return;
         window.scrollTo({top: 0, left: 0, behavior: 'auto'});
     }, [route]);
@@ -117,26 +118,38 @@ function DashboardContent() {
                     if (!open && route === 'notifications') navigate(contentRoute, true);
                 },
                 content: (
-                    <AsyncBoundary
-                        errorTitle="알림함을 불러오지 못했습니다."
-                        resetKeys={[notificationPanelOpen]}
-                    >
-                        <NotificationPanelContent
-                            seenMobileIds={seenMobileIds}
-                            onMobileNotificationsSeen={markMobileNotificationsSeen}
-                        />
-                    </AsyncBoundary>
+                    <PlatformAuthenticationGate enabled>
+                        <AsyncBoundary
+                            errorTitle="알림함을 불러오지 못했습니다."
+                            resetKeys={[notificationPanelOpen]}
+                        >
+                            <NotificationPanelContent
+                                seenMobileIds={seenMobileIds}
+                                onMobileNotificationsSeen={markMobileNotificationsSeen}
+                            />
+                        </AsyncBoundary>
+                    </PlatformAuthenticationGate>
                 ),
             }}
         >
             <DesktopUpdateNotice />
             <NotificationOnboardingNotice />
             <DashboardRouteRuntimeProvider value={{contentRoute, openInstallPrompt}}>
-                <AsyncBoundary resetKeys={[contentRoute]}>
+                <AsyncBoundary
+                    resetKeys={[contentRoute]}
+                    renderError={({retry}) => (
+                        <DashboardRouteErrorFallback route={contentRoute} retry={retry} />
+                    )}
+                >
                     <PlatformAuthenticationGate enabled={isPersonalDashboardRoute(contentRoute)}>
                         <Outlet />
                     </PlatformAuthenticationGate>
                 </AsyncBoundary>
+                {platform.kind === 'desktop' && contentRoute === 'connections' ? (
+                    <div className="mt-6">
+                        <DesktopLifecycleSummary />
+                    </div>
+                ) : null}
             </DashboardRouteRuntimeProvider>
             <InstallPrompt open={installPromptOpen} onOpenChange={setInstallPromptVisibility} />
         </DashboardShell>

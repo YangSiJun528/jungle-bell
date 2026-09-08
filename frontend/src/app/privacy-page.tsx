@@ -2,6 +2,7 @@ import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Link, Outlet} from '@tanstack/react-router';
 import {ArrowLeft, ShieldCheck} from 'lucide-react';
 
+import {ExternalLink} from '@/components/ui/external-link';
 import {Switch} from '@/components/ui/switch';
 
 import {queryKeys, useDashboardEnvironment} from './dashboard-context';
@@ -327,14 +328,12 @@ export function PrivacyPage() {
                     <p className="text-sm leading-6 text-muted-foreground">
                         공개 이슈에는 개인정보를 적지 마세요.
                     </p>
-                    <a
+                    <ExternalLink
                         href="https://github.com/YangSiJun528/jungle-bell"
-                        target="_blank"
-                        rel="noopener noreferrer"
                         className="inline-flex text-sm font-medium text-primary underline-offset-4 hover:underline"
                     >
                         프로젝트 문의 경로 보기
-                    </a>
+                    </ExternalLink>
                 </PolicySection>
 
                 <PolicySection id="changes-title" title="7. 개인정보 처리방침의 변경">

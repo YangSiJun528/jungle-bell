@@ -1,3 +1,5 @@
+import {readFileSync} from 'node:fs';
+
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, test, vi} from 'vitest';
 
@@ -5,6 +7,8 @@ import type {DesktopUpdateStatus} from '@/platform/contracts';
 
 import {DesktopUpdateGate} from './desktop-update-gate';
 import {desktopUpdateGateDecision} from './desktop-update-gate-decision';
+
+const gateSource = readFileSync(new URL('./desktop-update-gate.tsx', import.meta.url), 'utf8');
 
 const {environment, updateQuery} = vi.hoisted(() => ({
     environment: {
@@ -85,6 +89,10 @@ function RouteContent() {
 }
 
 describe('DesktopUpdateGate', () => {
+    test('blocking dialog는 최초 포커스·복원·키보드 trap controller를 사용한다', () => {
+        expect(gateSource).toContain('activateBlockingDialogFocus(dialog)');
+        expect(gateSource).toContain('<BlockingUpdateDialog>');
+    });
     test('웹과 PWA는 업데이트 확인 없이 대시보드를 연다', () => {
         const markup = renderGate({platform: 'browser', data: status('mandatory')});
 

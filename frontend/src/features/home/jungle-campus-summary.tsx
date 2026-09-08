@@ -1,6 +1,13 @@
 import {useMutation} from '@tanstack/react-query';
 import {Link} from '@tanstack/react-router';
-import {ArrowRight, CalendarCheck, Check, ExternalLink, RefreshCw, X} from 'lucide-react';
+import {
+    ArrowRight,
+    CalendarCheck,
+    Check,
+    ExternalLink as ExternalLinkIcon,
+    RefreshCw,
+    X,
+} from 'lucide-react';
 
 import type {AttendanceSnapshot} from '@/api/dashboard-api';
 import {useDashboardAccount} from '@/app/dashboard-account';
@@ -9,6 +16,7 @@ import {useAttendanceQuery, useRefreshAttendanceMutation} from '@/app/use-dashbo
 import {DdayCard} from '@/components/dashboard/dday-card';
 import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardFooter, CardHeader} from '@/components/ui/card';
+import {ExternalLink} from '@/components/ui/external-link';
 import {Skeleton} from '@/components/ui/skeleton';
 import {selectDdayView} from '@/domain/attendance/dday-view';
 import {dateTimeLabel} from '@/lib/format';
@@ -348,13 +356,13 @@ export function JungleCampusSummary() {
                                     : account.status.lmsAuthentication === 'required'
                                       ? 'LMS 로그인'
                                       : '정글캠퍼스 열기'}{' '}
-                                <ExternalLink />
+                                <ExternalLinkIcon />
                             </Button>
                         ) : (
                             <Button asChild size="sm">
-                                <a href={CAMPUS_URL} target="_blank" rel="noopener noreferrer">
-                                    정글캠퍼스 열기 <ExternalLink />
-                                </a>
+                                <ExternalLink href={CAMPUS_URL}>
+                                    정글캠퍼스 열기 <ExternalLinkIcon />
+                                </ExternalLink>
                             </Button>
                         )}
                         <Button asChild size="sm" variant="link" className="px-1">

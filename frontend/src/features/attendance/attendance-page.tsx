@@ -1,5 +1,12 @@
 import {useMutation} from '@tanstack/react-query';
-import {CalendarCheck2, Check, ExternalLink, Laptop, RefreshCw, X} from 'lucide-react';
+import {
+    CalendarCheck2,
+    Check,
+    ExternalLink as ExternalLinkIcon,
+    Laptop,
+    RefreshCw,
+    X,
+} from 'lucide-react';
 
 import type {DesktopDevice} from '@/api/dashboard-api';
 import {useDashboardAccount} from '@/app/dashboard-account';
@@ -22,6 +29,7 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import {ExternalLink} from '@/components/ui/external-link';
 import {selectDdayView} from '@/domain/attendance/dday-view';
 import {dateTimeLabel, relativeTimeLabel} from '@/lib/format';
 
@@ -165,7 +173,7 @@ export function AttendancePage() {
                 actions={
                     desktopLmsRequired ? (
                         <Button disabled={openCampus.isPending} onClick={() => openCampus.mutate()}>
-                            <ExternalLink aria-hidden="true" />
+                            <ExternalLinkIcon aria-hidden="true" />
                             {openCampus.isPending ? '여는 중' : 'LMS 로그인'}
                         </Button>
                     ) : (
@@ -357,13 +365,13 @@ export function AttendancePage() {
                                 onClick={() => openCampus.mutate()}
                             >
                                 {openCampus.isPending ? '여는 중' : '정글캠퍼스 열기'}{' '}
-                                <ExternalLink />
+                                <ExternalLinkIcon />
                             </Button>
                         ) : (
                             <Button asChild>
-                                <a href={CAMPUS_URL} target="_blank" rel="noopener noreferrer">
-                                    정글캠퍼스 열기 <ExternalLink />
-                                </a>
+                                <ExternalLink href={CAMPUS_URL}>
+                                    정글캠퍼스 열기 <ExternalLinkIcon />
+                                </ExternalLink>
                             </Button>
                         )}
                     </CardFooter>

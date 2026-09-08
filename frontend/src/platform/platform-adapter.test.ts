@@ -39,6 +39,9 @@ function pwaAdapter(installed: boolean): PwaCapabilityAdapter {
     return {
         available: true,
         installed,
+        getServiceWorkerContainer: vi.fn<PwaCapabilityAdapter['getServiceWorkerContainer']>(
+            () => null,
+        ),
         registerServiceWorker: vi.fn<PwaCapabilityAdapter['registerServiceWorker']>(),
         preparePush: vi.fn<PwaCapabilityAdapter['preparePush']>(async () => undefined),
         subscribeInstallPrompt: vi.fn<PwaCapabilityAdapter['subscribeInstallPrompt']>(

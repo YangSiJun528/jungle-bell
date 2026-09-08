@@ -1,7 +1,7 @@
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, it, vi} from 'vitest';
 
-import {ExternalLink} from './external-link';
+import {ExternalLink, openExternalLinkFromClick} from './external-link';
 
 const PROJECT_URL = 'https://github.com/YangSiJun528/jungle-bell';
 
@@ -25,17 +25,9 @@ describe('ExternalLink', () => {
             throw error;
         });
         const onOpenError = vi.fn<(error: unknown) => void>();
-        const element = ExternalLink({
-            href: PROJECT_URL,
-            openExternally,
-            onOpenError,
-            children: 'GitHub',
-        });
         const event = new Event('click', {cancelable: true});
-        const handler = element.props.onClick;
-        if (!handler) throw new Error('onClick handler is required');
 
-        await Reflect.apply(handler, undefined, [event]);
+        await openExternalLinkFromClick(event, PROJECT_URL, openExternally, onOpenError);
 
         expect(event.defaultPrevented).toBe(true);
         expect(openExternally).toHaveBeenCalledWith(PROJECT_URL);
@@ -43,8 +35,8 @@ describe('ExternalLink', () => {
     });
 
     it('허용 목록 밖 URL은 anchor를 만들기 전에 거부한다', () => {
-        expect(() => ExternalLink({href: 'javascript:alert(1)', children: 'bad'})).toThrow(
-            'EXTERNAL_URL_NOT_ALLOWED',
-        );
+        expect(() =>
+            renderToStaticMarkup(<ExternalLink href="javascript:alert(1)">bad</ExternalLink>),
+        ).toThrow('EXTERNAL_URL_NOT_ALLOWED');
     });
 });

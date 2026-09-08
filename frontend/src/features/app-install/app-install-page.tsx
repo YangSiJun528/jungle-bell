@@ -4,7 +4,7 @@ import {
     BellRing,
     CircleAlert,
     Download,
-    ExternalLink,
+    ExternalLink as ExternalLinkIcon,
     KeyRound,
     LoaderCircle,
     Monitor,
@@ -21,6 +21,7 @@ import {MobileNotificationMockup} from '@/components/app-showcase/mobile-notific
 import {PageHeader} from '@/components/dashboard/page-header';
 import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardHeader} from '@/components/ui/card';
+import {ExternalLink} from '@/components/ui/external-link';
 import {isMobileInstallClient} from '@/platform/pwa/install-client';
 
 import {installStepOrder, type InstallStepId} from './install-step-order';
@@ -212,10 +213,10 @@ function PcInstallStep({mobileClient}: {mobileClient: boolean}) {
                         : '운영체제에 맞는 PC 앱을 설치한 뒤 Jungle Campus에 로그인합니다. 공개 세탁실과 식단만 볼 때는 이 단계가 필요하지 않습니다.'}
                 </p>
                 <Button asChild className="mt-4 h-auto min-h-11 w-full whitespace-normal sm:w-auto">
-                    <a href={PC_INSTALL_GUIDE_URL} target="_blank" rel="noopener noreferrer">
+                    <ExternalLink href={PC_INSTALL_GUIDE_URL}>
                         PC 앱 설치 가이드
-                        <ExternalLink aria-hidden="true" />
-                    </a>
+                        <ExternalLinkIcon aria-hidden="true" />
+                    </ExternalLink>
                 </Button>
             </div>
             {mobileClient ? null : (

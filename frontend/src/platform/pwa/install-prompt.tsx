@@ -4,6 +4,7 @@ import {useCallback, useEffect, useReducer, useState, type ReactNode} from 'reac
 import {useDashboardEnvironment} from '@/app/dashboard-context';
 import {Button} from '@/components/ui/button';
 import {Card, CardContent} from '@/components/ui/card';
+import {ExternalLink} from '@/components/ui/external-link';
 
 import {
     initialInstallPromptState,
@@ -68,7 +69,7 @@ function mobileInstallPresentation(
             return {
                 title: '설치를 취소했습니다.',
                 description:
-                    '다시 확인하거나 아래 수동 설치 방법으로 언제든 홈 화면에 추가할 수 있습니다.',
+                    '이 설치 요청은 다시 실행할 수 없습니다. 아래 수동 설치 방법을 사용하거나 설치 가능 여부를 다시 확인하세요.',
             };
         case 'completed':
             return {
@@ -84,7 +85,7 @@ function mobileInstallPresentation(
             return {
                 title: '자동 설치를 사용할 수 없습니다.',
                 description: installRechecked
-                    ? '다시 확인했지만 자동 설치 버튼이 없습니다. 아래 방법으로 직접 설치하세요.'
+                    ? '현재 자동 설치 버튼이 없습니다. 브라우저가 새 설치 요청을 제공하면 이 안내에 표시됩니다. 아래 방법으로 직접 설치할 수도 있습니다.'
                     : '브라우저가 설치 버튼을 제공하지 않았습니다. 아래 방법으로 직접 설치하세요.',
             };
     }
@@ -107,12 +108,12 @@ function MobileInstallStatusIcon({status}: {status: InstallPromptStatus}) {
 function MobileInstallActions({
     state,
     onInstall,
-    onRetry,
+    onRecheck,
     onClose,
 }: {
     state: InstallPromptState;
     onInstall: () => void;
-    onRetry: () => void;
+    onRecheck: () => void;
     onClose: () => void;
 }) {
     let action: ReactNode;
@@ -132,10 +133,10 @@ function MobileInstallActions({
                 <Button
                     className="h-auto min-h-11 w-full whitespace-normal sm:w-auto"
                     variant="outline"
-                    onClick={onRetry}
+                    onClick={onRecheck}
                 >
                     <RotateCcw aria-hidden="true" className="size-4" />
-                    설치 다시 시도
+                    설치 가능 여부 다시 확인
                 </Button>
             );
             break;
@@ -144,7 +145,7 @@ function MobileInstallActions({
                 <Button
                     className="h-auto min-h-11 w-full whitespace-normal sm:w-auto"
                     variant="outline"
-                    onClick={onRetry}
+                    onClick={onRecheck}
                 >
                     <RotateCcw aria-hidden="true" className="size-4" />
                     설치 가능 여부 다시 확인
@@ -245,18 +246,18 @@ export function InstallPrompt({open, onOpenChange}: InstallPromptProps) {
                         <MobileInstallActions
                             state={state}
                             onInstall={() => void requestInstall()}
-                            onRetry={() => {
-                                dispatch({type: 'retry'});
+                            onRecheck={() => {
+                                dispatch({type: 'recheck'});
                                 setInstallRechecked(true);
                             }}
                             onClose={() => onOpenChange(false)}
                         />
                     ) : (
                         <Button asChild className="min-h-11 w-full sm:w-auto">
-                            <a href={RELEASE_URL} target="_blank" rel="noopener noreferrer">
+                            <ExternalLink href={RELEASE_URL}>
                                 <Download aria-hidden="true" className="size-4" />
                                 PC 앱 다운로드
-                            </a>
+                            </ExternalLink>
                         </Button>
                     )}
                 </div>

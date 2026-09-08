@@ -101,13 +101,18 @@ describe('PwaCapabilityAdapter', () => {
             navigatorObject: browser.navigatorObject,
         });
 
-        adapter.registerServiceWorker();
+        const registrationReady = adapter.registerServiceWorker();
+        expect(adapter.getServiceWorkerContainer()).toBe(browser.navigatorObject.serviceWorker);
         expect(browser.register).not.toHaveBeenCalled();
 
         browser.windowObject.dispatchEvent(new Event('load'));
+        await expect(registrationReady).resolves.toBe(
+            await browser.navigatorObject.serviceWorker.ready,
+        );
         await adapter.preparePush();
 
         expect(browser.register).toHaveBeenCalledWith('./sw.js', {scope: './'});
+        expect(browser.register).toHaveBeenCalledOnce();
     });
 
     it('설치 프롬프트를 이벤트에서 어댑터 계약으로 변환하고 해제한다', async () => {

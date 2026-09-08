@@ -1,7 +1,8 @@
-import {Download, ExternalLink, RefreshCw, ScrollText} from 'lucide-react';
+import {Download, ExternalLink as ExternalLinkIcon, RefreshCw, ScrollText} from 'lucide-react';
 
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Button} from '@/components/ui/button';
+import {ExternalLink} from '@/components/ui/external-link';
 import type {DesktopUpdateStatus} from '@/platform/contracts';
 
 const RELEASE_URL = 'https://github.com/YangSiJun528/jungle-bell/releases/latest';
@@ -102,6 +103,121 @@ function UpdateProgress({status}: {status: DesktopUpdateStatus | undefined}) {
     );
 }
 
+function UpdateVersionSummary({status}: {status: DesktopUpdateStatus | undefined}) {
+    const hasRelease = status?.availableVersion !== null && status?.availableVersion !== undefined;
+    if (!hasRelease) {
+        return <p>안전한 실행을 위해 PC 앱의 최신 호환 버전을 확인하고 있습니다.</p>;
+    }
+    return (
+        <p>
+            현재 v{status.currentVersion} ·{' '}
+            {status.policy === 'mandatory' ? '최신 정식 버전' : '최신'} v{status.availableVersion}
+        </p>
+    );
+}
+
+function UpdateFailureDetails({
+    checkFailed,
+    status,
+}: {
+    checkFailed: boolean;
+    status: DesktopUpdateStatus | undefined;
+}) {
+    return (
+        <div className="space-y-1">
+            <p className="font-medium text-destructive">
+                {failureSummary(checkFailed ? 'UPDATE_CHECK_FAILED' : status?.errorCode)}
+            </p>
+            <p>인터넷 연결을 확인한 뒤 다시 시도하세요.</p>
+        </div>
+    );
+}
+
+function PrimaryUpdateAction({
+    failed,
+    hasRelease,
+    installPending,
+    onCheckAgain,
+    onInstall,
+    ready,
+}: {
+    failed: boolean;
+    hasRelease: boolean;
+    installPending: boolean;
+    onCheckAgain: () => void;
+    onInstall: () => void;
+    ready: boolean;
+}) {
+    const retryInstall = failed && hasRelease;
+    if (ready || retryInstall) {
+        return (
+            <Button disabled={installPending} onClick={onInstall}>
+                {retryInstall ? <RefreshCw aria-hidden="true" /> : <Download aria-hidden="true" />}
+                {retryInstall ? '업데이트 다시 시도' : '업데이트하고 재시작'}
+            </Button>
+        );
+    }
+    if (failed && !hasRelease) {
+        return (
+            <Button disabled={installPending} onClick={onCheckAgain}>
+                <RefreshCw aria-hidden="true" />
+                다시 확인
+            </Button>
+        );
+    }
+    return null;
+}
+
+function UpdateActions({
+    failed,
+    hasRelease,
+    installPending,
+    onCheckAgain,
+    onInstall,
+    onLater,
+    onOpenLogs,
+    status,
+}: Pick<
+    DesktopUpdatePanelProps,
+    'installPending' | 'onCheckAgain' | 'onInstall' | 'onLater' | 'onOpenLogs' | 'status'
+> & {
+    failed: boolean;
+    hasRelease: boolean;
+}) {
+    const ready = status?.status === 'optional' || status?.status === 'mandatory';
+    return (
+        <div className="flex flex-wrap gap-2 pt-1">
+            <PrimaryUpdateAction
+                failed={failed}
+                hasRelease={hasRelease}
+                installPending={installPending}
+                onCheckAgain={onCheckAgain}
+                onInstall={onInstall}
+                ready={ready}
+            />
+            {onLater && status?.status === 'optional' ? (
+                <Button variant="outline" onClick={onLater}>
+                    나중에
+                </Button>
+            ) : null}
+            {failed ? (
+                <>
+                    <Button variant="outline" onClick={onOpenLogs}>
+                        <ScrollText aria-hidden="true" />
+                        로그 폴더 열기
+                    </Button>
+                    <Button variant="outline" asChild>
+                        <ExternalLink href={RELEASE_URL}>
+                            <ExternalLinkIcon aria-hidden="true" />
+                            릴리스에서 수동 설치
+                        </ExternalLink>
+                    </Button>
+                </>
+            ) : null}
+        </div>
+    );
+}
+
 export function DesktopUpdatePanel({
     status,
     checkFailed = false,
@@ -116,8 +232,6 @@ export function DesktopUpdatePanel({
 }: DesktopUpdatePanelProps) {
     const failed = checkFailed || installFailed || status?.status === 'failed';
     const hasRelease = status?.availableVersion !== null && status?.availableVersion !== undefined;
-    const ready = status?.status === 'optional' || status?.status === 'mandatory';
-    const retryInstall = failed && hasRelease;
 
     return (
         <Alert
@@ -128,63 +242,19 @@ export function DesktopUpdatePanel({
             <Download aria-hidden="true" />
             <AlertTitle>{stageTitle(status, checkFailed)}</AlertTitle>
             <AlertDescription className="mt-1 w-full gap-3">
-                {hasRelease ? (
-                    <p>
-                        현재 v{status.currentVersion} ·{' '}
-                        {status.policy === 'mandatory' ? '최신 정식 버전' : '최신'} v
-                        {status.availableVersion}
-                    </p>
-                ) : (
-                    <p>안전한 실행을 위해 PC 앱의 최신 호환 버전을 확인하고 있습니다.</p>
-                )}
-                {failed ? (
-                    <div className="space-y-1">
-                        <p className="font-medium text-destructive">
-                            {failureSummary(
-                                checkFailed ? 'UPDATE_CHECK_FAILED' : status?.errorCode,
-                            )}
-                        </p>
-                        <p>인터넷 연결을 확인한 뒤 다시 시도하세요.</p>
-                    </div>
-                ) : null}
+                <UpdateVersionSummary status={status} />
+                {failed ? <UpdateFailureDetails checkFailed={checkFailed} status={status} /> : null}
                 {failed ? null : <UpdateProgress status={status} />}
-                <div className="flex flex-wrap gap-2 pt-1">
-                    {ready || retryInstall ? (
-                        <Button disabled={installPending} onClick={onInstall}>
-                            {retryInstall ? (
-                                <RefreshCw aria-hidden="true" />
-                            ) : (
-                                <Download aria-hidden="true" />
-                            )}
-                            {retryInstall ? '업데이트 다시 시도' : '업데이트하고 재시작'}
-                        </Button>
-                    ) : null}
-                    {failed && !hasRelease ? (
-                        <Button disabled={installPending} onClick={onCheckAgain}>
-                            <RefreshCw aria-hidden="true" />
-                            다시 확인
-                        </Button>
-                    ) : null}
-                    {onLater && status?.status === 'optional' ? (
-                        <Button variant="outline" onClick={onLater}>
-                            나중에
-                        </Button>
-                    ) : null}
-                    {failed ? (
-                        <>
-                            <Button variant="outline" onClick={onOpenLogs}>
-                                <ScrollText aria-hidden="true" />
-                                로그 폴더 열기
-                            </Button>
-                            <Button variant="outline" asChild>
-                                <a href={RELEASE_URL} target="_blank" rel="noopener noreferrer">
-                                    <ExternalLink aria-hidden="true" />
-                                    릴리스에서 수동 설치
-                                </a>
-                            </Button>
-                        </>
-                    ) : null}
-                </div>
+                <UpdateActions
+                    failed={failed}
+                    hasRelease={hasRelease}
+                    installPending={installPending}
+                    onCheckAgain={onCheckAgain}
+                    onInstall={onInstall}
+                    onLater={onLater}
+                    onOpenLogs={onOpenLogs}
+                    status={status}
+                />
                 {logFailed ? (
                     <p className="text-destructive">로그 폴더를 열지 못했습니다.</p>
                 ) : null}

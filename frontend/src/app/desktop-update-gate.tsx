@@ -1,9 +1,10 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
-import type {PropsWithChildren} from 'react';
+import {useEffect, useRef, type PropsWithChildren} from 'react';
 
 import jungleBellLogo from '@/assets/logo.png';
 
 import {queryKeys, useDashboardEnvironment} from './dashboard-context';
+import {activateBlockingDialogFocus} from './desktop-update-dialog-focus';
 import {desktopUpdateGateDecision} from './desktop-update-gate-decision';
 import {DesktopUpdatePanel} from './desktop-update-panel';
 import {desktopUpdateInstallMutationKey, useDesktopUpdateQuery} from './desktop-update-query';
@@ -29,6 +30,27 @@ function UpdateGateFrame({children}: PropsWithChildren) {
                 {children}
             </div>
         </div>
+    );
+}
+
+function BlockingUpdateDialog({children}: PropsWithChildren) {
+    const dialogRef = useRef<HTMLDialogElement>(null);
+    useEffect(() => {
+        const dialog = dialogRef.current;
+        return dialog ? activateBlockingDialogFocus(dialog) : undefined;
+    }, []);
+
+    return (
+        <dialog
+            ref={dialogRef}
+            open
+            tabIndex={-1}
+            className="fixed inset-0 z-[100] m-0 h-full max-h-none w-full max-w-none overflow-y-auto border-0 bg-background p-0"
+            aria-modal="true"
+            aria-label="PC 앱 업데이트"
+        >
+            {children}
+        </dialog>
     );
 }
 
@@ -66,12 +88,7 @@ export function DesktopUpdateGate({children}: PropsWithChildren) {
                 </div>
             ) : null}
             {decision.blocked ? (
-                <dialog
-                    open
-                    className="fixed inset-0 z-[100] m-0 h-full max-h-none w-full max-w-none overflow-y-auto border-0 bg-background p-0"
-                    aria-modal="true"
-                    aria-label="PC 앱 업데이트"
-                >
+                <BlockingUpdateDialog>
                     <UpdateGateFrame>
                         <DesktopUpdatePanel
                             status={update.data}
@@ -84,7 +101,7 @@ export function DesktopUpdateGate({children}: PropsWithChildren) {
                             onOpenLogs={() => openLogs.mutate()}
                         />
                     </UpdateGateFrame>
-                </dialog>
+                </BlockingUpdateDialog>
             ) : null}
         </>
     );

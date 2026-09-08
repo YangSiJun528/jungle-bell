@@ -19,6 +19,37 @@ describe('DashboardApp personal access boundaries', () => {
     });
 
     test('privacy route는 dashboard shell 밖의 공개 outlet을 보존한다', () => {
-        expect(source).toContain("if (pathname === '/privacy') return <PublicRouteOutlet />;");
+        expect(source).toContain(
+            "{pathname === '/privacy' ? <PublicRouteOutlet /> : <DashboardContent />}",
+        );
+    });
+
+    test('알림 panel 내용 자체도 항상 개인 인증 gate를 통과한다', () => {
+        const panelStart = source.indexOf('notificationPanel={{');
+        const panelContent = source.slice(
+            panelStart,
+            source.indexOf('<DashboardRouteRuntimeProvider', panelStart),
+        );
+
+        expect(panelContent).toMatch(
+            /<PlatformAuthenticationGate enabled>[\s\S]*<NotificationPanelContent/u,
+        );
+    });
+
+    test('route 제목과 H1 포커스를 공통 accessibility controller에 위임한다', () => {
+        expect(source).toContain('<DashboardRouteAccessibility pathname={pathname} />');
+    });
+
+    test('route AsyncBoundary 오류 fallback에도 현재 route PageHeader를 유지한다', () => {
+        expect(source).toContain(
+            '<DashboardRouteErrorFallback route={contentRoute} retry={retry} />',
+        );
+        expect(source).toMatch(/<AsyncBoundary[\s\S]*renderError=\{/u);
+    });
+
+    test('PC 설정 화면에 종료 동작 요약을 실제 mount한다', () => {
+        expect(source).toMatch(
+            /platform\.kind === 'desktop' && contentRoute === 'connections'[\s\S]*<DesktopLifecycleSummary/u,
+        );
     });
 });

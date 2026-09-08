@@ -50,14 +50,25 @@ export function createPwaCapabilityAdapter(options: {
     return {
         available: true,
         installed: installedPwa(windowObject, navigatorObject),
+        getServiceWorkerContainer() {
+            return options.production && 'serviceWorker' in navigatorObject
+                ? navigatorObject.serviceWorker
+                : null;
+        },
         registerServiceWorker() {
-            if (!options.production || !('serviceWorker' in navigatorObject)) return;
-            const register = () => void startServiceWorker().catch(() => undefined);
-            if (windowObject.document?.readyState === 'complete') {
-                register();
-            } else {
-                windowObject.addEventListener('load', register, {once: true});
+            if (!options.production || !('serviceWorker' in navigatorObject)) {
+                return Promise.resolve(null);
             }
+            if (windowObject.document?.readyState === 'complete') {
+                return startServiceWorker();
+            }
+            return new Promise<ServiceWorkerRegistration>((resolve, reject) => {
+                windowObject.addEventListener(
+                    'load',
+                    () => void startServiceWorker().then(resolve, reject),
+                    {once: true},
+                );
+            });
         },
         async preparePush() {
             if (!('PushManager' in windowObject)) throw new Error('PUSH_UNSUPPORTED');

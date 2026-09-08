@@ -12,12 +12,13 @@ import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@/components/ui/card';
 import {Separator} from '@/components/ui/separator';
 import {SwitchRow} from '@/components/ui/switch';
+import {usePwaReloadPreserver} from '@/platform/pwa/reload-preservation';
 
-const asInput = (preferences: MealPreferences): MealPreferencesInput => ({
-    enabled: preferences.enabled,
-    lunch: preferences.lunch,
-    dinner: preferences.dinner,
-});
+import {
+    clearMealPreferencesDraft,
+    preserveMealPreferencesDraft,
+    readMealPreferencesDraft,
+} from './meal-preferences-draft';
 
 function preferencesEqual(left: MealPreferencesInput, right: MealPreferences): boolean {
     return (
@@ -38,8 +39,11 @@ function MealPreferencesEditor({
     onEdit: () => void;
     onSave: (draft: MealPreferencesInput) => void;
 }) {
-    const [draft, setDraft] = useState<MealPreferencesInput>(() => asInput(preferences));
+    const [draft, setDraft] = useState<MealPreferencesInput>(() =>
+        readMealPreferencesDraft(preferences),
+    );
     const dirty = !preferencesEqual(draft, preferences);
+    usePwaReloadPreserver(() => preserveMealPreferencesDraft(preferences, draft));
     const updateDraft = (key: keyof MealPreferencesInput, checked: boolean) => {
         onEdit();
         setDraft((current) => ({...current, [key]: checked}));
@@ -94,6 +98,7 @@ export function MealPreferencesSection() {
     const savePreferences = useMutation({
         mutationFn: (input: MealPreferencesInput) => api.updateMealPreferences(input),
         onSuccess: async (value) => {
+            clearMealPreferencesDraft();
             client.setQueryData(queryKeys.mealPreferences, value);
             setEditorRevision((revision) => revision + 1);
             setSaved(true);

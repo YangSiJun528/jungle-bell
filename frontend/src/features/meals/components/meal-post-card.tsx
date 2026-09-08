@@ -1,9 +1,10 @@
-import {Clock3, ExternalLink, ImageOff} from 'lucide-react';
+import {Clock3, ExternalLink as ExternalLinkIcon, ImageOff} from 'lucide-react';
 import {useState} from 'react';
 
 import type {DashboardMealPost} from '@/api/dashboard-api';
 import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@/components/ui/card';
+import {ExternalLink} from '@/components/ui/external-link';
 import {dateTimeLabel} from '@/lib/format';
 import {cn} from '@/lib/utils';
 
@@ -40,13 +41,11 @@ function MealImage({
     }
 
     return (
-        <a
+        <ExternalLink
             aria-label={`${label} 새 탭에서 열기`}
             className="block focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset"
             href={image.url}
-            rel="noopener noreferrer"
             tabIndex={interactive ? undefined : -1}
-            target="_blank"
         >
             <img
                 alt={label}
@@ -61,7 +60,7 @@ function MealImage({
                 width={image.width ?? undefined}
                 onError={() => setFailed(true)}
             />
-        </a>
+        </ExternalLink>
     );
 }
 
@@ -95,14 +94,9 @@ export function MealPostCard({
                     </div>
                     {meal.permalink ? (
                         <Button asChild size="icon-sm" variant="ghost">
-                            <a
-                                aria-label="식단 원문 열기"
-                                href={meal.permalink}
-                                rel="noreferrer"
-                                target="_blank"
-                            >
-                                <ExternalLink />
-                            </a>
+                            <ExternalLink aria-label="식단 원문 열기" href={meal.permalink}>
+                                <ExternalLinkIcon />
+                            </ExternalLink>
                         </Button>
                     ) : null}
                 </div>

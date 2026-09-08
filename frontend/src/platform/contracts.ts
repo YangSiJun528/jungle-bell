@@ -130,7 +130,8 @@ export type PwaServiceWorkerStatus =
 export interface PwaCapabilityAdapter {
     available: boolean;
     installed: boolean;
-    registerServiceWorker(): void;
+    getServiceWorkerContainer(): ServiceWorkerContainer | null;
+    registerServiceWorker(): Promise<ServiceWorkerRegistration | null>;
     preparePush(): Promise<void>;
     subscribeInstallPrompt(listener: (prompt: PwaInstallPrompt) => void): PlatformUnlisten;
     isMobileInstallClient(): boolean;
@@ -176,7 +177,8 @@ export function unavailablePwaAdapter(): PwaCapabilityAdapter {
     return {
         available: false,
         installed: false,
-        registerServiceWorker() {},
+        getServiceWorkerContainer: () => null,
+        registerServiceWorker: async () => null,
         preparePush: async () => {
             throw new PlatformCapabilityUnavailableError('webPush');
         },
