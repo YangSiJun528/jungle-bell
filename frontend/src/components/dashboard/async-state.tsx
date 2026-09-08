@@ -184,7 +184,7 @@ export function ErrorState({
     regionLabelledBy?: string;
 }) {
     return withRegion(
-        <Alert variant="destructive">
+        <Alert aria-live="assertive" variant="destructive">
             <AlertCircle aria-hidden="true" />
             <AlertTitle className="text-base leading-6">{title}</AlertTitle>
             {description || retry ? (
@@ -218,7 +218,7 @@ export function EmptyState({
     regionLabel?: string;
     regionLabelledBy?: string;
 }) {
-    return withStatus(
+    return withRegion(
         <div className="flex min-h-32 flex-col items-center justify-center rounded-lg border border-dashed bg-muted/30 p-6 text-center">
             <Inbox aria-hidden="true" className="mb-2 size-5 text-muted-foreground" />
             <strong className="text-base leading-6">{title}</strong>

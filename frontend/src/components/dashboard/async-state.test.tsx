@@ -16,11 +16,8 @@ test('오류 재시도 버튼은 Alert 설명 열 안에 배치한다', () => {
     );
 });
 
-test('로딩/빈값/오프라인/복구/스테일 상태는 status + polite 역할을 사용한다', () => {
+test('동적 loading/stale/offline/recovered만 status + polite로 알린다', () => {
     const loading = renderToStaticMarkup(<AsyncState type="loading" regionLabel="로딩 영역" />);
-    const empty = renderToStaticMarkup(
-        <AsyncState type="empty" title="데이터 없음" regionLabel="빈 상태 영역" />,
-    );
     const stale = renderToStaticMarkup(
         <AsyncState type="stale" lastUpdatedAt="2026-09-08 10:00" reason="요청 타임아웃" />,
     );
@@ -29,14 +26,24 @@ test('로딩/빈값/오프라인/복구/스테일 상태는 status + polite 역�
     );
     const recovered = renderToStaticMarkup(<AsyncState type="recovered" regionLabel="복구 영역" />);
 
-    for (const markup of [loading, empty, stale, offline, recovered]) {
+    for (const markup of [loading, stale, offline, recovered]) {
         assert.match(markup, /role="status"/u);
         assert.match(markup, /aria-live="polite"/u);
     }
 
     assert.match(loading, /aria-label="로딩 영역"/u);
-    assert.match(empty, /aria-label="빈 상태 영역"/u);
     assert.match(recovered, /aria-label="복구 영역"/u);
+});
+
+test('정적 empty는 이름 있는 region이지만 live status는 아니다', () => {
+    const empty = renderToStaticMarkup(
+        <AsyncState type="empty" title="데이터 없음" regionLabel="빈 상태 영역" />,
+    );
+
+    assert.match(empty, /role="region"/u);
+    assert.match(empty, /aria-label="빈 상태 영역"/u);
+    assert.doesNotMatch(empty, /role="status"/u);
+    assert.doesNotMatch(empty, /aria-live=/u);
 });
 
 test('재시도 텍스트/핸들러는 stale/offline/recovered에서 주입 가능하고 마지막 정상 시각·이유를 렌더링한다', () => {
@@ -61,7 +68,7 @@ test('재시도 텍스트/핸들러는 stale/offline/recovered에서 주입 가�
     assert.equal(called, false);
 });
 
-test('normal은 이름 있는 region, error는 즉시 알리는 alert로 렌더링한다', () => {
+test('normal은 이름 있는 region, error는 assertive alert로 즉시 알린다', () => {
     const normal = renderToStaticMarkup(
         <AsyncState type="normal" regionLabel="정상 데이터 영역">
             <p>정상 데이터</p>
@@ -74,6 +81,8 @@ test('normal은 이름 있는 region, error는 즉시 알리는 alert로 렌더�
     assert.match(normal, /role="region"/u);
     assert.match(normal, /aria-label="정상 데이터 영역"/u);
     assert.match(error, /role="alert"/u);
+    assert.match(error, /aria-live="assertive"/u);
+    assert.doesNotMatch(error, /role="status"/u);
 });
 
 test('loading/empty/error/degraded 본문은 16px 이상 안내 토큰을 사용한다', () => {

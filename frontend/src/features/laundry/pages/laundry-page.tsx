@@ -1,5 +1,5 @@
 import {RefreshCw, WashingMachine} from 'lucide-react';
-import {useId, useState} from 'react';
+import {useState} from 'react';
 
 import {useDashboardEnvironment} from '@/app/dashboard-context';
 import {useCampusManualRefresh, useSuspenseLaundryQuery} from '@/app/use-dashboard-queries';
@@ -8,8 +8,7 @@ import {laundryZonePresentation} from '@/components/dashboard/laundry-zone-prese
 import {PageHeader} from '@/components/dashboard/page-header';
 import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@/components/ui/card';
-import {Label} from '@/components/ui/label';
-import {Switch} from '@/components/ui/switch';
+import {SwitchRow} from '@/components/ui/switch';
 import {laundrySituationDataIsReliable} from '@/domain/laundry/freshness';
 import {dateTimeLabel, relativeTimeLabel} from '@/lib/format';
 import {cn} from '@/lib/utils';
@@ -120,18 +119,15 @@ function LaundryStatusNotice({
     );
 }
 
-function LaundryPageBody({
-    manualRefresh,
-}: {
-    manualRefresh: ReturnType<typeof useCampusManualRefresh>;
-}) {
-    const {platform} = useDashboardEnvironment();
-    const isOnline = useOnlineStatus();
-    const riskToggleId = useId();
-    const riskIndicatorAvailable = platform.capabilities.laundryRiskIndicator;
-    const [showRisk, setShowRisk] = useState(riskIndicatorAvailable);
+type LaundryManualRefresh = ReturnType<typeof useCampusManualRefresh>;
+type LaundryQuery = ReturnType<typeof useSuspenseLaundryQuery>;
 
-    const laundry = useSuspenseLaundryQuery();
+function laundryPagePresentation(input: {
+    isOnline: boolean;
+    laundry: LaundryQuery;
+    manualRefresh: LaundryManualRefresh;
+}) {
+    const {isOnline, laundry, manualRefresh} = input;
     const snapshot = laundry.data;
     const nowMs = laundry.dataUpdatedAt;
     const manualRefreshFailureIsCurrent =
@@ -174,146 +170,257 @@ function LaundryPageBody({
     const statusMessage = collectorUnavailable ? COLLECTOR_UNAVAILABLE_MESSAGE : status.message;
     const summaries = capacityCards(snapshot.capacity, reliable);
 
+    return {
+        collectorUnavailable,
+        dataStale,
+        nowMs,
+        snapshot,
+        staleLabel,
+        status,
+        statusMessage,
+        statusTitle,
+        summaries,
+    };
+}
+
+type LaundryPagePresentation = ReturnType<typeof laundryPagePresentation>;
+
+function LaundryJumpNavigation() {
     return (
-        <div className="space-y-6">
+        <nav aria-label="세부 섹션 이동" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {LAUNDRY_JUMPS.map(([label, anchor]) => (
+                <a
+                    key={anchor}
+                    className="min-h-11 rounded-md border border-border px-3 py-3 text-center text-base leading-6 outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    href={`#${anchor}`}
+                >
+                    {label}
+                </a>
+            ))}
+        </nav>
+    );
+}
+
+function LaundryCapacitySummary({presentation}: {presentation: LaundryPagePresentation}) {
+    const {nowMs, snapshot, staleLabel, summaries} = presentation;
+
+    return (
+        <section aria-labelledby="laundry-capacity-title">
+            <div className="mb-3">
+                <h2 className="font-semibold" id="laundry-capacity-title">
+                    지금 시작 가능
+                </h2>
+                <p className="text-xs text-muted-foreground">
+                    마지막 확인{' '}
+                    {relativeTimeLabel(snapshot.quality.lastCheckedAt ?? snapshot.asOf, nowMs)}
+                </p>
+                {staleLabel ? (
+                    <p className="text-base leading-6 text-amber-700 dark:text-amber-300">
+                        {staleLabel}
+                    </p>
+                ) : null}
+            </div>
+            <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                {summaries.map((card) => (
+                    <Card
+                        className={cn(
+                            'min-w-0 gap-3 py-5 shadow-none',
+                            card.status === 'available' && 'justify-center',
+                            capacityTone(card),
+                        )}
+                        key={card.access}
+                    >
+                        <CardHeader className="min-w-0 gap-1 px-5">
+                            <CardDescription className="text-base leading-6">
+                                {card.label}
+                            </CardDescription>
+                            <CardTitle className="flex min-w-0 flex-wrap items-baseline gap-2 text-3xl tabular-nums">
+                                {card.count === null ? '—' : `${card.count}회`}
+                                {card.count === null ? null : (
+                                    <span className="text-base leading-6 font-normal text-muted-foreground">
+                                        지금 시작 가능
+                                    </span>
+                                )}
+                            </CardTitle>
+                        </CardHeader>
+                        {card.status !== 'available' ? (
+                            <CardContent className="px-5 text-base leading-6 text-muted-foreground">
+                                {card.description}
+                            </CardContent>
+                        ) : null}
+                    </Card>
+                ))}
+            </div>
+        </section>
+    );
+}
+
+function LaundryRiskToggle({
+    checked,
+    onCheckedChange,
+}: {
+    checked: boolean;
+    onCheckedChange: (checked: boolean) => void;
+}) {
+    return (
+        <div className="border-b px-4 sm:px-6" data-laundry-risk-toggle-row="true">
+            <SwitchRow
+                checked={checked}
+                className="min-h-(--control-height-lg) w-full py-2"
+                label="최근 7일 에러 위험 표시"
+                onCheckedChange={onCheckedChange}
+            />
+        </div>
+    );
+}
+
+function LaundryTowerStatus({
+    presentation,
+    riskIndicatorAvailable,
+    showRisk,
+    onShowRiskChange,
+}: {
+    presentation: LaundryPagePresentation;
+    riskIndicatorAvailable: boolean;
+    showRisk: boolean;
+    onShowRiskChange: (showRisk: boolean) => void;
+}) {
+    const {dataStale, nowMs, snapshot, staleLabel, status} = presentation;
+
+    return (
+        <Card className="min-w-0 gap-0 overflow-hidden py-0" id="laundry-tower-title">
+            <CardHeader className="flex min-w-0 flex-col items-start gap-2 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 [.border-b]:pb-3">
+                <h2 className="flex items-center gap-2 leading-none font-semibold">
+                    <WashingMachine aria-hidden="true" className="size-4 text-primary" />
+                    워시타워 상태
+                </h2>
+                <div
+                    aria-label="워시타워 구역 및 경고 범례"
+                    className="flex min-w-0 flex-wrap items-center gap-1"
+                    data-laundry-zone-legend="true"
+                >
+                    <LaundryZoneBadge zone="men" />
+                    <LaundryZoneBadge zone="common" />
+                    <LaundryZoneBadge zone="women" />
+                    <LaundryWarningBadge />
+                </div>
+            </CardHeader>
+            {riskIndicatorAvailable ? (
+                <LaundryRiskToggle checked={showRisk} onCheckedChange={onShowRiskChange} />
+            ) : null}
+            <CardContent className="px-4 pt-0 pb-3 sm:px-6">
+                {staleLabel ? (
+                    <p className="mb-2 text-base leading-6 text-amber-700 dark:text-amber-300">
+                        {staleLabel}
+                    </p>
+                ) : null}
+                {snapshot.machines.length > 0 ? (
+                    <WashTowerGrid
+                        machines={snapshot.machines}
+                        nowMs={nowMs}
+                        showRiskIndicators={showRisk}
+                        dataStale={dataStale}
+                        dataStaleLabel={status.lastKnownLabel}
+                    />
+                ) : (
+                    <p className="py-5 text-center text-base leading-6 text-muted-foreground">
+                        표시할 워시타워가 없습니다.
+                    </p>
+                )}
+            </CardContent>
+        </Card>
+    );
+}
+
+function LaundryMachineDetails({
+    presentation,
+    showRisk,
+}: {
+    presentation: LaundryPagePresentation;
+    showRisk: boolean;
+}) {
+    const {dataStale, nowMs, snapshot, status} = presentation;
+    return (
+        <section aria-label="기기별 상세 상태" id="laundry-detail-title">
+            <LaundryMachineList
+                machines={snapshot.machines}
+                nowMs={nowMs}
+                showRiskWarnings={showRisk}
+                dataStale={dataStale}
+                staleLabel={status.lastKnownLabel}
+            />
+        </section>
+    );
+}
+
+function PersonalLaundryAlerts({presentation}: {presentation: LaundryPagePresentation}) {
+    const {snapshot, status} = presentation;
+    return (
+        <section aria-label="내 세탁 알림" id="laundry-watch-title">
+            <PersonalLaundrySection
+                canCreateWatch={status.allowWatchCreation ? undefined : false}
+                machines={snapshot.machines}
+            />
+            {status.kind === 'recovered' ? (
+                <p className="mt-2 text-base leading-6 text-emerald-700 dark:text-emerald-300">
+                    이전 오류에서 복구되어 실시간 조회가 재개됩니다.
+                </p>
+            ) : null}
+        </section>
+    );
+}
+
+function LaundryPageContent({
+    manualRefresh,
+    presentation,
+    riskIndicatorAvailable,
+    showRisk,
+    onShowRiskChange,
+}: {
+    manualRefresh: LaundryManualRefresh;
+    presentation: LaundryPagePresentation;
+    riskIndicatorAvailable: boolean;
+    showRisk: boolean;
+    onShowRiskChange: (showRisk: boolean) => void;
+}) {
+    return (
+        <div className="min-w-0 space-y-6">
             <LaundryStatusNotice
                 manualRefresh={manualRefresh}
-                message={statusMessage}
-                status={status}
-                title={statusTitle}
+                message={presentation.statusMessage}
+                status={presentation.status}
+                title={presentation.statusTitle}
             />
-
-            <nav aria-label="세부 섹션 이동" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {LAUNDRY_JUMPS.map(([label, anchor]) => (
-                    <a
-                        key={anchor}
-                        className="min-h-11 rounded-md border border-border px-3 py-3 text-center text-base hover:bg-muted/50"
-                        href={`#${anchor}`}
-                    >
-                        {label}
-                    </a>
-                ))}
-            </nav>
-
-            <section aria-labelledby="laundry-capacity-title">
-                <div className="mb-3">
-                    <h2 className="font-semibold" id="laundry-capacity-title">
-                        지금 시작 가능
-                    </h2>
-                    <p className="text-xs text-muted-foreground">
-                        마지막 확인{' '}
-                        {relativeTimeLabel(snapshot.quality.lastCheckedAt ?? snapshot.asOf, nowMs)}
-                    </p>
-                    {staleLabel ? (
-                        <p className="text-base leading-6 text-amber-700 dark:text-amber-300">
-                            {staleLabel}
-                        </p>
-                    ) : null}
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                    {summaries.map((card) => (
-                        <Card
-                            className={cn(
-                                'gap-3 py-5 shadow-none',
-                                card.status === 'available' && 'justify-center',
-                                capacityTone(card),
-                            )}
-                            key={card.access}
-                        >
-                            <CardHeader className="gap-1 px-5">
-                                <CardDescription>{card.label}</CardDescription>
-                                <CardTitle className="flex items-baseline gap-2 text-3xl tabular-nums">
-                                    {card.count === null ? '—' : `${card.count}회`}
-                                    {card.count === null ? null : (
-                                        <span className="text-sm font-normal text-muted-foreground">
-                                            지금 시작 가능
-                                        </span>
-                                    )}
-                                </CardTitle>
-                            </CardHeader>
-                            {card.status !== 'available' ? (
-                                <CardContent className="px-5 text-base leading-6 text-muted-foreground">
-                                    {card.description}
-                                </CardContent>
-                            ) : null}
-                        </Card>
-                    ))}
-                </div>
-            </section>
-
-            <Card className="gap-0 overflow-hidden py-0" id="laundry-tower-title">
-                <CardHeader className="flex items-center justify-between gap-2 border-b px-4 py-3 sm:px-6 [.border-b]:pb-3">
-                    <h2 className="flex items-center gap-2 leading-none font-semibold">
-                        <WashingMachine className="size-4 text-primary" />
-                        워시타워 상태
-                    </h2>
-                    <div
-                        aria-label="워시타워 구역 및 경고 범례"
-                        className="flex shrink-0 items-center gap-1"
-                        data-laundry-zone-legend="true"
-                    >
-                        <LaundryZoneBadge zone="men" />
-                        <LaundryZoneBadge zone="common" />
-                        <LaundryZoneBadge zone="women" />
-                        <LaundryWarningBadge />
-                    </div>
-                </CardHeader>
-                {riskIndicatorAvailable ? (
-                    <div className="flex items-center justify-end gap-3 border-b px-4 py-3 sm:px-6">
-                        <Label htmlFor={riskToggleId}>최근 7일 에러 위험 표시</Label>
-                        <Switch
-                            aria-label="최근 7일 에러 위험 표시"
-                            checked={showRisk}
-                            id={riskToggleId}
-                            onCheckedChange={setShowRisk}
-                        />
-                    </div>
-                ) : null}
-                <CardContent className="px-4 pt-0 pb-3 sm:px-6">
-                    {staleLabel ? (
-                        <p className="mb-2 text-base leading-6 text-amber-700 dark:text-amber-300">
-                            {staleLabel}
-                        </p>
-                    ) : null}
-                    {snapshot.machines.length > 0 ? (
-                        <WashTowerGrid
-                            machines={snapshot.machines}
-                            nowMs={nowMs}
-                            showRiskIndicators={showRisk}
-                            dataStale={dataStale}
-                            dataStaleLabel={status.lastKnownLabel}
-                        />
-                    ) : (
-                        <p className="py-5 text-center text-base leading-6 text-muted-foreground">
-                            표시할 워시타워가 없습니다.
-                        </p>
-                    )}
-                </CardContent>
-            </Card>
-
-            <section aria-label="기기별 상세 상태" id="laundry-detail-title">
-                <LaundryMachineList
-                    machines={snapshot.machines}
-                    nowMs={nowMs}
-                    showRiskWarnings={showRisk}
-                    dataStale={dataStale}
-                    staleLabel={status.lastKnownLabel}
-                />
-            </section>
-
-            <section aria-label="내 세탁 알림" id="laundry-watch-title">
-                {status.allowWatchCreation ? (
-                    <PersonalLaundrySection machines={snapshot.machines} />
-                ) : (
-                    <PersonalLaundrySection canCreateWatch={false} machines={snapshot.machines} />
-                )}
-                {status.kind === 'recovered' ? (
-                    <p className="mt-2 text-base leading-6 text-emerald-700 dark:text-emerald-300">
-                        이전 오류에서 복구되어 실시간 조회가 재개됩니다.
-                    </p>
-                ) : null}
-            </section>
+            <LaundryJumpNavigation />
+            <LaundryCapacitySummary presentation={presentation} />
+            <LaundryTowerStatus
+                presentation={presentation}
+                riskIndicatorAvailable={riskIndicatorAvailable}
+                showRisk={showRisk}
+                onShowRiskChange={onShowRiskChange}
+            />
+            <LaundryMachineDetails presentation={presentation} showRisk={showRisk} />
+            <PersonalLaundryAlerts presentation={presentation} />
         </div>
+    );
+}
+
+function LaundryPageBody({manualRefresh}: {manualRefresh: LaundryManualRefresh}) {
+    const {platform} = useDashboardEnvironment();
+    const isOnline = useOnlineStatus();
+    const laundry = useSuspenseLaundryQuery();
+    const riskIndicatorAvailable = platform.capabilities.laundryRiskIndicator;
+    const [showRisk, setShowRisk] = useState(riskIndicatorAvailable);
+    const presentation = laundryPagePresentation({isOnline, laundry, manualRefresh});
+
+    return (
+        <LaundryPageContent
+            manualRefresh={manualRefresh}
+            presentation={presentation}
+            riskIndicatorAvailable={riskIndicatorAvailable}
+            showRisk={showRisk}
+            onShowRiskChange={setShowRisk}
+        />
     );
 }
 

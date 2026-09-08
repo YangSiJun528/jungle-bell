@@ -136,6 +136,22 @@ test('200% 확대·landscape·키보드 축소에서도 overlay와 CTA는 동적
     assert.match(alertDialog, /overflow-y-auto/);
 });
 
+test('200% 확대와 긴 텍스트에서 본문·세탁 카드가 가로로 벗어나지 않는다', () => {
+    assert.match(globals, /overflow-wrap:\s*anywhere/);
+    assert.match(globals, /\[data-laundry-machine-card='true'\]/);
+    assert.match(globals, /\[data-laundry-watch-controls='true'\]/);
+    assert.match(globals, /min-width:\s*0/);
+});
+
+test('강제 색상 모드에서 포커스와 세탁 구역·경고·상태 표시를 보존한다', () => {
+    assert.match(globals, /@media\s*\(forced-colors:\s*active\)/);
+    assert.match(globals, /outline:\s*2px solid CanvasText/);
+    assert.match(globals, /\[data-laundry-zone\]/);
+    assert.match(globals, /\[data-laundry-warning='true'\]/);
+    assert.match(globals, /\[data-laundry-appliance-status='true'\]/);
+    assert.match(globals, /border-color:\s*CanvasText/);
+});
+
 test('하단 내비게이션 현재 위치는 aria-current와 비색상 indicator를 함께 제공한다', () => {
     assert.match(shell, /aria-current=\{active \? 'page' : undefined\}/);
     assert.match(shell, /data-active-indicator="true"/);

@@ -210,6 +210,11 @@ test('출석 화면은 조회 상태만 관리하고 공유 알림 설정을 중
 });
 
 test('세탁 화면은 워시타워 상태표와 공통 계정 기능을 함께 제공한다', () => {
+    const personalAlerts = laundry.slice(
+        laundry.indexOf('function PersonalLaundryAlerts'),
+        laundry.indexOf('function LaundryPageContent'),
+    );
+
     assert.match(laundry, /<WashTowerGrid[\s\S]*machines=\{snapshot\.machines\}/u);
     assert.match(laundry, /showRiskIndicators=\{showRisk\}/u);
     assert.match(laundry, /워시타워 상태/);
@@ -229,7 +234,12 @@ test('세탁 화면은 워시타워 상태표와 공통 계정 기능을 함께 
     assert.match(washTower, /data-zone=\{machine\.zone\}/);
     assert.match(washTower, /overflow-x-auto/);
 
-    assert.match(laundry, /<PersonalLaundrySection machines=\{snapshot\.machines\}\s*\/>/);
+    assert.match(personalAlerts, /<PersonalLaundrySection\b/);
+    assert.match(personalAlerts, /machines=\{snapshot\.machines\}/);
+    assert.match(
+        personalAlerts,
+        /canCreateWatch=\{status\.allowWatchCreation \? undefined : false\}/,
+    );
     assert.doesNotMatch(laundry, /use(?:Query|Mutation|QueryClient)/);
     assert.doesNotMatch(laundry, /api\.(?:list|create|delete|join|leave)Laundry/);
     assert.doesNotMatch(laundry, /as PersonalSurface/);

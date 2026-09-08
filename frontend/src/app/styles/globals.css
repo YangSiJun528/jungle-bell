@@ -166,6 +166,18 @@
         margin: 0;
     }
 
+    :where(p, li, dd, dt, figcaption, [data-slot='alert-description']) {
+        overflow-wrap: anywhere;
+    }
+
+    :where(
+        [data-laundry-machine-card='true'],
+        [data-laundry-watch-controls='true'],
+        [data-laundry-watch-item='true']
+    ) {
+        min-width: 0;
+    }
+
     :where(
         [data-slot='button'],
         [data-slot='input'],
@@ -191,5 +203,22 @@
 @media (min-width: 64rem) {
     html {
         scroll-padding-bottom: 1rem;
+    }
+}
+
+@media (forced-colors: active) {
+    :where(button, a, input, select, [role='switch']):focus-visible {
+        outline: 2px solid CanvasText;
+        outline-offset: 2px;
+    }
+
+    :where(
+        [data-laundry-zone],
+        [data-laundry-warning='true'],
+        [data-laundry-appliance-status='true'],
+        [data-risk-level]
+    ) {
+        border-color: CanvasText;
+        forced-color-adjust: auto;
     }
 }

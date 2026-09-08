@@ -116,13 +116,19 @@ test('버튼과 알림은 공통 variant를 제공하고 화면은 이를 조합
     const buttonVariants = source('./components/ui/button-variants.ts');
     const alert = source('./components/ui/alert.tsx');
     const asyncState = source('./components/dashboard/async-state.tsx');
+    const errorState = asyncState.slice(
+        asyncState.indexOf('export function ErrorState'),
+        asyncState.indexOf('export function EmptyState'),
+    );
 
     assert.match(buttonVariants, /buttonVariants = cva\(/);
     for (const variant of ['default', 'destructive', 'outline', 'secondary', 'ghost', 'link']) {
         assert.match(buttonVariants, new RegExp(`${variant}:`));
     }
     assert.match(alert, /const alertVariants = cva\(/);
-    assert.match(asyncState, /<Alert variant="destructive">/);
+    assert.match(errorState, /<Alert\b/);
+    assert.match(errorState, /variant="destructive"/);
+    assert.match(errorState, /aria-live="assertive"/);
     assert.match(asyncState, /export function (?:LoadingState|ErrorState|EmptyState)/);
 });
 

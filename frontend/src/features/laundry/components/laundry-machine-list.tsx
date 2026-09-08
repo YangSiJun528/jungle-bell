@@ -8,7 +8,11 @@ import {TooltipProvider} from '@/components/ui/tooltip';
 import type {DashboardLaundryMachine} from '@/domain/laundry/capacity';
 import {cn} from '@/lib/utils';
 
-import type {LaundryApplianceDetailView, LaundryApplianceTone} from '../lib/laundry-machine-detail';
+import type {
+    LaundryApplianceDetailView,
+    LaundryApplianceTone,
+    LaundryMachineDetailView,
+} from '../lib/laundry-machine-detail';
 import {
     LAUNDRY_WARNING_PROGRESS_CLASS_NAME,
     LAUNDRY_WARNING_TEXT_CLASS_NAME,
@@ -74,12 +78,12 @@ function isLaundryMachineStateFilter(value: string): value is LaundryMachineStat
 
 function StatusIcon({tone}: {tone: LaundryApplianceTone}) {
     const className = 'size-4 shrink-0';
-    if (tone === 'available') return <CircleCheck className={className} />;
-    if (tone === 'error') return <CircleAlert className={className} />;
-    if (tone === 'warning') return <TriangleAlert className={className} />;
-    if (tone === 'confirming') return <Clock3 className={className} />;
-    if (tone === 'active') return <Clock3 className={className} />;
-    return <CircleDashed className={className} />;
+    if (tone === 'available') return <CircleCheck aria-hidden="true" className={className} />;
+    if (tone === 'error') return <CircleAlert aria-hidden="true" className={className} />;
+    if (tone === 'warning') return <TriangleAlert aria-hidden="true" className={className} />;
+    if (tone === 'confirming') return <Clock3 aria-hidden="true" className={className} />;
+    if (tone === 'active') return <Clock3 aria-hidden="true" className={className} />;
+    return <CircleDashed aria-hidden="true" className={className} />;
 }
 
 function RecentRiskNotice({view}: {view: LaundryApplianceDetailView}) {
@@ -104,6 +108,94 @@ function RecentRiskNotice({view}: {view: LaundryApplianceDetailView}) {
     );
 }
 
+function applianceProgressText(view: LaundryApplianceDetailView): string | null {
+    if (view.progress === null) return null;
+    if (view.tone === 'error') return '오류로 진행률을 확인할 수 없음';
+    return [`${view.progress}% 진행`, view.remainingLabel, view.totalLabel]
+        .filter(Boolean)
+        .join(', ');
+}
+
+function ApplianceStatus({
+    machineTitle,
+    titleId,
+    view,
+}: {
+    machineTitle: string;
+    titleId: string;
+    view: LaundryApplianceDetailView;
+}) {
+    const hasStatusHint = view.helpText !== null || view.errorCode !== null;
+
+    return (
+        <div className="flex min-w-0 items-center justify-between gap-3">
+            <h4 className="text-base leading-6 font-medium" id={titleId}>
+                {view.label}
+            </h4>
+            <div className="flex min-w-0 items-center gap-0.5">
+                <span
+                    className={cn(
+                        'inline-flex min-w-0 items-center gap-1.5 text-base leading-6 font-medium',
+                        statusClasses[view.tone],
+                    )}
+                    data-laundry-appliance-status="true"
+                    data-state={view.tone}
+                >
+                    <StatusIcon tone={view.tone} />
+                    <span className="break-words">{view.statusLabel}</span>
+                </span>
+                {hasStatusHint ? (
+                    <LaundryStatusHint label={`${machineTitle} ${view.label} 상세 안내`}>
+                        {view.helpText ? <p>{view.helpText}</p> : null}
+                        {view.errorCode ? (
+                            <p>
+                                오류 코드{' '}
+                                <code className="font-mono break-all">{view.errorCode}</code>
+                            </p>
+                        ) : null}
+                    </LaundryStatusHint>
+                ) : null}
+            </div>
+        </div>
+    );
+}
+
+function ApplianceProgress({
+    machineTitle,
+    view,
+}: {
+    machineTitle: string;
+    view: LaundryApplianceDetailView;
+}) {
+    if (view.progress === null) return null;
+
+    return (
+        <Progress
+            aria-label={`${machineTitle} ${view.kind === 'washer' ? '세탁' : '건조'} 진행률`}
+            aria-valuetext={applianceProgressText(view) ?? undefined}
+            className={cn(view.tone === 'warning' && LAUNDRY_WARNING_PROGRESS_CLASS_NAME)}
+            value={view.progress}
+        />
+    );
+}
+
+function ApplianceTiming({view}: {view: LaundryApplianceDetailView}) {
+    if (!view.startedAt && !view.estimatedFinishAt) return null;
+
+    return (
+        <p className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground tabular-nums">
+            {view.startedAt ? (
+                <time dateTime={view.startedAt}>{clockLabel(view.startedAt)} 시작</time>
+            ) : null}
+            {view.estimatedFinishAt ? (
+                <time dateTime={view.estimatedFinishAt}>
+                    {clockLabel(view.estimatedFinishAt)} 종료
+                </time>
+            ) : null}
+        </p>
+    );
+}
+
 function ApplianceDetail({
     machineTitle,
     showRiskWarning,
@@ -115,51 +207,13 @@ function ApplianceDetail({
     titleId: string;
     view: LaundryApplianceDetailView;
 }) {
-    const progressText =
-        view.progress === null
-            ? null
-            : view.tone === 'error'
-              ? '오류로 진행률을 확인할 수 없음'
-              : [`${view.progress}% 진행`, view.remainingLabel, view.totalLabel]
-                    .filter(Boolean)
-                    .join(', ');
-    const hasStatusHint = view.helpText !== null || view.errorCode !== null;
-
     return (
         <section
-            className="flex h-full flex-col gap-3 border-b p-4 last:border-b-0"
+            className="flex h-full min-w-0 flex-col gap-3 border-b p-4 last:border-b-0"
             aria-labelledby={titleId}
             data-kind={view.kind}
         >
-            <div className="flex min-w-0 items-center justify-between gap-3">
-                <h4 className="text-base leading-6 font-medium" id={titleId}>
-                    {view.label}
-                </h4>
-                <div className="flex min-w-0 items-center gap-0.5">
-                    <span
-                        className={cn(
-                            'inline-flex min-w-0 items-center gap-1.5 text-base leading-6 font-medium',
-                            statusClasses[view.tone],
-                        )}
-                        data-state={view.tone}
-                    >
-                        <StatusIcon tone={view.tone} />
-                        <span className="truncate">{view.statusLabel}</span>
-                    </span>
-                    {hasStatusHint ? (
-                        <LaundryStatusHint label={`${machineTitle} ${view.label} 상세 안내`}>
-                            {view.helpText ? <p>{view.helpText}</p> : null}
-                            {view.errorCode ? (
-                                <p>
-                                    오류 코드{' '}
-                                    <code className="font-mono break-all">{view.errorCode}</code>
-                                </p>
-                            ) : null}
-                        </LaundryStatusHint>
-                    ) : null}
-                </div>
-            </div>
-
+            <ApplianceStatus machineTitle={machineTitle} titleId={titleId} view={view} />
             <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                 <strong className="text-lg tabular-nums">{view.remainingLabel}</strong>
                 {view.totalLabel ? (
@@ -168,33 +222,8 @@ function ApplianceDetail({
                     </span>
                 ) : null}
             </div>
-
-            {view.progress === null ? null : (
-                <div>
-                    <Progress
-                        aria-label={`${machineTitle} ${view.kind === 'washer' ? '세탁' : '건조'} 진행률`}
-                        aria-valuetext={progressText ?? undefined}
-                        className={cn(
-                            view.tone === 'warning' && LAUNDRY_WARNING_PROGRESS_CLASS_NAME,
-                        )}
-                        value={view.progress}
-                    />
-                </div>
-            )}
-
-            {view.startedAt || view.estimatedFinishAt ? (
-                <p className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground tabular-nums">
-                    {view.startedAt ? (
-                        <time dateTime={view.startedAt}>{clockLabel(view.startedAt)} 시작</time>
-                    ) : null}
-                    {view.estimatedFinishAt ? (
-                        <time dateTime={view.estimatedFinishAt}>
-                            {clockLabel(view.estimatedFinishAt)} 종료
-                        </time>
-                    ) : null}
-                </p>
-            ) : null}
-
+            <ApplianceProgress machineTitle={machineTitle} view={view} />
+            <ApplianceTiming view={view} />
             {showRiskWarning ? <RecentRiskNotice view={view} /> : null}
         </section>
     );
@@ -203,6 +232,72 @@ function ApplianceDetail({
 type CollapsibleMachineState = Record<string, boolean>;
 
 type LaundryMachineListFilter = LaundryMachineZoneFilter | 'all';
+
+function LaundryMachineCard({
+    dataStale,
+    detailId,
+    index,
+    isOpen,
+    machine,
+    showRiskWarnings,
+    titleId,
+    onToggle,
+}: {
+    dataStale: boolean;
+    detailId: string;
+    index: number;
+    isOpen: boolean;
+    machine: LaundryMachineDetailView;
+    showRiskWarnings: boolean;
+    titleId: string;
+    onToggle: () => void;
+}) {
+    return (
+        <Card
+            className="h-full min-w-0 gap-0 overflow-hidden py-0 shadow-none"
+            data-data-state={dataStale ? 'stale' : 'current'}
+            data-laundry-machine-card="true"
+        >
+            <CardHeader className="flex min-w-0 flex-row items-center justify-between gap-3 border-b px-4 py-3 [.border-b]:pb-3">
+                <h3 className="text-base leading-none font-semibold">{machine.title}</h3>
+                <div className="flex shrink-0 items-center gap-2">
+                    {dataStale ? (
+                        <span className="text-base leading-6 text-amber-700 dark:text-amber-300">
+                            실시간 아님
+                        </span>
+                    ) : null}
+                    <LaundryZoneBadge zone={machine.zone} />
+                </div>
+            </CardHeader>
+            <CardContent className="grid flex-1 grid-rows-2 p-0">
+                <button
+                    aria-controls={detailId}
+                    aria-expanded={isOpen}
+                    aria-label={`${machine.title} 상세 ${isOpen ? '접기' : '펼치기'}`}
+                    className="min-h-11 rounded-none border-b px-4 py-3 text-left text-base font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                    onClick={onToggle}
+                    type="button"
+                >
+                    상세 {isOpen ? '접기' : '펼치기'}
+                </button>
+                <div id={detailId} hidden={!isOpen}>
+                    <ApplianceDetail
+                        machineTitle={machine.title}
+                        showRiskWarning={showRiskWarnings}
+                        titleId={`${titleId}-${index}-dryer`}
+                        view={machine.dryer}
+                    />
+                    <ApplianceDetail
+                        machineTitle={machine.title}
+                        showRiskWarning={showRiskWarnings}
+                        titleId={`${titleId}-${index}-washer`}
+                        view={machine.washer}
+                    />
+                </div>
+            </CardContent>
+        </Card>
+    );
+}
 
 export function LaundryMachineList({
     machines,
@@ -240,11 +335,16 @@ export function LaundryMachineList({
                 </p>
             ) : null}
             <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-                <label className="flex flex-col text-base">
-                    <span className="mb-1 text-sm text-muted-foreground">구역</span>
+                <label className="flex min-w-0 flex-col text-base">
+                    <span
+                        className="mb-1 text-base leading-6 text-muted-foreground"
+                        data-laundry-filter-label="true"
+                    >
+                        구역
+                    </span>
                     <select
                         aria-label="구역"
-                        className="h-11 min-h-11 rounded-md border border-input bg-background px-3"
+                        className="h-11 min-h-11 w-full min-w-0 rounded-md border border-input bg-background px-3 text-base outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
                         value={zoneFilter}
                         onChange={(event) => {
                             if (isLaundryMachineListFilter(event.target.value)) {
@@ -259,11 +359,16 @@ export function LaundryMachineList({
                         ))}
                     </select>
                 </label>
-                <label className="flex flex-col text-base">
-                    <span className="mb-1 text-sm text-muted-foreground">상태</span>
+                <label className="flex min-w-0 flex-col text-base">
+                    <span
+                        className="mb-1 text-base leading-6 text-muted-foreground"
+                        data-laundry-filter-label="true"
+                    >
+                        상태
+                    </span>
                     <select
                         aria-label="상태"
-                        className="h-11 min-h-11 rounded-md border border-input bg-background px-3"
+                        className="h-11 min-h-11 w-full min-w-0 rounded-md border border-input bg-background px-3 text-base outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
                         value={stateFilter}
                         onChange={(event) => {
                             if (isLaundryMachineStateFilter(event.target.value)) {
@@ -278,10 +383,14 @@ export function LaundryMachineList({
                         ))}
                     </select>
                 </label>
-                <label className="flex min-h-11 items-center gap-3 text-base sm:col-span-2">
+                <label
+                    className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md px-1 text-base leading-6 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 sm:col-span-2"
+                    data-laundry-priority-row="true"
+                >
                     <input
-                        className="size-5"
+                        className="size-5 shrink-0 rounded outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                         checked={prioritizeProblems}
+                        data-laundry-priority-control="true"
                         onChange={(event) => {
                             setPrioritizeProblems(event.target.checked);
                         }}
@@ -299,56 +408,22 @@ export function LaundryMachineList({
                             const isOpen = expanded[machine.id] ?? true;
 
                             return (
-                                <Card
-                                    className="h-full gap-0 overflow-hidden py-0 shadow-none"
-                                    data-data-state={dataStale ? 'stale' : 'current'}
-                                    data-laundry-machine-card="true"
+                                <LaundryMachineCard
+                                    dataStale={dataStale}
+                                    detailId={detailId}
+                                    index={machineIndex}
+                                    isOpen={isOpen}
                                     key={machine.id}
-                                >
-                                    <CardHeader className="flex flex-row items-center justify-between gap-3 border-b px-4 py-3 [.border-b]:pb-3">
-                                        <h3 className="text-base leading-none font-semibold">
-                                            {machine.title}
-                                        </h3>
-                                        <div className="flex items-center gap-2">
-                                            {dataStale ? (
-                                                <span className="text-base leading-6 text-amber-700 dark:text-amber-300">
-                                                    실시간 아님
-                                                </span>
-                                            ) : null}
-                                            <LaundryZoneBadge zone={machine.zone} />
-                                        </div>
-                                    </CardHeader>
-                                    <CardContent className="grid flex-1 grid-rows-2 p-0">
-                                        <button
-                                            aria-controls={detailId}
-                                            aria-expanded={isOpen}
-                                            className="min-h-11 rounded-none border-b px-4 py-3 text-left text-base font-semibold"
-                                            onClick={() => {
-                                                setExpanded((previous) => ({
-                                                    ...previous,
-                                                    [machine.id]: !isOpen,
-                                                }));
-                                            }}
-                                            type="button"
-                                        >
-                                            상세 {isOpen ? '접기' : '펼치기'}
-                                        </button>
-                                        <div id={detailId} hidden={!isOpen}>
-                                            <ApplianceDetail
-                                                machineTitle={machine.title}
-                                                showRiskWarning={showRiskWarnings}
-                                                titleId={`${titleId}-${machineIndex}-dryer`}
-                                                view={machine.dryer}
-                                            />
-                                            <ApplianceDetail
-                                                machineTitle={machine.title}
-                                                showRiskWarning={showRiskWarnings}
-                                                titleId={`${titleId}-${machineIndex}-washer`}
-                                                view={machine.washer}
-                                            />
-                                        </div>
-                                    </CardContent>
-                                </Card>
+                                    machine={machine}
+                                    showRiskWarnings={showRiskWarnings}
+                                    titleId={titleId}
+                                    onToggle={() => {
+                                        setExpanded((previous) => ({
+                                            ...previous,
+                                            [machine.id]: !isOpen,
+                                        }));
+                                    }}
+                                />
                             );
                         })}
                     </div>

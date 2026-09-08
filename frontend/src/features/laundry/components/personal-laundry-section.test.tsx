@@ -231,4 +231,21 @@ describe('PersonalLaundrySection', () => {
         expect(markup).toContain('실시간 정보가 아닐 때는 새 세탁 알림을 설정할 수 없습니다.');
         expect(markup).toContain('text-base leading-6');
     });
+
+    test('설정 안내와 활성 알림은 메타데이터가 아닌 본문 크기로 안전하게 줄바꿈한다', () => {
+        const markup = renderPersonalLaundry();
+        const guide = markup.match(/<p[^>]*data-laundry-watch-guide="true"[^>]*>/u)?.[0];
+        const item = markup.match(/<li[^>]*data-laundry-watch-item="true"[^>]*>/u)?.[0];
+        const target = markup.match(/<p[^>]*data-laundry-watch-target="true"[^>]*>/u)?.[0];
+        const condition = markup.match(/<p[^>]*data-laundry-watch-condition="true"[^>]*>/u)?.[0];
+
+        expect(guide).toContain('text-base');
+        expect(guide).toContain('leading-6');
+        expect(item).toContain('min-w-0');
+        expect(target).toContain('text-base');
+        expect(target).toContain('leading-6');
+        expect(condition).toContain('text-base');
+        expect(condition).toContain('leading-6');
+        expect(condition).toContain('break-words');
+    });
 });

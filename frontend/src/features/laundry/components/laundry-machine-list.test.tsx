@@ -190,14 +190,55 @@ describe('LaundryMachineList', () => {
             <LaundryMachineList machines={machines} nowMs={NOW_MS} />,
         );
 
+        const zoneSelect = markup.match(/<select[^>]*aria-label="구역"[^>]*>/u)?.[0];
+        const stateSelect = markup.match(/<select[^>]*aria-label="상태"[^>]*>/u)?.[0];
+        const priorityRow = markup.match(/<label[^>]*data-laundry-priority-row="true"[^>]*>/u)?.[0];
+        const priorityControl = markup.match(
+            /<input[^>]*data-laundry-priority-control="true"[^>]*>/u,
+        )?.[0];
+        const accordion = markup.match(
+            /<button[^>]*aria-label="1번 워시타워 상세 접기"[^>]*>/u,
+        )?.[0];
+
         expect(markup).toContain('aria-label="구역"');
         expect(markup).toContain('aria-label="상태"');
         expect(markup).toContain('문제 우선 정렬');
         expect(markup).toContain('aria-expanded="true"');
         expect(markup).toContain('상세 접기');
-        expect(markup).toContain('min-h-11');
+        expect(zoneSelect).toContain('min-h-11');
+        expect(zoneSelect).toContain('focus-visible:ring');
+        expect(stateSelect).toContain('min-h-11');
+        expect(stateSelect).toContain('focus-visible:ring');
+        expect(priorityRow).toContain('min-h-11');
+        expect(priorityRow).toContain('cursor-pointer');
+        expect(priorityControl).toContain('focus-visible:ring');
+        expect(accordion).toContain('min-h-11');
+        expect(accordion).toContain('focus-visible:ring');
+        expect(accordion).toContain('aria-expanded="true"');
+        expect(accordion).toMatch(/aria-controls="[^"]+"/u);
         expect(source).not.toContain('if (views.length === 0) return null');
         expect(source).toContain('필터 조건에 맞는 기기가 없습니다.');
+    });
+
+    it('필터 라벨과 상태 안내는 본문 크기를 사용하고 상태를 글자와 아이콘으로 같이 표시한다', () => {
+        const markup = renderToStaticMarkup(
+            <LaundryMachineList machines={machines} nowMs={NOW_MS} showRiskWarnings />,
+        );
+        const filterLabels = (markup.match(/<span\b[^>]*>/gu) ?? []).filter((tag) =>
+            tag.includes('data-laundry-filter-label="true"'),
+        );
+
+        expect(filterLabels).toHaveLength(2);
+        for (const label of filterLabels) {
+            expect(label).toContain('text-base');
+            expect(label).toContain('leading-6');
+        }
+        expect(markup).toMatch(
+            /data-laundry-appliance-status="true"[^>]*data-state="error"[\s\S]*lucide-circle-alert[\s\S]*배관 에러/u,
+        );
+        expect(markup).toMatch(
+            /data-laundry-risk-notice="true"[^>]*data-risk-level="caution"[\s\S]*주의/u,
+        );
     });
 
     it('stale 상세 카드마다 실시간 데이터가 아님을 표시한다', () => {
