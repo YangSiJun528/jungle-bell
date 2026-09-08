@@ -256,6 +256,7 @@ test('설정 알림 탭은 연결된 기기의 출석·급식 설정을 함께 �
 
     assert.match(attendancePreferences, /api\.getAttendancePreferences\(\)/);
     assert.match(attendancePreferences, /api\.updateAttendancePreferences\(input\)/);
+    assert.match(attendancePreferences, /<SwitchRow/);
     for (const label of [
         '출석 알림 사용',
         '학습 시작 알림',
@@ -271,6 +272,7 @@ test('설정 알림 탭은 연결된 기기의 출석·급식 설정을 함께 �
 
     assert.match(mealPreferences, /api\.getMealPreferences\(\)/);
     assert.match(mealPreferences, /api\.updateMealPreferences\(input\)/);
+    assert.match(mealPreferences, /<SwitchRow/);
     for (const label of ['급식 알림 설정', '중식', '석식']) {
         assert.match(mealPreferences, new RegExp(label));
     }

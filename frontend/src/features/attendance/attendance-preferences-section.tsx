@@ -26,42 +26,13 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import {Separator} from '@/components/ui/separator';
-import {Switch} from '@/components/ui/switch';
+import {SwitchRow} from '@/components/ui/switch';
 
 import {attendancePreferencesEqual, attendanceSkipDate} from './attendance-view-model';
 
 const MORNING_START_HOURS = [4, 5, 6, 7, 8, 9] as const;
 const EVENING_END_HOURS = [0, 1, 2, 3, 4] as const;
 const INTERVAL_MINUTES = [1, 3, 5, 10, 15, 30] as const;
-
-function PreferenceSwitchRow({
-    title,
-    description,
-    checked,
-    disabled,
-    onCheckedChange,
-}: {
-    title: string;
-    description: string;
-    checked: boolean;
-    disabled: boolean;
-    onCheckedChange: (checked: boolean) => void;
-}) {
-    return (
-        <div className="flex items-center justify-between gap-4 py-4">
-            <div className="min-w-0">
-                <p className="text-sm font-medium">{title}</p>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p>
-            </div>
-            <Switch
-                aria-label={title}
-                checked={checked}
-                disabled={disabled}
-                onCheckedChange={onCheckedChange}
-            />
-        </div>
-    );
-}
 
 function NumberSelect<const Value extends number>({
     id,
@@ -175,8 +146,8 @@ export function AttendancePreferencesSection() {
                     />
                 ) : (
                     <div>
-                        <PreferenceSwitchRow
-                            title="출석 알림 사용"
+                        <SwitchRow
+                            label="출석 알림 사용"
                             description="출석 알림 계획을 한 번에 켜거나 끕니다."
                             checked={draft.enabled}
                             disabled={savePreferences.isPending}
@@ -184,8 +155,8 @@ export function AttendancePreferencesSection() {
                         />
                         <Separator />
                         <div className="py-4">
-                            <PreferenceSwitchRow
-                                title="학습 시작 알림"
+                            <SwitchRow
+                                label="학습 시작 알림"
                                 description="미완료 확인 시 선택한 간격으로, 상태 확인 불가 시 시작 시각·2시간 뒤·10시에 알립니다."
                                 checked={draft.morning}
                                 disabled={!draft.enabled || savePreferences.isPending}
@@ -226,8 +197,8 @@ export function AttendancePreferencesSection() {
                         </div>
                         <Separator />
                         <div className="py-4">
-                            <PreferenceSwitchRow
-                                title="학습 종료 알림"
+                            <SwitchRow
+                                label="학습 종료 알림"
                                 description="미완료 확인 시 선택한 간격으로, 상태 확인 불가 시 23시와 자정에만 알립니다."
                                 checked={draft.evening}
                                 disabled={!draft.enabled || savePreferences.isPending}
@@ -265,16 +236,16 @@ export function AttendancePreferencesSection() {
                             </div>
                         </div>
                         <Separator />
-                        <PreferenceSwitchRow
-                            title="일요일 제외"
+                        <SwitchRow
+                            label="일요일 제외"
                             description="일요일에는 출석 알림을 계획하지 않습니다."
                             checked={draft.skipSunday}
                             disabled={!draft.enabled || savePreferences.isPending}
                             onCheckedChange={(skipSunday) => updateDraft('skipSunday', skipSunday)}
                         />
                         <Separator />
-                        <PreferenceSwitchRow
-                            title="이번 출석일 건너뛰기"
+                        <SwitchRow
+                            label="이번 출석일 건너뛰기"
                             description={
                                 attendanceDate
                                     ? `${attendanceDate} 하루만 알림을 쉽니다.`

@@ -25,37 +25,8 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import {Separator} from '@/components/ui/separator';
-import {Switch} from '@/components/ui/switch';
+import {SwitchRow} from '@/components/ui/switch';
 import type {DesktopSettingsUpdate} from '@/platform/contracts';
-
-function ServiceSettingRow({
-    title,
-    description,
-    checked,
-    disabled,
-    onCheckedChange,
-}: {
-    title: string;
-    description: string;
-    checked: boolean;
-    disabled: boolean;
-    onCheckedChange: (checked: boolean) => void;
-}) {
-    return (
-        <div className="flex items-center justify-between gap-4 py-4">
-            <div className="min-w-0">
-                <p className="text-sm font-medium">{title}</p>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p>
-            </div>
-            <Switch
-                aria-label={title}
-                checked={checked}
-                disabled={disabled}
-                onCheckedChange={onCheckedChange}
-            />
-        </div>
-    );
-}
 
 function DesktopServiceSettings() {
     const {api} = useDashboardEnvironment();
@@ -185,8 +156,8 @@ function DesktopServiceSettings() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <ServiceSettingRow
-                        title="사용 통계"
+                    <SwitchRow
+                        label="사용 통계"
                         description="화면 열림과 성공한 기능 이용 횟수를 수집합니다. 이 PC와 이 계정에 연결된 PWA에 같은 설정이 적용됩니다."
                         checked={value.usageAnalytics === true}
                         disabled={save.isPending}
@@ -228,8 +199,8 @@ function DesktopServiceSettings() {
                         </p>
                     </div>
                     <Separator />
-                    <ServiceSettingRow
-                        title="자동 시작"
+                    <SwitchRow
+                        label="자동 시작"
                         description="운영체제에 로그인하면 백그라운드에서 Jungle Bell을 시작합니다."
                         checked={value.autoStart}
                         disabled={save.isPending}
@@ -257,8 +228,8 @@ function DesktopServiceSettings() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <ServiceSettingRow
-                        title="디버그 모드"
+                    <SwitchRow
+                        label="디버그 모드"
                         description="상세 진단 로그를 기록합니다. 개발자 도구나 외부 명령 실행 권한은 열지 않습니다."
                         checked={value.debugMode}
                         disabled={save.isPending}

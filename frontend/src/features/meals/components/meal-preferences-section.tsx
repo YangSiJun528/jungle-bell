@@ -11,7 +11,7 @@ import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@/components/ui/card';
 import {Separator} from '@/components/ui/separator';
-import {Switch} from '@/components/ui/switch';
+import {SwitchRow} from '@/components/ui/switch';
 
 const asInput = (preferences: MealPreferences): MealPreferencesInput => ({
     enabled: preferences.enabled,
@@ -22,30 +22,6 @@ const asInput = (preferences: MealPreferences): MealPreferencesInput => ({
 function preferencesEqual(left: MealPreferencesInput, right: MealPreferences): boolean {
     return (
         left.enabled === right.enabled && left.lunch === right.lunch && left.dinner === right.dinner
-    );
-}
-
-function PreferenceRow({
-    checked,
-    disabled,
-    label,
-    onCheckedChange,
-}: {
-    checked: boolean;
-    disabled?: boolean;
-    label: string;
-    onCheckedChange: (checked: boolean) => void;
-}) {
-    return (
-        <label className="flex cursor-pointer items-center justify-between gap-4 py-3">
-            <span className="text-sm font-medium">{label}</span>
-            <Switch
-                aria-label={label}
-                checked={checked}
-                disabled={disabled}
-                onCheckedChange={onCheckedChange}
-            />
-        </label>
     );
 }
 
@@ -71,7 +47,7 @@ function MealPreferencesEditor({
 
     return (
         <div className="mx-auto max-w-2xl">
-            <PreferenceRow
+            <SwitchRow
                 checked={draft.enabled}
                 disabled={saving}
                 label="급식 알림 사용"
@@ -79,14 +55,14 @@ function MealPreferencesEditor({
             />
             <Separator />
             <div className="pl-4">
-                <PreferenceRow
+                <SwitchRow
                     checked={draft.lunch}
                     disabled={!draft.enabled || saving}
                     label="중식"
                     onCheckedChange={(checked) => updateDraft('lunch', checked)}
                 />
                 <Separator />
-                <PreferenceRow
+                <SwitchRow
                     checked={draft.dinner}
                     disabled={!draft.enabled || saving}
                     label="석식"
