@@ -5,6 +5,14 @@
   "windows": ["dashboard"],
   "permissions": [
     "core:event:default",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        { "url": "https://github.com/YangSiJun528/jungle-bell" },
+        { "url": "https://github.com/YangSiJun528/jungle-bell/issues/new/choose" },
+        { "url": "https://github.com/YangSiJun528/jungle-bell/releases/latest" }
+      ]
+    },
     "allow-bootstrap-desktop-http-session",
     "allow-get-desktop-settings",
     "allow-check-desktop-update",
