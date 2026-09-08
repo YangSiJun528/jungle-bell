@@ -47,6 +47,26 @@ describe('mobile pairing flow', () => {
         expect(pause).not.toHaveBeenCalled();
     });
 
+    test('사용자가 승인 대기를 취소하면 추가 완료 확인을 시작하지 않는다', async () => {
+        const controller = new AbortController();
+        controller.abort();
+        const complete = vi
+            .fn<(pairingId: string) => Promise<'completed' | 'waiting'>>()
+            .mockResolvedValue('waiting');
+        const pause = vi.fn<(milliseconds: number) => Promise<void>>().mockResolvedValue(undefined);
+
+        await expect(
+            waitForPairingCompletion({
+                pairingId: 'pairing',
+                complete,
+                pause,
+                signal: controller.signal,
+            }),
+        ).rejects.toThrow('PAIRING_CANCELLED');
+        expect(complete).not.toHaveBeenCalled();
+        expect(pause).not.toHaveBeenCalled();
+    });
+
     test('기본 승인 대기는 10분 pairing 유효 시간에 맞춰 600회 확인한다', async () => {
         const complete = vi
             .fn<(pairingId: string) => Promise<'completed' | 'waiting'>>()

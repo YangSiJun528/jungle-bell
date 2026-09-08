@@ -131,6 +131,8 @@ export interface PwaCapabilityAdapter {
     subscribeInstallPrompt(listener: (prompt: PwaInstallPrompt) => void): PlatformUnlisten;
     isMobileInstallClient(): boolean;
     subscribePush(applicationServerKey: string): Promise<PushSubscriptionJSON>;
+    getPushSubscription(): Promise<PushSubscriptionJSON | null>;
+    unsubscribePush(expectedEndpoint: string): Promise<boolean>;
 }
 
 export type UsagePreferenceScope = 'anonymous';
@@ -176,6 +178,12 @@ export function unavailablePwaAdapter(): PwaCapabilityAdapter {
         subscribeInstallPrompt: () => () => undefined,
         isMobileInstallClient: () => false,
         subscribePush: async () => {
+            throw new PlatformCapabilityUnavailableError('webPush');
+        },
+        getPushSubscription: async () => {
+            throw new PlatformCapabilityUnavailableError('webPush');
+        },
+        unsubscribePush: async () => {
             throw new PlatformCapabilityUnavailableError('webPush');
         },
     };

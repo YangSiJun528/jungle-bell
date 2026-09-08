@@ -2,7 +2,11 @@ import {describe, expect, test} from 'vitest';
 
 import type {DesktopTestNotificationResult} from '@/api/dashboard-api';
 
-import {desktopTestNotificationMessage, mobilePushErrorMessage} from './notification-result';
+import {
+    assertMobileTestNotificationQueued,
+    desktopTestNotificationMessage,
+    mobilePushErrorMessage,
+} from './notification-result';
 
 const result = (
     systemDelivered: boolean,
@@ -24,9 +28,10 @@ describe('desktop test notification result', () => {
     });
 
     test('PC와 모바일 성공 범위를 구분한다', () => {
-        expect(desktopTestNotificationMessage(result(true, 0))).toContain(
-            '연결된 모바일 푸시는 없습니다',
-        );
+        const pcOnly = desktopTestNotificationMessage(result(true, 0));
+        expect(pcOnly).toContain('표시를 요청했습니다');
+        expect(pcOnly).not.toContain('표시했습니다');
+        expect(pcOnly).toContain('연결된 모바일 푸시는 없습니다');
         expect(desktopTestNotificationMessage(result(true, 2))).toContain('모바일 2대');
     });
 });
@@ -50,5 +55,22 @@ describe('mobile push error result', () => {
 
     test('알 수 없는 오류는 재시도 안내를 한다', () => {
         expect(mobilePushErrorMessage(new Error('NETWORK_ERROR'))).toContain('다시 시도');
+    });
+
+    test('등록 메타데이터 저장 실패를 서버 등록 성공으로 표시하지 않는다', () => {
+        expect(
+            mobilePushErrorMessage(new Error('PUSH_REGISTRATION_METADATA_WRITE_FAILED')),
+        ).toContain('등록 정보를 저장하지 못했습니다');
+        expect(
+            mobilePushErrorMessage(new Error('PUSH_PREVIOUS_REGISTRATION_CLEANUP_FAILED')),
+        ).toContain('이전 서버 등록을 정리하지 못했습니다');
+    });
+
+    test('테스트 대상 0대는 성공 결과로 통과시키지 않는다', () => {
+        expect(() => assertMobileTestNotificationQueued(0)).toThrow('PUSH_TEST_NO_TARGETS');
+        expect(assertMobileTestNotificationQueued(2)).toBe(2);
+        expect(mobilePushErrorMessage(new Error('PUSH_TEST_NO_TARGETS'))).toContain(
+            '전송할 기기가 없습니다',
+        );
     });
 });

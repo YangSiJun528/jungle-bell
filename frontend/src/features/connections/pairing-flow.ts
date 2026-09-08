@@ -3,6 +3,7 @@ export interface PairingCompletionOptions {
     complete(pairingId: string): Promise<'waiting' | 'completed'>;
     pause(milliseconds: number): Promise<void>;
     maximumAttempts?: number;
+    signal?: AbortSignal;
 }
 
 export type AccountInitializationState =
@@ -60,16 +61,25 @@ export function pairingCompletionErrorIsTerminal(error: unknown): boolean {
     return /EXPIRED|NOT_FOUND|CLAIM|ALREADY_USED|RECEIPT_(?:INVALID|MISSING)/u.test(message);
 }
 
+function throwIfPairingCancelled(signal: AbortSignal | undefined): void {
+    if (signal?.aborted) throw new Error('PAIRING_CANCELLED');
+}
+
 export async function waitForPairingCompletion(options: PairingCompletionOptions): Promise<void> {
     const maximumAttempts = options.maximumAttempts ?? 600;
     for (let attempt = 0; attempt < maximumAttempts; attempt += 1) {
+        throwIfPairingCancelled(options.signal);
         try {
             const result = await options.complete(options.pairingId);
+            throwIfPairingCancelled(options.signal);
             if (result === 'completed') return;
             await options.pause(1_000);
+            throwIfPairingCancelled(options.signal);
         } catch (error) {
+            throwIfPairingCancelled(options.signal);
             if (pairingCompletionErrorIsTerminal(error)) throw error;
             await options.pause(3_000);
+            throwIfPairingCancelled(options.signal);
         }
     }
     throw new Error('PAIRING_EXPIRED');

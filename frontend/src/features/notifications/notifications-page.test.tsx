@@ -39,6 +39,10 @@ const desktopNotification: NotificationInboxItem = {
 };
 
 describe('notification row navigation semantics', () => {
+    test('건너뛴 뒤에도 찾을 수 있는 푸시 설정 진입점을 알림 화면에 유지한다', () => {
+        expect(pageSource).toContain('<NotificationDeliverySection />');
+    });
+
     test('companion 알림 경로는 실제 링크로 렌더링한다', () => {
         const markup = renderToStaticMarkup(
             <NotificationRow
@@ -141,7 +145,7 @@ describe('notification center information architecture', () => {
     });
 
     test('새 푸시 연결이나 테스트를 시작할 때 이전 성공 문구를 지운다', () => {
-        expect(deliverySource.match(/setDeliveryMessage\(''\)/gu)).toHaveLength(2);
+        expect(deliverySource.match(/setDeliveryMessage\(''\)/gu)).toHaveLength(3);
         expect(deliverySource).toContain('setShowSystemSettingsShortcut(false)');
     });
 
@@ -158,7 +162,7 @@ describe('notification center information architecture', () => {
 
     test('테스트 Push는 Worker 전달 주기를 사용자에게 명확히 안내한다', () => {
         expect(deliverySource).toContain(
-            '테스트 푸시를 전송 대기열에 추가했습니다. 1분 안에 도착합니다.',
+            '테스트 푸시를 전송 대기열에 추가했습니다. 도착까지 최대 1분 정도 걸릴 수 있으며, 실제 도착을 아래에서 확인해야 합니다.',
         );
     });
 

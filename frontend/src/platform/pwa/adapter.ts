@@ -92,7 +92,29 @@ export function createPwaCapabilityAdapter(options: {
                 return Promise.reject(error);
             }
         },
+        async getPushSubscription() {
+            assertPushSupported(windowObject, navigatorObject);
+            const registration = await startServiceWorker();
+            const subscription = await registration.pushManager.getSubscription();
+            return subscription?.toJSON() ?? null;
+        },
+        async unsubscribePush(expectedEndpoint) {
+            assertPushSupported(windowObject, navigatorObject);
+            const registration = await startServiceWorker();
+            const subscription = await registration.pushManager.getSubscription();
+            if (!subscription) return false;
+            if (subscription.endpoint !== expectedEndpoint) {
+                throw new Error('PUSH_SUBSCRIPTION_CHANGED');
+            }
+            return subscription.unsubscribe();
+        },
     };
+}
+
+function assertPushSupported(windowObject: Window, navigatorObject: Navigator): void {
+    if (!('serviceWorker' in navigatorObject) || !('PushManager' in windowObject)) {
+        throw new Error('PUSH_UNSUPPORTED');
+    }
 }
 
 function installedPwa(windowObject: Window, navigatorObject: Navigator): boolean {
