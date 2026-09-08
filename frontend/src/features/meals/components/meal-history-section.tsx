@@ -78,7 +78,10 @@ function MealHistoryMonth({
                 className="grid items-start gap-4 lg:grid-cols-[minmax(17rem,20rem)_minmax(0,1fr)]"
                 data-meal-history-overview="true"
             >
-                <Card className="mx-auto w-full max-w-80 gap-4 p-4 shadow-none lg:mx-0">
+                <Card className="mx-auto w-full max-w-80 min-w-0 gap-3 p-4 shadow-none lg:mx-0">
+                    <p className="text-base leading-6 text-muted-foreground sm:hidden">
+                        달력은 좌우로 스크롤해 모든 요일을 확인할 수 있습니다.
+                    </p>
                     <MealHistoryCalendar
                         availableDates={availableDates}
                         month={visibleMonthKey}

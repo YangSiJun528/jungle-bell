@@ -92,7 +92,7 @@ function SidebarNavigationItem({route, activeRoute}: NavigationItemProps) {
                 asChild
                 isActive={active}
                 tooltip={meta.label}
-                className="h-auto min-h-(--control-height) gap-3 rounded-lg px-3 text-sidebar-foreground/70 lg:h-10 lg:min-h-10"
+                className="h-auto min-h-(--control-height) gap-3 rounded-lg px-3 text-sidebar-foreground/70"
             >
                 <Link
                     to={dashboardRoutePath(route)}
@@ -148,7 +148,7 @@ function SidebarNotificationItem({
                         setOpenMobile(false);
                     }}
                     className={cn(
-                        'h-auto min-h-(--control-height) gap-3 rounded-lg px-3 lg:h-10 lg:min-h-10',
+                        'h-auto min-h-(--control-height) gap-3 rounded-lg px-3',
                         hasUnread ? 'pr-10' : undefined,
                         hasUnread && !open
                             ? 'text-primary hover:text-primary'
