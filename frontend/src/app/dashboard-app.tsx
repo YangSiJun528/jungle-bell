@@ -141,7 +141,10 @@ function DashboardContent() {
                         <DashboardRouteErrorFallback route={contentRoute} retry={retry} />
                     )}
                 >
-                    <PlatformAuthenticationGate enabled={isPersonalDashboardRoute(contentRoute)}>
+                    <PlatformAuthenticationGate
+                        enabled={isPersonalDashboardRoute(contentRoute)}
+                        preserveRouteHeading
+                    >
                         <Outlet />
                     </PlatformAuthenticationGate>
                 </AsyncBoundary>

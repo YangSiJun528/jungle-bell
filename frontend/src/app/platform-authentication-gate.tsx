@@ -3,6 +3,7 @@ import {Link, useRouterState} from '@tanstack/react-router';
 import {CircleAlert, Download, LogIn, RefreshCw, Smartphone} from 'lucide-react';
 import {type PropsWithChildren, type ReactNode, useEffect, useId, useReducer} from 'react';
 
+import {PageHeader} from '@/components/dashboard/page-header';
 import {Button} from '@/components/ui/button';
 
 import {useDashboardAccount} from './dashboard-account';
@@ -17,6 +18,8 @@ import {
 import {useDashboardEnvironment} from './dashboard-context';
 import {
     connectionsRouteSearch,
+    DASHBOARD_ROUTE_META,
+    dashboardRouteFromPath,
     normalizeDashboardReturnTarget,
     type DashboardReturnTarget,
 } from './routes';
@@ -24,6 +27,7 @@ import {useRefreshAttendanceMutation} from './use-dashboard-queries';
 
 interface PlatformAuthenticationGateProps extends PropsWithChildren {
     enabled?: boolean;
+    preserveRouteHeading?: boolean;
     timeoutMilliseconds?: number;
 }
 
@@ -58,6 +62,16 @@ function GatePanel({actions, description, icon, title, tone = 'default'}: GatePa
                 </div>
             </div>
         </section>
+    );
+}
+
+function PersonalGateRouteFrame({children, pathname}: PropsWithChildren<{pathname: string}>) {
+    const route = dashboardRouteFromPath(pathname);
+    return (
+        <div className="space-y-6" data-personal-access-route-frame="true">
+            <PageHeader title={DASHBOARD_ROUTE_META[route].label} />
+            {children}
+        </div>
     );
 }
 
@@ -387,6 +401,7 @@ function DesktopServerGate({
 export function PlatformAuthenticationGate({
     children,
     enabled = true,
+    preserveRouteHeading = false,
     timeoutMilliseconds = CHECKER_LMS_UNKNOWN_TIMEOUT_MS,
 }: PlatformAuthenticationGateProps) {
     const {api, platform} = useDashboardEnvironment();
@@ -431,29 +446,35 @@ export function PlatformAuthenticationGate({
     const retryAction = (
         <RetryAction fetching={account.connectionQuery.isFetching} retry={retryDesktop} />
     );
+    const renderGate = (gate: ReactNode) =>
+        preserveRouteHeading ? (
+            <PersonalGateRouteFrame pathname={pathname}>{gate}</PersonalGateRouteFrame>
+        ) : (
+            gate
+        );
 
-    if (platform.accountAuthentication.kind === 'none') return <WebPersonalGate />;
+    if (platform.accountAuthentication.kind === 'none') return renderGate(<WebPersonalGate />);
     if (platform.accountAuthentication.kind === 'cookie') {
-        return (
+        return renderGate(
             <BrowserPersonalGate
                 access={account.personalAccess}
                 fetching={account.browserSessionQuery.isFetching}
                 retry={() => void account.browserSessionQuery.refetch()}
                 returnTo={returnTo}
-            />
+            />,
         );
     }
     if (account.status.lmsAuthentication !== 'authenticated') {
-        return (
+        return renderGate(
             <DesktopLmsGate
                 loginAction={loginAction}
                 retryAction={retryAction}
                 status={account.status.lmsAuthentication}
                 timedOut={checkerWait.timedOut}
-            />
+            />,
         );
     }
-    return (
+    return renderGate(
         <DesktopServerGate
             connect={() => refreshAttendance.mutate()}
             connecting={refreshAttendance.isPending}
@@ -462,6 +483,6 @@ export function PlatformAuthenticationGate({
             returnTo={returnTo}
             status={account.status.serverSession}
             timedOut={checkerWait.timedOut}
-        />
+        />,
     );
 }

@@ -79,6 +79,7 @@ function renderGate(options: {
     serverSession?: string;
     desktopAccount?: boolean;
     enabled?: boolean;
+    preserveRouteHeading?: boolean;
     pwaInstalled?: boolean;
 }): string {
     environment.authentication = options.authentication;
@@ -92,7 +93,11 @@ function renderGate(options: {
     const router = createDashboardRouter(createMemoryHistory({initialEntries: ['/attendance']}));
     return renderToStaticMarkup(
         <RouterContextProvider router={router}>
-            <PlatformAuthenticationGate enabled={options.enabled} timeoutMilliseconds={10_000}>
+            <PlatformAuthenticationGate
+                enabled={options.enabled}
+                preserveRouteHeading={options.preserveRouteHeading}
+                timeoutMilliseconds={10_000}
+            >
                 <RouteContent />
             </PlatformAuthenticationGate>
         </RouterContextProvider>,
@@ -144,6 +149,15 @@ describe('PlatformAuthenticationGate', () => {
         expect(markup).toContain('href="/home"');
         expect(markup).not.toContain('data-route-content');
         expect(routeRenderCount).toBe(0);
+    });
+
+    test('route 본문의 개인 기능 gate는 현재 화면 H1을 유지한다', () => {
+        const markup = renderGate({authentication: 'none', preserveRouteHeading: true});
+
+        expect(markup).toContain('data-personal-access-route-frame="true"');
+        expect(markup).toContain('<h1');
+        expect(markup).toContain('출석</h1>');
+        expect(markup).toContain('앱 설치가 필요합니다.');
     });
 
     test('PWA의 개인 기능만 연결 상태에 따라 인라인으로 분기한다', () => {

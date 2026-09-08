@@ -16,6 +16,7 @@ describe('DashboardApp personal access boundaries', () => {
         expect(source).toMatch(
             /<PlatformAuthenticationGate[\s\S]*enabled=\{isPersonalDashboardRoute\(contentRoute\)\}[\s\S]*<Outlet\s*\/>/u,
         );
+        expect(source).toContain('preserveRouteHeading');
     });
 
     test('privacy route는 dashboard shell 밖의 공개 outlet을 보존한다', () => {

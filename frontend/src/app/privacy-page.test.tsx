@@ -60,6 +60,7 @@ describe('개인정보 처리방침', () => {
         expect(markup).toContain('양시준');
         expect(markup).toContain('href="mailto:yangsijun5528@gmail.com"');
         expect(markup).toContain('변경 고지 방법: 앱 내 공지');
+        expect(markup.match(/min-h-\(--hit-area-min\)/gu)?.length ?? 0).toBeGreaterThanOrEqual(5);
     });
 
     test('통계 식별 단위와 계정 설정 정책을 실제 동작대로 고지한다', () => {
