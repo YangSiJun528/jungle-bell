@@ -158,17 +158,18 @@ describe('LaundryMachineList', () => {
         expect(markup).toContain(
             '<h3 class="text-base leading-none font-semibold">1번 워시타워</h3>',
         );
-        expect(markup).toContain('auto-rows-fr');
+        expect(markup).toContain('items-stretch');
         expect(markup).toContain('md:grid-cols-2');
         expect(markup).toContain('lg:grid-cols-3');
         expect(markup).not.toContain('2xl:grid-cols-3');
+        expect(markup).toContain('flex flex-1 flex-col p-0');
         expect(markup).toContain('grid flex-1 grid-rows-2');
         expect(markup).toContain('data-kind="dryer"');
         expect(markup).toContain('data-kind="washer"');
         expect(markup).not.toContain('min-w-[');
     });
 
-    it('nine wash tower cards share equal outer rows and two internal appliance rows', () => {
+    it('nine wash tower cards keep natural outer rows and equal internal appliance rows', () => {
         const nineMachines = Array.from({length: 9}, (_, index) => ({
             id: `워시타워_${index + 1}`,
             zone:
@@ -181,7 +182,8 @@ describe('LaundryMachineList', () => {
         );
 
         expect(markup.match(/data-laundry-machine-card="true"/gu)).toHaveLength(9);
-        expect(markup).toContain('auto-rows-fr');
+        expect(markup).not.toContain('auto-rows-fr');
+        expect(markup).toContain('items-stretch');
         expect(markup.match(/grid flex-1 grid-rows-2/gu)).toHaveLength(9);
     });
 

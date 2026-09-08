@@ -269,7 +269,7 @@ function LaundryMachineCard({
                     <LaundryZoneBadge zone={machine.zone} />
                 </div>
             </CardHeader>
-            <CardContent className="grid flex-1 grid-rows-2 p-0">
+            <CardContent className="flex flex-1 flex-col p-0">
                 <button
                     aria-controls={detailId}
                     aria-expanded={isOpen}
@@ -280,7 +280,7 @@ function LaundryMachineCard({
                 >
                     상세 {isOpen ? '접기' : '펼치기'}
                 </button>
-                <div id={detailId} hidden={!isOpen}>
+                <div className="grid flex-1 grid-rows-2" id={detailId} hidden={!isOpen}>
                     <ApplianceDetail
                         machineTitle={machine.title}
                         showRiskWarning={showRiskWarnings}
@@ -402,7 +402,7 @@ export function LaundryMachineList({
 
             {views.length > 0 ? (
                 <TooltipProvider delayDuration={200}>
-                    <div className="grid auto-rows-fr gap-3 md:grid-cols-2 lg:grid-cols-3">
+                    <div className="grid items-stretch gap-3 md:grid-cols-2 lg:grid-cols-3">
                         {views.map((machine, machineIndex) => {
                             const detailId = `${titleId}-detail-${machine.id}`;
                             const isOpen = expanded[machine.id] ?? true;
