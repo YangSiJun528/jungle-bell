@@ -56,11 +56,19 @@ function renderSettings(value: DesktopSettings = settings): string {
     );
 }
 
+function switchRow(markup: string, label: string): string {
+    const row = markup
+        .match(/<label data-slot="switch-row"[\s\S]*?<\/label>/gu)
+        ?.find((candidate) => candidate.includes(`>${label}<`));
+    expect(row, `${label} SwitchRow가 없습니다.`).toBeDefined();
+    return row ?? '';
+}
+
 describe('ServiceSettings', () => {
     test('데스크톱 로컬 기능을 실제 설정 컨트롤로 표시한다', () => {
         const markup = renderSettings();
         for (const label of ['자동 시작', '사용 통계', '디버그 모드']) {
-            expect(markup).toContain(`aria-label="${label}"`);
+            expect(switchRow(markup, label)).toContain('role="switch"');
         }
         expect(markup).not.toContain('aria-label="자동 업데이트"');
         expect(source).not.toContain('자동 업데이트를 끌까요?');
@@ -77,7 +85,7 @@ describe('ServiceSettings', () => {
             '기존 선택을 확인할 수 없어 이 PC와 연결된 PWA 모두 전송하지 않습니다.',
         );
         expect(markup).toContain('이 PC와 이 계정에 연결된 PWA에 같은 설정이 적용됩니다.');
-        expect(markup).toMatch(/<button[^>]+aria-checked="false"[^>]+aria-label="사용 통계"/u);
+        expect(switchRow(markup, '사용 통계')).toContain('aria-checked="false"');
         expect(markup).toContain('개발자 도구나 외부 명령 실행 권한은 열지 않습니다.');
         expect(markup).toContain('출석 확인 기수');
         expect(markup).toContain('자동 선택');
@@ -90,7 +98,7 @@ describe('ServiceSettings', () => {
 
     test('사용 통계를 명시적으로 허용한 설정만 켜진 상태로 표시한다', () => {
         const markup = renderSettings({...settings, usageAnalytics: true});
-        expect(markup).toMatch(/<button[^>]+aria-checked="true"[^>]+aria-label="사용 통계"/u);
+        expect(switchRow(markup, '사용 통계')).toContain('aria-checked="true"');
         expect(markup).not.toContain('기존 선택을 확인할 수 없어');
     });
 
@@ -120,7 +128,7 @@ describe('ServiceSettings', () => {
         try {
             const markup = renderSettings();
             expect(markup).toContain('PC 앱에서 설정합니다.');
-            expect(markup).not.toContain('aria-label="자동 시작"');
+            expect(markup).not.toContain('>자동 시작<');
         } finally {
             environment.platform = {capabilities: {desktopSettings: true}};
         }
