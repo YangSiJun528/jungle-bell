@@ -26,18 +26,24 @@ import {
 } from '@/components/ui/select';
 import {Separator} from '@/components/ui/separator';
 import {SwitchRow} from '@/components/ui/switch';
-import type {DesktopSettingsUpdate} from '@/platform/contracts';
+import type {DesktopSettings, DesktopSettingsUpdate} from '@/platform/contracts';
 
-function DesktopServiceSettings() {
+type EditableDesktopSetting = 'autoStart' | 'usageAnalytics' | 'debugMode';
+type CohortDraft = string | null | undefined;
+
+function useDesktopSettingsQuery() {
     const {api} = useDashboardEnvironment();
-    const client = useQueryClient();
-    const [confirmDebugOn, setConfirmDebugOn] = useState(false);
-    const [cohortDraft, setCohortDraft] = useState<string | null | undefined>(undefined);
-    const settings = useQuery({
+
+    return useQuery({
         queryKey: queryKeys.desktopSettings,
         queryFn: () => api.getDesktopSettings(),
         refetchInterval: 30_000,
     });
+}
+
+function useDesktopSettingsMutations() {
+    const {api} = useDashboardEnvironment();
+    const client = useQueryClient();
     const save = useMutation({
         mutationFn: (input: DesktopSettingsUpdate) => api.updateDesktopSettings(input),
         onSuccess: (value) => {
@@ -48,20 +54,382 @@ function DesktopServiceSettings() {
     // Opening an OS folder does not mutate query-backed application state.
     // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation
     const openLogs = useMutation({mutationFn: () => api.openLogFolder()});
-    const value = settings.data;
-    const update = (key: 'autoStart' | 'usageAnalytics' | 'debugMode', checked: boolean) => {
-        if (!value) return;
+
+    const updateSetting = (
+        value: DesktopSettings,
+        key: EditableDesktopSetting,
+        checked: boolean,
+    ) => {
         save.mutate({...value, [key]: checked});
     };
-    const updateSelectedCohort = (selectedCohortId: string | null) => {
-        if (!value) return;
-        save.mutate(
-            {...value, selectedCohortId},
-            {
-                onSuccess: () => setCohortDraft(undefined),
-            },
-        );
+    const updateSelectedCohort = (
+        value: DesktopSettings,
+        selectedCohortId: string | null,
+        onSuccess: () => void,
+    ) => {
+        save.mutate({...value, selectedCohortId}, {onSuccess});
     };
+
+    return {
+        hasError: save.isError || openLogs.isError,
+        isOpeningLogs: openLogs.isPending,
+        isSaving: save.isPending,
+        openLogFolder: () => openLogs.mutate(),
+        updateSelectedCohort,
+        updateSetting,
+    };
+}
+
+function useCohortSelection(value: DesktopSettings | undefined) {
+    const [cohortDraft, setCohortDraft] = useState<CohortDraft>(undefined);
+    const selectedCohortId = value?.selectedCohortId ?? null;
+    const savedCohortId =
+        selectedCohortId && value?.cohortOptions.some(({id}) => id === selectedCohortId)
+            ? selectedCohortId
+            : null;
+    const displayedCohortId = cohortDraft === undefined ? savedCohortId : cohortDraft;
+    const cohortDirty = cohortDraft !== undefined && cohortDraft !== savedCohortId;
+    const effectiveCohortId = value?.effectiveCohortId;
+    const effectiveCohortLabel =
+        value?.cohortOptions.find(({id}) => id === effectiveCohortId)?.label ?? null;
+
+    return {
+        cohortDirty,
+        cohortDraft,
+        displayedCohortId,
+        effectiveCohortLabel,
+        resetCohortDraft: () => setCohortDraft(undefined),
+        setCohortDraft,
+    };
+}
+
+function useDebugModeConfirmation() {
+    const [confirmDebugOn, setConfirmDebugOn] = useState(false);
+
+    return {confirmDebugOn, setConfirmDebugOn};
+}
+
+function getUsageAnalyticsNotice(value: DesktopSettings): string | null {
+    if (value.usageAnalytics === null) {
+        return value.usageAnalyticsSyncPending
+            ? '이 PC에서는 전송하지 않습니다. 연결된 PWA의 계정 설정은 서버 연결 후 확인됩니다.'
+            : '기존 선택을 확인할 수 없어 이 PC와 연결된 PWA 모두 전송하지 않습니다. 스위치를 선택하면 계정 설정으로 저장됩니다.';
+    }
+    if (!value.usageAnalyticsSyncPending) return null;
+
+    return value.usageAnalytics
+        ? '서버에서 허용을 확인하기 전까지 전송하지 않습니다. 계정 설정을 동기화하고 있습니다.'
+        : '이 PC의 전송은 중지했습니다. 연결된 PWA의 계정 설정은 서버 연결 후 적용됩니다.';
+}
+
+type CohortSelection = ReturnType<typeof useCohortSelection>;
+type DesktopSettingsMutations = ReturnType<typeof useDesktopSettingsMutations>;
+type DebugModeConfirmation = ReturnType<typeof useDebugModeConfirmation>;
+type UpdateSetting = (key: EditableDesktopSetting, checked: boolean) => void;
+
+function CohortSettingsCard({
+    value,
+    isSaving,
+    selection,
+    updateSelectedCohort,
+}: {
+    value: DesktopSettings;
+    isSaving: boolean;
+    selection: CohortSelection;
+    updateSelectedCohort: (selectedCohortId: string | null) => void;
+}) {
+    const {cohortDirty, cohortDraft, displayedCohortId, effectiveCohortLabel, setCohortDraft} =
+        selection;
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>정글 LMS</CardTitle>
+                <CardDescription>출석과 D-Day를 확인할 기수를 선택합니다.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+                <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                    <div>
+                        <p className="text-sm font-medium">출석 확인 기수</p>
+                        <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                            자동 선택은 현재 날짜에 맞는 활성 기수를 사용합니다.
+                        </p>
+                    </div>
+                    <Select
+                        disabled={isSaving || value.cohortOptions.length === 0}
+                        value={displayedCohortId ?? 'automatic'}
+                        onValueChange={(nextValue) =>
+                            setCohortDraft(nextValue === 'automatic' ? null : nextValue)
+                        }
+                    >
+                        <SelectTrigger aria-label="출석 확인 기수" className="w-full sm:w-64">
+                            <SelectValue placeholder="기수를 선택하세요" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="automatic">자동 선택</SelectItem>
+                            {value.cohortOptions.map((cohort) => (
+                                <SelectItem key={cohort.id} value={cohort.id}>
+                                    {cohort.label}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+                {value.cohortOptions.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                        LMS 로그인 후 기수 목록이 표시됩니다.
+                    </p>
+                ) : (
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-xs text-muted-foreground">
+                            현재 적용 · {effectiveCohortLabel ?? '자동 선택 대기 중'}
+                        </p>
+                        <Button
+                            disabled={isSaving || !cohortDirty}
+                            onClick={() => {
+                                if (cohortDraft !== undefined) updateSelectedCohort(cohortDraft);
+                            }}
+                        >
+                            {isSaving ? '적용 중' : '변경사항 적용'}
+                        </Button>
+                    </div>
+                )}
+                {cohortDirty ? (
+                    <p className="text-xs text-amber-700 dark:text-amber-300">
+                        적용하지 않은 기수 변경이 있습니다.
+                    </p>
+                ) : null}
+            </CardContent>
+        </Card>
+    );
+}
+
+function PrivacySettingsCard({
+    value,
+    isSaving,
+    update,
+}: {
+    value: DesktopSettings;
+    isSaving: boolean;
+    update: UpdateSetting;
+}) {
+    const notice = getUsageAnalyticsNotice(value);
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>개인정보</CardTitle>
+                <CardDescription>
+                    계정에 연결된 기기에서 최소한의 사용 통계를 전송할지 정합니다.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <SwitchRow
+                    label="사용 통계"
+                    description="화면 열림과 성공한 기능 이용 횟수를 수집합니다. 이 PC와 이 계정에 연결된 PWA에 같은 설정이 적용됩니다."
+                    checked={value.usageAnalytics === true}
+                    disabled={isSaving}
+                    onCheckedChange={(checked) => update('usageAnalytics', checked)}
+                />
+                {notice ? (
+                    <p className="pb-4 text-xs text-amber-700 dark:text-amber-300">{notice}</p>
+                ) : null}
+            </CardContent>
+        </Card>
+    );
+}
+
+function AppLaunchSettingsCard({
+    value,
+    isSaving,
+    update,
+}: {
+    value: DesktopSettings;
+    isSaving: boolean;
+    update: UpdateSetting;
+}) {
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>앱 실행</CardTitle>
+                <CardDescription>이 PC에서 Jungle Bell을 실행하는 방식을 정합니다.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className="flex items-center justify-between gap-4 py-4">
+                    <div className="min-w-0">
+                        <p className="text-sm font-medium">앱 버전</p>
+                        <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                            현재 설치된 Jungle Bell PC 앱의 버전입니다.
+                        </p>
+                    </div>
+                    <p className="shrink-0 font-mono text-sm text-muted-foreground">
+                        v{value.appVersion}
+                    </p>
+                </div>
+                <Separator />
+                <SwitchRow
+                    label="자동 시작"
+                    description="운영체제에 로그인하면 백그라운드에서 Jungle Bell을 시작합니다."
+                    checked={value.autoStart}
+                    disabled={isSaving}
+                    onCheckedChange={(checked) => update('autoStart', checked)}
+                />
+                <Separator />
+                <div className="flex items-center justify-between gap-4 py-4">
+                    <div className="min-w-0">
+                        <p className="text-sm font-medium">자동 업데이트</p>
+                        <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                            항상 새 버전을 확인하며, 사용 중에는 설치와 재시작을 다음 실행으로
+                            미룹니다.
+                        </p>
+                    </div>
+                    <p className="shrink-0 text-sm text-muted-foreground">항상 사용</p>
+                </div>
+            </CardContent>
+        </Card>
+    );
+}
+
+function DiagnosticsSettingsCard({
+    value,
+    isSaving,
+    isOpeningLogs,
+    setConfirmDebugOn,
+    update,
+    openLogFolder,
+}: {
+    value: DesktopSettings;
+    isSaving: boolean;
+    isOpeningLogs: boolean;
+    setConfirmDebugOn: (open: boolean) => void;
+    update: UpdateSetting;
+    openLogFolder: () => void;
+}) {
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>진단</CardTitle>
+                <CardDescription>
+                    문제를 확인할 때만 상세 로그를 켜고 앱 로그를 확인합니다.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <SwitchRow
+                    label="디버그 모드"
+                    description="상세 진단 로그를 기록합니다. 개발자 도구나 외부 명령 실행 권한은 열지 않습니다."
+                    checked={value.debugMode}
+                    disabled={isSaving}
+                    onCheckedChange={(checked) => {
+                        if (checked) setConfirmDebugOn(true);
+                        else update('debugMode', false);
+                    }}
+                />
+                <Separator />
+                <div className="flex items-center justify-between gap-4 py-4">
+                    <div className="min-w-0">
+                        <p className="text-sm font-medium">로그 폴더</p>
+                        <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                            Jungle Bell 전용 로그 디렉터리를 파일 탐색기에서 엽니다.
+                        </p>
+                    </div>
+                    <Button variant="outline" disabled={isOpeningLogs} onClick={openLogFolder}>
+                        <FolderOpen aria-hidden="true" />
+                        {isOpeningLogs ? '여는 중' : '열기'}
+                    </Button>
+                </div>
+            </CardContent>
+        </Card>
+    );
+}
+
+function SettingsMutationAlert({visible}: {visible: boolean}) {
+    if (!visible) return null;
+
+    return (
+        <Alert variant="destructive">
+            <CircleAlert />
+            <AlertTitle>서비스 설정을 처리하지 못했습니다.</AlertTitle>
+            <AlertDescription>잠시 후 다시 시도하세요.</AlertDescription>
+        </Alert>
+    );
+}
+
+function DebugModeConfirmationDialog({
+    confirmation,
+    update,
+}: {
+    confirmation: DebugModeConfirmation;
+    update: UpdateSetting;
+}) {
+    const {confirmDebugOn, setConfirmDebugOn} = confirmation;
+
+    return (
+        <AlertDialog open={confirmDebugOn} onOpenChange={setConfirmDebugOn}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>디버그 모드를 켤까요?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        평소보다 많은 진단 로그가 저장됩니다. 문제 분석 같은 특별한 목적이 없다면
+                        켜지 마세요.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>아니요</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => update('debugMode', true)}>
+                        네, 디버그 모드 켜기
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+    );
+}
+
+function DesktopSettingsCards({
+    value,
+    cohortSelection,
+    debugConfirmation,
+    mutations,
+}: {
+    value: DesktopSettings;
+    cohortSelection: CohortSelection;
+    debugConfirmation: DebugModeConfirmation;
+    mutations: DesktopSettingsMutations;
+}) {
+    const update: UpdateSetting = (key, checked) => mutations.updateSetting(value, key, checked);
+    const updateSelectedCohort = (selectedCohortId: string | null) => {
+        mutations.updateSelectedCohort(value, selectedCohortId, cohortSelection.resetCohortDraft);
+    };
+
+    return (
+        <div className="space-y-4">
+            <CohortSettingsCard
+                value={value}
+                isSaving={mutations.isSaving}
+                selection={cohortSelection}
+                updateSelectedCohort={updateSelectedCohort}
+            />
+            <PrivacySettingsCard value={value} isSaving={mutations.isSaving} update={update} />
+            <AppLaunchSettingsCard value={value} isSaving={mutations.isSaving} update={update} />
+            <DiagnosticsSettingsCard
+                value={value}
+                isSaving={mutations.isSaving}
+                isOpeningLogs={mutations.isOpeningLogs}
+                setConfirmDebugOn={debugConfirmation.setConfirmDebugOn}
+                update={update}
+                openLogFolder={mutations.openLogFolder}
+            />
+            <SettingsMutationAlert visible={mutations.hasError} />
+            <DebugModeConfirmationDialog confirmation={debugConfirmation} update={update} />
+        </div>
+    );
+}
+
+function DesktopServiceSettings() {
+    const settings = useDesktopSettingsQuery();
+    const mutations = useDesktopSettingsMutations();
+    const cohortSelection = useCohortSelection(settings.data);
+    const debugConfirmation = useDebugModeConfirmation();
+    const value = settings.data;
 
     if (settings.isPending && !value) {
         return <LoadingState label="서비스 설정을 불러오고 있습니다." />;
@@ -76,214 +444,13 @@ function DesktopServiceSettings() {
     }
     if (!value) return null;
 
-    const savedCohortId =
-        value.selectedCohortId && value.cohortOptions.some(({id}) => id === value.selectedCohortId)
-            ? value.selectedCohortId
-            : null;
-    const displayedCohortId = cohortDraft === undefined ? savedCohortId : cohortDraft;
-    const cohortDirty = cohortDraft !== undefined && cohortDraft !== savedCohortId;
-    const effectiveCohortLabel =
-        value.cohortOptions.find(({id}) => id === value.effectiveCohortId)?.label ?? null;
-
     return (
-        <div className="space-y-4">
-            <Card>
-                <CardHeader>
-                    <CardTitle>정글 LMS</CardTitle>
-                    <CardDescription>출석과 D-Day를 확인할 기수를 선택합니다.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                    <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-                        <div>
-                            <p className="text-sm font-medium">출석 확인 기수</p>
-                            <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                                자동 선택은 현재 날짜에 맞는 활성 기수를 사용합니다.
-                            </p>
-                        </div>
-                        <Select
-                            disabled={save.isPending || value.cohortOptions.length === 0}
-                            value={displayedCohortId ?? 'automatic'}
-                            onValueChange={(nextValue) =>
-                                setCohortDraft(nextValue === 'automatic' ? null : nextValue)
-                            }
-                        >
-                            <SelectTrigger aria-label="출석 확인 기수" className="w-full sm:w-64">
-                                <SelectValue placeholder="기수를 선택하세요" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="automatic">자동 선택</SelectItem>
-                                {value.cohortOptions.map((cohort) => (
-                                    <SelectItem key={cohort.id} value={cohort.id}>
-                                        {cohort.label}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    {value.cohortOptions.length === 0 ? (
-                        <p className="text-xs text-muted-foreground">
-                            LMS 로그인 후 기수 목록이 표시됩니다.
-                        </p>
-                    ) : (
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                            <p className="text-xs text-muted-foreground">
-                                현재 적용 · {effectiveCohortLabel ?? '자동 선택 대기 중'}
-                            </p>
-                            <Button
-                                disabled={save.isPending || !cohortDirty}
-                                onClick={() => {
-                                    if (cohortDraft !== undefined)
-                                        updateSelectedCohort(cohortDraft);
-                                }}
-                            >
-                                {save.isPending ? '적용 중' : '변경사항 적용'}
-                            </Button>
-                        </div>
-                    )}
-                    {cohortDirty ? (
-                        <p className="text-xs text-amber-700 dark:text-amber-300">
-                            적용하지 않은 기수 변경이 있습니다.
-                        </p>
-                    ) : null}
-                </CardContent>
-            </Card>
-
-            <Card>
-                <CardHeader>
-                    <CardTitle>개인정보</CardTitle>
-                    <CardDescription>
-                        계정에 연결된 기기에서 최소한의 사용 통계를 전송할지 정합니다.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <SwitchRow
-                        label="사용 통계"
-                        description="화면 열림과 성공한 기능 이용 횟수를 수집합니다. 이 PC와 이 계정에 연결된 PWA에 같은 설정이 적용됩니다."
-                        checked={value.usageAnalytics === true}
-                        disabled={save.isPending}
-                        onCheckedChange={(checked) => update('usageAnalytics', checked)}
-                    />
-                    {value.usageAnalytics === null ? (
-                        <p className="pb-4 text-xs text-amber-700 dark:text-amber-300">
-                            {value.usageAnalyticsSyncPending
-                                ? '이 PC에서는 전송하지 않습니다. 연결된 PWA의 계정 설정은 서버 연결 후 확인됩니다.'
-                                : '기존 선택을 확인할 수 없어 이 PC와 연결된 PWA 모두 전송하지 않습니다. 스위치를 선택하면 계정 설정으로 저장됩니다.'}
-                        </p>
-                    ) : value.usageAnalyticsSyncPending ? (
-                        <p className="pb-4 text-xs text-amber-700 dark:text-amber-300">
-                            {value.usageAnalytics
-                                ? '서버에서 허용을 확인하기 전까지 전송하지 않습니다. 계정 설정을 동기화하고 있습니다.'
-                                : '이 PC의 전송은 중지했습니다. 연결된 PWA의 계정 설정은 서버 연결 후 적용됩니다.'}
-                        </p>
-                    ) : null}
-                </CardContent>
-            </Card>
-
-            <Card>
-                <CardHeader>
-                    <CardTitle>앱 실행</CardTitle>
-                    <CardDescription>
-                        이 PC에서 Jungle Bell을 실행하는 방식을 정합니다.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="flex items-center justify-between gap-4 py-4">
-                        <div className="min-w-0">
-                            <p className="text-sm font-medium">앱 버전</p>
-                            <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                                현재 설치된 Jungle Bell PC 앱의 버전입니다.
-                            </p>
-                        </div>
-                        <p className="shrink-0 font-mono text-sm text-muted-foreground">
-                            v{value.appVersion}
-                        </p>
-                    </div>
-                    <Separator />
-                    <SwitchRow
-                        label="자동 시작"
-                        description="운영체제에 로그인하면 백그라운드에서 Jungle Bell을 시작합니다."
-                        checked={value.autoStart}
-                        disabled={save.isPending}
-                        onCheckedChange={(checked) => update('autoStart', checked)}
-                    />
-                    <Separator />
-                    <div className="flex items-center justify-between gap-4 py-4">
-                        <div className="min-w-0">
-                            <p className="text-sm font-medium">자동 업데이트</p>
-                            <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                                항상 새 버전을 확인하며, 사용 중에는 설치와 재시작을 다음 실행으로
-                                미룹니다.
-                            </p>
-                        </div>
-                        <p className="shrink-0 text-sm text-muted-foreground">항상 사용</p>
-                    </div>
-                </CardContent>
-            </Card>
-
-            <Card>
-                <CardHeader>
-                    <CardTitle>진단</CardTitle>
-                    <CardDescription>
-                        문제를 확인할 때만 상세 로그를 켜고 앱 로그를 확인합니다.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <SwitchRow
-                        label="디버그 모드"
-                        description="상세 진단 로그를 기록합니다. 개발자 도구나 외부 명령 실행 권한은 열지 않습니다."
-                        checked={value.debugMode}
-                        disabled={save.isPending}
-                        onCheckedChange={(checked) => {
-                            if (checked) setConfirmDebugOn(true);
-                            else update('debugMode', false);
-                        }}
-                    />
-                    <Separator />
-                    <div className="flex items-center justify-between gap-4 py-4">
-                        <div className="min-w-0">
-                            <p className="text-sm font-medium">로그 폴더</p>
-                            <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                                Jungle Bell 전용 로그 디렉터리를 파일 탐색기에서 엽니다.
-                            </p>
-                        </div>
-                        <Button
-                            variant="outline"
-                            disabled={openLogs.isPending}
-                            onClick={() => openLogs.mutate()}
-                        >
-                            <FolderOpen aria-hidden="true" />
-                            {openLogs.isPending ? '여는 중' : '열기'}
-                        </Button>
-                    </div>
-                </CardContent>
-            </Card>
-
-            {save.isError || openLogs.isError ? (
-                <Alert variant="destructive">
-                    <CircleAlert />
-                    <AlertTitle>서비스 설정을 처리하지 못했습니다.</AlertTitle>
-                    <AlertDescription>잠시 후 다시 시도하세요.</AlertDescription>
-                </Alert>
-            ) : null}
-
-            <AlertDialog open={confirmDebugOn} onOpenChange={setConfirmDebugOn}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>디버그 모드를 켤까요?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            평소보다 많은 진단 로그가 저장됩니다. 문제 분석 같은 특별한 목적이
-                            없다면 켜지 마세요.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>아니요</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => update('debugMode', true)}>
-                            네, 디버그 모드 켜기
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
-        </div>
+        <DesktopSettingsCards
+            value={value}
+            cohortSelection={cohortSelection}
+            debugConfirmation={debugConfirmation}
+            mutations={mutations}
+        />
     );
 }
 
