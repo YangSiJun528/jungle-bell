@@ -19,7 +19,7 @@ mod state;
 mod tray;
 mod updater;
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex};
 use tauri::Manager;
 use tokio::sync::Mutex;
 
@@ -56,6 +56,58 @@ fn notify_startup_status(app: &tauri::AppHandle, notifications: &NotificationSer
     );
 }
 
+#[derive(Default)]
+struct StartupNotificationState {
+    event_loop_ready: bool,
+    runtime_started: bool,
+    notification_emitted: bool,
+}
+
+impl StartupNotificationState {
+    fn mark_event_loop_ready(&mut self) -> bool {
+        self.event_loop_ready = true;
+        self.take_notification_permission()
+    }
+
+    fn mark_runtime_started(&mut self) -> bool {
+        self.runtime_started = true;
+        self.take_notification_permission()
+    }
+
+    fn take_notification_permission(&mut self) -> bool {
+        if self.event_loop_ready && self.runtime_started && !self.notification_emitted {
+            self.notification_emitted = true;
+            true
+        } else {
+            false
+        }
+    }
+}
+
+enum StartupNotificationMilestone {
+    EventLoopReady,
+    RuntimeStarted,
+}
+
+fn notify_startup_status_after(
+    app: &tauri::AppHandle,
+    notifications: &NotificationService,
+    state: &StdMutex<StartupNotificationState>,
+    milestone: StartupNotificationMilestone,
+) {
+    let should_notify = {
+        let mut state = state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        match milestone {
+            StartupNotificationMilestone::EventLoopReady => state.mark_event_loop_ready(),
+            StartupNotificationMilestone::RuntimeStarted => state.mark_runtime_started(),
+        }
+    };
+
+    if should_notify {
+        notify_startup_status(app, notifications);
+    }
+}
+
 #[derive(Clone)]
 struct RuntimeServices {
     state: Arc<Mutex<AppState>>,
@@ -74,7 +126,12 @@ fn spawn_initial_update_check(app: tauri::AppHandle, updater: Arc<updater::Updat
     });
 }
 
-fn spawn_pending_update_preflight(app: tauri::AppHandle, services: RuntimeServices, opens_dashboard: bool) {
+fn spawn_pending_update_preflight(
+    app: tauri::AppHandle,
+    services: RuntimeServices,
+    startup_notification_state: Arc<StdMutex<StartupNotificationState>>,
+    opens_dashboard: bool,
+) {
     tauri::async_runtime::spawn(async move {
         let outcome = services.updater.apply_pending_update_on_start(app.clone()).await;
         if outcome == updater::AutoUpdateOutcome::RestartRequested {
@@ -83,7 +140,13 @@ fn spawn_pending_update_preflight(app: tauri::AppHandle, services: RuntimeServic
 
         let app_handle = app.clone();
         if let Err(error) = app.run_on_main_thread(move || {
-            if let Err(error) = finish_runtime_startup(&app_handle, services, opens_dashboard, false) {
+            if let Err(error) = finish_runtime_startup(
+                &app_handle,
+                services,
+                startup_notification_state.as_ref(),
+                opens_dashboard,
+                false,
+            ) {
                 log::error!("[app] pending update 이후 런타임 초기화 실패: {error}");
                 app_handle.exit(1);
             }
@@ -109,6 +172,7 @@ fn spawn_periodic_update_check(app: tauri::AppHandle, updater: Arc<updater::Upda
 fn finish_runtime_startup(
     app: &tauri::AppHandle,
     services: RuntimeServices,
+    startup_notification_state: &StdMutex<StartupNotificationState>,
     opens_dashboard: bool,
     refresh_update_on_start: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -128,7 +192,12 @@ fn finish_runtime_startup(
         }
         Err(error) => log::warn!("[app] system theme detection failed: {error}"),
     }
-    notify_startup_status(app, &services.notifications);
+    notify_startup_status_after(
+        app,
+        &services.notifications,
+        startup_notification_state,
+        StartupNotificationMilestone::RuntimeStarted,
+    );
     if refresh_update_on_start {
         // 프런트엔드 조회와 같은 coordinator/cache를 사용해 시작 직후 원격
         // endpoint를 중복 호출하지 않는다.
@@ -170,6 +239,9 @@ pub fn run() {
     let shared_state = Arc::new(Mutex::new(AppState::new(config)));
     let notification_inbox_service = Arc::new(NotificationInboxService::load());
     let notification_service = Arc::new(NotificationService::new(notification_inbox_service.clone()));
+    let startup_notification_state = Arc::new(StdMutex::new(StartupNotificationState::default()));
+    let setup_startup_notification_state = startup_notification_state.clone();
+    let event_loop_notification_service = notification_service.clone();
     let settings_service = Arc::new(DesktopSettingsService::new(shared_state.clone()));
     let lifecycle_state = Arc::new(config::DesktopLifecycleStateStore::load());
 
@@ -289,15 +361,36 @@ pub fn run() {
             if pending_update_on_start {
                 // Windows installer는 프로세스를 즉시 끝낼 수 있으므로 tray,
                 // checker, ready 알림, 백그라운드 루프보다 먼저 처리한다.
-                spawn_pending_update_preflight(app.handle().clone(), runtime_services, opens_dashboard);
+                spawn_pending_update_preflight(
+                    app.handle().clone(),
+                    runtime_services,
+                    setup_startup_notification_state.clone(),
+                    opens_dashboard,
+                );
             } else {
-                finish_runtime_startup(app.handle(), runtime_services, opens_dashboard, true)?;
+                finish_runtime_startup(
+                    app.handle(),
+                    runtime_services,
+                    setup_startup_notification_state.as_ref(),
+                    opens_dashboard,
+                    true,
+                )?;
             }
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while running tauri application")
+        .run(move |app, event| {
+            if let tauri::RunEvent::Ready = event {
+                notify_startup_status_after(
+                    app,
+                    &event_loop_notification_service,
+                    startup_notification_state.as_ref(),
+                    StartupNotificationMilestone::EventLoopReady,
+                );
+            }
+        });
 }
 
 #[cfg(test)]
@@ -314,6 +407,26 @@ mod tests {
     fn 디버그_모드는_런타임_로그_상한을_전환한다() {
         assert_eq!(configured_log_level(false), log::LevelFilter::Info);
         assert_eq!(configured_log_level(true), log::LevelFilter::Debug);
+    }
+
+    #[test]
+    fn 시작_알림은_런타임초기화와_event_loop_ready_후_한번만_허용한다() {
+        let mut state = StartupNotificationState::default();
+
+        assert!(!state.mark_runtime_started());
+        assert!(state.mark_event_loop_ready());
+        assert!(!state.mark_event_loop_ready());
+        assert!(!state.mark_runtime_started());
+    }
+
+    #[test]
+    fn 지연된_런타임초기화도_event_loop_ready_후_한번만_허용한다() {
+        let mut state = StartupNotificationState::default();
+
+        assert!(!state.mark_event_loop_ready());
+        assert!(state.mark_runtime_started());
+        assert!(!state.mark_runtime_started());
+        assert!(!state.mark_event_loop_ready());
     }
 
     #[test]
