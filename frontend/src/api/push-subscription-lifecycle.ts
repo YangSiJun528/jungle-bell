@@ -4,6 +4,7 @@ import {pushSubscriptionIdSchema} from './dashboard-account-contract';
 
 export const PUSH_SUBSCRIPTION_LIFECYCLE_STORAGE_KEY = 'jungle-bell.push-subscription-lifecycle';
 export const PUSH_SUBSCRIPTION_METADATA_VERSION = 1 as const;
+export const PUSH_SUBSCRIPTION_LIFECYCLE_QUERY_KEY = ['push-subscription-lifecycle'] as const;
 
 const endpointFingerprintSchema = z.string().regex(/^sha256:[0-9a-f]{64}$/u);
 
@@ -198,6 +199,19 @@ export async function reconcilePushSubscriptionState(
     return metadataResult.metadata.cleanupPhase === 'registered'
         ? {status: 'matched-registered', metadata: metadataResult.metadata}
         : {status: 'matched-server-removed', metadata: metadataResult.metadata};
+}
+
+export async function loadPushSubscriptionReconciliation(options: {
+    storage: PushSubscriptionLifecycleStorage;
+    getLocalSubscription(): Promise<PushSubscriptionJSON | null>;
+    subtleCrypto?: PushSubscriptionDigest;
+}): Promise<PushSubscriptionReconciliation> {
+    const localSubscription = await options.getLocalSubscription();
+    return reconcilePushSubscriptionState(
+        readPushSubscriptionMetadata(options.storage),
+        localSubscription,
+        options.subtleCrypto,
+    );
 }
 
 export type PushSubscriptionCleanupProgress = {

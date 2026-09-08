@@ -58,6 +58,7 @@ export function createPushDeliveryState(permission: PushPermissionState): PushDe
 
 export function restoredPushDeliveryState(
     status: RestoredPushSubscriptionStatus,
+    permission: PushPermissionState = 'default',
 ): PushDeliveryState {
     if (status === 'matched-registered') {
         return {
@@ -92,7 +93,7 @@ export function restoredPushDeliveryState(
             serverRegistration: 'error',
         };
     }
-    return createPushDeliveryState('default');
+    return createPushDeliveryState(permission);
 }
 
 export function reducePushDeliveryState(

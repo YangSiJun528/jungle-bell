@@ -47,6 +47,7 @@ function pwaAdapter(installed: boolean): PwaCapabilityAdapter {
         isMobileInstallClient: vi.fn<PwaCapabilityAdapter['isMobileInstallClient']>(() => false),
         subscribePush: vi.fn<PwaCapabilityAdapter['subscribePush']>(),
         getPushSubscription: vi.fn<PwaCapabilityAdapter['getPushSubscription']>(),
+        getServiceWorkerStatus: vi.fn<PwaCapabilityAdapter['getServiceWorkerStatus']>(),
         unsubscribePush: vi.fn<PwaCapabilityAdapter['unsubscribePush']>(),
     };
 }

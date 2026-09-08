@@ -76,24 +76,36 @@ describe('dashboard router', () => {
         const matches = router.matchRoutes(router.state.location);
         const strictSearch = Reflect.get(matches.at(-1) ?? {}, '_strictSearch');
 
-        expect(strictSearch).toEqual({tab: 'notifications'});
+        expect(strictSearch).toEqual({tab: 'status'});
     });
 
     test('restores connections tabs through browser back and forward history', async () => {
         const history = createMemoryHistory({
-            initialEntries: ['/connections?tab=notifications'],
+            initialEntries: ['/connections?tab=status&returnTo=%2Fattendance'],
         });
         const router = createDashboardRouter(history);
         await router.load();
-        await router.navigate({to: '/connections', search: {tab: 'services'}});
-        await router.navigate({to: '/connections', search: {tab: 'devices'}});
+        await router.navigate({
+            to: '/connections',
+            search: {tab: 'services', returnTo: '/attendance'},
+        });
+        await router.navigate({
+            to: '/connections',
+            search: {tab: 'devices', returnTo: '/attendance'},
+        });
 
         history.back();
         await router.load();
-        expect(router.state.matches.at(-1)?.search).toEqual({tab: 'services'});
+        expect(router.state.matches.at(-1)?.search).toEqual({
+            tab: 'services',
+            returnTo: '/attendance',
+        });
 
         history.forward();
         await router.load();
-        expect(router.state.matches.at(-1)?.search).toEqual({tab: 'devices'});
+        expect(router.state.matches.at(-1)?.search).toEqual({
+            tab: 'devices',
+            returnTo: '/attendance',
+        });
     });
 });

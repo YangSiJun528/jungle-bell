@@ -7,6 +7,7 @@ import {
     cleanupPushSubscription,
     clearPushSubscriptionMetadata,
     fingerprintPushSubscriptionEndpoint,
+    loadPushSubscriptionReconciliation,
     matchesPushSubscriptionEndpoint,
     readPushSubscriptionMetadata,
     reconcilePushSubscriptionState,
@@ -145,6 +146,20 @@ describe('push subscription metadata', () => {
             status: 'none',
             verification: 'not-verified',
         });
+    });
+
+    test('loads the live local subscription and reconciles it with persisted metadata', async () => {
+        const storage = new MemoryStorage();
+        const metadata = await storeRegistered(storage);
+        const getLocalSubscription = vi.fn<() => Promise<PushSubscriptionJSON>>(async () =>
+            localSubscription(),
+        );
+
+        assert.deepEqual(
+            await loadPushSubscriptionReconciliation({storage, getLocalSubscription}),
+            {status: 'matched-registered', metadata},
+        );
+        assert.equal(getLocalSubscription.mock.calls.length, 1);
     });
 
     test('does not accept corrupt, unsupported-version, noncanonical, or expanded records', async () => {

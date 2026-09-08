@@ -98,6 +98,25 @@ export function createPwaCapabilityAdapter(options: {
             const subscription = await registration.pushManager.getSubscription();
             return subscription?.toJSON() ?? null;
         },
+        async getServiceWorkerStatus() {
+            if (!options.production || !('serviceWorker' in navigatorObject)) {
+                return {status: 'missing'};
+            }
+            try {
+                const registration = await navigatorObject.serviceWorker.getRegistration();
+                if (registration?.active?.state === 'activated') {
+                    return {
+                        status: 'active',
+                        scriptUrl: registration.active.scriptURL,
+                    };
+                }
+                if (registration?.waiting) return {status: 'waiting'};
+                if (registration?.installing) return {status: 'installing'};
+                return {status: 'missing'};
+            } catch {
+                return {status: 'error'};
+            }
+        },
         async unsubscribePush(expectedEndpoint) {
             assertPushSupported(windowObject, navigatorObject);
             const registration = await startServiceWorker();

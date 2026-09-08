@@ -44,6 +44,11 @@ import {
 } from '@/app/dashboard-context';
 import {readInitialPairingEntry} from '@/app/pairing-bootstrap';
 import {PersonalAccountGate} from '@/app/personal-account-gate';
+import {
+    normalizeConnectionsSearch,
+    type ConnectionsTab,
+    type DashboardReturnTarget,
+} from '@/app/routes';
 import {NotificationSettings} from '@/app/settings/notification-settings';
 import {useDesktopConnectionQuery, useRefreshAttendanceMutation} from '@/app/use-dashboard-queries';
 import {EmptyState, ErrorState, LoadingState} from '@/components/dashboard/async-state';
@@ -70,16 +75,11 @@ import {
 } from '@/domain/connections/manual-pairing-code';
 import {dateTimeLabel, relativeTimeLabel} from '@/lib/format';
 
+import {disconnectCompanionWithPushCleanup} from './companion-disconnect';
 import {
-    disconnectCompanionWithPushCleanup,
-    type CompanionDisconnectOutcome,
-} from './companion-disconnect';
-import {
-    connectionsTabFromHash,
-    connectionsTabHref,
-    parseConnectionsTabSearch,
-    type ConnectionsTab,
-} from './connections-tabs';
+    CompanionDisconnectFeedbackPanel,
+    type CompanionDisconnectFeedback,
+} from './companion-disconnect-feedback';
 import {desktopConnectionUiState, type DesktopConnectionUiState} from './desktop-connection-state';
 import {releaseExclusiveAction, tryReserveExclusiveAction} from './exclusive-action';
 import {pairingQrDataUrl} from './lib/pairing-qr';
@@ -753,8 +753,6 @@ function DesktopConnections() {
     );
 }
 
-type CompanionDisconnectFeedback = CompanionDisconnectOutcome<PushSubscriptionCleanupResult> | null;
-
 interface CompanionConnectionCardProps {
     checking: boolean;
     claimPending: boolean;
@@ -883,48 +881,11 @@ function CompanionConnectionCard({
                         {message}
                     </p>
                 ) : null}
-                {disconnectFeedback?.session === 'disconnected' &&
-                disconnectFeedback.pushCleanup.status === 'complete' ? (
-                    <Alert aria-live="polite">
-                        <Smartphone aria-hidden="true" />
-                        <AlertTitle>연결 해제 완료</AlertTitle>
-                        <AlertDescription>
-                            서버 푸시와 이 기기의 로컬 구독을 정리했습니다. 이제 공개 정보만 사용할
-                            수 있습니다.
-                        </AlertDescription>
-                    </Alert>
-                ) : disconnectFeedback?.session === 'disconnected' ? (
-                    <Alert variant="destructive" aria-live="polite">
-                        <CircleAlert aria-hidden="true" />
-                        <AlertTitle>연결 해제 완료 · 푸시 정리 미확인</AlertTitle>
-                        <AlertDescription>
-                            연결 세션은 해제됐지만 푸시 정리는 모두 확인하지 못했습니다. 서버는
-                            해제된 세션으로 더 이상 푸시를 보내지 않으며, 다시 연결한 뒤 등록 상태를
-                            정리할 수 있습니다.
-                        </AlertDescription>
-                    </Alert>
-                ) : disconnectFeedback?.session === 'connected' ? (
-                    <Alert variant="destructive">
-                        <CircleAlert aria-hidden="true" />
-                        <AlertTitle>연결 해제 실패</AlertTitle>
-                        <AlertDescription className="gap-3">
-                            <p>
-                                {disconnectFeedback.pushCleanup.status === 'complete'
-                                    ? '푸시 정리는 완료됐지만 연결은 유지됩니다. 다시 시도할 때 완료한 정리는 반복하지 않습니다.'
-                                    : '푸시 정리를 모두 확인하지 못했고 연결도 유지됩니다. 인증이 남아 있을 때 다시 시도하세요.'}
-                            </p>
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={onRequestDisconnect}
-                                disabled={disconnectPending}
-                            >
-                                다시 시도
-                            </Button>
-                        </AlertDescription>
-                    </Alert>
-                ) : null}
+                <CompanionDisconnectFeedbackPanel
+                    feedback={disconnectFeedback}
+                    pending={disconnectPending}
+                    onRetry={onRequestDisconnect}
+                />
             </CardContent>
         </Card>
     );
@@ -1253,40 +1214,23 @@ function WebConnections() {
 
 export interface ConnectionsPageProps {
     tab?: ConnectionsTab;
+    returnTo?: DashboardReturnTarget;
     onTabChange?: (tab: ConnectionsTab) => void;
     renderAppStatus?: () => ReactNode;
 }
 
-export function ConnectionsPage({tab, onTabChange, renderAppStatus}: ConnectionsPageProps = {}) {
+export function ConnectionsPage({
+    tab = 'status',
+    returnTo,
+    onTabChange,
+    renderAppStatus,
+}: ConnectionsPageProps = {}) {
     const {platform} = useDashboardEnvironment();
-    const [fallbackTab, setFallbackTab] = useState<ConnectionsTab>(() =>
-        typeof window === 'undefined'
-            ? 'notifications'
-            : connectionsTabFromHash(window.location.hash),
-    );
-    const requestedTab = tab ?? fallbackTab;
-    const selectedTab =
-        requestedTab === 'status' && !renderAppStatus ? 'notifications' : requestedTab;
+    const selectedTab = tab === 'status' && !renderAppStatus ? 'notifications' : tab;
     const selectTab = (value: string) => {
-        const nextTab = parseConnectionsTabSearch({tab: value});
-        if (tab === undefined) {
-            setFallbackTab(nextTab);
-            if (
-                typeof window !== 'undefined' &&
-                window.location.hash !== connectionsTabHref(nextTab)
-            ) {
-                window.location.hash = connectionsTabHref(nextTab);
-            }
-        }
+        const nextTab = normalizeConnectionsSearch({tab: value}).tab;
         onTabChange?.(nextTab);
     };
-
-    useEffect(() => {
-        if (tab !== undefined || typeof window === 'undefined') return undefined;
-        const syncTabFromUrl = () => setFallbackTab(connectionsTabFromHash(window.location.hash));
-        window.addEventListener('hashchange', syncTabFromUrl);
-        return () => window.removeEventListener('hashchange', syncTabFromUrl);
-    }, [tab]);
 
     return (
         <div className="space-y-6">
@@ -1316,7 +1260,7 @@ export function ConnectionsPage({tab, onTabChange, renderAppStatus}: Connections
                     {platform.capabilities.mobilePairingManagement ? (
                         <DesktopConnections />
                     ) : platform.accountAuthentication.kind === 'cookie' ? (
-                        <CompanionConnections />
+                        <CompanionConnections completionPath={returnTo ?? '/connections'} />
                     ) : (
                         <WebConnections />
                     )}

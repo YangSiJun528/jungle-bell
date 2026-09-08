@@ -27,9 +27,17 @@ function browserObjects(
         subscribe: vi.fn<PushManager['subscribe']>(async () => subscription),
         getSubscription,
     };
-    const registration = {pushManager} as unknown as ServiceWorkerRegistration;
+    const active = {
+        state: 'activated',
+        scriptURL: 'https://app.example/sw.js',
+    } as ServiceWorker;
+    const registration = {active, pushManager} as unknown as ServiceWorkerRegistration;
     const register = vi.fn<ServiceWorkerContainer['register']>(async () => registration);
+    const getRegistration = vi.fn<ServiceWorkerContainer['getRegistration']>(async () =>
+        Promise.resolve(registration),
+    );
     const serviceWorker = {
+        getRegistration,
         register,
         ready: Promise.resolve(registration),
     };
@@ -200,6 +208,20 @@ describe('PwaCapabilityAdapter', () => {
         });
 
         await expect(adapter.getPushSubscription()).resolves.toBeNull();
+    });
+
+    it('서비스 워커 등록과 활성 script를 플랫폼 계약으로 관측한다', async () => {
+        const browser = browserObjects();
+        const adapter = createPwaCapabilityAdapter({
+            production: true,
+            windowObject: browser.windowObject,
+            navigatorObject: browser.navigatorObject,
+        });
+
+        await expect(adapter.getServiceWorkerStatus()).resolves.toEqual({
+            status: 'active',
+            scriptUrl: 'https://app.example/sw.js',
+        });
     });
 
     it('현재 로컬 Push 구독을 찾아 실제 브라우저 구독을 해제한다', async () => {

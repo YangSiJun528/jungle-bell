@@ -123,6 +123,10 @@ export interface PwaInstallPrompt {
     prompt(): Promise<'accepted' | 'dismissed'>;
 }
 
+export type PwaServiceWorkerStatus =
+    | {status: 'active'; scriptUrl: string}
+    | {status: 'installing' | 'waiting' | 'missing' | 'error'};
+
 export interface PwaCapabilityAdapter {
     available: boolean;
     installed: boolean;
@@ -132,6 +136,7 @@ export interface PwaCapabilityAdapter {
     isMobileInstallClient(): boolean;
     subscribePush(applicationServerKey: string): Promise<PushSubscriptionJSON>;
     getPushSubscription(): Promise<PushSubscriptionJSON | null>;
+    getServiceWorkerStatus(): Promise<PwaServiceWorkerStatus>;
     unsubscribePush(expectedEndpoint: string): Promise<boolean>;
 }
 
@@ -181,6 +186,9 @@ export function unavailablePwaAdapter(): PwaCapabilityAdapter {
             throw new PlatformCapabilityUnavailableError('webPush');
         },
         getPushSubscription: async () => {
+            throw new PlatformCapabilityUnavailableError('webPush');
+        },
+        getServiceWorkerStatus: async () => {
             throw new PlatformCapabilityUnavailableError('webPush');
         },
         unsubscribePush: async () => {

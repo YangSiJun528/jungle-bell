@@ -13,7 +13,7 @@ export type DashboardRoutePath = `/${DashboardRoute}`;
 
 export type DashboardRouteAccess = 'mixed' | 'personal' | 'public';
 
-export const CONNECTIONS_TABS = ['notifications', 'services', 'devices'] as const;
+export const CONNECTIONS_TABS = ['status', 'notifications', 'services', 'devices'] as const;
 export type ConnectionsTab = (typeof CONNECTIONS_TABS)[number];
 export type DashboardReturnTarget = '/' | '/privacy' | Exclude<DashboardRoutePath, '/connections'>;
 
@@ -26,7 +26,7 @@ export const DASHBOARD_ROUTE_META: Readonly<Record<DashboardRoute, DashboardRout
     home: {label: '홈', shortLabel: '홈'},
     attendance: {label: '출석', shortLabel: '출석'},
     laundry: {label: '세탁실', shortLabel: '세탁'},
-    meals: {label: '식단', shortLabel: '식단'},
+    meals: {label: '급식', shortLabel: '급식'},
     notifications: {label: '알림', shortLabel: '알림'},
     connections: {label: '설정', shortLabel: '설정'},
     install: {label: '앱 설치 안내', shortLabel: '앱 안내'},
@@ -121,7 +121,7 @@ export function normalizeConnectionsSearch(search: {
     tab?: unknown;
     returnTo?: unknown;
 }): ConnectionsSearch {
-    const tab = CONNECTIONS_TABS.find((candidate) => candidate === search.tab) ?? 'notifications';
+    const tab = CONNECTIONS_TABS.find((candidate) => candidate === search.tab) ?? 'status';
     const returnTo = normalizeDashboardReturnTarget(search.returnTo);
     return returnTo ? {tab, returnTo} : {tab};
 }

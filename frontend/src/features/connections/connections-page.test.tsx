@@ -3,6 +3,10 @@ import {readFileSync} from 'node:fs';
 import {describe, expect, test} from 'vitest';
 
 const source = readFileSync(new URL('./connections-page.tsx', import.meta.url), 'utf8');
+const disconnectFeedbackSource = readFileSync(
+    new URL('./companion-disconnect-feedback.tsx', import.meta.url),
+    'utf8',
+);
 const notificationSettingsSource = readFileSync(
     new URL('../../app/settings/notification-settings.tsx', import.meta.url),
     'utf8',
@@ -82,8 +86,10 @@ describe('ConnectionsPage settings information architecture', () => {
         expect(source).toContain('api.unregisterPushSubscription(subscriptionId)');
         expect(source).toContain('platform.pwa.unsubscribePush(subscription.endpoint)');
         expect(source).toContain('disconnectSession: () => api.disconnectMobileSession()');
-        expect(source).toContain('연결 해제 완료 · 푸시 정리 미확인');
-        expect(source).toContain('다시 시도할 때 완료한 정리는 반복하지 않습니다.');
+        expect(disconnectFeedbackSource).toContain('연결 해제 완료 · 푸시 정리 미확인');
+        expect(disconnectFeedbackSource).toContain(
+            '다시 시도할 때 완료한 정리는 반복하지 않습니다.',
+        );
         expect(source).toContain('previousCleanup: completedPushCleanup.current');
     });
 

@@ -168,7 +168,7 @@ test('브라우저와 데스크톱은 4개 주요 메뉴와 보조 기능을 공
         /PERSONAL_UTILITY_ROUTES\s*=\s*\[[\s\S]*'notifications'[\s\S]*'connections'[\s\S]*\]/,
     );
     assert.match(routes, /home:\s*\{label:\s*'홈',\s*shortLabel:\s*'홈'\}/);
-    assert.match(routes, /meals:\s*\{label:\s*'식단',\s*shortLabel:\s*'식단'\}/);
+    assert.match(routes, /meals:\s*\{label:\s*'급식',\s*shortLabel:\s*'급식'\}/);
     assert.match(shell, /aria-label="개인 도구"/);
     assert.match(shell, /<SidebarFooter className="border-t border-sidebar-border">/);
     assert.match(shell, /aria-label=\{notificationAriaLabel/);

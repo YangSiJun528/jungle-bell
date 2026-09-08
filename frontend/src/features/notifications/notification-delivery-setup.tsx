@@ -4,8 +4,8 @@ import {useState} from 'react';
 
 import {
     cleanupPushSubscription,
-    readPushSubscriptionMetadata,
-    reconcilePushSubscriptionState,
+    loadPushSubscriptionReconciliation,
+    PUSH_SUBSCRIPTION_LIFECYCLE_QUERY_KEY,
     type PushSubscriptionCleanupResult,
     type PushSubscriptionLifecycleStorage,
     type PushSubscriptionReconciliation,
@@ -23,11 +23,17 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 
+import {notificationPermissionFromRuntime} from '../app-status/app-status-observations';
 import {
     assertMobileTestNotificationQueued,
     desktopTestNotificationMessage,
     mobilePushErrorMessage,
 } from './notification-result';
+import {
+    NOTIFICATION_TEST_QUERY_KEY,
+    writeNotificationTestRecord,
+    type NotificationTestState,
+} from './notification-test-history';
 import {
     pushDeliveryStepStates,
     reducePushDeliveryState,
@@ -44,8 +50,6 @@ import {
 import {SystemNotificationSettingsButton} from './system-notification-settings';
 
 type DesktopArrivalState = 'confirmed' | 'confirming' | 'idle' | 'missing';
-
-const PUSH_SUBSCRIPTION_LIFECYCLE_QUERY_KEY = ['push-subscription-lifecycle'] as const;
 
 const PUSH_DELIVERY_STEP_LABELS: Record<PushDeliveryStepId, string> = {
     permission: '알림 권한',
@@ -135,6 +139,9 @@ function useNotificationDeliverySetup() {
     const [desktopArrival, setDesktopArrival] = useState<DesktopArrivalState>('idle');
     const [pushDeliveryState, setPushDeliveryState] = useState<PushDeliveryState | null>(null);
     const [pushCleanupNeedsRetry, setPushCleanupNeedsRetry] = useState(false);
+    const notificationPermission = notificationPermissionFromRuntime(
+        typeof Notification === 'undefined' ? undefined : Notification,
+    );
     const pushSetup = useQuery({
         queryKey: queryKeys.pushSetup,
         queryFn: async () => {
@@ -149,21 +156,33 @@ function useNotificationDeliverySetup() {
     });
     const pushLifecycle = useQuery({
         queryKey: PUSH_SUBSCRIPTION_LIFECYCLE_QUERY_KEY,
-        queryFn: async () => {
-            const storage = pushSubscriptionStorage();
-            const [localSubscription] = await Promise.all([
-                platform.pwa.getPushSubscription(),
-                platform.pwa.preparePush(),
-            ]);
-            return reconcilePushSubscriptionState(
-                readPushSubscriptionMetadata(storage),
-                localSubscription,
-            );
-        },
+        queryFn: () =>
+            loadPushSubscriptionReconciliation({
+                storage: pushSubscriptionStorage(),
+                getLocalSubscription: () => platform.pwa.getPushSubscription(),
+            }),
         enabled: !desktop && account.personalAccess.status === 'connected',
     });
-    const restoredState = restoredPushDeliveryState(pushLifecycle.data?.status ?? 'none');
+    const restoredState = restoredPushDeliveryState(
+        pushLifecycle.data?.status ?? 'none',
+        notificationPermission === 'unsupported' ? 'default' : notificationPermission,
+    );
     const effectivePushDeliveryState = pushDeliveryState ?? restoredState;
+
+    const publishNotificationTest = (state: NotificationTestState) => {
+        const recordInput = {
+            surface: desktop ? ('pc' as const) : ('pwa' as const),
+            state,
+            testedAt: new Date().toISOString(),
+        };
+        let record = {version: 1 as const, ...recordInput};
+        try {
+            record = writeNotificationTestRecord(pushSubscriptionStorage(), recordInput);
+        } catch {
+            // Query cache still shares the current-session result when storage is unavailable.
+        }
+        client.setQueryData(NOTIFICATION_TEST_QUERY_KEY, record);
+    };
 
     const transitionPushDelivery = (event: PushDeliveryEvent) => {
         setPushDeliveryState((state) => reducePushDeliveryState(state ?? restoredState, event));
@@ -258,6 +277,7 @@ function useNotificationDeliverySetup() {
             setDeliveryMessage('');
             setShowSystemSettingsShortcut(false);
             setDesktopArrival('idle');
+            publishNotificationTest({status: 'test-sending'});
             if (!desktop) transitionPushDelivery({type: 'test-started'});
         },
         mutationFn: async (subscriptionPromise: Promise<PushSubscriptionJSON> | undefined) => {
@@ -278,6 +298,9 @@ function useNotificationDeliverySetup() {
                 setDeliveryMessage(desktopTestNotificationMessage(result));
                 setShowSystemSettingsShortcut(!result.systemDelivered);
                 setDesktopArrival(result.systemDelivered ? 'confirming' : 'missing');
+                if (!result.systemDelivered) {
+                    publishNotificationTest({status: 'not-arrived'});
+                }
             } else if (typeof result === 'number') {
                 transitionPushDelivery({type: 'test-queued', queued: result});
                 setDeliveryMessage(
@@ -291,6 +314,7 @@ function useNotificationDeliverySetup() {
                 throw new Error('TEST_NOTIFICATION_RESULT_INVALID');
             }
         },
+        onError: () => publishNotificationTest({status: 'error'}),
     });
 
     const connectPush = () => {
@@ -320,13 +344,23 @@ function useNotificationDeliverySetup() {
         pushDeliveryState: effectivePushDeliveryState,
         pushRegistered: effectivePushDeliveryState.serverRegistration === 'complete',
         pushCleanupNeedsRetry,
-        confirmDesktopArrival: () => setDesktopArrival('confirmed'),
+        confirmDesktopArrival: () => {
+            setDesktopArrival('confirmed');
+            publishNotificationTest({status: 'arrived'});
+        },
         reportDesktopArrivalMissing: () => {
             setDesktopArrival('missing');
             setShowSystemSettingsShortcut(true);
+            publishNotificationTest({status: 'not-arrived'});
         },
-        confirmMobileArrival: () => transitionPushDelivery({type: 'arrival-confirmed'}),
-        reportMobileArrivalMissing: () => transitionPushDelivery({type: 'arrival-missing'}),
+        confirmMobileArrival: () => {
+            transitionPushDelivery({type: 'arrival-confirmed'});
+            publishNotificationTest({status: 'arrived'});
+        },
+        reportMobileArrivalMissing: () => {
+            transitionPushDelivery({type: 'arrival-missing'});
+            publishNotificationTest({status: 'not-arrived'});
+        },
         connectPush,
         reregisterPush: connectPush,
         disablePush: () => disablePush.mutate(),

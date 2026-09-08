@@ -68,11 +68,20 @@ describe('notification delivery setup', () => {
     });
 
     test('재시작 때 저장 메타데이터와 실제 로컬 구독을 대조해 상태를 복구한다', () => {
-        expect(source).toContain('readPushSubscriptionMetadata(storage)');
-        expect(source).toContain('reconcilePushSubscriptionState(');
+        expect(source).toContain('loadPushSubscriptionReconciliation({');
         expect(source).toContain('restoredPushDeliveryState(');
         expect(source).toContain('마지막으로 확인한 서버 등록과 일치합니다.');
         expect(source).toContain('서버 등록 ID가 없어 푸시 정리 완료로 확인하지 않았습니다.');
+        expect(source).toContain('PUSH_SUBSCRIPTION_LIFECYCLE_QUERY_KEY');
+        expect(source).toContain('notificationPermissionFromRuntime');
+    });
+
+    test('테스트 발송과 실제 도착 결과를 App Status와 같은 canonical 기록으로 공유한다', () => {
+        expect(source).toContain('writeNotificationTestRecord');
+        expect(source).toContain('NOTIFICATION_TEST_QUERY_KEY');
+        expect(source).toContain("status: 'test-sending'");
+        expect(source).toContain("status: 'arrived'");
+        expect(source).toContain("status: 'not-arrived'");
     });
 
     test('푸시 준비 자체가 실패해도 사용자가 바로 다시 시도할 수 있다', () => {

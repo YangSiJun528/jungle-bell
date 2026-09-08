@@ -1,3 +1,5 @@
+import type {DashboardReturnTarget} from '@/app/routes';
+
 export interface PairingCompletionOptions {
     pairingId: string;
     complete(pairingId: string): Promise<'waiting' | 'completed'>;
@@ -19,7 +21,7 @@ export interface PairingStartGate {
     automaticHandled: boolean;
 }
 
-export type CompanionCompletionPath = '/connections' | '/home' | null;
+export type CompanionCompletionPath = '/connections' | DashboardReturnTarget | null;
 
 export async function finishCompanionPairing(options: {
     completionPath: CompanionCompletionPath;
