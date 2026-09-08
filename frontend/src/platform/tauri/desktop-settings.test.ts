@@ -60,20 +60,22 @@ describe('desktop settings adapter', () => {
 });
 
 describe('desktop update adapter', () => {
-    test('parses the exact update status and installs through the native bridge', async () => {
+    test('단계와 policy, 진행률을 포함한 exact 상태를 파싱하고 native 설치를 호출한다', async () => {
+        const updateStatus = {
+            currentVersion: '0.5.0',
+            availableVersion: '0.6.0',
+            status: 'downloading',
+            policy: 'mandatory',
+            progress: {downloadedBytes: 25, totalBytes: 100},
+            errorCode: null,
+        };
         const invoke = vi.fn<NativeInvoke>(async (command) => {
-            if (command === 'check_desktop_update') {
-                return {currentVersion: '0.5.0', availableVersion: '0.6.0', mandatory: true};
-            }
+            if (command === 'check_desktop_update') return updateStatus;
             return null;
         });
         const api = createDashboardDesktopSettingsApi(createNativeBridge(invoke));
 
-        await expect(api.checkDesktopUpdate()).resolves.toEqual({
-            currentVersion: '0.5.0',
-            availableVersion: '0.6.0',
-            mandatory: true,
-        });
+        await expect(api.checkDesktopUpdate()).resolves.toEqual(updateStatus);
         await expect(api.installDesktopUpdate()).resolves.toBeUndefined();
         await expect(api.openSystemNotificationSettings()).resolves.toBeUndefined();
         expect(invoke.mock.calls).toEqual([
@@ -84,11 +86,109 @@ describe('desktop update adapter', () => {
     });
 
     test.each([
-        {currentVersion: '0.5.0', availableVersion: null},
-        {currentVersion: '0.5.0', availableVersion: 'latest', mandatory: false},
-        {currentVersion: '0.5.0', availableVersion: null, mandatory: false, extra: true},
-        {currentVersion: '0.5.0', availableVersion: null, mandatory: 'false'},
-        {currentVersion: '0.5.0', availableVersion: null, mandatory: true},
+        {
+            currentVersion: '0.6.0',
+            availableVersion: null,
+            status: 'latest',
+            policy: null,
+            progress: null,
+            errorCode: null,
+        },
+        {
+            currentVersion: '0.5.0',
+            availableVersion: '0.5.1',
+            status: 'optional',
+            policy: 'optional',
+            progress: null,
+            errorCode: null,
+        },
+        {
+            currentVersion: '0.5.0',
+            availableVersion: '0.6.0',
+            status: 'mandatory',
+            policy: 'mandatory',
+            progress: null,
+            errorCode: null,
+        },
+        {
+            currentVersion: '0.5.0',
+            availableVersion: '0.6.0',
+            status: 'failed',
+            policy: 'mandatory',
+            progress: {downloadedBytes: 10, totalBytes: null},
+            errorCode: 'UPDATE_VERIFY_FAILED',
+        },
+    ])('상태 조합을 손실 없이 파싱한다: $status', async (value) => {
+        const api = createDashboardDesktopSettingsApi(createNativeBridge(async () => value));
+        await expect(api.checkDesktopUpdate()).resolves.toEqual(value);
+    });
+
+    test.each([
+        {
+            currentVersion: '0.5.0',
+            availableVersion: null,
+            status: 'latest',
+            policy: null,
+            progress: null,
+        },
+        {
+            currentVersion: '0.5.0',
+            availableVersion: 'latest',
+            status: 'mandatory',
+            policy: 'mandatory',
+            progress: null,
+            errorCode: null,
+        },
+        {
+            currentVersion: '0.5.0',
+            availableVersion: null,
+            status: 'latest',
+            policy: null,
+            progress: null,
+            errorCode: null,
+            extra: true,
+        },
+        {
+            currentVersion: '0.5.0',
+            availableVersion: '0.6.0',
+            status: 'mandatory',
+            policy: 'optional',
+            progress: null,
+            errorCode: null,
+        },
+        {
+            currentVersion: '0.5.0',
+            availableVersion: null,
+            status: 'mandatory',
+            policy: 'mandatory',
+            progress: null,
+            errorCode: null,
+        },
+        {
+            currentVersion: '0.5.0',
+            availableVersion: '0.6.0',
+            status: 'downloading',
+            policy: 'mandatory',
+            progress: {downloadedBytes: 101, totalBytes: 100},
+            errorCode: null,
+        },
+        {
+            currentVersion: '0.5.0',
+            availableVersion: '0.6.0',
+            status: 'failed',
+            policy: 'mandatory',
+            progress: null,
+            errorCode: null,
+        },
+        {
+            currentVersion: '0.5.0',
+            availableVersion: '0.6.0',
+            status: 'mandatory',
+            policy: 'mandatory',
+            progress: null,
+            errorCode: null,
+            mandatory: true,
+        },
     ])('rejects malformed update status %#', async (value) => {
         const api = createDashboardDesktopSettingsApi(createNativeBridge(async () => value));
         await expect(api.checkDesktopUpdate()).rejects.toThrow('API_RESPONSE_INVALID');

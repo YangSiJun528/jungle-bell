@@ -1,3 +1,5 @@
+import type {UpdateState, UpdateStatus} from './status-model';
+
 export type PlatformKind = 'browser' | 'desktop';
 
 export interface PlatformCapabilities {
@@ -78,11 +80,20 @@ export type DesktopSettingsUpdate = Pick<
     'autoStart' | 'usageAnalytics' | 'debugMode' | 'selectedCohortId'
 >;
 
-export interface DesktopUpdateStatus {
+export type DesktopUpdatePolicy = Extract<UpdateStatus, 'optional' | 'mandatory'>;
+
+export interface DesktopUpdateProgress {
+    downloadedBytes: number;
+    totalBytes: number | null;
+}
+
+export type DesktopUpdateStatus = UpdateState & {
     currentVersion: string;
     availableVersion: string | null;
-    mandatory: boolean;
-}
+    policy: DesktopUpdatePolicy | null;
+    progress: DesktopUpdateProgress | null;
+    errorCode: string | null;
+};
 
 export interface DesktopSettingsAdapter {
     getDesktopSettings(): Promise<DesktopSettings>;
