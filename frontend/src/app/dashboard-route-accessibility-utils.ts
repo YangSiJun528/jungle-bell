@@ -5,9 +5,20 @@ export function dashboardDocumentTitle(pathname: string): string {
     return `${DASHBOARD_ROUTE_META[dashboardRouteFromPath(pathname)].label} · Jungle Bell`;
 }
 
-export function focusDashboardHeading(documentObject: Document = document): boolean {
-    const heading = documentObject.querySelector<HTMLElement>(
+export function dashboardHeadingLabel(pathname: string): string {
+    if (pathname === '/privacy') return '개인정보 처리방침';
+    return DASHBOARD_ROUTE_META[dashboardRouteFromPath(pathname)].label;
+}
+
+export function focusDashboardHeading(
+    documentObject: Document = document,
+    expectedLabel?: string,
+): boolean {
+    const headings = documentObject.querySelectorAll<HTMLElement>(
         '#dashboard-content h1, main h1, [data-desktop-update-gate] h1',
+    );
+    const heading = [...headings].find(
+        (candidate) => !expectedLabel || candidate.textContent?.trim() === expectedLabel,
     );
     if (!heading) return false;
     heading.tabIndex = -1;

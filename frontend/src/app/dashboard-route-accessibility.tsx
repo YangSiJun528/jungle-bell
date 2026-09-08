@@ -1,6 +1,10 @@
 import {useEffect, useRef} from 'react';
 
-import {dashboardDocumentTitle, focusDashboardHeading} from './dashboard-route-accessibility-utils';
+import {
+    dashboardDocumentTitle,
+    dashboardHeadingLabel,
+    focusDashboardHeading,
+} from './dashboard-route-accessibility-utils';
 
 export function DashboardRouteAccessibility({pathname}: {pathname: string}) {
     const previousPathname = useRef(pathname);
@@ -10,14 +14,15 @@ export function DashboardRouteAccessibility({pathname}: {pathname: string}) {
         if (previousPathname.current === pathname || pathname === '/notifications')
             return undefined;
         previousPathname.current = pathname;
+        const expectedHeading = dashboardHeadingLabel(pathname);
 
         let frame = 0;
         let observer: MutationObserver | null = null;
         let timeout = 0;
         frame = window.requestAnimationFrame(() => {
-            if (focusDashboardHeading()) return;
+            if (focusDashboardHeading(document, expectedHeading)) return;
             observer = new MutationObserver(() => {
-                if (focusDashboardHeading()) observer?.disconnect();
+                if (focusDashboardHeading(document, expectedHeading)) observer?.disconnect();
             });
             observer.observe(document.body, {childList: true, subtree: true});
             timeout = window.setTimeout(() => observer?.disconnect(), 2_000);
