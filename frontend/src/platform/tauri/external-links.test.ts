@@ -19,6 +19,13 @@ describe('TauriExternalLinkAdapter', () => {
     });
 
     it.each([
+        `http://127.0.0.1:4173/api/public/assets/${'a'.repeat(64)}.jpg`,
+        `http://localhost:5173/api/public/assets/${'b'.repeat(64)}.webp`,
+    ])('Web production-preview의 동일 출처 공개 급식 asset만 허용한다: %s', (url) => {
+        expect(normalizeExternalUrl(url)).toBe(url);
+    });
+
+    it.each([
         'http://github.com/YangSiJun528/jungle-bell',
         'javascript:alert(1)',
         'https://evil.example/YangSiJun528/jungle-bell',
@@ -29,6 +36,8 @@ describe('TauriExternalLinkAdapter', () => {
         'https://jungle-lms.krafton.com/check-in?next=https://evil.example',
         'https://pf.kakao.com/_xhzNjn/0',
         `https://jungle-bell.sijun-yang.com/api/public/assets/${'a'.repeat(63)}.png`,
+        `http://127.0.0.1:4173/not-public/${'a'.repeat(64)}.jpg`,
+        `http://example.com/api/public/assets/${'a'.repeat(64)}.jpg`,
     ])('허용 목록 밖 URL을 거부한다: %s', (url) => {
         expect(() => normalizeExternalUrl(url)).toThrow('EXTERNAL_URL_NOT_ALLOWED');
     });
