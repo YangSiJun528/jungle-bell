@@ -1,3 +1,5 @@
+import type {UpdateState, UpdateStatus} from './status-model';
+
 export type PlatformKind = 'browser' | 'desktop';
 
 export interface PlatformCapabilities {
@@ -78,11 +80,20 @@ export type DesktopSettingsUpdate = Pick<
     'autoStart' | 'usageAnalytics' | 'debugMode' | 'selectedCohortId'
 >;
 
-export interface DesktopUpdateStatus {
+export type DesktopUpdatePolicy = Extract<UpdateStatus, 'optional' | 'mandatory'>;
+
+export interface DesktopUpdateProgress {
+    downloadedBytes: number;
+    totalBytes: number | null;
+}
+
+export type DesktopUpdateStatus = UpdateState & {
     currentVersion: string;
     availableVersion: string | null;
-    mandatory: boolean;
-}
+    policy: DesktopUpdatePolicy | null;
+    progress: DesktopUpdateProgress | null;
+    errorCode: string | null;
+};
 
 export interface DesktopSettingsAdapter {
     getDesktopSettings(): Promise<DesktopSettings>;
@@ -112,14 +123,22 @@ export interface PwaInstallPrompt {
     prompt(): Promise<'accepted' | 'dismissed'>;
 }
 
+export type PwaServiceWorkerStatus =
+    | {status: 'active'; scriptUrl: string}
+    | {status: 'installing' | 'waiting' | 'missing' | 'error'};
+
 export interface PwaCapabilityAdapter {
     available: boolean;
     installed: boolean;
-    registerServiceWorker(): void;
+    getServiceWorkerContainer(): ServiceWorkerContainer | null;
+    registerServiceWorker(): Promise<ServiceWorkerRegistration | null>;
     preparePush(): Promise<void>;
     subscribeInstallPrompt(listener: (prompt: PwaInstallPrompt) => void): PlatformUnlisten;
     isMobileInstallClient(): boolean;
     subscribePush(applicationServerKey: string): Promise<PushSubscriptionJSON>;
+    getPushSubscription(): Promise<PushSubscriptionJSON | null>;
+    getServiceWorkerStatus(): Promise<PwaServiceWorkerStatus>;
+    unsubscribePush(expectedEndpoint: string): Promise<boolean>;
 }
 
 export type UsagePreferenceScope = 'anonymous';
@@ -158,13 +177,23 @@ export function unavailablePwaAdapter(): PwaCapabilityAdapter {
     return {
         available: false,
         installed: false,
-        registerServiceWorker() {},
+        getServiceWorkerContainer: () => null,
+        registerServiceWorker: async () => null,
         preparePush: async () => {
             throw new PlatformCapabilityUnavailableError('webPush');
         },
         subscribeInstallPrompt: () => () => undefined,
         isMobileInstallClient: () => false,
         subscribePush: async () => {
+            throw new PlatformCapabilityUnavailableError('webPush');
+        },
+        getPushSubscription: async () => {
+            throw new PlatformCapabilityUnavailableError('webPush');
+        },
+        getServiceWorkerStatus: async () => {
+            throw new PlatformCapabilityUnavailableError('webPush');
+        },
+        unsubscribePush: async () => {
             throw new PlatformCapabilityUnavailableError('webPush');
         },
     };

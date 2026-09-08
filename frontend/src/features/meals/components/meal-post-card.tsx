@@ -1,9 +1,10 @@
-import {Clock3, ExternalLink, ImageOff} from 'lucide-react';
+import {Clock3, ExternalLink as ExternalLinkIcon, ImageOff} from 'lucide-react';
 import {useState} from 'react';
 
 import type {DashboardMealPost} from '@/api/dashboard-api';
 import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@/components/ui/card';
+import {ExternalLink} from '@/components/ui/external-link';
 import {dateTimeLabel} from '@/lib/format';
 import {cn} from '@/lib/utils';
 
@@ -13,11 +14,13 @@ function MealImage({
     compact,
     eager,
     image,
+    interactive,
     label,
 }: {
     compact: boolean;
     eager: boolean;
     image: NonNullable<DashboardMealPost['images']>[number];
+    interactive: boolean;
     label: string;
 }) {
     const [failed, setFailed] = useState(false);
@@ -38,12 +41,11 @@ function MealImage({
     }
 
     return (
-        <a
+        <ExternalLink
             aria-label={`${label} 새 탭에서 열기`}
             className="block focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset"
             href={image.url}
-            rel="noopener noreferrer"
-            target="_blank"
+            tabIndex={interactive ? undefined : -1}
         >
             <img
                 alt={label}
@@ -58,7 +60,7 @@ function MealImage({
                 width={image.width ?? undefined}
                 onError={() => setFailed(true)}
             />
-        </a>
+        </ExternalLink>
     );
 }
 
@@ -72,34 +74,16 @@ export function MealPostCard({
     meal: DashboardMealPost;
 }) {
     const images = meal.images ?? [];
-    const title = meal.title ?? '\uC2DD\uB2E8 \uC548\uB0B4';
+    const title = meal.title ?? '급식 안내';
     const text = meal.text.trim();
+    const imageSectionId = `${meal.id}-image-preview`;
+    const [isImageExpanded, setIsImageExpanded] = useState(false);
+
     return (
         <Card
             className={cn('overflow-hidden py-0 shadow-none', compact && 'gap-4')}
             data-meal-state="available"
         >
-            {images.length > 0 ? (
-                <div className={cn('grid gap-px bg-border', images.length > 1 && 'grid-cols-2')}>
-                    {images.map((image, index) => (
-                        <MealImage
-                            compact={compact}
-                            eager={eagerImage && index === 0}
-                            image={image}
-                            key={image.sha}
-                            label={`${title} \uC0AC\uC9C4${images.length > 1 ? ` ${index + 1}` : ''}`}
-                        />
-                    ))}
-                </div>
-            ) : (
-                <div
-                    aria-label={`${title} \uC0AC\uC9C4 \uC5C6\uC74C`}
-                    className="flex aspect-[4/3] items-center justify-center border-b bg-muted/60 px-5 text-center text-xs text-muted-foreground"
-                    role="img"
-                >
-                    급식 사진이 아직 올라오지 않았습니다.
-                </div>
-            )}
             <CardHeader className="px-5 pt-5">
                 <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -110,14 +94,9 @@ export function MealPostCard({
                     </div>
                     {meal.permalink ? (
                         <Button asChild size="icon-sm" variant="ghost">
-                            <a
-                                aria-label="식단 원문 열기"
-                                href={meal.permalink}
-                                rel="noreferrer"
-                                target="_blank"
-                            >
-                                <ExternalLink />
-                            </a>
+                            <ExternalLink aria-label="급식 원문 열기" href={meal.permalink}>
+                                <ExternalLinkIcon />
+                            </ExternalLink>
                         </Button>
                     ) : null}
                 </div>
@@ -126,18 +105,62 @@ export function MealPostCard({
                 {text ? (
                     <p
                         className={cn(
-                            'text-sm leading-6 whitespace-pre-wrap text-foreground/85',
+                            'text-base leading-6 whitespace-pre-wrap text-foreground/85',
                             compact && 'line-clamp-5',
                         )}
                     >
                         {text}
                     </p>
                 ) : (
-                    <p className="rounded-md bg-muted/60 p-3 text-sm leading-6 text-muted-foreground">
+                    <p className="rounded-md bg-muted/60 p-3 text-base leading-6 text-muted-foreground">
                         메뉴가 아직 올라오지 않았습니다.
                     </p>
                 )}
             </CardContent>
+            {images.length > 0 ? (
+                <section aria-label={`${title} 이미지`} className="px-5 pb-5">
+                    <div
+                        aria-hidden={!isImageExpanded}
+                        className={cn(
+                            'grid gap-px overflow-hidden rounded-lg border bg-border transition-[max-height] duration-200',
+                            images.length > 1 && 'grid-cols-2',
+                            isImageExpanded ? 'max-h-none' : 'max-h-44',
+                        )}
+                        id={imageSectionId}
+                    >
+                        {images.map((image, index) => (
+                            <MealImage
+                                compact={compact}
+                                eager={eagerImage && index === 0}
+                                image={image}
+                                interactive={isImageExpanded}
+                                key={image.sha}
+                                label={`${title} 사진${images.length > 1 ? ` ${index + 1}` : ''}`}
+                            />
+                        ))}
+                    </div>
+                    <div className="mt-3 min-h-11 w-full">
+                        <Button
+                            aria-controls={imageSectionId}
+                            aria-expanded={isImageExpanded}
+                            className="min-h-11 w-full"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setIsImageExpanded((current) => !current)}
+                        >
+                            {isImageExpanded ? '이미지 접기' : '이미지 펼치기'}
+                        </Button>
+                    </div>
+                </section>
+            ) : (
+                <div
+                    aria-label={`${title} 사진 없음`}
+                    className="flex aspect-[4/3] items-center justify-center border-b bg-muted/60 px-5 text-center text-base leading-6 text-muted-foreground"
+                    role="img"
+                >
+                    급식 사진이 아직 올라오지 않았습니다.
+                </div>
+            )}
         </Card>
     );
 }
@@ -146,7 +169,7 @@ export function MissingMealPostCard({period}: {period: TodayMealPeriod}) {
     return (
         <Card className="gap-0 overflow-hidden py-0 shadow-none" data-meal-state="missing">
             <div
-                aria-label={`${period} \uC2DD\uB2E8 \uAC8C\uC2DC \uB300\uAE30`}
+                aria-label={`${period} 급식 게시 대기`}
                 className="flex aspect-[4/3] items-center justify-center border-b bg-muted/60 text-muted-foreground"
                 role="img"
             >
@@ -154,7 +177,9 @@ export function MissingMealPostCard({period}: {period: TodayMealPeriod}) {
             </div>
             <CardHeader className="p-5">
                 <CardTitle className="text-base leading-6">{period}</CardTitle>
-                <CardDescription className="mt-1">아직 올라오지 않았습니다.</CardDescription>
+                <CardDescription className="mt-1 text-base leading-6">
+                    아직 올라오지 않았습니다.
+                </CardDescription>
             </CardHeader>
         </Card>
     );

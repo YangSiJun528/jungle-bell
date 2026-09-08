@@ -31,7 +31,7 @@ const pending = {
     createdAtEpochMs: 1_785_727_000_000,
 };
 
-test('pending pairing은 식별자와 생성 시각만 session storage에 보존한다', () => {
+test('pending pairing은 식별자와 생성 시각만 영속 저장소에 보존한다', () => {
     const storage = memoryStorage();
     storePendingMobilePairing(storage, pending);
 
@@ -45,6 +45,26 @@ test('pending pairing은 식별자와 생성 시각만 session storage에 보존
 
     clearPendingMobilePairing(storage);
     assert.equal(storage.values.has(PENDING_MOBILE_PAIRING_KEY), false);
+});
+
+test('새 브라우저 실행에서 같은 local storage를 읽어 승인 대기를 복구한다', () => {
+    const persistentValues = new Map<string, string>();
+    const firstRun = {
+        getItem: (key: string) => persistentValues.get(key) ?? null,
+        setItem: (key: string, value: string) => persistentValues.set(key, value),
+        removeItem: (key: string) => persistentValues.delete(key),
+    };
+    storePendingMobilePairing(firstRun, pending);
+
+    const restartedRun = {
+        getItem: firstRun.getItem,
+        setItem: firstRun.setItem,
+        removeItem: firstRun.removeItem,
+    };
+    assert.deepEqual(
+        readPendingMobilePairing(restartedRun, pending.createdAtEpochMs + 30_000),
+        pending,
+    );
 });
 
 test('pending pairing은 10분이 지나거나 필드가 위조되면 제거한다', () => {

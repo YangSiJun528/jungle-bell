@@ -1,11 +1,13 @@
 import {useMutation} from '@tanstack/react-query';
-import {lazy, useEffect, useState} from 'react';
+import {useNavigate, useSearch} from '@tanstack/react-router';
+import {lazy, useCallback, useEffect, useState} from 'react';
 
 import type {MobilePairingLink} from '@/domain/connections/pairing-link';
 
 import {useDashboardEnvironment} from './dashboard-context';
 import {useDashboardRouteRuntime} from './dashboard-route-runtime';
 import {clearInitialPairingEntry, readInitialPairingEntry} from './pairing-bootstrap';
+import type {ConnectionsTab} from './routes';
 
 const HomePage = lazy(() =>
     import('@/features/home/home-page').then((module) => ({default: module.HomePage})),
@@ -26,6 +28,11 @@ const MealsPage = lazy(() =>
 const ConnectionsPage = lazy(() =>
     import('@/features/connections/connections-page').then((module) => ({
         default: module.ConnectionsPage,
+    })),
+);
+const AppStatusPage = lazy(() =>
+    import('@/features/app-status/app-status-page').then((module) => ({
+        default: module.AppStatusPage,
     })),
 );
 const AppInstallPage = lazy(() =>
@@ -91,7 +98,23 @@ export function MealsRoutePage() {
 }
 
 export function ConnectionsRoutePage() {
-    return <ConnectionsPage />;
+    const search = useSearch({from: '/connections'});
+    const navigate = useNavigate({from: '/connections'});
+    const selectTab = useCallback(
+        (tab: ConnectionsTab) => {
+            void navigate({search: (previous) => ({...previous, tab})});
+        },
+        [navigate],
+    );
+
+    return (
+        <ConnectionsPage
+            tab={search.tab}
+            returnTo={search.returnTo}
+            onTabChange={selectTab}
+            renderAppStatus={() => <AppStatusPage onOpenTab={selectTab} />}
+        />
+    );
 }
 
 export function NotificationRoutePage() {

@@ -7,6 +7,7 @@ const PUBLIC_DATA_CACHE = 'jungle-bell-public-data-v1';
 const PUBLIC_IMAGE_CACHE = 'jungle-bell-public-images-v1';
 const RUNTIME_ASSET_CACHE = 'jungle-bell-runtime-assets-v1';
 const LEGACY_CACHE_PREFIX = 'jungle-bell-dashboard-';
+const ACTIVATE_UPDATE_MESSAGE = 'JUNGLE_BELL_ACTIVATE_UPDATE';
 const SEVEN_DAYS_SECONDS = 7 * 24 * 60 * 60;
 const THIRTY_DAYS_SECONDS = 30 * 24 * 60 * 60;
 
@@ -90,6 +91,21 @@ registerRoute(
 // dashboard and lazy chunk remains available immediately after installation.
 precacheAndRoute(self.__WB_MANIFEST);
 cleanupOutdatedCaches();
+
+// A newly installed worker remains waiting until the visible client has saved
+// any user input and explicitly completes the update handshake.
+self.addEventListener('message', (event) => {
+    const message = event.data;
+    if (
+        !message ||
+        typeof message !== 'object' ||
+        Object.keys(message).length !== 1 ||
+        message.type !== ACTIVATE_UPDATE_MESSAGE
+    ) {
+        return;
+    }
+    event.waitUntil(self.skipWaiting());
+});
 
 self.addEventListener('activate', (event) => {
     event.waitUntil(Promise.all([deleteLegacyCaches(), self.clients.claim()]));

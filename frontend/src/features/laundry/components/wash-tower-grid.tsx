@@ -16,19 +16,35 @@ export interface WashTowerGridProps {
     machines: readonly DashboardLaundryMachine[];
     nowMs: number;
     showRiskIndicators?: boolean;
+    dataStale?: boolean;
+    dataStaleLabel?: string | null;
 }
 
-export function WashTowerGrid({machines, nowMs, showRiskIndicators = false}: WashTowerGridProps) {
+export function WashTowerGrid({
+    machines,
+    nowMs,
+    showRiskIndicators = false,
+    dataStale = false,
+    dataStaleLabel,
+}: WashTowerGridProps) {
     const towers = sortWashTowers(machines);
     if (towers.length === 0) return null;
 
     return (
         <div
             aria-label="워시타워 상태표"
-            className="overflow-x-auto pb-1 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            className="overflow-x-auto overscroll-x-contain pb-1 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             role="region"
             tabIndex={0}
         >
+            {dataStale ? (
+                <p className="mb-2 text-base leading-6 text-amber-700 dark:text-amber-300">
+                    실시간 정보가 아닙니다 · 마지막 정상 시각 {dataStaleLabel ?? '확인 기록 없음'}
+                </p>
+            ) : null}
+            <p className="mb-2 block text-base leading-6 text-muted-foreground sm:hidden">
+                표가 화면을 벗어나면 좌우로 스크롤해 자세히 확인하세요.
+            </p>
             <table className="w-full min-w-[620px] table-fixed border-separate border-spacing-1">
                 <caption className="sr-only">워시타워 번호별 세탁기와 건조기 상태</caption>
                 <thead>

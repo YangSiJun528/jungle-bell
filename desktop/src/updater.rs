@@ -4,8 +4,8 @@ use std::{
     fs,
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicU8, Ordering},
-        Arc,
+        atomic::{AtomicU64, AtomicU8, Ordering},
+        Arc, RwLock,
     },
     time::Duration,
 };
@@ -13,7 +13,7 @@ use std::{
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
-use tauri_plugin_updater::{Update, UpdaterExt};
+use tauri_plugin_updater::{Error as UpdaterError, Update, UpdaterExt};
 use tokio::sync::Mutex;
 
 use crate::{
@@ -32,18 +32,49 @@ const SESSION_BACKGROUND: u8 = 0;
 const SESSION_FOREGROUND: u8 = 1;
 const SESSION_INSTALLING: u8 = 2;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+enum DesktopUpdateStage {
+    Checking,
+    Latest,
+    Optional,
+    Mandatory,
+    Downloading,
+    Verifying,
+    Installing,
+    RestartRequired,
+    Failed,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+enum DesktopUpdatePolicy {
+    Optional,
+    Mandatory,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DesktopUpdateProgress {
+    downloaded_bytes: u64,
+    total_bytes: Option<u64>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct DesktopUpdateStatus {
     current_version: String,
     available_version: Option<String>,
-    mandatory: bool,
+    status: DesktopUpdateStage,
+    policy: Option<DesktopUpdatePolicy>,
+    progress: Option<DesktopUpdateProgress>,
+    error_code: Option<String>,
 }
 
 impl DesktopUpdateStatus {
     fn new(current_version: impl Into<String>, available_version: Option<String>) -> Self {
         let current_version = current_version.into();
-        let mandatory = current_version
+        let policy = current_version
             .parse::<Version>()
             .ok()
             .zip(
@@ -51,12 +82,63 @@ impl DesktopUpdateStatus {
                     .as_deref()
                     .and_then(|version| version.parse::<Version>().ok()),
             )
-            .is_some_and(|(current, available)| is_mandatory_update(&current, &available));
+            .map(|(current, available)| {
+                if is_mandatory_update(&current, &available) {
+                    DesktopUpdatePolicy::Mandatory
+                } else {
+                    DesktopUpdatePolicy::Optional
+                }
+            });
+        let status = match policy {
+            Some(DesktopUpdatePolicy::Mandatory) => DesktopUpdateStage::Mandatory,
+            Some(DesktopUpdatePolicy::Optional) => DesktopUpdateStage::Optional,
+            None => DesktopUpdateStage::Latest,
+        };
         Self {
             current_version,
             available_version,
-            mandatory,
+            status,
+            policy,
+            progress: None,
+            error_code: None,
         }
+    }
+
+    fn checking(current_version: impl Into<String>) -> Self {
+        Self {
+            current_version: current_version.into(),
+            available_version: None,
+            status: DesktopUpdateStage::Checking,
+            policy: None,
+            progress: None,
+            error_code: None,
+        }
+    }
+
+    fn checking_from(mut self, current_version: impl Into<String>) -> Self {
+        self.current_version = current_version.into();
+        self.status = DesktopUpdateStage::Checking;
+        self.progress = None;
+        self.error_code = None;
+        self
+    }
+
+    fn with_stage(mut self, status: DesktopUpdateStage, progress: Option<DesktopUpdateProgress>) -> Self {
+        self.status = status;
+        self.progress = progress;
+        self.error_code = None;
+        self
+    }
+
+    fn failed(mut self, error_code: impl Into<String>) -> Self {
+        self.status = DesktopUpdateStage::Failed;
+        self.error_code = Some(error_code.into());
+        self
+    }
+
+    fn with_progress(mut self, progress: DesktopUpdateProgress) -> Self {
+        self.progress = Some(progress);
+        self
     }
 }
 
@@ -113,21 +195,25 @@ struct CachedUpdateCheck {
 #[derive(Default)]
 struct UpdateOperationState {
     cached: Option<CachedUpdateCheck>,
-    latest_check_error: Option<String>,
     pending: Option<PendingUpdateMarker>,
 }
 
 impl UpdateOperationState {
     fn cached_check(&self) -> Option<Result<CheckedUpdate, String>> {
-        if let Some(error) = self.latest_check_error.as_ref() {
-            return Some(Err(error.clone()));
-        }
         self.cached.as_ref().map(|cached| {
             Ok(CheckedUpdate {
                 status: cached.status.clone(),
                 update: cached.update.clone(),
             })
         })
+    }
+
+    fn remember_failure(&mut self, error_code: &str) -> bool {
+        let Some(cached) = self.cached.as_mut() else {
+            return false;
+        };
+        cached.status = cached.status.clone().failed(error_code);
+        true
     }
 }
 
@@ -142,6 +228,7 @@ pub(crate) enum AutoUpdateOutcome {
 /// 업데이트 확인, 유예 상태, 설치 직전 안전 판정을 하나의 직렬화 경계에서 관리한다.
 pub(crate) struct UpdateCoordinator {
     operation: Mutex<UpdateOperationState>,
+    status_snapshot: RwLock<DesktopUpdateStatus>,
     session_state: AtomicU8,
     marker_path: PathBuf,
 }
@@ -151,12 +238,13 @@ impl UpdateCoordinator {
         let marker_path = app.path().app_data_dir()?.join(PENDING_UPDATE_FILE);
         let current_version = app.package_info().version.clone();
         let pending = load_pending_marker(&marker_path, &current_version);
+        let initial_status = pending.as_ref().map_or_else(
+            || DesktopUpdateStatus::checking(current_version.to_string()),
+            |marker| DesktopUpdateStatus::new(current_version.to_string(), Some(marker.version.clone())),
+        );
         Ok(Self {
-            operation: Mutex::new(UpdateOperationState {
-                cached: None,
-                latest_check_error: None,
-                pending,
-            }),
+            operation: Mutex::new(UpdateOperationState { cached: None, pending }),
+            status_snapshot: RwLock::new(initial_status),
             session_state: AtomicU8::new(SESSION_BACKGROUND),
             marker_path,
         })
@@ -197,6 +285,55 @@ impl UpdateCoordinator {
             .is_ok()
     }
 
+    fn try_begin_manual_install(&self) -> bool {
+        self.mark_foreground_seen()
+            && self
+                .session_state
+                .compare_exchange(
+                    SESSION_FOREGROUND,
+                    SESSION_INSTALLING,
+                    Ordering::AcqRel,
+                    Ordering::Acquire,
+                )
+                .is_ok()
+    }
+
+    fn status_snapshot(&self) -> DesktopUpdateStatus {
+        self.status_snapshot
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
+    }
+
+    fn publish_status(&self, status: DesktopUpdateStatus) {
+        *self
+            .status_snapshot
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = status;
+    }
+
+    fn remember_status(&self, state: &mut UpdateOperationState, status: DesktopUpdateStatus) {
+        if let Some(cached) = state.cached.as_mut() {
+            cached.status = status.clone();
+        }
+        self.publish_status(status);
+    }
+
+    fn remember_failure(&self, state: &mut UpdateOperationState, current_version: &str, error_code: &str) {
+        let status = if state.remember_failure(error_code) {
+            state.cached.as_ref().unwrap().status.clone()
+        } else {
+            self.status_snapshot().checking_from(current_version).failed(error_code)
+        };
+        if state.cached.is_none() && status.available_version.is_some() {
+            state.cached = Some(CachedUpdateCheck {
+                status: status.clone(),
+                update: None,
+            });
+        }
+        self.publish_status(status);
+    }
+
     pub(crate) async fn has_pending_auto_install(&self) -> bool {
         self.operation
             .lock()
@@ -207,26 +344,40 @@ impl UpdateCoordinator {
     }
 
     pub(crate) async fn check_update(&self, app: &tauri::AppHandle) -> Result<DesktopUpdateStatus, String> {
+        if self.session_state.load(Ordering::Acquire) == SESSION_INSTALLING {
+            return Ok(self.status_snapshot());
+        }
         let mut state = self.operation.lock().await;
         let checked = self.check_remote(app, &mut state, false).await?;
         Ok(checked.status)
     }
 
     pub(crate) async fn refresh_update(&self, app: &tauri::AppHandle) -> Result<DesktopUpdateStatus, String> {
+        if self.session_state.load(Ordering::Acquire) == SESSION_INSTALLING {
+            return Ok(self.status_snapshot());
+        }
         let mut state = self.operation.lock().await;
         let checked = self.check_remote(app, &mut state, true).await?;
         Ok(checked.status)
     }
 
     pub(crate) async fn install_update(&self, app: tauri::AppHandle) -> Result<(), String> {
-        if !self.mark_foreground_seen() {
+        if !self.try_begin_manual_install() {
             return Err("UPDATE_INSTALL_IN_PROGRESS".to_owned());
         }
+        let result = self.install_foreground_update(app).await;
+        if !matches!(result, Ok(true)) {
+            self.session_state.store(SESSION_FOREGROUND, Ordering::Release);
+        }
+        result.map(|_| ())
+    }
+
+    async fn install_foreground_update(&self, app: tauri::AppHandle) -> Result<bool, String> {
         let mut state = self.operation.lock().await;
         let checked = self.check_remote(&app, &mut state, true).await?;
         let Some(update) = checked.update else {
             log::debug!("[updater] 최신 버전");
-            return Ok(());
+            return Ok(false);
         };
 
         // Windows installer는 install 호출 안에서 프로세스를 종료할 수 있다.
@@ -240,13 +391,42 @@ impl UpdateCoordinator {
         if let Err(error) = self.persist_pending_version(&mut state, &update.version) {
             log::warn!("[updater] 수동 설치 marker 기록 실패: {error}");
         }
+        let (bytes, progress) = match self.download_verified_update(&checked.status, &update).await {
+            Ok(download) => download,
+            Err(error) => {
+                let error_code = updater_operation_error_code(&error);
+                log::error!("[updater] 업데이트 다운로드 또는 서명 검증 실패: {error}");
+                let failed = self.status_snapshot().failed(error_code);
+                self.remember_status(&mut state, failed);
+                self.defer_pending_retry(&mut state);
+                return Err(error_code.to_owned());
+            }
+        };
         self.notify_installing(&app, &update.version);
-        if let Err(error) = install_verified_update(update).await {
+        self.remember_status(
+            &mut state,
+            checked
+                .status
+                .clone()
+                .with_stage(DesktopUpdateStage::Installing, Some(progress.clone())),
+        );
+        if let Err(error) = update.install(bytes) {
+            log::error!("[updater] 업데이트 설치 실패: {error}");
+            self.remember_status(
+                &mut state,
+                checked.status.failed("UPDATE_INSTALL_FAILED").with_progress(progress),
+            );
             self.defer_pending_retry(&mut state);
-            return Err(error);
+            return Err("UPDATE_INSTALL_FAILED".to_owned());
         }
+        self.remember_status(
+            &mut state,
+            checked
+                .status
+                .with_stage(DesktopUpdateStage::RestartRequired, Some(progress)),
+        );
         app.request_restart();
-        Ok(())
+        Ok(true)
     }
 
     pub(crate) async fn apply_pending_update_on_start(&self, app: tauri::AppHandle) -> AutoUpdateOutcome {
@@ -290,10 +470,13 @@ impl UpdateCoordinator {
             return AutoUpdateOutcome::Deferred;
         }
         log::info!("[updater] v{} 서명 검증 다운로드 시작", update.version);
-        let bytes = match update.download(|_, _| {}, || {}).await {
-            Ok(bytes) => bytes,
+        let (bytes, progress) = match self.download_verified_update(&checked.status, &update).await {
+            Ok(download) => download,
             Err(error) => {
                 log::error!("[updater] 업데이트 다운로드 또는 서명 검증 실패: {error}");
+                let error_code = updater_operation_error_code(&error);
+                let failed = self.status_snapshot().failed(error_code);
+                self.remember_status(&mut state, failed);
                 self.defer_pending_retry(&mut state);
                 return AutoUpdateOutcome::Failed;
             }
@@ -306,24 +489,44 @@ impl UpdateCoordinator {
                 "[updater] 다운로드 중 사용자 세션이 시작되어 v{} 설치를 유예",
                 update.version
             );
+            self.remember_status(&mut state, checked.status);
             return AutoUpdateOutcome::Deferred;
         }
 
         if let Err(error) = self.record_install_attempt(&mut state, &update.version) {
             self.session_state.store(SESSION_BACKGROUND, Ordering::Release);
             log::warn!("[updater] 자동 설치 marker 기록 실패로 설치를 유예: {error}");
-            return AutoUpdateOutcome::Deferred;
+            let failed = checked.status.failed("UPDATE_STATE_SAVE_FAILED");
+            self.remember_status(&mut state, failed);
+            return AutoUpdateOutcome::Failed;
         }
 
+        self.remember_status(
+            &mut state,
+            checked
+                .status
+                .clone()
+                .with_stage(DesktopUpdateStage::Installing, Some(progress.clone())),
+        );
         if let Err(error) = update.install(bytes) {
             self.session_state.store(SESSION_BACKGROUND, Ordering::Release);
             log::error!("[updater] 업데이트 설치 실패: {error}");
+            self.remember_status(
+                &mut state,
+                checked.status.failed("UPDATE_INSTALL_FAILED").with_progress(progress),
+            );
             self.defer_pending_retry(&mut state);
             return AutoUpdateOutcome::Failed;
         }
 
         // Windows updater는 install 안에서 상태 정리 hook 실행 후 프로세스를
         // 종료한다. install이 반환되는 플랫폼은 이벤트 루프에 재시작을 요청한다.
+        self.remember_status(
+            &mut state,
+            checked
+                .status
+                .with_stage(DesktopUpdateStage::RestartRequired, Some(progress)),
+        );
         app.request_restart();
         AutoUpdateOutcome::RestartRequested
     }
@@ -336,16 +539,22 @@ impl UpdateCoordinator {
     ) -> Result<CheckedUpdate, String> {
         if !force {
             if let Some(cached) = state.cached_check() {
+                if let Ok(checked) = &cached {
+                    self.publish_status(checked.status.clone());
+                }
                 return cached;
             }
         }
+
+        let current_version = app.package_info().version.to_string();
+        self.publish_status(self.status_snapshot().checking_from(current_version.clone()));
 
         let updater = match app.updater_builder().timeout(UPDATE_CHECK_TIMEOUT).build() {
             Ok(updater) => updater,
             Err(error) => {
                 log::debug!("[updater] updater 초기화 실패: {error}");
                 let error = "UPDATER_UNAVAILABLE".to_owned();
-                state.latest_check_error = Some(error.clone());
+                self.remember_failure(state, &current_version, &error);
                 self.defer_pending_retry(state);
                 return Err(error);
             }
@@ -355,16 +564,14 @@ impl UpdateCoordinator {
             Err(error) => {
                 log::warn!("[updater] 업데이트 확인 실패: {error}");
                 let error = "UPDATE_CHECK_FAILED".to_owned();
-                state.latest_check_error = Some(error.clone());
+                self.remember_failure(state, &current_version, &error);
                 self.defer_pending_retry(state);
                 return Err(error);
             }
         };
-        state.latest_check_error = None;
         if let Some(update) = update.as_mut() {
             update.timeout = Some(UPDATE_DOWNLOAD_TIMEOUT);
         }
-        let current_version = app.package_info().version.to_string();
         let status = DesktopUpdateStatus::new(current_version, update.as_ref().map(|update| update.version.clone()));
 
         match update.as_ref() {
@@ -384,7 +591,66 @@ impl UpdateCoordinator {
             status: status.clone(),
             update: update.clone(),
         });
+        self.publish_status(status.clone());
         Ok(CheckedUpdate { status, update })
+    }
+
+    async fn download_verified_update(
+        &self,
+        status: &DesktopUpdateStatus,
+        update: &Update,
+    ) -> Result<(Vec<u8>, DesktopUpdateProgress), UpdaterError> {
+        let downloaded_bytes = Arc::new(AtomicU64::new(0));
+        let total_bytes = Arc::new(AtomicU64::new(u64::MAX));
+        let initial_progress = DesktopUpdateProgress {
+            downloaded_bytes: 0,
+            total_bytes: None,
+        };
+        self.publish_status(
+            status
+                .clone()
+                .with_stage(DesktopUpdateStage::Downloading, Some(initial_progress)),
+        );
+
+        let chunk_downloaded = downloaded_bytes.clone();
+        let chunk_total = total_bytes.clone();
+        let chunk_status = status.clone();
+        let finish_downloaded = downloaded_bytes.clone();
+        let finish_total = total_bytes.clone();
+        let finish_status = status.clone();
+        let bytes = update
+            .download(
+                |chunk_length, content_length| {
+                    let downloaded = chunk_downloaded
+                        .fetch_add(chunk_length as u64, Ordering::AcqRel)
+                        .saturating_add(chunk_length as u64);
+                    if let Some(total) = content_length {
+                        chunk_total.store(total, Ordering::Release);
+                    }
+                    let progress = DesktopUpdateProgress {
+                        downloaded_bytes: downloaded,
+                        total_bytes: observed_total_bytes(&chunk_total),
+                    };
+                    self.publish_status(
+                        chunk_status
+                            .clone()
+                            .with_stage(DesktopUpdateStage::Downloading, Some(progress)),
+                    );
+                },
+                || {
+                    let progress = DesktopUpdateProgress {
+                        downloaded_bytes: finish_downloaded.load(Ordering::Acquire),
+                        total_bytes: observed_total_bytes(&finish_total),
+                    };
+                    self.publish_status(finish_status.with_stage(DesktopUpdateStage::Verifying, Some(progress)));
+                },
+            )
+            .await?;
+        let progress = DesktopUpdateProgress {
+            downloaded_bytes: downloaded_bytes.load(Ordering::Acquire),
+            total_bytes: observed_total_bytes(&total_bytes),
+        };
+        Ok((bytes, progress))
     }
 
     fn persist_pending_version(&self, state: &mut UpdateOperationState, version: &str) -> Result<(), String> {
@@ -437,12 +703,18 @@ struct CheckedUpdate {
     update: Option<Update>,
 }
 
-async fn install_verified_update(update: Update) -> Result<(), String> {
-    log::info!("[updater] v{} 설치 시작", update.version);
-    update.download_and_install(|_, _| {}, || {}).await.map_err(|error| {
-        log::error!("[updater] 업데이트 설치 실패: {error}");
-        "UPDATE_INSTALL_FAILED".to_owned()
-    })
+fn observed_total_bytes(total_bytes: &AtomicU64) -> Option<u64> {
+    match total_bytes.load(Ordering::Acquire) {
+        u64::MAX => None,
+        total => Some(total),
+    }
+}
+
+fn updater_operation_error_code(error: &UpdaterError) -> &'static str {
+    match error {
+        UpdaterError::Minisign(_) | UpdaterError::Base64(_) | UpdaterError::SignatureUtf8(_) => "UPDATE_VERIFY_FAILED",
+        _ => "UPDATE_DOWNLOAD_FAILED",
+    }
 }
 
 pub(crate) fn mark_foreground_session(app: &tauri::AppHandle) -> bool {
@@ -530,17 +802,28 @@ mod tests {
     }
 
     #[test]
-    fn 업데이트_상태는_현재_버전과_선택적_최신_버전을_노출한다() {
+    fn 업데이트_상태는_단계_policy_진행률_오류를_exact하게_노출한다() {
         let available = DesktopUpdateStatus::new("0.5.0", Some("0.5.1".to_owned()));
         let mandatory = DesktopUpdateStatus::new("0.5.0", Some("0.6.0".to_owned()));
         let current = DesktopUpdateStatus::new("0.6.0", None);
+        let downloading = mandatory.clone().with_stage(
+            DesktopUpdateStage::Downloading,
+            Some(DesktopUpdateProgress {
+                downloaded_bytes: 25,
+                total_bytes: Some(100),
+            }),
+        );
+        let failed = downloading.failed("UPDATE_VERIFY_FAILED");
 
         assert_eq!(
             serde_json::to_value(available).unwrap(),
             serde_json::json!({
                 "currentVersion": "0.5.0",
                 "availableVersion": "0.5.1",
-                "mandatory": false
+                "status": "optional",
+                "policy": "optional",
+                "progress": null,
+                "errorCode": null
             })
         );
         assert_eq!(
@@ -548,7 +831,10 @@ mod tests {
             serde_json::json!({
                 "currentVersion": "0.5.0",
                 "availableVersion": "0.6.0",
-                "mandatory": true
+                "status": "mandatory",
+                "policy": "mandatory",
+                "progress": null,
+                "errorCode": null
             })
         );
         assert_eq!(
@@ -556,7 +842,21 @@ mod tests {
             serde_json::json!({
                 "currentVersion": "0.6.0",
                 "availableVersion": null,
-                "mandatory": false
+                "status": "latest",
+                "policy": null,
+                "progress": null,
+                "errorCode": null
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(failed).unwrap(),
+            serde_json::json!({
+                "currentVersion": "0.5.0",
+                "availableVersion": "0.6.0",
+                "status": "failed",
+                "policy": "mandatory",
+                "progress": {"downloadedBytes": 25, "totalBytes": 100},
+                "errorCode": "UPDATE_VERIFY_FAILED"
             })
         );
     }
@@ -616,7 +916,6 @@ mod tests {
         let eligible = UpdateCoordinator {
             operation: Mutex::new(UpdateOperationState {
                 cached: None,
-                latest_check_error: None,
                 pending: Some(PendingUpdateMarker {
                     schema_version: PENDING_UPDATE_SCHEMA_VERSION,
                     version: "0.6.0".into(),
@@ -624,13 +923,13 @@ mod tests {
                     retry_not_before_unix_seconds: 0,
                 }),
             }),
+            status_snapshot: RwLock::new(DesktopUpdateStatus::checking("0.5.0")),
             session_state: AtomicU8::new(SESSION_BACKGROUND),
             marker_path: PathBuf::new(),
         };
         let exhausted = UpdateCoordinator {
             operation: Mutex::new(UpdateOperationState {
                 cached: None,
-                latest_check_error: None,
                 pending: Some(PendingUpdateMarker {
                     schema_version: PENDING_UPDATE_SCHEMA_VERSION,
                     version: "0.6.0".into(),
@@ -638,13 +937,13 @@ mod tests {
                     retry_not_before_unix_seconds: 0,
                 }),
             }),
+            status_snapshot: RwLock::new(DesktopUpdateStatus::checking("0.5.0")),
             session_state: AtomicU8::new(SESSION_BACKGROUND),
             marker_path: PathBuf::new(),
         };
         let backed_off = UpdateCoordinator {
             operation: Mutex::new(UpdateOperationState {
                 cached: None,
-                latest_check_error: None,
                 pending: Some(PendingUpdateMarker {
                     schema_version: PENDING_UPDATE_SCHEMA_VERSION,
                     version: "0.6.0".into(),
@@ -652,6 +951,7 @@ mod tests {
                     retry_not_before_unix_seconds: i64::MAX,
                 }),
             }),
+            status_snapshot: RwLock::new(DesktopUpdateStatus::checking("0.5.0")),
             session_state: AtomicU8::new(SESSION_BACKGROUND),
             marker_path: PathBuf::new(),
         };
@@ -666,12 +966,12 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let coordinator = UpdateCoordinator {
             operation: Mutex::new(UpdateOperationState::default()),
+            status_snapshot: RwLock::new(DesktopUpdateStatus::checking("0.5.0")),
             session_state: AtomicU8::new(SESSION_BACKGROUND),
             marker_path: directory.path().join(PENDING_UPDATE_FILE),
         };
         let mut state = UpdateOperationState {
             cached: None,
-            latest_check_error: None,
             pending: Some(PendingUpdateMarker {
                 schema_version: PENDING_UPDATE_SCHEMA_VERSION,
                 version: "0.6.0".into(),
@@ -687,26 +987,39 @@ mod tests {
     }
 
     #[test]
-    fn 최신_확인_오류는_이전_mandatory_cache보다_우선한다() {
-        let state = UpdateOperationState {
+    fn 최신_확인_오류에도_이전_mandatory_cache를_실패_상태로_보존한다() {
+        let mut state = UpdateOperationState {
             cached: Some(CachedUpdateCheck {
                 status: DesktopUpdateStatus::new("0.5.0", Some("0.6.0".into())),
                 update: None,
             }),
-            latest_check_error: Some("UPDATE_CHECK_FAILED".into()),
             pending: None,
         };
 
-        assert!(matches!(
-            state.cached_check(),
-            Some(Err(error)) if error == "UPDATE_CHECK_FAILED"
-        ));
+        assert!(state.remember_failure("UPDATE_CHECK_FAILED"));
+        let checked = state.cached_check().unwrap().unwrap();
+        assert_eq!(checked.status.status, DesktopUpdateStage::Failed);
+        assert_eq!(checked.status.policy, Some(DesktopUpdatePolicy::Mandatory));
+        assert_eq!(checked.status.error_code.as_deref(), Some("UPDATE_CHECK_FAILED"));
+    }
+
+    #[test]
+    fn 서명_오류와_네트워크_오류를_검증과_다운로드_단계로_구분한다() {
+        assert_eq!(
+            updater_operation_error_code(&tauri_plugin_updater::Error::SignatureUtf8("bad".into())),
+            "UPDATE_VERIFY_FAILED"
+        );
+        assert_eq!(
+            updater_operation_error_code(&tauri_plugin_updater::Error::Network("offline".into())),
+            "UPDATE_DOWNLOAD_FAILED"
+        );
     }
 
     #[test]
     fn 설치_확정과_사용자_창_열기는_하나만_먼저_상태를_선점한다() {
         let foreground_first = UpdateCoordinator {
             operation: Mutex::new(UpdateOperationState::default()),
+            status_snapshot: RwLock::new(DesktopUpdateStatus::checking("0.5.0")),
             session_state: AtomicU8::new(SESSION_BACKGROUND),
             marker_path: PathBuf::new(),
         };
@@ -715,6 +1028,7 @@ mod tests {
 
         let install_first = UpdateCoordinator {
             operation: Mutex::new(UpdateOperationState::default()),
+            status_snapshot: RwLock::new(DesktopUpdateStatus::checking("0.5.0")),
             session_state: AtomicU8::new(SESSION_BACKGROUND),
             marker_path: PathBuf::new(),
         };

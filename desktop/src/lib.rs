@@ -171,6 +171,7 @@ pub fn run() {
     let notification_inbox_service = Arc::new(NotificationInboxService::load());
     let notification_service = Arc::new(NotificationService::new(notification_inbox_service.clone()));
     let settings_service = Arc::new(DesktopSettingsService::new(shared_state.clone()));
+    let lifecycle_state = Arc::new(config::DesktopLifecycleStateStore::load());
 
     tauri::Builder::default()
         // single-instance 플러그인: 공식 문서 권장대로 가장 먼저 등록한다.
@@ -219,9 +220,13 @@ pub fn run() {
         .manage(notification_inbox_service.clone())
         .manage(notification_service.clone())
         .manage(settings_service.clone())
+        .manage(lifecycle_state)
         // JS에서 `window.__TAURI__.core.invoke()`로 호출할 수 있는 Tauri 커맨드 등록.
         .invoke_handler(tauri::generate_handler![
             commands::report_checker_event,
+            commands::get_desktop_lifecycle_status,
+            commands::acknowledge_and_hide_to_tray,
+            commands::quit_desktop_app,
             commands::bootstrap_desktop_http_session,
             commands::get_desktop_settings,
             commands::check_desktop_update,
@@ -336,10 +341,12 @@ mod tests {
             .filter_map(|line| line.trim().strip_prefix('"')?.strip_suffix("\","))
             .collect::<std::collections::BTreeSet<_>>();
         let expected = [
+            "acknowledge_and_hide_to_tray",
             "activate_notification",
             "bootstrap_desktop_http_session",
             "check_desktop_update",
             "get_connected_service_status",
+            "get_desktop_lifecycle_status",
             "get_desktop_settings",
             "get_notification_inbox_snapshot",
             "mark_all_notifications_read",
@@ -352,6 +359,7 @@ mod tests {
             "report_checker_event",
             "reset_desktop_identity",
             "send_test_notification",
+            "quit_desktop_app",
             "update_desktop_settings",
         ]
         .into_iter()

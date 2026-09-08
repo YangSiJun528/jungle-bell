@@ -50,14 +50,25 @@ export function createPwaCapabilityAdapter(options: {
     return {
         available: true,
         installed: installedPwa(windowObject, navigatorObject),
+        getServiceWorkerContainer() {
+            return options.production && 'serviceWorker' in navigatorObject
+                ? navigatorObject.serviceWorker
+                : null;
+        },
         registerServiceWorker() {
-            if (!options.production || !('serviceWorker' in navigatorObject)) return;
-            const register = () => void startServiceWorker().catch(() => undefined);
-            if (windowObject.document?.readyState === 'complete') {
-                register();
-            } else {
-                windowObject.addEventListener('load', register, {once: true});
+            if (!options.production || !('serviceWorker' in navigatorObject)) {
+                return Promise.resolve(null);
             }
+            if (windowObject.document?.readyState === 'complete') {
+                return startServiceWorker();
+            }
+            return new Promise<ServiceWorkerRegistration>((resolve, reject) => {
+                windowObject.addEventListener(
+                    'load',
+                    () => void startServiceWorker().then(resolve, reject),
+                    {once: true},
+                );
+            });
         },
         async preparePush() {
             if (!('PushManager' in windowObject)) throw new Error('PUSH_UNSUPPORTED');
@@ -92,7 +103,48 @@ export function createPwaCapabilityAdapter(options: {
                 return Promise.reject(error);
             }
         },
+        async getPushSubscription() {
+            assertPushSupported(windowObject, navigatorObject);
+            const registration = await startServiceWorker();
+            const subscription = await registration.pushManager.getSubscription();
+            return subscription?.toJSON() ?? null;
+        },
+        async getServiceWorkerStatus() {
+            if (!options.production || !('serviceWorker' in navigatorObject)) {
+                return {status: 'missing'};
+            }
+            try {
+                const registration = await navigatorObject.serviceWorker.getRegistration();
+                if (registration?.waiting) return {status: 'waiting'};
+                if (registration?.installing) return {status: 'installing'};
+                if (registration?.active?.state === 'activated') {
+                    return {
+                        status: 'active',
+                        scriptUrl: registration.active.scriptURL,
+                    };
+                }
+                return {status: 'missing'};
+            } catch {
+                return {status: 'error'};
+            }
+        },
+        async unsubscribePush(expectedEndpoint) {
+            assertPushSupported(windowObject, navigatorObject);
+            const registration = await startServiceWorker();
+            const subscription = await registration.pushManager.getSubscription();
+            if (!subscription) return false;
+            if (subscription.endpoint !== expectedEndpoint) {
+                throw new Error('PUSH_SUBSCRIPTION_CHANGED');
+            }
+            return subscription.unsubscribe();
+        },
     };
+}
+
+function assertPushSupported(windowObject: Window, navigatorObject: Navigator): void {
+    if (!('serviceWorker' in navigatorObject) || !('PushManager' in windowObject)) {
+        throw new Error('PUSH_UNSUPPORTED');
+    }
 }
 
 function installedPwa(windowObject: Window, navigatorObject: Navigator): boolean {

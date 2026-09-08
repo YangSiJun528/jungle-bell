@@ -4,6 +4,8 @@ import type {DashboardMealsSnapshot} from '@/api/dashboard-api';
 
 import {
     mealsGroupedByDate,
+    mealsPageLoadState,
+    type MealsPageLoadInput,
     todayMealSlots,
     weekKeyForDate,
     weekRangeLabel,
@@ -89,5 +91,179 @@ describe('급식 이력 보조 모델', () => {
         expect(weeklyMenuForDate(weekly, '2026-08-13')?.post.id).toBe('weekly');
         expect(weeklyMenuForDate(weekly, '2026-08-18')?.post.id).toBe('next-weekly');
         expect(weeklyMenuForDate(weekly, '2026-08-24')).toBeNull();
+    });
+});
+
+describe('Meals 페이지 상태 모델', () => {
+    const fixture = (patch: Partial<MealsPageLoadInput>): MealsPageLoadInput => ({
+        hasData: true,
+        isPending: false,
+        isStale: false,
+        isError: false,
+        manualRefreshError: false,
+        todayHasContent: true,
+        weeklyHasContent: true,
+        historyHasContent: true,
+        isOffline: false,
+        ...patch,
+    });
+
+    it('로딩은 데이터가 없고 pending일 때만 loading으로 분류한다', () => {
+        expect(
+            mealsPageLoadState(
+                fixture({
+                    hasData: false,
+                    isPending: true,
+                    isError: false,
+                }),
+            ).kind,
+        ).toBe('loading');
+    });
+
+    it('데이터가 없으면 오프라인을 로딩보다 우선하고 정상 응답의 빈값을 구분한다', () => {
+        expect(
+            mealsPageLoadState(
+                fixture({
+                    hasData: false,
+                    isPending: true,
+                    isOffline: true,
+                }),
+            ),
+        ).toMatchObject({kind: 'offline', reason: 'offline', canRetry: false});
+
+        expect(
+            mealsPageLoadState(
+                fixture({
+                    hasData: false,
+                    isPending: false,
+                }),
+            ),
+        ).toMatchObject({kind: 'empty', reason: null, hasFailure: false});
+    });
+
+    it('데이터 갱신 실패는 stale와 recovered를 구분한다', () => {
+        const stale = mealsPageLoadState(
+            fixture({
+                isError: true,
+                isStale: true,
+                previous: {
+                    kind: 'normal',
+                    hasFailure: false,
+                    reason: null,
+                    hasRecovered: false,
+                    canRetry: false,
+                    sections: {
+                        todayEmpty: false,
+                        weeklyEmpty: false,
+                        historyEmpty: false,
+                    },
+                },
+            }),
+        );
+
+        expect(stale.kind).toBe('stale');
+        expect(stale.reason).toBe('fetch-failed');
+        expect(stale.canRetry).toBe(true);
+
+        const aged = mealsPageLoadState(fixture({isStale: true}));
+        expect(aged.kind).toBe('stale');
+        expect(aged.canRetry).toBe(true);
+
+        const recovered = mealsPageLoadState(
+            fixture({
+                previous: {
+                    kind: 'stale',
+                    hasFailure: true,
+                    reason: 'fetch-failed',
+                    hasRecovered: false,
+                    canRetry: true,
+                    sections: {
+                        todayEmpty: false,
+                        weeklyEmpty: false,
+                        historyEmpty: false,
+                    },
+                },
+            }),
+        );
+
+        expect(recovered.kind).toBe('recovered');
+        expect(recovered.hasRecovered).toBe(true);
+        expect(recovered.canRetry).toBe(false);
+    });
+
+    it('장애 이력 없는 수동 새로고침 성공은 recovered로 오인하지 않는다', () => {
+        expect(mealsPageLoadState(fixture({recovered: false})).kind).toBe('normal');
+    });
+
+    it('오프라인/빈값/오류/재확보를 분명히 구분한다', () => {
+        const offline = mealsPageLoadState(
+            fixture({
+                isOffline: true,
+            }),
+        );
+        expect(offline.kind).toBe('offline');
+        expect(offline.reason).toBe('offline');
+        expect(offline.canRetry).toBe(false);
+
+        const empty = mealsPageLoadState(
+            fixture({
+                todayHasContent: false,
+                weeklyHasContent: false,
+                historyHasContent: false,
+            }),
+        );
+        expect(empty.kind).toBe('empty');
+        expect(empty.sections).toEqual({
+            todayEmpty: true,
+            weeklyEmpty: true,
+            historyEmpty: true,
+        });
+
+        const error = mealsPageLoadState(
+            fixture({
+                hasData: false,
+                isPending: false,
+                isError: true,
+                isOffline: false,
+            }),
+        );
+        expect(error.kind).toBe('error');
+        expect(error.canRetry).toBe(true);
+
+        const recovered = mealsPageLoadState(
+            fixture({
+                previous: {
+                    kind: 'error',
+                    hasFailure: true,
+                    reason: 'fetch-failed',
+                    hasRecovered: false,
+                    canRetry: true,
+                    sections: {
+                        todayEmpty: false,
+                        weeklyEmpty: false,
+                        historyEmpty: false,
+                    },
+                },
+            }),
+        );
+        expect(recovered.kind).toBe('recovered');
+        expect(recovered.reason).toBe(null);
+    });
+
+    it('섹션별 빈값 플래그는 UI 메시지 라우팅에 사용 가능하다', () => {
+        const mixed = mealsPageLoadState(
+            fixture({
+                todayHasContent: false,
+                weeklyHasContent: true,
+                historyHasContent: false,
+            }),
+        );
+
+        expect(mixed.kind).toBe('normal');
+        expect(mixed.sections).toEqual({
+            todayEmpty: true,
+            weeklyEmpty: false,
+            historyEmpty: true,
+        });
     });
 });

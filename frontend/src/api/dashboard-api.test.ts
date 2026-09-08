@@ -1261,6 +1261,94 @@ test('테스트 알림은 PC에서는 OS 알림 IPC, 모바일에서는 인증�
     );
 });
 
+const pushSubscription = {
+    endpoint: 'https://push.example.com/subscriptions/device-1',
+    keys: {
+        p256dh: 'public-key',
+        auth: 'auth-secret',
+    },
+};
+
+test('푸시 구독은 서버가 반환한 ID를 검증해 반환하고 같은 ID로 해제한다', async () => {
+    const requests: Array<{url: string; init?: RequestInit}> = [];
+    const subscriptionId = `jbps_${'a'.repeat(64)}`;
+    const api = createDashboardApi({
+        platformApiBaseUrl: 'https://platform.example.com',
+        fetcher: async (input, init) => {
+            requests.push({url: String(input), init});
+            return init?.method === 'PUT'
+                ? jsonResponse({subscriptionId})
+                : new Response(null, {status: 204});
+        },
+        invokeCommand: async () => undefined,
+    });
+
+    assert.equal(await api.registerPushSubscription(pushSubscription), subscriptionId);
+    await api.unregisterPushSubscription(subscriptionId);
+
+    assert.deepEqual(
+        requests.map(({url, init}) => ({
+            url,
+            method: init?.method,
+            body: init?.body,
+            credentials: init?.credentials,
+            cache: init?.cache,
+        })),
+        [
+            {
+                url: 'https://platform.example.com/api/me/push/subscriptions',
+                method: 'PUT',
+                body: JSON.stringify(pushSubscription),
+                credentials: 'include',
+                cache: 'no-store',
+            },
+            {
+                url: `https://platform.example.com/api/me/push/subscriptions/${subscriptionId}`,
+                method: 'DELETE',
+                body: undefined,
+                credentials: 'include',
+                cache: 'no-store',
+            },
+        ],
+    );
+});
+
+test('푸시 구독 등록은 정규 ID만 반환하고 추가 필드를 거부한다', async () => {
+    for (const response of [
+        {},
+        {subscriptionId: 'jbps_short'},
+        {subscriptionId: `jbps_${'A'.repeat(64)}`},
+        {subscriptionId: `jbps_${'a'.repeat(64)}`, legacy: true},
+    ]) {
+        const api = createDashboardApi({fetcher: async () => jsonResponse(response)});
+        await assert.rejects(
+            api.registerPushSubscription(pushSubscription),
+            /API_RESPONSE_INVALID/u,
+        );
+    }
+});
+
+test('푸시 구독 해제는 정규 ID와 204 응답만 허용한다', async () => {
+    let fetchCount = 0;
+    const invalidInputApi = createDashboardApi({
+        fetcher: async () => {
+            fetchCount += 1;
+            return new Response(null, {status: 204});
+        },
+    });
+    await assert.rejects(
+        invalidInputApi.unregisterPushSubscription('../subscription'),
+        /API_CLIENT_INVALID_ARGUMENT/u,
+    );
+    assert.equal(fetchCount, 0);
+
+    const nonCanonicalResponseApi = createDashboardApi({fetcher: async () => jsonResponse({})});
+    await assert.rejects(
+        nonCanonicalResponseApi.unregisterPushSubscription(`jbps_${'a'.repeat(64)}`),
+        /API_RESPONSE_INVALID/u,
+    );
+});
+
 const mealPreferences = {
     enabled: true,
     lunch: true,

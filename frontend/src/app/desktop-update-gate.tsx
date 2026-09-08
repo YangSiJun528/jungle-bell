@@ -1,17 +1,17 @@
-import {useMutation} from '@tanstack/react-query';
-import {Download} from 'lucide-react';
-import type {PropsWithChildren} from 'react';
+import {useMutation, useQueryClient} from '@tanstack/react-query';
+import {useEffect, useRef, type PropsWithChildren} from 'react';
 
 import jungleBellLogo from '@/assets/logo.png';
-import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
-import {Button} from '@/components/ui/button';
 
-import {useDashboardEnvironment} from './dashboard-context';
-import {useDesktopUpdateQuery} from './desktop-update-query';
+import {queryKeys, useDashboardEnvironment} from './dashboard-context';
+import {activateBlockingDialogFocus} from './desktop-update-dialog-focus';
+import {desktopUpdateGateDecision} from './desktop-update-gate-decision';
+import {DesktopUpdatePanel} from './desktop-update-panel';
+import {desktopUpdateInstallMutationKey, useDesktopUpdateQuery} from './desktop-update-query';
 
 function UpdateGateFrame({children}: PropsWithChildren) {
     return (
-        <main
+        <div
             className="grid min-h-svh place-items-center bg-background px-4 py-8 text-foreground"
             data-desktop-update-gate="true"
         >
@@ -29,53 +29,80 @@ function UpdateGateFrame({children}: PropsWithChildren) {
                 </header>
                 {children}
             </div>
-        </main>
+        </div>
+    );
+}
+
+function BlockingUpdateDialog({children}: PropsWithChildren) {
+    const dialogRef = useRef<HTMLDialogElement>(null);
+    useEffect(() => {
+        const dialog = dialogRef.current;
+        return dialog ? activateBlockingDialogFocus(dialog) : undefined;
+    }, []);
+
+    return (
+        <dialog
+            ref={dialogRef}
+            open
+            tabIndex={-1}
+            className="fixed inset-0 z-[100] m-0 h-full max-h-none w-full max-w-none overflow-y-auto border-0 bg-background p-0"
+            aria-modal="true"
+            aria-label="PC 앱 업데이트"
+        >
+            {children}
+        </dialog>
     );
 }
 
 export function DesktopUpdateGate({children}: PropsWithChildren) {
     const {api} = useDashboardEnvironment();
-    const {desktop, update} = useDesktopUpdateQuery();
+    const client = useQueryClient();
+    const {desktop, installMutationPending, update} = useDesktopUpdateQuery();
     const install = useMutation({
+        mutationKey: desktopUpdateInstallMutationKey,
         mutationFn: () => api.installDesktopUpdate(),
-        onSuccess: () => update.refetch(),
+        onSettled: () => client.invalidateQueries({queryKey: queryKeys.desktopUpdate}),
+    });
+    // 로그 폴더 열기는 query-backed 애플리케이션 상태를 변경하지 않는다.
+    // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation
+    const openLogs = useMutation({mutationFn: () => api.openLogFolder()});
+    const decision = desktopUpdateGateDecision({
+        desktop,
+        data: update.data,
+        queryPending: update.isPending,
+        queryError: update.isError,
     });
 
-    if (
-        !desktop ||
-        update.isPending ||
-        update.isError ||
-        !update.data?.mandatory ||
-        !update.data.availableVersion
-    ) {
-        return children;
-    }
+    if (!desktop) return children;
 
     return (
-        <UpdateGateFrame>
-            <Alert className="border-amber-500/25 bg-amber-500/10 text-amber-950 dark:text-amber-100">
-                <Download aria-hidden="true" />
-                <AlertTitle>PC 앱 업데이트가 필요합니다.</AlertTitle>
-                <AlertDescription>
-                    <p>
-                        현재 v{update.data.currentVersion}에서는 앱을 계속 사용할 수 없습니다. 최신
-                        정식 버전 v{update.data.availableVersion}으로 업데이트하세요.
-                    </p>
-                    {install.isError ? (
-                        <p className="text-destructive">
-                            업데이트를 설치하지 못했습니다. 잠시 후 다시 시도하세요.
-                        </p>
-                    ) : null}
-                    <Button
-                        className="mt-2"
-                        disabled={install.isPending}
-                        onClick={() => install.mutate()}
-                    >
-                        <Download aria-hidden="true" />
-                        {install.isPending ? '업데이트 중' : '지금 업데이트'}
-                    </Button>
-                </AlertDescription>
-            </Alert>
-        </UpdateGateFrame>
+        <>
+            {decision.renderDashboard ? (
+                <div
+                    inert={decision.blocked ? true : undefined}
+                    aria-hidden={decision.blocked || undefined}
+                    className={decision.blocked ? 'pointer-events-none select-none' : undefined}
+                    data-desktop-update-content="true"
+                >
+                    {children}
+                </div>
+            ) : null}
+            {decision.blocked ? (
+                <BlockingUpdateDialog>
+                    <UpdateGateFrame>
+                        <DesktopUpdatePanel
+                            status={update.data}
+                            checkFailed={update.isError}
+                            installFailed={install.isError}
+                            installPending={install.isPending || installMutationPending}
+                            logFailed={openLogs.isError}
+                            onInstall={() => install.mutate()}
+                            onCheckAgain={() => void update.refetch()}
+                            onOpenLogs={() => openLogs.mutate()}
+                        />
+                    </UpdateGateFrame>
+                </BlockingUpdateDialog>
+            ) : null}
+        </>
     );
 }

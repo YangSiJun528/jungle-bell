@@ -8,7 +8,10 @@ describe('LaundryStatusHint', () => {
     it('정보 아이콘과 한국어 단어 단위 줄바꿈을 사용한다', () => {
         expect(source).toContain("import {Info} from 'lucide-react'");
         expect(source).toContain('<Info className="size-4" />');
-        expect(source).toContain('space-y-1.5 leading-5 break-keep');
+        expect(source).toContain('inline-grid size-11');
+        expect(source).not.toContain('inline-grid size-7');
+        expect(source).toContain('max-w-72 text-base');
+        expect(source).toContain('space-y-1.5 leading-6 break-keep');
         expect(source).not.toMatch(/CircleHelp|CircleInfo/u);
     });
 });

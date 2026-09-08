@@ -16,7 +16,7 @@ import {
     Smartphone,
     Trash2,
 } from 'lucide-react';
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState, type ReactNode} from 'react';
 
 import type {
     MobilePairingCreated,
@@ -24,6 +24,11 @@ import type {
     MobileSession,
     PairingClaim,
 } from '@/api/dashboard-api';
+import {
+    cleanupPushSubscription,
+    type PushSubscriptionCleanupResult,
+    type PushSubscriptionLifecycleStorage,
+} from '@/api/push-subscription-lifecycle';
 import {useDashboardAccount} from '@/app/dashboard-account';
 import {
     assertLmsAuthenticated,
@@ -39,6 +44,11 @@ import {
 } from '@/app/dashboard-context';
 import {readInitialPairingEntry} from '@/app/pairing-bootstrap';
 import {PersonalAccountGate} from '@/app/personal-account-gate';
+import {
+    normalizeConnectionsSearch,
+    type ConnectionsTab,
+    type DashboardReturnTarget,
+} from '@/app/routes';
 import {NotificationSettings} from '@/app/settings/notification-settings';
 import {useDesktopConnectionQuery, useRefreshAttendanceMutation} from '@/app/use-dashboard-queries';
 import {EmptyState, ErrorState, LoadingState} from '@/components/dashboard/async-state';
@@ -65,7 +75,13 @@ import {
 } from '@/domain/connections/manual-pairing-code';
 import {dateTimeLabel, relativeTimeLabel} from '@/lib/format';
 
+import {disconnectCompanionWithPushCleanup} from './companion-disconnect';
+import {
+    CompanionDisconnectFeedbackPanel,
+    type CompanionDisconnectFeedback,
+} from './companion-disconnect-feedback';
 import {desktopConnectionUiState, type DesktopConnectionUiState} from './desktop-connection-state';
+import {releaseExclusiveAction, tryReserveExclusiveAction} from './exclusive-action';
 import {pairingQrDataUrl} from './lib/pairing-qr';
 import {
     clearPendingMobilePairing,
@@ -87,13 +103,26 @@ import {ServiceSettings} from './service-settings';
 interface PairingClaimStart {
     mode: 'handoff' | 'manual' | 'qr' | 'resume';
     resumePairingId?: string;
+    signal?: AbortSignal;
 }
 
-function pairingSessionStorage(): Storage | null {
+function pairingPersistentStorage(): Storage | null {
     try {
-        return window.sessionStorage;
+        return window.localStorage;
     } catch {
-        return null;
+        try {
+            return window.sessionStorage;
+        } catch {
+            return null;
+        }
+    }
+}
+
+function pushSubscriptionStorage(): PushSubscriptionLifecycleStorage {
+    try {
+        return window.localStorage;
+    } catch (error) {
+        throw new Error('PUSH_REGISTRATION_STORAGE_UNAVAILABLE', {cause: error});
     }
 }
 
@@ -111,9 +140,11 @@ type MobileSessionsQuery = Pick<
 
 interface MobilePairingCardProps {
     approve: MutationState<void, void>;
+    cancelPairing: () => void;
     connectionUi: DesktopConnectionUiState;
     createPairing: MutationState<MobilePairingCreated, void>;
     pairing: MobilePairingCreated | null;
+    pairingMessage: string;
     pairingStatus: PairingStatusQuery;
     personalReady: boolean;
     qr: string | null;
@@ -122,14 +153,17 @@ interface MobilePairingCardProps {
 
 function MobilePairingCard({
     approve,
+    cancelPairing,
     connectionUi,
     createPairing,
     pairing,
+    pairingMessage,
     pairingStatus,
     personalReady,
     qr,
     registersDesktop,
 }: MobilePairingCardProps) {
+    const pairingExpired = pairingStatus.data?.status === 'expired';
     return (
         <Card>
             <CardHeader>
@@ -163,6 +197,25 @@ function MobilePairingCard({
                             </p>
                         ) : null}
                     </div>
+                ) : pairingExpired ? (
+                    <Alert variant="destructive">
+                        <CircleAlert aria-hidden="true" />
+                        <AlertTitle>연결 코드가 만료됐습니다.</AlertTitle>
+                        <AlertDescription className="gap-3">
+                            <p>만료된 QR과 코드는 더 이상 사용할 수 없습니다.</p>
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => createPairing.mutate()}
+                                disabled={createPairing.isPending}
+                            >
+                                {createPairing.isPending
+                                    ? '새 코드 만드는 중'
+                                    : '새 QR과 코드 만들기'}
+                            </Button>
+                        </AlertDescription>
+                    </Alert>
                 ) : (
                     <div className="grid gap-4 sm:grid-cols-[9rem_minmax(0,1fr)]">
                         {qr ? (
@@ -190,10 +243,6 @@ function MobilePairingCard({
                                     className="text-sm text-emerald-700 dark:text-emerald-300"
                                 >
                                     연결이 완료됐습니다.
-                                </p>
-                            ) : pairingStatus.data?.status === 'expired' ? (
-                                <p aria-live="polite" className="text-sm text-destructive">
-                                    연결 코드가 만료됐습니다.
                                 </p>
                             ) : null}
                             {pairingStatus.data?.claim ? (
@@ -232,13 +281,28 @@ function MobilePairingCard({
                                     이 기기를 승인하지 못했습니다.
                                 </p>
                             ) : null}
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => createPairing.mutate()}
-                            >
-                                새 QR과 코드
-                            </Button>
+                            <div className="flex flex-wrap gap-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => createPairing.mutate()}
+                                    disabled={createPairing.isPending || approve.isPending}
+                                >
+                                    {createPairing.isPending ? '코드 변경 중' : '코드 변경'}
+                                </Button>
+                                {pairingStatus.data?.status !== 'completed' ? (
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={cancelPairing}
+                                        disabled={createPairing.isPending || approve.isPending}
+                                    >
+                                        연결 대기 취소
+                                    </Button>
+                                ) : null}
+                            </div>
                             {createPairing.isError ? (
                                 <p className="text-sm text-destructive">
                                     새 연결 코드를 만들지 못했습니다.
@@ -247,6 +311,11 @@ function MobilePairingCard({
                         </div>
                     </div>
                 )}
+                {pairingMessage ? (
+                    <p aria-live="polite" className="text-sm text-muted-foreground">
+                        {pairingMessage}
+                    </p>
+                ) : null}
             </CardContent>
         </Card>
     );
@@ -263,6 +332,29 @@ function ConnectedMobileCard({
     revoke: MutationState<void, string>;
     sessions: MobileSessionsQuery;
 }) {
+    const [revokeTarget, setRevokeTarget] = useState<MobileSession | null>(null);
+    const [revokeFeedback, setRevokeFeedback] = useState<{
+        kind: 'success' | 'error';
+        session: MobileSession;
+    } | null>(null);
+    const revokeInFlight = useRef({inFlight: false});
+    const confirmRevoke = () => {
+        const target = revokeTarget;
+        if (!target || !tryReserveExclusiveAction(revokeInFlight.current)) return;
+        setRevokeFeedback(null);
+        revoke.mutate(target.deviceId, {
+            onSuccess: () => {
+                setRevokeTarget(null);
+                setRevokeFeedback({kind: 'success', session: target});
+            },
+            onError: () => {
+                setRevokeTarget(null);
+                setRevokeFeedback({kind: 'error', session: target});
+            },
+            onSettled: () => releaseExclusiveAction(revokeInFlight.current),
+        });
+    };
+
     return (
         <Card>
             <CardHeader>
@@ -297,7 +389,8 @@ function ConnectedMobileCard({
                                 variant="ghost"
                                 size="icon-sm"
                                 aria-label={`${session.deviceLabel} 연결 해제`}
-                                onClick={() => revoke.mutate(session.deviceId)}
+                                onClick={() => setRevokeTarget(session)}
+                                disabled={revoke.isPending}
                             >
                                 <Trash2 className="size-4" />
                             </Button>
@@ -306,10 +399,66 @@ function ConnectedMobileCard({
                 ) : (
                     <EmptyState title="연결된 모바일이 없습니다." />
                 )}
-                {revoke.isError ? (
-                    <p className="text-sm text-destructive">모바일 연결을 해제하지 못했습니다.</p>
+                {revokeFeedback?.kind === 'success' ? (
+                    <Alert aria-live="polite">
+                        <Smartphone aria-hidden="true" />
+                        <AlertTitle>연결 해제 완료</AlertTitle>
+                        <AlertDescription>
+                            {revokeFeedback.session.deviceLabel}의 개인 기능과 푸시를 해제했습니다.
+                        </AlertDescription>
+                    </Alert>
+                ) : revokeFeedback?.kind === 'error' ? (
+                    <Alert variant="destructive">
+                        <CircleAlert aria-hidden="true" />
+                        <AlertTitle>연결 해제 실패</AlertTitle>
+                        <AlertDescription className="gap-3">
+                            <p>
+                                {revokeFeedback.session.deviceLabel} 연결은 유지됩니다. 네트워크를
+                                확인하고 다시 시도하세요.
+                            </p>
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setRevokeTarget(revokeFeedback.session)}
+                                disabled={revoke.isPending}
+                            >
+                                다시 시도
+                            </Button>
+                        </AlertDescription>
+                    </Alert>
                 ) : null}
             </CardContent>
+            <AlertDialog
+                open={revokeTarget !== null}
+                onOpenChange={(open) => {
+                    if (!open && !revoke.isPending) setRevokeTarget(null);
+                }}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>
+                            {revokeTarget?.deviceLabel ?? '이 모바일'} 연결을 해제할까요?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                            해제하면 이 기기의 출석과 개인 알림을 사용할 수 없습니다. 다시
+                            사용하려면 새 코드로 연결해야 합니다.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={revoke.isPending}>유지</AlertDialogCancel>
+                        <AlertDialogAction
+                            disabled={revoke.isPending}
+                            onClick={(event) => {
+                                event.preventDefault();
+                                confirmRevoke();
+                            }}
+                        >
+                            {revoke.isPending ? '해제 중' : '연결 해제'}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </Card>
     );
 }
@@ -319,9 +468,9 @@ function DesktopConnections() {
     const account = useDashboardAccount();
     const client = useQueryClient();
     const [pairing, setPairing] = useState<MobilePairingCreated | null>(null);
-    const [identityResetReason, setIdentityResetReason] = useState<'recovery' | 'reset' | null>(
-        null,
-    );
+    const [pairingMessage, setPairingMessage] = useState('');
+    const [identityMessage, setIdentityMessage] = useState('');
+    const [identityResetReason, setIdentityResetReason] = useState<'reset' | null>(null);
     const refreshAccount = useRefreshAttendanceMutation();
     const personalReady =
         account.status.lmsAuthentication === 'authenticated' && serverSessionReady(account.status);
@@ -375,6 +524,7 @@ function DesktopConnections() {
         },
         onSuccess: async (value) => {
             setPairing(value);
+            setPairingMessage('');
             await client.invalidateQueries({queryKey: queryKeys.desktopConnection});
         },
     });
@@ -397,19 +547,39 @@ function DesktopConnections() {
         onSuccess: () => void client.invalidateQueries({queryKey: queryKeys.mobileSessions}),
     });
     const reset = useMutation({
-        mutationFn: () => api.resetDesktopIdentity(),
+        mutationFn: async () => {
+            if (connection.data?.state !== 'connected') {
+                throw new Error('IDENTITY_RESET_NOT_AVAILABLE');
+            }
+            const value = await api.resetDesktopIdentity();
+            if (value.state !== 'connected') throw new Error('IDENTITY_RESET_INCOMPLETE');
+            return value;
+        },
         onMutate: () => {
             setPairing(null);
+            setIdentityMessage('');
             removeDesktopIdentityQueries(client);
         },
         onSuccess: async (value) => {
             client.setQueryData(queryKeys.desktopConnection, value);
+            setIdentityResetReason(null);
+            setIdentityMessage('PC 연결 정보를 초기화하고 새 서버 등록을 확인했습니다.');
             await client.invalidateQueries({queryKey: queryKeys.desktopConnection});
         },
     });
 
+    const cancelDesktopPairing = () => {
+        if (!pairing) return;
+        client.removeQueries({queryKey: ['pairing-status', pairing.pairingId], exact: true});
+        setPairing(null);
+        setPairingMessage(
+            '이 화면의 연결 대기를 중단했습니다. 발급한 코드는 서버 만료 전까지 유효할 수 있습니다. 새 코드를 만들면 이전 코드를 교체합니다.',
+        );
+    };
+
     const qr = useMemo(() => (pairing ? pairingQrDataUrl(pairing.qrPayload) : null), [pairing]);
     const connectionUi = desktopConnectionUiState(connection.data);
+    const identityBusy = reset.isPending;
     const activeSessions = sessions.data?.filter((item) => item.status === 'active') ?? [];
     const serverSessionLabel =
         account.status.serverSession === 'stored'
@@ -466,24 +636,15 @@ function DesktopConnections() {
                                 <AlertTitle>{connectionUi.label}</AlertTitle>
                                 <AlertDescription>
                                     <p>
-                                        {connectionUi.reason} 복구하면 연결된 모바일을 다시 연결해야
-                                        합니다.
+                                        {connectionUi.reason}{' '}
+                                        {
+                                            '안전한 PC identity 복구는 현재 앱 계약에서 지원하지 않습니다. 초기화와 달리 기존 identity를 복원하는 별도 native/backend 계약이 필요합니다.'
+                                        }
                                     </p>
-                                    <Button
-                                        className="mt-3"
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => setIdentityResetReason('recovery')}
-                                        disabled={reset.isPending}
-                                    >
+                                    <Button className="mt-3" size="sm" variant="outline" disabled>
                                         <RotateCcw className="size-4" />
-                                        {reset.isPending ? '복구 중' : 'PC 연결 정보 복구'}
+                                        복구 기능 준비 안 됨
                                     </Button>
-                                    {reset.isError ? (
-                                        <p className="mt-2 text-sm text-destructive">
-                                            PC 연결 정보를 복구하지 못했습니다.
-                                        </p>
-                                    ) : null}
                                 </AlertDescription>
                             </Alert>
                         ) : connection.data?.state === 'disconnected' ? (
@@ -514,9 +675,11 @@ function DesktopConnections() {
             <div className="grid gap-6 lg:grid-cols-2">
                 <MobilePairingCard
                     approve={approve}
+                    cancelPairing={cancelDesktopPairing}
                     connectionUi={connectionUi}
                     createPairing={createPairing}
                     pairing={pairing}
+                    pairingMessage={pairingMessage}
                     pairingStatus={pairingStatus}
                     personalReady={personalReady}
                     qr={qr}
@@ -542,7 +705,7 @@ function DesktopConnections() {
                         <Button
                             variant="destructive"
                             onClick={() => setIdentityResetReason('reset')}
-                            disabled={reset.isPending}
+                            disabled={identityBusy}
                         >
                             <RotateCcw className="size-4" />
                             초기화
@@ -556,6 +719,14 @@ function DesktopConnections() {
                 </Card>
             ) : null}
 
+            {identityMessage ? (
+                <Alert aria-live="polite">
+                    <RotateCcw aria-hidden="true" />
+                    <AlertTitle>PC 연결 정보 처리 완료</AlertTitle>
+                    <AlertDescription>{identityMessage}</AlertDescription>
+                </Alert>
+            ) : null}
+
             <AlertDialog
                 open={identityResetReason !== null}
                 onOpenChange={(open) => {
@@ -564,29 +735,198 @@ function DesktopConnections() {
             >
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>
-                            {identityResetReason === 'recovery'
-                                ? 'PC 연결 정보를 복구할까요?'
-                                : 'PC 연결 정보를 초기화할까요?'}
-                        </AlertDialogTitle>
+                        <AlertDialogTitle>PC 연결 정보를 초기화할까요?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            {identityResetReason === 'recovery'
-                                ? '남아 있는 로컬 인증 정보를 새로 만듭니다. 이전 서버 credential이 이미 없으면 기존 모바일 정리는 운영자 확인이 필요할 수 있습니다.'
-                                : '이 PC의 서버 계정과 인증 정보를 삭제하고 새로 만듭니다. 연결된 모바일은 모두 해제되며 되돌릴 수 없습니다.'}
+                            이 PC의 서버 계정과 인증 정보를 삭제하고 새로 만듭니다. 연결된 모바일은
+                            모두 해제되며 되돌릴 수 없습니다.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel>아니요</AlertDialogCancel>
-                        <AlertDialogAction
-                            disabled={reset.isPending}
-                            onClick={() => reset.mutate()}
-                        >
+                        <AlertDialogCancel disabled={identityBusy}>아니요</AlertDialogCancel>
+                        <AlertDialogAction disabled={identityBusy} onClick={() => reset.mutate()}>
                             네, PC 초기화
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
         </div>
+    );
+}
+
+interface CompanionConnectionCardProps {
+    checking: boolean;
+    claimPending: boolean;
+    confirmationCode: string;
+    connected: boolean;
+    disconnectFeedback: CompanionDisconnectFeedback;
+    disconnectPending: boolean;
+    manualCode: string;
+    message: string;
+    onCancelPairing: () => void;
+    onChangeCode: () => void;
+    onManualCodeChange: (value: string) => void;
+    onRequestDisconnect: () => void;
+    onStartManualPairing: () => void;
+    pendingPairingExpiresAt: string | null;
+}
+
+function CompanionConnectionCard({
+    checking,
+    claimPending,
+    confirmationCode,
+    connected,
+    disconnectFeedback,
+    disconnectPending,
+    manualCode,
+    message,
+    onCancelPairing,
+    onChangeCode,
+    onManualCodeChange,
+    onRequestDisconnect,
+    onStartManualPairing,
+    pendingPairingExpiresAt,
+}: CompanionConnectionCardProps) {
+    return (
+        <Card className="mx-auto max-w-xl">
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                    <MonitorCheck className="size-5" />
+                    {connected
+                        ? '이 기기는 연결됨'
+                        : claimPending
+                          ? 'PC 승인 대기'
+                          : '연결 코드 입력'}
+                </CardTitle>
+                <CardDescription>
+                    {connected
+                        ? 'PC 앱이 출석 상태를 주기적으로 갱신합니다.'
+                        : '설치 QR 정보가 있으면 자동으로 연결하고, 없으면 PC 앱의 10자리 코드를 입력합니다.'}
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                {checking ? (
+                    <LoadingState label="설치 QR 연결 정보를 확인하고 있습니다." />
+                ) : connected ? (
+                    <Button
+                        variant="outline"
+                        onClick={onRequestDisconnect}
+                        disabled={disconnectPending}
+                    >
+                        이 모바일 연결 해제
+                    </Button>
+                ) : claimPending ? null : (
+                    <>
+                        <div className="space-y-2">
+                            <Label htmlFor="pairing-code">10자리 연결 코드</Label>
+                            <Input
+                                id="pairing-code"
+                                value={manualCode}
+                                inputMode="text"
+                                maxLength={11}
+                                autoCapitalize="characters"
+                                placeholder="ABCDE-12345"
+                                onChange={(event) =>
+                                    onManualCodeChange(formatManualPairingCode(event.target.value))
+                                }
+                            />
+                        </div>
+                        <Button
+                            onClick={onStartManualPairing}
+                            disabled={!validManualPairingCode(manualCode)}
+                        >
+                            연결 요청
+                        </Button>
+                    </>
+                )}
+                {claimPending ? (
+                    <Alert>
+                        <KeyRound />
+                        <AlertTitle>PC에서 이 기기를 승인해 주세요.</AlertTitle>
+                        <AlertDescription className="gap-3">
+                            <p>
+                                PC 화면의 확인 코드가 <strong>{confirmationCode}</strong>인지
+                                확인하세요.
+                            </p>
+                            {pendingPairingExpiresAt ? (
+                                <PairingExpiryCountdown expiresAt={pendingPairingExpiresAt} />
+                            ) : null}
+                            <p className="text-xs text-muted-foreground">
+                                {
+                                    '이 시간은 기기에서 계산한 최대 10분입니다. 서버 만료 시 더 일찍 끝날 수 있습니다.'
+                                }
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={onCancelPairing}
+                                >
+                                    연결 대기 취소
+                                </Button>
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={onChangeCode}
+                                >
+                                    코드 변경
+                                </Button>
+                            </div>
+                        </AlertDescription>
+                    </Alert>
+                ) : null}
+                {message ? (
+                    <p aria-live="polite" className="text-sm text-muted-foreground">
+                        {message}
+                    </p>
+                ) : null}
+                <CompanionDisconnectFeedbackPanel
+                    feedback={disconnectFeedback}
+                    pending={disconnectPending}
+                    onRetry={onRequestDisconnect}
+                />
+            </CardContent>
+        </Card>
+    );
+}
+
+function CompanionDisconnectDialog({
+    open,
+    pending,
+    onOpenChange,
+    onConfirm,
+}: {
+    open: boolean;
+    pending: boolean;
+    onOpenChange: (open: boolean) => void;
+    onConfirm: () => void;
+}) {
+    return (
+        <AlertDialog open={open} onOpenChange={onOpenChange}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>이 모바일 연결을 해제할까요?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        서버 푸시와 이 기기의 로컬 구독을 먼저 정리한 다음 연결 세션을 해제합니다.
+                        이후 출석과 개인 알림을 사용할 수 없고, 다시 사용하려면 새 코드로 연결해야
+                        합니다.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel disabled={pending}>유지</AlertDialogCancel>
+                    <AlertDialogAction
+                        disabled={pending}
+                        onClick={(event) => {
+                            event.preventDefault();
+                            onConfirm();
+                        }}
+                    >
+                        {pending ? '해제 중' : '연결 해제'}
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
     );
 }
 
@@ -601,22 +941,35 @@ export function CompanionConnections({
     const navigate = useNavigate();
     const [manualCode, setManualCode] = useState('');
     const [message, setMessage] = useState('');
+    const [disconnectConfirmationOpen, setDisconnectConfirmationOpen] = useState(false);
+    const [disconnectFeedback, setDisconnectFeedback] = useState<CompanionDisconnectFeedback>(null);
     const pairingStartGate = useRef({inFlight: false, automaticHandled: false});
+    const pairingAbortController = useRef<AbortController | null>(null);
+    const disconnectInFlight = useRef({inFlight: false});
+    const completedPushCleanup = useRef<
+        Extract<PushSubscriptionCleanupResult, {status: 'complete'}> | undefined
+    >(undefined);
     const [automaticPairingHandled, setAutomaticPairingHandled] = useState(false);
     const [initialPairing] = useState(readInitialPairingEntry);
     const pairingLink = initialPairing?.kind === 'companion' ? initialPairing.link : null;
-    const [restoredPairing] = useState(() => {
-        const storage = pairingSessionStorage();
+    const [restoredPairing, setRestoredPairing] = useState(() => {
+        const storage = pairingPersistentStorage();
         return storage ? readPendingMobilePairing(storage, Date.now()) : null;
     });
+    const [pendingPairingStartedAt, setPendingPairingStartedAt] = useState<number | null>(
+        restoredPairing?.createdAtEpochMs ?? null,
+    );
     const claim = useMutation({
-        mutationFn: async ({mode, resumePairingId}: PairingClaimStart) => {
+        onMutate: () => setMessage(''),
+        mutationFn: async ({mode, resumePairingId, signal}: PairingClaimStart) => {
             const installationId = mobileInstallationId();
             let request: PairingClaim | null = null;
             let pairingId: string;
+            let createdAtEpochMs = Date.now();
             if (mode === 'resume') {
                 if (!resumePairingId) throw new Error('PAIRING_ID_MISSING');
                 pairingId = resumePairingId;
+                createdAtEpochMs = restoredPairing?.createdAtEpochMs ?? createdAtEpochMs;
             } else if (mode === 'handoff') {
                 request = await api.claimPairingHandoff({
                     deviceLabel: mobileDeviceLabel(),
@@ -641,28 +994,32 @@ export function CompanionConnections({
                 pairingId = request.claimId;
             }
             if (request) {
-                const storage = pairingSessionStorage();
+                const storage = pairingPersistentStorage();
                 if (storage) {
                     storePendingMobilePairing(storage, {
                         pairingId,
                         claimId: request.claimId,
-                        createdAtEpochMs: Date.now(),
+                        createdAtEpochMs,
                     });
                 }
             }
+            setPendingPairingStartedAt(createdAtEpochMs);
             await waitForPairingCompletion({
                 pairingId,
                 complete: (id) => api.completePairing(id),
                 pause: (milliseconds) =>
                     new Promise((resolve) => window.setTimeout(resolve, milliseconds)),
+                signal,
             });
-            const storage = pairingSessionStorage();
+            const storage = pairingPersistentStorage();
             if (storage) clearPendingMobilePairing(storage);
             return true;
         },
         onSuccess: async (completed) => {
             if (!completed) return;
             setMessage('연결이 완료됐습니다.');
+            setPendingPairingStartedAt(null);
+            setRestoredPairing(null);
             if (platform.accountAuthentication.kind === 'cookie') {
                 await finishCompanionPairing({
                     completionPath,
@@ -671,19 +1028,54 @@ export function CompanionConnections({
                 });
             }
         },
-        onError: () => {
-            const storage = pairingSessionStorage();
+        onError: (error) => {
+            const storage = pairingPersistentStorage();
             if (storage) clearPendingMobilePairing(storage);
-            setMessage('연결하지 못했습니다. PC에서 새 코드를 만든 뒤 다시 시도하세요.');
+            setPendingPairingStartedAt(null);
+            setRestoredPairing(null);
+            setMessage(
+                error.message === 'PAIRING_CANCELLED'
+                    ? '연결 대기를 취소했습니다. 서버의 요청은 만료될 때까지 남을 수 있습니다.'
+                    : /EXPIRED|NOT_FOUND|ALREADY_USED/u.test(error.message)
+                      ? '연결 코드가 만료되었거나 교체됐습니다. PC에서 새 코드를 만든 뒤 다시 연결하세요.'
+                      : '연결하지 못했습니다. 네트워크를 확인하거나 PC에서 새 코드를 만든 뒤 다시 시도하세요.',
+            );
         },
     });
     const disconnect = useMutation({
-        mutationFn: () => api.disconnectMobileSession(),
+        mutationFn: () =>
+            disconnectCompanionWithPushCleanup({
+                cleanupPush: () =>
+                    cleanupPushSubscription({
+                        storage: pushSubscriptionStorage(),
+                        getLocalSubscription: () => platform.pwa.getPushSubscription(),
+                        unregisterServer: (subscriptionId) =>
+                            api.unregisterPushSubscription(subscriptionId),
+                        unsubscribeLocal: (subscription) => {
+                            if (
+                                typeof subscription.endpoint !== 'string' ||
+                                !subscription.endpoint
+                            ) {
+                                throw new Error('PUSH_SUBSCRIPTION_ENDPOINT_INVALID');
+                            }
+                            return platform.pwa.unsubscribePush(subscription.endpoint);
+                        },
+                    }),
+                disconnectSession: () => api.disconnectMobileSession(),
+                previousCleanup: completedPushCleanup.current,
+            }),
         onMutate: () => client.cancelQueries({queryKey: queryKeys.accountSession, exact: true}),
-        onSuccess: () => {
-            removeBrowserPersonalQueries(client);
-            setAutomaticPairingHandled(true);
-            setMessage('이 모바일 연결을 해제했습니다.');
+        onSuccess: (result) => {
+            setDisconnectConfirmationOpen(false);
+            setDisconnectFeedback(result);
+            setMessage('');
+            if (result.pushCleanup.status === 'complete') {
+                completedPushCleanup.current = result.pushCleanup;
+            }
+            if (result.session === 'disconnected') {
+                removeBrowserPersonalQueries(client);
+                setAutomaticPairingHandled(true);
+            }
         },
     });
     const connected = account.personalAccess.status === 'connected';
@@ -691,15 +1083,42 @@ export function CompanionConnections({
     const startClaim = useCallback(
         (input: PairingClaimStart) => {
             if (!tryReservePairingStart(pairingStartGate.current)) return;
+            const controller = new AbortController();
+            pairingAbortController.current = controller;
             // Reservation is a pairing state-machine transition, not synchronization from props.
             // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change
             setAutomaticPairingHandled(true);
-            claim.mutate(input, {
-                onSettled: () => releasePairingStart(pairingStartGate.current),
-            });
+            claim.mutate(
+                {...input, signal: controller.signal},
+                {
+                    onSettled: () => {
+                        if (pairingAbortController.current === controller) {
+                            pairingAbortController.current = null;
+                        }
+                        releasePairingStart(pairingStartGate.current);
+                    },
+                },
+            );
         },
         [claim],
     );
+
+    const cancelPairingWait = () => {
+        pairingAbortController.current?.abort();
+        const storage = pairingPersistentStorage();
+        if (storage) clearPendingMobilePairing(storage);
+        setRestoredPairing(null);
+        setPendingPairingStartedAt(null);
+        setMessage('연결 대기를 취소하는 중입니다. 서버 요청은 만료 전까지 남을 수 있습니다.');
+    };
+
+    const confirmDisconnect = () => {
+        if (!tryReserveExclusiveAction(disconnectInFlight.current)) return;
+        setDisconnectFeedback(null);
+        disconnect.mutate(undefined, {
+            onSettled: () => releaseExclusiveAction(disconnectInFlight.current),
+        });
+    };
 
     useEffect(() => {
         const action = automaticPairingAction({
@@ -711,7 +1130,7 @@ export function CompanionConnections({
         });
         if (action === 'clear') {
             pairingStartGate.current.automaticHandled = true;
-            const storage = pairingSessionStorage();
+            const storage = pairingPersistentStorage();
             if (storage) clearPendingMobilePairing(storage);
             return;
         }
@@ -740,79 +1159,40 @@ export function CompanionConnections({
         !automaticPairingHandled &&
         (restoredPairing !== null || pairingLink !== null || platform.pwa.installed);
     const checking = account.personalAccess.status === 'checking' || automaticCheckPending;
+    const pendingPairingExpiresAt =
+        pendingPairingStartedAt === null
+            ? null
+            : new Date(pendingPairingStartedAt + 10 * 60_000).toISOString();
 
     return (
         <div className="space-y-6">
-            <Card className="mx-auto max-w-xl">
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <MonitorCheck className="size-5" />
-                        {connected
-                            ? '이 기기는 연결됨'
-                            : claim.isPending
-                              ? 'PC 승인 대기'
-                              : '연결 코드 입력'}
-                    </CardTitle>
-                    <CardDescription>
-                        {connected
-                            ? 'PC 앱이 출석 상태를 주기적으로 갱신합니다.'
-                            : '설치 QR 정보가 있으면 자동으로 연결하고, 없으면 PC 앱의 10자리 코드를 입력합니다.'}
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    {checking ? (
-                        <LoadingState label="설치 QR 연결 정보를 확인하고 있습니다." />
-                    ) : connected ? (
-                        <Button
-                            variant="outline"
-                            onClick={() => disconnect.mutate()}
-                            disabled={disconnect.isPending}
-                        >
-                            이 모바일 연결 해제
-                        </Button>
-                    ) : (
-                        <>
-                            {!claim.isPending ? (
-                                <>
-                                    <div className="space-y-2">
-                                        <Label htmlFor="pairing-code">10자리 연결 코드</Label>
-                                        <Input
-                                            id="pairing-code"
-                                            value={manualCode}
-                                            inputMode="text"
-                                            maxLength={11}
-                                            autoCapitalize="characters"
-                                            placeholder="ABCDE-12345"
-                                            onChange={(event) =>
-                                                setManualCode(
-                                                    formatManualPairingCode(event.target.value),
-                                                )
-                                            }
-                                        />
-                                    </div>
-                                    <Button
-                                        onClick={() => startClaim({mode: 'manual'})}
-                                        disabled={!validManualPairingCode(manualCode)}
-                                    >
-                                        연결 요청
-                                    </Button>
-                                </>
-                            ) : null}
-                        </>
-                    )}
-                    {claim.isPending ? (
-                        <Alert>
-                            <KeyRound />
-                            <AlertTitle>PC에서 이 기기를 승인해 주세요.</AlertTitle>
-                            <AlertDescription>
-                                PC 화면의 확인 코드가 <strong>{confirmationCode}</strong>인지
-                                확인하세요.
-                            </AlertDescription>
-                        </Alert>
-                    ) : null}
-                    {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
-                </CardContent>
-            </Card>
+            <CompanionConnectionCard
+                checking={checking}
+                claimPending={claim.isPending}
+                confirmationCode={confirmationCode}
+                connected={connected}
+                disconnectFeedback={disconnectFeedback}
+                disconnectPending={disconnect.isPending}
+                manualCode={manualCode}
+                message={message}
+                onCancelPairing={cancelPairingWait}
+                onChangeCode={() => {
+                    setManualCode('');
+                    cancelPairingWait();
+                }}
+                onManualCodeChange={setManualCode}
+                onRequestDisconnect={() => setDisconnectConfirmationOpen(true)}
+                onStartManualPairing={() => startClaim({mode: 'manual'})}
+                pendingPairingExpiresAt={pendingPairingExpiresAt}
+            />
+            <CompanionDisconnectDialog
+                open={disconnectConfirmationOpen}
+                pending={disconnect.isPending}
+                onOpenChange={(open) => {
+                    if (!disconnect.isPending) setDisconnectConfirmationOpen(open);
+                }}
+                onConfirm={confirmDisconnect}
+            />
         </div>
     );
 }
@@ -832,21 +1212,42 @@ function WebConnections() {
     );
 }
 
-export function ConnectionsPage() {
+export interface ConnectionsPageProps {
+    tab?: ConnectionsTab;
+    returnTo?: DashboardReturnTarget;
+    onTabChange?: (tab: ConnectionsTab) => void;
+    renderAppStatus?: () => ReactNode;
+}
+
+export function ConnectionsPage({
+    tab = 'status',
+    returnTo,
+    onTabChange,
+    renderAppStatus,
+}: ConnectionsPageProps = {}) {
     const {platform} = useDashboardEnvironment();
+    const selectedTab = tab === 'status' && !renderAppStatus ? 'notifications' : tab;
+    const selectTab = (value: string) => {
+        const nextTab = normalizeConnectionsSearch({tab: value}).tab;
+        onTabChange?.(nextTab);
+    };
 
     return (
         <div className="space-y-6">
             <PageHeader title="설정" />
-            <Tabs defaultValue="notifications" className="gap-5">
+            <Tabs value={selectedTab} onValueChange={selectTab} className="gap-5">
                 <TabsList
                     aria-label="설정 구분"
-                    className="grid h-auto w-full grid-cols-3 sm:w-fit"
+                    className={`grid h-auto w-full sm:w-fit ${renderAppStatus ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}
                 >
+                    {renderAppStatus ? <TabsTrigger value="status">앱 상태</TabsTrigger> : null}
                     <TabsTrigger value="notifications">알림</TabsTrigger>
                     <TabsTrigger value="services">서비스</TabsTrigger>
                     <TabsTrigger value="devices">기기 연결</TabsTrigger>
                 </TabsList>
+                {renderAppStatus ? (
+                    <TabsContent value="status">{renderAppStatus()}</TabsContent>
+                ) : null}
                 <TabsContent value="notifications">
                     <PersonalAccountGate>
                         <NotificationSettings />
@@ -859,7 +1260,7 @@ export function ConnectionsPage() {
                     {platform.capabilities.mobilePairingManagement ? (
                         <DesktopConnections />
                     ) : platform.accountAuthentication.kind === 'cookie' ? (
-                        <CompanionConnections />
+                        <CompanionConnections completionPath={returnTo ?? '/connections'} />
                     ) : (
                         <WebConnections />
                     )}

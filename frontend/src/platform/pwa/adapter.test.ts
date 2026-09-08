@@ -8,19 +8,56 @@ function browserObjects(
     options: {
         standalone?: boolean;
         iosStandalone?: boolean;
+        existingSubscription?: boolean;
+        activeWorker?: boolean;
+        waitingWorker?: boolean;
+        installingWorker?: boolean;
+        registrationAvailable?: boolean;
+        registrationError?: boolean;
     } = {},
 ) {
+    const unsubscribe = vi.fn<PushSubscription['unsubscribe']>(async () => true);
+    const toJSON = vi.fn<() => PushSubscriptionJSON>(() => ({
+        endpoint: 'https://push.example/subscription',
+    }));
     const subscription = {
-        toJSON: vi.fn<PushSubscription['toJSON']>(() => ({
-            endpoint: 'https://push.example/subscription',
-        })),
+        endpoint: 'https://push.example/subscription',
+        toJSON,
+        unsubscribe,
     } as unknown as PushSubscription;
+    const getSubscription = vi.fn<PushManager['getSubscription']>(async () =>
+        options.existingSubscription === false ? null : subscription,
+    );
     const pushManager = {
         subscribe: vi.fn<PushManager['subscribe']>(async () => subscription),
+        getSubscription,
     };
-    const registration = {pushManager} as unknown as ServiceWorkerRegistration;
+    const active =
+        options.activeWorker === false
+            ? null
+            : ({
+                  state: 'activated',
+                  scriptURL: 'https://app.example/sw.js',
+              } as ServiceWorker);
+    const waiting = options.waitingWorker
+        ? ({state: 'installed', scriptURL: 'https://app.example/sw.next.js'} as ServiceWorker)
+        : null;
+    const installing = options.installingWorker
+        ? ({state: 'installing', scriptURL: 'https://app.example/sw.next.js'} as ServiceWorker)
+        : null;
+    const registration = {
+        active,
+        waiting,
+        installing,
+        pushManager,
+    } as unknown as ServiceWorkerRegistration;
     const register = vi.fn<ServiceWorkerContainer['register']>(async () => registration);
+    const getRegistration = vi.fn<ServiceWorkerContainer['getRegistration']>(async () => {
+        if (options.registrationError) throw new Error('SERVICE_WORKER_LOOKUP_FAILED');
+        return options.registrationAvailable === false ? undefined : registration;
+    });
     const serviceWorker = {
+        getRegistration,
         register,
         ready: Promise.resolve(registration),
     };
@@ -35,7 +72,16 @@ function browserObjects(
         serviceWorker,
         standalone: options.iosStandalone ?? false,
     } as unknown as Navigator;
-    return {navigatorObject, pushManager, register, subscription, windowObject};
+    return {
+        navigatorObject,
+        getSubscription,
+        pushManager,
+        register,
+        subscription,
+        toJSON,
+        unsubscribe,
+        windowObject,
+    };
 }
 
 describe('PwaCapabilityAdapter', () => {
@@ -75,13 +121,18 @@ describe('PwaCapabilityAdapter', () => {
             navigatorObject: browser.navigatorObject,
         });
 
-        adapter.registerServiceWorker();
+        const registrationReady = adapter.registerServiceWorker();
+        expect(adapter.getServiceWorkerContainer()).toBe(browser.navigatorObject.serviceWorker);
         expect(browser.register).not.toHaveBeenCalled();
 
         browser.windowObject.dispatchEvent(new Event('load'));
+        await expect(registrationReady).resolves.toBe(
+            await browser.navigatorObject.serviceWorker.ready,
+        );
         await adapter.preparePush();
 
         expect(browser.register).toHaveBeenCalledWith('./sw.js', {scope: './'});
+        expect(browser.register).toHaveBeenCalledOnce();
     });
 
     it('설치 프롬프트를 이벤트에서 어댑터 계약으로 변환하고 해제한다', async () => {
@@ -156,6 +207,172 @@ describe('PwaCapabilityAdapter', () => {
         });
     });
 
+    it('현재 로컬 Push 구독을 조회하고 직렬화한다', async () => {
+        const browser = browserObjects();
+        const adapter = createPwaCapabilityAdapter({
+            production: true,
+            windowObject: browser.windowObject,
+            navigatorObject: browser.navigatorObject,
+        });
+
+        await expect(adapter.getPushSubscription()).resolves.toEqual({
+            endpoint: 'https://push.example/subscription',
+        });
+
+        expect(browser.register).toHaveBeenCalledOnce();
+        expect(browser.getSubscription).toHaveBeenCalledOnce();
+        expect(browser.toJSON).toHaveBeenCalledOnce();
+    });
+
+    it('현재 로컬 Push 구독이 없으면 null을 반환한다', async () => {
+        const browser = browserObjects({existingSubscription: false});
+        const adapter = createPwaCapabilityAdapter({
+            production: true,
+            windowObject: browser.windowObject,
+            navigatorObject: browser.navigatorObject,
+        });
+
+        await expect(adapter.getPushSubscription()).resolves.toBeNull();
+    });
+
+    it('서비스 워커 등록과 활성 script를 플랫폼 계약으로 관측한다', async () => {
+        const browser = browserObjects();
+        const adapter = createPwaCapabilityAdapter({
+            production: true,
+            windowObject: browser.windowObject,
+            navigatorObject: browser.navigatorObject,
+        });
+
+        await expect(adapter.getServiceWorkerStatus()).resolves.toEqual({
+            status: 'active',
+            scriptUrl: 'https://app.example/sw.js',
+        });
+    });
+
+    it('기존 활성 워커가 있어도 waiting 업데이트를 우선 관측한다', async () => {
+        const browser = browserObjects({waitingWorker: true});
+        const adapter = createPwaCapabilityAdapter({
+            production: true,
+            windowObject: browser.windowObject,
+            navigatorObject: browser.navigatorObject,
+        });
+
+        await expect(adapter.getServiceWorkerStatus()).resolves.toEqual({status: 'waiting'});
+    });
+
+    it('기존 활성 워커가 있어도 installing 업데이트를 우선 관측한다', async () => {
+        const browser = browserObjects({installingWorker: true});
+        const adapter = createPwaCapabilityAdapter({
+            production: true,
+            windowObject: browser.windowObject,
+            navigatorObject: browser.navigatorObject,
+        });
+
+        await expect(adapter.getServiceWorkerStatus()).resolves.toEqual({status: 'installing'});
+    });
+
+    it('서비스 워커 등록이 없으면 missing 상태를 반환한다', async () => {
+        const browser = browserObjects({registrationAvailable: false});
+        const adapter = createPwaCapabilityAdapter({
+            production: true,
+            windowObject: browser.windowObject,
+            navigatorObject: browser.navigatorObject,
+        });
+
+        await expect(adapter.getServiceWorkerStatus()).resolves.toEqual({status: 'missing'});
+    });
+
+    it('서비스 워커 상태 조회가 실패하면 error 상태를 반환한다', async () => {
+        const browser = browserObjects({registrationError: true});
+        const adapter = createPwaCapabilityAdapter({
+            production: true,
+            windowObject: browser.windowObject,
+            navigatorObject: browser.navigatorObject,
+        });
+
+        await expect(adapter.getServiceWorkerStatus()).resolves.toEqual({status: 'error'});
+    });
+
+    it('현재 로컬 Push 구독을 찾아 실제 브라우저 구독을 해제한다', async () => {
+        const browser = browserObjects();
+        const adapter = createPwaCapabilityAdapter({
+            production: true,
+            windowObject: browser.windowObject,
+            navigatorObject: browser.navigatorObject,
+        });
+
+        await expect(adapter.unsubscribePush('https://push.example/subscription')).resolves.toBe(
+            true,
+        );
+
+        expect(browser.pushManager.getSubscription).toHaveBeenCalledOnce();
+        expect(browser.unsubscribe).toHaveBeenCalledOnce();
+    });
+
+    it('해제할 로컬 Push 구독이 없으면 false를 반환한다', async () => {
+        const browser = browserObjects({existingSubscription: false});
+        const adapter = createPwaCapabilityAdapter({
+            production: true,
+            windowObject: browser.windowObject,
+            navigatorObject: browser.navigatorObject,
+        });
+
+        await expect(adapter.unsubscribePush('https://push.example/subscription')).resolves.toBe(
+            false,
+        );
+        expect(browser.unsubscribe).not.toHaveBeenCalled();
+    });
+
+    it('조회와 해제 전 과정에서 같은 서비스 워커 등록을 재사용한다', async () => {
+        const browser = browserObjects();
+        browser.getSubscription
+            .mockResolvedValueOnce(browser.subscription)
+            .mockResolvedValueOnce(browser.subscription)
+            .mockResolvedValueOnce(null);
+        const adapter = createPwaCapabilityAdapter({
+            production: true,
+            windowObject: browser.windowObject,
+            navigatorObject: browser.navigatorObject,
+        });
+
+        await expect(adapter.getPushSubscription()).resolves.toEqual({
+            endpoint: 'https://push.example/subscription',
+        });
+        await expect(adapter.unsubscribePush('https://push.example/subscription')).resolves.toBe(
+            true,
+        );
+        await expect(adapter.getPushSubscription()).resolves.toBeNull();
+
+        expect(browser.register).toHaveBeenCalledOnce();
+        expect(browser.getSubscription).toHaveBeenCalledTimes(3);
+        expect(browser.unsubscribe).toHaveBeenCalledOnce();
+    });
+
+    it('조회 이후 구독 endpoint가 바뀌면 다른 구독을 해제하지 않는다', async () => {
+        const browser = browserObjects();
+        const replacementUnsubscribe = vi.fn<PushSubscription['unsubscribe']>(async () => true);
+        const replacement = {
+            endpoint: 'https://push.example/replacement',
+            unsubscribe: replacementUnsubscribe,
+        } as unknown as PushSubscription;
+        browser.getSubscription
+            .mockResolvedValueOnce(browser.subscription)
+            .mockResolvedValueOnce(replacement);
+        const adapter = createPwaCapabilityAdapter({
+            production: true,
+            windowObject: browser.windowObject,
+            navigatorObject: browser.navigatorObject,
+        });
+
+        const observed = await adapter.getPushSubscription();
+
+        await expect(adapter.unsubscribePush(observed?.endpoint ?? '')).rejects.toThrow(
+            'PUSH_SUBSCRIPTION_CHANGED',
+        );
+        expect(browser.unsubscribe).not.toHaveBeenCalled();
+        expect(replacementUnsubscribe).not.toHaveBeenCalled();
+    });
+
     it('지원되지 않는 브라우저에서는 Push 요청 전에 실패한다', async () => {
         const windowObject = new EventTarget() as unknown as Window;
         const navigatorObject = {userAgent: 'test'} as Navigator;
@@ -167,5 +384,9 @@ describe('PwaCapabilityAdapter', () => {
 
         await expect(adapter.preparePush()).rejects.toThrow('PUSH_UNSUPPORTED');
         await expect(adapter.subscribePush('AQ')).rejects.toThrow('PUSH_UNSUPPORTED');
+        await expect(adapter.getPushSubscription()).rejects.toThrow('PUSH_UNSUPPORTED');
+        await expect(adapter.unsubscribePush('https://push.example/subscription')).rejects.toThrow(
+            'PUSH_UNSUPPORTED',
+        );
     });
 });

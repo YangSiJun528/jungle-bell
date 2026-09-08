@@ -56,12 +56,17 @@ function renderSettings(value: DesktopSettings = settings): string {
     );
 }
 
+function switchRow(markup: string, label: string): string {
+    const row = markup
+        .match(/<label data-slot="switch-row"[\s\S]*?<\/label>/gu)
+        ?.find((candidate) => candidate.includes(`>${label}<`));
+    expect(row, `${label} SwitchRow가 없습니다.`).toBeDefined();
+    return row ?? '';
+}
+
 describe('ServiceSettings', () => {
     test('데스크톱 로컬 기능을 실제 설정 컨트롤로 표시한다', () => {
         const markup = renderSettings();
-        for (const label of ['자동 시작', '사용 통계', '디버그 모드']) {
-            expect(markup).toContain(`aria-label="${label}"`);
-        }
         expect(markup).not.toContain('aria-label="자동 업데이트"');
         expect(source).not.toContain('자동 업데이트를 끌까요?');
         expect(markup).toContain('항상 새 버전을 확인하며');
@@ -72,25 +77,59 @@ describe('ServiceSettings', () => {
         expect(source).toContain('디버그 모드를 켤까요?');
         expect(normalizedSource).toContain('특별한 목적이 없다면 켜지 마세요.');
         expect(source).toContain('네, 디버그 모드 켜기');
-        expect(source).toContain('if (checked) setConfirmDebugOn(true)');
+        expect(source).toContain('setConfirmDebugOn(true)');
         expect(markup).toContain(
             '기존 선택을 확인할 수 없어 이 PC와 연결된 PWA 모두 전송하지 않습니다.',
         );
         expect(markup).toContain('이 PC와 이 계정에 연결된 PWA에 같은 설정이 적용됩니다.');
-        expect(markup).toMatch(/<button[^>]+aria-checked="false"[^>]+aria-label="사용 통계"/u);
+        expect(switchRow(markup, '사용 통계')).toContain('aria-checked="false"');
         expect(markup).toContain('개발자 도구나 외부 명령 실행 권한은 열지 않습니다.');
         expect(markup).toContain('출석 확인 기수');
         expect(markup).toContain('자동 선택');
         expect(source).toContain('{cohort.label}');
         expect(markup).toContain('변경사항 적용');
-        expect(source).toContain("setCohortDraft(nextValue === 'automatic' ? null : nextValue)");
+        expect(source).toContain("nextValue === 'automatic' ? null : nextValue");
         expect(source).toContain('updateSelectedCohort(cohortDraft)');
         expect(source).not.toContain('onValueChange={(value) => updateSelectedCohort');
     });
 
+    test('공통 SwitchRow가 각 스위치의 전체 행을 조작 대상으로 유지한다', () => {
+        const markup = renderSettings();
+        for (const label of ['자동 시작', '사용 통계', '디버그 모드']) {
+            const row = switchRow(markup, label);
+            expect(row).toMatch(/^<label data-slot="switch-row"/u);
+            expect(row).toContain('role="switch"');
+        }
+    });
+
+    test('기수 목록과 현재 적용 기수의 파생 상태를 구분해 표시한다', () => {
+        const unresolved = renderSettings({...settings, effectiveCohortId: 'missing'});
+        expect(unresolved).toContain('현재 적용 · 자동 선택 대기 중');
+
+        const empty = renderSettings({
+            ...settings,
+            selectedCohortId: 'cohort-1',
+            effectiveCohortId: null,
+            cohortOptions: [],
+        });
+        expect(empty).toContain('LMS 로그인 후 기수 목록이 표시됩니다.');
+        expect(empty).not.toContain('변경사항 적용');
+    });
+
+    test('설정 mutation의 API 및 쿼리 캐시 갱신 계약을 유지한다', () => {
+        expect(normalizedSource).toContain(
+            'mutationFn: (input: DesktopSettingsUpdate) => api.updateDesktopSettings(input)',
+        );
+        expect(normalizedSource).toContain('client.setQueryData(queryKeys.desktopSettings, value)');
+        expect(normalizedSource).toContain(
+            'client.invalidateQueries({queryKey: queryKeys.desktopSettings})',
+        );
+        expect(normalizedSource).toContain('mutationFn: () => api.openLogFolder()');
+    });
+
     test('사용 통계를 명시적으로 허용한 설정만 켜진 상태로 표시한다', () => {
         const markup = renderSettings({...settings, usageAnalytics: true});
-        expect(markup).toMatch(/<button[^>]+aria-checked="true"[^>]+aria-label="사용 통계"/u);
+        expect(switchRow(markup, '사용 통계')).toContain('aria-checked="true"');
         expect(markup).not.toContain('기존 선택을 확인할 수 없어');
     });
 
@@ -120,7 +159,7 @@ describe('ServiceSettings', () => {
         try {
             const markup = renderSettings();
             expect(markup).toContain('PC 앱에서 설정합니다.');
-            expect(markup).not.toContain('aria-label="자동 시작"');
+            expect(markup).not.toContain('>자동 시작<');
         } finally {
             environment.platform = {capabilities: {desktopSettings: true}};
         }

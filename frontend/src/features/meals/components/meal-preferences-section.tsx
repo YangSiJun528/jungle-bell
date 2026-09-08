@@ -11,41 +11,18 @@ import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@/components/ui/card';
 import {Separator} from '@/components/ui/separator';
-import {Switch} from '@/components/ui/switch';
+import {SwitchRow} from '@/components/ui/switch';
+import {usePwaReloadPreserver} from '@/platform/pwa/reload-preservation';
 
-const asInput = (preferences: MealPreferences): MealPreferencesInput => ({
-    enabled: preferences.enabled,
-    lunch: preferences.lunch,
-    dinner: preferences.dinner,
-});
+import {
+    clearMealPreferencesDraft,
+    preserveMealPreferencesDraft,
+    readMealPreferencesDraft,
+} from './meal-preferences-draft';
 
 function preferencesEqual(left: MealPreferencesInput, right: MealPreferences): boolean {
     return (
         left.enabled === right.enabled && left.lunch === right.lunch && left.dinner === right.dinner
-    );
-}
-
-function PreferenceRow({
-    checked,
-    disabled,
-    label,
-    onCheckedChange,
-}: {
-    checked: boolean;
-    disabled?: boolean;
-    label: string;
-    onCheckedChange: (checked: boolean) => void;
-}) {
-    return (
-        <label className="flex cursor-pointer items-center justify-between gap-4 py-3">
-            <span className="text-sm font-medium">{label}</span>
-            <Switch
-                aria-label={label}
-                checked={checked}
-                disabled={disabled}
-                onCheckedChange={onCheckedChange}
-            />
-        </label>
     );
 }
 
@@ -62,8 +39,11 @@ function MealPreferencesEditor({
     onEdit: () => void;
     onSave: (draft: MealPreferencesInput) => void;
 }) {
-    const [draft, setDraft] = useState<MealPreferencesInput>(() => asInput(preferences));
+    const [draft, setDraft] = useState<MealPreferencesInput>(() =>
+        readMealPreferencesDraft(preferences),
+    );
     const dirty = !preferencesEqual(draft, preferences);
+    usePwaReloadPreserver(() => preserveMealPreferencesDraft(preferences, draft));
     const updateDraft = (key: keyof MealPreferencesInput, checked: boolean) => {
         onEdit();
         setDraft((current) => ({...current, [key]: checked}));
@@ -71,7 +51,7 @@ function MealPreferencesEditor({
 
     return (
         <div className="mx-auto max-w-2xl">
-            <PreferenceRow
+            <SwitchRow
                 checked={draft.enabled}
                 disabled={saving}
                 label="급식 알림 사용"
@@ -79,14 +59,14 @@ function MealPreferencesEditor({
             />
             <Separator />
             <div className="pl-4">
-                <PreferenceRow
+                <SwitchRow
                     checked={draft.lunch}
                     disabled={!draft.enabled || saving}
                     label="중식"
                     onCheckedChange={(checked) => updateDraft('lunch', checked)}
                 />
                 <Separator />
-                <PreferenceRow
+                <SwitchRow
                     checked={draft.dinner}
                     disabled={!draft.enabled || saving}
                     label="석식"
@@ -118,6 +98,7 @@ export function MealPreferencesSection() {
     const savePreferences = useMutation({
         mutationFn: (input: MealPreferencesInput) => api.updateMealPreferences(input),
         onSuccess: async (value) => {
+            clearMealPreferencesDraft();
             client.setQueryData(queryKeys.mealPreferences, value);
             setEditorRevision((revision) => revision + 1);
             setSaved(true);
@@ -151,7 +132,7 @@ export function MealPreferencesSection() {
                         <BellRing className="size-4 text-primary" />
                         급식 알림
                     </CardTitle>
-                    <CardDescription>새 식단 게시물 중 선택한 식사 시간대만 알림</CardDescription>
+                    <CardDescription>새 급식 게시물 중 선택한 식사 시간대만 알림</CardDescription>
                 </CardHeader>
                 <CardContent>
                     {preferences.isPending && !preferences.data ? (

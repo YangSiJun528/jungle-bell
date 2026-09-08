@@ -2,11 +2,13 @@ import {Outlet, useNavigate, useRouterState} from '@tanstack/react-router';
 import {lazy, useCallback, useEffect, useMemo, useState} from 'react';
 
 import {AsyncBoundary} from '@/components/dashboard/async-boundary';
-import {LoadingState} from '@/components/dashboard/async-state';
 import {InstallPrompt, useInstallPromptVisibility} from '@/platform/pwa/install-prompt';
 
 import {useDashboardEnvironment} from './dashboard-context';
+import {DashboardRouteAccessibility} from './dashboard-route-accessibility';
+import {DashboardRouteErrorFallback} from './dashboard-route-error';
 import {DashboardRouteRuntimeProvider} from './dashboard-route-runtime';
+import {DesktopLifecycleSummary} from './desktop-lifecycle-controller';
 import {DesktopUpdateNotice} from './desktop-update-notice';
 import {
     mergeSeenMobileNotificationIds,
@@ -21,9 +23,9 @@ import {
 import {PlatformAuthenticationGate} from './platform-authentication-gate';
 import {PublicRouteOutlet} from './privacy-page';
 import {
-    DASHBOARD_ROUTE_META,
     dashboardRouteFromPath,
     dashboardRoutePath,
+    isPersonalDashboardRoute,
     type DashboardRoute,
 } from './routes';
 import {DashboardShell} from './shell';
@@ -34,27 +36,13 @@ const NotificationPanelContent = lazy(() =>
         default: module.NotificationPanelContent,
     })),
 );
-const CompanionConnections = lazy(() =>
-    import('@/features/connections/connections-page').then((module) => ({
-        default: module.CompanionConnections,
-    })),
-);
-
 export function DashboardApp() {
     const pathname = useRouterState({select: (state) => state.location.pathname});
-    if (pathname === '/privacy') return <PublicRouteOutlet />;
-
     return (
-        <PlatformAuthenticationGate
-            notice={<DesktopUpdateNotice />}
-            connectionContent={
-                <AsyncBoundary fallback={<LoadingState label="연결 화면을 준비하고 있습니다." />}>
-                    <CompanionConnections completionPath={null} />
-                </AsyncBoundary>
-            }
-        >
-            <DashboardContent />
-        </PlatformAuthenticationGate>
+        <>
+            <DashboardRouteAccessibility pathname={pathname} />
+            {pathname === '/privacy' ? <PublicRouteOutlet /> : <DashboardContent />}
+        </>
     );
 }
 
@@ -98,10 +86,6 @@ function DashboardContent() {
     );
 
     useEffect(() => {
-        document.title = `${DASHBOARD_ROUTE_META[route].label} · Jungle Bell`;
-    }, [route]);
-
-    useEffect(() => {
         if (route === 'notifications') return;
         window.scrollTo({top: 0, left: 0, behavior: 'auto'});
     }, [route]);
@@ -134,24 +118,41 @@ function DashboardContent() {
                     if (!open && route === 'notifications') navigate(contentRoute, true);
                 },
                 content: (
-                    <AsyncBoundary
-                        errorTitle="알림함을 불러오지 못했습니다."
-                        resetKeys={[notificationPanelOpen]}
-                    >
-                        <NotificationPanelContent
-                            seenMobileIds={seenMobileIds}
-                            onMobileNotificationsSeen={markMobileNotificationsSeen}
-                        />
-                    </AsyncBoundary>
+                    <PlatformAuthenticationGate enabled>
+                        <AsyncBoundary
+                            errorTitle="알림함을 불러오지 못했습니다."
+                            resetKeys={[notificationPanelOpen]}
+                        >
+                            <NotificationPanelContent
+                                seenMobileIds={seenMobileIds}
+                                onMobileNotificationsSeen={markMobileNotificationsSeen}
+                            />
+                        </AsyncBoundary>
+                    </PlatformAuthenticationGate>
                 ),
             }}
         >
             <DesktopUpdateNotice />
             <NotificationOnboardingNotice />
             <DashboardRouteRuntimeProvider value={{contentRoute, openInstallPrompt}}>
-                <AsyncBoundary resetKeys={[contentRoute]}>
-                    <Outlet />
+                <AsyncBoundary
+                    resetKeys={[contentRoute]}
+                    renderError={({retry}) => (
+                        <DashboardRouteErrorFallback route={contentRoute} retry={retry} />
+                    )}
+                >
+                    <PlatformAuthenticationGate
+                        enabled={isPersonalDashboardRoute(contentRoute)}
+                        preserveRouteHeading
+                    >
+                        <Outlet />
+                    </PlatformAuthenticationGate>
                 </AsyncBoundary>
+                {platform.kind === 'desktop' && contentRoute === 'connections' ? (
+                    <div className="mt-6">
+                        <DesktopLifecycleSummary />
+                    </div>
+                ) : null}
             </DashboardRouteRuntimeProvider>
             <InstallPrompt open={installPromptOpen} onOpenChange={setInstallPromptVisibility} />
         </DashboardShell>

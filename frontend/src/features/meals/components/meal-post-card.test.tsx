@@ -16,7 +16,7 @@ const meal: DashboardMealPost = {
     images: [
         {
             sha: 'a'.repeat(64),
-            url: `https://campus.example.com/api/public/assets/${'a'.repeat(64)}.jpg`,
+            url: `https://jungle-bell.sijun-yang.com/api/public/assets/${'a'.repeat(64)}.jpg`,
             contentType: 'image/jpeg',
             extension: 'jpg',
             width: 1600,
@@ -46,11 +46,11 @@ describe('MealPostCard', () => {
 
     it('원문 링크의 실제 anchor에 접근 가능한 이름을 제공한다', () => {
         const markup = renderToStaticMarkup(
-            <MealPostCard meal={{...meal, permalink: 'https://campus.example.com/meals/lunch'}} />,
+            <MealPostCard meal={{...meal, permalink: 'https://pf.kakao.com/_xhzNjn/112664323'}} />,
         );
 
-        expect(markup).toMatch(/<a[^>]+aria-label="식단 원문 열기"/u);
-        expect(markup).toContain('href="https://campus.example.com/meals/lunch"');
+        expect(markup).toMatch(/<a[^>]+aria-label="급식 원문 열기"/u);
+        expect(markup).toContain('href="https://pf.kakao.com/_xhzNjn/112664323"');
     });
 
     it('사진이나 메뉴가 없으면 로딩 표시가 아닌 저채도 빈 상태로 구분한다', () => {
@@ -64,13 +64,31 @@ describe('MealPostCard', () => {
         expect(markup).toContain('메뉴가 아직 올라오지 않았습니다.');
         expect(markup).toContain('bg-muted/60');
         expect(markup).toContain('text-muted-foreground');
+        expect(markup.match(/text-base/gu)?.length).toBeGreaterThanOrEqual(2);
+        expect(markup.match(/leading-6/gu)?.length).toBeGreaterThanOrEqual(2);
         expect(markup).not.toContain('animate-pulse');
+    });
+
+    it('텍스트가 이미지보다 먼저 렌더링되고 이미지에 펼치기/접기 토글이 존재한다', () => {
+        const markup = renderToStaticMarkup(<MealPostCard meal={meal} />);
+        const titleIndex = markup.indexOf('중식 메뉴');
+        const imageContainerIndex = markup.indexOf('aria-label="8월 11일(화) 중식 메뉴 이미지"');
+
+        expect(titleIndex).toBeGreaterThan(-1);
+        expect(imageContainerIndex).toBeGreaterThan(titleIndex);
+        expect(markup).toContain('aria-controls="lunch-image-preview"');
+        expect(markup).toContain('aria-expanded="false"');
+        expect(markup).toContain('이미지 펼치기');
+        expect(markup).toContain('class="mt-3 min-h-11 w-full"');
+        expect(markup).toContain('max-h-44');
+        expect(markup).toContain('aria-hidden="true"');
+        expect(markup).toContain('tabindex="-1"');
     });
 
     it('게시물 전체가 없으면 빈 상태를 한 번만 표시한다', () => {
         const markup = renderToStaticMarkup(<MissingMealPostCard period="석식" />);
 
-        expect(markup).toContain('aria-label="석식 식단 게시 대기"');
+        expect(markup).toContain('aria-label="석식 급식 게시 대기"');
         expect(markup).not.toContain('lucide-image-off');
         expect(markup).toContain('lucide-clock-3');
         expect(markup.match(/아직 올라오지 않았습니다\./gu)).toHaveLength(1);

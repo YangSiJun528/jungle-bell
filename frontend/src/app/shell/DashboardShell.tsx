@@ -92,7 +92,7 @@ function SidebarNavigationItem({route, activeRoute}: NavigationItemProps) {
                 asChild
                 isActive={active}
                 tooltip={meta.label}
-                className="h-10 gap-3 rounded-lg px-3 text-sidebar-foreground/70"
+                className="h-auto min-h-(--control-height) gap-3 rounded-lg px-3 text-sidebar-foreground/70"
             >
                 <Link
                     to={dashboardRoutePath(route)}
@@ -148,7 +148,7 @@ function SidebarNotificationItem({
                         setOpenMobile(false);
                     }}
                     className={cn(
-                        'h-10 gap-3 rounded-lg px-3',
+                        'h-auto min-h-(--control-height) gap-3 rounded-lg px-3',
                         hasUnread ? 'pr-10' : undefined,
                         hasUnread && !open
                             ? 'text-primary hover:text-primary'
@@ -187,7 +187,7 @@ function BottomNavigationItem({route, activeRoute}: NavigationItemProps) {
             aria-label={meta.label}
             data-dashboard-route={route}
             className={cn(
-                'relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-1 py-1.5',
+                'relative flex min-h-(--control-height-lg) min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-1 py-1.5',
                 'text-xs leading-none font-medium transition-colors',
                 'focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
                 active
@@ -195,6 +195,13 @@ function BottomNavigationItem({route, activeRoute}: NavigationItemProps) {
                     : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
             )}
         >
+            {active ? (
+                <span
+                    data-active-indicator="true"
+                    aria-hidden="true"
+                    className="absolute inset-x-4 top-0 h-0.5 rounded-full bg-current"
+                />
+            ) : null}
             <Icon
                 className="size-[1.125rem]"
                 aria-hidden="true"
@@ -270,15 +277,15 @@ function ShellTopSpacer({
 
     return (
         <div
-            className="flex h-14 shrink-0 items-center gap-2 px-3 sm:h-16 sm:px-4 md:px-5 lg:px-6"
+            className="flex min-h-[calc(3.5rem+var(--safe-area-top))] shrink-0 items-center gap-2 pt-(--safe-area-top) pr-[max(var(--dashboard-inline-gutter),var(--safe-area-right))] pl-[max(var(--dashboard-inline-gutter),var(--safe-area-left))] sm:min-h-[calc(4rem+var(--safe-area-top))]"
             data-shell-top-spacer="true"
         >
             <SidebarTrigger
                 aria-label="사이드바 메뉴 열기"
                 title="사이드바 메뉴 열기"
-                className="bg-background md:hidden"
+                className="bg-background lg:hidden"
             />
-            <div className="ml-auto flex items-center gap-2 md:hidden">
+            <div className="ml-auto flex items-center gap-2 lg:hidden">
                 <SheetTrigger asChild>
                     <Button
                         variant={notificationPanelOpen ? 'secondary' : 'outline'}
@@ -326,9 +333,10 @@ function DashboardBottomNavigation({
 }) {
     return (
         <nav
-            className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/96 px-2 pt-1.5 pb-[calc(env(safe-area-inset-bottom)+0.375rem)] backdrop-blur supports-[backdrop-filter]:bg-background/88 md:hidden"
+            className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/96 pt-1.5 pr-[max(0.5rem,var(--safe-area-right))] pb-[calc(var(--safe-area-bottom)+0.375rem)] pl-[max(0.5rem,var(--safe-area-left))] backdrop-blur supports-[backdrop-filter]:bg-background/88 lg:hidden"
             aria-label="모바일 메뉴"
             data-navigation-group="primary"
+            data-mobile-navigation="true"
         >
             <div
                 className="mx-auto grid max-w-lg gap-1"
@@ -380,7 +388,7 @@ export function DashboardShell({
             >
                 <button
                     type="button"
-                    className="sr-only fixed top-3 left-3 z-[100] rounded-md bg-background px-3 py-2 text-sm font-medium shadow-lg focus:not-sr-only"
+                    className="sr-only fixed top-[max(0.75rem,var(--safe-area-top))] left-[max(0.75rem,var(--safe-area-left))] z-[100] min-h-(--hit-area-min) min-w-(--hit-area-min) rounded-md bg-background px-3 py-2 text-sm font-medium shadow-lg focus:not-sr-only"
                     onClick={() => document.getElementById('dashboard-content')?.focus()}
                 >
                     본문 바로가기
@@ -445,7 +453,10 @@ export function DashboardShell({
                         hasUnreadNotifications={hasUnreadNotifications}
                         notificationAriaLabel={notificationAriaLabel}
                     />
-                    <div className="mx-auto w-full max-w-6xl p-3 sm:p-4 md:p-5 lg:p-6">
+                    <div
+                        className="mx-auto w-full max-w-6xl py-4 pr-[max(var(--dashboard-inline-gutter),var(--safe-area-right))] pl-[max(var(--dashboard-inline-gutter),var(--safe-area-left))] md:py-6"
+                        data-shell-content="true"
+                    >
                         {children}
                     </div>
                     <DashboardFooter />

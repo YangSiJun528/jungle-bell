@@ -78,7 +78,10 @@ function MealHistoryMonth({
                 className="grid items-start gap-4 lg:grid-cols-[minmax(17rem,20rem)_minmax(0,1fr)]"
                 data-meal-history-overview="true"
             >
-                <Card className="mx-auto w-full max-w-80 gap-4 p-4 shadow-none lg:mx-0">
+                <Card className="mx-auto w-full max-w-80 min-w-0 gap-3 p-4 shadow-none lg:mx-0">
+                    <p className="text-base leading-6 text-muted-foreground sm:hidden">
+                        달력은 좌우로 스크롤해 모든 요일을 확인할 수 있습니다.
+                    </p>
                     <MealHistoryCalendar
                         availableDates={availableDates}
                         month={visibleMonthKey}
@@ -88,8 +91,11 @@ function MealHistoryMonth({
                     />
                 </Card>
                 <section aria-labelledby="selected-history-date-title" className="min-w-0">
-                    <h3 className="mb-3 text-sm font-semibold" id="selected-history-date-title">
-                        {activeHistoryDate ? mealDateLabel(activeHistoryDate) : '선택한 날짜 식단'}
+                    <h3
+                        className="mb-3 text-base leading-6 font-semibold"
+                        id="selected-history-date-title"
+                    >
+                        {activeHistoryDate ? mealDateLabel(activeHistoryDate) : '선택한 날짜 급식'}
                     </h3>
                     {activeHistoryMeals.length > 0 ? (
                         <div className="grid gap-4 sm:grid-cols-2">
@@ -103,7 +109,10 @@ function MealHistoryMonth({
                 </section>
             </div>
             <section aria-labelledby="selected-history-week-title" data-meal-history-weekly="true">
-                <h3 className="mb-3 text-sm font-semibold" id="selected-history-week-title">
+                <h3
+                    className="mb-3 text-base leading-6 font-semibold"
+                    id="selected-history-week-title"
+                >
                     선택한 주 급식표
                 </h3>
                 {activeWeeklyMenu ? (

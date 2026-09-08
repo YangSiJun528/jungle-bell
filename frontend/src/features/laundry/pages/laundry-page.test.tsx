@@ -3,6 +3,10 @@ import {readFileSync} from 'node:fs';
 import {describe, expect, it} from 'vitest';
 
 const source = readFileSync(new URL('./laundry-page.tsx', import.meta.url), 'utf8');
+const boundarySource = readFileSync(
+    new URL('../components/laundry-feature-boundary.tsx', import.meta.url),
+    'utf8',
+);
 const zoneSource = readFileSync(
     new URL('../../../components/dashboard/laundry-zone-presentation.ts', import.meta.url),
     'utf8',
@@ -48,10 +52,34 @@ describe('LaundryPage capacity summary', () => {
     it('platform capability gates one switch that controls both risk presentations', () => {
         expect(source).toContain('platform.capabilities.laundryRiskIndicator');
         expect(source).toContain('최근 7일 에러 위험 표시');
-        expect(source).toContain('onCheckedChange={setShowRisk}');
+        expect(source).toContain('onCheckedChange={onCheckedChange}');
+        expect(source).toContain('onShowRiskChange={setShowRisk}');
         expect(source).toContain('showRiskIndicators={showRisk}');
         expect(source).toContain('showRiskWarnings={showRisk}');
+        expect(source).toContain("import {SwitchRow} from '@/components/ui/switch'");
+        expect(source).toContain('<SwitchRow');
+        expect(source).toContain('data-laundry-risk-toggle-row="true"');
+        expect(source).toContain('min-h-(--control-height-lg)');
+        expect(source).not.toContain('<Switch\n');
         expect(source).not.toContain('전체 에러율');
         expect(source).not.toContain('에러 위험 요약');
+    });
+
+    it('주요 설명과 이동 링크는 16px 본문·44px 조작·키보드 포커스 계약을 사용한다', () => {
+        expect(source).toMatch(/<CardDescription className="text-base leading-6">/u);
+        expect(source).toMatch(/<span className="text-base leading-6 font-normal/u);
+        expect(source).toContain('min-h-11');
+        expect(source).toContain('focus-visible:ring-2');
+    });
+
+    it('페이지 헤더 밖의 local async boundary로 세탁 실패를 격리한다', () => {
+        const pageSource = source.slice(source.indexOf('export function LaundryPage()'));
+
+        expect(pageSource.indexOf('<PageHeader')).toBeLessThan(
+            pageSource.indexOf('<LaundryDataRegion'),
+        );
+        expect(boundarySource).toContain('<AsyncBoundary');
+        expect(boundarySource).toContain('regionLabel="세탁실 데이터"');
+        expect(boundarySource).toContain('type="offline"');
     });
 });

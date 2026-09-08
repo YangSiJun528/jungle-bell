@@ -74,16 +74,23 @@ describe('AttendancePreferencesSection', () => {
         for (const label of [
             '출석 알림 사용',
             '학습 시작 알림',
-            '학습 시작 확인 시각',
-            '학습 시작 미완료 알림 간격',
             '학습 종료 알림',
-            '학습 종료 확인 종료 시각',
-            '학습 종료 미완료 알림 간격',
             '일요일 제외',
             '이번 출석일 건너뛰기',
         ]) {
+            expect(markup).toContain(`>${label}<`);
+        }
+        for (const label of [
+            '학습 시작 확인 시각',
+            '학습 시작 미완료 알림 간격',
+            '학습 종료 확인 종료 시각',
+            '학습 종료 미완료 알림 간격',
+        ]) {
             expect(markup).toContain(`aria-label="${label}"`);
         }
+        expect(markup.match(/data-slot="switch-row"/gu)).toHaveLength(5);
+        expect(markup.match(/<label[^>]*data-slot="switch-row"/gu)).toHaveLength(5);
+        expect(markup.match(/role="switch"[^>]+aria-labelledby=/gu)).toHaveLength(5);
         expect(markup).toContain('출석 알림 저장');
         expect(markup).toContain('상태 확인 불가 시 시작 시각·2시간 뒤·10시에 알립니다.');
         expect(markup).toContain('상태 확인 불가 시 23시와 자정에만 알립니다.');

@@ -8,9 +8,12 @@ import type {DesktopConnectionState} from '@/api/dashboard-api';
 import {
     assertLmsAuthenticated,
     assertServerSessionReady,
+    checkerWaitTransition,
     dashboardAccountStatus,
+    initialCheckerWaitState,
     normalizeLmsSessionStateEvent,
     personalAccessState,
+    transitionCookieSessionAccess,
     withLmsSessionState,
 } from './dashboard-account-state';
 
@@ -80,7 +83,7 @@ describe('dashboard account status', () => {
                 isPending: true,
                 isError: false,
             }),
-            {status: 'not-applicable'},
+            {status: 'not-applicable', reason: 'not-applicable'},
         );
         assert.deepEqual(
             personalAccessState('cookie', desktop, {
@@ -88,7 +91,7 @@ describe('dashboard account status', () => {
                 isPending: true,
                 isError: false,
             }),
-            {status: 'checking'},
+            {status: 'checking', reason: 'initial-check'},
         );
         assert.deepEqual(
             personalAccessState('cookie', desktop, {
@@ -96,7 +99,7 @@ describe('dashboard account status', () => {
                 isPending: false,
                 isError: false,
             }),
-            {status: 'unconnected'},
+            {status: 'unconnected', reason: 'first-connect'},
         );
         assert.deepEqual(
             personalAccessState('cookie', desktop, {
@@ -104,7 +107,11 @@ describe('dashboard account status', () => {
                 isPending: false,
                 isError: false,
             }),
-            {status: 'connected'},
+            {
+                status: 'connected',
+                reason: 'authenticated',
+                expiresAt: '2026-08-14T00:00:00.000Z',
+            },
         );
         assert.deepEqual(
             personalAccessState('cookie', desktop, {
@@ -112,7 +119,7 @@ describe('dashboard account status', () => {
                 isPending: false,
                 isError: true,
             }),
-            {status: 'error'},
+            {status: 'error', reason: 'server-error', retryable: true},
         );
         assert.deepEqual(
             personalAccessState('cookie', desktop, {
@@ -120,7 +127,7 @@ describe('dashboard account status', () => {
                 isPending: false,
                 isError: true,
             }),
-            {status: 'unconnected'},
+            {status: 'error', reason: 'server-error', retryable: true},
         );
         assert.deepEqual(
             personalAccessState('cookie', desktop, {
@@ -128,7 +135,7 @@ describe('dashboard account status', () => {
                 isPending: false,
                 isError: true,
             }),
-            {status: 'connected'},
+            {status: 'error', reason: 'server-error', retryable: true},
         );
         assert.deepEqual(
             personalAccessState('desktop-session', desktop, {
@@ -136,7 +143,7 @@ describe('dashboard account status', () => {
                 isPending: false,
                 isError: false,
             }),
-            {status: 'connected'},
+            {status: 'connected', reason: 'authenticated'},
         );
         assert.deepEqual(
             personalAccessState(
@@ -151,8 +158,102 @@ describe('dashboard account status', () => {
                     isError: false,
                 },
             ),
-            {status: 'unconnected'},
+            {status: 'unconnected', reason: 'expired'},
         );
+    });
+
+    test('쿠키 세션의 최초 연결·만료와 offline·서버 오류를 구분한다', () => {
+        const desktop = {
+            serverSession: 'not-applicable',
+            lmsAuthentication: 'not-applicable',
+        } as const;
+
+        assert.deepEqual(
+            personalAccessState('cookie', desktop, {
+                data: undefined,
+                isPending: true,
+                isError: false,
+                fetchStatus: 'paused',
+            }),
+            {status: 'error', reason: 'offline', retryable: true},
+        );
+        assert.deepEqual(
+            personalAccessState('cookie', desktop, {
+                data: undefined,
+                isPending: false,
+                isError: true,
+                fetchStatus: 'idle',
+            }),
+            {status: 'error', reason: 'server-error', retryable: true},
+        );
+
+        const sessionTransition = transitionCookieSessionAccess(
+            null,
+            {kind: 'authenticated', expiresAt: '2026-08-14T00:00:00.000Z'},
+            Date.parse('2026-08-12T00:00:00.000Z'),
+        );
+        assert.deepEqual(sessionTransition, {
+            state: {
+                status: 'connected',
+                reason: 'authenticated',
+                expiresAt: '2026-08-14T00:00:00.000Z',
+            },
+            evidence: {
+                expiresAt: '2026-08-14T00:00:00.000Z',
+                lastConfirmedAtEpochMs: Date.parse('2026-08-12T00:00:00.000Z'),
+            },
+        });
+        assert.deepEqual(
+            transitionCookieSessionAccess(
+                sessionTransition.evidence,
+                {kind: 'missing'},
+                Date.parse('2026-08-15T00:00:00.000Z'),
+            ),
+            {
+                state: {
+                    status: 'unconnected',
+                    reason: 'expired',
+                    expiredAt: '2026-08-14T00:00:00.000Z',
+                },
+                evidence: sessionTransition.evidence,
+            },
+        );
+        assert.deepEqual(
+            transitionCookieSessionAccess(
+                sessionTransition.evidence,
+                {kind: 'failed', reason: 'offline'},
+                Date.parse('2026-08-15T00:00:00.000Z'),
+            ),
+            {
+                state: {
+                    status: 'error',
+                    reason: 'offline',
+                    retryable: true,
+                    lastSuccessfulSessionExpiresAt: '2026-08-14T00:00:00.000Z',
+                },
+                evidence: sessionTransition.evidence,
+            },
+        );
+        assert.deepEqual(transitionCookieSessionAccess(null, {kind: 'missing'}, 0), {
+            state: {status: 'unconnected', reason: 'first-connect'},
+            evidence: null,
+        });
+    });
+
+    test('checker unknown timeout은 재시도 후 이전 timer를 무시하고 다시 대기한다', () => {
+        const timedOut = checkerWaitTransition(initialCheckerWaitState, {
+            type: 'timeout',
+            attempt: 0,
+        });
+        assert.deepEqual(timedOut, {attempt: 0, timedOut: true});
+
+        const retried = checkerWaitTransition(timedOut, {type: 'retry'});
+        assert.deepEqual(retried, {attempt: 1, timedOut: false});
+        assert.equal(checkerWaitTransition(retried, {type: 'timeout', attempt: 0}), retried);
+        assert.deepEqual(checkerWaitTransition(retried, {type: 'timeout', attempt: 1}), {
+            attempt: 1,
+            timedOut: true,
+        });
     });
 
     test('LMS 의존 작업은 인증 확인 전 호출하지 않는다', async () => {

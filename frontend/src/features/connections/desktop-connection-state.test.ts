@@ -47,7 +47,7 @@ describe('desktop connection state UI', () => {
         expect(resetRequired.reason).toContain('일치하지 않');
     });
 
-    test('연결 화면은 생성 mutation도 상태로 방어하고 identity 복구 CTA를 연결한다', () => {
+    test('연결 화면은 생성 mutation을 상태로 방어하고 지원하지 않는 identity 복구를 숨기지 않는다', () => {
         const source = readFileSync(new URL('./connections-page.tsx', import.meta.url), 'utf8');
         expect(source).toMatch(
             /connection\.data\?\.state !== 'connected'[\s\S]*connection\.data\?\.state !== 'disconnected'[\s\S]*DESKTOP_CONNECTION_REQUIRED/u,
@@ -55,7 +55,8 @@ describe('desktop connection state UI', () => {
         expect(source).toMatch(/!connectionUi\.canCreatePairing/u);
         expect(source).toMatch(/api\.resetDesktopIdentity\(\)/u);
         expect(source).toMatch(/invalidateQueries\(\{queryKey: queryKeys\.desktopConnection\}\)/u);
-        expect(source).toContain('PC 연결 정보 복구');
+        expect(source).toContain('복구 기능 준비 안 됨');
+        expect(source).toContain('안전한 PC identity 복구는 현재 앱 계약에서 지원하지 않습니다.');
         expect(source).toContain('서버 인증 정보');
         expect(source).toContain('LMS 계정');
         expect(source).toContain('useDashboardAccount()');

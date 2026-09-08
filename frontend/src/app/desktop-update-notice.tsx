@@ -1,49 +1,51 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
-import {Download} from 'lucide-react';
-
-import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
-import {Button} from '@/components/ui/button';
+import {useState} from 'react';
 
 import {queryKeys, useDashboardEnvironment} from './dashboard-context';
-import {useDesktopUpdateQuery} from './desktop-update-query';
+import {deferOptionalDesktopUpdate, isOptionalDesktopUpdateDeferred} from './desktop-update-later';
+import {DesktopUpdatePanel} from './desktop-update-panel';
+import {desktopUpdateInstallMutationKey, useDesktopUpdateQuery} from './desktop-update-query';
 
 export function DesktopUpdateNotice() {
     const {api} = useDashboardEnvironment();
     const client = useQueryClient();
-    const {desktop, update} = useDesktopUpdateQuery();
+    const {desktop, installMutationPending, update} = useDesktopUpdateQuery();
+    const [deferredVersion, setDeferredVersion] = useState<string | null>(null);
     const install = useMutation({
+        mutationKey: desktopUpdateInstallMutationKey,
         mutationFn: () => api.installDesktopUpdate(),
-        onSuccess: async () => {
-            await client.invalidateQueries({queryKey: queryKeys.desktopUpdate});
-        },
+        onSettled: () => client.invalidateQueries({queryKey: queryKeys.desktopUpdate}),
     });
+    // 로그 폴더 열기는 query-backed 애플리케이션 상태를 변경하지 않는다.
+    // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation
+    const openLogs = useMutation({mutationFn: () => api.openLogFolder()});
+    const status = update.data;
+    const availableVersion = status?.availableVersion;
+    const optional =
+        desktop && status?.policy === 'optional' && typeof availableVersion === 'string';
+    const deferred =
+        optional &&
+        status.status === 'optional' &&
+        (deferredVersion === availableVersion || isOptionalDesktopUpdateDeferred(availableVersion));
 
-    if (!desktop || !update.data?.availableVersion || update.data.mandatory) return null;
+    if (!optional || deferred) return null;
 
     return (
-        <Alert className="mb-4 border-amber-500/50 bg-amber-500/10">
-            <Download aria-hidden="true" />
-            <AlertTitle>Jungle Bell 업데이트가 필요합니다.</AlertTitle>
-            <AlertDescription className="mt-1 gap-3 sm:flex sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                    <p>
-                        현재 v{update.data.currentVersion} · 최신 v{update.data.availableVersion}
-                    </p>
-                    {install.isError ? (
-                        <p className="mt-1 text-destructive">
-                            업데이트를 설치하지 못했습니다. 잠시 후 다시 시도하세요.
-                        </p>
-                    ) : null}
-                </div>
-                <Button
-                    size="sm"
-                    className="shrink-0"
-                    disabled={install.isPending}
-                    onClick={() => install.mutate()}
-                >
-                    {install.isPending ? '업데이트 중' : '지금 업데이트'}
-                </Button>
-            </AlertDescription>
-        </Alert>
+        <DesktopUpdatePanel
+            compact
+            status={status}
+            installFailed={install.isError}
+            installPending={install.isPending || installMutationPending}
+            logFailed={openLogs.isError}
+            onInstall={() => install.mutate()}
+            onCheckAgain={() => void update.refetch()}
+            onOpenLogs={() => openLogs.mutate()}
+            onLater={() => {
+                const version = status.availableVersion;
+                if (!version) return;
+                deferOptionalDesktopUpdate(version);
+                setDeferredVersion(version);
+            }}
+        />
     );
 }

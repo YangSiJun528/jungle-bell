@@ -47,7 +47,7 @@ describe('dashboard routes', () => {
         expect(dashboardRoutePath('connections')).toBe('/connections');
         expect(dashboardRoutePath('install')).toBe('/install');
         expect(DASHBOARD_ROUTE_META.home).toEqual({label: '홈', shortLabel: '홈'});
-        expect(DASHBOARD_ROUTE_META.meals).toEqual({label: '식단', shortLabel: '식단'});
+        expect(DASHBOARD_ROUTE_META.meals).toEqual({label: '급식', shortLabel: '급식'});
         expect(DASHBOARD_ROUTE_META.notifications.label).toBe('알림');
         expect(DASHBOARD_ROUTE_META.connections.label).toBe('설정');
         expect(DASHBOARD_ROUTE_META.install.label).toBe('앱 설치 안내');

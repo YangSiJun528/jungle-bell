@@ -47,10 +47,12 @@ describe('MealPreferencesSection', () => {
         const markup = renderPreferences();
 
         expect(markup).toContain('급식 알림');
-        expect(markup).toContain('aria-label="급식 알림 사용"');
-        expect(markup).not.toContain('aria-label="조식"');
-        expect(markup).toContain('aria-label="중식"');
-        expect(markup).toContain('aria-label="석식"');
+        expect(markup).toContain('data-slot="switch-row"');
+        expect(markup).toContain('급식 알림 사용');
+        expect(markup).not.toContain('>조식<');
+        expect(markup).toContain('>중식<');
+        expect(markup).toContain('>석식<');
+        expect(markup).toMatch(/role="switch"[^>]+aria-labelledby=/u);
         expect(markup).toContain('설정 저장');
     });
 });

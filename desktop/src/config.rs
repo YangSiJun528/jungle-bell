@@ -2,11 +2,155 @@ use serde::{Deserialize, Deserializer, Serialize};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex as StdMutex, MutexGuard as StdMutexGuard};
 
 const CURRENT_CONFIG_FILE_NAME: &str = "desktop-settings.json";
 const CONFIG_SCHEMA: &str = "jungle-bell.desktop-settings";
 const CONFIG_SCHEMA_VERSION: u32 = 6;
 const MIN_SUPPORTED_CONFIG_SCHEMA_VERSION: u32 = 3;
+const DESKTOP_LIFECYCLE_FILE_NAME: &str = "desktop-lifecycle.json";
+const DESKTOP_LIFECYCLE_SCHEMA: &str = "jungle-bell.desktop-lifecycle";
+const DESKTOP_LIFECYCLE_SCHEMA_VERSION: u32 = 1;
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum CloseToTrayNotice {
+    #[default]
+    Unseen,
+    Pending,
+    Acknowledged,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct DesktopLifecycleDocument {
+    schema: String,
+    schema_version: u32,
+    close_to_tray_notice: CloseToTrayNotice,
+}
+
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DesktopLifecycleStatus {
+    close_behavior: &'static str,
+    close_to_tray_notice: CloseToTrayNotice,
+    explicit_quit_available: bool,
+}
+
+impl DesktopLifecycleStatus {
+    pub(crate) fn new(close_to_tray_notice: CloseToTrayNotice) -> Self {
+        Self {
+            close_behavior: "hideToTray",
+            close_to_tray_notice,
+            explicit_quit_available: true,
+        }
+    }
+}
+
+/// 창 닫기 동작을 설명하는 최초 1회 안내 상태를 별도 문서에 보관한다.
+///
+/// 사용자 설정 DTO와 독립시켜 병렬 설정 변경 및 이전 설정 스키마와 충돌하지
+/// 않는다. 전이는 파일 저장에 성공한 뒤 메모리에 반영한다.
+pub(crate) struct DesktopLifecycleStateStore {
+    path: Option<PathBuf>,
+    close_to_tray_notice: StdMutex<CloseToTrayNotice>,
+}
+
+impl DesktopLifecycleStateStore {
+    pub(crate) fn load() -> Self {
+        Self::load_from(desktop_lifecycle_path())
+    }
+
+    pub(crate) fn load_from(path: Option<PathBuf>) -> Self {
+        let state = path
+            .as_deref()
+            .and_then(|path| match fs::read_to_string(path) {
+                Ok(data) => match parse_desktop_lifecycle_document(&data) {
+                    Ok(state) => Some(state),
+                    Err(error) => {
+                        log::warn!("[lifecycle] 상태 파일({}) 검증 실패: {error}", path.display());
+                        None
+                    }
+                },
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+                Err(error) => {
+                    log::warn!("[lifecycle] 상태 파일({}) 읽기 실패: {error}", path.display());
+                    None
+                }
+            })
+            .unwrap_or_default();
+        Self {
+            path,
+            close_to_tray_notice: StdMutex::new(state),
+        }
+    }
+
+    fn lock(&self) -> Result<StdMutexGuard<'_, CloseToTrayNotice>, String> {
+        self.close_to_tray_notice
+            .lock()
+            .map_err(|_| "데스크톱 수명주기 상태 잠금이 손상되었습니다.".to_owned())
+    }
+
+    pub(crate) fn close_to_tray_notice(&self) -> Result<CloseToTrayNotice, String> {
+        Ok(*self.lock()?)
+    }
+
+    pub(crate) fn status(&self) -> Result<DesktopLifecycleStatus, String> {
+        Ok(DesktopLifecycleStatus::new(self.close_to_tray_notice()?))
+    }
+
+    pub(crate) fn record_close_to_tray(&self) -> Result<bool, String> {
+        let mut state = self.lock()?;
+        if *state != CloseToTrayNotice::Unseen {
+            return Ok(false);
+        }
+        self.persist(CloseToTrayNotice::Pending)?;
+        *state = CloseToTrayNotice::Pending;
+        Ok(true)
+    }
+
+    pub(crate) fn acknowledge_close_to_tray_notice(&self) -> Result<bool, String> {
+        let mut state = self.lock()?;
+        if *state == CloseToTrayNotice::Acknowledged {
+            return Ok(false);
+        }
+        self.persist(CloseToTrayNotice::Acknowledged)?;
+        *state = CloseToTrayNotice::Acknowledged;
+        Ok(true)
+    }
+
+    fn persist(&self, close_to_tray_notice: CloseToTrayNotice) -> Result<(), String> {
+        let path = self
+            .path
+            .as_deref()
+            .ok_or_else(|| "운영체제 설정 디렉토리를 확인할 수 없습니다.".to_owned())?;
+        let parent = path
+            .parent()
+            .ok_or_else(|| "데스크톱 수명주기 상태 파일 상위 디렉토리가 없습니다.".to_owned())?;
+        fs::create_dir_all(parent).map_err(|error| format!("데스크톱 수명주기 상태 디렉토리 생성 실패: {error}"))?;
+        let data = serde_json::to_vec_pretty(&DesktopLifecycleDocument {
+            schema: DESKTOP_LIFECYCLE_SCHEMA.to_owned(),
+            schema_version: DESKTOP_LIFECYCLE_SCHEMA_VERSION,
+            close_to_tray_notice,
+        })
+        .map_err(|error| format!("데스크톱 수명주기 상태 직렬화 실패: {error}"))?;
+        write_file_atomically(path, &data)
+            .map_err(|error| format!("데스크톱 수명주기 상태 파일({}) 저장 실패: {error}", path.display()))
+    }
+}
+
+fn desktop_lifecycle_path() -> Option<PathBuf> {
+    dirs::config_dir().map(|path| path.join("jungle-bell").join(DESKTOP_LIFECYCLE_FILE_NAME))
+}
+
+fn parse_desktop_lifecycle_document(data: &str) -> Result<CloseToTrayNotice, String> {
+    let document: DesktopLifecycleDocument =
+        serde_json::from_str(data).map_err(|error| format!("상태 파싱 실패: {error}"))?;
+    if document.schema != DESKTOP_LIFECYCLE_SCHEMA || document.schema_version != DESKTOP_LIFECYCLE_SCHEMA_VERSION {
+        return Err("지원하지 않는 데스크톱 수명주기 스키마입니다.".to_owned());
+    }
+    Ok(document.close_to_tray_notice)
+}
 
 pub const MORNING_START_HOUR: u32 = 4;
 pub const MORNING_START_MINUTE: u32 = 0;
@@ -386,6 +530,67 @@ mod tests {
                 .unwrap()
                 .as_nanos()
         ))
+    }
+
+    #[test]
+    fn close_to_tray_안내는_첫_close에_pending이_되고_확인후_영구_종료된다() {
+        let path = temporary_path("desktop-lifecycle");
+        let store = DesktopLifecycleStateStore::load_from(Some(path.clone()));
+
+        assert_eq!(store.close_to_tray_notice().unwrap(), CloseToTrayNotice::Unseen);
+        assert!(store.record_close_to_tray().unwrap());
+        assert!(!store.record_close_to_tray().unwrap());
+        assert_eq!(store.close_to_tray_notice().unwrap(), CloseToTrayNotice::Pending);
+        assert_eq!(
+            DesktopLifecycleStateStore::load_from(Some(path.clone()))
+                .close_to_tray_notice()
+                .unwrap(),
+            CloseToTrayNotice::Pending,
+        );
+
+        assert!(store.acknowledge_close_to_tray_notice().unwrap());
+        assert!(!store.acknowledge_close_to_tray_notice().unwrap());
+        assert_eq!(
+            DesktopLifecycleStateStore::load_from(Some(path.clone()))
+                .close_to_tray_notice()
+                .unwrap(),
+            CloseToTrayNotice::Acknowledged,
+        );
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn 잘못된_lifecycle_문서는_안내를_보지_않은_상태로_fail_closed한다() {
+        let path = temporary_path("desktop-lifecycle-invalid");
+        fs::write(
+            &path,
+            serde_json::json!({
+                "schema": "jungle-bell.desktop-lifecycle",
+                "schemaVersion": 1,
+                "closeToTrayNotice": "legacy-value",
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let store = DesktopLifecycleStateStore::load_from(Some(path.clone()));
+
+        assert_eq!(store.close_to_tray_notice().unwrap(), CloseToTrayNotice::Unseen);
+        assert!(store.record_close_to_tray().unwrap());
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn lifecycle_저장_실패는_메모리_상태를_소비하지_않는다() {
+        let root = temporary_path("desktop-lifecycle-write-failure");
+        fs::create_dir_all(&root).unwrap();
+        let blocked_parent = root.join("not-a-directory");
+        fs::write(&blocked_parent, b"file").unwrap();
+        let store = DesktopLifecycleStateStore::load_from(Some(blocked_parent.join("desktop-lifecycle.json")));
+
+        assert!(store.record_close_to_tray().is_err());
+        assert_eq!(store.close_to_tray_notice().unwrap(), CloseToTrayNotice::Unseen);
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

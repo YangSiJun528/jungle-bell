@@ -48,7 +48,9 @@ describe('home feature boundaries', () => {
         expect(source).not.toContain('href="#notifications"');
         expect(source).not.toContain('title="알림"');
         expect(source).not.toContain('useCampusDataIssue');
-        expect(source).toContain('useSuspenseCampusQueries');
+        expect(source).not.toContain('useSuspenseCampusQueries');
+        expect(source).toContain('useSuspenseLaundryQuery');
+        expect(source).toContain('useSuspenseMealsQuery');
         expect(source).toContain('const laundryRefreshFailed = laundry.isError');
         expect(source).toContain(
             'const laundryCollectorUnavailable = !laundry.data.quality.collectorHealthy',
@@ -62,17 +64,46 @@ describe('home feature boundaries', () => {
         expect(source).not.toContain('CompactError');
     });
 
+    it('세탁실과 식단 query를 각각의 오류 경계와 재시도 CTA로 격리한다', () => {
+        const source = readFileSync(new URL('./home-page.tsx', import.meta.url), 'utf8');
+
+        expect(source).toMatch(/function HomeLaundrySummary[\s\S]*useSuspenseLaundryQuery\(\)/u);
+        expect(source).toMatch(/function HomeMealsSummary[\s\S]*useSuspenseMealsQuery\(\)/u);
+        expect(source.match(/<AsyncBoundary\b/gu)).toHaveLength(2);
+        expect(source).toMatch(
+            /errorTitle="세탁실 요약을 불러오지 못했습니다\."[\s\S]*<HomeLaundrySummary \/>/u,
+        );
+        expect(source).toMatch(
+            /errorTitle="급식 요약을 불러오지 못했습니다\."[\s\S]*<HomeMealsSummary \/>/u,
+        );
+        expect(source).toContain('급식 요약은 계속 확인할 수 있습니다.');
+        expect(source).toContain('세탁실 요약은 계속 확인할 수 있습니다.');
+    });
+
     it('PC와 설치형 PWA에는 출석 요약을, 일반 웹에는 앱 소개를 표시한다', () => {
         const source = readFileSync(new URL('./home-page.tsx', import.meta.url), 'utf8');
 
         expect(source).toContain("platform.kind === 'desktop' || platform.pwa.installed");
         expect(source).toContain('<JungleCampusSummary />');
         expect(source).toContain('<AppShowcaseCard />');
-        expect(source.indexOf('<JungleCampusSummary')).toBeLessThan(
-            source.lastIndexOf('<AsyncBoundary'),
+        expect(source.indexOf('<AsyncBoundary')).toBeLessThan(
+            source.indexOf('{showAttendanceSummary'),
         );
         expect(source).not.toContain('title="출석"');
         expect(source).not.toContain('<CardTitle>공식 정글캠퍼스</CardTitle>');
+    });
+
+    it('일반 웹의 설치 안내는 320px에서 줄바꿈되고 닫을 수 있는 compact 안내다', () => {
+        const showcaseSource = readFileSync(
+            new URL('../../components/app-showcase/app-showcase-card.tsx', import.meta.url),
+            'utf8',
+        );
+
+        expect(showcaseSource).toContain('aria-label="설치 안내 닫기"');
+        expect(showcaseSource).toContain('sessionStorage');
+        expect(showcaseSource).toContain('min-w-0');
+        expect(showcaseSource).toContain('whitespace-normal');
+        expect(showcaseSource).toContain('sm:whitespace-nowrap');
     });
 
     it('centers compact living summaries and keeps their footer divider tight', () => {

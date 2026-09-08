@@ -2,6 +2,7 @@ import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Link, Outlet} from '@tanstack/react-router';
 import {ArrowLeft, ShieldCheck} from 'lucide-react';
 
+import {ExternalLink} from '@/components/ui/external-link';
 import {Switch} from '@/components/ui/switch';
 
 import {queryKeys, useDashboardEnvironment} from './dashboard-context';
@@ -16,7 +17,7 @@ const purposes = [
     },
     {
         title: '서비스 제공',
-        description: '출석·세탁·식단 콘텐츠 제공, PC·모바일 연결, 알림 기능 제공',
+        description: '출석·세탁·급식 콘텐츠 제공, PC·PWA 연결, 알림 기능 제공',
     },
     {
         title: '통계 분석',
@@ -141,7 +142,7 @@ export function PrivacyPage() {
             <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:px-6 sm:py-14">
                 <Link
                     to="/home"
-                    className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+                    className="inline-flex min-h-(--hit-area-min) items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground"
                 >
                     <ArrowLeft className="size-4" aria-hidden="true" />
                     대시보드로 돌아가기
@@ -155,7 +156,7 @@ export function PrivacyPage() {
                         Jungle Bell(
                         <a
                             href={SERVICE_URL}
-                            className="font-medium text-foreground underline-offset-4 hover:underline"
+                            className="inline-flex min-h-(--hit-area-min) items-center font-medium text-foreground underline-offset-4 hover:underline"
                         >
                             {SERVICE_URL}
                         </a>
@@ -260,7 +261,7 @@ export function PrivacyPage() {
                             계정 설정은 PC 앱의{' '}
                             <Link
                                 to="/connections"
-                                className="font-medium text-foreground underline underline-offset-4"
+                                className="inline-flex min-h-(--hit-area-min) items-center font-medium text-foreground underline underline-offset-4"
                             >
                                 설정 → 개인정보
                             </Link>
@@ -318,7 +319,7 @@ export function PrivacyPage() {
                         <dd className="mt-2 text-sm leading-6">
                             <a
                                 href="mailto:yangsijun5528@gmail.com"
-                                className="font-medium text-primary underline-offset-4 hover:underline"
+                                className="inline-flex min-h-(--hit-area-min) items-center font-medium text-primary underline-offset-4 hover:underline"
                             >
                                 yangsijun5528@gmail.com
                             </a>
@@ -327,14 +328,12 @@ export function PrivacyPage() {
                     <p className="text-sm leading-6 text-muted-foreground">
                         공개 이슈에는 개인정보를 적지 마세요.
                     </p>
-                    <a
+                    <ExternalLink
                         href="https://github.com/YangSiJun528/jungle-bell"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex text-sm font-medium text-primary underline-offset-4 hover:underline"
+                        className="inline-flex min-h-(--hit-area-min) items-center text-sm font-medium text-primary underline-offset-4 hover:underline"
                     >
                         프로젝트 문의 경로 보기
-                    </a>
+                    </ExternalLink>
                 </PolicySection>
 
                 <PolicySection id="changes-title" title="7. 개인정보 처리방침의 변경">

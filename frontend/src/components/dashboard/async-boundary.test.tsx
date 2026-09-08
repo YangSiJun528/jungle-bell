@@ -3,6 +3,7 @@ import {readFileSync} from 'node:fs';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, it} from 'vitest';
 
+import {AsyncBoundary} from './async-boundary';
 import {MealHistorySkeleton, PageSkeleton} from './async-state';
 
 const source = readFileSync(new URL('./async-boundary.tsx', import.meta.url), 'utf8');
@@ -24,5 +25,28 @@ describe('AsyncBoundary', () => {
         expect(page).toContain('data-slot="skeleton"');
         expect(meals).toContain('aria-label="지난 급식 기록을 불러오는 중"');
         expect(meals).toContain('lg:grid-cols-[minmax(17rem,20rem)_minmax(0,1fr)]');
+    });
+
+    it('header prop으로 이름 붙은 지역(role=region)을 제공한다', () => {
+        const markup = renderToStaticMarkup(
+            <AsyncBoundary header="대시보드 섹션">
+                <div>로딩 콘텐츠</div>
+            </AsyncBoundary>,
+        );
+
+        expect(markup).toContain('role="region"');
+        expect(markup).toContain('aria-label="대시보드 섹션"');
+    });
+
+    it('외부 헤더 id를 사용해 지역 라벨링이 가능하다', () => {
+        const markup = renderToStaticMarkup(
+            <AsyncBoundary regionLabelledBy="dashboard-heading">
+                <h2 id="dashboard-heading">대시보드 헤더</h2>
+                <div>로딩 콘텐츠</div>
+            </AsyncBoundary>,
+        );
+
+        expect(markup).toContain('role="region"');
+        expect(markup).toContain('aria-labelledby="dashboard-heading"');
     });
 });

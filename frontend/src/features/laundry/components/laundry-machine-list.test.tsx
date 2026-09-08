@@ -1,9 +1,13 @@
+import {readFileSync} from 'node:fs';
+
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, it} from 'vitest';
 
 import type {DashboardLaundryMachine} from '@/domain/laundry/capacity';
 
 import {LaundryMachineList} from './laundry-machine-list';
+
+const source = readFileSync(new URL('./laundry-machine-list.tsx', import.meta.url), 'utf8');
 
 const NOW_MS = Date.parse('2026-08-11T03:00:00.000Z');
 
@@ -154,17 +158,18 @@ describe('LaundryMachineList', () => {
         expect(markup).toContain(
             '<h3 class="text-base leading-none font-semibold">1번 워시타워</h3>',
         );
-        expect(markup).toContain('auto-rows-fr');
+        expect(markup).toContain('items-stretch');
         expect(markup).toContain('md:grid-cols-2');
         expect(markup).toContain('lg:grid-cols-3');
         expect(markup).not.toContain('2xl:grid-cols-3');
+        expect(markup).toContain('flex flex-1 flex-col p-0');
         expect(markup).toContain('grid flex-1 grid-rows-2');
         expect(markup).toContain('data-kind="dryer"');
         expect(markup).toContain('data-kind="washer"');
         expect(markup).not.toContain('min-w-[');
     });
 
-    it('nine wash tower cards share equal outer rows and two internal appliance rows', () => {
+    it('nine wash tower cards keep natural outer rows and equal internal appliance rows', () => {
         const nineMachines = Array.from({length: 9}, (_, index) => ({
             id: `워시타워_${index + 1}`,
             zone:
@@ -177,7 +182,80 @@ describe('LaundryMachineList', () => {
         );
 
         expect(markup.match(/data-laundry-machine-card="true"/gu)).toHaveLength(9);
-        expect(markup).toContain('auto-rows-fr');
+        expect(markup).not.toContain('auto-rows-fr');
+        expect(markup).toContain('items-stretch');
         expect(markup.match(/grid flex-1 grid-rows-2/gu)).toHaveLength(9);
+    });
+
+    it('구역·상태 필터, 문제 우선 정렬, 기기별 accordion을 제공한다', () => {
+        const markup = renderToStaticMarkup(
+            <LaundryMachineList machines={machines} nowMs={NOW_MS} />,
+        );
+
+        const zoneSelect = markup.match(/<select[^>]*aria-label="구역"[^>]*>/u)?.[0];
+        const stateSelect = markup.match(/<select[^>]*aria-label="상태"[^>]*>/u)?.[0];
+        const priorityRow = markup.match(/<label[^>]*data-laundry-priority-row="true"[^>]*>/u)?.[0];
+        const priorityControl = markup.match(
+            /<input[^>]*data-laundry-priority-control="true"[^>]*>/u,
+        )?.[0];
+        const accordion = markup.match(
+            /<button[^>]*aria-label="1번 워시타워 상세 접기"[^>]*>/u,
+        )?.[0];
+
+        expect(markup).toContain('aria-label="구역"');
+        expect(markup).toContain('aria-label="상태"');
+        expect(markup).toContain('문제 우선 정렬');
+        expect(markup).toContain('aria-expanded="true"');
+        expect(markup).toContain('상세 접기');
+        expect(zoneSelect).toContain('min-h-11');
+        expect(zoneSelect).toContain('focus-visible:ring');
+        expect(stateSelect).toContain('min-h-11');
+        expect(stateSelect).toContain('focus-visible:ring');
+        expect(priorityRow).toContain('min-h-11');
+        expect(priorityRow).toContain('cursor-pointer');
+        expect(priorityControl).toContain('focus-visible:ring');
+        expect(accordion).toContain('min-h-11');
+        expect(accordion).toContain('focus-visible:ring');
+        expect(accordion).toContain('aria-expanded="true"');
+        expect(accordion).toMatch(/aria-controls="[^"]+"/u);
+        expect(source).not.toContain('if (views.length === 0) return null');
+        expect(source).toContain('필터 조건에 맞는 기기가 없습니다.');
+    });
+
+    it('필터 라벨과 상태 안내는 본문 크기를 사용하고 상태를 글자와 아이콘으로 같이 표시한다', () => {
+        const markup = renderToStaticMarkup(
+            <LaundryMachineList machines={machines} nowMs={NOW_MS} showRiskWarnings />,
+        );
+        const filterLabels = (markup.match(/<span\b[^>]*>/gu) ?? []).filter((tag) =>
+            tag.includes('data-laundry-filter-label="true"'),
+        );
+
+        expect(filterLabels).toHaveLength(2);
+        for (const label of filterLabels) {
+            expect(label).toContain('text-base');
+            expect(label).toContain('leading-6');
+        }
+        expect(markup).toMatch(
+            /data-laundry-appliance-status="true"[^>]*data-state="error"[\s\S]*lucide-circle-alert[\s\S]*배관 에러/u,
+        );
+        expect(markup).toMatch(
+            /data-laundry-risk-notice="true"[^>]*data-risk-level="caution"[\s\S]*주의/u,
+        );
+    });
+
+    it('stale 상세 카드마다 실시간 데이터가 아님을 표시한다', () => {
+        const markup = renderToStaticMarkup(
+            <LaundryMachineList
+                dataStale
+                machines={machines}
+                nowMs={NOW_MS}
+                staleLabel="오전 11:30"
+            />,
+        );
+
+        expect(markup).toContain('실시간 정보가 아닙니다 · 마지막 정상 시각 오전 11:30');
+        expect(markup.match(/data-data-state="stale"/gu)).toHaveLength(2);
+        expect(markup).toMatch(/실시간 정보가 아닙니다[^<]*<\/p>/u);
+        expect(source).toContain('text-base leading-6');
     });
 });

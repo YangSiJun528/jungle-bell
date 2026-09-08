@@ -13,6 +13,7 @@ const dashboardRouter = source('./app/dashboard-router.tsx');
 const routePages = source('./app/dashboard-route-pages.tsx');
 const context = source('./app/dashboard-context.tsx');
 const personalAccountGate = source('./app/personal-account-gate.tsx');
+const platformAuthenticationGate = source('./app/platform-authentication-gate.tsx');
 const personalFeatureSlot = source('./app/personal-feature-slot.tsx');
 const providers = source('./app/dashboard-providers.tsx');
 const desktopAttendanceEvent = source('./app/desktop-attendance-event.ts');
@@ -106,7 +107,7 @@ test('브라우저와 데스크톱은 동일한 SPA 경로 정책을 사용한�
     assert.match(shell, /<SidebarFooter className="border-t border-sidebar-border">/);
     assert.match(shell, /aria-label="개인 도구"/);
     assert.match(shell, /data-navigation-group="utilities"/);
-    assert.match(shell, /md:hidden[\s\S]*aria-label=\{notificationAriaLabel/);
+    assert.match(shell, /lg:hidden[\s\S]*aria-label=\{notificationAriaLabel/);
     assert.match(shell, /aria-label="설정"/);
     assert.match(shell, /aria-haspopup="dialog"/);
     assert.match(shell, /overlayClassName="backdrop-blur-sm"/);
@@ -123,8 +124,8 @@ test('홈은 PC·PWA 출석 요약과 일반 웹 앱 소개를 구분하고 오�
     assert.match(home, /<JungleCampusSummary\s*\/>[\s\S]*<AppShowcaseCard\s*\/>/);
     assert.doesNotMatch(home, /onRequestInstall/);
     assert.match(appShowcase, /data-app-showcase-card="true"/);
-    assert.match(appShowcase, /PC·모바일 앱을 설치해[\s\S]*더 편리하게 사용하세요\./);
-    assert.match(appShowcase, /whitespace-nowrap[\s\S]*PC·모바일 앱을 설치해[\s\S]*<br\s*\/>/);
+    assert.match(appShowcase, /PC·PWA를 설치해[\s\S]*더 편리하게 사용하세요\./);
+    assert.match(appShowcase, /whitespace-nowrap[\s\S]*PC·PWA를 설치해[\s\S]*<br\s*\/>/);
     assert.match(
         appShowcase,
         /출석 상태를 확인하고, 출석·식사·세탁 생활 알림과 앞으로 추가될 편의 기능까지\s+이용할 수 있어요\./,
@@ -209,6 +210,11 @@ test('출석 화면은 조회 상태만 관리하고 공유 알림 설정을 중
 });
 
 test('세탁 화면은 워시타워 상태표와 공통 계정 기능을 함께 제공한다', () => {
+    const personalAlerts = laundry.slice(
+        laundry.indexOf('function PersonalLaundryAlerts'),
+        laundry.indexOf('function LaundryPageContent'),
+    );
+
     assert.match(laundry, /<WashTowerGrid[\s\S]*machines=\{snapshot\.machines\}/u);
     assert.match(laundry, /showRiskIndicators=\{showRisk\}/u);
     assert.match(laundry, /워시타워 상태/);
@@ -228,7 +234,12 @@ test('세탁 화면은 워시타워 상태표와 공통 계정 기능을 함께 
     assert.match(washTower, /data-zone=\{machine\.zone\}/);
     assert.match(washTower, /overflow-x-auto/);
 
-    assert.match(laundry, /<PersonalLaundrySection machines=\{snapshot\.machines\}\s*\/>/);
+    assert.match(personalAlerts, /<PersonalLaundrySection\b/);
+    assert.match(personalAlerts, /machines=\{snapshot\.machines\}/);
+    assert.match(
+        personalAlerts,
+        /canCreateWatch=\{status\.allowWatchCreation \? undefined : false\}/,
+    );
     assert.doesNotMatch(laundry, /use(?:Query|Mutation|QueryClient)/);
     assert.doesNotMatch(laundry, /api\.(?:list|create|delete|join|leave)Laundry/);
     assert.doesNotMatch(laundry, /as PersonalSurface/);
@@ -240,8 +251,9 @@ test('세탁 화면은 워시타워 상태표와 공통 계정 기능을 함께 
     assert.match(personalLaundry, /enabled: attendanceReady/);
     assert.match(personalLaundry, /<PersonalFeatureSlot>/);
     assert.match(personalFeatureSlot, /personalAccess\.status === 'connected' \? children : null/);
-    assert.match(personalAccountGate, /LMS 로그인이 필요합니다/);
-    assert.match(personalAccountGate, /계정 연결이 필요합니다/);
+    assert.match(personalAccountGate, /<PlatformAuthenticationGate>/);
+    assert.match(platformAuthenticationGate, /LMS 로그인이 필요합니다/);
+    assert.match(platformAuthenticationGate, /계정 연결이 필요합니다/);
 });
 
 test('설정 알림 탭은 연결된 기기의 출석·급식 설정을 함께 제공한다', () => {
@@ -254,6 +266,7 @@ test('설정 알림 탭은 연결된 기기의 출석·급식 설정을 함께 �
 
     assert.match(attendancePreferences, /api\.getAttendancePreferences\(\)/);
     assert.match(attendancePreferences, /api\.updateAttendancePreferences\(input\)/);
+    assert.match(attendancePreferences, /<SwitchRow/);
     for (const label of [
         '출석 알림 사용',
         '학습 시작 알림',
@@ -269,6 +282,7 @@ test('설정 알림 탭은 연결된 기기의 출석·급식 설정을 함께 �
 
     assert.match(mealPreferences, /api\.getMealPreferences\(\)/);
     assert.match(mealPreferences, /api\.updateMealPreferences\(input\)/);
+    assert.match(mealPreferences, /<SwitchRow/);
     for (const label of ['급식 알림 설정', '중식', '석식']) {
         assert.match(mealPreferences, new RegExp(label));
     }

@@ -1,7 +1,11 @@
 import {describe, expect, it, vi} from 'vitest';
 
 import type {NativeBridge, PwaCapabilityAdapter} from './contracts';
-import {PlatformCapabilityUnavailableError, unavailableEventAdapter} from './contracts';
+import {
+    PlatformCapabilityUnavailableError,
+    unavailableEventAdapter,
+    unavailablePwaAdapter,
+} from './contracts';
 import {createTauriPlatformAdapter} from './tauri/adapter';
 import {createWebPlatformAdapter} from './web/adapter';
 
@@ -35,6 +39,9 @@ function pwaAdapter(installed: boolean): PwaCapabilityAdapter {
     return {
         available: true,
         installed,
+        getServiceWorkerContainer: vi.fn<PwaCapabilityAdapter['getServiceWorkerContainer']>(
+            () => null,
+        ),
         registerServiceWorker: vi.fn<PwaCapabilityAdapter['registerServiceWorker']>(),
         preparePush: vi.fn<PwaCapabilityAdapter['preparePush']>(async () => undefined),
         subscribeInstallPrompt: vi.fn<PwaCapabilityAdapter['subscribeInstallPrompt']>(
@@ -42,10 +49,24 @@ function pwaAdapter(installed: boolean): PwaCapabilityAdapter {
         ),
         isMobileInstallClient: vi.fn<PwaCapabilityAdapter['isMobileInstallClient']>(() => false),
         subscribePush: vi.fn<PwaCapabilityAdapter['subscribePush']>(),
+        getPushSubscription: vi.fn<PwaCapabilityAdapter['getPushSubscription']>(),
+        getServiceWorkerStatus: vi.fn<PwaCapabilityAdapter['getServiceWorkerStatus']>(),
+        unsubscribePush: vi.fn<PwaCapabilityAdapter['unsubscribePush']>(),
     };
 }
 
 describe('PlatformAdapter', () => {
+    it('사용할 수 없는 PWA Push 조회와 해제 계약은 capability 오류로 실패한다', async () => {
+        const pwa = unavailablePwaAdapter();
+
+        await expect(pwa.getPushSubscription()).rejects.toEqual(
+            new PlatformCapabilityUnavailableError('webPush'),
+        );
+        await expect(pwa.unsubscribePush('https://push.example/subscription')).rejects.toEqual(
+            new PlatformCapabilityUnavailableError('webPush'),
+        );
+    });
+
     it('일반 웹에서는 개인 인증과 Push를 주입하지 않는다', async () => {
         const platform = createWebPlatformAdapter(pwaAdapter(false));
 

@@ -30,6 +30,7 @@ import {
     parseDesktopTestNotificationResult,
     parseNotificationInboxSnapshot,
     pushPublicKeyResultSchema,
+    pushSubscriptionIdSchema,
     pushSubscriptionInputSchema,
     pushSubscriptionResultSchema,
     qrPairingClaimInputSchema,
@@ -150,7 +151,8 @@ export interface DashboardApi extends DashboardPersonalApi, DesktopSettingsAdapt
     sendDesktopTestNotification(): Promise<DesktopTestNotificationResult>;
     sendMobileTestNotification(): Promise<number>;
     getPushPublicKey(): Promise<string>;
-    registerPushSubscription(subscription: PushSubscriptionJSON): Promise<void>;
+    registerPushSubscription(subscription: PushSubscriptionJSON): Promise<string>;
+    unregisterPushSubscription(subscriptionId: string): Promise<void>;
 }
 
 const historyMonthSchema = z.string().regex(/^\d{4}-(?:0[1-9]|1[0-2])$/u);
@@ -428,10 +430,20 @@ export function createDashboardApi(options: DashboardApiOptions = {}): Dashboard
                 endpoint: subscription.endpoint,
                 keys: subscription.keys,
             });
-            await accountValue(pushSubscriptionResultSchema, '/api/me/push/subscriptions', {
-                method: 'PUT',
-                body: JSON.stringify(body),
-            });
+            return (
+                await accountValue(pushSubscriptionResultSchema, '/api/me/push/subscriptions', {
+                    method: 'PUT',
+                    body: JSON.stringify(body),
+                })
+            ).subscriptionId;
+        },
+
+        async unregisterPushSubscription(subscriptionId) {
+            const validatedSubscriptionId = parseInput(pushSubscriptionIdSchema, subscriptionId);
+            await accountNoContent(
+                `/api/me/push/subscriptions/${encodeURIComponent(validatedSubscriptionId)}`,
+                {method: 'DELETE'},
+            );
         },
     };
 }
