@@ -175,19 +175,37 @@ function desktopMobileSessionCount(
     return 'unavailable';
 }
 
-function desktopUpdateState(
-    query: ReturnType<typeof useDesktopUpdateQuery>['update'],
-): DesktopUpdateState {
+type DesktopUpdateQueryState = Pick<
+    ReturnType<typeof useDesktopUpdateQuery>['update'],
+    'data' | 'dataUpdatedAt' | 'isError' | 'isPending'
+>;
+
+export function desktopUpdateState(query: DesktopUpdateQueryState): DesktopUpdateState {
     if (query.data) {
         const checkedAt =
             query.dataUpdatedAt > 0 ? new Date(query.dataUpdatedAt).toISOString() : null;
-        if (!query.data.availableVersion) return {kind: 'latest', checkedAt};
-        return {
-            kind: 'available',
-            availableVersion: query.data.availableVersion,
-            mandatory: query.data.mandatory,
-            checkedAt,
-        };
+        const {availableVersion, policy, status} = query.data;
+        switch (status) {
+            case 'checking':
+                return {kind: 'checking'};
+            case 'failed':
+                return {kind: 'error'};
+            case 'latest':
+                return {kind: 'latest', checkedAt};
+            case 'optional':
+            case 'mandatory':
+            case 'downloading':
+            case 'verifying':
+            case 'installing':
+            case 'restart-required':
+                if (availableVersion === null) return {kind: 'latest', checkedAt};
+                return {
+                    kind: 'available',
+                    availableVersion,
+                    mandatory: policy === 'mandatory',
+                    checkedAt,
+                };
+        }
     }
     if (query.isError) return {kind: 'error'};
     if (query.isPending) return {kind: 'checking'};
