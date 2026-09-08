@@ -3,13 +3,18 @@ import {readFileSync} from 'node:fs';
 import {describe, expect, test} from 'vitest';
 
 const source = readFileSync(new URL('./attendance-page.tsx', import.meta.url), 'utf8');
+const stateSource = readFileSync(new URL('./attendance-page-state.ts', import.meta.url), 'utf8');
 const normalizedSource = source.replace(/\s+/gu, ' ');
+const combinedSource = `${source}\n${stateSource}`;
 
 describe('AttendancePage LMS gate', () => {
     test('인증 전에는 출석 결과 대신 로그인 UI를 우선 표시한다', () => {
         expect(source).toContain('useDashboardAccount()');
-        expect(source).toContain("account.status.lmsAuthentication === 'required'");
-        expect(source).toContain("refreshAttendance.error.message === 'LMS_AUTH_REQUIRED'");
+        expect(stateSource).toContain("accountStatus.lmsAuthentication === 'required'");
+        expect(normalizedSource).toContain(
+            'refreshAttendance.isError ? refreshAttendance.error.message : null',
+        );
+        expect(source).toContain("errorMessage === 'LMS_AUTH_REQUIRED'");
         expect(source).toContain('LMS 로그인');
     });
 
@@ -20,13 +25,15 @@ describe('AttendancePage LMS gate', () => {
     });
 
     test('일반 웹에서는 출석 로딩 대신 앱 연결 안내를 표시한다', () => {
-        expect(source).toContain("account.personalAccess.status === 'not-applicable'");
-        expect(source).toContain('출석은 PC 앱 또는 연결된 PWA에서 확인할 수 있습니다.');
+        expect(stateSource).toContain("personalAccessStatus === 'not-applicable'");
+        expect(stateSource).toContain('출석은 PC 앱 또는 연결된 PWA에서 확인할 수 있습니다.');
     });
 
     test('PC 로컬 관측이 있으면 서버 동기화와 무관하게 출석을 표시한다', () => {
-        expect(source).toContain('desktopLocalAttendanceAvailable');
+        expect(stateSource).toContain('desktopLocalAttendanceAvailable');
         expect(normalizedSource).toContain('다른 기기 동기화 대기 중');
-        expect(source).toContain("detail.source === 'desktop' ? '마지막 확인' : '마지막 동기화'");
+        expect(combinedSource).toContain(
+            "detail.source === 'desktop' ? '마지막 확인' : '마지막 동기화'",
+        );
     });
 });
