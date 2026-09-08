@@ -92,10 +92,26 @@ describe('app status producer observations', () => {
         expect(
             pushStateFromRuntime(
                 'granted',
-                {status: 'matched-registered'},
+                {status: 'matched-registered', serverEvidence: 'registration-response'},
                 {state: {status: 'arrived'}},
             ),
         ).toEqual({status: 'arrived'});
+        expect(
+            pushStateFromRuntime(
+                'granted',
+                {status: 'matched-registration-unverified'},
+                {state: {status: 'arrived'}},
+            ),
+        ).toEqual({status: 'subscribed-local'});
+        expect(
+            pushStateFromRuntime(
+                'granted',
+                {status: 'matched-registered'},
+                {
+                    state: {status: 'arrived'},
+                },
+            ),
+        ).toEqual({status: 'error'});
     });
 
     test('플랫폼 service worker 관측에 현재 build version을 붙인다', () => {

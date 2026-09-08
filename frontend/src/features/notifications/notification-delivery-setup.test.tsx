@@ -70,7 +70,9 @@ describe('notification delivery setup', () => {
     test('재시작 때 저장 메타데이터와 실제 로컬 구독을 대조해 상태를 복구한다', () => {
         expect(source).toContain('loadPushSubscriptionReconciliation({');
         expect(source).toContain('restoredPushDeliveryState(');
-        expect(source).toContain('마지막으로 확인한 서버 등록과 일치합니다.');
+        expect(source).toContain('이번 서버 등록 응답과 일치합니다.');
+        expect(source).toContain('현재 서버 등록은 확인되지 않았습니다.');
+        expect(source).toContain("serverEvidence: 'registration-response'");
         expect(source).toContain('서버 등록 ID가 없어 푸시 정리 완료로 확인하지 않았습니다.');
         expect(source).toContain('PUSH_SUBSCRIPTION_LIFECYCLE_QUERY_KEY');
         expect(source).toContain('notificationPermissionFromRuntime');

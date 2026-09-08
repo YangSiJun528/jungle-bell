@@ -81,6 +81,7 @@ export type PushLifecycleRuntimeStatus =
     | 'checking'
     | 'error'
     | 'matched-registered'
+    | 'matched-registration-unverified'
     | 'matched-server-removed'
     | 'local-only'
     | 'record-only'
@@ -91,13 +92,19 @@ export type PushLifecycleRuntimeStatus =
 
 export function pushStateFromRuntime(
     permission: AppNotificationPermission,
-    lifecycle: {status: PushLifecycleRuntimeStatus},
+    lifecycle: {
+        status: PushLifecycleRuntimeStatus;
+        serverEvidence?: 'registration-response';
+    },
     lastTest: {state: PushState} | null,
 ): PushState {
     if (permission === 'unsupported') return {status: 'unsupported'};
     if (permission === 'denied') return {status: 'denied'};
     if (permission === 'default') return {status: 'permission-default'};
-    if (lifecycle.status === 'matched-registered') {
+    if (
+        lifecycle.status === 'matched-registered' &&
+        lifecycle.serverEvidence === 'registration-response'
+    ) {
         if (
             lastTest &&
             ['test-sending', 'arrived', 'not-arrived', 'error'].includes(lastTest.state.status)
@@ -106,7 +113,11 @@ export function pushStateFromRuntime(
         }
         return {status: 'registered-server'};
     }
-    if (lifecycle.status === 'matched-server-removed' || lifecycle.status === 'local-only') {
+    if (
+        lifecycle.status === 'matched-registration-unverified' ||
+        lifecycle.status === 'matched-server-removed' ||
+        lifecycle.status === 'local-only'
+    ) {
         return {status: 'subscribed-local'};
     }
     return {status: 'error'};

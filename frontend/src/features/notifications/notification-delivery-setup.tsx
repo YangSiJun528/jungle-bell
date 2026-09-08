@@ -84,7 +84,9 @@ function pushSubscriptionStorage(): PushSubscriptionLifecycleStorage {
 function pushReconciliationMessage(state: PushSubscriptionReconciliation | undefined): string {
     switch (state?.status) {
         case 'matched-registered':
-            return '현재 로컬 구독이 마지막으로 확인한 서버 등록과 일치합니다.';
+            return '현재 로컬 구독이 이번 서버 등록 응답과 일치합니다.';
+        case 'matched-registration-unverified':
+            return '저장된 등록 ID와 로컬 구독은 일치하지만 현재 서버 등록은 확인되지 않았습니다. 푸시를 재등록해 확인하세요.';
         case 'matched-server-removed':
             return '서버 등록은 제거됐지만 로컬 구독 해제가 남았습니다. 푸시 끄기를 다시 시도하세요.';
         case 'local-only':
@@ -219,6 +221,7 @@ function useNotificationDeliverySetup() {
             client.setQueryData(PUSH_SUBSCRIPTION_LIFECYCLE_QUERY_KEY, {
                 status: 'matched-registered',
                 metadata,
+                serverEvidence: 'registration-response',
             } satisfies PushSubscriptionReconciliation);
             transitionPushDelivery({type: 'server-registered'});
             return preparation;

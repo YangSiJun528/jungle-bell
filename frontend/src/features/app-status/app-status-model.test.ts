@@ -188,6 +188,7 @@ describe('app status rows', () => {
             pushLifecycle: {
                 status: 'matched-registered',
                 subscriptionId: `jbps_${'a'.repeat(64)}`,
+                serverEvidence: 'registration-response',
             },
             lastTest: {
                 version: 1,
@@ -216,6 +217,31 @@ describe('app status rows', () => {
             statusText: 'v0.5.9 활성',
         });
         expect(appStatusRows(input).every(({status}) => status !== 'unavailable')).toBe(true);
+    });
+
+    test('저장 기록만 일치한 서버 푸시 등록은 ready로 표시하지 않는다', () => {
+        const input: AppStatusInput = {
+            surface: 'pwa',
+            authentication: {status: 'authenticated'},
+            sessionExpiresAt: '2026-09-09T01:00:00.000Z',
+            notificationPermission: 'granted',
+            pushState: {status: 'subscribed-local'},
+            pushLifecycle: {
+                status: 'matched-registration-unverified',
+                subscriptionId: `jbps_${'a'.repeat(64)}`,
+            },
+            lastTest: null,
+            serviceWorker: {status: 'active', version: '0.5.9', scriptUrl: '/sw.js'},
+        };
+
+        expect(row(input, 'local-push')).toMatchObject({
+            status: 'attention',
+            statusText: '구독됨',
+        });
+        expect(row(input, 'server-registration')).toMatchObject({
+            status: 'attention',
+            statusText: '서버 확인 필요',
+        });
     });
 
     test('PWA의 누락·불일치·미등록 상태마다 실행 가능한 복구 CTA를 제공한다', () => {

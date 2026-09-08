@@ -50,6 +50,7 @@ export type PwaPushLifecycleStatus =
     | 'checking'
     | 'error'
     | 'matched-registered'
+    | 'matched-registration-unverified'
     | 'matched-server-removed'
     | 'local-only'
     | 'record-only'
@@ -61,6 +62,7 @@ export type PwaPushLifecycleStatus =
 export interface PwaPushLifecycleObservation {
     status: PwaPushLifecycleStatus;
     subscriptionId?: string;
+    serverEvidence?: 'registration-response';
 }
 
 export interface PwaAppStatusInput {
@@ -605,17 +607,20 @@ function localPushRow(input: PwaAppStatusInput): AppStatusRowModel {
     }
     if (
         status === 'matched-registered' ||
+        status === 'matched-registration-unverified' ||
         status === 'matched-server-removed' ||
         status === 'local-only'
     ) {
+        const serverVerified =
+            status === 'matched-registered' &&
+            input.pushLifecycle.serverEvidence === 'registration-response';
         return {
             ...base,
-            status: status === 'matched-registered' ? 'ready' : 'attention',
+            status: serverVerified ? 'ready' : 'attention',
             statusText: '구독됨',
-            description:
-                status === 'matched-registered'
-                    ? '현재 브라우저의 로컬 구독이 저장된 서버 등록과 일치합니다.'
-                    : '로컬 구독은 남아 있지만 서버 등록을 다시 확인해야 합니다.',
+            description: serverVerified
+                ? '현재 브라우저의 로컬 구독이 저장된 서버 등록과 일치합니다.'
+                : '로컬 구독은 남아 있지만 서버 등록을 다시 확인해야 합니다.',
         };
     }
     if (status === 'none' || status === 'record-only') {
@@ -649,12 +654,25 @@ function serverRegistrationRow(input: PwaAppStatusInput): AppStatusRowModel {
             description: '저장된 서버 등록 ID와 로컬 구독을 대조하고 있습니다.',
         };
     }
-    if (status === 'matched-registered' && input.pushLifecycle.subscriptionId) {
+    if (
+        status === 'matched-registered' &&
+        input.pushLifecycle.subscriptionId &&
+        input.pushLifecycle.serverEvidence === 'registration-response'
+    ) {
         return {
             ...base,
             status: 'ready',
             statusText: `등록됨 · ${input.pushLifecycle.subscriptionId.slice(-8)}`,
-            description: '이 기기의 저장된 서버 등록 ID가 현재 로컬 구독과 일치합니다.',
+            description: '이 기기의 로컬 구독이 이번 서버 등록 응답과 일치합니다.',
+        };
+    }
+    if (status === 'matched-registration-unverified' || status === 'matched-registered') {
+        return {
+            ...base,
+            status: 'attention',
+            statusText: '서버 확인 필요',
+            description:
+                '저장된 등록 ID와 로컬 구독은 일치하지만 현재 서버 등록은 확인되지 않았습니다. 푸시를 재등록해 주세요.',
         };
     }
     if (status === 'matched-server-removed') {

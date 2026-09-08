@@ -24,6 +24,7 @@ export interface PushDeliveryState {
 
 export type RestoredPushSubscriptionStatus =
     | 'matched-registered'
+    | 'matched-registration-unverified'
     | 'matched-server-removed'
     | 'local-only'
     | 'record-only'
@@ -69,7 +70,12 @@ export function restoredPushDeliveryState(
             arrival: 'waiting',
         };
     }
-    if (status === 'matched-server-removed' || status === 'local-only' || status === 'mismatch') {
+    if (
+        status === 'matched-registration-unverified' ||
+        status === 'matched-server-removed' ||
+        status === 'local-only' ||
+        status === 'mismatch'
+    ) {
         return {
             permission: 'complete',
             localSubscription: 'complete',

@@ -53,9 +53,12 @@ function lifecycleObservation(input: {
     if (input.isError) return {status: 'error'};
     if (!input.data) return {status: input.isPending ? 'checking' : 'error'};
     const metadata = 'metadata' in input.data ? input.data.metadata : undefined;
-    return metadata
-        ? {status: input.data.status, subscriptionId: metadata.subscriptionId}
-        : {status: input.data.status};
+    const serverEvidence =
+        input.data.status === 'matched-registered' ? input.data.serverEvidence : undefined;
+    if (!metadata) return {status: input.data.status};
+    return serverEvidence
+        ? {status: input.data.status, subscriptionId: metadata.subscriptionId, serverEvidence}
+        : {status: input.data.status, subscriptionId: metadata.subscriptionId};
 }
 
 function currentNotificationPermission() {

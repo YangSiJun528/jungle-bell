@@ -107,12 +107,12 @@ describe('push subscription metadata', () => {
         assert.match(metadata.endpointFingerprint, /^sha256:[0-9a-f]{64}$/u);
     });
 
-    test('reconciles restart state without treating absence as verified cleanup', async () => {
+    test('reconciles restart state without treating persisted records as current server evidence', async () => {
         const metadata = await registeredMetadata();
 
         assert.deepEqual(
             await reconcilePushSubscriptionState({status: 'found', metadata}, localSubscription()),
-            {status: 'matched-registered', metadata},
+            {status: 'matched-registration-unverified', metadata},
         );
         assert.deepEqual(
             await reconcilePushSubscriptionState(
@@ -157,7 +157,7 @@ describe('push subscription metadata', () => {
 
         assert.deepEqual(
             await loadPushSubscriptionReconciliation({storage, getLocalSubscription}),
-            {status: 'matched-registered', metadata},
+            {status: 'matched-registration-unverified', metadata},
         );
         assert.equal(getLocalSubscription.mock.calls.length, 1);
     });
@@ -288,7 +288,7 @@ describe('push subscription cleanup', () => {
         assert.deepEqual(result, {
             status: 'incomplete',
             phase: 'server-removal',
-            progress: {metadata: 'registered', server: 'registered', local: 'present'},
+            progress: {metadata: 'registered', server: 'unknown', local: 'present'},
             error: {code: 'server-unregister-failed', cause: failure},
         });
         assert.equal(unsubscribeLocal.mock.calls.length, 0);
@@ -346,6 +346,75 @@ describe('push subscription cleanup', () => {
         }
         assert.equal(unsubscribeLocal.mock.calls.length, 0);
         assert.deepEqual(readPushSubscriptionMetadata(storage), {status: 'found', metadata});
+    });
+
+    test('DELETE 성공 뒤 phase 저장 실패와 reload가 서버 등록 ready로 복원되지 않는다', async () => {
+        const storage = new MemoryStorage();
+        const metadata = await storeRegistered(storage);
+        const phaseWriteFailure = new Error('QUOTA_EXCEEDED');
+        const originalSetItem = storage.setItem.bind(storage);
+        let failServerRemovedWrite = true;
+        storage.setItem = (key, value) => {
+            const candidate = JSON.parse(value) as {cleanupPhase?: unknown};
+            if (candidate.cleanupPhase === 'server-removed' && failServerRemovedWrite) {
+                throw phaseWriteFailure;
+            }
+            originalSetItem(key, value);
+        };
+        let serverRegistrationExists = true;
+        const unregisterServer = vi.fn<(id: string) => Promise<void>>(async () => {
+            if (!serverRegistrationExists) throw new Error('PUSH_SUBSCRIPTION_NOT_FOUND');
+            serverRegistrationExists = false;
+        });
+        const unsubscribeLocal = unsubscribeLocalMock();
+
+        const first = await cleanupPushSubscription({
+            storage,
+            getLocalSubscription: async () => localSubscription(),
+            unregisterServer,
+            unsubscribeLocal,
+        });
+
+        assert.deepEqual(first, {
+            status: 'incomplete',
+            phase: 'server-phase-persistence',
+            progress: {metadata: 'registered', server: 'removed', local: 'present'},
+            error: {
+                code: 'server-phase-persist-failed',
+                error: {
+                    status: 'failed',
+                    error: {code: 'storage-write-failed', cause: phaseWriteFailure},
+                },
+            },
+        });
+        assert.equal(unsubscribeLocal.mock.calls.length, 0);
+        assert.deepEqual(readPushSubscriptionMetadata(storage), {status: 'found', metadata});
+
+        const afterReload = await loadPushSubscriptionReconciliation({
+            storage,
+            getLocalSubscription: async () => localSubscription(),
+        });
+        assert.deepEqual(afterReload, {
+            status: 'matched-registration-unverified',
+            metadata,
+        });
+
+        failServerRemovedWrite = false;
+        const retry = await cleanupPushSubscription({
+            storage,
+            getLocalSubscription: async () => localSubscription(),
+            unregisterServer,
+            unsubscribeLocal,
+        });
+
+        assert.deepEqual(retry, {
+            status: 'complete',
+            phase: 'complete',
+            progress: {metadata: 'cleared', server: 'removed', local: 'unsubscribed'},
+        });
+        assert.equal(unregisterServer.mock.calls.length, 2);
+        assert.equal(unsubscribeLocal.mock.calls.length, 1);
+        assert.equal(readPushSubscriptionMetadata(storage).status, 'missing');
     });
 
     test('retry from server-removed skips server deletion and finishes local cleanup', async () => {

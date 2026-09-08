@@ -154,7 +154,12 @@ export async function matchesPushSubscriptionEndpoint(
 }
 
 export type PushSubscriptionReconciliation =
-    | {status: 'matched-registered'; metadata: PushSubscriptionMetadata}
+    | {
+          status: 'matched-registered';
+          metadata: PushSubscriptionMetadata;
+          serverEvidence: 'registration-response';
+      }
+    | {status: 'matched-registration-unverified'; metadata: PushSubscriptionMetadata}
     | {status: 'matched-server-removed'; metadata: PushSubscriptionMetadata}
     | {status: 'local-only'}
     | {status: 'record-only'; metadata: PushSubscriptionMetadata}
@@ -197,7 +202,7 @@ export async function reconcilePushSubscriptionState(
     }
     if (!matches) return {status: 'mismatch', metadata: metadataResult.metadata};
     return metadataResult.metadata.cleanupPhase === 'registered'
-        ? {status: 'matched-registered', metadata: metadataResult.metadata}
+        ? {status: 'matched-registration-unverified', metadata: metadataResult.metadata}
         : {status: 'matched-server-removed', metadata: metadataResult.metadata};
 }
 
@@ -216,7 +221,7 @@ export async function loadPushSubscriptionReconciliation(options: {
 
 export type PushSubscriptionCleanupProgress = {
     metadata: 'unknown' | 'missing' | 'invalid' | 'registered' | 'server-removed' | 'cleared';
-    server: 'unknown' | 'registered' | 'removed';
+    server: 'unknown' | 'removed';
     local: 'unknown' | 'absent' | 'present' | 'unsubscribed';
 };
 
@@ -312,10 +317,9 @@ export async function cleanupPushSubscription(
                       ? metadataResult.metadata.cleanupPhase
                       : 'unknown',
             server:
-                metadataResult.status === 'found'
-                    ? metadataResult.metadata.cleanupPhase === 'server-removed'
-                        ? 'removed'
-                        : 'registered'
+                metadataResult.status === 'found' &&
+                metadataResult.metadata.cleanupPhase === 'server-removed'
+                    ? 'removed'
                     : 'unknown',
             local: localSubscription ? 'present' : 'absent',
         };
@@ -349,7 +353,7 @@ export async function cleanupPushSubscription(
                 server:
                     reconciliation.metadata.cleanupPhase === 'server-removed'
                         ? 'removed'
-                        : 'registered',
+                        : 'unknown',
                 local: 'present',
             },
             {code: 'endpoint-mismatch'},
@@ -359,7 +363,7 @@ export async function cleanupPushSubscription(
     const metadata = reconciliation.metadata;
     let progress: PushSubscriptionCleanupProgress = {
         metadata: metadata.cleanupPhase,
-        server: metadata.cleanupPhase === 'server-removed' ? 'removed' : 'registered',
+        server: metadata.cleanupPhase === 'server-removed' ? 'removed' : 'unknown',
         local: localSubscription ? 'present' : 'absent',
     };
 

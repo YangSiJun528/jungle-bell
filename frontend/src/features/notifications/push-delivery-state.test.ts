@@ -18,6 +18,7 @@ describe('push delivery state machine', () => {
         });
 
         for (const status of [
+            'matched-registration-unverified',
             'matched-server-removed',
             'local-only',
             'record-only',
