@@ -146,21 +146,21 @@ function HomeMealsSummary() {
             footer={
                 <Button asChild size="sm" variant="link" className="px-0">
                     <Link to="/meals">
-                        전체 식단 보기 <ArrowRight />
+                        전체 급식 보기 <ArrowRight />
                     </Link>
                 </Button>
             }
         >
             {mealsRefreshFailed ? (
                 <p className="text-xs text-amber-700 dark:text-amber-300">
-                    최신 식단을 가져오지 못해 마지막 확인값을 표시합니다.
+                    최신 급식을 가져오지 못해 마지막 확인값을 표시합니다.
                 </p>
             ) : null}
             {todayMealSlots === null ? (
                 <p className="text-sm leading-6 text-muted-foreground">
                     {mealsRefreshFailed
-                        ? '마지막으로 확인한 데이터에는 오늘 식단이 없습니다.'
-                        : '오늘 식단이 아직 게시되지 않았습니다.'}
+                        ? '마지막으로 확인한 데이터에는 오늘 급식이 없습니다.'
+                        : '오늘 급식이 아직 게시되지 않았습니다.'}
                 </p>
             ) : (
                 <HomeMealSlotsList slots={todayMealSlots} />
@@ -174,15 +174,15 @@ function HomeLivingSummaries() {
         <section className="grid gap-4 lg:grid-cols-2" aria-label="오늘의 생활 정보">
             <AsyncBoundary
                 errorTitle="세탁실 요약을 불러오지 못했습니다."
-                errorDescription="식단 요약은 계속 확인할 수 있습니다. 세탁실 정보만 다시 시도해 주세요."
+                errorDescription="급식 요약은 계속 확인할 수 있습니다. 세탁실 정보만 다시 시도해 주세요."
                 fallback={<LoadingState label="세탁실 요약을 불러오는 중" />}
             >
                 <HomeLaundrySummary />
             </AsyncBoundary>
             <AsyncBoundary
-                errorTitle="식단 요약을 불러오지 못했습니다."
-                errorDescription="세탁실 요약은 계속 확인할 수 있습니다. 식단 정보만 다시 시도해 주세요."
-                fallback={<LoadingState label="식단 요약을 불러오는 중" />}
+                errorTitle="급식 요약을 불러오지 못했습니다."
+                errorDescription="세탁실 요약은 계속 확인할 수 있습니다. 급식 정보만 다시 시도해 주세요."
+                fallback={<LoadingState label="급식 요약을 불러오는 중" />}
             >
                 <HomeMealsSummary />
             </AsyncBoundary>

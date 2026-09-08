@@ -114,7 +114,7 @@ describe('MealHistorySection', () => {
         expect(markup).toContain('data-meal-history-overview="true"');
         expect(markup).toContain('data-meal-history-weekly="true"');
         expect(markup).toContain('lg:grid-cols-[minmax(17rem,20rem)_minmax(0,1fr)]');
-        expect(markup).toContain('선택한 날짜 식단');
+        expect(markup).toContain('선택한 날짜 급식');
         expect(markup).toContain('이 달에 저장된 급식 기록이 없습니다.');
         expect(markup).toContain('저장된 주간 급식표가 없습니다.');
     });

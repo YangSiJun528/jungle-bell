@@ -132,7 +132,7 @@ export function MealPreferencesSection() {
                         <BellRing className="size-4 text-primary" />
                         급식 알림
                     </CardTitle>
-                    <CardDescription>새 식단 게시물 중 선택한 식사 시간대만 알림</CardDescription>
+                    <CardDescription>새 급식 게시물 중 선택한 식사 시간대만 알림</CardDescription>
                 </CardHeader>
                 <CardContent>
                     {preferences.isPending && !preferences.data ? (

@@ -108,7 +108,7 @@ function messageForStatus(state: MealsPageLoadState) {
         return {
             title: '현재 오프라인 상태입니다.',
             description:
-                '인터넷 연결이 없어 마지막 정상 식단을 표시합니다. 실시간 정보가 아닙니다.',
+                '인터넷 연결이 없어 마지막 정상 급식을 표시합니다. 실시간 정보가 아닙니다.',
             reason: '네트워크 연결 끊김',
         };
     }
@@ -126,12 +126,12 @@ function messageForStatus(state: MealsPageLoadState) {
         return {
             title: recovered ? '급식 정보가 복구되었습니다.' : '급식 정보가 최신이 아닙니다.',
             description: recovered
-                ? '최근 조회 실패가 해결되어 최신 식단으로 갱신했습니다.'
-                : '마지막 정상 식단을 표시합니다. 실시간 정보가 아닙니다.',
+                ? '최근 조회 실패가 해결되어 최신 급식으로 갱신했습니다.'
+                : '마지막 정상 급식을 표시합니다. 실시간 정보가 아닙니다.',
             reason: recovered
                 ? '정상 조회 재개'
                 : state.reason === 'fetch-failed'
-                  ? '최신 식단 갱신 실패'
+                  ? '최신 급식 갱신 실패'
                   : '급식 데이터 갱신 지연',
         };
     }
@@ -163,7 +163,7 @@ function MealsPageStatusBanner({
             <AsyncState
                 type="empty"
                 title="표시할 급식 정보가 없습니다."
-                description="새 식단이 등록되면 이 화면에 표시됩니다."
+                description="새 급식이 등록되면 이 화면에 표시됩니다."
                 regionLabel="급식 데이터 상태"
             />
         );
@@ -257,7 +257,7 @@ export function MealsPage() {
                                             id="today-meals-title"
                                         >
                                             <Utensils className="size-4 text-primary" />
-                                            오늘 식단
+                                            오늘 급식
                                         </h2>
                                         <p className="mt-1 text-xs text-muted-foreground">
                                             마지막 확인 {lastCheckedLabel}

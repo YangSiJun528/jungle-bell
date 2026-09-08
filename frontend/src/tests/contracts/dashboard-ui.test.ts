@@ -124,8 +124,8 @@ test('홈은 PC·PWA 출석 요약과 일반 웹 앱 소개를 구분하고 오�
     assert.match(home, /<JungleCampusSummary\s*\/>[\s\S]*<AppShowcaseCard\s*\/>/);
     assert.doesNotMatch(home, /onRequestInstall/);
     assert.match(appShowcase, /data-app-showcase-card="true"/);
-    assert.match(appShowcase, /PC·모바일 앱을 설치해[\s\S]*더 편리하게 사용하세요\./);
-    assert.match(appShowcase, /whitespace-nowrap[\s\S]*PC·모바일 앱을 설치해[\s\S]*<br\s*\/>/);
+    assert.match(appShowcase, /PC·PWA를 설치해[\s\S]*더 편리하게 사용하세요\./);
+    assert.match(appShowcase, /whitespace-nowrap[\s\S]*PC·PWA를 설치해[\s\S]*<br\s*\/>/);
     assert.match(
         appShowcase,
         /출석 상태를 확인하고, 출석·식사·세탁 생활 알림과 앞으로 추가될 편의 기능까지\s+이용할 수 있어요\./,

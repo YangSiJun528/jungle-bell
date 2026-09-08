@@ -92,7 +92,7 @@ function MealHistoryMonth({
                         className="mb-3 text-base leading-6 font-semibold"
                         id="selected-history-date-title"
                     >
-                        {activeHistoryDate ? mealDateLabel(activeHistoryDate) : '선택한 날짜 식단'}
+                        {activeHistoryDate ? mealDateLabel(activeHistoryDate) : '선택한 날짜 급식'}
                     </h3>
                     {activeHistoryMeals.length > 0 ? (
                         <div className="grid gap-4 sm:grid-cols-2">

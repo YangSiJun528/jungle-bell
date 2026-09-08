@@ -17,7 +17,7 @@ const purposes = [
     },
     {
         title: '서비스 제공',
-        description: '출석·세탁·식단 콘텐츠 제공, PC·모바일 연결, 알림 기능 제공',
+        description: '출석·세탁·급식 콘텐츠 제공, PC·PWA 연결, 알림 기능 제공',
     },
     {
         title: '통계 분석',

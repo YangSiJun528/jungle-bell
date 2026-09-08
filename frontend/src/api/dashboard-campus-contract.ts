@@ -277,7 +277,7 @@ export type DashboardMealPost = z.output<ReturnType<typeof mealPostSchema>>;
 
 const mealWeekKeySchema = calendarDateSchema.refine(
     (value) => new Date(`${value}T00:00:00.000Z`).getUTCDay() === 1,
-    '주간 식단 키는 월요일이어야 합니다.',
+    '주간 급식 키는 월요일이어야 합니다.',
 );
 
 function currentWeeklyMealMenuSchema(expectedAssetOrigin: string | null) {
@@ -296,7 +296,7 @@ function currentWeeklyMealMenuSchema(expectedAssetOrigin: string | null) {
             ) {
                 context.addIssue({
                     code: 'custom',
-                    message: '현재 주간 식단 계약이 올바르지 않습니다.',
+                    message: '현재 주간 급식 계약이 올바르지 않습니다.',
                 });
             }
         });
@@ -315,7 +315,7 @@ function weeklyMealMenuSchema(expectedAssetOrigin: string | null) {
         })
         .superRefine((value, context) => {
             if (value.post.contentSha !== undefined && value.post.contentSha !== value.contentSha) {
-                context.addIssue({code: 'custom', message: '주간 식단 SHA가 일치하지 않습니다.'});
+                context.addIssue({code: 'custom', message: '주간 급식 SHA가 일치하지 않습니다.'});
             }
         });
 }

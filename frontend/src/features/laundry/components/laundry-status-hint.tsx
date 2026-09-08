@@ -12,7 +12,7 @@ export function LaundryStatusHint({children, label}: {children: ReactNode; label
                 <button
                     aria-expanded={open}
                     aria-label={label}
-                    className="inline-grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                    className="inline-grid size-11 shrink-0 place-items-center rounded-md text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
                     data-laundry-status-hint="true"
                     type="button"
                     onClick={() => setOpen((current) => !current)}

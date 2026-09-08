@@ -10,8 +10,8 @@ describe('DashboardRouteErrorFallback', () => {
         );
 
         expect(markup).toContain('<h1');
-        expect(markup).toContain('식단');
-        expect(markup).toContain('식단 화면을 불러오지 못했습니다.');
+        expect(markup).toContain('급식');
+        expect(markup).toContain('급식 화면을 불러오지 못했습니다.');
         expect(markup).toContain('새로고침');
     });
 });

@@ -210,7 +210,7 @@ function PcInstallStep({mobileClient}: {mobileClient: boolean}) {
                 <p className="text-base leading-7 text-muted-foreground">
                     {mobileClient
                         ? '출석 자동 확인과 개인 알림을 연결하려면 PC 앱 설치와 Jungle Campus 로그인을 먼저 완료하세요.'
-                        : '운영체제에 맞는 PC 앱을 설치한 뒤 Jungle Campus에 로그인합니다. 공개 세탁실과 식단만 볼 때는 이 단계가 필요하지 않습니다.'}
+                        : '운영체제에 맞는 PC 앱을 설치한 뒤 Jungle Campus에 로그인합니다. 공개 세탁실과 급식만 볼 때는 이 단계가 필요하지 않습니다.'}
                 </p>
                 <Button asChild className="mt-4 h-auto min-h-11 w-full whitespace-normal sm:w-auto">
                     <ExternalLink href={PC_INSTALL_GUIDE_URL}>
@@ -397,7 +397,7 @@ export function AppInstallPage({
                     네 단계로 PC와 휴대폰 연결하기
                 </h2>
                 <p className="mt-2 max-w-3xl text-base leading-7 text-muted-foreground">
-                    세탁실·식단은 설치 없이 바로 볼 수 있습니다. 아래 과정은 출석 자동 확인과 개인
+                    세탁실·급식은 설치 없이 바로 볼 수 있습니다. 아래 과정은 출석 자동 확인과 개인
                     알림을 사용할 때만 필요합니다.
                 </p>
             </section>

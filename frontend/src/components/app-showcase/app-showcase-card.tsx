@@ -44,7 +44,7 @@ export function AppShowcaseCard() {
                         id="home-install-promotion-title"
                         className="text-lg leading-6 font-bold tracking-[-0.025em] whitespace-normal sm:whitespace-nowrap"
                     >
-                        PC·모바일 앱을 설치해
+                        PC·PWA를 설치해
                         <br />
                         <span className="text-primary">더 편리하게 사용하세요.</span>
                     </h2>

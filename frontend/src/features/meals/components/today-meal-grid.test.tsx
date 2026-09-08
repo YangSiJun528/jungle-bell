@@ -28,8 +28,8 @@ describe('TodayMealGrid', () => {
         expect(markup.match(/data-meal-state="missing"/gu)).toHaveLength(2);
         expect(markup).toContain('>중식<');
         expect(markup).toContain('>석식<');
-        expect(markup).toContain('중식 식단 게시 대기');
-        expect(markup).toContain('석식 식단 게시 대기');
+        expect(markup).toContain('중식 급식 게시 대기');
+        expect(markup).toContain('석식 급식 게시 대기');
         expect(markup).not.toContain('lucide-image-off');
         expect(markup).not.toContain('animate-pulse');
     });

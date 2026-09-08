@@ -49,7 +49,7 @@ describe('MealPostCard', () => {
             <MealPostCard meal={{...meal, permalink: 'https://pf.kakao.com/_xhzNjn/112664323'}} />,
         );
 
-        expect(markup).toMatch(/<a[^>]+aria-label="식단 원문 열기"/u);
+        expect(markup).toMatch(/<a[^>]+aria-label="급식 원문 열기"/u);
         expect(markup).toContain('href="https://pf.kakao.com/_xhzNjn/112664323"');
     });
 
@@ -88,7 +88,7 @@ describe('MealPostCard', () => {
     it('게시물 전체가 없으면 빈 상태를 한 번만 표시한다', () => {
         const markup = renderToStaticMarkup(<MissingMealPostCard period="석식" />);
 
-        expect(markup).toContain('aria-label="석식 식단 게시 대기"');
+        expect(markup).toContain('aria-label="석식 급식 게시 대기"');
         expect(markup).not.toContain('lucide-image-off');
         expect(markup).toContain('lucide-clock-3');
         expect(markup.match(/아직 올라오지 않았습니다\./gu)).toHaveLength(1);

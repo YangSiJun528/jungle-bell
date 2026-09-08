@@ -74,9 +74,9 @@ describe('home feature boundaries', () => {
             /errorTitle="세탁실 요약을 불러오지 못했습니다\."[\s\S]*<HomeLaundrySummary \/>/u,
         );
         expect(source).toMatch(
-            /errorTitle="식단 요약을 불러오지 못했습니다\."[\s\S]*<HomeMealsSummary \/>/u,
+            /errorTitle="급식 요약을 불러오지 못했습니다\."[\s\S]*<HomeMealsSummary \/>/u,
         );
-        expect(source).toContain('식단 요약은 계속 확인할 수 있습니다.');
+        expect(source).toContain('급식 요약은 계속 확인할 수 있습니다.');
         expect(source).toContain('세탁실 요약은 계속 확인할 수 있습니다.');
     });
 

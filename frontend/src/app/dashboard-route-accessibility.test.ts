@@ -5,7 +5,7 @@ import {dashboardDocumentTitle, focusDashboardHeading} from './dashboard-route-a
 describe('dashboard route accessibility', () => {
     it.each([
         ['/home', '홈 · Jungle Bell'],
-        ['/meals', '식단 · Jungle Bell'],
+        ['/meals', '급식 · Jungle Bell'],
         ['/privacy', '개인정보 처리방침 · Jungle Bell'],
     ])('%s의 문서 제목을 route와 일치시킨다', (pathname, title) => {
         expect(dashboardDocumentTitle(pathname)).toBe(title);

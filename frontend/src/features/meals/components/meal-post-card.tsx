@@ -74,7 +74,7 @@ export function MealPostCard({
     meal: DashboardMealPost;
 }) {
     const images = meal.images ?? [];
-    const title = meal.title ?? '식단 안내';
+    const title = meal.title ?? '급식 안내';
     const text = meal.text.trim();
     const imageSectionId = `${meal.id}-image-preview`;
     const [isImageExpanded, setIsImageExpanded] = useState(false);
@@ -94,7 +94,7 @@ export function MealPostCard({
                     </div>
                     {meal.permalink ? (
                         <Button asChild size="icon-sm" variant="ghost">
-                            <ExternalLink aria-label="식단 원문 열기" href={meal.permalink}>
+                            <ExternalLink aria-label="급식 원문 열기" href={meal.permalink}>
                                 <ExternalLinkIcon />
                             </ExternalLink>
                         </Button>
@@ -169,7 +169,7 @@ export function MissingMealPostCard({period}: {period: TodayMealPeriod}) {
     return (
         <Card className="gap-0 overflow-hidden py-0 shadow-none" data-meal-state="missing">
             <div
-                aria-label={`${period} 식단 게시 대기`}
+                aria-label={`${period} 급식 게시 대기`}
                 className="flex aspect-[4/3] items-center justify-center border-b bg-muted/60 text-muted-foreground"
                 role="img"
             >
