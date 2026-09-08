@@ -3,6 +3,128 @@ import {mealPeriodLabel, mealServiceDate} from '@/domain/meals/today';
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
 
+export type MealsPageLoadKind =
+    | 'loading'
+    | 'normal'
+    | 'empty'
+    | 'stale'
+    | 'offline'
+    | 'error'
+    | 'recovered';
+
+export type MealsPageLoadReason = 'offline' | 'fetch-failed' | 'stale-data' | null;
+
+export interface MealsPageSectionState {
+    todayEmpty: boolean;
+    weeklyEmpty: boolean;
+    historyEmpty: boolean;
+}
+
+export interface MealsPageLoadInput {
+    hasData: boolean;
+    isPending: boolean;
+    isStale: boolean;
+    isError: boolean;
+    manualRefreshError: boolean;
+    todayHasContent: boolean;
+    weeklyHasContent: boolean;
+    historyHasContent: boolean;
+    isOffline: boolean;
+    recovered?: boolean;
+    previous?: MealsPageLoadState;
+}
+
+export interface MealsPageLoadState {
+    kind: MealsPageLoadKind;
+    hasFailure: boolean;
+    reason: MealsPageLoadReason;
+    hasRecovered: boolean;
+    canRetry: boolean;
+    sections: MealsPageSectionState;
+}
+
+function normalizeMealsPageReason({
+    isOffline,
+    isError,
+    manualRefreshError,
+    isStale,
+}: Pick<
+    MealsPageLoadInput,
+    'isOffline' | 'isError' | 'manualRefreshError' | 'isStale'
+>): MealsPageLoadReason {
+    if (isOffline) return 'offline';
+    if (isError || manualRefreshError) return 'fetch-failed';
+    if (isStale) return 'stale-data';
+    return null;
+}
+
+export function mealsPageLoadState(input: MealsPageLoadInput): MealsPageLoadState {
+    if (!input.hasData) {
+        const kind: MealsPageLoadKind = input.isOffline
+            ? 'offline'
+            : input.isError || input.manualRefreshError
+              ? 'error'
+              : input.isPending
+                ? 'loading'
+                : 'empty';
+
+        return {
+            kind,
+            hasFailure: kind === 'offline' || kind === 'error',
+            reason: kind === 'offline' ? 'offline' : kind === 'error' ? 'fetch-failed' : null,
+            hasRecovered: false,
+            canRetry: kind === 'error',
+            sections: {
+                todayEmpty: true,
+                weeklyEmpty: true,
+                historyEmpty: true,
+            },
+        };
+    }
+
+    const sections: MealsPageSectionState = {
+        todayEmpty: !input.todayHasContent,
+        weeklyEmpty: !input.weeklyHasContent,
+        historyEmpty: !input.historyHasContent,
+    };
+    const isSectionEmpty = sections.todayEmpty && sections.weeklyEmpty && sections.historyEmpty;
+    const reason = normalizeMealsPageReason(input);
+    const hasFailure = reason !== null;
+    const wasFailure =
+        input.previous?.kind === 'error' ||
+        input.previous?.kind === 'offline' ||
+        input.previous?.kind === 'stale';
+    const hasRecovered = reason === null && (input.recovered === true || wasFailure);
+
+    let kind: MealsPageLoadKind =
+        reason === 'offline' || reason === 'fetch-failed'
+            ? 'stale'
+            : reason === 'stale-data'
+              ? 'stale'
+              : 'normal';
+
+    if (reason === 'offline') {
+        kind = 'offline';
+    }
+
+    if (isSectionEmpty && kind === 'normal') {
+        kind = 'empty';
+    }
+
+    if (hasRecovered) {
+        kind = 'recovered';
+    }
+
+    return {
+        kind,
+        hasFailure,
+        reason,
+        hasRecovered,
+        canRetry: kind === 'stale',
+        sections,
+    };
+}
+
 export type TodayMealPeriod = '\uC911\uC2DD' | '\uC11D\uC2DD';
 
 export interface TodayMealSlot {

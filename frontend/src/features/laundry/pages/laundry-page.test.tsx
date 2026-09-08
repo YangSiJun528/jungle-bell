@@ -3,6 +3,10 @@ import {readFileSync} from 'node:fs';
 import {describe, expect, it} from 'vitest';
 
 const source = readFileSync(new URL('./laundry-page.tsx', import.meta.url), 'utf8');
+const boundarySource = readFileSync(
+    new URL('../components/laundry-feature-boundary.tsx', import.meta.url),
+    'utf8',
+);
 const zoneSource = readFileSync(
     new URL('../../../components/dashboard/laundry-zone-presentation.ts', import.meta.url),
     'utf8',
@@ -53,5 +57,16 @@ describe('LaundryPage capacity summary', () => {
         expect(source).toContain('showRiskWarnings={showRisk}');
         expect(source).not.toContain('전체 에러율');
         expect(source).not.toContain('에러 위험 요약');
+    });
+
+    it('페이지 헤더 밖의 local async boundary로 세탁 실패를 격리한다', () => {
+        const pageSource = source.slice(source.indexOf('export function LaundryPage()'));
+
+        expect(pageSource.indexOf('<PageHeader')).toBeLessThan(
+            pageSource.indexOf('<LaundryDataRegion'),
+        );
+        expect(boundarySource).toContain('<AsyncBoundary');
+        expect(boundarySource).toContain('regionLabel="세탁실 데이터"');
+        expect(boundarySource).toContain('type="offline"');
     });
 });

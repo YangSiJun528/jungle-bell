@@ -1,9 +1,13 @@
+import {readFileSync} from 'node:fs';
+
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, it} from 'vitest';
 
 import type {DashboardLaundryMachine} from '@/domain/laundry/capacity';
 
 import {LaundryMachineList} from './laundry-machine-list';
+
+const source = readFileSync(new URL('./laundry-machine-list.tsx', import.meta.url), 'utf8');
 
 const NOW_MS = Date.parse('2026-08-11T03:00:00.000Z');
 
@@ -179,5 +183,36 @@ describe('LaundryMachineList', () => {
         expect(markup.match(/data-laundry-machine-card="true"/gu)).toHaveLength(9);
         expect(markup).toContain('auto-rows-fr');
         expect(markup.match(/grid flex-1 grid-rows-2/gu)).toHaveLength(9);
+    });
+
+    it('구역·상태 필터, 문제 우선 정렬, 기기별 accordion을 제공한다', () => {
+        const markup = renderToStaticMarkup(
+            <LaundryMachineList machines={machines} nowMs={NOW_MS} />,
+        );
+
+        expect(markup).toContain('aria-label="구역"');
+        expect(markup).toContain('aria-label="상태"');
+        expect(markup).toContain('문제 우선 정렬');
+        expect(markup).toContain('aria-expanded="true"');
+        expect(markup).toContain('상세 접기');
+        expect(markup).toContain('min-h-11');
+        expect(source).not.toContain('if (views.length === 0) return null');
+        expect(source).toContain('필터 조건에 맞는 기기가 없습니다.');
+    });
+
+    it('stale 상세 카드마다 실시간 데이터가 아님을 표시한다', () => {
+        const markup = renderToStaticMarkup(
+            <LaundryMachineList
+                dataStale
+                machines={machines}
+                nowMs={NOW_MS}
+                staleLabel="오전 11:30"
+            />,
+        );
+
+        expect(markup).toContain('실시간 정보가 아닙니다 · 마지막 정상 시각 오전 11:30');
+        expect(markup.match(/data-data-state="stale"/gu)).toHaveLength(2);
+        expect(markup).toMatch(/실시간 정보가 아닙니다[^<]*<\/p>/u);
+        expect(source).toContain('text-base leading-6');
     });
 });

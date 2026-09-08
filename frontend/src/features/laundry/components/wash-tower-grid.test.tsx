@@ -216,4 +216,20 @@ describe('WashTowerGrid', () => {
         expect(markup).toContain('title="워시타워_1 건조기 1시간 5분"');
         expect(markup).not.toContain('예상');
     });
+
+    it('모바일 가로 스크롤 안내와 stale 시각을 표 문맥 안에 표시한다', () => {
+        const markup = renderToStaticMarkup(
+            <WashTowerGrid
+                dataStale
+                dataStaleLabel="오전 11:30"
+                machines={machines}
+                nowMs={NOW_MS}
+            />,
+        );
+
+        expect(markup).toContain('좌우로 스크롤');
+        expect(markup).toContain('실시간 정보가 아닙니다 · 마지막 정상 시각 오전 11:30');
+        expect(markup).toContain('overflow-x-auto');
+        expect(markup.match(/text-base leading-6/gu)?.length).toBeGreaterThanOrEqual(2);
+    });
 });

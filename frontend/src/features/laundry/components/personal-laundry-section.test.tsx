@@ -126,6 +126,7 @@ function renderPersonalLaundry(
         personalAccess?: string;
         platformKind?: string;
         attendanceStatus?: string;
+        canCreateWatch?: boolean;
         serverSession?: string;
     } = {},
 ): string {
@@ -144,7 +145,10 @@ function renderPersonalLaundry(
 
     return renderToStaticMarkup(
         <QueryClientProvider client={client}>
-            <PersonalLaundrySection machines={options.machines ?? machines} />
+            <PersonalLaundrySection
+                canCreateWatch={options.canCreateWatch}
+                machines={options.machines ?? machines}
+            />
         </QueryClientProvider>,
     );
 }
@@ -215,5 +219,16 @@ describe('PersonalLaundrySection', () => {
         expect(markup).toContain('완료 확정');
         expect(addButton).toContain('w-full');
         expect(markup).toMatch(/data-slot="card"[^>]*class="[^"]*min-w-0/u);
+    });
+
+    test('stale 데이터에서는 새 알림만 막고 기존 알림 취소는 유지한다', () => {
+        const markup = renderPersonalLaundry({canCreateWatch: false});
+        const addButton = markup.match(/<button[^>]*data-laundry-watch-add="true"[^>]*>/u)?.[0];
+        const removeButton = markup.match(/<button[^>]*aria-label="1번 알림 취소"[^>]*>/u)?.[0];
+
+        expect(addButton).toContain('disabled=""');
+        expect(removeButton).not.toContain('disabled=""');
+        expect(markup).toContain('실시간 정보가 아닐 때는 새 세탁 알림을 설정할 수 없습니다.');
+        expect(markup).toContain('text-base leading-6');
     });
 });

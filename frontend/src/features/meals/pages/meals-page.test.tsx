@@ -31,4 +31,19 @@ describe('MealsPage information architecture', () => {
         expect(source).not.toContain('PersonalSurface');
         expect(historySource).toContain('setVisibleMonthKey(month)');
     });
+
+    it('page header 밖의 공통 local async boundary로 식단 실패를 격리한다', () => {
+        const pageSource = source.slice(source.indexOf('export function MealsPage()'));
+
+        expect(pageSource.indexOf('<PageHeader')).toBeLessThan(
+            pageSource.indexOf('<MealsFeatureBoundary'),
+        );
+        expect(source).toContain(
+            "import {AsyncBoundary} from '@/components/dashboard/async-boundary'",
+        );
+        expect(source).toContain('<AsyncBoundary');
+        expect(source).toContain('regionLabel="급식 데이터"');
+        expect(source).not.toContain('<QueryErrorResetBoundary>');
+        expect(source).not.toContain('isRefreshSuccess: manualRefresh.isSuccess');
+    });
 });

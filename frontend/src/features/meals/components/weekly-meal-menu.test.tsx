@@ -68,7 +68,7 @@ describe('WeeklyMealMenu', () => {
             id: 'weekly-text',
             title: '8월 2주차 식단표',
             text: '월요일 중식: 잡곡밥, 육개장',
-            publishedAt: null,
+            publishedAt: '2026-08-10T00:00:00.000Z',
             permalink: null,
             images: [],
         };
@@ -77,5 +77,62 @@ describe('WeeklyMealMenu', () => {
 
         expect(markup).toContain('급식표 텍스트 내용');
         expect(markup).toContain('월요일 중식: 잡곡밥, 육개장');
+    });
+
+    it('주간 급식도 텍스트가 이미지보다 먼저 렌더링되고 이미지 토글을 가진다', () => {
+        const sha = 'a'.repeat(64);
+        const meal: DashboardMealPost = {
+            id: 'weekly-toggle',
+            title: '8월 2주차 식단표',
+            text: '월요일 중식: 잡곡밥, 육개장',
+            publishedAt: '2026-08-10T00:00:00.000Z',
+            permalink: null,
+            images: [
+                {
+                    sha,
+                    url: `https://campus.example.com/api/public/assets/${sha}.jpg`,
+                    contentType: 'image/jpeg',
+                    extension: 'jpg',
+                    width: 1439,
+                    height: 1079,
+                    byteLength: 120_000,
+                },
+            ],
+        };
+
+        const markup = renderToStaticMarkup(<WeeklyMealMenu meal={meal} weekKey="2026-08-10" />);
+
+        expect(markup.indexOf('급식표 텍스트 내용')).toBeGreaterThan(-1);
+        expect(markup.indexOf('aria-label="8월 2주차 식단표 새 탭에서 열기"')).toBe(-1);
+        expect(markup).toContain('aria-label="8월 2주차 식단표 급식표 새 탭에서 열기"');
+        const textIndex = markup.indexOf('급식표 텍스트 내용');
+        const imageIndex = markup.indexOf('aria-label="8월 2주차 식단표 급식표 새 탭에서 열기"');
+        expect(imageIndex).toBeGreaterThan(textIndex);
+        expect(markup).toContain('aria-controls="weekly-toggle-image-preview"');
+        expect(markup).toContain('aria-expanded="false"');
+        expect(markup).toContain('이미지 펼치기');
+        expect(markup).toContain('class="min-h-11 w-full"');
+        expect(markup).toContain('max-h-44');
+        expect(markup).toContain('aria-hidden="true"');
+        expect(markup).toContain('tabindex="-1"');
+    });
+
+    it('이미지와 텍스트가 모두 없을 때 empty 본문을 16px 이상으로 표시한다', () => {
+        const markup = renderToStaticMarkup(
+            <WeeklyMealMenu
+                meal={{
+                    id: 'weekly-empty',
+                    title: '이번 주 급식표',
+                    text: '',
+                    publishedAt: null,
+                    permalink: null,
+                    images: [],
+                }}
+                weekKey="2026-08-10"
+            />,
+        );
+
+        expect(markup).toContain('급식표 이미지와 텍스트 내용이 아직 등록되지 않았습니다.');
+        expect(markup).toContain('text-base leading-6');
     });
 });

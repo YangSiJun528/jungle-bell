@@ -88,7 +88,10 @@ function MealHistoryMonth({
                     />
                 </Card>
                 <section aria-labelledby="selected-history-date-title" className="min-w-0">
-                    <h3 className="mb-3 text-sm font-semibold" id="selected-history-date-title">
+                    <h3
+                        className="mb-3 text-base leading-6 font-semibold"
+                        id="selected-history-date-title"
+                    >
                         {activeHistoryDate ? mealDateLabel(activeHistoryDate) : '선택한 날짜 식단'}
                     </h3>
                     {activeHistoryMeals.length > 0 ? (
@@ -103,7 +106,10 @@ function MealHistoryMonth({
                 </section>
             </div>
             <section aria-labelledby="selected-history-week-title" data-meal-history-weekly="true">
-                <h3 className="mb-3 text-sm font-semibold" id="selected-history-week-title">
+                <h3
+                    className="mb-3 text-base leading-6 font-semibold"
+                    id="selected-history-week-title"
+                >
                     선택한 주 급식표
                 </h3>
                 {activeWeeklyMenu ? (

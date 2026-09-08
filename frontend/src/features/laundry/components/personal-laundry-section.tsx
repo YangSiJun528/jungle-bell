@@ -38,6 +38,7 @@ import {
 } from '@/features/laundry/lib/personal-laundry';
 
 interface PersonalLaundrySectionProps {
+    canCreateWatch?: boolean;
     machines: DashboardLaundrySnapshot['machines'];
 }
 
@@ -45,6 +46,7 @@ interface LaundryWatchCardProps {
     activeWatches: readonly LaundryWatch[];
     adding: boolean;
     busy: boolean;
+    canCreateWatch: boolean;
     loading: boolean;
     notificationMode: LaundryNotificationMode;
     notifyBeforeMinutes: number;
@@ -74,6 +76,7 @@ function LaundryWatchCard({
     activeWatches,
     adding,
     busy,
+    canCreateWatch,
     loading,
     notificationMode,
     notifyBeforeMinutes,
@@ -98,7 +101,7 @@ function LaundryWatchCard({
                     <Bell className="size-4 text-primary" />
                     내 세탁 알림
                 </CardTitle>
-                <CardDescription>
+                <CardDescription className="text-base leading-6">
                     워시타워와 기기, 알림 시점을 선택해 한 가지 조건만 설정합니다.
                 </CardDescription>
             </CardHeader>
@@ -195,7 +198,7 @@ function LaundryWatchCard({
                                 </div>
                             </div>
                         ) : (
-                            <p className="rounded-lg bg-muted/50 p-4 text-sm text-muted-foreground">
+                            <p className="rounded-lg bg-muted/50 p-4 text-base leading-6 text-muted-foreground">
                                 기기 상태가 확인되면 알림 대상을 선택할 수 있습니다.
                             </p>
                         )}
@@ -222,7 +225,7 @@ function LaundryWatchCard({
                                         />
                                     </div>
                                 ) : (
-                                    <p className="min-w-0 flex-1 text-sm text-muted-foreground">
+                                    <p className="min-w-0 flex-1 text-base leading-6 text-muted-foreground">
                                         {notificationMode === 'estimated-completion'
                                             ? '예상 종료 시각에 알립니다.'
                                             : '기기에서 완료가 확인되면 알립니다.'}
@@ -232,6 +235,7 @@ function LaundryWatchCard({
                                     data-laundry-watch-add="true"
                                     className="w-full shrink-0 sm:w-auto"
                                     disabled={
+                                        !canCreateWatch ||
                                         !selectedTarget ||
                                         sessionUnavailable ||
                                         (notificationMode === 'before-completion' &&
@@ -252,8 +256,14 @@ function LaundryWatchCard({
                             </div>
                         ) : null}
 
+                        {!canCreateWatch ? (
+                            <p className="text-base leading-6 text-amber-700 dark:text-amber-300">
+                                실시간 정보가 아닐 때는 새 세탁 알림을 설정할 수 없습니다.
+                            </p>
+                        ) : null}
+
                         {sessionUnavailable ? (
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-base leading-6 text-muted-foreground">
                                 현재 동작 중인 기기만 알림을 설정할 수 있습니다.
                             </p>
                         ) : null}
@@ -288,7 +298,7 @@ function LaundryWatchCard({
                                 ))}
                             </ul>
                         ) : (
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-base leading-6 text-muted-foreground">
                                 설정된 세탁 알림이 없습니다.
                             </p>
                         )}
@@ -299,7 +309,10 @@ function LaundryWatchCard({
     );
 }
 
-function AuthenticatedPersonalLaundrySection({machines}: PersonalLaundrySectionProps) {
+function AuthenticatedPersonalLaundrySection({
+    canCreateWatch = true,
+    machines,
+}: PersonalLaundrySectionProps) {
     const {api, platform} = useDashboardEnvironment();
     const account = useDashboardAccount();
     const attendance = useAttendanceQuery();
@@ -420,6 +433,7 @@ function AuthenticatedPersonalLaundrySection({machines}: PersonalLaundrySectionP
                 activeWatches={activeWatches}
                 adding={addWatch.isPending}
                 busy={personalBusy}
+                canCreateWatch={canCreateWatch}
                 loading={watches.isPending}
                 notificationMode={notificationMode}
                 notifyBeforeMinutes={notifyBeforeMinutes}
