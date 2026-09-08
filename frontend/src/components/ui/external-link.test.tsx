@@ -1,7 +1,8 @@
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, it, vi} from 'vitest';
 
-import {ExternalLink, openExternalLinkFromClick} from './external-link';
+import {ExternalLink} from './external-link';
+import {openExternalLinkFromClick} from './external-link-click';
 
 const PROJECT_URL = 'https://github.com/YangSiJun528/jungle-bell';
 

@@ -1,6 +1,6 @@
 import {describe, expect, it, vi} from 'vitest';
 
-import {dashboardDocumentTitle, focusDashboardHeading} from './dashboard-route-accessibility';
+import {dashboardDocumentTitle, focusDashboardHeading} from './dashboard-route-accessibility-utils';
 
 describe('dashboard route accessibility', () => {
     it.each([

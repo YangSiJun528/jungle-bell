@@ -2,7 +2,7 @@ import {describe, expect, it, vi} from 'vitest';
 
 import type {PlatformAdapter} from '@/platform/contracts';
 
-import {desktopExternalOpener} from './external-link-controller';
+import {desktopExternalOpener} from './external-link-runtime';
 
 describe('desktopExternalOpener', () => {
     it('desktop production adapter의 검증된 system opener를 사용한다', async () => {

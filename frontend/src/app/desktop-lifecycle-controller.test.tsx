@@ -7,10 +7,9 @@ import type {TauriLifecycleAdapter} from '@/platform/tauri/lifecycle';
 import {
     DesktopLifecycleController,
     DesktopLifecycleSummary,
-    desktopLifecycleTransition,
-    initialDesktopLifecycleState,
     useDesktopLifecycleControls,
 } from './desktop-lifecycle-controller';
+import {desktopLifecycleTransition, initialDesktopLifecycleState} from './desktop-lifecycle-state';
 
 const unseen = {
     closeBehavior: 'hideToTray',
