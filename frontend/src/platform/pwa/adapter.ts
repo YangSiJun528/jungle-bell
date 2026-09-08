@@ -115,14 +115,14 @@ export function createPwaCapabilityAdapter(options: {
             }
             try {
                 const registration = await navigatorObject.serviceWorker.getRegistration();
+                if (registration?.waiting) return {status: 'waiting'};
+                if (registration?.installing) return {status: 'installing'};
                 if (registration?.active?.state === 'activated') {
                     return {
                         status: 'active',
                         scriptUrl: registration.active.scriptURL,
                     };
                 }
-                if (registration?.waiting) return {status: 'waiting'};
-                if (registration?.installing) return {status: 'installing'};
                 return {status: 'missing'};
             } catch {
                 return {status: 'error'};

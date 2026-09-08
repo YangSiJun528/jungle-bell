@@ -9,6 +9,11 @@ function browserObjects(
         standalone?: boolean;
         iosStandalone?: boolean;
         existingSubscription?: boolean;
+        activeWorker?: boolean;
+        waitingWorker?: boolean;
+        installingWorker?: boolean;
+        registrationAvailable?: boolean;
+        registrationError?: boolean;
     } = {},
 ) {
     const unsubscribe = vi.fn<PushSubscription['unsubscribe']>(async () => true);
@@ -27,15 +32,30 @@ function browserObjects(
         subscribe: vi.fn<PushManager['subscribe']>(async () => subscription),
         getSubscription,
     };
-    const active = {
-        state: 'activated',
-        scriptURL: 'https://app.example/sw.js',
-    } as ServiceWorker;
-    const registration = {active, pushManager} as unknown as ServiceWorkerRegistration;
+    const active =
+        options.activeWorker === false
+            ? null
+            : ({
+                  state: 'activated',
+                  scriptURL: 'https://app.example/sw.js',
+              } as ServiceWorker);
+    const waiting = options.waitingWorker
+        ? ({state: 'installed', scriptURL: 'https://app.example/sw.next.js'} as ServiceWorker)
+        : null;
+    const installing = options.installingWorker
+        ? ({state: 'installing', scriptURL: 'https://app.example/sw.next.js'} as ServiceWorker)
+        : null;
+    const registration = {
+        active,
+        waiting,
+        installing,
+        pushManager,
+    } as unknown as ServiceWorkerRegistration;
     const register = vi.fn<ServiceWorkerContainer['register']>(async () => registration);
-    const getRegistration = vi.fn<ServiceWorkerContainer['getRegistration']>(async () =>
-        Promise.resolve(registration),
-    );
+    const getRegistration = vi.fn<ServiceWorkerContainer['getRegistration']>(async () => {
+        if (options.registrationError) throw new Error('SERVICE_WORKER_LOOKUP_FAILED');
+        return options.registrationAvailable === false ? undefined : registration;
+    });
     const serviceWorker = {
         getRegistration,
         register,
@@ -227,6 +247,50 @@ describe('PwaCapabilityAdapter', () => {
             status: 'active',
             scriptUrl: 'https://app.example/sw.js',
         });
+    });
+
+    it('기존 활성 워커가 있어도 waiting 업데이트를 우선 관측한다', async () => {
+        const browser = browserObjects({waitingWorker: true});
+        const adapter = createPwaCapabilityAdapter({
+            production: true,
+            windowObject: browser.windowObject,
+            navigatorObject: browser.navigatorObject,
+        });
+
+        await expect(adapter.getServiceWorkerStatus()).resolves.toEqual({status: 'waiting'});
+    });
+
+    it('기존 활성 워커가 있어도 installing 업데이트를 우선 관측한다', async () => {
+        const browser = browserObjects({installingWorker: true});
+        const adapter = createPwaCapabilityAdapter({
+            production: true,
+            windowObject: browser.windowObject,
+            navigatorObject: browser.navigatorObject,
+        });
+
+        await expect(adapter.getServiceWorkerStatus()).resolves.toEqual({status: 'installing'});
+    });
+
+    it('서비스 워커 등록이 없으면 missing 상태를 반환한다', async () => {
+        const browser = browserObjects({registrationAvailable: false});
+        const adapter = createPwaCapabilityAdapter({
+            production: true,
+            windowObject: browser.windowObject,
+            navigatorObject: browser.navigatorObject,
+        });
+
+        await expect(adapter.getServiceWorkerStatus()).resolves.toEqual({status: 'missing'});
+    });
+
+    it('서비스 워커 상태 조회가 실패하면 error 상태를 반환한다', async () => {
+        const browser = browserObjects({registrationError: true});
+        const adapter = createPwaCapabilityAdapter({
+            production: true,
+            windowObject: browser.windowObject,
+            navigatorObject: browser.navigatorObject,
+        });
+
+        await expect(adapter.getServiceWorkerStatus()).resolves.toEqual({status: 'error'});
     });
 
     it('현재 로컬 Push 구독을 찾아 실제 브라우저 구독을 해제한다', async () => {
