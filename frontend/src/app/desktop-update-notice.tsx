@@ -1,4 +1,4 @@
-import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
+import {useMutation, useQueryClient} from '@tanstack/react-query';
 import {Download} from 'lucide-react';
 
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
@@ -8,17 +8,9 @@ import {queryKeys, useDashboardEnvironment} from './dashboard-context';
 import {useDesktopUpdateQuery} from './desktop-update-query';
 
 export function DesktopUpdateNotice() {
-    const {api, platform} = useDashboardEnvironment();
+    const {api} = useDashboardEnvironment();
     const client = useQueryClient();
-    const desktop = platform.kind === 'desktop' && platform.capabilities.desktopSettings;
-    const settings = useQuery({
-        queryKey: queryKeys.desktopSettings,
-        queryFn: () => api.getDesktopSettings(),
-        enabled: desktop,
-        staleTime: 30_000,
-    });
-    const manualUpdate = desktop && settings.data?.autoUpdate === false;
-    const {update} = useDesktopUpdateQuery();
+    const {desktop, update} = useDesktopUpdateQuery();
     const install = useMutation({
         mutationFn: () => api.installDesktopUpdate(),
         onSuccess: async () => {
@@ -26,7 +18,7 @@ export function DesktopUpdateNotice() {
         },
     });
 
-    if (!manualUpdate || !update.data?.availableVersion || update.data.mandatory) return null;
+    if (!desktop || !update.data?.availableVersion || update.data.mandatory) return null;
 
     return (
         <Alert className="mb-4 border-amber-500/50 bg-amber-500/10">

@@ -4,19 +4,15 @@ import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, test, vi} from 'vitest';
 
-import type {DesktopSettings} from '@/platform/contracts';
-
 import {DesktopUpdateNotice} from './desktop-update-notice';
 
 const source = readFileSync(new URL('./desktop-update-notice.tsx', import.meta.url), 'utf8');
 const {environment, queryKeys} = vi.hoisted(() => ({
     queryKeys: {
-        desktopSettings: ['desktop-settings'] as const,
         desktopUpdate: ['desktop-update'] as const,
     },
     environment: {
         api: {
-            getDesktopSettings: vi.fn<() => Promise<DesktopSettings>>(),
             checkDesktopUpdate: vi.fn<() => Promise<unknown>>(),
             installDesktopUpdate: vi.fn<() => Promise<void>>(),
         },
@@ -29,28 +25,12 @@ vi.mock('@/app/dashboard-context', () => ({
     useDashboardEnvironment: () => environment,
 }));
 
-const settings: DesktopSettings = {
-    appVersion: '0.5.0',
-    autoStart: true,
-    autoUpdate: false,
-    usageAnalytics: false,
-    usageAnalyticsSyncPending: false,
-    debugMode: false,
-    selectedCohortId: null,
-    effectiveCohortId: null,
-    cohortOptions: [],
-};
-
-function renderNotice(options: {autoUpdate: boolean; availableVersion: string | null}): string {
+function renderNotice(options: {availableVersion: string | null; mandatory?: boolean}): string {
     const client = new QueryClient();
-    client.setQueryData(queryKeys.desktopSettings, {
-        ...settings,
-        autoUpdate: options.autoUpdate,
-    });
     client.setQueryData(queryKeys.desktopUpdate, {
         currentVersion: '0.5.0',
         availableVersion: options.availableVersion,
-        mandatory: false,
+        mandatory: options.mandatory ?? false,
     });
     return renderToStaticMarkup(
         <QueryClientProvider client={client}>
@@ -60,8 +40,8 @@ function renderNotice(options: {autoUpdate: boolean; availableVersion: string | 
 }
 
 describe('DesktopUpdateNotice', () => {
-    test('자동 업데이트가 꺼진 구버전에 안내와 수동 설치 버튼을 표시한다', () => {
-        const markup = renderNotice({autoUpdate: false, availableVersion: '0.5.1'});
+    test('일반 patch 업데이트가 있으면 설정과 무관하게 비차단 안내와 수동 설치 버튼을 표시한다', () => {
+        const markup = renderNotice({availableVersion: '0.5.1'});
 
         expect(markup).toContain('업데이트가 필요합니다.');
         expect(markup).toContain('현재 v0.5.0');
@@ -70,8 +50,8 @@ describe('DesktopUpdateNotice', () => {
         expect(source).toContain('api.installDesktopUpdate()');
     });
 
-    test('자동 업데이트가 켜졌거나 최신 버전이면 안내를 숨긴다', () => {
-        expect(renderNotice({autoUpdate: true, availableVersion: '0.5.1'})).toBe('');
-        expect(renderNotice({autoUpdate: false, availableVersion: null})).toBe('');
+    test('최신 버전이거나 강제 업데이트면 일반 안내를 숨긴다', () => {
+        expect(renderNotice({availableVersion: null})).toBe('');
+        expect(renderNotice({availableVersion: '0.6.0', mandatory: true})).toBe('');
     });
 });

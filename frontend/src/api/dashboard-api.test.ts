@@ -1297,7 +1297,6 @@ test('데스크톱 서비스 설정은 canonical current-only commands와 exact 
     const initial = {
         appVersion: '0.5.0-beta.1',
         autoStart: false,
-        autoUpdate: true,
         usageAnalytics: null,
         usageAnalyticsSyncPending: false,
         debugMode: false,
@@ -1338,7 +1337,6 @@ test('데스크톱 서비스 설정은 canonical current-only commands와 exact 
             args: {
                 input: {
                     autoStart: true,
-                    autoUpdate: true,
                     usageAnalytics: null,
                     debugMode: false,
                     selectedCohortId: null,
@@ -1362,12 +1360,10 @@ test('데스크톱 서비스 설정은 unknown field와 non-boolean을 거부한
             selectedCohortId: null,
             effectiveCohortId: null,
             cohortOptions: [],
-            unknown: true,
         },
         {
             appVersion: '0.5.0-beta.1',
             autoStart: 'true',
-            autoUpdate: true,
             usageAnalytics: null,
             usageAnalyticsSyncPending: false,
             debugMode: false,
@@ -1378,7 +1374,6 @@ test('데스크톱 서비스 설정은 unknown field와 non-boolean을 거부한
         {
             appVersion: '0.5.0-beta.1',
             autoStart: false,
-            autoUpdate: true,
             usageAnalytics: 'false',
             usageAnalyticsSyncPending: false,
             debugMode: false,
@@ -1389,7 +1384,6 @@ test('데스크톱 서비스 설정은 unknown field와 non-boolean을 거부한
         {
             appVersion: '0.5.0-beta.1',
             autoStart: false,
-            autoUpdate: true,
             usageAnalytics: false,
             usageAnalyticsSyncPending: 'false',
             debugMode: false,
@@ -1400,7 +1394,6 @@ test('데스크톱 서비스 설정은 unknown field와 non-boolean을 거부한
         {
             appVersion: '0.5.0-beta.1',
             autoStart: false,
-            autoUpdate: true,
             usageAnalytics: null,
             usageAnalyticsSyncPending: false,
             debugMode: false,
@@ -1411,7 +1404,6 @@ test('데스크톱 서비스 설정은 unknown field와 non-boolean을 거부한
         {
             appVersion: 'beta',
             autoStart: false,
-            autoUpdate: true,
             usageAnalytics: null,
             usageAnalyticsSyncPending: false,
             debugMode: false,

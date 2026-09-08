@@ -1,9 +1,8 @@
 import {useMutation} from '@tanstack/react-query';
-import {CircleAlert, Download, RefreshCw} from 'lucide-react';
-import type {PropsWithChildren, ReactNode} from 'react';
+import {Download} from 'lucide-react';
+import type {PropsWithChildren} from 'react';
 
 import jungleBellLogo from '@/assets/logo.png';
-import {LoadingState} from '@/components/dashboard/async-state';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Button} from '@/components/ui/button';
 
@@ -34,28 +33,6 @@ function UpdateGateFrame({children}: PropsWithChildren) {
     );
 }
 
-function UpdateCheckError({retry, retrying}: {retry: () => void; retrying: boolean}) {
-    return (
-        <Alert variant="destructive">
-            <CircleAlert aria-hidden="true" />
-            <AlertTitle>업데이트 정보를 확인하지 못했습니다.</AlertTitle>
-            <AlertDescription>
-                <p>네트워크 상태를 확인한 뒤 다시 시도하세요.</p>
-                <Button
-                    className="mt-2"
-                    disabled={retrying}
-                    size="sm"
-                    variant="outline"
-                    onClick={retry}
-                >
-                    <RefreshCw aria-hidden="true" />
-                    {retrying ? '확인 중' : '다시 확인'}
-                </Button>
-            </AlertDescription>
-        </Alert>
-    );
-}
-
 export function DesktopUpdateGate({children}: PropsWithChildren) {
     const {api} = useDashboardEnvironment();
     const {desktop, update} = useDesktopUpdateQuery();
@@ -64,23 +41,18 @@ export function DesktopUpdateGate({children}: PropsWithChildren) {
         onSuccess: () => update.refetch(),
     });
 
-    if (!desktop) return children;
-
-    let content: ReactNode;
-    if (update.isError) {
-        content = (
-            <UpdateCheckError retry={() => void update.refetch()} retrying={update.isFetching} />
-        );
-    } else if (update.isPending || !update.data) {
-        content = <LoadingState label="최신 버전을 확인하고 있습니다." />;
-    } else if (!update.data.mandatory) {
+    if (
+        !desktop ||
+        update.isPending ||
+        update.isError ||
+        !update.data?.mandatory ||
+        !update.data.availableVersion
+    ) {
         return children;
-    } else if (!update.data.availableVersion) {
-        content = (
-            <UpdateCheckError retry={() => void update.refetch()} retrying={update.isFetching} />
-        );
-    } else {
-        content = (
+    }
+
+    return (
+        <UpdateGateFrame>
             <Alert className="border-amber-500/25 bg-amber-500/10 text-amber-950 dark:text-amber-100">
                 <Download aria-hidden="true" />
                 <AlertTitle>PC 앱 업데이트가 필요합니다.</AlertTitle>
@@ -104,8 +76,6 @@ export function DesktopUpdateGate({children}: PropsWithChildren) {
                     </Button>
                 </AlertDescription>
             </Alert>
-        );
-    }
-
-    return <UpdateGateFrame>{content}</UpdateGateFrame>;
+        </UpdateGateFrame>
+    );
 }

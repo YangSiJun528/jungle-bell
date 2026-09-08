@@ -8,7 +8,8 @@
 | checker·출석 runtime | Rust `AppState` | 트레이 아이콘·서버 출석 snapshot | checker IPC·desktop HTTP API |
 | 서버용 PC credential | Windows Credential Manager 또는 mode 0600 앱 파일 + `RemoteSyncService` | PC 연결 상태 | 장기 desktop HTTP API |
 | WebView HTTP session | React 메모리 + PostgreSQL session hash | PC의 서버 소유 개인 화면 | bootstrap IPC → `/api/me` |
-| PC 로컬 서비스 설정 | Rust `DesktopSettingsService` | LMS 기수 선택·자동 시작·업데이트·디버그 | exact get/update IPC |
+| PC 로컬 서비스 설정 | Rust `DesktopSettingsService` | LMS 기수 선택·자동 시작·디버그 | exact get/update IPC |
+| 데스크톱 업데이트 상태 | Rust `UpdateCoordinator` + 원자적 pending version marker | 업데이트 안내·필수 업데이트 gate | 서명된 updater endpoint → Rust 확인·설치 → 상태 조회 IPC |
 | 계정 사용 통계 preference | nullable PC 로컬 설정 + PostgreSQL `usage_preference` | PC 사용 통계 스위치·연결 PWA 수집 gate | PC IPC → desktop GET/PUT, PWA에는 같은 서버 gate 적용 |
 | 익명 사용 통계 opt-out | 브라우저 `localStorage` + first-party HttpOnly cookie | 개인정보 화면의 익명 방문 통계 스위치 | public usage preference GET/PUT |
 | 공개 세탁·급식 cache | React Query | 공통 SPA 생활 정보 | public HTTP API |
@@ -70,8 +71,11 @@ challenge나 claim receipt는 저장하지 않습니다.
   7분짜리 desktop-ui session만 bootstrap합니다.
 - 대시보드는 로컬 앱 URL만 사용합니다. 트레이 아이콘을 누르면 별도 목록 창 없이
   대시보드 홈을 엽니다.
-- 자동 시작·자동 업데이트·디버그 설정은 PC 로컬에만 적용합니다. 계정 사용 통계는
-  nullable 로컬 값을 서버 계정 preference에 동기화하며 PC 서비스 설정만 편집합니다.
+- 자동 시작·디버그 설정은 PC 로컬에만 적용합니다. 자동 업데이트는 항상 활성화하며,
+  Rust coordinator가 사용자 창이 열린 프로세스의 설치·재시작을 다음 실행으로 미루고
+  실패 뒤 한 시간 동안 재시도를 미룹니다. 같은 버전의 자동 설치를 세 번 실패하면 수동
+  설치만 허용합니다.
+  계정 사용 통계는 nullable 로컬 값을 서버 계정 preference에 동기화하며 PC 서비스 설정만 편집합니다.
   `null`은 pending이지만 유효 OFF이고 `false`는 OFF, `true`는 ON입니다.
 - Web·PWA production 빌드와 Desktop release 빌드만 UI 열림 전송을 시작합니다.
   로그 폴더는 경로 입력 없이 앱 전용 위치만 엽니다.

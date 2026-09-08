@@ -56,24 +56,97 @@ fn notify_startup_status(app: &tauri::AppHandle, notifications: &NotificationSer
     );
 }
 
-fn spawn_startup_update_check(app: tauri::AppHandle, state: Arc<Mutex<AppState>>) {
+#[derive(Clone)]
+struct RuntimeServices {
+    state: Arc<Mutex<AppState>>,
+    notification_inbox: Arc<NotificationInboxService>,
+    notifications: Arc<NotificationService>,
+    settings: Arc<DesktopSettingsService>,
+    remote_sync: Arc<remote_sync::RemoteSyncService>,
+    updater: Arc<updater::UpdateCoordinator>,
+}
+
+fn spawn_initial_update_check(app: tauri::AppHandle, updater: Arc<updater::UpdateCoordinator>) {
     tauri::async_runtime::spawn(async move {
-        if state.lock().await.config.auto_update {
-            updater::auto_install_update(app).await;
+        if let Err(error) = updater.check_update(&app).await {
+            log::warn!("[updater] 시작 업데이트 확인 중단: {error}");
         }
     });
 }
 
-fn spawn_periodic_update_check(app: tauri::AppHandle, state: Arc<Mutex<AppState>>) {
+fn spawn_pending_update_preflight(app: tauri::AppHandle, services: RuntimeServices, opens_dashboard: bool) {
+    tauri::async_runtime::spawn(async move {
+        let outcome = services.updater.apply_pending_update_on_start(app.clone()).await;
+        if outcome == updater::AutoUpdateOutcome::RestartRequested {
+            return;
+        }
+
+        let app_handle = app.clone();
+        if let Err(error) = app.run_on_main_thread(move || {
+            if let Err(error) = finish_runtime_startup(&app_handle, services, opens_dashboard, false) {
+                log::error!("[app] pending update 이후 런타임 초기화 실패: {error}");
+                app_handle.exit(1);
+            }
+        }) {
+            log::error!("[app] pending update 이후 런타임 초기화 예약 실패: {error}");
+            app.exit(1);
+        }
+    });
+}
+
+fn spawn_periodic_update_check(app: tauri::AppHandle, updater: Arc<updater::UpdateCoordinator>) {
     tauri::async_runtime::spawn(async move {
         const INTERVAL_SECS: u64 = 60 * 60; // 1시간마다 체크
         loop {
             tokio::time::sleep(tokio::time::Duration::from_secs(INTERVAL_SECS)).await;
-            if state.lock().await.config.auto_update {
-                updater::auto_install_update(app.clone()).await;
+            if let Err(error) = updater.refresh_update(&app).await {
+                log::warn!("[updater] 주기적 업데이트 확인 중단: {error}");
             }
         }
     });
+}
+
+fn finish_runtime_startup(
+    app: &tauri::AppHandle,
+    services: RuntimeServices,
+    opens_dashboard: bool,
+    refresh_update_on_start: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    tray::setup_tray(app)?;
+    if let Err(error) = services.notifications.initialize_system_backend() {
+        log::warn!("[notification] OS backend initialization failed: {error}");
+    }
+    let checker_window = checker::build_webview(app)?;
+    // macOS Dock 배지는 윈도우 API를 통해 앱 전역으로 설정되므로,
+    // 자동 시작에서도 존재하는 checker를 만든 뒤 초기 배지를 동기화한다.
+    services.notification_inbox.initialize(app);
+    match checker_window.theme() {
+        Ok(theme) => {
+            if let Err(error) = tray::sync_icon_theme(app, theme) {
+                log::warn!("[app] initial tray theme sync failed: {error}");
+            }
+        }
+        Err(error) => log::warn!("[app] system theme detection failed: {error}"),
+    }
+    notify_startup_status(app, &services.notifications);
+    if refresh_update_on_start {
+        // 프런트엔드 조회와 같은 coordinator/cache를 사용해 시작 직후 원격
+        // endpoint를 중복 호출하지 않는다.
+        spawn_initial_update_check(app.clone(), services.updater.clone());
+    }
+    if opens_dashboard {
+        tray::open_dashboard_window(app);
+    }
+    spawn_periodic_update_check(app.clone(), services.updater.clone());
+    scheduler::start_scheduler(app.clone(), services.state.clone());
+    remote_sync::start_background_loop(
+        app.clone(),
+        services.remote_sync,
+        services.settings,
+        services.state,
+        services.notifications,
+    );
+    Ok(())
 }
 
 const fn configured_log_level(debug_mode: bool) -> log::LevelFilter {
@@ -195,39 +268,26 @@ pub fn run() {
             let runtime_usage = loaded_config.runtime_usage_analytics(effective_usage);
             tauri::async_runtime::block_on(remote_sync_service.set_usage_analytics_preference(runtime_usage));
             app.manage(remote_sync_service.clone());
-            tray::setup_tray(app)?;
-            if let Err(error) = notification_service.initialize_system_backend() {
-                log::warn!("[notification] OS backend initialization failed: {error}");
-            }
-            let checker_window = checker::build_webview(app.handle())?;
-            // macOS Dock 배지는 윈도우 API를 통해 앱 전역으로 설정되므로,
-            // 자동 시작에서도 존재하는 checker를 만든 뒤 초기 배지를 동기화한다.
-            notification_inbox_service.initialize(app.handle());
-            match checker_window.theme() {
-                Ok(theme) => {
-                    if let Err(error) = tray::sync_icon_theme(app.handle(), theme) {
-                        log::warn!("[app] initial tray theme sync failed: {error}");
-                    }
-                }
-                Err(error) => log::warn!("[app] system theme detection failed: {error}"),
-            }
-            notify_startup_status(app.handle(), &notification_service);
-            if should_open_dashboard_on_start(launched_from_autostart) {
-                tray::open_dashboard_window(app.handle());
-            }
-            spawn_startup_update_check(app.handle().clone(), shared_state.clone());
-            spawn_periodic_update_check(app.handle().clone(), shared_state.clone());
+            let update_coordinator = Arc::new(updater::UpdateCoordinator::new(app.handle())?);
+            let pending_update_on_start = tauri::async_runtime::block_on(update_coordinator.has_pending_auto_install());
+            app.manage(update_coordinator.clone());
+            let opens_dashboard = should_open_dashboard_on_start(launched_from_autostart);
+            let runtime_services = RuntimeServices {
+                state: shared_state.clone(),
+                notification_inbox: notification_inbox_service.clone(),
+                notifications: notification_service.clone(),
+                settings: settings_service.clone(),
+                remote_sync: remote_sync_service,
+                updater: update_coordinator,
+            };
 
-            // 백그라운드 루프: 상태 계산, 트레이 갱신, 체커 주기적 리로드.
-            let app_handle = app.handle().clone();
-            scheduler::start_scheduler(app_handle, shared_state.clone());
-            remote_sync::start_background_loop(
-                app.handle().clone(),
-                remote_sync_service,
-                settings_service.clone(),
-                shared_state.clone(),
-                notification_service.clone(),
-            );
+            if pending_update_on_start {
+                // Windows installer는 프로세스를 즉시 끝낼 수 있으므로 tray,
+                // checker, ready 알림, 백그라운드 루프보다 먼저 처리한다.
+                spawn_pending_update_preflight(app.handle().clone(), runtime_services, opens_dashboard);
+            } else {
+                finish_runtime_startup(app.handle(), runtime_services, opens_dashboard, true)?;
+            }
 
             Ok(())
         })

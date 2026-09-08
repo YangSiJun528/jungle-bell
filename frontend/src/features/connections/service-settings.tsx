@@ -60,7 +60,6 @@ function ServiceSettingRow({
 function DesktopServiceSettings() {
     const {api} = useDashboardEnvironment();
     const client = useQueryClient();
-    const [confirmAutoUpdateOff, setConfirmAutoUpdateOff] = useState(false);
     const [confirmDebugOn, setConfirmDebugOn] = useState(false);
     const [cohortDraft, setCohortDraft] = useState<string | null | undefined>(undefined);
     const settings = useQuery({
@@ -79,10 +78,7 @@ function DesktopServiceSettings() {
     // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation
     const openLogs = useMutation({mutationFn: () => api.openLogFolder()});
     const value = settings.data;
-    const update = (
-        key: 'autoStart' | 'autoUpdate' | 'usageAnalytics' | 'debugMode',
-        checked: boolean,
-    ) => {
+    const update = (key: 'autoStart' | 'usageAnalytics' | 'debugMode', checked: boolean) => {
         if (!value) return;
         save.mutate({...value, [key]: checked});
     };
@@ -216,7 +212,7 @@ function DesktopServiceSettings() {
                 <CardHeader>
                     <CardTitle>앱 실행</CardTitle>
                     <CardDescription>
-                        이 PC에서 Jungle Bell을 실행하고 업데이트하는 방식을 정합니다.
+                        이 PC에서 Jungle Bell을 실행하는 방식을 정합니다.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -240,16 +236,16 @@ function DesktopServiceSettings() {
                         onCheckedChange={(checked) => update('autoStart', checked)}
                     />
                     <Separator />
-                    <ServiceSettingRow
-                        title="자동 업데이트"
-                        description="서명된 최신 버전을 확인하고 자동으로 설치합니다."
-                        checked={value.autoUpdate}
-                        disabled={save.isPending}
-                        onCheckedChange={(checked) => {
-                            if (checked) update('autoUpdate', true);
-                            else setConfirmAutoUpdateOff(true);
-                        }}
-                    />
+                    <div className="flex items-center justify-between gap-4 py-4">
+                        <div className="min-w-0">
+                            <p className="text-sm font-medium">자동 업데이트</p>
+                            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                                항상 새 버전을 확인하며, 사용 중에는 설치와 재시작을 다음 실행으로
+                                미룹니다.
+                            </p>
+                        </div>
+                        <p className="shrink-0 text-sm text-muted-foreground">항상 사용</p>
+                    </div>
                 </CardContent>
             </Card>
 
@@ -299,24 +295,6 @@ function DesktopServiceSettings() {
                 </Alert>
             ) : null}
 
-            <AlertDialog open={confirmAutoUpdateOff} onOpenChange={setConfirmAutoUpdateOff}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>자동 업데이트를 끌까요?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            외부 서비스가 변경되면 출석 확인과 알림이 정상적으로 작동하지 않을 수
-                            있습니다.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>취소</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => update('autoUpdate', false)}>
-                            그래도 끄기
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
-
             <AlertDialog open={confirmDebugOn} onOpenChange={setConfirmDebugOn}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
@@ -346,8 +324,8 @@ export function ServiceSettings() {
             <Laptop />
             <AlertTitle>PC 앱에서 설정합니다.</AlertTitle>
             <AlertDescription>
-                자동 시작, 업데이트와 진단 로그는 각 PC에 적용됩니다. 계정 사용 통계 설정은 현재 PC
-                앱에서 변경할 수 있으며 이 계정에 연결된 PWA에도 함께 적용됩니다.
+                자동 시작과 진단 로그는 각 PC에 적용됩니다. 계정 사용 통계 설정은 현재 PC 앱에서
+                변경할 수 있으며 이 계정에 연결된 PWA에도 함께 적용됩니다.
             </AlertDescription>
         </Alert>
     );

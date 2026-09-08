@@ -62,7 +62,8 @@ test('제거된 앱 소식 IPC 없이 서명된 v2 앱 업데이트를 유지한
         /github\.com\/YangSiJun528\/jungle-bell\/releases\/latest\/download\/latest-v2\.json/,
     );
     assert.match(appSource, /tauri_plugin_updater/);
-    assert.match(appSource, /spawn_startup_update_check/);
+    assert.match(appSource, /spawn_pending_update_preflight/);
+    assert.match(appSource, /spawn_periodic_update_check/);
     assert.match(dashboardApp, /DesktopUpdateNotice/);
     assert.match(dashboardCapability, /allow-check-desktop-update/);
     assert.match(dashboardCapability, /allow-install-desktop-update/);
