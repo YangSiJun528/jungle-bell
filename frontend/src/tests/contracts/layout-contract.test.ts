@@ -8,6 +8,12 @@ const source = (path: string) => readFileSync(new URL(path, srcRoot), 'utf8');
 const dashboard = source('../index.html');
 const app = source('./app/dashboard-app.tsx');
 const shell = source('./app/shell/DashboardShell.tsx');
+const footer = source('./app/shell/DashboardFooter.tsx');
+const globals = source('./app/styles/globals.css');
+const mobileHook = source('./hooks/use-mobile.ts');
+const sidebar = source('./components/ui/sidebar.tsx');
+const sheet = source('./components/ui/sheet.tsx');
+const alertDialog = source('./components/ui/alert-dialog.tsx');
 const routes = source('./app/routes.ts');
 
 test('HTML 문서는 레이아웃을 복제하지 않고 React 셸을 위한 단일 mount만 제공한다', () => {
@@ -32,7 +38,7 @@ test('모든 기능 경로는 하나의 DashboardShell과 main 콘텐츠 영역�
     assert.equal((shell.match(/id="dashboard-content"/g) ?? []).length, 1);
 });
 
-test('사이드바는 shadcn 접기·모바일 Sheet와 데스크톱 Rail 크기 조절을 사용한다', () => {
+test('사이드바는 1024px부터 shadcn 접기·데스크톱 Rail 크기 조절을 사용한다', () => {
     assert.match(shell, /<SidebarProvider[\s\S]{0,160}\bresizable/);
     assert.match(shell, /<Sidebar[\s\S]{0,120}collapsible="icon"/);
     assert.match(shell, /<SidebarTrigger[\s\S]{0,100}aria-label="사이드바 메뉴 열기"/);
@@ -46,26 +52,48 @@ test('사이드바는 shadcn 접기·모바일 Sheet와 데스크톱 Rail 크기
     assert.equal(existsSync(new URL('./app/sidebar-width.test.ts', srcRoot)), false);
     assert.doesNotMatch(shell, /<header\b/);
     assert.match(shell, /data-shell-top-spacer="true"/);
-    assert.match(shell, /h-14[\s\S]{0,120}sm:h-16/);
+    assert.match(shell, /min-h-\[calc\(3\.5rem\+var\(--safe-area-top\)\)\]/);
+    assert.match(shell, /sm:min-h-\[calc\(4rem\+var\(--safe-area-top\)\)\]/);
     assert.match(shell, /max-w-6xl/);
-    assert.match(shell, /md:p-5[\s\S]*lg:p-6/);
+    assert.match(mobileHook, /DESKTOP_SHELL_BREAKPOINT\s*=\s*1024/);
+    assert.doesNotMatch(sidebar, /\bmd:(?:block|flex)/);
+    assert.match(sidebar, /\blg:block/);
+    assert.match(sidebar, /\blg:flex/);
 });
 
-test('모바일은 safe-area를 반영한 하단 내비게이션과 충분한 본문 여백을 사용한다', () => {
+test('320~1023px 셸은 네 방향 safe-area와 하단 내비게이션 여유 공간을 사용한다', () => {
     assert.match(shell, /fixed inset-x-0 bottom-0 z-40/);
-    assert.match(shell, /pb-\[calc\(env\(safe-area-inset-bottom\)\+0\.375rem\)\]/);
-    assert.match(shell, /md:hidden/);
+    assert.match(shell, /lg:hidden/);
     assert.match(
         shell,
         /style=\{\{gridTemplateColumns: `repeat\(\$\{routes\.length\}, minmax\(0, 1fr\)\)`\}\}/,
     );
-    assert.match(shell, /p-3[\s\S]*sm:p-4[\s\S]*md:p-5[\s\S]*lg:p-6/);
     assert.match(shell, /max-w-lg/);
+    assert.match(shell, /data-mobile-navigation="true"/);
+    assert.match(shell, /data-shell-content="true"/);
+
+    for (const side of ['top', 'right', 'bottom', 'left']) {
+        assert.match(
+            globals,
+            new RegExp(`safe-area-inset-${side}`),
+            `${side} safe-area 환경 변수 계약이 없습니다.`,
+        );
+        assert.match(
+            `${shell}\n${footer}`,
+            new RegExp(`var\\(--safe-area-${side}\\)`),
+            `${side} safe-area가 셸에 적용되지 않았습니다.`,
+        );
+    }
+
+    assert.match(footer, /--dashboard-mobile-navigation-height/);
+    assert.match(footer, /lg:pb-8/);
+    assert.match(globals, /min-height:\s*100dvh/);
+    assert.match(globals, /min-width:\s*min\(320px, 100%\)/);
+    assert.match(globals, /scroll-padding-bottom:/);
+    assert.match(globals, /overflow-x:\s*clip/);
 });
 
 test('공통 푸터는 외부 링크와 모바일 하단 메뉴 여백만 제공한다', () => {
-    const footer = source('./app/shell/DashboardFooter.tsx');
-
     assert.match(shell, /<DashboardFooter\s*\/>/);
     assert.match(footer, /<footer\b/);
     assert.match(footer, /max-w-6xl/);
@@ -75,7 +103,43 @@ test('공통 푸터는 외부 링크와 모바일 하단 메뉴 여백만 제공
     assert.doesNotMatch(footer, /\/discussions(?:\/|\b)/);
     assert.match(footer, /피드백 남기기/);
     assert.match(footer, /릴리즈/);
-    assert.match(footer, /pb-28[\s\S]{0,160}md:pb-8/);
+    assert.match(footer, /lg:pb-8/);
+});
+
+test('지원 viewport 계약은 clipping 없이 760px에서 768px로 본문 폭이 역전되지 않는다', () => {
+    const viewportWidths = [320, 390, 760, 768, 1023, 1024, 1440] as const;
+    const pageGutter = (width: number) => (width >= 768 ? 24 : width >= 640 ? 20 : 16);
+    const sidebarWidth = (width: number) => (width >= 1024 ? 256 : 0);
+    const contentWidth = (width: number) => width - sidebarWidth(width) - pageGutter(width) * 2;
+
+    for (const width of viewportWidths) {
+        assert.ok(contentWidth(width) > 0, `${width}px에서 본문 폭이 사라집니다.`);
+        assert.ok(contentWidth(width) <= width, `${width}px에서 페이지 가로 overflow가 납니다.`);
+    }
+
+    assert.ok(contentWidth(768) >= contentWidth(760));
+    assert.match(globals, /--dashboard-inline-gutter:\s*1rem/);
+    assert.match(globals, /min-width:\s*40rem[\s\S]*--dashboard-inline-gutter:\s*1\.25rem/);
+    assert.match(globals, /min-width:\s*48rem[\s\S]*--dashboard-inline-gutter:\s*1\.5rem/);
+});
+
+test('200% 확대·landscape·키보드 축소에서도 overlay와 CTA는 동적 viewport 안에서 스크롤된다', () => {
+    assert.match(globals, /min-height:\s*100svh[\s\S]*min-height:\s*100dvh/);
+    assert.match(globals, /scroll-padding-bottom:/);
+    assert.match(globals, /scroll-margin-block:/);
+    assert.match(sheet, /max-h-dvh[\s\S]*overflow-y-auto[\s\S]*overscroll-contain/);
+    assert.match(sheet, /h-dvh/);
+    assert.match(
+        alertDialog,
+        /max-h-\[calc\(100dvh-2rem-var\(--safe-area-top\)-var\(--safe-area-bottom\)\)\]/,
+    );
+    assert.match(alertDialog, /overflow-y-auto/);
+});
+
+test('하단 내비게이션 현재 위치는 aria-current와 비색상 indicator를 함께 제공한다', () => {
+    assert.match(shell, /aria-current=\{active \? 'page' : undefined\}/);
+    assert.match(shell, /data-active-indicator="true"/);
+    assert.match(shell, /aria-hidden="true"/);
 });
 
 test('브라우저와 데스크톱은 4개 주요 메뉴와 보조 기능을 공유한다', () => {
@@ -95,7 +159,7 @@ test('브라우저와 데스크톱은 4개 주요 메뉴와 보조 기능을 공
     assert.match(shell, /aria-label="설정"/);
     assert.match(shell, /aria-haspopup="dialog"/);
     assert.match(shell, /overlayClassName="backdrop-blur-sm"/);
-    assert.match(shell, /md:hidden/);
+    assert.match(shell, /lg:hidden/);
     assert.match(shell, /<Link to=\{dashboardRoutePath\('connections'\)\}>/);
 });
 

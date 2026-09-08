@@ -14,6 +14,15 @@
 :root {
     color-scheme: light;
     --radius: 0.75rem;
+    --hit-area-min: 2.75rem;
+    --control-height: 3rem;
+    --control-height-lg: 3.5rem;
+    --dashboard-inline-gutter: 1rem;
+    --dashboard-mobile-navigation-height: 5rem;
+    --safe-area-top: env(safe-area-inset-top, 0px);
+    --safe-area-right: env(safe-area-inset-right, 0px);
+    --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-area-left: env(safe-area-inset-left, 0px);
     --background: oklch(0.972 0.009 145);
     --foreground: oklch(0.23 0.017 145);
     --card: oklch(0.995 0.004 145);
@@ -45,6 +54,18 @@
     --sidebar-accent-foreground: oklch(0.35 0.09 148);
     --sidebar-border: oklch(0.9 0.012 145);
     --sidebar-ring: oklch(0.52 0.11 148);
+}
+
+@media (min-width: 40rem) {
+    :root {
+        --dashboard-inline-gutter: 1.25rem;
+    }
+}
+
+@media (min-width: 48rem) {
+    :root {
+        --dashboard-inline-gutter: 1.5rem;
+    }
 }
 
 .dark {
@@ -123,8 +144,21 @@
     }
 
     html {
-        min-width: 320px;
+        min-width: min(320px, 100%);
+        max-width: 100%;
+        overflow-x: clip;
+        scroll-padding-bottom: calc(
+            var(--dashboard-mobile-navigation-height) + var(--safe-area-bottom) + 1rem
+        );
         background: var(--background);
+    }
+
+    body,
+    #root {
+        min-height: 100svh;
+        min-height: 100dvh;
+        max-width: 100%;
+        overflow-x: clip;
     }
 
     body {
@@ -132,10 +166,30 @@
         margin: 0;
     }
 
+    :where(
+        [data-slot='button'],
+        [data-slot='input'],
+        [data-slot='select-trigger'],
+        [data-slot='tabs-trigger'],
+        [data-slot='calendar'],
+        [data-slot='switch-row'],
+        [role='alert'],
+        [role='status']
+    ) {
+        scroll-margin-block: 1rem
+            calc(var(--dashboard-mobile-navigation-height) + var(--safe-area-bottom) + 1rem);
+    }
+
     button,
     a,
     input,
     select {
         -webkit-tap-highlight-color: transparent;
+    }
+}
+
+@media (min-width: 64rem) {
+    html {
+        scroll-padding-bottom: 1rem;
     }
 }

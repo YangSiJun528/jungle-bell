@@ -20,7 +20,7 @@ function TabsList({className, ...props}: React.ComponentProps<typeof TabsPrimiti
         <TabsPrimitive.List
             data-slot="tabs-list"
             className={cn(
-                'inline-flex h-9 w-fit items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground',
+                'inline-flex min-h-(--control-height-lg) max-w-full items-center justify-start overflow-x-auto rounded-lg bg-muted p-1 text-muted-foreground sm:w-fit',
                 className,
             )}
             {...props}
@@ -33,7 +33,7 @@ function TabsTrigger({className, ...props}: React.ComponentProps<typeof TabsPrim
         <TabsPrimitive.Trigger
             data-slot="tabs-trigger"
             className={cn(
-                'inline-flex h-7 flex-1 items-center justify-center gap-1.5 rounded-md border border-transparent px-3 text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:border-border data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs',
+                'inline-flex h-(--control-height) min-w-(--hit-area-min) flex-1 items-center justify-center gap-1.5 rounded-md border border-transparent px-3 text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:border-border data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs',
                 className,
             )}
             {...props}

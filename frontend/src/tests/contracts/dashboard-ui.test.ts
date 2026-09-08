@@ -107,7 +107,7 @@ test('브라우저와 데스크톱은 동일한 SPA 경로 정책을 사용한�
     assert.match(shell, /<SidebarFooter className="border-t border-sidebar-border">/);
     assert.match(shell, /aria-label="개인 도구"/);
     assert.match(shell, /data-navigation-group="utilities"/);
-    assert.match(shell, /md:hidden[\s\S]*aria-label=\{notificationAriaLabel/);
+    assert.match(shell, /lg:hidden[\s\S]*aria-label=\{notificationAriaLabel/);
     assert.match(shell, /aria-label="설정"/);
     assert.match(shell, /aria-haspopup="dialog"/);
     assert.match(shell, /overlayClassName="backdrop-blur-sm"/);

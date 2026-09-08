@@ -140,6 +140,37 @@ test('공통 상호작용 컴포넌트는 키보드 포커스와 비활성 상�
     assert.match(source('./app/shell/DashboardShell.tsx'), /focus-visible:ring-2/);
 });
 
+test('KRDS 조작 크기는 44px hit area와 48~56px 주요 control 토큰을 공유한다', () => {
+    assert.match(globals, /--hit-area-min:\s*2\.75rem/);
+    assert.match(globals, /--control-height:\s*3rem/);
+    assert.match(globals, /--control-height-lg:\s*3\.5rem/);
+
+    const contracts = [
+        ['./components/ui/button-variants.ts', /--control-height/],
+        ['./components/ui/input.tsx', /--control-height/],
+        ['./components/ui/select.tsx', /--control-height/],
+        ['./components/ui/tabs.tsx', /--control-height/],
+        ['./components/ui/calendar.tsx', /--control-height/],
+        ['./components/ui/switch.tsx', /--hit-area-min/],
+    ] as const;
+    for (const [path, contract] of contracts) {
+        assert.match(source(path), contract, `${path}가 KRDS control 토큰을 사용하지 않습니다.`);
+    }
+
+    const switchComponent = source('./components/ui/switch.tsx');
+    assert.match(switchComponent, /function SwitchRow\(/);
+    assert.match(switchComponent, /data-slot="switch-row"/);
+    assert.match(switchComponent, /<label/);
+});
+
+test('정적 Alert는 긴급 live region이 아니며 오류와 비긴급 상태를 구분할 수 있다', () => {
+    const alert = source('./components/ui/alert.tsx');
+
+    assert.doesNotMatch(alert, /role="alert"/);
+    assert.match(alert, /variant === 'destructive' \? 'alert' : undefined/);
+    assert.match(alert, /role=\{role \?\?/);
+});
+
 test('README 트레이 아이콘은 런타임과 같이 나침반 바깥의 배경 박스를 채운다', () => {
     for (const status of ['normal', 'offline', 'warning', 'alert', 'complete']) {
         const icon = source(`../../docs/assets/readme/readme-status-${status}.svg`);
