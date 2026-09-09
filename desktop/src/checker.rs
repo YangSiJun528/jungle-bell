@@ -20,6 +20,7 @@ use crate::state::{AppState, CheckerRuntime, CheckerRuntimeStatus};
 use crate::tray;
 
 const ATTENDANCE_URL: &str = "https://jungle-lms.krafton.com/check-in";
+const PREPARE_LMS_WINDOW_EVENT: &str = "prepare-lms-window";
 pub(crate) const CHECKER_NO_REPORT_REFRESH_LIMIT: u32 = 3;
 const CHECKER_REPORT_TIMEOUT: Duration = Duration::from_secs(7);
 
@@ -389,6 +390,15 @@ pub(crate) fn show_lms_window(app: &tauri::AppHandle) -> Result<(), String> {
     let window = app
         .get_webview_window("checker")
         .ok_or_else(|| "LMS_CHECKER_UNAVAILABLE".to_string())?;
+    if let Err(error) = app.emit_to(
+        tauri::EventTarget::WebviewWindow {
+            label: "checker".into(),
+        },
+        PREPARE_LMS_WINDOW_EVENT,
+        (),
+    ) {
+        log::warn!("[checker] LMS stylesheet check request failed: {error}");
+    }
     window
         .set_skip_taskbar(false)
         .map_err(|error| format!("LMS_WINDOW_TASKBAR_FAILED: {error}"))?;

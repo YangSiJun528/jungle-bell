@@ -12,14 +12,60 @@ interface InvokeCall {
     event: Record<string, unknown>;
 }
 
-async function executeChecker(options: {invalidSelection?: boolean} = {}) {
+interface StylesheetFixture {
+    href: string;
+    loaded: boolean;
+}
+
+interface MockStylesheetLink {
+    addEventListener(event: string, handler: () => void, options?: {once?: boolean}): void;
+    dataset: Record<string, string>;
+    dispatch(event: string): void;
+    href: string;
+    sheet: object | null;
+}
+
+async function executeChecker(
+    options: {
+        invalidSelection?: boolean;
+        locationHref?: string;
+        stylesheets?: StylesheetFixture[];
+    } = {},
+) {
     const transformed = await transformWithOxc(source, 'checker.ts', {
         lang: 'ts',
         sourceType: 'script',
         target: 'safari13',
     });
     const calls: InvokeCall[] = [];
-    let trigger: ((event: {payload: unknown}) => void) | null = null;
+    const eventListeners = new Map<string, (event: {payload: unknown}) => void>();
+    let now = Date.now();
+    let windowLoad: (() => void) | null = null;
+    let replacedLocation: string | null = null;
+    class TestDate extends Date {
+        static override now(): number {
+            return now;
+        }
+    }
+    const lmsLocation = new URL(options.locationHref ?? 'https://jungle-lms.krafton.com/check-in');
+    const stylesheetLinks: MockStylesheetLink[] = (options.stylesheets ?? []).map(
+        ({href, loaded}) => {
+            const listeners = new Map<string, {handler: () => void; once: boolean}>();
+            return {
+                addEventListener(event, handler, listenerOptions) {
+                    listeners.set(event, {handler, once: listenerOptions?.once === true});
+                },
+                dispatch(event) {
+                    const listener = listeners.get(event);
+                    listener?.handler();
+                    if (listener?.once) listeners.delete(event);
+                },
+                dataset: {},
+                href,
+                sheet: loaded ? {} : null,
+            };
+        },
+    );
     const invoke = async (command: string, args?: Record<string, unknown>): Promise<unknown> => {
         const event = args?.event as Record<string, unknown>;
         calls.push({command, event});
@@ -39,7 +85,7 @@ async function executeChecker(options: {invalidSelection?: boolean} = {}) {
         return {type: 'acknowledged'};
     };
     const context = vm.createContext({
-        Date,
+        Date: TestDate,
         Number,
         Object,
         Promise,
@@ -72,28 +118,63 @@ async function executeChecker(options: {invalidSelection?: boolean} = {}) {
                           }),
                   },
         window: {
-            location: {href: 'https://jungle-lms.krafton.com/check-in'},
+            location: {
+                href: lmsLocation.href,
+                origin: lmsLocation.origin,
+                replace(href: string) {
+                    replacedLocation = href;
+                },
+            },
             __TAURI__: {
                 core: {invoke},
                 event: {
-                    listen: async (
-                        _event: string,
-                        handler: (event: {payload: unknown}) => void,
-                    ) => {
-                        trigger = handler;
+                    listen: async (event: string, handler: (event: {payload: unknown}) => void) => {
+                        eventListeners.set(event, handler);
                         return () => undefined;
                     },
                 },
             },
+            addEventListener(event: string, handler: () => void) {
+                if (event === 'load') windowLoad = handler;
+            },
         },
+        document: {
+            querySelectorAll(selector: string) {
+                assert.equal(selector, 'link[rel~="stylesheet"][href]');
+                return stylesheetLinks;
+            },
+        },
+        URL,
     });
     vm.runInContext(transformed.code, context);
     await flushTasks();
     return {
         calls,
         trigger(payload: unknown) {
+            const trigger = eventListeners.get('trigger-check');
             assert.ok(trigger);
             trigger({payload});
+        },
+        prepareWindow() {
+            const prepare = eventListeners.get('prepare-lms-window');
+            assert.ok(prepare);
+            prepare({payload: null});
+        },
+        dispatchWindowLoad() {
+            assert.ok(windowLoad);
+            windowLoad();
+        },
+        stylesheetHrefs() {
+            return stylesheetLinks.map(({href}) => href);
+        },
+        failStylesheet(index = 0) {
+            stylesheetLinks[index]?.dispatch('error');
+        },
+        replacedLocation() {
+            return replacedLocation;
+        },
+        advanceTime(milliseconds: number) {
+            now += milliseconds;
         },
     };
 }
@@ -178,4 +259,90 @@ test('검사 중 새 generation trigger가 오면 최신 검사를 유실하지 
         .filter(({event}) => event.type === 'attendanceSnapshot')
         .map(({event}) => (event.status as {generation: number}).generation);
     assert.deepEqual(generations, [1, 2]);
+});
+
+test('정상적으로 적용된 LMS 스타일시트는 수정하지 않는다', async () => {
+    const href = 'https://jungle-lms.krafton.com/_next/static/css/934f429988e2d2ad.css';
+    const runtime = await executeChecker({stylesheets: [{href, loaded: true}]});
+
+    runtime.dispatchWindowLoad();
+    runtime.prepareWindow();
+
+    assert.deepEqual(runtime.stylesheetHrefs(), [href]);
+});
+
+test('로드에 실패한 LMS Next CSS는 캐시를 우회해 다시 요청한다', async () => {
+    const href = 'https://jungle-lms.krafton.com/_next/static/css/934f429988e2d2ad.css';
+    const runtime = await executeChecker({stylesheets: [{href, loaded: false}]});
+
+    runtime.dispatchWindowLoad();
+
+    const [retriedHref] = runtime.stylesheetHrefs();
+    const retriedUrl = new URL(retriedHref ?? '');
+    assert.equal(retriedUrl.origin, 'https://jungle-lms.krafton.com');
+    assert.equal(retriedUrl.pathname, '/_next/static/css/934f429988e2d2ad.css');
+    assert.match(retriedUrl.searchParams.get('jungle-bell-retry') ?? '', /^\d+$/u);
+
+    runtime.prepareWindow();
+    assert.equal(runtime.stylesheetHrefs()[0], retriedHref);
+
+    runtime.advanceTime(10_001);
+    runtime.prepareWindow();
+    assert.notEqual(runtime.stylesheetHrefs()[0], retriedHref);
+});
+
+test('LMS와 관계없는 스타일시트 URL은 캐시 복구 대상에서 제외한다', async () => {
+    const unrelatedHref = 'https://example.com/_next/static/css/untrusted.css';
+    const nonNextHref = 'https://jungle-lms.krafton.com/assets/site.css';
+    const runtime = await executeChecker({
+        stylesheets: [
+            {href: unrelatedHref, loaded: false},
+            {href: nonNextHref, loaded: false},
+        ],
+    });
+
+    runtime.dispatchWindowLoad();
+
+    assert.deepEqual(runtime.stylesheetHrefs(), [unrelatedHref, nonNextHref]);
+});
+
+test('Google 로그인 화면에서는 LMS CSS 복구를 시도하지 않는다', async () => {
+    const href = 'https://jungle-lms.krafton.com/_next/static/css/934f429988e2d2ad.css';
+    const runtime = await executeChecker({
+        locationHref: 'https://accounts.google.com/o/oauth2/auth',
+        stylesheets: [{href, loaded: false}],
+    });
+
+    runtime.dispatchWindowLoad();
+
+    assert.deepEqual(runtime.stylesheetHrefs(), [href]);
+    assert.equal(runtime.replacedLocation(), null);
+});
+
+test('CSS 캐시 우회도 실패하면 LMS 문서를 한 번만 새로 받는다', async () => {
+    const href = 'https://jungle-lms.krafton.com/_next/static/css/obsolete.css';
+    const runtime = await executeChecker({stylesheets: [{href, loaded: false}]});
+
+    runtime.dispatchWindowLoad();
+    runtime.failStylesheet();
+
+    const replacedHref = runtime.replacedLocation();
+    assert.ok(replacedHref);
+    const replacedUrl = new URL(replacedHref);
+    assert.equal(replacedUrl.origin, 'https://jungle-lms.krafton.com');
+    assert.equal(replacedUrl.pathname, '/check-in');
+    assert.match(replacedUrl.searchParams.get('jungle-bell-document-retry') ?? '', /^\d+$/u);
+});
+
+test('문서 캐시 우회 후에도 CSS가 실패하면 재로드 루프를 만들지 않는다', async () => {
+    const href = 'https://jungle-lms.krafton.com/_next/static/css/obsolete.css';
+    const runtime = await executeChecker({
+        locationHref: 'https://jungle-lms.krafton.com/check-in?jungle-bell-document-retry=123',
+        stylesheets: [{href, loaded: false}],
+    });
+
+    runtime.dispatchWindowLoad();
+    runtime.failStylesheet();
+
+    assert.equal(runtime.replacedLocation(), null);
 });
