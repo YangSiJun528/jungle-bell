@@ -81,7 +81,7 @@ describe('WeeklyMealMenu', () => {
         expect(markup).toContain('월요일 중식: 잡곡밥, 육개장');
     });
 
-    it('주간 급식도 텍스트가 이미지보다 먼저 렌더링되고 이미지 토글을 가진다', () => {
+    it('주간 급식도 이미지를 접지 않고 텍스트보다 먼저 표시한다', () => {
         const sha = 'a'.repeat(64);
         const meal: DashboardMealPost = {
             id: 'weekly-toggle',
@@ -109,14 +109,15 @@ describe('WeeklyMealMenu', () => {
         expect(markup).toContain('aria-label="8월 2주차 식단표 급식표 새 탭에서 열기"');
         const textIndex = markup.indexOf('급식표 텍스트 내용');
         const imageIndex = markup.indexOf('aria-label="8월 2주차 식단표 급식표 새 탭에서 열기"');
-        expect(imageIndex).toBeGreaterThan(textIndex);
-        expect(markup).toContain('aria-controls="weekly-toggle-image-preview"');
-        expect(markup).toContain('aria-expanded="false"');
-        expect(markup).toContain('이미지 펼치기');
-        expect(markup).toContain('class="min-h-11 w-full"');
-        expect(markup).toContain('max-h-44');
-        expect(markup).toContain('aria-hidden="true"');
-        expect(markup).toContain('tabindex="-1"');
+        expect(imageIndex).toBeLessThan(textIndex);
+        expect(markup).toContain('max-h-[72vh]');
+        expect(markup).not.toContain('aria-controls');
+        expect(markup).not.toContain('aria-expanded');
+        expect(markup).not.toContain('이미지 펼치기');
+        expect(markup).not.toContain('이미지 접기');
+        expect(markup).not.toContain('max-h-44');
+        expect(markup).not.toContain('aria-hidden="true"');
+        expect(markup).not.toContain('tabindex="-1"');
     });
 
     it('이미지와 텍스트가 모두 없을 때 empty 본문을 16px 이상으로 표시한다', () => {

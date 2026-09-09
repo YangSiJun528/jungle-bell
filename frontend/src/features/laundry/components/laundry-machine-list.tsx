@@ -1,27 +1,23 @@
 import {CircleAlert, CircleCheck, CircleDashed, Clock3, TriangleAlert} from 'lucide-react';
-import {useId, useMemo, useState} from 'react';
+import {useId} from 'react';
 
-import {EmptyState} from '@/components/dashboard/async-state';
 import {Card, CardContent, CardHeader} from '@/components/ui/card';
 import {Progress} from '@/components/ui/progress';
 import {TooltipProvider} from '@/components/ui/tooltip';
 import type {DashboardLaundryMachine} from '@/domain/laundry/capacity';
 import {cn} from '@/lib/utils';
 
-import type {
-    LaundryApplianceDetailView,
-    LaundryApplianceTone,
-    LaundryMachineDetailView,
+import {
+    laundryMachineDetail,
+    type LaundryApplianceDetailView,
+    type LaundryApplianceTone,
+    type LaundryMachineDetailView,
 } from '../lib/laundry-machine-detail';
 import {
     LAUNDRY_WARNING_PROGRESS_CLASS_NAME,
     LAUNDRY_WARNING_TEXT_CLASS_NAME,
 } from '../lib/laundry-warning';
-import {
-    filterAndSortLaundryMachineViews,
-    type LaundryMachineStateFilter,
-    type LaundryMachineZoneFilter,
-} from '../pages/laundry-page-view';
+import {sortWashTowers} from '../lib/wash-tower';
 import {LaundryStatusHint} from './laundry-status-hint';
 import {LaundryZoneBadge} from './laundry-zone-badge';
 
@@ -51,29 +47,6 @@ const statusClasses: Readonly<Record<LaundryApplianceTone, string>> = {
 
 function clockLabel(value: string): string {
     return clockFormatter.format(new Date(value));
-}
-
-const machineFilters = [
-    {id: 'all', label: '전체'},
-    {id: 'men', label: '남성'},
-    {id: 'common', label: '공용'},
-    {id: 'women', label: '여성'},
-    {id: 'other', label: '기타'},
-] as const;
-
-const stateFilters = [
-    {id: 'all', label: '전체'},
-    {id: 'running', label: '가동 중'},
-    {id: 'available', label: '사용 가능'},
-    {id: 'problem', label: '문제'},
-] as const;
-
-function isLaundryMachineListFilter(value: string): value is LaundryMachineListFilter {
-    return machineFilters.some((item) => item.id === value);
-}
-
-function isLaundryMachineStateFilter(value: string): value is LaundryMachineStateFilter {
-    return stateFilters.some((item) => item.id === value);
 }
 
 function StatusIcon({tone}: {tone: LaundryApplianceTone}) {
@@ -229,28 +202,18 @@ function ApplianceDetail({
     );
 }
 
-type CollapsibleMachineState = Record<string, boolean>;
-
-type LaundryMachineListFilter = LaundryMachineZoneFilter | 'all';
-
 function LaundryMachineCard({
     dataStale,
-    detailId,
     index,
-    isOpen,
     machine,
     showRiskWarnings,
     titleId,
-    onToggle,
 }: {
     dataStale: boolean;
-    detailId: string;
     index: number;
-    isOpen: boolean;
     machine: LaundryMachineDetailView;
     showRiskWarnings: boolean;
     titleId: string;
-    onToggle: () => void;
 }) {
     return (
         <Card
@@ -270,17 +233,7 @@ function LaundryMachineCard({
                 </div>
             </CardHeader>
             <CardContent className="flex flex-1 flex-col p-0">
-                <button
-                    aria-controls={detailId}
-                    aria-expanded={isOpen}
-                    aria-label={`${machine.title} 상세 ${isOpen ? '접기' : '펼치기'}`}
-                    className="min-h-11 rounded-none border-b px-4 py-3 text-left text-base font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-                    onClick={onToggle}
-                    type="button"
-                >
-                    상세 {isOpen ? '접기' : '펼치기'}
-                </button>
-                <div className="grid flex-1 grid-rows-2" id={detailId} hidden={!isOpen}>
+                <div className="grid flex-1 grid-rows-2">
                     <ApplianceDetail
                         machineTitle={machine.title}
                         showRiskWarning={showRiskWarnings}
@@ -307,22 +260,8 @@ export function LaundryMachineList({
     staleLabel,
 }: LaundryMachineListProps) {
     const titleId = useId();
-    const [zoneFilter, setZoneFilter] = useState<LaundryMachineListFilter>('all');
-    const [stateFilter, setStateFilter] = useState<LaundryMachineStateFilter>('all');
-    const [prioritizeProblems, setPrioritizeProblems] = useState(true);
-    const [expanded, setExpanded] = useState<CollapsibleMachineState>({});
-
-    const views = useMemo(
-        () =>
-            filterAndSortLaundryMachineViews({
-                machines,
-                nowMs,
-                zoneFilter,
-                stateFilter,
-                prioritizeProblems,
-            }).views,
-        [machines, nowMs, zoneFilter, stateFilter, prioritizeProblems],
-    );
+    const views = sortWashTowers(machines).map((machine) => laundryMachineDetail(machine, nowMs));
+    if (views.length === 0) return null;
 
     return (
         <section className="space-y-3" aria-labelledby={titleId} data-laundry-detail-list="true">
@@ -334,106 +273,20 @@ export function LaundryMachineList({
                     실시간 정보가 아닙니다 · 마지막 정상 시각 {staleLabel ?? '확인 기록 없음'}
                 </p>
             ) : null}
-            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-                <label className="flex min-w-0 flex-col text-base">
-                    <span
-                        className="mb-1 text-base leading-6 text-muted-foreground"
-                        data-laundry-filter-label="true"
-                    >
-                        구역
-                    </span>
-                    <select
-                        aria-label="구역"
-                        className="h-11 min-h-11 w-full min-w-0 rounded-md border border-input bg-background px-3 text-base outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                        value={zoneFilter}
-                        onChange={(event) => {
-                            if (isLaundryMachineListFilter(event.target.value)) {
-                                setZoneFilter(event.target.value);
-                            }
-                        }}
-                    >
-                        {machineFilters.map((item) => (
-                            <option key={item.id} value={item.id}>
-                                {item.label}
-                            </option>
-                        ))}
-                    </select>
-                </label>
-                <label className="flex min-w-0 flex-col text-base">
-                    <span
-                        className="mb-1 text-base leading-6 text-muted-foreground"
-                        data-laundry-filter-label="true"
-                    >
-                        상태
-                    </span>
-                    <select
-                        aria-label="상태"
-                        className="h-11 min-h-11 w-full min-w-0 rounded-md border border-input bg-background px-3 text-base outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                        value={stateFilter}
-                        onChange={(event) => {
-                            if (isLaundryMachineStateFilter(event.target.value)) {
-                                setStateFilter(event.target.value);
-                            }
-                        }}
-                    >
-                        {stateFilters.map((item) => (
-                            <option key={item.id} value={item.id}>
-                                {item.label}
-                            </option>
-                        ))}
-                    </select>
-                </label>
-                <label
-                    className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md px-1 text-base leading-6 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 sm:col-span-2"
-                    data-laundry-priority-row="true"
-                >
-                    <input
-                        className="size-5 shrink-0 rounded outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                        checked={prioritizeProblems}
-                        data-laundry-priority-control="true"
-                        onChange={(event) => {
-                            setPrioritizeProblems(event.target.checked);
-                        }}
-                        type="checkbox"
-                    />
-                    <span>문제 우선 정렬</span>
-                </label>
-            </div>
-
-            {views.length > 0 ? (
-                <TooltipProvider delayDuration={200}>
-                    <div className="grid items-stretch gap-3 md:grid-cols-2 lg:grid-cols-3">
-                        {views.map((machine, machineIndex) => {
-                            const detailId = `${titleId}-detail-${machine.id}`;
-                            const isOpen = expanded[machine.id] ?? true;
-
-                            return (
-                                <LaundryMachineCard
-                                    dataStale={dataStale}
-                                    detailId={detailId}
-                                    index={machineIndex}
-                                    isOpen={isOpen}
-                                    key={machine.id}
-                                    machine={machine}
-                                    showRiskWarnings={showRiskWarnings}
-                                    titleId={titleId}
-                                    onToggle={() => {
-                                        setExpanded((previous) => ({
-                                            ...previous,
-                                            [machine.id]: !isOpen,
-                                        }));
-                                    }}
-                                />
-                            );
-                        })}
-                    </div>
-                </TooltipProvider>
-            ) : (
-                <EmptyState
-                    title="필터 조건에 맞는 기기가 없습니다."
-                    description="구역이나 상태 필터를 바꿔 다시 확인해 주세요."
-                />
-            )}
+            <TooltipProvider delayDuration={200}>
+                <div className="grid items-stretch gap-3 md:grid-cols-2 lg:grid-cols-3">
+                    {views.map((machine, machineIndex) => (
+                        <LaundryMachineCard
+                            dataStale={dataStale}
+                            index={machineIndex}
+                            key={machine.id}
+                            machine={machine}
+                            showRiskWarnings={showRiskWarnings}
+                            titleId={titleId}
+                        />
+                    ))}
+                </div>
+            </TooltipProvider>
         </section>
     );
 }
