@@ -10,12 +10,10 @@ import {createDesktopHttpSessionManager} from './desktop-http-session';
 import {createDashboardDesktopSettingsApi} from './desktop-settings';
 import {createTauriEventAdapter} from './event-adapter';
 import {createTauriExternalLinkAdapter, type TauriExternalLinkAdapter} from './external-links';
-import {createTauriLifecycleAdapter, type TauriLifecycleAdapter} from './lifecycle';
 import {createNativeBridge} from './native-bridge';
 
 export interface TauriPlatformAdapter extends PlatformAdapter {
     externalLinks: TauriExternalLinkAdapter;
-    lifecycle: TauriLifecycleAdapter;
 }
 
 export function createTauriPlatformAdapter(
@@ -23,7 +21,6 @@ export function createTauriPlatformAdapter(
         nativeBridge?: NativeBridge;
         events?: PlatformEventAdapter;
         externalLinks?: TauriExternalLinkAdapter;
-        lifecycle?: TauriLifecycleAdapter;
         pwa?: PwaCapabilityAdapter;
     } = {},
 ): TauriPlatformAdapter {
@@ -48,7 +45,6 @@ export function createTauriPlatformAdapter(
         desktopSettings: createDashboardDesktopSettingsApi(native),
         events: options.events ?? createTauriEventAdapter(),
         externalLinks: options.externalLinks ?? createTauriExternalLinkAdapter(),
-        lifecycle: options.lifecycle ?? createTauriLifecycleAdapter(),
         pwa: options.pwa ?? unavailablePwaAdapter(),
         usagePrivacy: unavailableUsagePrivacyAdapter(),
     };

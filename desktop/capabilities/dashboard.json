@@ -21,9 +21,6 @@
         }
       ]
     },
-    "allow-get-desktop-lifecycle-status",
-    "allow-acknowledge-and-hide-to-tray",
-    "allow-quit-desktop-app",
     "allow-bootstrap-desktop-http-session",
     "allow-get-desktop-settings",
     "allow-check-desktop-update",

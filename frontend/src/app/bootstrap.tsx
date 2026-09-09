@@ -8,7 +8,6 @@ import {createPwaUpdateBootstrap} from '@/platform/pwa/update-bootstrap';
 
 import {DashboardProviders} from './dashboard-providers';
 import {createDashboardRouter} from './dashboard-router';
-import {DesktopLifecycleController} from './desktop-lifecycle-controller';
 import {DashboardExternalLinkController} from './external-link-controller';
 import {PwaUpdateController} from './pwa-update-controller';
 import {normalizeLegacyDashboardHash} from './routes';
@@ -49,13 +48,11 @@ export function bootstrapDashboard(platform: PlatformAdapter): void {
     createRoot(root).render(
         <StrictMode>
             <DashboardExternalLinkController platform={platform}>
-                <DesktopLifecycleController platform={platform}>
-                    <PwaUpdateController bootstrap={pwaUpdate}>
-                        <DashboardProviders platform={platform}>
-                            <RouterProvider router={router} />
-                        </DashboardProviders>
-                    </PwaUpdateController>
-                </DesktopLifecycleController>
+                <PwaUpdateController bootstrap={pwaUpdate}>
+                    <DashboardProviders platform={platform}>
+                        <RouterProvider router={router} />
+                    </DashboardProviders>
+                </PwaUpdateController>
             </DashboardExternalLinkController>
         </StrictMode>,
     );

@@ -21,34 +21,6 @@ use crate::tray;
 
 const LMS_SESSION_STATE_UPDATED_EVENT: &str = "lms-session-state-updated";
 
-// ── 데스크톱 창 수명주기 경계 ──────────────────────────
-
-#[tauri::command]
-pub(crate) fn get_desktop_lifecycle_status(
-    window: tauri::WebviewWindow,
-    lifecycle: tauri::State<'_, Arc<crate::config::DesktopLifecycleStateStore>>,
-) -> Result<crate::config::DesktopLifecycleStatus, String> {
-    remote_sync::ensure_dashboard_window(&window)?;
-    lifecycle.status()
-}
-
-#[tauri::command]
-pub(crate) fn acknowledge_and_hide_to_tray(
-    window: tauri::WebviewWindow,
-    lifecycle: tauri::State<'_, Arc<crate::config::DesktopLifecycleStateStore>>,
-) -> Result<crate::config::DesktopLifecycleStatus, String> {
-    remote_sync::ensure_dashboard_window(&window)?;
-    tray::acknowledge_and_hide_to_tray(&window, lifecycle.inner())?;
-    lifecycle.status()
-}
-
-#[tauri::command]
-pub(crate) fn quit_desktop_app(window: tauri::WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
-    remote_sync::ensure_dashboard_window(&window)?;
-    tray::quit_app(&app);
-    Ok(())
-}
-
 // ── 연결 서비스 대시보드 경계 ───────────────────────────
 
 #[tauri::command]
@@ -595,23 +567,6 @@ mod tests {
         system_notification_settings_url, validate_js_log_payload, CheckerEventInput, CheckerEventResponse,
         DesktopSettings, DesktopSettingsInput,
     };
-
-    #[test]
-    fn desktop_lifecycle_status는_close동작과_명시적_종료_가능성을_고정한다() {
-        let value = serde_json::to_value(crate::config::DesktopLifecycleStatus::new(
-            crate::config::CloseToTrayNotice::Pending,
-        ))
-        .unwrap();
-
-        assert_eq!(
-            value,
-            serde_json::json!({
-                "closeBehavior": "hideToTray",
-                "closeToTrayNotice": "pending",
-                "explicitQuitAvailable": true,
-            })
-        );
-    }
 
     #[test]
     fn 운영체제별_알림_설정_url은_고정된_대상만_허용한다() {

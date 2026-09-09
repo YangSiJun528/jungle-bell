@@ -104,6 +104,7 @@ describe('PlatformAdapter', () => {
 
         expect(platform.kind).toBe('desktop');
         expect(platform.native).toBe(native);
+        expect(platform).not.toHaveProperty('lifecycle');
         expect(platform.accountAuthentication.kind).toBe('desktop-session');
         expect(platform.capabilities).toEqual({
             desktopAccount: true,

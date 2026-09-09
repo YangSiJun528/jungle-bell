@@ -8,7 +8,6 @@ import {useDashboardEnvironment} from './dashboard-context';
 import {DashboardRouteAccessibility} from './dashboard-route-accessibility';
 import {DashboardRouteErrorFallback} from './dashboard-route-error';
 import {DashboardRouteRuntimeProvider} from './dashboard-route-runtime';
-import {DesktopLifecycleSummary} from './desktop-lifecycle-controller';
 import {DesktopUpdateNotice} from './desktop-update-notice';
 import {
     mergeSeenMobileNotificationIds,
@@ -148,11 +147,6 @@ function DashboardContent() {
                         <Outlet />
                     </PlatformAuthenticationGate>
                 </AsyncBoundary>
-                {platform.kind === 'desktop' && contentRoute === 'connections' ? (
-                    <div className="mt-6">
-                        <DesktopLifecycleSummary />
-                    </div>
-                ) : null}
             </DashboardRouteRuntimeProvider>
             <InstallPrompt open={installPromptOpen} onOpenChange={setInstallPromptVisibility} />
         </DashboardShell>
