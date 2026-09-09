@@ -36,7 +36,16 @@ describe('MealHistoryCalendar', () => {
         expect(markup).toContain('이전 달');
         expect(markup).toContain('다음 달');
         expect(markup).toContain('aria-label="달력 월 이동"');
+        expect(markup).toContain('w-[15.75rem]');
+        expect(markup).toContain('sm:w-[17.5rem]');
+        expect(markup).toContain('overflow-hidden');
+        expect(markup).not.toContain('overflow-x-auto');
         expect(markup).not.toMatch(/<p(?:\s|>)/u);
+
+        const selectedDayButton = markup.match(/<button[^>]+data-day="8\/10\/2026"[^>]*>/u)?.[0];
+        expect(selectedDayButton).toContain('min-h-(--cell-size)');
+        expect(selectedDayButton).toContain('min-w-(--cell-size)');
+        expect(selectedDayButton).not.toContain('min-h-(--hit-area-min)');
     });
 
     it('공식 ShadCN Calendar에 날짜 선택과 월 이동을 위임한다', () => {
@@ -53,6 +62,10 @@ describe('MealHistoryCalendar', () => {
         expect(calendarSource.match(/buttonVariants\(\{variant: buttonVariant\}\)/gu)).toHaveLength(
             2,
         );
+        expect(calendarSource).toContain(
+            "'size-(--cell-size) min-h-(--cell-size) min-w-(--cell-size) p-0 select-none aria-disabled:opacity-50'",
+        );
+        expect(calendarSource).toContain('min-h-(--cell-size) min-w-(--cell-size)');
         expect(calendarSource).not.toContain('PreviousMonthButton:');
         expect(calendarSource).not.toContain('NextMonthButton:');
     });

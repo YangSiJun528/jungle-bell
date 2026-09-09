@@ -2,7 +2,7 @@ import {describe, expect, test} from 'vitest';
 
 import type {DesktopUpdateStatus} from '@/platform/contracts';
 
-import {appStatusRows, type AppStatusInput} from './app-status-model';
+import {appStatusRows, appStatusWarningCount, type AppStatusInput} from './app-status-model';
 
 function update(
     status: DesktopUpdateStatus['status'],
@@ -30,6 +30,18 @@ function row(input: AppStatusInput, id: string) {
 }
 
 describe('app status rows', () => {
+    test('조치가 필요한 attention과 error만 경고 개수에 포함한다', () => {
+        expect(
+            appStatusWarningCount([
+                {status: 'attention'},
+                {status: 'error'},
+                {status: 'checking'},
+                {status: 'ready'},
+                {status: 'unavailable'},
+            ]),
+        ).toBe(2);
+    });
+
     test('PC는 로그인, credential, 동기화, 모바일, OS 알림, 업데이트 상태를 구분한다', () => {
         const input: AppStatusInput = {
             surface: 'desktop',

@@ -36,4 +36,17 @@ describe('AttendancePage LMS gate', () => {
             "detail.source === 'desktop' ? '마지막 확인' : '마지막 동기화'",
         );
     });
+
+    test('출석 상태와 공식 서비스 카드는 한 화면에서 빠르게 훑을 수 있는 밀도로 표시한다', () => {
+        expect(source).toContain('data-attendance-card="today"');
+        expect(source).toContain('data-attendance-card="campus"');
+        expect(source).toContain('data-attendance-check={label}');
+        expect(normalizedSource).toContain(
+            'className="flex flex-wrap items-baseline justify-between gap-2"',
+        );
+        expect(source).toContain('className="gap-0 py-0"');
+        expect(source).toContain('lg:grid-cols-[minmax(0,1.4fr)_minmax(20rem,0.8fr)]');
+        expect(source).not.toContain('xl:grid-cols-[minmax(0,1.4fr)_minmax(20rem,0.8fr)]');
+        expect(source).not.toContain('<strong className="mt-3 block text-xl">');
+    });
 });

@@ -205,6 +205,10 @@ describe('DashboardShell', () => {
         expect(shellSource).toContain('side="right"');
         expect(shellSource).toContain('overlayClassName="backdrop-blur-sm"');
         expect(shellSource).toContain('data-notification-panel="true"');
+        expect(shellSource).toContain('className="w-full gap-0 overflow-hidden sm:max-w-xl"');
+        expect(shellSource).toMatch(
+            /data-notification-panel-scroll="true"[\s\S]*className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5"/u,
+        );
         expect(shellSource).toContain('<SheetTitle>알림</SheetTitle>');
         expect(shellSource).not.toContain('keyboardShortcut={null}');
     });

@@ -54,5 +54,7 @@ describe('MealPreferencesSection', () => {
         expect(markup).toContain('>석식<');
         expect(markup).toMatch(/role="switch"[^>]+aria-labelledby=/u);
         expect(markup).toContain('설정 저장');
+        expect(markup).toMatch(/data-slot="card" class="[^"]*gap-6/u);
+        expect(markup).not.toMatch(/data-slot="card" class="[^"]*gap-4/u);
     });
 });

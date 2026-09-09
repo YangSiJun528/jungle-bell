@@ -20,6 +20,7 @@ import type {
     PwaAppStatusInput,
     PwaPushLifecycleObservation,
 } from './app-status-model';
+import {appStatusRows, appStatusWarningCount} from './app-status-model';
 import {
     authenticationStateFromProducer,
     notificationPermissionFromRuntime,
@@ -27,6 +28,7 @@ import {
     serviceWorkerObservation,
 } from './app-status-observations';
 import {AppStatusPanel} from './app-status-panel';
+import type {AppStatusRenderer} from './app-status-render';
 
 function pushSubscriptionStorage(): PushSubscriptionLifecycleStorage {
     try {
@@ -67,7 +69,13 @@ function currentNotificationPermission() {
     );
 }
 
-export function ConnectedPwaStatus({onOpenTab}: {onOpenTab?: (tab: AppStatusTab) => void}) {
+export function ConnectedPwaStatus({
+    children,
+    onOpenTab,
+}: {
+    children?: AppStatusRenderer;
+    onOpenTab?: (tab: AppStatusTab) => void;
+}) {
     const account = useDashboardAccount();
     const {platform} = useDashboardEnvironment();
     const pushLifecycle = useQuery({
@@ -115,5 +123,8 @@ export function ConnectedPwaStatus({onOpenTab}: {onOpenTab?: (tab: AppStatusTab)
             ? 'checking'
             : (worker.data ?? {status: 'error', version: packageMetadata.version}),
     };
-    return <AppStatusPanel input={input} onOpenTab={onOpenTab} />;
+    const content = <AppStatusPanel input={input} onOpenTab={onOpenTab} />;
+    return children
+        ? children({content, warningCount: appStatusWarningCount(appStatusRows(input))})
+        : content;
 }

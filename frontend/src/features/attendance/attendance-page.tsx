@@ -51,21 +51,20 @@ function calendarDateLabel(value: string): string {
 function AttendanceCheck({label, checked}: {label: string; checked: boolean}) {
     return (
         <div
+            data-attendance-check={label}
             className={
                 checked
-                    ? 'rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-emerald-800 dark:text-emerald-200'
-                    : 'rounded-xl border border-amber-500/20 bg-amber-500/10 p-4 text-amber-900 dark:text-amber-200'
+                    ? 'flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2.5 text-emerald-800 dark:text-emerald-200'
+                    : 'flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2.5 text-amber-900 dark:text-amber-200'
             }
         >
-            <span className="flex items-center gap-2 text-sm font-medium">
-                {checked ? (
-                    <Check aria-hidden="true" className="size-4" />
-                ) : (
-                    <X aria-hidden="true" className="size-4" />
-                )}
-                {label}
-            </span>
-            <strong className="mt-3 block text-xl">{checked ? '완료' : '미완료'}</strong>
+            {checked ? (
+                <Check aria-hidden="true" className="size-4 shrink-0" />
+            ) : (
+                <X aria-hidden="true" className="size-4 shrink-0" />
+            )}
+            <span className="text-sm font-medium">{label}</span>
+            <strong className="ml-auto text-sm">{checked ? '완료' : '미완료'}</strong>
         </div>
     );
 }
@@ -74,21 +73,21 @@ function AttendanceDevicesCard({devices}: {devices: DesktopDevice[]}) {
     if (devices.length === 0) return null;
 
     return (
-        <Card>
-            <CardHeader>
+        <Card className="gap-0 py-0">
+            <CardHeader className="px-5 py-4">
                 <div>
                     <p className="text-xs font-medium text-muted-foreground">수집 기기</p>
                     <CardTitle className="mt-1">출석 확인 PC</CardTitle>
                 </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-5 pb-4">
                 <ul className="divide-y rounded-xl border">
                     {devices.map((device) => {
                         const status = deviceStatus(device);
                         return (
                             <li
                                 key={device.id}
-                                className="flex items-center justify-between gap-4 p-4"
+                                className="flex items-center justify-between gap-4 p-3"
                             >
                                 <div className="flex min-w-0 items-center gap-3">
                                     <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted">
@@ -182,10 +181,10 @@ function AvailableAttendance({
     detail: Extract<AttendanceContentState, {kind: 'available'}>['detail'];
 }) {
     return (
-        <div className="space-y-4">
-            <div>
+        <div className="space-y-3">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <p className="text-xs text-muted-foreground">출석 기준일</p>
-                <p className="mt-1 text-lg font-semibold">
+                <p className="text-sm font-semibold">
                     {calendarDateLabel(detail.snapshot.attendanceDate)}
                 </p>
             </div>
@@ -193,15 +192,17 @@ function AvailableAttendance({
                 <AttendanceCheck label="학습 시작" checked={detail.snapshot.morningChecked} />
                 <AttendanceCheck label="학습 종료" checked={detail.snapshot.eveningChecked} />
             </div>
-            <p className="text-xs text-muted-foreground">
-                {detail.source === 'desktop' ? '마지막 확인' : '마지막 동기화'} ·{' '}
-                {dateTimeLabel(detail.lastSyncedAt)}
-            </p>
-            {detail.syncState === 'pending' ? (
-                <p className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <RefreshCw aria-hidden="true" className="size-3" /> 다른 기기 동기화 대기 중
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                <p>
+                    {detail.source === 'desktop' ? '마지막 확인' : '마지막 동기화'} ·{' '}
+                    {dateTimeLabel(detail.lastSyncedAt)}
                 </p>
-            ) : null}
+                {detail.syncState === 'pending' ? (
+                    <p className="flex items-center gap-1">
+                        <RefreshCw aria-hidden="true" className="size-3" /> 다른 기기 동기화 대기 중
+                    </p>
+                ) : null}
+            </div>
             {detail.freshness === 'stale' ? (
                 <Alert className="border-amber-500/25 bg-amber-500/10 text-amber-900 dark:text-amber-200">
                     <RefreshCw aria-hidden="true" />
@@ -242,11 +243,16 @@ function TodayAttendanceCard({
     retryActions: RetryActions;
 }) {
     return (
-        <Card aria-live="polite" aria-busy={state.attendanceBusy}>
-            <CardHeader>
+        <Card
+            className="gap-0 py-0"
+            data-attendance-card="today"
+            aria-live="polite"
+            aria-busy={state.attendanceBusy}
+        >
+            <CardHeader className="px-5 py-4">
                 <CardTitle>오늘 출석</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-5 pb-4">
                 <AttendanceContent content={state.content} retryActions={retryActions} />
             </CardContent>
         </Card>
@@ -269,8 +275,8 @@ function JungleCampusCard({
     onOpen: () => void;
 }) {
     return (
-        <Card className="border-primary/20 bg-primary/5">
-            <CardHeader>
+        <Card className="gap-0 border-primary/20 bg-primary/5 py-0" data-attendance-card="campus">
+            <CardHeader className="px-5 py-4">
                 <div className="flex items-center gap-3">
                     <span className="grid size-10 place-items-center rounded-xl bg-primary/10 text-primary">
                         <CalendarCheck2 aria-hidden="true" className="size-5" />
@@ -281,8 +287,8 @@ function JungleCampusCard({
                     </div>
                 </div>
             </CardHeader>
-            <CardContent className="space-y-3">
-                <CardDescription className="leading-6">
+            <CardContent className="space-y-2 px-5 pb-4">
+                <CardDescription className="leading-5">
                     공식 정글캠퍼스에서 출석 원본 상태를 확인하거나 로그인하세요.
                     {lmsWindow ? ' LMS 세션은 이 PC의 앱에만 저장됩니다.' : ''}
                 </CardDescription>
@@ -298,7 +304,7 @@ function JungleCampusCard({
                     <p className="text-sm text-destructive">정글캠퍼스를 열지 못했습니다.</p>
                 ) : null}
             </CardContent>
-            <CardFooter className="border-t">
+            <CardFooter className="border-t px-5 py-3 [.border-t]:pt-3">
                 {lmsWindow ? (
                     <Button disabled={opening} onClick={onOpen}>
                         {opening ? '여는 중' : '정글캠퍼스 열기'} <ExternalLinkIcon />
@@ -355,7 +361,7 @@ function AttendancePageView({
             />
             <AttendanceRefreshError errorMessage={refreshErrorMessage} />
 
-            <section className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(20rem,0.8fr)]">
+            <section className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(20rem,0.8fr)]">
                 <TodayAttendanceCard state={state} retryActions={retryActions} />
                 <JungleCampusCard
                     campusNotice={campusNotice}

@@ -13,11 +13,14 @@ describe('AppStatusPage', () => {
         expect(rowSource).toContain('row.action');
         expect(panelSource).toContain('AppStatusRow');
         expect(panelSource).toContain('앱 상태');
+        expect(pageSource).toContain('appStatusWarningCount(appStatusRows(input))');
+        expect(pageSource).not.toContain('useEffect');
     });
 
     test('실제 입력이 없으면 producer에 연결된 상태를 렌더링한다', () => {
         expect(pageSource).toContain('if (input)');
         expect(pageSource).toContain('<ConnectedAppStatus');
+        expect(pageSource).toContain('{children}</ConnectedAppStatus>');
         expect(pwaSource).toContain('loadPushSubscriptionReconciliation({');
         expect(pwaSource).toContain('notificationPermissionFromRuntime');
         expect(pwaSource).toContain('readNotificationTestRecord');

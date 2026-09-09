@@ -469,7 +469,7 @@ export function DashboardShell({
                         side="right"
                         showCloseButton={false}
                         overlayClassName="backdrop-blur-sm"
-                        className="w-full gap-0 sm:max-w-xl"
+                        className="w-full gap-0 overflow-hidden sm:max-w-xl"
                         aria-describedby={undefined}
                         data-notification-panel="true"
                         onCloseAutoFocus={(event) => {
@@ -490,7 +490,10 @@ export function DashboardShell({
                                 </Button>
                             </SheetClose>
                         </SheetHeader>
-                        <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
+                        <div
+                            data-notification-panel-scroll="true"
+                            className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5"
+                        >
                             {notificationPanel.content}
                         </div>
                     </SheetContent>

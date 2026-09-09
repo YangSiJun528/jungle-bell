@@ -28,13 +28,6 @@ import {
 
 export {LaundryFeatureBoundary} from '../components/laundry-feature-boundary';
 
-const LAUNDRY_JUMPS = [
-    ['요약', 'laundry-capacity-title'],
-    ['워시타워', 'laundry-tower-title'],
-    ['기기 상세', 'laundry-detail-title'],
-    ['내 알림', 'laundry-watch-title'],
-] as const;
-
 type LaundryFailureKind = 'error' | 'offline' | 'stale';
 
 function isFailureKind(kind: LaundryPageStatus['kind']): kind is LaundryFailureKind {
@@ -184,22 +177,6 @@ function laundryPagePresentation(input: {
 }
 
 type LaundryPagePresentation = ReturnType<typeof laundryPagePresentation>;
-
-function LaundryJumpNavigation() {
-    return (
-        <nav aria-label="세부 섹션 이동" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {LAUNDRY_JUMPS.map(([label, anchor]) => (
-                <a
-                    key={anchor}
-                    className="min-h-11 rounded-md border border-border px-3 py-3 text-center text-base leading-6 outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                    href={`#${anchor}`}
-                >
-                    {label}
-                </a>
-            ))}
-        </nav>
-    );
-}
 
 function LaundryCapacitySummary({presentation}: {presentation: LaundryPagePresentation}) {
     const {nowMs, snapshot, staleLabel, summaries} = presentation;
@@ -391,7 +368,6 @@ function LaundryPageContent({
                 status={presentation.status}
                 title={presentation.statusTitle}
             />
-            <LaundryJumpNavigation />
             <LaundryCapacitySummary presentation={presentation} />
             <LaundryTowerStatus
                 presentation={presentation}

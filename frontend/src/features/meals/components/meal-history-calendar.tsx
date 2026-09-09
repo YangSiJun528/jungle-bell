@@ -45,7 +45,7 @@ export function MealHistoryCalendar({
     return (
         <Calendar
             aria-label={`${formatMonth(selected)} 급식 기록 달력`}
-            className="w-full p-0 [--cell-size:2.25rem] sm:[--cell-size:2.5rem]"
+            className="w-[15.75rem] shrink-0 overflow-hidden p-0 [--cell-size:2.25rem] sm:w-[17.5rem] sm:[--cell-size:2.5rem]"
             month={visibleMonth}
             disabled={(date) => !hasMeal(date)}
             fixedWeeks

@@ -1213,20 +1213,22 @@ function WebConnections() {
 }
 
 export interface ConnectionsPageProps {
+    appStatus?: ReactNode;
+    appStatusWarningCount?: number;
     tab?: ConnectionsTab;
     returnTo?: DashboardReturnTarget;
     onTabChange?: (tab: ConnectionsTab) => void;
-    renderAppStatus?: () => ReactNode;
 }
 
 export function ConnectionsPage({
+    appStatus,
+    appStatusWarningCount = 0,
     tab = 'status',
     returnTo,
     onTabChange,
-    renderAppStatus,
 }: ConnectionsPageProps = {}) {
     const {platform} = useDashboardEnvironment();
-    const selectedTab = tab === 'status' && !renderAppStatus ? 'notifications' : tab;
+    const selectedTab = tab === 'status' && !appStatus ? 'notifications' : tab;
     const selectTab = (value: string) => {
         const nextTab = normalizeConnectionsSearch({tab: value}).tab;
         onTabChange?.(nextTab);
@@ -1238,16 +1240,27 @@ export function ConnectionsPage({
             <Tabs value={selectedTab} onValueChange={selectTab} className="gap-5">
                 <TabsList
                     aria-label="설정 구분"
-                    className={`grid h-auto w-full sm:w-fit ${renderAppStatus ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}
+                    className={`grid h-auto w-full sm:w-fit ${appStatus ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}
                 >
-                    {renderAppStatus ? <TabsTrigger value="status">앱 상태</TabsTrigger> : null}
+                    {appStatus ? (
+                        <TabsTrigger value="status">
+                            앱 상태
+                            {appStatusWarningCount > 0 ? (
+                                <span
+                                    aria-label={`확인이 필요한 앱 상태 ${appStatusWarningCount}개`}
+                                    aria-live="polite"
+                                    className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-xs font-semibold text-white tabular-nums dark:bg-destructive/60"
+                                >
+                                    {appStatusWarningCount}
+                                </span>
+                            ) : null}
+                        </TabsTrigger>
+                    ) : null}
                     <TabsTrigger value="notifications">알림</TabsTrigger>
                     <TabsTrigger value="services">서비스</TabsTrigger>
                     <TabsTrigger value="devices">기기 연결</TabsTrigger>
                 </TabsList>
-                {renderAppStatus ? (
-                    <TabsContent value="status">{renderAppStatus()}</TabsContent>
-                ) : null}
+                {appStatus ? <TabsContent value="status">{appStatus}</TabsContent> : null}
                 <TabsContent value="notifications">
                     <PersonalAccountGate>
                         <NotificationSettings />

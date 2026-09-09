@@ -65,10 +65,10 @@ function AttendanceChecks({snapshot}: {snapshot: AttendanceSnapshot}) {
 function CampusCardFrame({children, footer}: {children: React.ReactNode; footer: React.ReactNode}) {
     return (
         <Card
-            className="h-[20rem] gap-0 overflow-hidden border-primary/20 py-0"
+            className="h-60 gap-0 overflow-hidden border-primary/20 py-0"
             data-home-campus-card="true"
         >
-            <CardHeader className="min-h-20 shrink-0 px-5 py-4 sm:px-6">
+            <CardHeader className="min-h-16 shrink-0 px-5 py-3 sm:px-6">
                 <div className="flex items-center gap-3">
                     <span
                         className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary"
@@ -88,7 +88,7 @@ function CampusCardFrame({children, footer}: {children: React.ReactNode; footer:
             >
                 <div className="flex min-h-full flex-col justify-center gap-3">{children}</div>
             </CardContent>
-            <CardFooter className="min-h-14 shrink-0 flex-wrap gap-2 border-t px-5 py-3 sm:px-6">
+            <CardFooter className="min-h-11 shrink-0 flex-wrap gap-2 border-t px-5 py-1.5 sm:px-6 [.border-t]:pt-1.5">
                 {footer}
             </CardFooter>
         </Card>

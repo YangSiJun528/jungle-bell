@@ -67,10 +67,9 @@ function switchRow(markup: string, label: string): string {
 describe('ServiceSettings', () => {
     test('데스크톱 로컬 기능을 실제 설정 컨트롤로 표시한다', () => {
         const markup = renderSettings();
-        expect(markup).not.toContain('aria-label="자동 업데이트"');
-        expect(source).not.toContain('자동 업데이트를 끌까요?');
-        expect(markup).toContain('항상 새 버전을 확인하며');
-        expect(markup).toContain('항상 사용');
+        expect(markup).not.toContain('자동 업데이트');
+        expect(source).not.toContain('자동 업데이트');
+        expect(source).not.toContain('autoUpdate');
         expect(markup).toContain('로그 폴더');
         expect(markup).toContain('앱 버전');
         expect(markup).toContain('v0.5.0-beta.1');

@@ -15,11 +15,14 @@ import {
 } from '@/platform/notification-test-history';
 
 import type {AppStatusTab, DesktopAppStatusInput} from './app-status-model';
+import {appStatusRows} from './app-status-model';
 import {desktopUpdateObservationFromQuery} from './app-status-observations';
 import {AppStatusPanel} from './app-status-panel';
+import type {AppStatusRenderer} from './app-status-render';
 import {
     desktopLastSyncedAt,
     desktopMobileSessionCount,
+    desktopStatusWarningCount,
     failedDesktopStatusProducers,
     retryFailedDesktopStatusProducers,
     type DesktopStatusProducer,
@@ -80,7 +83,13 @@ function DesktopStatusRefreshFailure({failures}: {failures: readonly DesktopStat
     );
 }
 
-export function ConnectedDesktopStatus({onOpenTab}: {onOpenTab?: (tab: AppStatusTab) => void}) {
+export function ConnectedDesktopStatus({
+    children,
+    onOpenTab,
+}: {
+    children?: AppStatusRenderer;
+    onOpenTab?: (tab: AppStatusTab) => void;
+}) {
     const account = useDashboardAccount();
     const personalReady =
         account.status.lmsAuthentication === 'authenticated' && serverSessionReady(account.status);
@@ -97,6 +106,7 @@ export function ConnectedDesktopStatus({onOpenTab}: {onOpenTab?: (tab: AppStatus
     const failures = failedDesktopStatusProducers([
         {
             label: 'PC 연결',
+            rowIds: ['lms-authentication', 'server-credential'],
             data: account.connectionQuery.data,
             isError: account.connectionQuery.isError,
             isFetching: account.connectionQuery.isFetching,
@@ -104,6 +114,7 @@ export function ConnectedDesktopStatus({onOpenTab}: {onOpenTab?: (tab: AppStatus
         },
         {
             label: '출석 동기화',
+            rowIds: ['last-sync'],
             data: attendance.data,
             isError: attendance.isError,
             isFetching: attendance.isFetching,
@@ -111,6 +122,7 @@ export function ConnectedDesktopStatus({onOpenTab}: {onOpenTab?: (tab: AppStatus
         },
         {
             label: '모바일 세션',
+            rowIds: ['mobile-sessions'],
             data: sessions.data,
             isError: sessions.isError,
             isFetching: sessions.isFetching,
@@ -118,6 +130,7 @@ export function ConnectedDesktopStatus({onOpenTab}: {onOpenTab?: (tab: AppStatus
         },
         {
             label: '알림 테스트 기록',
+            rowIds: ['os-notification'],
             data: notificationTest.data,
             isError: notificationTest.isError,
             isFetching: notificationTest.isFetching,
@@ -125,6 +138,7 @@ export function ConnectedDesktopStatus({onOpenTab}: {onOpenTab?: (tab: AppStatus
         },
         {
             label: '앱 업데이트',
+            rowIds: ['update'],
             data: update.data,
             isError: update.isError,
             isFetching: update.isFetching,
@@ -144,10 +158,16 @@ export function ConnectedDesktopStatus({onOpenTab}: {onOpenTab?: (tab: AppStatus
               : restoredNotificationTest,
         update: desktopUpdateObservationFromQuery(update),
     };
-    return (
+    const content = (
         <div className="space-y-4">
             <DesktopStatusRefreshFailure failures={failures} />
             <AppStatusPanel input={input} onOpenTab={onOpenTab} />
         </div>
     );
+    return children
+        ? children({
+              content,
+              warningCount: desktopStatusWarningCount(appStatusRows(input), failures),
+          })
+        : content;
 }
