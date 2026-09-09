@@ -83,6 +83,8 @@ describe('MealHistorySection', () => {
         expect(markup).toContain('data-meal-history-overview="true"');
         expect(markup).toContain('data-meal-history-weekly="true"');
         expect(source).toContain('lg:grid-cols-[minmax(17rem,20rem)_minmax(0,1fr)]');
+        expect(source).toContain('w-fit max-w-full');
+        expect(source).toContain('overflow-hidden');
         expect(source).toContain('className="grid gap-4 sm:grid-cols-2"');
         expect(source).not.toContain('lg:grid-cols-1');
         expect(source).toMatch(
@@ -115,9 +117,10 @@ describe('MealHistorySection', () => {
         expect(markup).toContain('data-meal-history-weekly="true"');
         expect(markup).toContain('lg:grid-cols-[minmax(17rem,20rem)_minmax(0,1fr)]');
         expect(markup).toContain('선택한 날짜 급식');
-        expect(markup).toContain('달력은 좌우로 스크롤해 모든 요일을 확인할 수 있습니다.');
+        expect(markup).not.toContain('달력은 좌우로 스크롤해 모든 요일을 확인할 수 있습니다.');
         expect(markup).toContain('min-w-0');
-        expect(markup).toContain('max-w-80');
+        expect(markup).toContain('w-fit');
+        expect(markup).toContain('max-w-full');
         expect(markup).toContain('이 달에 저장된 급식 기록이 없습니다.');
         expect(markup).toContain('저장된 주간 급식표가 없습니다.');
     });

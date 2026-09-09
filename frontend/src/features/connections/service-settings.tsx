@@ -274,17 +274,6 @@ function AppLaunchSettingsCard({
                     disabled={isSaving}
                     onCheckedChange={(checked) => update('autoStart', checked)}
                 />
-                <Separator />
-                <div className="flex items-center justify-between gap-4 py-4">
-                    <div className="min-w-0">
-                        <p className="text-sm font-medium">자동 업데이트</p>
-                        <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                            항상 새 버전을 확인하며, 사용 중에는 설치와 재시작을 다음 실행으로
-                            미룹니다.
-                        </p>
-                    </div>
-                    <p className="shrink-0 text-sm text-muted-foreground">항상 사용</p>
-                </div>
             </CardContent>
         </Card>
     );

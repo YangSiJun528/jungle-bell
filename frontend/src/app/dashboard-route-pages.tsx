@@ -108,12 +108,17 @@ export function ConnectionsRoutePage() {
     );
 
     return (
-        <ConnectionsPage
-            tab={search.tab}
-            returnTo={search.returnTo}
-            onTabChange={selectTab}
-            renderAppStatus={() => <AppStatusPage onOpenTab={selectTab} />}
-        />
+        <AppStatusPage onOpenTab={selectTab}>
+            {({content, warningCount}) => (
+                <ConnectionsPage
+                    tab={search.tab}
+                    returnTo={search.returnTo}
+                    onTabChange={selectTab}
+                    appStatus={content}
+                    appStatusWarningCount={warningCount}
+                />
+            )}
+        </AppStatusPage>
     );
 }
 

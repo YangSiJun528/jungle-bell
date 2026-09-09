@@ -867,3 +867,7 @@ export function appStatusRows(input: AppStatusInput, now = Date.now()): AppStatu
     if (input.surface === 'pwa') return pwaRows(input, now);
     return webRows(input);
 }
+
+export function appStatusWarningCount(rows: readonly Pick<AppStatusRowModel, 'status'>[]): number {
+    return rows.filter(({status}) => status === 'attention' || status === 'error').length;
+}

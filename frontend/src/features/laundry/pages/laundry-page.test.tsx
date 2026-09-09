@@ -65,11 +65,12 @@ describe('LaundryPage capacity summary', () => {
         expect(source).not.toContain('에러 위험 요약');
     });
 
-    it('주요 설명과 이동 링크는 16px 본문·44px 조작·키보드 포커스 계약을 사용한다', () => {
+    it('주요 설명은 16px 본문 계약을 사용하고 중복 섹션 이동 링크를 두지 않는다', () => {
         expect(source).toMatch(/<CardDescription className="text-base leading-6">/u);
         expect(source).toMatch(/<span className="text-base leading-6 font-normal/u);
-        expect(source).toContain('min-h-11');
-        expect(source).toContain('focus-visible:ring-2');
+        expect(source).not.toContain('LAUNDRY_JUMPS');
+        expect(source).not.toContain('LaundryJumpNavigation');
+        expect(source).not.toContain('aria-label="세부 섹션 이동"');
     });
 
     it('페이지 헤더 밖의 local async boundary로 세탁 실패를 격리한다', () => {

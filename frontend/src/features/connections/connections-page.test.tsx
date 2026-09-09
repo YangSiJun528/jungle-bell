@@ -17,8 +17,10 @@ describe('ConnectionsPage settings information architecture', () => {
         expect(source.match(/<PageHeader title="설정" \/>/gu)).toHaveLength(1);
         expect(source).toContain('value={selectedTab}');
         expect(source).toContain('onValueChange={selectTab}');
-        expect(source).toContain('renderAppStatus ? (');
-        expect(source).toContain('<TabsTrigger value="status">앱 상태</TabsTrigger>');
+        expect(source).toContain('appStatus ? (');
+        expect(source).toContain('<TabsTrigger value="status">');
+        expect(source).toContain('appStatusWarningCount > 0');
+        expect(source).toContain('확인이 필요한 앱 상태 ${appStatusWarningCount}개');
         expect(source).toContain('<TabsTrigger value="notifications">알림</TabsTrigger>');
         expect(source).toContain('<TabsTrigger value="services">서비스</TabsTrigger>');
         expect(source).toContain('<TabsTrigger value="devices">기기 연결</TabsTrigger>');
@@ -29,7 +31,8 @@ describe('ConnectionsPage settings information architecture', () => {
         expect(source).toContain('<TabsContent value="services"');
         expect(source).toContain('<ServiceSettings />');
         expect(source).toContain('<TabsContent value="status"');
-        expect(source).toContain('{renderAppStatus()}');
+        expect(source).toContain('{appStatus}');
+        expect(source).toContain('appStatusWarningCount?: number');
         expect(source).not.toContain('앱 상태 연결 필요');
     });
 

@@ -18,5 +18,7 @@ describe('ConnectedDesktopStatus', () => {
         expect(source).toContain('일부 앱 상태를 다시 확인하지 못했습니다.');
         expect(source).toContain('실패한 상태 다시 확인');
         expect(source).toContain('retryFailedDesktopStatusProducers(failures)');
+        expect(source).toContain("rowIds: ['mobile-sessions']");
+        expect(source).toContain('desktopStatusWarningCount(appStatusRows(input), failures)');
     });
 });

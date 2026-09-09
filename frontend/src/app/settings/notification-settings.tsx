@@ -4,7 +4,7 @@ import {SystemNotificationSettingsCard} from '@/features/notifications/system-no
 
 export function NotificationSettings() {
     return (
-        <div className="space-y-6">
+        <div className="space-y-4">
             <AttendancePreferencesSection />
             <MealPreferencesSection />
             <SystemNotificationSettingsCard />

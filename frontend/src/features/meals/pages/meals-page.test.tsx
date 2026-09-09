@@ -20,6 +20,12 @@ describe('MealsPage information architecture', () => {
         expect(historySource).not.toContain('MealHistoryLoadMore');
     });
 
+    it('급식 섹션 사이에 일관된 세로 여백을 둔다', () => {
+        expect(source).toMatch(
+            /<div className="space-y-6" data-meals-sections="true">[\s\S]*aria-labelledby="today-meals-title"[\s\S]*aria-labelledby="weekly-meal-title"[\s\S]*<MealHistorySection/u,
+        );
+    });
+
     it('오늘 급식에 주간 pinned fallback을 쓰지 않고 Badge나 그라데이션을 사용하지 않는다', () => {
         expect(source).not.toMatch(/todayMeals[\s\S]{0,200}pinnedMenus/u);
         expect(source).not.toMatch(/\bBadge\b|gradient/u);

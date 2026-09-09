@@ -11,7 +11,10 @@ const normalizedSource = source.replace(/\s+/gu, ' ');
 
 describe('JungleCampusSummary', () => {
     it('keeps one fixed-size campus surface and changes only its attendance content', () => {
-        expect(source).toContain('h-[20rem]');
+        expect(source).toContain('h-60');
+        expect(source).not.toContain('h-[20rem]');
+        expect(source).toContain('min-h-16');
+        expect(source).toContain('min-h-11');
         expect(source).not.toContain("surface.kind === 'public'");
         expect(source).toContain('CalendarCheck');
         expect(source).toContain('data-home-campus-status-icon="true"');

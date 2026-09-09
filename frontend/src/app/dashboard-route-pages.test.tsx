@@ -12,7 +12,10 @@ describe('connections production route wiring', () => {
     test('typed search를 실제 탭과 App Status slot에 연결한다', () => {
         expect(source).toContain("useSearch({from: '/connections'})");
         expect(source).toContain("useNavigate({from: '/connections'})");
-        expect(source).toContain('renderAppStatus={() =>');
+        expect(source).toContain('<AppStatusPage onOpenTab={selectTab}>');
+        expect(source).toContain('{({content, warningCount}) => (');
+        expect(source).toContain('appStatus={content}');
+        expect(source).toContain('appStatusWarningCount={warningCount}');
         expect(source).toContain('<AppStatusPage');
         expect(source).toContain('returnTo={search.returnTo}');
     });

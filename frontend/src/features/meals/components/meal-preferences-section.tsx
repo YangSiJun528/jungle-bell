@@ -126,7 +126,7 @@ export function MealPreferencesSection() {
 
     return (
         <>
-            <Card className="gap-4">
+            <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         <BellRing className="size-4 text-primary" />

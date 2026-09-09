@@ -240,7 +240,7 @@ export function MealsPage() {
                         );
 
                         return (
-                            <>
+                            <div className="space-y-6" data-meals-sections="true">
                                 <MealsPageStatusBanner
                                     isRefreshing={featureRefreshing}
                                     lastCheckedAt={lastCheckedAt}
@@ -311,7 +311,7 @@ export function MealsPage() {
                                         />
                                     </section>
                                 )}
-                            </>
+                            </div>
                         );
                     }}
                 </MealsPageBoundary>

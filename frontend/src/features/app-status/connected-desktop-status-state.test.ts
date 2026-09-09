@@ -7,6 +7,7 @@ import type {AttendanceDashboard} from '@/api/dashboard-api';
 import {
     desktopLastSyncedAt,
     desktopMobileSessionCount,
+    desktopStatusWarningCount,
     failedDesktopStatusProducers,
     retryFailedDesktopStatusProducers,
     type DesktopStatusProducer,
@@ -91,6 +92,7 @@ describe('desktop app-status query state', () => {
         const producers: DesktopStatusProducer[] = [
             {
                 label: 'PC 연결',
+                rowIds: ['lms-authentication', 'server-credential'],
                 data: {cached: true},
                 isError: true,
                 isFetching: false,
@@ -98,6 +100,7 @@ describe('desktop app-status query state', () => {
             },
             {
                 label: '출석 동기화',
+                rowIds: ['last-sync'],
                 data: {cached: true},
                 isError: true,
                 isFetching: false,
@@ -105,6 +108,7 @@ describe('desktop app-status query state', () => {
             },
             {
                 label: '모바일 세션',
+                rowIds: ['mobile-sessions'],
                 data: [],
                 isError: false,
                 isFetching: false,
@@ -120,5 +124,34 @@ describe('desktop app-status query state', () => {
         assert.equal(rejectedRefetch.mock.calls.length, 1);
         assert.equal(resolvedRefetch.mock.calls.length, 1);
         assert.equal(healthyRefetch.mock.calls.length, 0);
+    });
+
+    test('행에 드러나지 않은 producer 실패만 경고 개수에 추가한다', () => {
+        const refetch = vi.fn<() => Promise<void>>(async () => undefined);
+        const failures: DesktopStatusProducer[] = [
+            {
+                label: '출석 동기화',
+                rowIds: ['last-sync'],
+                data: attendance,
+                isError: true,
+                isFetching: false,
+                refetch,
+            },
+            {
+                label: '모바일 세션',
+                rowIds: ['mobile-sessions'],
+                data: [],
+                isError: true,
+                isFetching: false,
+                refetch,
+            },
+        ];
+        const rows = [
+            {id: 'last-sync', status: 'attention' as const},
+            {id: 'mobile-sessions', status: 'unavailable' as const},
+            {id: 'update', status: 'checking' as const},
+        ];
+
+        assert.equal(desktopStatusWarningCount(rows, failures), 2);
     });
 });

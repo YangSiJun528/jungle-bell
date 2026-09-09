@@ -12,7 +12,7 @@ plugins {
 
 allprojects {
     group = "app.junglebell"
-    version = "0.6.0-beta.2"
+    version = "0.6.0-beta.3"
 
     repositories {
         mavenCentral()

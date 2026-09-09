@@ -15,4 +15,9 @@ describe('notification settings', () => {
             settingsSource.indexOf('<MealPreferencesSection />'),
         );
     });
+
+    test('같은 레벨의 설정 카드는 서비스 설정과 같은 간격을 사용한다', () => {
+        expect(settingsSource).toContain('<div className="space-y-4">');
+        expect(settingsSource).not.toContain('space-y-6');
+    });
 });

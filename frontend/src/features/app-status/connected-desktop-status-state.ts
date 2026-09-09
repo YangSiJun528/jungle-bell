@@ -1,7 +1,7 @@
 import type {AttendanceDashboard, MobileSession} from '@/api/dashboard-api';
 import type {PersonalAccessStatus} from '@/app/dashboard-account-state';
 
-import type {DesktopAppStatusInput} from './app-status-model';
+import type {AppStatusRowModel, DesktopAppStatusInput} from './app-status-model';
 
 interface QuerySnapshot<T> {
     data: T | undefined;
@@ -9,12 +9,21 @@ interface QuerySnapshot<T> {
     isPending: boolean;
 }
 
+export type DesktopStatusRowId =
+    | 'lms-authentication'
+    | 'server-credential'
+    | 'last-sync'
+    | 'mobile-sessions'
+    | 'os-notification'
+    | 'update';
+
 export interface DesktopStatusProducer {
     data: unknown;
     isError: boolean;
     isFetching: boolean;
     label: string;
     refetch: () => Promise<unknown>;
+    rowIds: readonly [DesktopStatusRowId, ...DesktopStatusRowId[]];
 }
 
 export function desktopLastSyncedAt(
@@ -57,6 +66,20 @@ export function failedDesktopStatusProducers(
     producers: readonly DesktopStatusProducer[],
 ): DesktopStatusProducer[] {
     return producers.filter(({isError}) => isError);
+}
+
+export function desktopStatusWarningCount(
+    rows: readonly Pick<AppStatusRowModel, 'id' | 'status'>[],
+    failures: readonly DesktopStatusProducer[],
+): number {
+    const warningRowIds = new Set<string>();
+    for (const {id, status} of rows) {
+        if (status === 'attention' || status === 'error') warningRowIds.add(id);
+    }
+    const unrepresentedFailureCount = failures.filter(
+        ({isError, rowIds}) => isError && rowIds.every((rowId) => !warningRowIds.has(rowId)),
+    ).length;
+    return warningRowIds.size + unrepresentedFailureCount;
 }
 
 export async function retryFailedDesktopStatusProducers(
