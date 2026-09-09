@@ -18,7 +18,7 @@ use tauri::{
     image::Image,
     menu::MenuBuilder,
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Emitter, Manager, WebviewWindow,
+    Manager, WebviewWindow,
 };
 
 const STATUS_COURSE_UPCOMING: &str = "코스 시작 전";
@@ -79,7 +79,6 @@ const ICON_COMPLETE_DARK: &[u8] = include_bytes!("../icons/tray-complete-dark-wi
 
 const TRAY_MENU_OPEN_ID: &str = "open-dashboard";
 const TRAY_MENU_QUIT_ID: &str = "quit";
-const DESKTOP_CLOSE_TO_TRAY_EVENT: &str = "desktop-close-to-tray";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DashboardRoute {
@@ -106,12 +105,6 @@ impl DashboardRoute {
 enum TrayMenuAction {
     OpenDashboard,
     Quit,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum DashboardCloseOutcome {
-    KeptVisible,
-    Hidden,
 }
 
 fn tray_menu_action(id: &str) -> Option<TrayMenuAction> {
@@ -533,30 +526,7 @@ fn sync_foreground_app_visibility_soon(app: tauri::AppHandle) {
     });
 }
 
-fn handle_dashboard_close(
-    lifecycle: &crate::config::DesktopLifecycleStateStore,
-    notify: impl FnOnce(crate::config::DesktopLifecycleStatus) -> Result<(), String>,
-    hide: impl FnOnce() -> Result<(), String>,
-) -> Result<DashboardCloseOutcome, String> {
-    match lifecycle.close_to_tray_notice()? {
-        crate::config::CloseToTrayNotice::Acknowledged => {
-            hide()?;
-            Ok(DashboardCloseOutcome::Hidden)
-        }
-        crate::config::CloseToTrayNotice::Unseen => {
-            lifecycle.record_close_to_tray()?;
-            notify(lifecycle.status()?)?;
-            Ok(DashboardCloseOutcome::KeptVisible)
-        }
-        crate::config::CloseToTrayNotice::Pending => Ok(DashboardCloseOutcome::KeptVisible),
-    }
-}
-
-fn acknowledge_and_hide(
-    lifecycle: &crate::config::DesktopLifecycleStateStore,
-    hide: impl FnOnce() -> Result<(), String>,
-) -> Result<(), String> {
-    lifecycle.acknowledge_close_to_tray_notice()?;
+fn handle_dashboard_close(hide: impl FnOnce() -> Result<(), String>) -> Result<(), String> {
     hide()
 }
 
@@ -564,13 +534,6 @@ fn hide_dashboard_window(window: &WebviewWindow<tauri::Wry>) -> Result<(), Strin
     window.hide().map_err(|error| format!("창 숨김 실패: {error}"))?;
     sync_foreground_app_visibility_soon(window.app_handle().clone());
     Ok(())
-}
-
-pub(crate) fn acknowledge_and_hide_to_tray(
-    window: &WebviewWindow<tauri::Wry>,
-    lifecycle: &crate::config::DesktopLifecycleStateStore,
-) -> Result<(), String> {
-    acknowledge_and_hide(lifecycle, || hide_dashboard_window(window))
 }
 
 pub(crate) fn quit_app(app: &tauri::AppHandle) {
@@ -619,20 +582,7 @@ fn build_dashboard_window(app: &tauri::AppHandle, route: DashboardRoute) {
             window.on_window_event(move |event| match event {
                 tauri::WindowEvent::CloseRequested { api, .. } => {
                     api.prevent_close();
-                    let Some(lifecycle) = app_handle.try_state::<Arc<crate::config::DesktopLifecycleStateStore>>()
-                    else {
-                        log::error!("[dashboard] lifecycle state is unavailable; keeping window visible");
-                        return;
-                    };
-                    if let Err(error) = handle_dashboard_close(
-                        lifecycle.inner(),
-                        |status| {
-                            window_for_event
-                                .emit(DESKTOP_CLOSE_TO_TRAY_EVENT, status)
-                                .map_err(|error| format!("close-to-tray 안내 전송 실패: {error}"))
-                        },
-                        || hide_dashboard_window(&window_for_event),
-                    ) {
+                    if let Err(error) = handle_dashboard_close(|| hide_dashboard_window(&window_for_event)) {
                         log::warn!("[dashboard] close-to-tray 처리 실패: {error}");
                     }
                 }
@@ -1051,75 +1001,25 @@ mod tests {
             .unwrap();
         assert!(source.contains("tauri::WindowEvent::CloseRequested { api, .. }"));
         assert!(source.contains("api.prevent_close()"));
-        assert!(source.contains("record_close_to_tray"));
-        assert!(source.contains("desktop-close-to-tray"));
+        let notice_record_call = ["record", "close", "to", "tray"].join("_");
+        let notice_event = ["desktop", "close", "to", "tray"].join("-");
+        assert!(!dashboard_builder.contains(&notice_record_call));
+        assert!(!dashboard_builder.contains(&notice_event));
         assert!(source.contains("hide_dashboard_window"));
         assert!(source.contains("if let Some(window) = app.get_webview_window(\"dashboard\")"));
         assert!(!dashboard_builder.contains(".theme("));
     }
 
     #[test]
-    fn 최초_close는_창을_유지하고_ack후_숨긴뒤_후속_close는_즉시_숨긴다() {
-        let path = std::env::temp_dir().join(format!(
-            "jungle-bell-tray-lifecycle-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        let lifecycle = crate::config::DesktopLifecycleStateStore::load_from(Some(path.clone()));
-        let notified = Cell::new(false);
+    fn 첫_close부터_대시보드를_즉시_숨긴다() {
         let hidden = Cell::new(false);
 
-        let first = handle_dashboard_close(
-            &lifecycle,
-            |_| {
-                notified.set(true);
-                Ok(())
-            },
-            || {
-                hidden.set(true);
-                Ok(())
-            },
-        )
-        .unwrap();
-        assert_eq!(first, DashboardCloseOutcome::KeptVisible);
-        assert!(notified.get());
-        assert!(!hidden.get());
-        assert_eq!(
-            lifecycle.close_to_tray_notice().unwrap(),
-            crate::config::CloseToTrayNotice::Pending
-        );
-
-        acknowledge_and_hide(&lifecycle, || {
+        handle_dashboard_close(|| {
             hidden.set(true);
             Ok(())
         })
         .unwrap();
-        assert!(hidden.replace(false));
-        assert_eq!(
-            lifecycle.close_to_tray_notice().unwrap(),
-            crate::config::CloseToTrayNotice::Acknowledged
-        );
-
-        notified.set(false);
-        let subsequent = handle_dashboard_close(
-            &lifecycle,
-            |_| {
-                notified.set(true);
-                Ok(())
-            },
-            || {
-                hidden.set(true);
-                Ok(())
-            },
-        )
-        .unwrap();
-        assert_eq!(subsequent, DashboardCloseOutcome::Hidden);
-        assert!(!notified.get());
         assert!(hidden.get());
-        std::fs::remove_file(path).unwrap();
     }
 
     // --- TrayViewModel ---
@@ -1428,9 +1328,20 @@ mod tests {
 
     #[test]
     fn 네이티브_트레이_메뉴는_대시보드_열기와_종료만_제공한다() {
+        let source = include_str!("tray.rs");
+        let setup_tray = source
+            .split("pub fn setup_tray")
+            .nth(1)
+            .unwrap()
+            .split("pub fn sync_icon_theme")
+            .next()
+            .unwrap();
+
         assert_eq!(tray_menu_action(TRAY_MENU_OPEN_ID), Some(TrayMenuAction::OpenDashboard));
         assert_eq!(tray_menu_action(TRAY_MENU_QUIT_ID), Some(TrayMenuAction::Quit));
         assert_eq!(tray_menu_action("unknown"), None);
+        assert!(setup_tray.contains(".text(TRAY_MENU_QUIT_ID, \"종료\")"));
+        assert!(setup_tray.contains("Some(TrayMenuAction::Quit) => quit_app(app)"));
     }
 
     #[test]

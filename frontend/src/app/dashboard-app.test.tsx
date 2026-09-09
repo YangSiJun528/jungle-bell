@@ -3,6 +3,7 @@ import {readFileSync} from 'node:fs';
 import {describe, expect, test} from 'vitest';
 
 const source = readFileSync(new URL('./dashboard-app.tsx', import.meta.url), 'utf8');
+const bootstrapSource = readFileSync(new URL('./bootstrap.tsx', import.meta.url), 'utf8');
 
 describe('DashboardApp personal access boundaries', () => {
     test('공유 shell 내부의 route content에만 인증 gate를 둔다', () => {
@@ -48,9 +49,8 @@ describe('DashboardApp personal access boundaries', () => {
         expect(source).toMatch(/<AsyncBoundary[\s\S]*renderError=\{/u);
     });
 
-    test('PC 설정 화면에 종료 동작 요약을 실제 mount한다', () => {
-        expect(source).toMatch(
-            /platform\.kind === 'desktop' && contentRoute === 'connections'[\s\S]*<DesktopLifecycleSummary/u,
-        );
+    test('PC 설정과 앱 bootstrap에 close-to-tray 안내 UI를 mount하지 않는다', () => {
+        expect(source).not.toContain('DesktopLifecycleSummary');
+        expect(bootstrapSource).not.toContain('DesktopLifecycleController');
     });
 });

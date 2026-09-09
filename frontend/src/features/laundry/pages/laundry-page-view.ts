@@ -1,17 +1,8 @@
 import type {DashboardLaundrySnapshot} from '@/api/dashboard-api';
-import type {
-    DashboardLaundryMachine,
-    LaundryCapacityEstimate,
-    LaundryCapacitySnapshot,
-} from '@/domain/laundry/capacity';
+import type {LaundryCapacityEstimate, LaundryCapacitySnapshot} from '@/domain/laundry/capacity';
 import {laundryCapacity} from '@/domain/laundry/capacity';
 import {laundrySituationDataIsReliable} from '@/domain/laundry/freshness';
-import type {LaundryMachineZone} from '@/domain/laundry/status';
 import {relativeTimeLabel} from '@/lib/format';
-
-import type {LaundryMachineDetailView} from '../lib/laundry-machine-detail';
-import {laundryMachineDetail} from '../lib/laundry-machine-detail';
-import {sortWashTowers} from '../lib/wash-tower';
 
 export interface CapacityCardView {
     access: LaundryCapacityEstimate['access'];
@@ -19,22 +10,6 @@ export interface CapacityCardView {
     description: string;
     label: string;
     status: 'available' | 'full' | 'checking';
-}
-
-export type LaundryMachineZoneFilter = 'all' | LaundryMachineZone;
-
-export type LaundryMachineStateFilter = 'all' | 'running' | 'available' | 'problem';
-
-export interface LaundryMachineFilterInput {
-    machines: readonly DashboardLaundryMachine[];
-    nowMs: number;
-    zoneFilter: LaundryMachineZoneFilter;
-    stateFilter: LaundryMachineStateFilter;
-    prioritizeProblems: boolean;
-}
-
-export interface LaundryMachineFilterResult {
-    views: LaundryMachineDetailView[];
 }
 
 export interface LaundrySummaryCounts {
@@ -80,39 +55,6 @@ export interface LaundryPageReliabilityFlags {
     isFreshEnough: boolean;
 }
 
-function zoneMatches(
-    machine: {zone: LaundryMachineFilterInput['machines'][number]['zone']},
-    zoneFilter: LaundryMachineZoneFilter,
-): boolean {
-    return zoneFilter === 'all' ? true : machine.zone === zoneFilter;
-}
-
-function toneSeverity(tone: LaundryMachineDetailView['washer']['tone']): number {
-    if (tone === 'error') return 0;
-    if (tone === 'warning') return 1;
-    if (tone === 'confirming') return 2;
-    if (tone === 'active') return 3;
-    if (tone === 'neutral') return 4;
-    return 5;
-}
-
-function hasProblem(view: LaundryMachineDetailView): boolean {
-    return [view.washer.tone, view.dryer.tone].some(
-        (tone) => tone === 'error' || tone === 'warning',
-    );
-}
-
-function hasState(view: LaundryMachineDetailView, stateFilter: LaundryMachineStateFilter): boolean {
-    if (stateFilter === 'all') return true;
-    if (stateFilter === 'problem') return hasProblem(view);
-    const tones = [view.washer.tone, view.dryer.tone];
-    if (stateFilter === 'available') {
-        return tones.some((tone) => tone === 'available');
-    }
-
-    return tones.some((tone) => tone === 'active' || tone === 'confirming');
-}
-
 function snapshotReliabilityFlags(input: {
     snapshot: DashboardLaundrySnapshot;
     nowMs: number;
@@ -146,34 +88,6 @@ export function laundrySummaryFromSnapshot(input: {
             nowMs: input.nowMs ?? (Number.isFinite(snapshotTime) ? snapshotTime : Date.now()),
         }),
     );
-}
-
-export function filterAndSortLaundryMachineViews(
-    input: LaundryMachineFilterInput,
-): LaundryMachineFilterResult {
-    const views: LaundryMachineDetailView[] = [];
-    for (const machine of sortWashTowers(input.machines)) {
-        const view = laundryMachineDetail(machine, input.nowMs);
-        if (!zoneMatches(view, input.zoneFilter) || !hasState(view, input.stateFilter)) continue;
-        views.push(view);
-    }
-
-    if (input.prioritizeProblems) {
-        views.sort((left, right) => {
-            const leftSeverity = Math.min(
-                toneSeverity(left.washer.tone),
-                toneSeverity(left.dryer.tone),
-            );
-            const rightSeverity = Math.min(
-                toneSeverity(right.washer.tone),
-                toneSeverity(right.dryer.tone),
-            );
-            if (leftSeverity !== rightSeverity) return leftSeverity - rightSeverity;
-            return left.title.localeCompare(right.title, 'ko');
-        });
-    }
-
-    return {views};
 }
 
 function isLaundrySnapshotReliable(input: {

@@ -3,13 +3,7 @@ import {describe, expect, it} from 'vitest';
 import type {DashboardLaundrySnapshot} from '@/api/dashboard-api';
 import type {DashboardLaundryMachine, LaundryCapacitySnapshot} from '@/domain/laundry/capacity';
 
-import {
-    capacityCards,
-    filterAndSortLaundryMachineViews,
-    laundryPageState,
-    laundrySummaryFromSnapshot,
-    type LaundryMachineFilterInput,
-} from './laundry-page-view';
+import {capacityCards, laundryPageState, laundrySummaryFromSnapshot} from './laundry-page-view';
 
 const capacity: LaundryCapacitySnapshot = {
     basis: 'WASHER_AND_DRYER_HEADROOM_60_MIN',
@@ -213,87 +207,6 @@ describe('laundryPageState', () => {
         ).toBe('error');
     });
 });
-
-describe('filterAndSortLaundryMachineViews', () => {
-    const filterInput: Omit<LaundryMachineFilterInput, 'zoneFilter' | 'stateFilter'> = {
-        machines: [
-            {
-                ...baseMachine,
-                id: '워시타워_1',
-                zone: 'men',
-                washer: {
-                    appliance: 'washer',
-                    operationalStatus: 'IDLE',
-                    projection: {status: 'IDLE', remainingMinutes: 0},
-                },
-                dryer: {
-                    appliance: 'dryer',
-                    operationalStatus: 'RUNNING',
-                    projection: {status: 'ESTIMATED_RUNNING', remainingMinutes: 15},
-                },
-            },
-            {
-                ...baseMachine,
-                id: '워시타워_2',
-                zone: 'common',
-                washer: {
-                    appliance: 'washer',
-                    operationalStatus: 'ERROR',
-                    errorCode: 'OE',
-                    projection: {status: 'ERROR', remainingMinutes: 0},
-                },
-                dryer: {
-                    appliance: 'dryer',
-                    operationalStatus: 'IDLE',
-                    projection: {status: 'IDLE', remainingMinutes: 0},
-                },
-            },
-            {
-                ...baseMachine,
-                id: '워시타워_3',
-                zone: 'women',
-                washer: {
-                    appliance: 'washer',
-                    operationalStatus: 'RUNNING',
-                    projection: {status: 'ESTIMATED_RUNNING', remainingMinutes: 10},
-                },
-                dryer: {
-                    appliance: 'dryer',
-                    operationalStatus: 'PAUSED',
-                    projection: {status: 'PAUSED', remainingMinutes: 0},
-                },
-            },
-        ],
-        nowMs: NOW_MS,
-        prioritizeProblems: true,
-    };
-
-    it('구역 필터와 상태 필터로 대상 리스트를 축소한다', () => {
-        const {views} = filterAndSortLaundryMachineViews({
-            ...filterInput,
-            zoneFilter: 'common',
-            stateFilter: 'problem',
-        });
-
-        expect(views).toHaveLength(1);
-        expect(views[0]?.id).toBe('워시타워_2');
-    });
-
-    it('문제 우선 정렬이 오류 기기를 앞에 둔다', () => {
-        const {views} = filterAndSortLaundryMachineViews({
-            ...filterInput,
-            zoneFilter: 'all',
-            stateFilter: 'all',
-        });
-
-        expect(views[0]?.id).toBe('워시타워_2');
-        expect(views[0]?.dryer.tone === 'available' || views[0]?.washer.tone === 'error').toBe(
-            true,
-        );
-    });
-});
-
-const NOW_MS = Date.parse('2026-08-11T03:00:00.000Z');
 
 const baseMachine: DashboardLaundryMachine = {
     id: '워시타워_0',

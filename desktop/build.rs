@@ -2,9 +2,6 @@ use std::{fs, path::Path};
 
 const APP_COMMANDS: &[&str] = &[
     "report_checker_event",
-    "get_desktop_lifecycle_status",
-    "acknowledge_and_hide_to_tray",
-    "quit_desktop_app",
     "bootstrap_desktop_http_session",
     "get_desktop_settings",
     "check_desktop_update",
