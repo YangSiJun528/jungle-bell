@@ -165,28 +165,6 @@ test('LMS 로그인 창을 닫으면 숨긴 채로 복귀하고 인증 상태를
     assert.match(closeHandler, /refresh_webview\(&app_handle, "LMS window closed"\)/);
 });
 
-test('정글캠퍼스 창을 표시하기 전에 원격 CSS 상태를 재검사한다', () => {
-    const showWindow = checkerRuntimeSource.match(
-        /pub\(crate\) fn show_lms_window[\s\S]*?\n\}/,
-    )?.[0];
-
-    assert.ok(showWindow, 'show_lms_window 함수를 찾을 수 없습니다.');
-    assert.match(
-        checkerRuntimeSource,
-        /const PREPARE_LMS_WINDOW_EVENT: &str = "prepare-lms-window";/,
-    );
-    assert.match(showWindow, /emit_to\([\s\S]*?PREPARE_LMS_WINDOW_EVENT/);
-    assert.ok(
-        showWindow.indexOf('emit_to(') < showWindow.indexOf('.show()'),
-        'CSS 재검사 요청은 창을 표시하기 전에 발송해야 합니다.',
-    );
-    assert.equal(
-        (showWindow.match(/PREPARE_LMS_WINDOW_EVENT/gu) ?? []).length,
-        1,
-        '창 열기당 CSS 재검사 요청은 한 번만 발송해야 합니다.',
-    );
-});
-
 test('구형 출석 WebView injection과 capability는 제거한다', () => {
     assert.equal(existsSync(new URL('./injected/attendance.ts', srcRoot)), false);
     assert.equal(existsSync(new URL('./injected/attendance-decision.ts', srcRoot)), false);

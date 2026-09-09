@@ -78,12 +78,6 @@ interface AttendanceValue {
 
 type AttendanceFetchResult = AttendanceValue | {needs_login: true} | null;
 
-const LMS_ORIGIN = 'https://jungle-lms.krafton.com';
-const DOCUMENT_RETRY_PARAMETER = 'jungle-bell-document-retry';
-const NEXT_STYLESHEET_PATH_PREFIX = '/_next/static/css/';
-const STYLESHEET_RETRY_PARAMETER = 'jungle-bell-retry';
-const STYLESHEET_RETRY_COOLDOWN_MS = 10_000;
-
 interface AttendanceResult {
     needs_login: boolean;
     morning_done: boolean;
@@ -103,7 +97,6 @@ let cachedCohortDate: string | null = null;
 let checkInFlight = false;
 let queuedCheckGeneration: number | null = null;
 let currentGeneration = 0;
-let documentRetryRequested = false;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null;
@@ -140,69 +133,6 @@ function jsLog(level: LogLevel, message: string): void {
     void reportCheckerEvent({type: 'log', level, message: normalized})
         .then(expectAcknowledged)
         .catch(() => undefined);
-}
-
-function isRecoverableLmsStylesheet(link: HTMLLinkElement): URL | null {
-    if (window.location.origin !== LMS_ORIGIN) return null;
-
-    try {
-        const url = new URL(link.href, window.location.href);
-        if (
-            url.origin !== LMS_ORIGIN ||
-            !url.pathname.startsWith(NEXT_STYLESHEET_PATH_PREFIX) ||
-            !url.pathname.endsWith('.css')
-        ) {
-            return null;
-        }
-        return url;
-    } catch {
-        return null;
-    }
-}
-
-function retryLmsDocumentAfterStylesheetFailure(): void {
-    if (documentRetryRequested || window.location.origin !== LMS_ORIGIN) return;
-
-    try {
-        const documentUrl = new URL(window.location.href);
-        if (documentUrl.searchParams.has(DOCUMENT_RETRY_PARAMETER)) return;
-
-        documentRetryRequested = true;
-        documentUrl.searchParams.set(DOCUMENT_RETRY_PARAMETER, String(Date.now()));
-        jsLog('warn', 'stylesheet recovery failed; reloading LMS document');
-        window.location.replace(documentUrl.href);
-    } catch (error: unknown) {
-        jsLog('warn', `LMS document recovery failed: ${errorMessage(error)}`);
-    }
-}
-
-function recoverFailedLmsStylesheets(reason: string): void {
-    const now = Date.now();
-    let retryCount = 0;
-
-    for (const link of document.querySelectorAll<HTMLLinkElement>(
-        'link[rel~="stylesheet"][href]',
-    )) {
-        if (link.sheet !== null) continue;
-
-        const stylesheetUrl = isRecoverableLmsStylesheet(link);
-        if (!stylesheetUrl) continue;
-
-        const lastRetryAt = Number(link.dataset.jungleBellStylesheetRetryAt ?? Number.NaN);
-        if (Number.isFinite(lastRetryAt) && now - lastRetryAt < STYLESHEET_RETRY_COOLDOWN_MS) {
-            continue;
-        }
-
-        link.dataset.jungleBellStylesheetRetryAt = String(now);
-        stylesheetUrl.searchParams.set(STYLESHEET_RETRY_PARAMETER, String(now));
-        link.addEventListener('error', retryLmsDocumentAfterStylesheetFailure, {once: true});
-        link.href = stylesheetUrl.href;
-        retryCount += 1;
-    }
-
-    if (retryCount > 0) {
-        jsLog('warn', `stylesheet recovery started: reason=${reason} count=${retryCount}`);
-    }
 }
 
 function reportCheckerReady(): void {
@@ -583,18 +513,6 @@ function runCheck(reason: string): void {
             }
         });
 }
-
-window.addEventListener('load', () => {
-    recoverFailedLmsStylesheets('page-load');
-});
-
-void window.__TAURI__.event
-    .listen('prepare-lms-window', () => {
-        recoverFailedLmsStylesheets('window-open');
-    })
-    .catch((error: unknown) => {
-        jsLog('warn', `prepare-lms-window listener failed: ${errorMessage(error)}`);
-    });
 
 void window.__TAURI__.event
     .listen<TriggerCheckPayload>('trigger-check', (event) => {
