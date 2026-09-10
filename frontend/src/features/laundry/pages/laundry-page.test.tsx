@@ -83,4 +83,11 @@ describe('LaundryPage capacity summary', () => {
         expect(boundarySource).toContain('regionLabel="세탁실 데이터"');
         expect(boundarySource).toContain('type="offline"');
     });
+
+    it('마지막 정상 시각을 페이지 데이터 범위에서 한 번만 안내한다', () => {
+        expect(source).toContain('<LaundryStatusNotice');
+        expect(source).toContain("data-data-state={presentation.dataStale ? 'stale' : 'current'}");
+        expect(source.match(/lastUpdatedAt=/gu)).toHaveLength(1);
+        expect(source).not.toContain('staleBanner');
+    });
 });

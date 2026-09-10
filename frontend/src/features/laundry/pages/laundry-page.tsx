@@ -39,11 +39,6 @@ function capacityTone(card: CapacityCardView): string {
     return laundryZonePresentation(card.access).surfaceClassName;
 }
 
-function staleBanner(status: LaundryPageStatus): string | null {
-    if (!isFailureKind(status.kind)) return null;
-    return `실시간 정보가 아닙니다. 마지막 정상 시각: ${status.lastKnownLabel}`;
-}
-
 const COLLECTOR_UNAVAILABLE_TITLE = '세탁실 수집 서버에 문제가 있습니다.';
 const COLLECTOR_UNAVAILABLE_MESSAGE =
     '실시간 상태를 확인할 수 없어 마지막 정상 데이터를 표시합니다.';
@@ -158,7 +153,6 @@ function laundryPagePresentation(input: {
     });
 
     const dataStale = collectorUnavailable || isFailureKind(status.kind);
-    const staleLabel = staleBanner(status);
     const statusTitle = collectorUnavailable ? COLLECTOR_UNAVAILABLE_TITLE : status.title;
     const statusMessage = collectorUnavailable ? COLLECTOR_UNAVAILABLE_MESSAGE : status.message;
     const summaries = capacityCards(snapshot.capacity, reliable);
@@ -168,7 +162,6 @@ function laundryPagePresentation(input: {
         dataStale,
         nowMs,
         snapshot,
-        staleLabel,
         status,
         statusMessage,
         statusTitle,
@@ -179,7 +172,7 @@ function laundryPagePresentation(input: {
 type LaundryPagePresentation = ReturnType<typeof laundryPagePresentation>;
 
 function LaundryCapacitySummary({presentation}: {presentation: LaundryPagePresentation}) {
-    const {nowMs, snapshot, staleLabel, summaries} = presentation;
+    const {nowMs, snapshot, summaries} = presentation;
 
     return (
         <section aria-labelledby="laundry-capacity-title">
@@ -191,11 +184,6 @@ function LaundryCapacitySummary({presentation}: {presentation: LaundryPagePresen
                     마지막 확인{' '}
                     {relativeTimeLabel(snapshot.quality.lastCheckedAt ?? snapshot.asOf, nowMs)}
                 </p>
-                {staleLabel ? (
-                    <p className="text-base leading-6 text-amber-700 dark:text-amber-300">
-                        {staleLabel}
-                    </p>
-                ) : null}
             </div>
             <div className="grid min-w-0 gap-3 sm:grid-cols-2">
                 {summaries.map((card) => (
@@ -262,7 +250,7 @@ function LaundryTowerStatus({
     showRisk: boolean;
     onShowRiskChange: (showRisk: boolean) => void;
 }) {
-    const {dataStale, nowMs, snapshot, staleLabel, status} = presentation;
+    const {nowMs, snapshot} = presentation;
 
     return (
         <Card className="min-w-0 gap-0 overflow-hidden py-0" id="laundry-tower-title">
@@ -286,18 +274,11 @@ function LaundryTowerStatus({
                 <LaundryRiskToggle checked={showRisk} onCheckedChange={onShowRiskChange} />
             ) : null}
             <CardContent className="px-4 pt-0 pb-3 sm:px-6">
-                {staleLabel ? (
-                    <p className="mb-2 text-base leading-6 text-amber-700 dark:text-amber-300">
-                        {staleLabel}
-                    </p>
-                ) : null}
                 {snapshot.machines.length > 0 ? (
                     <WashTowerGrid
                         machines={snapshot.machines}
                         nowMs={nowMs}
                         showRiskIndicators={showRisk}
-                        dataStale={dataStale}
-                        dataStaleLabel={status.lastKnownLabel}
                     />
                 ) : (
                     <p className="py-5 text-center text-base leading-6 text-muted-foreground">
@@ -316,15 +297,13 @@ function LaundryMachineDetails({
     presentation: LaundryPagePresentation;
     showRisk: boolean;
 }) {
-    const {dataStale, nowMs, snapshot, status} = presentation;
+    const {nowMs, snapshot} = presentation;
     return (
         <section aria-label="기기별 상세 상태" id="laundry-detail-title">
             <LaundryMachineList
                 machines={snapshot.machines}
                 nowMs={nowMs}
                 showRiskWarnings={showRisk}
-                dataStale={dataStale}
-                staleLabel={status.lastKnownLabel}
             />
         </section>
     );
@@ -361,7 +340,10 @@ function LaundryPageContent({
     onShowRiskChange: (showRisk: boolean) => void;
 }) {
     return (
-        <div className="min-w-0 space-y-6">
+        <div
+            className="min-w-0 space-y-6"
+            data-data-state={presentation.dataStale ? 'stale' : 'current'}
+        >
             <LaundryStatusNotice
                 manualRefresh={manualRefresh}
                 message={presentation.statusMessage}

@@ -25,8 +25,6 @@ export interface LaundryMachineListProps {
     machines: readonly DashboardLaundryMachine[];
     nowMs: number;
     showRiskWarnings?: boolean;
-    dataStale?: boolean;
-    staleLabel?: string | null;
 }
 
 const clockFormatter = new Intl.DateTimeFormat('ko-KR', {
@@ -203,13 +201,11 @@ function ApplianceDetail({
 }
 
 function LaundryMachineCard({
-    dataStale,
     index,
     machine,
     showRiskWarnings,
     titleId,
 }: {
-    dataStale: boolean;
     index: number;
     machine: LaundryMachineDetailView;
     showRiskWarnings: boolean;
@@ -218,17 +214,11 @@ function LaundryMachineCard({
     return (
         <Card
             className="h-full min-w-0 gap-0 overflow-hidden py-0 shadow-none"
-            data-data-state={dataStale ? 'stale' : 'current'}
             data-laundry-machine-card="true"
         >
             <CardHeader className="flex min-w-0 flex-row items-center justify-between gap-3 border-b px-4 py-3 [.border-b]:pb-3">
                 <h3 className="text-base leading-none font-semibold">{machine.title}</h3>
                 <div className="flex shrink-0 items-center gap-2">
-                    {dataStale ? (
-                        <span className="text-base leading-6 text-amber-700 dark:text-amber-300">
-                            실시간 아님
-                        </span>
-                    ) : null}
                     <LaundryZoneBadge zone={machine.zone} />
                 </div>
             </CardHeader>
@@ -256,8 +246,6 @@ export function LaundryMachineList({
     machines,
     nowMs,
     showRiskWarnings = false,
-    dataStale = false,
-    staleLabel,
 }: LaundryMachineListProps) {
     const titleId = useId();
     const views = sortWashTowers(machines).map((machine) => laundryMachineDetail(machine, nowMs));
@@ -268,16 +256,10 @@ export function LaundryMachineList({
             <h2 className="font-semibold" id={titleId}>
                 기기별 상세 상태
             </h2>
-            {dataStale ? (
-                <p className="text-base leading-6 text-amber-700 dark:text-amber-300">
-                    실시간 정보가 아닙니다 · 마지막 정상 시각 {staleLabel ?? '확인 기록 없음'}
-                </p>
-            ) : null}
             <TooltipProvider delayDuration={200}>
                 <div className="grid items-stretch gap-3 md:grid-cols-2 lg:grid-cols-3">
                     {views.map((machine, machineIndex) => (
                         <LaundryMachineCard
-                            dataStale={dataStale}
                             index={machineIndex}
                             key={machine.id}
                             machine={machine}
