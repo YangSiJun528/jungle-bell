@@ -227,19 +227,13 @@ describe('LaundryMachineList', () => {
         );
     });
 
-    it('stale 상세 카드마다 실시간 데이터가 아님을 표시한다', () => {
+    it('하위 상세 카드에서 페이지 단위 신뢰도 경고를 반복하지 않는다', () => {
         const markup = renderToStaticMarkup(
-            <LaundryMachineList
-                dataStale
-                machines={machines}
-                nowMs={NOW_MS}
-                staleLabel="오전 11:30"
-            />,
+            <LaundryMachineList machines={machines} nowMs={NOW_MS} />,
         );
 
-        expect(markup).toContain('실시간 정보가 아닙니다 · 마지막 정상 시각 오전 11:30');
-        expect(markup.match(/data-data-state="stale"/gu)).toHaveLength(2);
-        expect(markup).toMatch(/실시간 정보가 아닙니다[^<]*<\/p>/u);
-        expect(source).toContain('text-base leading-6');
+        expect(markup).not.toContain('실시간 정보가 아닙니다');
+        expect(markup).not.toContain('실시간 아님');
+        expect(markup).not.toContain('data-data-state');
     });
 });
