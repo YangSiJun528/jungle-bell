@@ -6,19 +6,23 @@
 
 ## 준비
 
-- Node.js 24
-- Java 21
-- Rust stable과 `rustfmt`, `clippy`
-- prek 0.4.9 이상
+- mise 2025.8.11 이상
 - 서버를 로컬에서 실행할 경우 Docker
 - Tauri가 요구하는 운영체제별 빌드 도구
+
+Node.js 24, Temurin Java 21, Rust stable과 `rustfmt`·`clippy`, prek 0.4.14는
+저장소의 `mise.toml`에서 관리합니다. 저장소 루트에서 설치합니다.
+
+```bash
+mise install
+```
 
 ## Git 훅 설치
 
 저장소 루트에서 prek의 `pre-commit`, `pre-push` 훅을 설치합니다.
 
 ```bash
-prek install
+mise exec -- prek install
 ```
 
 `pre-commit`은 staged diff, 설정 파일, 프론트엔드 포맷·lint와 Rust 포맷을 빠르게 검사합니다. `main` 브랜치에는 직접 커밋할 수 없습니다. `pre-push`는 변경 경로에 따라 프론트엔드 check, 서버 Gradle check, 데스크톱 test·clippy를 실행합니다.
@@ -26,14 +30,14 @@ prek install
 설정과 기본 위생 검사를 수동으로 확인하려면 다음 명령을 실행합니다.
 
 ```bash
-prek validate-config prek.toml
-prek run --all-files --group hygiene
+mise exec -- prek validate-config prek.toml
+mise exec -- prek run --all-files --group hygiene
 ```
 
 모든 `pre-push` 검사를 수동으로 실행하려면 다음 명령을 사용합니다.
 
 ```bash
-prek run --all-files --stage pre-push
+mise exec -- prek run --all-files --stage pre-push
 ```
 
 ## 저장소 구조
@@ -53,13 +57,13 @@ prek run --all-files --stage pre-push
 
 ```bash
 cd frontend
-npm ci
+mise exec -- npm ci
 ```
 
 ### 웹·PWA
 
 ```bash
-npm run dev:web
+mise exec -- npm run dev:web
 ```
 
 ### PC 앱
@@ -68,14 +72,14 @@ macOS와 Linux에서는 다음과 같이 실행합니다.
 
 ```bash
 export JUNGLE_BELL_DATA_API_URL=https://jungle-bell.sijun-yang.com
-npm run desktop:dev
+mise exec -- npm run desktop:dev
 ```
 
 Windows PowerShell에서는 환경 변수를 먼저 설정합니다.
 
 ```powershell
 $env:JUNGLE_BELL_DATA_API_URL = "https://jungle-bell.sijun-yang.com"
-npm run desktop:dev
+mise exec -- npm run desktop:dev
 ```
 
 ### 서버
@@ -84,7 +88,7 @@ npm run desktop:dev
 
 ```bash
 cd server
-./gradlew check :api:bootJar :worker:bootJar
+mise exec -- ./gradlew check :api:bootJar :worker:bootJar
 ```
 
 PostgreSQL을 포함한 로컬 실행 방법은 [`server/README.md`](server/README.md)를 참고하세요.
@@ -95,14 +99,14 @@ PostgreSQL을 포함한 로컬 실행 방법은 [`server/README.md`](server/READ
 
 ```bash
 cd frontend
-npm run verify
+mise exec -- npm run verify
 ```
 
 서버 전체 검증:
 
 ```bash
 cd server
-./gradlew --no-daemon check :api:bootJar :worker:bootJar
+mise exec -- ./gradlew --no-daemon check :api:bootJar :worker:bootJar
 ```
 
 문서만 변경했더라도 링크, 이미지 경로와 Markdown 렌더링을 확인하고 `git diff --check`를 실행합니다.
@@ -111,7 +115,8 @@ cd server
 
 Pull Request와 `main` push에서는 GitHub Actions의 `CI` 워크플로가 hygiene, 웹, 서버,
 macOS·Windows 데스크톱 검증을 실행합니다. 브랜치 규칙에는 고정 집계 잡인
-`CI / required`를 필수 체크로 사용합니다.
+`CI / required`를 필수 체크로 사용합니다. 각 잡은 `mise.toml`에서 필요한 도구만 설치해
+로컬과 같은 버전 정책을 사용합니다.
 
 서버 배포는 GitHub Actions에서 수행하지 않습니다. 운영망 접근 권한이 있는 로컬 환경에서
 [OCI 운영 서버 배포 가이드](server/deploy/guide_oci_production_deployment.md)를 따라 수동으로
@@ -131,7 +136,7 @@ macOS·Windows 데스크톱 검증을 실행합니다. 브랜치 규칙에는 �
 
 ## Pull Request 전 확인
 
-- `prek install`로 로컬 Git 훅을 설치합니다.
+- `mise exec -- prek install`로 로컬 Git 훅을 설치합니다.
 - 변경 범위에 해당하는 테스트와 검증 명령을 통과시킵니다.
 - 사용자 동작이나 플랫폼 계약이 바뀌면 관련 문서를 함께 수정합니다.
 - 비밀값, 개인 세션 파일, 로그와 캡처용 임시 파일을 커밋하지 않습니다.

@@ -153,7 +153,7 @@ test('데스크톱 릴리스는 exact SHA의 CI 통과 후 서명·공개 환경
     assert.match(releaseWorkflow, /headSha/u);
     assert.match(releaseWorkflow, /\.name == "required"/u);
     assert.match(releaseWorkflow, /ref:\s*\$\{\{ needs\.prepare-release\.outputs\.sha \}\}/u);
-    assert.match(releaseWorkflow, /node-version:\s*24/u);
+    assert.match(releaseWorkflow, /install_args:\s*node rust/u);
     assert.match(releaseWorkflow, /environment:\s*desktop-signing/u);
     assert.match(releaseWorkflow, /max-parallel:\s*1/u);
     assert.match(releaseWorkflow, /tauri-apps\/tauri-action@[0-9a-f]{40}/u);
