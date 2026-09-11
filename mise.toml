@@ -1,0 +1,10 @@
+min_version = "2025.8.11"
+
+[tools]
+node = "24"
+java = "temurin-21"
+rust = { version = "stable", profile = "minimal", components = [
+  "rustfmt",
+  "clippy",
+] }
+prek = "0.4.14"

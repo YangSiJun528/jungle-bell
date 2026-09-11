@@ -23,10 +23,11 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - uses: j178/prek-action@4e14d07f9231acabce116ccfca13b13dd9755ece # v3.0.0
+      - name: Set up prek
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
-          prek-version: "0.4.14"
-          install-only: true
+          version: "2026.9.5"
+          install_args: prek
       - run: prek validate-config prek.toml
       - run: prek run --all-files --group hygiene --show-diff-on-failure
 
@@ -38,11 +39,18 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v6
+      - name: Set up Node.js
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          version: "2026.9.5"
+          install_args: node
+      - name: Cache npm downloads
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.npm
+          key: npm-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            npm-${{ runner.os }}-
       - run: npm ci
         working-directory: frontend
       - run: npm run verify:web
@@ -56,11 +64,13 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - uses: actions/setup-java@v5
+      - name: Set up Java
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
-          distribution: temurin
-          java-version: 21
-          cache: gradle
+          version: "2026.9.5"
+          install_args: java
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
       - run: chmod +x server/gradlew
       - run: ./gradlew --no-daemon check :api:bootJar :worker:bootJar
         working-directory: server
@@ -98,14 +108,21 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v6
+      - name: Set up Node.js and Rust
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - uses: dtolnay/rust-toolchain@stable
+          version: "2026.9.5"
+          install_args: node rust
+          cache: false
+      - name: Ensure Rust components
+        run: rustup component add --toolchain stable rustfmt clippy
+      - name: Cache npm downloads
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          components: clippy,rustfmt
+          path: ~/.npm
+          key: npm-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            npm-${{ runner.os }}-
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: desktop -> target
