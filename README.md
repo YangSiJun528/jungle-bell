@@ -23,22 +23,54 @@
 
 ## 실제 화면
 
+<table width="100%">
+  <tr>
+    <th width="33%" align="center">출석</th>
+    <th width="33%" align="center">세탁실</th>
+    <th width="33%" align="center">급식</th>
+  </tr>
+  <tr>
+    <td align="center">
+      <a href="docs/assets/readme/desktop-attendance.png"><img src="docs/assets/readme/desktop-attendance.png" height="200" alt="PC 앱의 출석 상태와 수료일까지 남은 날"></a>
+    </td>
+    <td align="center">
+      <a href="docs/assets/readme/desktop-laundry.png"><img src="docs/assets/readme/desktop-laundry.png" height="200" alt="PC 앱의 세탁실 현황"></a>
+    </td>
+    <td align="center">
+      <a href="docs/assets/readme/desktop-meals.png"><img src="docs/assets/readme/desktop-meals.png" height="200" alt="PC 앱의 오늘 급식"></a>
+    </td>
+  </tr>
+</table>
+
+### 트레이 상태 변화
+
 <table>
   <tr>
     <td width="33%" align="center">
-      <img src="docs/assets/readme/desktop-home.png" alt="PC 앱에서 출석 상태와 오늘 필요한 정보를 확인하는 화면">
+      <a href="docs/assets/readme/desktop-tray-studying.png"><img src="docs/assets/readme/desktop-tray-studying-focus.svg" alt="학습 중인 트레이 아이콘과 종료 가능까지 남은 시간 툴팁"></a>
     </td>
     <td width="33%" align="center">
-      <img src="docs/assets/readme/desktop-laundry.png" alt="PC 화면에서 세탁기와 건조기의 사용 가능 여부를 확인하는 화면">
+      <a href="docs/assets/readme/desktop-tray-warning.png"><img src="docs/assets/readme/desktop-tray-warning-focus.svg" alt="지각 임박을 알리는 빨간 트레이 아이콘과 툴팁"></a>
     </td>
     <td width="33%" align="center">
-      <img src="docs/assets/readme/desktop-meals.png" alt="PC 화면에서 오늘의 식단과 최근 기록을 확인하는 화면">
+      <a href="docs/assets/readme/desktop-tray-complete.png"><img src="docs/assets/readme/desktop-tray-complete-focus.svg" alt="오늘 출석 완료 상태의 트레이 아이콘과 툴팁"></a>
     </td>
   </tr>
+</table>
+
+### PWA 앱 화면
+
+<table width="100%">
   <tr>
-    <td align="center"><sub>출석</sub></td>
-    <td align="center"><sub>세탁실</sub></td>
-    <td align="center"><sub>식단</sub></td>
+    <td width="33%" align="center">
+      <a href="docs/assets/readme/ios-home-screen.webp"><img src="docs/assets/readme/ios-home-screen.webp" height="200" alt="iPhone 홈 화면에 추가된 Jungle Bell 아이콘"></a>
+    </td>
+    <td width="33%" align="center">
+      <a href="docs/assets/readme/ios-notifications.webp"><img src="docs/assets/readme/ios-notifications.webp" height="200" alt="iOS 알림센터에 표시된 학습 종료 확인, 세탁 종료 5분 전, 석식 알림"></a>
+    </td>
+    <td width="33%" align="center">
+      <a href="docs/assets/readme/ios-home.png"><img src="docs/assets/readme/ios-home.png" height="200" alt="휴대폰에서 세탁실과 오늘 급식을 확인하는 Jungle Bell 대시보드"></a>
+    </td>
   </tr>
 </table>
 
@@ -67,6 +99,8 @@ irm https://install.sijun-yang.com/jungle-bell.ps1/latest | iex
 ### 웹/PWA
 
 웹·PWA는 [jungle-bell.sijun-yang.com](https://jungle-bell.sijun-yang.com/)에서 바로 사용할 수 있습니다.
+
+일반 웹에서는 세탁·급식 정보를 확인할 수 있으며, 출석·알림 기능은 제공하지 않습니다. 출석·알림은 PWA를 설치하고 PC 앱과 연결하면 사용할 수 있습니다.
 
 ## 동작 방식
 
