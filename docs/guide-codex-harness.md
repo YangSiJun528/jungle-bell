@@ -17,7 +17,7 @@
 | [jb_desktop.toml](../.codex/agents/jb_desktop.toml) | `desktop/**`, `frontend/src/platform/tauri/**`와 checker TypeScript |
 | [jb_server.toml](../.codex/agents/jb_server.toml) | Core·JDBC·API·Worker |
 | [jb_reviewer.toml](../.codex/agents/jb_reviewer.toml) | 선택 호출: 요청된 결함 근거·회귀 분석 |
-| [jb_visual_qa.toml](../.codex/agents/jb_visual_qa.toml) | 선택 호출: 큰 기능 완료·최종 릴리스의 전체 UI 확인 |
+| [jb_visual_qa.toml](../.codex/agents/jb_visual_qa.toml) | 선택 호출: 요청된 화면·동작, 큰 기능 완료·최종 릴리스의 전체 UI 확인 |
 
 역할을 수정하거나 프로젝트 스킬을 추가하면 각 역할의 비활성 목록도 검토합니다.
 새 역할 설정은 이를 인식하는 새 앱 대화에서 사용합니다. 전역·시스템·플러그인 스킬과
@@ -43,6 +43,7 @@
 사용합니다. 실패·막힘은 메인에 알리고, 메인이 결과 통합과 Goal 진행을 관리합니다.
 결과는 변경·실행한 검사·남은 문제로 짧게 전달합니다. 공통 협업 규칙은 [AGENTS.md](../AGENTS.md)에 있습니다.
 
-검증은 기존 [개발 안내](../CONTRIBUTING.md)를 따릅니다. Docker가 없으면 일부 DB 통합
+검증은 기존 [개발 안내](../CONTRIBUTING.md)를 따릅니다. 직접 UI를 확인할 때의 브라우저·모바일·PC 환경 선택은
+[환경별 Visual QA](guide-visual-qa.md)를 참고합니다. Docker가 없으면 일부 DB 통합
 테스트가 생략될 수 있으므로 성공과 구분해 보고합니다. 스킬 필터는 파일 접근을 차단하는 보안 경계가 아닙니다.
 설계 이유와 참고 자료는 [하네스 설계](explanation-codex-harness-plan.md)에 있습니다.

@@ -11,3 +11,4 @@ Tauri Rust 런타임은 LMS 수집과 PC 로컬 상태, 창·트레이·운영�
 
 React 쪽 연결은 [Tauri 어댑터 안내](../frontend/src/platform/tauri/AGENTS.md), 서비스별 상태 소유권은
 [상태 관리](../docs/state-management-reference.md), HTTP·IPC 상세는 [플랫폼 계약](../docs/reference-platform-contract.md)을 참고합니다.
+창·트레이·OS 동작의 직접 확인은 [환경별 Visual QA](../docs/guide-visual-qa.md)를 참고합니다.

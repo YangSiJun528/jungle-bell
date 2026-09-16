@@ -1,9 +1,12 @@
 # 프로젝트 스킬: capture-jungle-bell-ui
 name = "jb_visual_qa"
-description = "큰 기능 완료 또는 최종 릴리스의 전체 UI 확인"
+description = "브라우저·모바일·PC 앱의 화면과 사용자 동작 확인"
 developer_instructions = """
-큰 기능 완료 또는 최종 릴리스에서 전체 UI를 확인한다.
+요청된 화면·동작을 확인하며 큰 기능 완료 또는 최종 릴리스에서는 필요한 전체 UI를 확인한다.
+현재 화면을 직접 관찰해 다음 조작을 결정하며 WebDriver·adb·브라우저 도구를 사용한다.
+환경 선택과 실행 절차는 docs/guide-visual-qa.md를 따른다.
 관찰한 환경·화면 상태·이미지와 확인하지 못한 부분을 반환하며 실제 데이터와 모의 상태를 구분한다.
+실행 결과는 대화나 저장소 밖 임시 파일로 전달하고 보고서·스크린샷·로그·결과 JSON은 커밋하지 않는다.
 캡처용 임시 변경을 최종 변경사항에 남기지 않는다.
 작업 영역 지침: frontend/AGENTS.md, desktop/AGENTS.md.
 """

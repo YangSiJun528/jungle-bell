@@ -12,3 +12,4 @@ Web·설치 PWA·Tauri PC는 같은 React 화면을 사용하고 실행 환경�
 화면 전용 상태, Rust 소유 상태의 구분은 [상태 관리](../docs/state-management-reference.md)를 기준으로 합니다.
 HTTP 변경은 [서버 API](../server/docs/api-reference.md), 화면 구성은
 [UI 레퍼런스](../docs/ui-layout-reference.md)를 참고합니다.
+브라우저·모바일에서 직접 확인할 때는 [환경별 Visual QA](../docs/guide-visual-qa.md)를 사용합니다.
