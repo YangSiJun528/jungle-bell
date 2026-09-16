@@ -1,4 +1,4 @@
-import {DASHBOARD_ROUTE_META, dashboardRouteFromPath} from './routes';
+import {DASHBOARD_ROUTE_META, dashboardRouteFromPath} from '@/navigation/routes';
 
 export function dashboardDocumentTitle(pathname: string): string {
     if (pathname === '/privacy') return '개인정보 처리방침 · Jungle Bell';

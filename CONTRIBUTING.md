@@ -95,6 +95,15 @@ PostgreSQL을 포함한 로컬 실행 방법은 [`server/README.md`](server/READ
 
 ## 변경 사항 검증
 
+프론트엔드 의존성 경계와 검사기 자체를 검증하려면 다음 명령을 실행합니다.
+허용 의존성과 예외는 [모듈 의존성 규칙](docs/reference-module-boundaries.md)에 정의합니다.
+
+```bash
+cd frontend
+mise exec -- npm run architecture
+mise exec -- npm run test:architecture
+```
+
 프론트엔드와 PC 앱 전체 검증은 위와 같은 방식으로 `JUNGLE_BELL_DATA_API_URL`을 설정한 뒤 실행합니다.
 
 ```bash

@@ -1,8 +1,9 @@
 import {createMemoryHistory} from '@tanstack/react-router';
 import {describe, expect, test} from 'vitest';
 
+import {normalizeLegacyDashboardHash} from '@/navigation/routes';
+
 import {createDashboardRouter} from './dashboard-router';
-import {normalizeLegacyDashboardHash} from './routes';
 
 describe('dashboard router', () => {
     test('uses the typed dashboard route tree for SPA navigation', async () => {

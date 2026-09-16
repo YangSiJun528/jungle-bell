@@ -1,4 +1,4 @@
-import {useDashboardEnvironment} from '@/app/dashboard-context';
+import {useDashboardEnvironment} from '@/state/dashboard-context';
 
 import {
     appStatusRows,

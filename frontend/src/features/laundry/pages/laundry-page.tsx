@@ -1,8 +1,6 @@
 import {RefreshCw, WashingMachine} from 'lucide-react';
 import {useState} from 'react';
 
-import {useDashboardEnvironment} from '@/app/dashboard-context';
-import {useCampusManualRefresh, useSuspenseLaundryQuery} from '@/app/use-dashboard-queries';
 import {AsyncState, useOnlineStatus} from '@/components/dashboard/async-state';
 import {laundryZonePresentation} from '@/components/dashboard/laundry-zone-presentation';
 import {PageHeader} from '@/components/dashboard/page-header';
@@ -12,6 +10,8 @@ import {SwitchRow} from '@/components/ui/switch';
 import {laundrySituationDataIsReliable} from '@/domain/laundry/freshness';
 import {dateTimeLabel, relativeTimeLabel} from '@/lib/format';
 import {cn} from '@/lib/utils';
+import {useDashboardEnvironment} from '@/state/dashboard-context';
+import {useCampusManualRefresh, useSuspenseLaundryQuery} from '@/state/use-dashboard-queries';
 
 import {LaundryFeatureBoundary} from '../components/laundry-feature-boundary';
 import {LaundryMachineList} from '../components/laundry-machine-list';

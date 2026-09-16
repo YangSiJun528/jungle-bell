@@ -10,8 +10,6 @@ import {
     type PushSubscriptionLifecycleStorage,
     type PushSubscriptionReconciliation,
 } from '@/api/push-subscription-lifecycle';
-import {useDashboardAccount} from '@/app/dashboard-account';
-import {queryKeys, useDashboardEnvironment} from '@/app/dashboard-context';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Button} from '@/components/ui/button';
 import {
@@ -22,8 +20,10 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import {notificationPermissionFromRuntime} from '@/platform/notification-permission';
+import {useDashboardAccount} from '@/state/dashboard-account';
+import {queryKeys, useDashboardEnvironment} from '@/state/dashboard-context';
 
-import {notificationPermissionFromRuntime} from '../app-status/app-status-observations';
 import {
     assertMobileTestNotificationQueued,
     desktopTestNotificationMessage,

@@ -1,11 +1,11 @@
 import {describe, expect, test} from 'vitest';
 
 import type {DesktopUpdateStatus} from '@/platform/contracts';
+import {notificationPermissionFromRuntime} from '@/platform/notification-permission';
 
 import {
     authenticationStateFromProducer,
     desktopUpdateObservationFromQuery,
-    notificationPermissionFromRuntime,
     pushStateFromRuntime,
     serviceWorkerObservation,
 } from './app-status-observations';

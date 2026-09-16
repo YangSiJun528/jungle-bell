@@ -9,13 +9,6 @@ import {
 } from 'lucide-react';
 
 import type {DesktopDevice} from '@/api/dashboard-api';
-import {useDashboardAccount} from '@/app/dashboard-account';
-import {useDashboardEnvironment} from '@/app/dashboard-context';
-import {
-    useAttendanceQuery,
-    useDesktopConnectionQuery,
-    useRefreshAttendanceMutation,
-} from '@/app/use-dashboard-queries';
 import {EmptyState, ErrorState, LoadingState} from '@/components/dashboard/async-state';
 import {DdayCard} from '@/components/dashboard/dday-card';
 import {PageHeader} from '@/components/dashboard/page-header';
@@ -32,6 +25,13 @@ import {
 import {ExternalLink} from '@/components/ui/external-link';
 import {selectDdayView} from '@/domain/attendance/dday-view';
 import {dateTimeLabel, relativeTimeLabel} from '@/lib/format';
+import {useDashboardAccount} from '@/state/dashboard-account';
+import {useDashboardEnvironment} from '@/state/dashboard-context';
+import {
+    useAttendanceQuery,
+    useDesktopConnectionQuery,
+    useRefreshAttendanceMutation,
+} from '@/state/use-dashboard-queries';
 
 import {
     resolveAttendancePageState,

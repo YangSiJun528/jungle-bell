@@ -11,7 +11,7 @@ const productionSources = [
     '../../features/home/jungle-campus-summary.tsx',
     '../../features/meals/components/meal-post-card.tsx',
     '../../features/meals/components/weekly-meal-menu.tsx',
-    '../../platform/pwa/install-prompt.tsx',
+    '../../components/pwa/install-prompt.tsx',
 ] as const;
 
 describe('production external links', () => {

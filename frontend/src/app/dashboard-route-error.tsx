@@ -1,8 +1,8 @@
 import {ErrorState} from '@/components/dashboard/async-state';
 import {PageHeader} from '@/components/dashboard/page-header';
+import {DASHBOARD_ROUTE_META} from '@/navigation/routes';
 
 import type {DashboardContentRoute} from './notification-panel-route';
-import {DASHBOARD_ROUTE_META} from './routes';
 
 export function DashboardRouteErrorFallback({
     retry,

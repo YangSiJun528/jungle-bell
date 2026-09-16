@@ -13,7 +13,7 @@
 | 역할 | 위치 |
 | --- | --- |
 | React 진입점과 provider | [`frontend/src/app`](../frontend/src/app) |
-| 화면 셸과 hash route | [`frontend/src/app/shell`](../frontend/src/app/shell), [`frontend/src/app/routes.ts`](../frontend/src/app/routes.ts) |
+| 화면 셸과 hash route | [`frontend/src/app/shell`](../frontend/src/app/shell), [`frontend/src/navigation/routes.ts`](../frontend/src/navigation/routes.ts) |
 | 화면별 기능 | [`frontend/src/features`](../frontend/src/features) |
 | 공유 화면 컴포넌트 | [`frontend/src/components/dashboard`](../frontend/src/components/dashboard) |
 | 저장소에 포함한 shadcn/ui | [`frontend/src/components/ui`](../frontend/src/components/ui) |

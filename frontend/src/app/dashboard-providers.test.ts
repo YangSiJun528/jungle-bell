@@ -2,9 +2,11 @@ import {QueryClient} from '@tanstack/react-query';
 import {expect, test} from 'vitest';
 
 import type {AttendanceDashboard} from '@/api/dashboard-api';
-
-import {queryKeys} from './dashboard-context';
-import {handleAttendanceSnapshotUpdated, preferDesktopAttendance} from './desktop-attendance-event';
+import {queryKeys} from '@/state/dashboard-context';
+import {
+    handleAttendanceSnapshotUpdated,
+    preferDesktopAttendance,
+} from '@/state/desktop-attendance-event';
 
 test('업로드 완료 이벤트는 데스크톱 출석 캐시만 stale 처리한다', async () => {
     const client = new QueryClient();

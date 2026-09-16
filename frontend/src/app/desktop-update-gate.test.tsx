@@ -37,7 +37,7 @@ vi.mock('@tanstack/react-query', () => ({
     useQuery: () => updateQuery,
 }));
 
-vi.mock('./dashboard-context', () => ({
+vi.mock('@/state/dashboard-context', () => ({
     queryKeys: {desktopUpdate: ['desktop-update'] as const},
     useDashboardEnvironment: () => ({
         api: environment,

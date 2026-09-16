@@ -17,7 +17,7 @@ const api = vi.hoisted(() => ({
     ),
 }));
 
-vi.mock('@/app/dashboard-context', () => ({
+vi.mock('@/state/dashboard-context', () => ({
     useDashboardEnvironment: () => ({api}),
 }));
 

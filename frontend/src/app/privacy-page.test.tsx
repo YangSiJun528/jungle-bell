@@ -7,8 +7,8 @@ import {describe, expect, test, vi} from 'vitest';
 
 import {unavailablePwaAdapter, type UsagePrivacyAdapter} from '@/platform/contracts';
 import {createWebPlatformAdapter} from '@/platform/web/adapter';
+import {createEnvironment, DashboardEnvironmentContext} from '@/state/dashboard-context';
 
-import {createEnvironment, DashboardEnvironmentContext} from './dashboard-context';
 import {createDashboardRouter} from './dashboard-router';
 import {PrivacyPage} from './privacy-page';
 

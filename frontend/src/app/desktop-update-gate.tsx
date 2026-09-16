@@ -2,12 +2,12 @@ import {useMutation, useQueryClient} from '@tanstack/react-query';
 import {useEffect, useRef, type PropsWithChildren} from 'react';
 
 import jungleBellLogo from '@/assets/logo.png';
+import {queryKeys, useDashboardEnvironment} from '@/state/dashboard-context';
+import {desktopUpdateInstallMutationKey, useDesktopUpdateQuery} from '@/state/desktop-update-query';
 
-import {queryKeys, useDashboardEnvironment} from './dashboard-context';
 import {activateBlockingDialogFocus} from './desktop-update-dialog-focus';
 import {desktopUpdateGateDecision} from './desktop-update-gate-decision';
 import {DesktopUpdatePanel} from './desktop-update-panel';
-import {desktopUpdateInstallMutationKey, useDesktopUpdateQuery} from './desktop-update-query';
 
 function UpdateGateFrame({children}: PropsWithChildren) {
     return (

@@ -1,4 +1,4 @@
-import type {ExternalUrlOpener} from './external-link';
+export type ExternalUrlOpener = (url: string) => Promise<void>;
 
 export async function openExternalLinkFromClick(
     event: Pick<Event, 'defaultPrevented' | 'preventDefault'>,

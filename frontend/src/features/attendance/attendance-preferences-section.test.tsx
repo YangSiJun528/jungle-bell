@@ -19,16 +19,16 @@ const {api, queryKeys} = vi.hoisted(() => ({
     },
 }));
 
-vi.mock('@/app/dashboard-context', () => ({
+vi.mock('@/state/dashboard-context', () => ({
     queryKeys,
     useDashboardEnvironment: () => ({api}),
 }));
 
-vi.mock('@/app/dashboard-account', () => ({
+vi.mock('@/state/dashboard-account', () => ({
     useDashboardAccount: () => ({personalAccess: {status: 'connected'}}),
 }));
 
-vi.mock('@/app/use-dashboard-queries', () => ({
+vi.mock('@/state/use-dashboard-queries', () => ({
     useAttendanceQuery: () => ({
         data: {
             state: 'loaded',

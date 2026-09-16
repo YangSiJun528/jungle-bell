@@ -1,10 +1,10 @@
 import {BadgeCheck, CircleAlert, Download, MonitorDown, RotateCcw, X} from 'lucide-react';
 import {useCallback, useEffect, useReducer, useState, type ReactNode} from 'react';
 
-import {useDashboardEnvironment} from '@/app/dashboard-context';
 import {Button} from '@/components/ui/button';
 import {Card, CardContent} from '@/components/ui/card';
 import {ExternalLink} from '@/components/ui/external-link';
+import {useDashboardEnvironment} from '@/state/dashboard-context';
 
 import {
     initialInstallPromptState,

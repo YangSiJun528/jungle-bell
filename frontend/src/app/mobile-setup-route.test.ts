@@ -1,6 +1,6 @@
 import {describe, expect, test} from 'vitest';
 
-import {normalizeLegacyDashboardHash} from './routes';
+import {normalizeLegacyDashboardHash} from '@/navigation/routes';
 
 describe('legacy mobile setup hash', () => {
     test('이전 setup hash를 React mount 전에 설치 안내로 바꾼다', () => {

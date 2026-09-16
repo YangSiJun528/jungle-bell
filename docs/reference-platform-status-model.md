@@ -112,6 +112,6 @@ PWA surface 판정은 UI 분기일 뿐 인증과 권한의 증명이 아니다.
 | 소비자            | `status`를 exhaustive switch로 처리하고 기본 분기로 알 수 없는 상태를 숨기지 않는다. 차단 UI는 현재 상태, 필요한 이유, 다음 행동, 복구 또는 나가기 경로를 표시한다. |
 
 우선 wiring 대상은 `frontend/src/platform/contracts.ts`,
-`frontend/src/app/dashboard-account-state.ts`,
+`frontend/src/state/dashboard-account-state.ts`,
 `frontend/src/features/notifications/notification-delivery-setup.tsx`,
 `frontend/src/app/desktop-update-gate.tsx`다.

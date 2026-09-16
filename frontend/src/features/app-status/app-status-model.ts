@@ -1,14 +1,11 @@
-import type {LmsAuthenticationStatus, ServerSessionStatus} from '@/app/dashboard-account-state';
-import type {ConnectionsTab} from '@/app/routes';
 import {dateTimeLabel} from '@/lib/format';
+import type {ConnectionsTab} from '@/navigation/routes';
+import type {AppNotificationPermission} from '@/platform/notification-permission';
 import type {NotificationTestRecord} from '@/platform/notification-test-history';
 import type {AuthenticationState, PushState} from '@/platform/status-model';
+import type {LmsAuthenticationStatus, ServerSessionStatus} from '@/state/dashboard-account-state';
 
-import type {
-    AppNotificationPermission,
-    DesktopUpdateObservation,
-    ServiceWorkerObservation,
-} from './app-status-observations';
+import type {DesktopUpdateObservation, ServiceWorkerObservation} from './app-status-observations';
 
 export type AppStatusValue = 'attention' | 'checking' | 'error' | 'ready' | 'unavailable';
 

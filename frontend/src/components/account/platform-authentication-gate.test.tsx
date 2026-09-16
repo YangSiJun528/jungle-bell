@@ -2,13 +2,13 @@ import {createMemoryHistory, RouterContextProvider} from '@tanstack/react-router
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, test, vi} from 'vitest';
 
+import {createDashboardRouter} from '../../app/dashboard-router';
 import {
     browserSessionObservation,
     checkerWaitTransition,
     initialCheckerWaitState,
     transitionCookieSessionAccess,
-} from './dashboard-account-state';
-import {createDashboardRouter} from './dashboard-router';
+} from '../../state/dashboard-account-state';
 import {PlatformAuthenticationGate} from './platform-authentication-gate';
 
 const {account, environment} = vi.hoisted(() => ({
@@ -38,7 +38,7 @@ vi.mock('@tanstack/react-query', () => ({
     }),
 }));
 
-vi.mock('./dashboard-account', () => ({
+vi.mock('../../state/dashboard-account', () => ({
     useDashboardAccount: () => ({
         personalAccess: {status: account.personalAccess, reason: account.personalReason},
         status: {
@@ -56,7 +56,7 @@ vi.mock('./dashboard-account', () => ({
     }),
 }));
 
-vi.mock('./dashboard-context', () => ({
+vi.mock('../../state/dashboard-context', () => ({
     useDashboardEnvironment: () => ({
         api: {openLmsLogin: environment.openLmsLogin},
         platform: {
@@ -67,7 +67,7 @@ vi.mock('./dashboard-context', () => ({
     }),
 }));
 
-vi.mock('./use-dashboard-queries', () => ({
+vi.mock('../../state/use-dashboard-queries', () => ({
     useRefreshAttendanceMutation: () => ({isPending: false, mutate: vi.fn<() => void>()}),
 }));
 

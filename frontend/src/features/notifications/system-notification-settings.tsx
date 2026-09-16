@@ -1,9 +1,9 @@
 import {useMutation} from '@tanstack/react-query';
 import {ExternalLink} from 'lucide-react';
 
-import {useDashboardEnvironment} from '@/app/dashboard-context';
 import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@/components/ui/card';
+import {useDashboardEnvironment} from '@/state/dashboard-context';
 
 export function SystemNotificationSettingsButton() {
     const {api, platform} = useDashboardEnvironment();

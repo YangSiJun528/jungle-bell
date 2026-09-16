@@ -22,7 +22,7 @@ const {api, environment, queryKeys} = vi.hoisted(() => ({
     queryKeys: {desktopSettings: ['desktop-settings'] as const},
 }));
 
-vi.mock('@/app/dashboard-context', () => ({
+vi.mock('@/state/dashboard-context', () => ({
     queryKeys,
     useDashboardEnvironment: () => ({api, ...environment}),
 }));

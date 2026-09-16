@@ -1,4 +1,4 @@
-import type {DashboardRoute} from './routes';
+import type {DashboardRoute} from '@/navigation/routes';
 
 export type DashboardContentRoute = Exclude<DashboardRoute, 'notifications'>;
 

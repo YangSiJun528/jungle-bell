@@ -1,6 +1,5 @@
+import {isMobileInstallClient} from '@/lib/install-client';
 import type {PwaCapabilityAdapter, PwaInstallPrompt, PlatformUnlisten} from '@/platform/contracts';
-
-import {isMobileInstallClient} from './install-client';
 
 interface BeforeInstallPromptEvent extends Event {
     prompt(): Promise<void>;

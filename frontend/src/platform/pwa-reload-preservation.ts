@@ -1,5 +1,3 @@
-import {useEffect, useEffectEvent} from 'react';
-
 export const PWA_RELOAD_HANDOFF_KEY = 'jungle-bell:pwa-reload-handoff:v1';
 
 export type PwaReloadPreserver = () => boolean | Promise<boolean>;
@@ -37,11 +35,6 @@ export function createPwaReloadPreserverRegistry(): PwaReloadPreserverRegistry {
 }
 
 export const pwaReloadPreservers = createPwaReloadPreserverRegistry();
-
-export function usePwaReloadPreserver(preserver: PwaReloadPreserver): void {
-    const preserveLatest = useEffectEvent(preserver);
-    useEffect(() => pwaReloadPreservers.register(() => preserveLatest()), []);
-}
 
 function browserSessionStorage(): PwaReloadStorage | null {
     try {

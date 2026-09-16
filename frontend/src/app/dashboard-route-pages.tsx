@@ -3,11 +3,11 @@ import {useNavigate, useSearch} from '@tanstack/react-router';
 import {lazy, useCallback, useEffect, useState} from 'react';
 
 import type {MobilePairingLink} from '@/domain/connections/pairing-link';
+import type {ConnectionsTab} from '@/navigation/routes';
+import {useDashboardEnvironment} from '@/state/dashboard-context';
+import {clearInitialPairingEntry, readInitialPairingEntry} from '@/state/pairing-bootstrap';
 
-import {useDashboardEnvironment} from './dashboard-context';
 import {useDashboardRouteRuntime} from './dashboard-route-runtime';
-import {clearInitialPairingEntry, readInitialPairingEntry} from './pairing-bootstrap';
-import type {ConnectionsTab} from './routes';
 
 const HomePage = lazy(() =>
     import('@/features/home/home-page').then((module) => ({default: module.HomePage})),
@@ -28,6 +28,11 @@ const MealsPage = lazy(() =>
 const ConnectionsPage = lazy(() =>
     import('@/features/connections/connections-page').then((module) => ({
         default: module.ConnectionsPage,
+    })),
+);
+const NotificationSettings = lazy(() =>
+    import('./settings/notification-settings').then((module) => ({
+        default: module.NotificationSettings,
     })),
 );
 const AppStatusPage = lazy(() =>
@@ -116,6 +121,7 @@ export function ConnectionsRoutePage() {
                     onTabChange={selectTab}
                     appStatus={content}
                     appStatusWarningCount={warningCount}
+                    notificationSettings={<NotificationSettings />}
                 />
             )}
         </AppStatusPage>

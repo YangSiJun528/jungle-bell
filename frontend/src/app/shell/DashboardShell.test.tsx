@@ -4,7 +4,6 @@ import {createMemoryHistory, RouterContextProvider} from '@tanstack/react-router
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, test, vi} from 'vitest';
 
-import {createDashboardRouter} from '../dashboard-router';
 import {
     DASHBOARD_ROUTE_META,
     dashboardNavigationRoutes,
@@ -13,7 +12,8 @@ import {
     dashboardRoutePath,
     dashboardUtilityRoutes,
     type DashboardRoute,
-} from '../routes';
+} from '../../navigation/routes';
+import {createDashboardRouter} from '../dashboard-router';
 import {DashboardShell} from './DashboardShell';
 
 const shellSource = readFileSync(new URL('./DashboardShell.tsx', import.meta.url), 'utf8');

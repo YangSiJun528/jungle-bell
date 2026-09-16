@@ -4,7 +4,7 @@ import {
     PWA_RELOAD_HANDOFF_KEY,
     createPwaReloadPreserverRegistry,
     preparePwaReload,
-} from './reload-preservation';
+} from './pwa-reload-preservation';
 
 function memoryStorage() {
     const values = new Map<string, string>();

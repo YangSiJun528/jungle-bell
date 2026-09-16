@@ -1,5 +1,5 @@
-import type {DashboardAccountStatus, PersonalAccessStatus} from '@/app/dashboard-account-state';
 import type {PlatformKind} from '@/platform/contracts';
+import type {DashboardAccountStatus, PersonalAccessStatus} from '@/state/dashboard-account-state';
 
 import type {AttendanceDetailModel} from './attendance-view-model';
 

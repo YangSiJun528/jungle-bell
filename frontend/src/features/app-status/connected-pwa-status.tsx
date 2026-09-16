@@ -6,13 +6,14 @@ import {
     type PushSubscriptionLifecycleStorage,
     type PushSubscriptionReconciliation,
 } from '@/api/push-subscription-lifecycle';
-import {useDashboardAccount} from '@/app/dashboard-account';
-import {useDashboardEnvironment} from '@/app/dashboard-context';
+import {notificationPermissionFromRuntime} from '@/platform/notification-permission';
 import {
     NOTIFICATION_TEST_QUERY_KEY,
     readNotificationTestRecord,
     type NotificationTestRecord,
 } from '@/platform/notification-test-history';
+import {useDashboardAccount} from '@/state/dashboard-account';
+import {useDashboardEnvironment} from '@/state/dashboard-context';
 
 import packageMetadata from '../../../package.json';
 import type {
@@ -23,7 +24,6 @@ import type {
 import {appStatusRows, appStatusWarningCount} from './app-status-model';
 import {
     authenticationStateFromProducer,
-    notificationPermissionFromRuntime,
     pushStateFromRuntime,
     serviceWorkerObservation,
 } from './app-status-observations';

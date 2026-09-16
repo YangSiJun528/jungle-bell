@@ -11,17 +11,17 @@ const main = source('./app/bootstrap.tsx');
 const app = source('./app/dashboard-app.tsx');
 const dashboardRouter = source('./app/dashboard-router.tsx');
 const routePages = source('./app/dashboard-route-pages.tsx');
-const context = source('./app/dashboard-context.tsx');
-const personalAccountGate = source('./app/personal-account-gate.tsx');
-const platformAuthenticationGate = source('./app/platform-authentication-gate.tsx');
-const personalFeatureSlot = source('./app/personal-feature-slot.tsx');
+const context = source('./state/dashboard-context.tsx');
+const personalAccountGate = source('./components/account/personal-account-gate.tsx');
+const platformAuthenticationGate = source('./components/account/platform-authentication-gate.tsx');
+const personalFeatureSlot = source('./components/account/personal-feature-slot.tsx');
 const providers = source('./app/dashboard-providers.tsx');
-const desktopAttendanceEvent = source('./app/desktop-attendance-event.ts');
-const queries = source('./app/use-dashboard-queries.ts');
-const campusQueryOptions = source('./app/campus-query-options.ts');
-const routes = source('./app/routes.ts');
+const desktopAttendanceEvent = source('./state/desktop-attendance-event.ts');
+const queries = source('./state/use-dashboard-queries.ts');
+const campusQueryOptions = source('./state/campus-query-options.ts');
+const routes = source('./navigation/routes.ts');
 const shell = source('./app/shell/DashboardShell.tsx');
-const installPrompt = source('./platform/pwa/install-prompt.tsx');
+const installPrompt = source('./components/pwa/install-prompt.tsx');
 const pwaAdapter = source('./platform/pwa/adapter.ts');
 const platformEvents = source('./platform/tauri/event-adapter.ts');
 const vite = source('../vite.config.ts');
@@ -260,7 +260,11 @@ test('설정 알림 탭은 연결된 기기의 출석·급식 설정을 함께 �
     assert.doesNotMatch(meals, /MealPreferencesSection/);
     assert.doesNotMatch(meals, /as PersonalSurface/);
     assert.match(connections, /<TabsTrigger value="notifications">알림<\/TabsTrigger>/);
-    assert.match(connections, /<NotificationSettings\s*\/>/);
+    assert.match(connections, /\{notificationSettings\}/);
+    assert.match(
+        source('./app/dashboard-route-pages.tsx'),
+        /notificationSettings=\{<NotificationSettings\s*\/>\}/,
+    );
     assert.match(notificationSettings, /<AttendancePreferencesSection\s*\/>/);
     assert.match(notificationSettings, /<MealPreferencesSection\s*\/>/);
 

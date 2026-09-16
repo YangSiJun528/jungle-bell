@@ -3,12 +3,12 @@ import {readFileSync} from 'node:fs';
 
 import {describe, expect, test} from 'vitest';
 
-import {isMobileInstallClient} from './install-client';
 import {
     initialInstallPromptState,
     reduceInstallPromptState,
     type InstallPromptState,
-} from './install-prompt-state';
+} from '@/components/pwa/install-prompt-state';
+import {isMobileInstallClient} from '@/lib/install-client';
 
 test('iOS·Android와 iPad 데스크톱 UA를 모바일 설치 대상으로 판정한다', () => {
     assert.equal(

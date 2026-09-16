@@ -6,7 +6,14 @@ import {type PropsWithChildren, type ReactNode, useEffect, useId, useReducer} fr
 import {PageHeader} from '@/components/dashboard/page-header';
 import {Button} from '@/components/ui/button';
 
-import {useDashboardAccount} from './dashboard-account';
+import {
+    connectionsRouteSearch,
+    DASHBOARD_ROUTE_META,
+    dashboardRouteFromPath,
+    normalizeDashboardReturnTarget,
+    type DashboardReturnTarget,
+} from '../../navigation/routes';
+import {useDashboardAccount} from '../../state/dashboard-account';
 import {
     CHECKER_LMS_UNKNOWN_TIMEOUT_MS,
     checkerWaitTransition,
@@ -14,16 +21,9 @@ import {
     type LmsAuthenticationStatus,
     type PersonalAccessState,
     type ServerSessionStatus,
-} from './dashboard-account-state';
-import {useDashboardEnvironment} from './dashboard-context';
-import {
-    connectionsRouteSearch,
-    DASHBOARD_ROUTE_META,
-    dashboardRouteFromPath,
-    normalizeDashboardReturnTarget,
-    type DashboardReturnTarget,
-} from './routes';
-import {useRefreshAttendanceMutation} from './use-dashboard-queries';
+} from '../../state/dashboard-account-state';
+import {useDashboardEnvironment} from '../../state/dashboard-context';
+import {useRefreshAttendanceMutation} from '../../state/use-dashboard-queries';
 
 interface PlatformAuthenticationGateProps extends PropsWithChildren {
     enabled?: boolean;

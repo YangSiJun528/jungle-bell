@@ -42,13 +42,16 @@ subprojects {
         }
     }
 
+    val mainClasses = extensions.getByType<SourceSetContainer>()["main"].output.classesDirs
     tasks.withType<Test>().configureEach {
         useJUnitPlatform()
+        systemProperty("junglebell.architecture.classes", mainClasses.asPath)
     }
 }
 
 project(":core") {
     apply(plugin = "java-library")
+    apply(plugin = "java-test-fixtures")
 
     dependencies {
         add("api", "org.springframework.boot:spring-boot-starter-data-jdbc")
@@ -64,6 +67,7 @@ project(":core") {
         add("testImplementation", "org.testcontainers:testcontainers-junit-jupiter")
         add("testImplementation", "org.testcontainers:testcontainers-postgresql")
         add("testRuntimeOnly", "org.junit.platform:junit-platform-launcher")
+        add("testFixturesApi", "com.tngtech.archunit:archunit:1.5.0")
     }
 }
 
@@ -88,6 +92,7 @@ project(":api") {
         add("testImplementation", "org.springframework.boot:spring-boot-starter-validation-test")
         add("testImplementation", "org.springframework.boot:spring-boot-starter-webmvc-test")
         add("testImplementation", "org.springframework.boot:spring-boot-testcontainers")
+        add("testImplementation", testFixtures(project(":core")))
         add("testImplementation", "org.jetbrains.kotlin:kotlin-test-junit5")
         add("testImplementation", "org.testcontainers:testcontainers-junit-jupiter")
         add("testImplementation", "org.testcontainers:testcontainers-postgresql")
@@ -117,6 +122,7 @@ project(":worker") {
         add("testImplementation", "org.springframework.boot:spring-boot-starter-data-jdbc-test")
         add("testImplementation", "org.springframework.boot:spring-boot-starter-validation-test")
         add("testImplementation", "org.springframework.boot:spring-boot-testcontainers")
+        add("testImplementation", testFixtures(project(":core")))
         add("testImplementation", "org.jetbrains.kotlin:kotlin-test-junit5")
         add("testImplementation", "org.testcontainers:testcontainers-junit-jupiter")
         add("testImplementation", "org.testcontainers:testcontainers-postgresql")

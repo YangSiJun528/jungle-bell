@@ -3,8 +3,9 @@ import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, test, vi} from 'vitest';
 
 import type {DesktopUpdateStatus} from '@/platform/contracts';
+import type * as DashboardContextModule from '@/state/dashboard-context';
+import {queryKeys} from '@/state/dashboard-context';
 
-import {queryKeys} from './dashboard-context';
 import {deferOptionalDesktopUpdate, isOptionalDesktopUpdateDeferred} from './desktop-update-later';
 import {DesktopUpdateNotice} from './desktop-update-notice';
 
@@ -19,8 +20,8 @@ const {environment} = vi.hoisted(() => ({
     },
 }));
 
-vi.mock('@/app/dashboard-context', async (importOriginal) => ({
-    ...(await importOriginal<typeof import('@/app/dashboard-context')>()),
+vi.mock('@/state/dashboard-context', async (importOriginal) => ({
+    ...(await importOriginal<typeof DashboardContextModule>()),
     useDashboardEnvironment: () => environment,
 }));
 

@@ -16,32 +16,6 @@ describe('React renewal architecture', () => {
         expect(rootFiles).toEqual(['env.d.ts', 'main.ts']);
     });
 
-    test('shared layers do not depend on features and features stay isolated', () => {
-        const apiFiles = globSync('src/api/**/*.{ts,tsx}', {cwd: root});
-        for (const path of apiFiles) {
-            expect(read(path), path).not.toMatch(/['"]@\/features\//u);
-        }
-
-        const domainFiles = globSync('src/domain/**/*.{ts,tsx}', {cwd: root}).filter(
-            (path) => !path.includes('.test.'),
-        );
-        for (const path of domainFiles) {
-            expect(read(path), path).not.toMatch(/['"]@\/(?:api|app|features)\//u);
-        }
-
-        const featureFiles = globSync('src/features/*/**/*.{ts,tsx}', {cwd: root});
-        for (const path of featureFiles) {
-            const owner = path.split('/')[2];
-            const importedFeatures = Array.from(
-                read(path).matchAll(/(?:from\s+|import\()\s*['"]@\/features\/([^/'"]+)/gu),
-                (match) => match[1],
-            );
-            expect(importedFeatures, path).toEqual(
-                importedFeatures.filter((feature) => feature === owner),
-            );
-        }
-    });
-
     test('the dashboard is a React entry backed by TanStack Query', () => {
         const dashboard = read('index.html');
         const packageJson = JSON.parse(read('package.json')) as {

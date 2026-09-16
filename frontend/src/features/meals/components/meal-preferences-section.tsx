@@ -4,15 +4,15 @@ import {useEffect, useState} from 'react';
 
 import {accountAuthenticationRequired} from '@/api/account-authentication';
 import type {MealPreferences, MealPreferencesInput} from '@/api/dashboard-api';
-import {useDashboardAccount} from '@/app/dashboard-account';
-import {queryKeys, useDashboardEnvironment} from '@/app/dashboard-context';
 import {ErrorState, LoadingState} from '@/components/dashboard/async-state';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@/components/ui/card';
 import {Separator} from '@/components/ui/separator';
 import {SwitchRow} from '@/components/ui/switch';
-import {usePwaReloadPreserver} from '@/platform/pwa/reload-preservation';
+import {usePwaReloadPreserver} from '@/hooks/use-pwa-reload-preserver';
+import {useDashboardAccount} from '@/state/dashboard-account';
+import {queryKeys, useDashboardEnvironment} from '@/state/dashboard-context';
 
 import {
     clearMealPreferencesDraft,
