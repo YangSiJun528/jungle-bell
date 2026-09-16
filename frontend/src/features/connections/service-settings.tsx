@@ -2,7 +2,6 @@ import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {CircleAlert, FolderOpen, Laptop} from 'lucide-react';
 import {useState} from 'react';
 
-import {queryKeys, useDashboardEnvironment} from '@/app/dashboard-context';
 import {ErrorState, LoadingState} from '@/components/dashboard/async-state';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {
@@ -27,6 +26,7 @@ import {
 import {Separator} from '@/components/ui/separator';
 import {SwitchRow} from '@/components/ui/switch';
 import type {DesktopSettings, DesktopSettingsUpdate} from '@/platform/contracts';
+import {queryKeys, useDashboardEnvironment} from '@/state/dashboard-context';
 
 type EditableDesktopSetting = 'autoStart' | 'usageAnalytics' | 'debugMode';
 type CohortDraft = string | null | undefined;

@@ -9,11 +9,7 @@ import type {
     LaundryNotificationMode,
     LaundryWatch,
 } from '@/api/dashboard-api';
-import {useDashboardAccount} from '@/app/dashboard-account';
-import {assertLmsAuthenticated, assertServerSessionReady} from '@/app/dashboard-account-state';
-import {queryKeys, useDashboardEnvironment} from '@/app/dashboard-context';
-import {PersonalFeatureSlot} from '@/app/personal-feature-slot';
-import {useAttendanceQuery, useRefreshAttendanceMutation} from '@/app/use-dashboard-queries';
+import {PersonalFeatureSlot} from '@/components/account/personal-feature-slot';
 import {LoadingState} from '@/components/dashboard/async-state';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Button} from '@/components/ui/button';
@@ -36,6 +32,10 @@ import {
     watchConditionLabel,
     type LaundryTarget,
 } from '@/features/laundry/lib/personal-laundry';
+import {useDashboardAccount} from '@/state/dashboard-account';
+import {assertLmsAuthenticated, assertServerSessionReady} from '@/state/dashboard-account-state';
+import {queryKeys, useDashboardEnvironment} from '@/state/dashboard-context';
+import {useAttendanceQuery, useRefreshAttendanceMutation} from '@/state/use-dashboard-queries';
 
 interface PersonalLaundrySectionProps {
     canCreateWatch?: boolean;

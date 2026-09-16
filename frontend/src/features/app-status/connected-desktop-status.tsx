@@ -1,11 +1,6 @@
 import {useQuery} from '@tanstack/react-query';
 import {CircleAlert, RefreshCw} from 'lucide-react';
 
-import {useDashboardAccount} from '@/app/dashboard-account';
-import {serverSessionReady} from '@/app/dashboard-account-state';
-import {queryKeys, useDashboardEnvironment} from '@/app/dashboard-context';
-import {useDesktopUpdateQuery} from '@/app/desktop-update-query';
-import {useAttendanceQuery} from '@/app/use-dashboard-queries';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Button} from '@/components/ui/button';
 import {
@@ -13,6 +8,11 @@ import {
     readNotificationTestRecord,
     type NotificationTestRecord,
 } from '@/platform/notification-test-history';
+import {useDashboardAccount} from '@/state/dashboard-account';
+import {serverSessionReady} from '@/state/dashboard-account-state';
+import {queryKeys, useDashboardEnvironment} from '@/state/dashboard-context';
+import {useDesktopUpdateQuery} from '@/state/desktop-update-query';
+import {useAttendanceQuery} from '@/state/use-dashboard-queries';
 
 import type {AppStatusTab, DesktopAppStatusInput} from './app-status-model';
 import {appStatusRows} from './app-status-model';

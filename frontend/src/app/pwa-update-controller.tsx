@@ -10,7 +10,7 @@ import {
 
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Button} from '@/components/ui/button';
-import {preparePwaReload} from '@/platform/pwa/reload-preservation';
+import {preparePwaReload} from '@/platform/pwa-reload-preservation';
 import type {PwaUpdateBootstrap} from '@/platform/pwa/update-bootstrap';
 import type {PwaUpdateSnapshot} from '@/platform/pwa/update-lifecycle';
 

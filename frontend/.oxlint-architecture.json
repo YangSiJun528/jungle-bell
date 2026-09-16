@@ -1,0 +1,11 @@
+{
+    "plugins": ["typescript"],
+    "categories": {"correctness": "off"},
+    "rules": {
+        "typescript/consistent-type-imports": ["error", {"disallowTypeAnnotations": true}],
+        "typescript/triple-slash-reference": [
+            "error",
+            {"path": "never", "types": "always", "lib": "always"}
+        ]
+    }
+}

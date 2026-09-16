@@ -3,7 +3,7 @@ import {createMemoryHistory, RouterContextProvider} from '@tanstack/react-router
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, test, vi} from 'vitest';
 
-import {createDashboardRouter} from './dashboard-router';
+import {createDashboardRouter} from '../../app/dashboard-router';
 import {PersonalAccountGate} from './personal-account-gate';
 
 const {account, environment} = vi.hoisted(() => ({
@@ -20,7 +20,7 @@ const {account, environment} = vi.hoisted(() => ({
     },
 }));
 
-vi.mock('./dashboard-account', () => ({
+vi.mock('../../state/dashboard-account', () => ({
     useDashboardAccount: () => ({
         personalAccess: {status: account.personalAccess, reason: account.personalReason},
         status: {
@@ -32,7 +32,7 @@ vi.mock('./dashboard-account', () => ({
     }),
 }));
 
-vi.mock('./dashboard-context', () => ({
+vi.mock('../../state/dashboard-context', () => ({
     useDashboardEnvironment: () => ({
         api: {openLmsLogin: vi.fn<() => Promise<void>>()},
         platform: {
@@ -44,7 +44,7 @@ vi.mock('./dashboard-context', () => ({
     }),
 }));
 
-vi.mock('./use-dashboard-queries', () => ({
+vi.mock('../../state/use-dashboard-queries', () => ({
     useRefreshAttendanceMutation: () => ({isPending: false, mutate: vi.fn<() => void>()}),
 }));
 

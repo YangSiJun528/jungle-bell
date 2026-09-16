@@ -29,28 +29,7 @@ import {
     type PushSubscriptionCleanupResult,
     type PushSubscriptionLifecycleStorage,
 } from '@/api/push-subscription-lifecycle';
-import {useDashboardAccount} from '@/app/dashboard-account';
-import {
-    assertLmsAuthenticated,
-    assertServerSessionReady,
-    serverSessionReady,
-} from '@/app/dashboard-account-state';
-import {
-    queryKeys,
-    refreshBrowserPersonalQueries,
-    removeBrowserPersonalQueries,
-    removeDesktopIdentityQueries,
-    useDashboardEnvironment,
-} from '@/app/dashboard-context';
-import {readInitialPairingEntry} from '@/app/pairing-bootstrap';
-import {PersonalAccountGate} from '@/app/personal-account-gate';
-import {
-    normalizeConnectionsSearch,
-    type ConnectionsTab,
-    type DashboardReturnTarget,
-} from '@/app/routes';
-import {NotificationSettings} from '@/app/settings/notification-settings';
-import {useDesktopConnectionQuery, useRefreshAttendanceMutation} from '@/app/use-dashboard-queries';
+import {PersonalAccountGate} from '@/components/account/personal-account-gate';
 import {EmptyState, ErrorState, LoadingState} from '@/components/dashboard/async-state';
 import {PageHeader} from '@/components/dashboard/page-header';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
@@ -74,6 +53,29 @@ import {
     validManualPairingCode,
 } from '@/domain/connections/manual-pairing-code';
 import {dateTimeLabel, relativeTimeLabel} from '@/lib/format';
+import {
+    normalizeConnectionsSearch,
+    type ConnectionsTab,
+    type DashboardReturnTarget,
+} from '@/navigation/routes';
+import {useDashboardAccount} from '@/state/dashboard-account';
+import {
+    assertLmsAuthenticated,
+    assertServerSessionReady,
+    serverSessionReady,
+} from '@/state/dashboard-account-state';
+import {
+    queryKeys,
+    refreshBrowserPersonalQueries,
+    removeBrowserPersonalQueries,
+    removeDesktopIdentityQueries,
+    useDashboardEnvironment,
+} from '@/state/dashboard-context';
+import {readInitialPairingEntry} from '@/state/pairing-bootstrap';
+import {
+    useDesktopConnectionQuery,
+    useRefreshAttendanceMutation,
+} from '@/state/use-dashboard-queries';
 
 import {disconnectCompanionWithPushCleanup} from './companion-disconnect';
 import {
@@ -1215,6 +1217,7 @@ function WebConnections() {
 export interface ConnectionsPageProps {
     appStatus?: ReactNode;
     appStatusWarningCount?: number;
+    notificationSettings: ReactNode;
     tab?: ConnectionsTab;
     returnTo?: DashboardReturnTarget;
     onTabChange?: (tab: ConnectionsTab) => void;
@@ -1223,10 +1226,11 @@ export interface ConnectionsPageProps {
 export function ConnectionsPage({
     appStatus,
     appStatusWarningCount = 0,
+    notificationSettings,
     tab = 'status',
     returnTo,
     onTabChange,
-}: ConnectionsPageProps = {}) {
+}: ConnectionsPageProps) {
     const {platform} = useDashboardEnvironment();
     const selectedTab = tab === 'status' && !appStatus ? 'notifications' : tab;
     const selectTab = (value: string) => {
@@ -1262,9 +1266,7 @@ export function ConnectionsPage({
                 </TabsList>
                 {appStatus ? <TabsContent value="status">{appStatus}</TabsContent> : null}
                 <TabsContent value="notifications">
-                    <PersonalAccountGate>
-                        <NotificationSettings />
-                    </PersonalAccountGate>
+                    <PersonalAccountGate>{notificationSettings}</PersonalAccountGate>
                 </TabsContent>
                 <TabsContent value="services">
                     <ServiceSettings />

@@ -3,11 +3,11 @@ import {CalendarDays} from 'lucide-react';
 import {useMemo, useState} from 'react';
 
 import type {DashboardMealPost, DashboardMealsSnapshot} from '@/api/dashboard-api';
-import {useDashboardEnvironment} from '@/app/dashboard-context';
 import {AsyncBoundary} from '@/components/dashboard/async-boundary';
 import {EmptyState, MealHistorySkeleton} from '@/components/dashboard/async-state';
 import {Card} from '@/components/ui/card';
 import {kstDateKey} from '@/domain/meals/today';
+import {useDashboardEnvironment} from '@/state/dashboard-context';
 
 import {mealDateLabel, mealsGroupedByDate, weeklyMenuForDate} from '../lib/meal-view';
 import {MealHistoryCalendar} from './meal-history-calendar';

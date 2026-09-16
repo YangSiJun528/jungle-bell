@@ -5,7 +5,7 @@ import {personalFeatureAvailable, PersonalFeatureSlot} from './personal-feature-
 
 const state = vi.hoisted(() => ({status: 'unconnected'}));
 
-vi.mock('./dashboard-account', () => ({
+vi.mock('../../state/dashboard-account', () => ({
     useDashboardAccount: () => ({personalAccess: {status: state.status}}),
 }));
 

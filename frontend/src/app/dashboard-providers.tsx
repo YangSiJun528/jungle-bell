@@ -12,11 +12,11 @@ import {
     disposeDesktopSubscriptions,
     registerDesktopSubscriptions,
 } from '@/platform/event-subscriptions';
+import {DashboardAccountProvider} from '@/state/dashboard-account';
+import {normalizeLmsSessionStateEvent, withLmsSessionState} from '@/state/dashboard-account-state';
+import {createEnvironment, DashboardEnvironmentContext, queryKeys} from '@/state/dashboard-context';
+import {handleAttendanceSnapshotUpdated} from '@/state/desktop-attendance-event';
 
-import {DashboardAccountProvider} from './dashboard-account';
-import {normalizeLmsSessionStateEvent, withLmsSessionState} from './dashboard-account-state';
-import {createEnvironment, DashboardEnvironmentContext, queryKeys} from './dashboard-context';
-import {handleAttendanceSnapshotUpdated} from './desktop-attendance-event';
 import {DesktopUpdateGate} from './desktop-update-gate';
 import {createJungleBellQueryClient} from './query-client';
 

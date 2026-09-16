@@ -1,4 +1,4 @@
-import type {DashboardReturnTarget} from '@/app/routes';
+import type {DashboardReturnTarget} from '@/navigation/routes';
 
 export interface PairingCompletionOptions {
     pairingId: string;

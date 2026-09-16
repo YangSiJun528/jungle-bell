@@ -1,6 +1,7 @@
-import type {PersonalAccessState} from '@/app/dashboard-account-state';
 import type {DesktopUpdateStatus, PwaServiceWorkerStatus} from '@/platform/contracts';
+import type {AppNotificationPermission} from '@/platform/notification-permission';
 import type {AuthenticationState, PushState} from '@/platform/status-model';
+import type {PersonalAccessState} from '@/state/dashboard-account-state';
 
 export interface ProducerQueryObservation {
     fetchStatus: 'fetching' | 'idle' | 'paused';
@@ -67,14 +68,6 @@ export function desktopUpdateObservationFromQuery(query: {
         queryStatus: query.isError ? 'error' : query.isPending ? 'checking' : 'unavailable',
         checkedAt,
     };
-}
-
-export type AppNotificationPermission = NotificationPermission | 'unsupported';
-
-export function notificationPermissionFromRuntime(
-    notification: Pick<typeof Notification, 'permission'> | undefined,
-): AppNotificationPermission {
-    return notification?.permission ?? 'unsupported';
 }
 
 export type PushLifecycleRuntimeStatus =

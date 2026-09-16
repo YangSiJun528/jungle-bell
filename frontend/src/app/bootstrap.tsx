@@ -2,15 +2,15 @@ import {RouterProvider} from '@tanstack/react-router';
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 
-import {captureInitialPairingFromWindow} from '@/app/pairing-bootstrap';
+import {normalizeLegacyDashboardHash} from '@/navigation/routes';
 import type {PlatformAdapter} from '@/platform/contracts';
 import {createPwaUpdateBootstrap} from '@/platform/pwa/update-bootstrap';
+import {captureInitialPairingFromWindow} from '@/state/pairing-bootstrap';
 
 import {DashboardProviders} from './dashboard-providers';
 import {createDashboardRouter} from './dashboard-router';
 import {DashboardExternalLinkController} from './external-link-controller';
 import {PwaUpdateController} from './pwa-update-controller';
-import {normalizeLegacyDashboardHash} from './routes';
 
 import './styles/globals.css';
 

@@ -25,7 +25,7 @@ const {api, queryKeys, state} = vi.hoisted(() => ({
     },
 }));
 
-vi.mock('@/app/dashboard-context', () => ({
+vi.mock('@/state/dashboard-context', () => ({
     queryKeys,
     useDashboardEnvironment: () => ({
         api,
@@ -36,7 +36,7 @@ vi.mock('@/app/dashboard-context', () => ({
     }),
 }));
 
-vi.mock('@/app/dashboard-account', () => ({
+vi.mock('@/state/dashboard-account', () => ({
     useDashboardAccount: () => ({
         status: {
             serverSession: state.serverSession,
@@ -48,7 +48,7 @@ vi.mock('@/app/dashboard-account', () => ({
     }),
 }));
 
-vi.mock('@/app/dashboard-account-state', () => ({
+vi.mock('@/state/dashboard-account-state', () => ({
     assertLmsAuthenticated: () => {
         if (state.lmsAuthentication !== 'authenticated') throw new Error('LMS_AUTH_REQUIRED');
     },
@@ -61,7 +61,7 @@ vi.mock('@/app/dashboard-account-state', () => ({
         state.serverSession === 'stored' || state.serverSession === 'memory-only',
 }));
 
-vi.mock('@/app/use-dashboard-queries', () => ({
+vi.mock('@/state/use-dashboard-queries', () => ({
     useAttendanceQuery: () => ({
         data: {
             state: 'loaded',

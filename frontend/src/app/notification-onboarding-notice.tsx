@@ -2,9 +2,9 @@ import {useState} from 'react';
 
 import {NotificationOnboardingCard} from '@/features/notifications/notification-delivery-setup';
 import type {PlatformAdapter} from '@/platform/contracts';
+import {useDashboardAccount} from '@/state/dashboard-account';
+import {useDashboardEnvironment} from '@/state/dashboard-context';
 
-import {useDashboardAccount} from './dashboard-account';
-import {useDashboardEnvironment} from './dashboard-context';
 import {
     readNotificationOnboardingDecision,
     type NotificationOnboardingDecision,

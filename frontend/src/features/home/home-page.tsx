@@ -2,12 +2,6 @@ import {Link} from '@tanstack/react-router';
 import {ArrowRight, RefreshCw, Utensils, WashingMachine, type LucideIcon} from 'lucide-react';
 import type {ReactNode} from 'react';
 
-import {useDashboardEnvironment} from '@/app/dashboard-context';
-import {
-    useRefreshHomeMutation,
-    useSuspenseLaundryQuery,
-    useSuspenseMealsQuery,
-} from '@/app/use-dashboard-queries';
 import {AppShowcaseCard} from '@/components/app-showcase/app-showcase-card';
 import {AsyncBoundary} from '@/components/dashboard/async-boundary';
 import {LoadingState} from '@/components/dashboard/async-state';
@@ -17,6 +11,12 @@ import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardFooter, CardHeader} from '@/components/ui/card';
 import {cn} from '@/lib/utils';
+import {useDashboardEnvironment} from '@/state/dashboard-context';
+import {
+    useRefreshHomeMutation,
+    useSuspenseLaundryQuery,
+    useSuspenseMealsQuery,
+} from '@/state/use-dashboard-queries';
 
 import {HomeMealSlotsList} from './home-meal-slots';
 import {homeLaundrySummary, homeTodayMealSlots} from './home-view-model';

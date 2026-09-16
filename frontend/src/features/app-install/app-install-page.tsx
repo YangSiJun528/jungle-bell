@@ -22,7 +22,7 @@ import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardHeader} from '@/components/ui/card';
 import {ExternalLink} from '@/components/ui/external-link';
 import {Tabs, TabsContent, TabsList, TabsTrigger} from '@/components/ui/tabs';
-import {isMobileInstallClient} from '@/platform/pwa/install-client';
+import {isMobileInstallClient} from '@/lib/install-client';
 
 import {
     androidInstallScreenshots,

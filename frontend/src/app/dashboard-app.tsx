@@ -1,10 +1,18 @@
 import {Outlet, useNavigate, useRouterState} from '@tanstack/react-router';
 import {lazy, useCallback, useEffect, useMemo, useState} from 'react';
 
+import {PlatformAuthenticationGate} from '@/components/account/platform-authentication-gate';
 import {AsyncBoundary} from '@/components/dashboard/async-boundary';
-import {InstallPrompt, useInstallPromptVisibility} from '@/platform/pwa/install-prompt';
+import {InstallPrompt, useInstallPromptVisibility} from '@/components/pwa/install-prompt';
+import {
+    dashboardRouteFromPath,
+    dashboardRoutePath,
+    isPersonalDashboardRoute,
+    type DashboardRoute,
+} from '@/navigation/routes';
+import {useDashboardEnvironment} from '@/state/dashboard-context';
+import {useNotificationsQuery} from '@/state/use-dashboard-queries';
 
-import {useDashboardEnvironment} from './dashboard-context';
 import {DashboardRouteAccessibility} from './dashboard-route-accessibility';
 import {DashboardRouteErrorFallback} from './dashboard-route-error';
 import {DashboardRouteRuntimeProvider} from './dashboard-route-runtime';
@@ -19,16 +27,8 @@ import {
     notificationPanelBackgroundRoute,
     type DashboardContentRoute,
 } from './notification-panel-route';
-import {PlatformAuthenticationGate} from './platform-authentication-gate';
 import {PublicRouteOutlet} from './privacy-page';
-import {
-    dashboardRouteFromPath,
-    dashboardRoutePath,
-    isPersonalDashboardRoute,
-    type DashboardRoute,
-} from './routes';
 import {DashboardShell} from './shell';
-import {useNotificationsQuery} from './use-dashboard-queries';
 
 const NotificationPanelContent = lazy(() =>
     import('@/features/notifications/notifications-page').then((module) => ({

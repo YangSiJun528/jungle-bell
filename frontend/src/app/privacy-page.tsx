@@ -4,8 +4,8 @@ import {ArrowLeft, ShieldCheck} from 'lucide-react';
 
 import {ExternalLink} from '@/components/ui/external-link';
 import {Switch} from '@/components/ui/switch';
+import {queryKeys, useDashboardEnvironment} from '@/state/dashboard-context';
 
-import {queryKeys, useDashboardEnvironment} from './dashboard-context';
 import {DashboardFooter} from './shell/DashboardFooter';
 
 const SERVICE_URL = 'https://jungle-bell.sijun-yang.com';

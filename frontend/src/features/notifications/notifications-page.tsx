@@ -4,10 +4,7 @@ import {Check, CheckCheck, ExternalLink, Send, Smartphone} from 'lucide-react';
 
 import {accountAuthenticationRequired} from '@/api/account-authentication';
 import type {DashboardNotification} from '@/api/dashboard-api';
-import {useDashboardAccount} from '@/app/dashboard-account';
-import {queryKeys, useDashboardEnvironment} from '@/app/dashboard-context';
-import {PersonalAccountGate} from '@/app/personal-account-gate';
-import {useNotificationsQuery} from '@/app/use-dashboard-queries';
+import {PersonalAccountGate} from '@/components/account/personal-account-gate';
 import {EmptyState, ErrorState, LoadingState} from '@/components/dashboard/async-state';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Button} from '@/components/ui/button';
@@ -20,6 +17,9 @@ import {
     type NotificationInboxSnapshot,
 } from '@/domain/notifications/inbox';
 import {dateTimeLabel} from '@/lib/format';
+import {useDashboardAccount} from '@/state/dashboard-account';
+import {queryKeys, useDashboardEnvironment} from '@/state/dashboard-context';
+import {useNotificationsQuery} from '@/state/use-dashboard-queries';
 
 import {NotificationDeliverySection} from './notification-delivery-setup';
 import {notificationRowsForTab} from './notification-tabs';

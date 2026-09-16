@@ -1,6 +1,6 @@
 import type {AttendanceDashboard, AttendanceData} from '@/api/dashboard-api';
-import type {DashboardAccountStatus, PersonalAccessStatus} from '@/app/dashboard-account-state';
 import type {PlatformKind} from '@/platform/contracts';
+import type {DashboardAccountStatus, PersonalAccessStatus} from '@/state/dashboard-account-state';
 
 import {homeAttendanceState} from './home-view-model';
 

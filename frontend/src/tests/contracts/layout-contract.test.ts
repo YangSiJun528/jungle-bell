@@ -14,7 +14,7 @@ const mobileHook = source('./hooks/use-mobile.ts');
 const sidebar = source('./components/ui/sidebar.tsx');
 const sheet = source('./components/ui/sheet.tsx');
 const alertDialog = source('./components/ui/alert-dialog.tsx');
-const routes = source('./app/routes.ts');
+const routes = source('./navigation/routes.ts');
 
 test('HTML 문서는 레이아웃을 복제하지 않고 React 셸을 위한 단일 mount만 제공한다', () => {
     assert.equal((dashboard.match(/id="root"/g) ?? []).length, 1);

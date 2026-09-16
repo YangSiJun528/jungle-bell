@@ -2,7 +2,6 @@ import {CalendarDays, RefreshCw, Utensils} from 'lucide-react';
 import {type ReactNode, useMemo} from 'react';
 
 import {type DashboardMealPost, type DashboardMealsSnapshot} from '@/api/dashboard-api';
-import {useCampusManualRefresh, useSuspenseMealsQuery} from '@/app/use-dashboard-queries';
 import {AsyncBoundary} from '@/components/dashboard/async-boundary';
 import {
     AsyncState,
@@ -15,6 +14,7 @@ import {Button} from '@/components/ui/button';
 import {selectTodayMeals} from '@/domain/meals/today';
 import {dateTimeLabel, relativeTimeLabel} from '@/lib/format';
 import {cn} from '@/lib/utils';
+import {useCampusManualRefresh, useSuspenseMealsQuery} from '@/state/use-dashboard-queries';
 
 import {MealHistorySection} from '../components/meal-history-section';
 import {TodayMealGrid} from '../components/today-meal-grid';

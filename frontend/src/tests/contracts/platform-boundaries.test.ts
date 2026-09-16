@@ -27,7 +27,7 @@ describe('repository platform boundaries', () => {
 
     test('common React and HTTP code do not reach into native or browser capability APIs', () => {
         const commonFiles = globSync(
-            'src/{api,app,components,domain,features,hooks,lib}/**/*.{ts,tsx}',
+            'src/{api,app,components,domain,features,hooks,lib,navigation,state}/**/*.{ts,tsx}',
             {cwd: frontendRoot},
         ).filter((path) => !path.includes('.test.'));
         const forbidden =

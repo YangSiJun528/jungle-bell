@@ -1,10 +1,11 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
 import {useState} from 'react';
 
-import {queryKeys, useDashboardEnvironment} from './dashboard-context';
+import {queryKeys, useDashboardEnvironment} from '@/state/dashboard-context';
+import {desktopUpdateInstallMutationKey, useDesktopUpdateQuery} from '@/state/desktop-update-query';
+
 import {deferOptionalDesktopUpdate, isOptionalDesktopUpdateDeferred} from './desktop-update-later';
 import {DesktopUpdatePanel} from './desktop-update-panel';
-import {desktopUpdateInstallMutationKey, useDesktopUpdateQuery} from './desktop-update-query';
 
 export function DesktopUpdateNotice() {
     const {api} = useDashboardEnvironment();

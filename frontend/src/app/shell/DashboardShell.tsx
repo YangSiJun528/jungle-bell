@@ -43,13 +43,13 @@ import {
     useSidebar,
 } from '../../components/ui/sidebar';
 import {cn} from '../../lib/utils';
-import type {DashboardRoute} from '../routes';
+import type {DashboardRoute} from '../../navigation/routes';
 import {
     DASHBOARD_ROUTE_META,
     dashboardNavigationRoutes,
     dashboardRoutePath,
     dashboardUtilityRoutes,
-} from '../routes';
+} from '../../navigation/routes';
 import {DashboardFooter} from './DashboardFooter';
 
 export interface DashboardShellProps {

@@ -25,7 +25,7 @@ describe('ConnectionsPage settings information architecture', () => {
         expect(source).toContain('<TabsTrigger value="services">서비스</TabsTrigger>');
         expect(source).toContain('<TabsTrigger value="devices">기기 연결</TabsTrigger>');
         expect(source).toContain('<TabsContent value="notifications"');
-        expect(source).toContain('<NotificationSettings />');
+        expect(source).toContain('{notificationSettings}');
         expect(notificationSettingsSource).toContain('<AttendancePreferencesSection />');
         expect(notificationSettingsSource).toContain('<MealPreferencesSection />');
         expect(source).toContain('<TabsContent value="services"');

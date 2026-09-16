@@ -6,6 +6,8 @@ import {
     type RouterHistory,
 } from '@tanstack/react-router';
 
+import {validateConnectionsSearch} from '@/navigation/routes';
+
 import {DashboardApp} from './dashboard-app';
 import {
     AppInstallRoutePage,
@@ -17,7 +19,6 @@ import {
     NotificationRoutePage,
 } from './dashboard-route-pages';
 import {PrivacyPage} from './privacy-page';
-import {validateConnectionsSearch} from './routes';
 
 const rootRoute = createRootRoute({component: DashboardApp});
 const indexRoute = createRoute({

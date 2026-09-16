@@ -7,10 +7,11 @@ import {
     type ReactElement,
 } from 'react';
 
-import {openExternalLinkFromClick} from './external-link-click';
-import {normalizeExternalUrl} from './external-link-policy';
+import {normalizeExternalUrl} from '@/lib/external-link-policy';
 
-export type ExternalUrlOpener = (url: string) => Promise<void>;
+import {openExternalLinkFromClick, type ExternalUrlOpener} from './external-link-click';
+
+export type {ExternalUrlOpener} from './external-link-click';
 
 interface ExternalLinkRuntime {
     openExternally?: ExternalUrlOpener;

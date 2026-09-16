@@ -4,9 +4,6 @@ import {useState} from 'react';
 
 import {accountAuthenticationRequired} from '@/api/account-authentication';
 import type {AttendancePreferences} from '@/api/personal-api';
-import {useDashboardAccount} from '@/app/dashboard-account';
-import {queryKeys, useDashboardEnvironment} from '@/app/dashboard-context';
-import {useAttendanceQuery} from '@/app/use-dashboard-queries';
 import {EmptyState, ErrorState, LoadingState} from '@/components/dashboard/async-state';
 import {Button} from '@/components/ui/button';
 import {
@@ -27,6 +24,9 @@ import {
 } from '@/components/ui/select';
 import {Separator} from '@/components/ui/separator';
 import {SwitchRow} from '@/components/ui/switch';
+import {useDashboardAccount} from '@/state/dashboard-account';
+import {queryKeys, useDashboardEnvironment} from '@/state/dashboard-context';
+import {useAttendanceQuery} from '@/state/use-dashboard-queries';
 
 import {attendancePreferencesEqual, attendanceSkipDate} from './attendance-view-model';
 

@@ -1,9 +1,9 @@
 import {invoke as tauriInvoke} from '@tauri-apps/api/core';
 
-import {normalizeExternalUrl} from '@/components/ui/external-link-policy';
+import {normalizeExternalUrl} from '@/lib/external-link-policy';
 import type {NativeInvoke} from '@/platform/contracts';
 
-export {normalizeExternalUrl} from '@/components/ui/external-link-policy';
+export {normalizeExternalUrl} from '@/lib/external-link-policy';
 
 export interface TauriExternalLinkAdapter {
     open(url: string): Promise<void>;

@@ -1,5 +1,5 @@
 import type {AttendanceDashboard, MobileSession} from '@/api/dashboard-api';
-import type {PersonalAccessStatus} from '@/app/dashboard-account-state';
+import type {PersonalAccessStatus} from '@/state/dashboard-account-state';
 
 import type {AppStatusRowModel, DesktopAppStatusInput} from './app-status-model';
 

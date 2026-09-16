@@ -102,7 +102,7 @@ describe('initial QR pairing bootstrap', () => {
     });
 
     test('앱 진입점이 React mount 전에 메모리 capture를 실행하고 bootstrap은 storage를 쓰지 않는다', () => {
-        const main = readFileSync(new URL('./bootstrap.tsx', import.meta.url), 'utf8');
+        const main = readFileSync(new URL('../app/bootstrap.tsx', import.meta.url), 'utf8');
         const bootstrap = readFileSync(new URL('./pairing-bootstrap.ts', import.meta.url), 'utf8');
 
         expect(main.indexOf('captureInitialPairingFromWindow(')).toBeGreaterThan(-1);

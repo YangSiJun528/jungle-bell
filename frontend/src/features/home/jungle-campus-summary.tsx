@@ -10,9 +10,6 @@ import {
 } from 'lucide-react';
 
 import type {AttendanceData, AttendanceSnapshot} from '@/api/dashboard-api';
-import {useDashboardAccount} from '@/app/dashboard-account';
-import {useDashboardEnvironment} from '@/app/dashboard-context';
-import {useAttendanceQuery, useRefreshAttendanceMutation} from '@/app/use-dashboard-queries';
 import {DdayCard} from '@/components/dashboard/dday-card';
 import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardFooter, CardHeader} from '@/components/ui/card';
@@ -20,6 +17,9 @@ import {ExternalLink} from '@/components/ui/external-link';
 import {Skeleton} from '@/components/ui/skeleton';
 import {selectDdayView} from '@/domain/attendance/dday-view';
 import {dateTimeLabel} from '@/lib/format';
+import {useDashboardAccount} from '@/state/dashboard-account';
+import {useDashboardEnvironment} from '@/state/dashboard-context';
+import {useAttendanceQuery, useRefreshAttendanceMutation} from '@/state/use-dashboard-queries';
 
 import {
     resolveCampusAccessState,
