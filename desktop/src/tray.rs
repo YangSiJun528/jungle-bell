@@ -427,6 +427,11 @@ fn window_focus_enabled() -> bool {
 }
 
 fn focus_window_checked(window: &WebviewWindow<tauri::Wry>, focus_enabled: bool) -> Result<(), String> {
+    if !focus_enabled {
+        // show/unminimize 자체도 OS에서 포커스를 가져올 수 있으므로 호출하지 않는다.
+        crate::notification_inbox::sync_badge_for_window(window);
+        return Ok(());
+    }
     window.show().map_err(|error| format!("창 표시 실패: {error}"))?;
     if window
         .is_minimized()
@@ -437,9 +442,6 @@ fn focus_window_checked(window: &WebviewWindow<tauri::Wry>, focus_enabled: bool)
             .map_err(|error| format!("창 최소화 해제 실패: {error}"))?;
     }
     crate::notification_inbox::sync_badge_for_window(window);
-    if !focus_enabled {
-        return Ok(());
-    }
 
     #[cfg(target_os = "macos")]
     {
