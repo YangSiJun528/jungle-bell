@@ -1,0 +1,28 @@
+# 프로젝트 스킬: vercel-react-best-practices, vercel-composition-patterns, react-doctor
+name = "jb_frontend"
+description = "React UI, Web·PWA와 HTTP 소비 코드"
+developer_instructions = "React UI, Web·PWA와 HTTP 소비 코드\n관련 문서: docs/state-management-reference.md, docs/reference-platform-contract.md"
+
+[[skills.config]]
+path = "../../.agents/skills/bump-version/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/capture-jungle-bell-ui/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/checker-session-repro/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/commit-style/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/release/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/tauri/SKILL.md"
+enabled = false

@@ -1,0 +1,40 @@
+# 프로젝트 스킬: 없음
+name = "jb_server"
+description = "Spring Core·API·Worker, DB·인증·알림"
+developer_instructions = "Spring Core·API·Worker, DB·인증·알림\n관련 문서: server/README.md, server/docs/api-reference.md"
+
+[[skills.config]]
+path = "../../.agents/skills/bump-version/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/capture-jungle-bell-ui/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/checker-session-repro/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/commit-style/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/react-doctor/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/release/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/tauri/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/vercel-composition-patterns/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/vercel-react-best-practices/SKILL.md"
+enabled = false

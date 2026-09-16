@@ -1,0 +1,32 @@
+# 프로젝트 스킬: tauri, checker-session-repro
+name = "jb_desktop"
+description = "Rust, Tauri 어댑터·IPC, checker와 트레이"
+developer_instructions = "Rust, Tauri 어댑터·IPC, checker와 트레이\n관련 문서: docs/reference-platform-contract.md, docs/reference-platform-status-model.md"
+
+[[skills.config]]
+path = "../../.agents/skills/bump-version/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/capture-jungle-bell-ui/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/commit-style/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/react-doctor/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/release/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/vercel-composition-patterns/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/vercel-react-best-practices/SKILL.md"
+enabled = false

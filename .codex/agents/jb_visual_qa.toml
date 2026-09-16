@@ -1,0 +1,36 @@
+# 프로젝트 스킬: capture-jungle-bell-ui
+name = "jb_visual_qa"
+description = "큰 기능 완료 또는 최종 릴리스의 전체 UI 확인"
+developer_instructions = "큰 기능 완료 또는 최종 릴리스의 전체 UI 확인\n관련 문서: docs/ui-layout-reference.md\n캡처용 임시 변경을 최종 변경사항에 남기지 않는다."
+
+[[skills.config]]
+path = "../../.agents/skills/bump-version/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/checker-session-repro/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/commit-style/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/react-doctor/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/release/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/tauri/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/vercel-composition-patterns/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/vercel-react-best-practices/SKILL.md"
+enabled = false

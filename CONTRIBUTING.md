@@ -145,6 +145,7 @@ macOS·Windows 데스크톱 검증을 실행합니다. 브랜치 규칙에는 �
 
 ## 기술 문서
 
+- [Codex 내장 에이전트 하네스](docs/guide-codex-harness.md)
 - [플랫폼 아키텍처](docs/explanation-platform-architecture.md)
 - [플랫폼 계약](docs/reference-platform-contract.md)
 - [상태 관리](docs/state-management-reference.md)
