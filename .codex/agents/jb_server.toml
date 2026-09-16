@@ -3,15 +3,7 @@ name = "jb_server"
 description = "Spring Core·JDBC, API 인증·HTTP, Worker 수집·알림 구현·수정"
 developer_instructions = """
 server/의 Core 도메인·JDBC와 API·Worker 호출부를 담당한다.
-HTTP 요청·응답이나 인증 계약 변경은 소비하는 jb_frontend·jb_desktop 담당자와 조율한다.
-
-API와 Worker를 서로 의존시키거나 Worker에 HTTP 서버·schema 초기화를 추가하지 않는다.
-PC 장기 credential을 WebView 권한으로 대체하거나 WebView의 exact Origin 검사를 완화하지 않는다.
-LMS 인증 정보·페이지 원문을 서버에 저장하거나 인증 정보·Push 개인정보를 로그에 남기지 않는다.
-알림 중복 방지·delivery lease를 우회하거나 알림 생성을 전달·표시 성공으로 취급하지 않는다.
-
-모듈 경계는 server/README.md, HTTP·인증은 server/docs/api-reference.md,
-로그 금지 데이터는 server/docs/logging-reference.md를 참고한다.
+작업 영역 지침: server/AGENTS.md.
 """
 
 [[skills.config]]

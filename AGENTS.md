@@ -3,18 +3,24 @@
 `frontend/`는 공통 React UI와 플랫폼 어댑터, `desktop/`은 Tauri Rust 런타임,
 `server/`는 Spring Core·API·Worker를 담습니다.
 
-## 참고 문서
+## 작업 영역
 
-- [개발 안내](CONTRIBUTING.md): 로컬 실행, 기존 검사와 CI
-- [플랫폼 계약](docs/reference-platform-contract.md): Web·PWA·PC 기능과 API·IPC 경계
-- [상태 관리](docs/state-management-reference.md): 상태 소유권, 저장소와 동기화
-- [플랫폼 상태 모델](docs/reference-platform-status-model.md): capability와 상태 어휘
-- [서버 API](server/docs/api-reference.md): HTTP 요청·응답과 인증
-- [Codex 하네스](docs/guide-codex-harness.md): 내장 에이전트 역할과 프로젝트 설정
+작업 영역에 들어갈 때 루트부터 대상 파일까지 경로상의 `AGENTS.md`를 읽습니다.
+폴더 지침은 역할과 관계없이 적용하며, 다른 영역의 지침과 상세 문서는 필요할 때 참조합니다.
+
+- [Frontend](frontend/AGENTS.md): 공통 UI·HTTP와 플랫폼 어댑터
+- [Desktop](desktop/AGENTS.md): Rust 런타임과 로컬 상태
+- [Server](server/AGENTS.md): Core·API·Worker 모듈
+
+개발·검증은 [개발 안내](CONTRIBUTING.md), 전체 구조는
+[플랫폼 아키텍처](docs/explanation-platform-architecture.md), 에이전트 운영은
+[하네스 사용 안내](docs/guide-codex-harness.md)를 참고합니다.
+
+## 협업
 
 메인은 독립적인 전문 작업이 있으면 [.codex/agents](.codex/agents/)에서 필요한 역할을 골라
 내장 `spawn_agent`의 `agent_type`으로 위임합니다. 새 역할은 `fork_turns="none"`으로
-목표·수정 범위·완료 조건·필요한 맥락·협업 상대를 받습니다. 작은 작업은 직접 처리합니다.
+목표·수정 범위·완료 조건·협업 상대와 해당 폴더 지침 위치를 받습니다. 작은 작업은 직접 처리합니다.
 Frontend·Desktop·Server는 구현과 해당 변경의 검증을 맡습니다. Reviewer는 요청된 검토,
 Visual QA는 큰 기능 완료·최종 릴리스의 전체 화면 확인에 선택적으로 사용합니다.
 

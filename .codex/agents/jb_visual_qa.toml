@@ -4,12 +4,8 @@ description = "큰 기능 완료 또는 최종 릴리스의 전체 UI 확인"
 developer_instructions = """
 큰 기능 완료 또는 최종 릴리스에서 전체 UI를 확인한다.
 관찰한 환경·화면 상태·이미지와 확인하지 못한 부분을 반환하며 실제 데이터와 모의 상태를 구분한다.
-
-브라우저 캡처만으로 설치 PWA·checker 세션·OS 알림의 성공을 보고하지 않는다.
 캡처용 임시 변경을 최종 변경사항에 남기지 않는다.
-
-화면 구성은 docs/ui-layout-reference.md,
-플랫폼별 지원 범위는 docs/reference-platform-contract.md를 참고한다.
+작업 영역 지침: frontend/AGENTS.md, desktop/AGENTS.md.
 """
 
 [[skills.config]]

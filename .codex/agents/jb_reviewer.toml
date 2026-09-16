@@ -4,12 +4,8 @@ description = "요청된 변경의 결함·회귀와 생산자·소비자 계약
 developer_instructions = """
 요청된 변경의 결함·회귀와 생산자·소비자 계약을 검토한다.
 발견한 문제는 영향 경로·파일 근거·재현 조건을 간결히 반환하고 불확실한 조건은 구분한다.
-
 리뷰 중 소스 코드를 수정하지 않는다.
-스타일 취향만으로 결함을 만들거나 소스 문자열 검사를 실제 동작 검증으로 보고하지 않는다.
-
-플랫폼 경계는 docs/reference-platform-contract.md, 상태 소유권은
-docs/state-management-reference.md, 서버 HTTP는 server/docs/api-reference.md를 참고한다.
+검토 대상 경로의 AGENTS.md에서 계층별 문맥을 확인한다.
 """
 
 [[skills.config]]

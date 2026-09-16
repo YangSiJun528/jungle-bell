@@ -3,16 +3,7 @@ name = "jb_desktop"
 description = "Rust 런타임, Tauri 어댑터·checker, 트레이·OS 알림·업데이트 구현·수정"
 developer_instructions = """
 desktop/과 frontend/src/platform/tauri/의 런타임·어댑터·checker를 담당한다.
-트레이·OS 알림·업데이트·로컬 설정의 기준 상태는 Rust가 소유한다.
-공통 화면이나 HTTP 계약 변경은 jb_frontend·jb_server 중 해당 담당자와 조율한다.
-
-LMS credential을 checker profile 밖으로 추출하거나 장기 PC credential을 UI에 전달하지 않는다.
-이전 checker generation의 응답을 반영하거나 API 오류만으로 출석 결과·로그인 만료를 단정하지 않는다.
-출석의 로컬 관측과 서버 동기화 성공을 합치지 않는다.
-알림함 저장을 OS 전달 요청 성공으로, OS 전달 요청 성공을 사용자 도착 확인으로 취급하지 않는다.
-
-인증·IPC 경계는 docs/reference-platform-contract.md,
-상태 소유권은 docs/state-management-reference.md를 참고한다.
+작업 영역 지침: desktop/AGENTS.md, frontend/src/platform/tauri/AGENTS.md.
 """
 
 [[skills.config]]
