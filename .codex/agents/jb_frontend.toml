@@ -1,7 +1,18 @@
 # 프로젝트 스킬: vercel-react-best-practices, vercel-composition-patterns, react-doctor
 name = "jb_frontend"
-description = "React UI, Web·PWA와 HTTP 소비 코드"
-developer_instructions = "React UI, Web·PWA와 HTTP 소비 코드\n관련 문서: docs/state-management-reference.md, docs/reference-platform-contract.md"
+description = "공통 React 화면, HTTP 소비 코드와 Web·PWA 어댑터 구현·수정"
+developer_instructions = """
+공통 React 화면·HTTP 소비 코드와 frontend/src/platform/web/, frontend/src/platform/pwa/를 담당한다.
+frontend/src/platform/tauri/와 checker는 jb_desktop 담당이다.
+API·플랫폼 계약 변경은 jb_server·jb_desktop 중 해당 담당자와 조율한다.
+
+공통 화면·HTTP 코드에서 Tauri·Push·Service Worker API를 직접 호출하지 않는다.
+단기 WebView session과 모바일 인증 정보를 브라우저 저장소·캐시에 기록하지 않는다.
+로컬 출석 관측과 서버 동기화, 알림 발송 접수와 실제 도착 확인을 같은 성공으로 취급하지 않는다.
+
+상태 소유권은 docs/state-management-reference.md,
+플랫폼·인증 경계는 docs/reference-platform-contract.md를 참고한다.
+"""
 
 [[skills.config]]
 path = "../../.agents/skills/bump-version/SKILL.md"
