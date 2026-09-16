@@ -82,6 +82,14 @@ $env:JUNGLE_BELL_DATA_API_URL = "https://jungle-bell.sijun-yang.com"
 mise exec -- npm run desktop:dev
 ```
 
+QA 중 대시보드가 포커스를 가져오지 않게 하려면 실행 환경에
+`JUNGLE_BELL_WINDOW_FOCUS=false`를 지정합니다. 새 창은 포커스 없이 표시하고,
+기존 창에는 표시·최소화 해제·포커스를 요청하지 않습니다. 따라서 숨기거나 최소화한
+창은 복원하지 않습니다. 허용값은 소문자 `true`와 `false`이며, 미설정이나 잘못된
+값은 기존 `true` 동작을 유지합니다.
+`false`일 때 macOS의 앱 활성화 정책·Dock 표시 변경도 생략하지만, LMS 로그인 창의
+직접 포커스 요청과 운영체제 대화상자에는 적용하지 않습니다.
+
 ### 서버
 
 서버 모듈을 빌드하고 테스트합니다.

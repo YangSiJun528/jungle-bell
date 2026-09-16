@@ -418,7 +418,20 @@ impl TrayStateStore {
     }
 }
 
-fn focus_window_checked(window: &WebviewWindow<tauri::Wry>) -> Result<(), String> {
+fn parse_window_focus(value: Option<&str>) -> bool {
+    value.and_then(|value| value.parse::<bool>().ok()).unwrap_or(true)
+}
+
+fn window_focus_enabled() -> bool {
+    parse_window_focus(std::env::var("JUNGLE_BELL_WINDOW_FOCUS").ok().as_deref())
+}
+
+fn focus_window_checked(window: &WebviewWindow<tauri::Wry>, focus_enabled: bool) -> Result<(), String> {
+    if !focus_enabled {
+        // show/unminimize 자체도 OS에서 포커스를 가져올 수 있으므로 호출하지 않는다.
+        crate::notification_inbox::sync_badge_for_window(window);
+        return Ok(());
+    }
     window.show().map_err(|error| format!("창 표시 실패: {error}"))?;
     if window
         .is_minimized()
@@ -453,8 +466,8 @@ fn focus_window_checked(window: &WebviewWindow<tauri::Wry>) -> Result<(), String
     window.set_focus().map_err(|error| format!("창 포커스 실패: {error}"))
 }
 
-fn focus_window(window: &WebviewWindow<tauri::Wry>) {
-    match focus_window_checked(window) {
+fn focus_window(window: &WebviewWindow<tauri::Wry>, focus_enabled: bool) {
+    match focus_window_checked(window, focus_enabled) {
         Ok(()) => record_ui_opened(window.app_handle()),
         Err(error) => log::warn!("[tray] window focus failed ({}): {}", window.label(), error),
     }
@@ -485,6 +498,9 @@ fn foreground_window_skip_taskbar(_app: &tauri::AppHandle) -> bool {
 
 #[cfg(target_os = "macos")]
 fn set_macos_foreground_visibility(app: &tauri::AppHandle, visible: bool) {
+    if !window_focus_enabled() {
+        return;
+    }
     let policy = if visible {
         tauri::ActivationPolicy::Regular
     } else {
@@ -558,7 +574,7 @@ fn select_dashboard_route(window: &WebviewWindow<tauri::Wry>, route: DashboardRo
     }
 }
 
-fn build_dashboard_window(app: &tauri::AppHandle, route: DashboardRoute) {
+fn build_dashboard_window(app: &tauri::AppHandle, route: DashboardRoute, focus_enabled: bool) {
     show_foreground_app(app);
     match tauri::WebviewWindowBuilder::new(
         app,
@@ -572,11 +588,11 @@ fn build_dashboard_window(app: &tauri::AppHandle, route: DashboardRoute) {
     .minimizable(true)
     .maximizable(true)
     .skip_taskbar(foreground_window_skip_taskbar(app))
-    .focused(true)
+    .focused(focus_enabled)
     .build()
     {
         Ok(window) => {
-            focus_window(&window);
+            focus_window(&window, focus_enabled);
             let app_handle = app.clone();
             let window_for_event = window.clone();
             window.on_window_event(move |event| match event {
@@ -606,12 +622,13 @@ fn open_dashboard_route_now(app: &tauri::AppHandle, route: DashboardRoute) {
         return;
     }
     log::info!("[dashboard] route opened: {}", route.as_str());
+    let focus_enabled = window_focus_enabled();
     if let Some(window) = app.get_webview_window("dashboard") {
         show_foreground_app(app);
         select_dashboard_route(&window, route);
-        focus_window(&window);
+        focus_window(&window, focus_enabled);
     } else {
-        build_dashboard_window(app, route);
+        build_dashboard_window(app, route, focus_enabled);
     }
 }
 
@@ -715,6 +732,14 @@ mod tests {
     const EXPECTED_TRAY_ICON_SIZE: u32 = 36;
     #[cfg(not(target_os = "macos"))]
     const EXPECTED_TRAY_ICON_SIZE: u32 = 48;
+
+    #[test]
+    fn window_focus_defaults_to_true_unless_explicitly_false() {
+        for value in [None, Some("true"), Some(""), Some("FALSE"), Some("0"), Some(" false ")] {
+            assert!(parse_window_focus(value), "unexpected focus policy for {value:?}");
+        }
+        assert!(!parse_window_focus(Some("false")));
+    }
 
     fn snapshot(
         phase: DailyPhase,
