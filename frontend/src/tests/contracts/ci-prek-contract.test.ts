@@ -87,7 +87,10 @@ test('mise는 로컬과 GitHub Actions의 개발 도구 버전 정책을 통일�
     );
 });
 
-test('CI는 hygiene와 제품 검증을 고정 required 잡으로 집계한다', () => {
+test('CI는 변경 범위에 맞는 검증을 고정 required 잡으로 집계한다', () => {
+    assert.match(ciWorkflow, /^  scope:\s*$/mu);
+    assert.match(ciWorkflow, /python3 scripts\/ci_scope\.py/u);
+    assert.match(ciWorkflow, /fetch-depth: 0/u);
     assert.match(ciWorkflow, /^  hygiene:\s*$/mu);
     assert.match(ciWorkflow, /prek validate-config prek\.toml/u);
     assert.match(ciWorkflow, /prek run --all-files --group hygiene/u);
@@ -101,23 +104,32 @@ test('CI는 hygiene와 제품 검증을 고정 required 잡으로 집계한다',
     );
     assert.match(
         ciWorkflow,
-        /types: \[opened, synchronize, reopened, ready_for_review, converted_to_draft\]/u,
+        /types: \[opened, synchronize, reopened, ready_for_review, converted_to_draft, labeled, unlabeled, edited\]/u,
     );
     assert.equal(
         ciWorkflow.split(
             "if: github.event_name != 'pull_request' || github.event.pull_request.draft == false",
         ).length - 1,
-        4,
+        2,
     );
     assert.match(
         ciWorkflow,
         /if: \$\{\{ always\(\) && \(github\.event_name != 'pull_request' \|\| github\.event\.pull_request\.draft == false\) \}\}/u,
     );
-    assert.match(ciWorkflow, /needs: \[hygiene, web, server, desktop\]/u);
+    assert.match(ciWorkflow, /needs: \[scope, hygiene, web, server, desktop\]/u);
+    for (const job of ['web', 'server', 'desktop']) {
+        const definition = ciWorkflow.split(`  ${job}:`)[1]?.split(/\n  [a-z]+:/u)[0];
+        assert.ok(definition);
+        assert.match(definition, /needs: scope/u);
+        assert.match(definition, /if: needs\.scope\.outputs\.mode == 'full'/u);
+    }
+    assert.match(ciWorkflow, /test "\$SCOPE_RESULT" = "success"/u);
     assert.match(ciWorkflow, /test "\$HYGIENE_RESULT" = "success"/u);
-    assert.match(ciWorkflow, /test "\$WEB_RESULT" = "success"/u);
-    assert.match(ciWorkflow, /test "\$SERVER_RESULT" = "success"/u);
-    assert.match(ciWorkflow, /test "\$DESKTOP_RESULT" = "success"/u);
+    assert.match(ciWorkflow, /full\) EXPECTED_RESULT=success/u);
+    assert.match(ciWorkflow, /docs\) EXPECTED_RESULT=skipped/u);
+    assert.match(ciWorkflow, /test "\$WEB_RESULT" = "\$EXPECTED_RESULT"/u);
+    assert.match(ciWorkflow, /test "\$SERVER_RESULT" = "\$EXPECTED_RESULT"/u);
+    assert.match(ciWorkflow, /test "\$DESKTOP_RESULT" = "\$EXPECTED_RESULT"/u);
     assert.doesNotMatch(ciWorkflow, /actions\/upload-artifact/u);
     assert.doesNotMatch(ciWorkflow, /campus-observer/u);
     assert.doesNotMatch(ciWorkflow, /^\s+paths(?:-ignore)?:/mu);

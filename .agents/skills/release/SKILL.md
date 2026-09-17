@@ -1,18 +1,19 @@
 ---
 name: release
-description: Create a GitHub release with a tag from the current version in desktop/Cargo.toml. Use when the user asks to create a release, says "릴리즈 만들어줘", "release", "/release", or otherwise wants to publish a new version. Handles branch/state checks, changelog drafting (Korean), tag push, draft release creation, and CI workflow trigger.
+description: Prepare a Jungle Bell desktop release from the current version, trigger the release workflow, and provide its GitHub approval link. Use when the user asks to create a release, says "릴리즈 만들어줘", "release", or "/release".
 ---
 
 # Release
 
-Create a GitHub release. Follow the steps below in order.
+Prepare a draft release and its builds. Final publication is approved by the user in GitHub Actions.
 
-## Interaction compatibility
+## Approval boundary
 
-When a release decision needs user approval, ask one concise Korean question and wait for the answer. Use the structured user-input tool available in the current runtime:
-
-- In runtimes that provide `AskUserQuestion`, use `AskUserQuestion`.
-- In Codex, use Codex's available user-input mechanism when available and appropriate; otherwise ask in normal chat.
+The release request authorizes preparing notes, the tag, the draft, and the workflow run.
+Do not ask for separate changelog, prerelease-flag, or publication approval in chat.
+Provide the exact workflow run link; the user approves the `desktop-release` environment there.
+Never approve or bypass that environment, publish the draft yourself, or delete/recreate a published
+release or tag. A failed guard is a blocker to report, not an invitation to force deployment.
 
 ## Step 1: Check local state
 
@@ -22,7 +23,8 @@ When a release decision needs user approval, ask one concise Korean question and
 
 If the branch is not `main` or there are uncommitted changes, **refuse the operation** and explain why.
 
-If there are unpushed commits, ask whether to push them to the remote before proceeding. If the user agrees, run `git push origin main` and continue. If not, abort.
+Fetch `origin/main` and require HEAD to match it. If local and remote main differ, stop and report
+the mismatch; do not push main or merge changes as part of this skill.
 
 ## Step 2: Check version and existing tags/releases
 
@@ -31,21 +33,19 @@ If there are unpushed commits, ask whether to push them to the remote before pro
 3. Check if the tag already exists on the remote (`git ls-remote --tags origin`).
 4. Check if a GitHub release already exists (`gh release view`).
 
-If a tag or release already exists, ask the user to choose one of these options:
+Run `node scripts/verify-release-version.mjs v{version}` to check every package version.
+An existing remote tag must resolve to the intended HEAD; never move it. An existing unpublished
+draft for that same tag may be reused after checking its prerelease flag. An already published
+release requires a new version through the normal version-bump PR process; stop without modifying it.
+Treat authentication or network errors as errors, not as evidence that a release is absent.
 
-1. **Abort** — the user resolves it manually and tries again
-2. **Force deploy** — delete the existing release and tag, then recreate them
-3. **Bump version and retry** — use the `bump-version` skill to increment to the next version, commit/push the changes, then restart from Step 1
-
-## Step 3 (stable releases only): Review changelog and get user approval
+## Step 3 (stable releases only): Draft changelog
 
 Only run this step if the version has **no** prerelease identifiers (`-alpha`, `-beta`, `-rc`, etc.).
 
-1. Find the previous stable release tag (exclude prerelease/beta tags):
-   ```
-   git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -2
-   ```
-   If the current version tag already exists, the second result is the previous version; otherwise the first result is.
+1. Find the highest previously published stable version in GitHub's release history.
+   Exclude drafts and tags with prerelease identifiers; do not infer publication from Git tags alone.
+   If this is the first stable release, use the repository history as the changelog source.
 
 2. Get the commit list from the previous stable tag to HEAD:
    ```
@@ -69,11 +69,12 @@ Only run this step if the version has **no** prerelease identifiers (`-alpha`, `
 
    Each item is one concise Korean line. Bold a short label at the start when it helps scanning.
 
-4. Present the drafted changelog **in Korean** and ask (in Korean) whether to proceed. If the user wants edits, apply them. If they decline, abort.
-
-5. Use the user-approved changelog with `--notes` in Step 5 (instead of `--generate-notes`).
+4. Write the Korean changelog to a temporary file and pass it with `--notes-file` in Step 5.
+   The user can review or edit the draft before approving publication in GitHub; do not add a chat approval step.
 
 ## Step 4: Create and push tag
+
+Create and push the tag only if it does not already exist. Reuse an existing matching tag.
 
 ```
 git tag v{version}
@@ -82,33 +83,39 @@ git push origin v{version}
 
 ## Step 5: Create GitHub release (draft)
 
-The release is created as a **draft**. The CI workflow will automatically publish it after all builds complete.
+Create a **draft**, or reuse the matching unpublished draft from Step 2 without replacing its notes.
+Publication requires successful checks and the user's `desktop-release` environment approval.
 
-- **Prerelease/beta** (version contains `-alpha`, `-beta`, `-rc`, etc.): use `--generate-notes`. Ask in Korean whether to add the `--prerelease` flag.
+- **Prerelease/beta** (`-alpha.N`, `-beta.N`, `-rc.N`): `--prerelease` is mandatory and derived from the version.
   ```
-  gh release create v{version} --title "v{version}" --generate-notes --draft [--prerelease]
-  ```
-
-- **Stable release**: use the user-approved changelog from Step 3 via `--notes` (do not use `--generate-notes`):
-  ```
-  gh release create v{version} --title "v{version}" --notes "{changelog}" --draft
+  gh release create v{version} --verify-tag --title "v{version}" --generate-notes --draft --prerelease
   ```
 
-## Step 6: Trigger CI workflow
+- **Stable release**: use the changelog file from Step 3; omit `--prerelease`:
+  ```
+  gh release create v{version} --verify-tag --title "v{version}" --notes-file "{changelog_file}" --draft
+  ```
+
+## Step 6: Trigger the release workflow
+
+Follow [release QA](../../../docs/template-release-qa.md) and the
+[development guide](../../../CONTRIBUTING.md#ci와-릴리스-경계). Record the candidate SHA, results,
+and untested scope outside the repository. Link the evidence from the draft when available;
+do not claim unperformed checks passed. Checks requiring the built installers can finish before final approval.
 
 Trigger the release workflow manually via `workflow_dispatch`:
 
 ```
-gh workflow run release.yml -f tag=v{version}
+gh workflow run release.yml --ref main -f tag=v{version}
 ```
 
-Wait 3 seconds, then get the workflow run URL:
+Capture the dispatch start time and identify the new run by workflow, `workflow_dispatch` event,
+main branch, intended main SHA, and display title `Desktop Release v{version}`. Use bounded retries
+while the run appears. Do not take the newest run blindly or dispatch a duplicate after an uncertain response.
 
-```
-sleep 3
-gh run list --workflow=release.yml --limit=1 --json url --jq '.[0].url'
-```
+## Step 7: Provide the approval link
 
-## Step 7: Confirm
-
-Inform the user that the release was created as a draft and the CI workflow has been triggered. Provide a link to the GitHub Actions workflow run. The release will be automatically published once all builds complete.
+Return the exact GitHub Actions run link with a short Korean status, such as
+"릴리스 빌드를 시작했습니다. 검증 후 이 실행에서 공개를 승인하면 됩니다."
+Do not wait for or request a duplicate chat approval. If the run has already failed, report the failure;
+if it is still building, do not describe it as already awaiting approval or published.
