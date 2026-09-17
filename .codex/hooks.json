@@ -1,0 +1,18 @@
+{
+  "description": "관리하는 서브에이전트의 작업명에 실제 역할명을 붙입니다.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^(spawn_agent|Agent|collaboration\\.?spawn_agent)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"const root=require('node:child_process').execFileSync('git',['rev-parse','--show-toplevel'],{encoding:'utf8'}).trim();import(require('node:url').pathToFileURL(require('node:path').join(root,'.codex/hooks/prefix-agent-task-name.mjs')).href)\"",
+            "timeout": 5,
+            "statusMessage": "서브에이전트 작업명에 역할명 적용"
+          }
+        ]
+      }
+    ]
+  }
+}
