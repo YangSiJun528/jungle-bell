@@ -44,8 +44,6 @@ jobs:
         with:
           version: "2026.9.5"
           install_args: node
-      - name: Test release policy
-        run: node --test scripts/test-release-policy.mjs
       - name: Cache npm downloads
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:

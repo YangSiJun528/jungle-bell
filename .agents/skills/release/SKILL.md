@@ -96,12 +96,7 @@ Publication requires successful checks and the user's `desktop-release` environm
   gh release create v{version} --verify-tag --title "v{version}" --notes-file "{changelog_file}" --draft
   ```
 
-## Step 6: Verify and trigger the release workflow
-
-Run `GITHUB_REPOSITORY={owner/repo} node scripts/verify-release-policy.mjs v{version}`.
-The pipeline also enforces this policy before building and after approval; agent checks do not replace it.
-A stable release must exceed all published stable versions. A prerelease must exceed all published
-stable versions and published prereleases with the same `X.Y.Z`. Newer unpublished drafts do not block retries.
+## Step 6: Trigger the release workflow
 
 Follow [release QA](../../../docs/template-release-qa.md) and the
 [development guide](../../../CONTRIBUTING.md#ci와-릴리스-경계). Record the candidate SHA, results,

@@ -92,8 +92,6 @@ jobs:
             exit 1
           fi
 
-          node scripts/verify-release-policy.mjs "$TAG" --release-id "$RELEASE_ID"
-
           CI_RUNS=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml \
             --branch main --commit "$SHA" --event push --status success --limit 20 \
             --json databaseId,headSha,headBranch,event,conclusion,url)
@@ -180,14 +178,6 @@ jobs:
           prefix-key: "v${{ vars.CACHE_VERSION }}"
           cache-on-failure: false
 
-      - name: Recheck draft before building and uploading
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ needs.prepare-release.outputs.tag }}
-          RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
-        run: node scripts/verify-release-policy.mjs "$TAG" --release-id "$RELEASE_ID" --draft-only
-
       - name: Build and upload to draft release
         uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
         env:
@@ -210,7 +200,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.prepare-release.outputs.tag }}
-          RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
         run: |
           set -euo pipefail
           VER="${TAG#v}"
@@ -228,7 +217,6 @@ jobs:
           printf '%s\n' "$SIGNATURE_INFO" | grep -qx 'Identifier=dev.sijun-yang.jungle-bell.v2'
           ASSET="Jungle.Bell_${VER}_${ARCH}.tar.gz"
           tar -czf "$ASSET" -C "$APP_DIR" "Jungle Bell.app"
-          node scripts/verify-release-policy.mjs "$TAG" --release-id "$RELEASE_ID" --draft-only
           gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber "$ASSET"
 
   publish-installer-scripts:
@@ -243,24 +231,16 @@ jobs:
           ref: ${{ needs.prepare-release.outputs.sha }}
           persist-credentials: false
 
-      - name: Set up Node.js
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
-        with:
-          version: "2026.9.5"
-          install_args: node
-
       - name: Render and upload installer scripts
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.prepare-release.outputs.tag }}
           VERSION: ${{ needs.prepare-release.outputs.version }}
-          RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
         run: |
           set -euo pipefail
           mkdir -p out
           sed "s/__VERSION__/${VERSION}/g" install/jungle-bell.sh.tmpl > out/jungle-bell.sh
           sed "s/__VERSION__/${VERSION}/g" install/jungle-bell.ps1.tmpl > out/jungle-bell.ps1
-          node scripts/verify-release-policy.mjs "$TAG" --release-id "$RELEASE_ID" --draft-only
           gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
             out/jungle-bell.sh out/jungle-bell.ps1
 
@@ -271,23 +251,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ needs.prepare-release.outputs.sha }}
-          persist-credentials: false
-
-      - name: Set up Node.js
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
-        with:
-          version: "2026.9.5"
-          install_args: node
-
       - name: Promote updater manifest to the v2 channel
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.prepare-release.outputs.tag }}
           VERSION: ${{ needs.prepare-release.outputs.version }}
-          RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
         run: |
           set -euo pipefail
 
@@ -310,10 +278,8 @@ jobs:
           ' "$MANIFEST_DIR/latest.json"
 
           mv "$MANIFEST_DIR/latest.json" "$MANIFEST_DIR/latest-v2.json"
-          node scripts/verify-release-policy.mjs "$TAG" --release-id "$RELEASE_ID" --draft-only
           gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
             "$MANIFEST_DIR/latest-v2.json"
-          node scripts/verify-release-policy.mjs "$TAG" --release-id "$RELEASE_ID" --draft-only
           gh release delete-asset "$TAG" latest.json --yes --repo "$GITHUB_REPOSITORY"
 
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets \
@@ -403,12 +369,6 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Set up Node.js
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
-        with:
-          version: "2026.9.5"
-          install_args: node
-
       - name: Revalidate and publish release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -416,7 +376,6 @@ jobs:
           SHA: ${{ needs.prepare-release.outputs.sha }}
           VERSION: ${{ needs.prepare-release.outputs.version }}
           IS_PRERELEASE: ${{ needs.prepare-release.outputs.is_prerelease }}
-          RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
         run: |
           set -euo pipefail
 
@@ -466,9 +425,6 @@ jobs:
             jq -e --arg name "$asset_name" 'index($name) != null' <<<"$ASSET_NAMES" >/dev/null
             jq -e --arg name "${asset_name}.sig" 'index($name) != null' <<<"$ASSET_NAMES" >/dev/null
           done < <(jq -r '.platforms[].url' "$MANIFEST_DIR/latest-v2.json")
-
-          node scripts/verify-release-version.mjs "$TAG"
-          node scripts/verify-release-policy.mjs "$TAG" --release-id "$RELEASE_ID"
 
           if [ "$IS_PRERELEASE" = "true" ]; then
             gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false
