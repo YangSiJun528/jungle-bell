@@ -2,7 +2,7 @@ name: CI
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, labeled, unlabeled, edited]
   push:
     branches: [main]
   workflow_dispatch:
@@ -15,6 +15,21 @@ permissions:
   contents: read
 
 jobs:
+  scope:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      mode: ${{ steps.scope.outputs.mode }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Select CI scope from the label and complete PR diff
+        id: scope
+        run: python3 scripts/ci_scope.py
+
   hygiene:
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-24.04
@@ -30,9 +45,12 @@ jobs:
           install_args: prek
       - run: prek validate-config prek.toml
       - run: prek run --all-files --group hygiene --show-diff-on-failure
+      - name: Test CI scope selection
+        run: python3 -B -m unittest discover -s scripts -p 'test_ci_scope.py' -v
 
   web:
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    needs: scope
+    if: needs.scope.outputs.mode == 'full'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -57,7 +75,8 @@ jobs:
         working-directory: frontend
 
   server:
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    needs: scope
+    if: needs.scope.outputs.mode == 'full'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -95,7 +114,8 @@ jobs:
         run: docker build --target worker-runtime --file server/Dockerfile .
 
   desktop:
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    needs: scope
+    if: needs.scope.outputs.mode == 'full'
     name: desktop (${{ matrix.os }})
     strategy:
       fail-fast: false
@@ -136,18 +156,31 @@ jobs:
   required:
     name: required
     if: ${{ always() && (github.event_name != 'pull_request' || github.event.pull_request.draft == false) }}
-    needs: [hygiene, web, server, desktop]
+    needs: [scope, hygiene, web, server, desktop]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Require every CI job to succeed
+      - name: Require all checks selected for this change
         env:
+          SCOPE_RESULT: ${{ needs.scope.result }}
+          CI_MODE: ${{ needs.scope.outputs.mode }}
           HYGIENE_RESULT: ${{ needs.hygiene.result }}
           WEB_RESULT: ${{ needs.web.result }}
           SERVER_RESULT: ${{ needs.server.result }}
           DESKTOP_RESULT: ${{ needs.desktop.result }}
         run: |
+          test "$SCOPE_RESULT" = "success"
           test "$HYGIENE_RESULT" = "success"
-          test "$WEB_RESULT" = "success"
-          test "$SERVER_RESULT" = "success"
-          test "$DESKTOP_RESULT" = "success"
+          case "$CI_MODE" in
+            full) EXPECTED_RESULT=success ;;
+            docs) EXPECTED_RESULT=skipped ;;
+            *) echo "Unknown CI mode: $CI_MODE" >&2; exit 1 ;;
+          esac
+          test "$WEB_RESULT" = "$EXPECTED_RESULT"
+          test "$SERVER_RESULT" = "$EXPECTED_RESULT"
+          test "$DESKTOP_RESULT" = "$EXPECTED_RESULT"
+          if [ "$CI_MODE" = "docs" ]; then
+            echo 'Documentation-only PR: hygiene passed; web, server and desktop checks were intentionally skipped.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'Full CI: hygiene, web, server and desktop checks passed.' >> "$GITHUB_STEP_SUMMARY"
+          fi
