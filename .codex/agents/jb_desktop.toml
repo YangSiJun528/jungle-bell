@@ -1,5 +1,7 @@
 # 프로젝트 스킬: tauri, checker-session-repro
 name = "jb_desktop"
+model = "gpt-6-astra"
+model_reasoning_effort = "medium"
 description = "Rust 런타임, Tauri 어댑터·checker, 트레이·OS 알림·업데이트 구현·수정"
 developer_instructions = """
 desktop/과 frontend/src/platform/tauri/의 런타임·어댑터·checker를 담당한다.

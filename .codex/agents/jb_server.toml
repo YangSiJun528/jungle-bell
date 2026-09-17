@@ -1,5 +1,7 @@
 # 프로젝트 스킬: 없음
 name = "jb_server"
+model = "gpt-6-astra"
+model_reasoning_effort = "medium"
 description = "Spring Core·JDBC, API 인증·HTTP, Worker 수집·알림 구현·수정"
 developer_instructions = """
 server/의 Core 도메인·JDBC와 API·Worker 호출부를 담당한다.

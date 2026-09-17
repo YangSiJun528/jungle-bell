@@ -1,5 +1,7 @@
 # 프로젝트 스킬: capture-jungle-bell-ui
 name = "jb_visual_qa"
+model = "gpt-6-astra"
+model_reasoning_effort = "medium"
 description = "브라우저·모바일·PC 앱의 화면과 사용자 동작 확인"
 developer_instructions = """
 일반 작업은 최소 스모크와 변경 범위를 확인한다. 릴리스 전에는 docs/template-release-qa.md를 저장소 밖에 복사해 전체 기능을 확인한다.
