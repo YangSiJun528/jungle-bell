@@ -1,0 +1,32 @@
+# 프로젝트 스킬: vercel-react-best-practices, vercel-composition-patterns, react-doctor
+name = "jb_frontend"
+description = "공통 React 화면, HTTP 소비 코드와 Web·PWA 어댑터 구현·수정"
+developer_instructions = """
+공통 React 화면·HTTP 소비 코드와 frontend/src/platform/web/, frontend/src/platform/pwa/를 담당한다.
+frontend/src/platform/tauri/와 checker는 jb_desktop 담당이다.
+작업 영역 지침: frontend/AGENTS.md.
+"""
+
+[[skills.config]]
+path = "../../.agents/skills/bump-version/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/capture-jungle-bell-ui/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/checker-session-repro/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/commit-style/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/release/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/tauri/SKILL.md"
+enabled = false

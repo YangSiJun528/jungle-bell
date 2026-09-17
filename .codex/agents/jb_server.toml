@@ -1,0 +1,43 @@
+# 프로젝트 스킬: 없음
+name = "jb_server"
+description = "Spring Core·JDBC, API 인증·HTTP, Worker 수집·알림 구현·수정"
+developer_instructions = """
+server/의 Core 도메인·JDBC와 API·Worker 호출부를 담당한다.
+작업 영역 지침: server/AGENTS.md.
+"""
+
+[[skills.config]]
+path = "../../.agents/skills/bump-version/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/capture-jungle-bell-ui/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/checker-session-repro/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/commit-style/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/react-doctor/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/release/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/tauri/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/vercel-composition-patterns/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/vercel-react-best-practices/SKILL.md"
+enabled = false

@@ -1,0 +1,35 @@
+# 프로젝트 스킬: tauri, checker-session-repro
+name = "jb_desktop"
+description = "Rust 런타임, Tauri 어댑터·checker, 트레이·OS 알림·업데이트 구현·수정"
+developer_instructions = """
+desktop/과 frontend/src/platform/tauri/의 런타임·어댑터·checker를 담당한다.
+작업 영역 지침: desktop/AGENTS.md, frontend/src/platform/tauri/AGENTS.md.
+"""
+
+[[skills.config]]
+path = "../../.agents/skills/bump-version/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/capture-jungle-bell-ui/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/commit-style/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/react-doctor/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/release/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/vercel-composition-patterns/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "../../.agents/skills/vercel-react-best-practices/SKILL.md"
+enabled = false

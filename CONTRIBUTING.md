@@ -103,6 +103,10 @@ PostgreSQL을 포함한 로컬 실행 방법은 [`server/README.md`](server/READ
 
 ## 변경 사항 검증
 
+일반 작업의 QA는 최소 스모크(실행·주요 화면 진입·대표 동작)와 변경한 기능 및 직접 영향을
+받는 기능만 확인합니다. 문서만 바뀌면 문서 검사로 충분합니다. 화면·기기별 실행 방법은
+[Visual QA 안내](docs/guide-visual-qa.md)를 참고합니다.
+
 프론트엔드 의존성 경계와 검사기 자체를 검증하려면 다음 명령을 실행합니다.
 허용 의존성과 예외는 [모듈 의존성 규칙](docs/reference-module-boundaries.md)에 정의합니다.
 
@@ -143,8 +147,14 @@ macOS·Windows 데스크톱 검증을 실행합니다. 브랜치 규칙에는 �
 가리키는 정확한 SHA의 `CI / required` 성공과 버전 일치를 확인한 뒤 초안 릴리스에 서명
 산출물을 올리고, `desktop-release` 환경 승인을 거쳐 공개합니다.
 
+매 릴리스 공개 전에는 [전체 기능 QA 템플릿](docs/template-release-qa.md)의 사본을 저장소 밖에
+만들어 수행합니다. 공통 로직은 해당 후보 SHA의 코드 검사 결과를 활용하고, 설치·로그인·트레이·
+실제 알림처럼 환경에 의존하는 동작은 해당 환경에서 확인합니다. 실패·미실행 범위를 함께 전달하며,
+실행 보고서와 캡처는 코드베이스에 보관하지 않습니다.
+
 ## 기술 문서
 
+- [Codex 내장 에이전트 하네스](docs/guide-codex-harness.md)
 - [플랫폼 아키텍처](docs/explanation-platform-architecture.md)
 - [플랫폼 계약](docs/reference-platform-contract.md)
 - [상태 관리](docs/state-management-reference.md)
@@ -156,5 +166,6 @@ macOS·Windows 데스크톱 검증을 실행합니다. 브랜치 규칙에는 �
 - `mise exec -- prek install`로 로컬 Git 훅을 설치합니다.
 - 변경 범위에 해당하는 테스트와 검증 명령을 통과시킵니다.
 - 사용자 동작이나 플랫폼 계약이 바뀌면 관련 문서를 함께 수정합니다.
+- 기능을 추가·변경·삭제하면 릴리스 QA 템플릿의 해당 항목도 갱신합니다.
 - 비밀값, 개인 세션 파일, 로그와 캡처용 임시 파일을 커밋하지 않습니다.
 - 관계없는 포맷 변경이나 생성물을 포함하지 않습니다.
