@@ -74,7 +74,8 @@ jobs:
       - name: Set up Gradle cache
         uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
       - run: chmod +x server/gradlew
-      - run: ./gradlew --no-daemon check :api:bootJar :worker:bootJar
+      - name: Run unit and PostgreSQL integration tests and build jars
+        run: ./gradlew --no-daemon check :api:bootJar :worker:bootJar
         working-directory: server
       - name: Validate production Compose
         working-directory: server

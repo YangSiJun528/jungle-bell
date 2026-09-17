@@ -18,7 +18,7 @@ COPY server/core/src ./core/src
 COPY server/api/src ./api/src
 COPY server/worker/src ./worker/src
 COPY --from=web-build /workspace/frontend/dist/web ./api/src/main/resources/static
-RUN ./gradlew --no-daemon clean check :api:bootJar :worker:bootJar
+RUN ./gradlew --no-daemon clean test :api:bootJar :worker:bootJar
 RUN set -eu; \
     api_jar="$(find api/build/libs -maxdepth 1 -type f -name 'api-*.jar' ! -name '*-plain.jar')"; \
     worker_jar="$(find worker/build/libs -maxdepth 1 -type f -name 'worker-*.jar' ! -name '*-plain.jar')"; \
