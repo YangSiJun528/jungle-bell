@@ -62,11 +62,13 @@ JUNGLE_BELL_DATA_API_URL=https://jungle-bell.sijun-yang.com \
 cd server
 ./gradlew :core:test \
   --tests 'app.junglebell.server.domain.usage.UsageRecorderTest' \
-  --tests 'app.junglebell.server.domain.usage.UsageAggregationServiceTest' \
+  --tests 'app.junglebell.server.domain.usage.UsageAggregationServiceTest'
+./gradlew :core:integrationTest \
   --tests 'app.junglebell.server.domain.usage.JdbcUsageStoreIntegrationTest'
 ./gradlew :api:test \
   --tests 'app.junglebell.server.api.usage.UsageControllerTest' \
-  --tests 'app.junglebell.server.api.usage.UsageInfoContributorTest' \
+  --tests 'app.junglebell.server.api.usage.UsageInfoContributorTest'
+./gradlew :api:integrationTest \
   --tests 'app.junglebell.server.api.security.SecurityFilterChainIntegrationTest'
 ```
 

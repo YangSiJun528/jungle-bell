@@ -103,8 +103,8 @@ stages = ["pre-push"]
 
 [[repos.hooks]]
 id = "server-check"
-name = "server check"
-entry = "mise exec -- ./server/gradlew --no-daemon -p server check"
+name = "server unit and architecture tests"
+entry = "mise exec -- ./server/gradlew --no-daemon -p server test"
 language = "system"
 pass_filenames = false
 files = "^server/"

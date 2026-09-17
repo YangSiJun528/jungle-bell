@@ -136,7 +136,9 @@ docker compose \
 ```
 
 API와 Worker를 동시에 빌드하지 않고 순차적으로 빌드합니다. 각 빌드에서 프런트엔드
-타입 검사와 전체 Gradle 검사가 실행됩니다.
+타입 검사와 Gradle 단위·아키텍처 테스트가 실행됩니다. PostgreSQL 통합 테스트는
+이미지 빌드에 포함하지 않습니다. 배포할 소스의 `./gradlew check`가 Docker를 사용할 수
+있는 환경에서 통과했는지 먼저 확인합니다.
 
 ```bash
 docker compose \
