@@ -51,12 +51,22 @@ docker compose \
 이 가이드의 명령은 `API_PORT=8080`, `MANAGEMENT_PORT=8081`을 전제로 합니다. 두 port를
 같게 설정하거나 management publish 주소를 compose의 `127.0.0.1`에서 바꾸지 않습니다.
 
-검증에 성공하면 새 운영 디렉터리를 만들고 소스를 동기화합니다.
+검증에 성공하면 운영 소스 디렉터리를 만들고 소스를 동기화합니다. `--delete`로 로컬에서
+삭제한 소스도 원격에서 제거해 이전 배포의 파일이 다음 빌드에 섞이지 않게 합니다.
+동기화 대상은 아래 운영 소스 디렉터리로 한정합니다. 운영 secret과 DB 백업은 위 표의
+별도 경로에 유지합니다.
+
+`--exclude` 경로는 전송뿐 아니라 삭제에서도 제외됩니다. 따라서 기존
+`server/deploy/.env.production`은 아래 환경 파일 교체가 성공할 때까지 유지됩니다.
+이 보호를 없애는 `--delete-excluded`는 사용하지 않습니다. 소스 동기화가 실패하면
+환경 파일 전송과 이미지 빌드도 중단합니다.
 
 ```bash
+set -euo pipefail
+
 ssh ubuntu@oci-server.tail3cbec1.ts.net 'install -d -m 0700 /home/ubuntu/jungle-bell-production'
 
-rsync -az \
+rsync -az --delete \
   --exclude .git/ \
   --exclude node_modules/ \
   --exclude frontend/node_modules/ \
