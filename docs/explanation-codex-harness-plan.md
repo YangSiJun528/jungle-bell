@@ -12,6 +12,8 @@
 | [revfactory/harness](https://github.com/revfactory/harness/blob/main/skills/harness/references/agent-design-patterns.md) | 메인이 필요한 전문가를 선택하고 결과를 통합한다. |
 | [OpenAI Subagents](https://learn.chatgpt.com/docs/agent-configuration/subagents) | 공식 역할 파일과 내장 위임·후속 작업으로 협업한다. |
 | [OpenAI Harness engineering](https://openai.com/index/harness-engineering/) | 짧은 문서 지도로 지식을 연결하고, 판정 가능한 제약은 코드로 확인한다. |
+| [OpenAI Codex Prompting Guide](https://developers.openai.com/cookbook/examples/gpt-5/codex_prompting_guide) | 합리적인 가정으로 진행하되, 진전 없는 반복은 중단하고 필요한 질문을 한다. |
+| [Superpowers systematic-debugging](https://github.com/obra/superpowers/blob/main/skills/systematic-debugging/SKILL.md) | 원인 가설을 최소 실험으로 확인하고, 반복 실패 시 접근을 재검토한다. |
 | [Anthropic 지침 작성 가이드](https://code.claude.com/docs/en/best-practices#write-an-effective-claude-md) | 사람이 읽기 쉽게 쓰고 일반 지식 대신 프로젝트 특이 사항을 남긴다. |
 | [DeepAgents 스킬 상속](https://docs.langchain.com/oss/python/deepagents/subagents#skills-inheritance) | 전문 역할에 필요한 스킬 문맥만 배정하는 원칙을 참고한다. |
 
@@ -28,9 +30,15 @@
 폴더별 `AGENTS.md`는 해당 계층의 책임·의존 방향과 하위 지침을 짧게 설명한다.
 세부 계약은 기존 플랫폼·상태·API 문서를 연결해 사람과 에이전트가 함께 사용한다.
 
-지침은 역할이 아니라 코드 위치에 귀속된다. 작업 경로의 문맥만 단계적으로 읽으므로
+폴더별 지침은 역할이 아니라 코드 위치에 귀속된다. 작업 경로의 문맥만 단계적으로 읽으므로
 서버 담당자가 모든 모듈의 세부 규칙을 처음부터 받을 필요가 없고, 같은 코드를 검토하는
-다른 역할도 같은 기준을 찾을 수 있다. 구현 순서나 판단 방법은 고정하지 않는다.
+다른 역할도 같은 기준을 찾을 수 있다. 세부 구현 순서는 담당자가 정한다.
+
+역할 설정과 공통 협업 절차는 [하네스 사용 안내](guide-codex-harness.md)에 둔다.
+요구사항 확인과 반복 실패 대응의 상세 절차는 [메인 작업 안내](guide-codex-main.md)에 분리한다.
+루트에는 메인이 구현·수정 작업을 시작할 때 읽도록 하는 안내만 남겨, 모든 역할이 상세 절차를
+문맥에 넣지 않게 한다. 하위 담당자는 모호함·실패·막힘을 메인에 보고하고, 메인이 필요한 진단이나
+다음 접근을 전달한다. 이는 진전 없는 반복을 줄이는 행동 지침이며 실행을 강제 종료하는 장치는 아니다.
 
 상대 경로로 저장소 스킬만 역할별로 제한한다. **메인과 전역·시스템·플러그인 스킬은
 부모 설정을 그대로 따른다.** 부모가 끈 스킬을 자식이 다시 켤 수 없으며, 이 필터가

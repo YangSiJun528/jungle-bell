@@ -13,8 +13,8 @@
 - [Server](server/AGENTS.md): Core·API·Worker 모듈
 
 개발·검증은 [개발 안내](CONTRIBUTING.md), 전체 구조는
-[플랫폼 아키텍처](docs/explanation-platform-architecture.md), 에이전트 운영은
-[하네스 사용 안내](docs/guide-codex-harness.md)를 참고합니다.
+[플랫폼 아키텍처](docs/explanation-platform-architecture.md)를 참고합니다.
+메인은 구현·수정 작업을 시작할 때 [메인 작업 안내](docs/guide-codex-main.md)를 읽습니다.
 
 ## 협업
 
@@ -27,7 +27,7 @@ Visual QA는 요청된 화면·동작 검증이나 큰 기능 완료·최종 릴
 공유 계약 파일은 작업마다 한 명의 편집 담당자를 정하고, 생산자·소비자 담당자는
 변경 내용을 직접 공유합니다. 공동 목표가 끝날 때까지 같은 담당자를 재사용하며,
 후속 작업은 `followup_task`, 정보 전달은 `send_message`로 처리합니다.
-담당자는 변경 내용·수행한 검사·남은 문제를 간결히 반환합니다. 실패·막힘은 메인에
+담당자는 변경 내용·수행한 검사·남은 문제를 간결히 반환합니다. 요구사항의 모호함·실패·막힘은 메인에
 알리고, 메인은 결과 통합과 Goal 진행을 관리합니다. 작업이 없을 때 반복 실행하거나
 미해결 상태로 무한 대기하지 않습니다.
 
