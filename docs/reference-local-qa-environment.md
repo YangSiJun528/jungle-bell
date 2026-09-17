@@ -18,7 +18,8 @@
 | 브라우저 조작 | Codex In-app Browser 사용 가능 |
 | 네이티브 Computer Use | 메인·하위 에이전트 모두 네이티브 API 미제공 |
 | 플러그인 구성 | `computer-use@openai-bundled` 비활성, `unified-computer-use`는 `browser` 표면만 제공 |
-| macOS 화면 기록·손쉬운 사용 권한 | 미확인 |
+| macOS OS 포커스 관측 | 승인된 Swift 프로세스에서 NSWorkspace 이벤트·전경 PID와 AX 포커스 창 조회 가능 |
+| macOS 화면 기록·손쉬운 사용 권한 | 화면 기록 미확인. Swift 관측 프로세스의 `AXIsProcessTrusted()`는 true; 실행 주체가 바뀌면 다시 확인 |
 
 이 도구 상태는 Codex나 운영체제의 영구 제약이 아닙니다. 다음 실행에서는 제공 도구와
 플러그인 설정을 다시 확인합니다. 이 환경에서는 시뮬레이터·서버 bind에 sandbox 밖 실행이
@@ -58,6 +59,7 @@ qa_artifacts="/private/tmp/jungle-bell/android-qa-$(date +%Y%m%d-%H%M%S)"
 | --- | --- |
 | Xcode | 26.6, `/Applications/Xcode.app/Contents/Developer` |
 | 시뮬레이터 구성 | iPhone 17 Pro, iOS 26.5 |
+| iOS 입력 드라이버 | `appium`은 PATH에서 찾지 못함. 비표준 경로 설치·XCUITest/WebDriverAgent 연결은 미확인 |
 | 웹 포트 예시 | 5173 |
 
 [공통 가이드](guide-visual-qa.md)의 명령에 넣을 값입니다. Device Type ID와 Runtime ID는
@@ -68,6 +70,28 @@ qa_developer_dir=/Applications/Xcode.app/Contents/Developer
 qa_web_port=5173
 qa_artifacts="/private/tmp/jungle-bell/ios-qa-$(date +%Y%m%d-%H%M%S)"
 ```
+
+## Playwright Chromium
+
+| 항목 | 값 |
+| --- | --- |
+| 라이브러리 | Playwright 1.62.1, Codex workspace dependency runtime 제공 |
+| 브라우저 | Chromium 151.0.7922.34, `headless: true`, `channel: 'chromium'` |
+| 실행 방식 | 지속 Node REPL에서 Playwright 라이브러리 호출, 임시 context·프로필 |
+| 웹 포트 예시 | 5175 |
+
+[Playwright 가이드](guide-playwright-qa.md)에 넣을 값입니다. runtime 갱신 시
+`load_workspace_dependencies`와 패키지 버전·브라우저 실행 경로를 다시 확인합니다.
+
+```bash
+qa_node=/Users/sijun-yang/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node
+qa_playwright_module=/Users/sijun-yang/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright
+qa_web_port=5175
+```
+
+이 호스트에서는 sandbox 안의 Chromium 생성이 `MachPortRendezvousServer ... Permission denied`로
+실패할 수 있습니다. 권한을 확보한 별도 Node 세션에서 headless로 실행할 수 있으며, 사용자
+Chrome 프로필이나 전경 창을 사용할 필요는 없습니다.
 
 ## Tauri
 

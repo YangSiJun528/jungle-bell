@@ -45,6 +45,11 @@ AVD 삭제나 `-wipe-data`는 사용하지 않습니다. `-no-window`는 호스�
 숨기며, 기기 화면은 `adb screencap`으로 관찰할 수 있습니다.
 [Emulator 실행 옵션](https://developer.android.com/studio/run/emulator-commandline)
 
+이 방식을 기본으로 사용합니다. `adb input`은 Android 내부에 입력을 보내므로 호스트의
+커서·키보드 포커스를 가져오지 않습니다. 캡처도 호스트 바탕화면이 아닌 기기 화면을 읽습니다.
+PNG는 에이전트의 이미지 도구로 확인하며 에뮬레이터 창이나 이미지 뷰어를 띄울 필요가 없습니다.
+[adb 화면 캡처](https://developer.android.com/tools/adb#screencap)
+
 ```bash
 "$ANDROID_HOME/emulator/emulator" -avd "$qa_avd" \
   -port "$qa_emulator_port" -read-only -no-snapshot-save -no-snapshot-load -no-window -no-audio

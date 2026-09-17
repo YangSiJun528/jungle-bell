@@ -2,7 +2,9 @@
 
 Web·설치 PWA·Tauri PC는 같은 React 화면을 사용하고 실행 환경별 기능을 어댑터로 주입합니다.
 
-- `src/app/`: 진입점, 라우팅, provider와 query 연결을 구성합니다.
+- `src/app/`: 진입점과 화면·provider를 조립하고 실행 흐름을 연결합니다.
+- `src/navigation/`: 공통 경로를 정의합니다.
+- `src/state/`: 계정·대시보드 상태와 query를 관리합니다.
 - `src/features/`, `src/components/`: 기능 화면과 공통 UI를 구성합니다.
 - `src/domain/`: 화면과 실행 환경에 독립적인 계산·판정 규칙을 둡니다.
 - `src/api/`: HTTP 요청과 응답 계약을 다룹니다.

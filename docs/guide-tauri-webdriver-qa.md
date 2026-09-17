@@ -36,10 +36,27 @@ debug 빌드에서만 등록됩니다. 원본 Cargo 의존성·앱 코드·사�
 
 ## 앱 실행
 
+요소 클릭·입력과 캡처는 WebDriver API로 수행합니다. 현재 플러그인 1.4.0은 WebView 내부의
+DOM 입력과 WKWebView snapshot을 사용하므로 반복 조작마다 호스트 커서를 움직이거나 앱을
+전경으로 가져올 필요가 없습니다. 이미지도 에이전트의 이미지 도구로 읽습니다.
+
+일반 QA는 격리된 QA 앱의 실행 명령에만 `JUNGLE_BELL_WINDOW_FOCUS=false`를 붙입니다.
+전역 환경·셸 설정·일반 앱 실행 설정은 바꾸지 않습니다. 새 대시보드를 포커스 없이 만들고,
+앱의 명시적인 활성화·기존 창 표시·최소화 복원 요청을 생략합니다. 변수 생략·`true`·잘못된 값은
+기존 포커스 동작을 유지합니다. 숨겼거나 최소화한 기존 창은 이 모드에서 복원되지 않으므로
+새 QA 인스턴스의 창을 그대로 두고 조작합니다. 미설정·`true` 실행은 포커스 동작 자체를
+비교 검증할 때만 사용합니다.
+
+다른 창 뒤에 놓인 상태와 최소화·숨김 상태는 같지 않습니다. 최소화/숨김 상태의 snapshot 품질은
+별도로 확인하며, 빈 캡처를 정상 화면으로 처리하거나 실패 시 임의로 창을 활성화하지 않습니다.
+LMS 로그인 창·외부 앱·OS 대화상자의 활성화는 이 설정의 범위 밖입니다. 해당 동작이나 실제
+창·트레이·OS 포커스를 확인해야 하면 메인에게 알리고 사용자와 전경 작업 시간을 맞춥니다.
+
 같은 터미널에서 QA `.app` 안의 실행 파일을 실행합니다. 기존 설치 앱을 열지 않습니다.
 
 ```bash
 qa_app=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["productName"])' "$qa_root/qa-environment.json")
+JUNGLE_BELL_WINDOW_FOCUS=false \
 "$qa_root/desktop/target/debug/bundle/macos/$qa_app.app/Contents/MacOS/jungle-bell" \
   > "$qa_root/app.log" 2>&1 &
 qa_app_pid=$!
@@ -94,6 +111,29 @@ curl --fail --silent "$qa_driver_url/session/$qa_session_id/screenshot" \
 DOM 변화만으로 화면이 보였다고 판단하지 않습니다. 스크린샷은 WebView 내용만 담습니다.
 Rust IPC가 확인 범위에 포함되면 해당 UI 조작이나 필요한 IPC 요청의 실제 응답도 확인합니다.
 응답 형식·수치처럼 코드로 확인할 수 있는 조건은 필요한 짧은 검사로 보완합니다.
+
+## OS 포커스 측정(macOS)
+
+창 활성화가 확인 범위에 포함되면 [OS 관측기](../scripts/qa/observe-macos-focus.swift)를 함께 실행합니다.
+활성 앱 변경 이벤트와 전경 앱·창 식별자를 기록하는 도구이며 앱 활성화나 입력 조작은 하지 않습니다.
+네이티브 Computer Use 없이 사용할 수 있고, WebDriver 캡처는 화면 표시의 별도 근거로 사용합니다.
+
+```bash
+mkdir -p "$qa_root/evidence"
+xcrun swift scripts/qa/observe-macos-focus.swift 300 > "$qa_root/evidence/focus.jsonl" &
+qa_focus_pid=$!
+```
+
+로그의 `observer_started`와 유효한 `frontmost.pid`를 확인한 뒤 QA 앱을 실행합니다.
+`false`에서는 앱 준비·WebDriver 조작·캡처 동안 기존 전경 앱·창이 유지되고 QA PID의
+`didActivateApplication` 이벤트가 없는지 확인합니다. 미설정·`true` 대조군에서는 QA PID의
+활성화 이벤트가 실제로 잡히는지 확인합니다. 조건마다 QA 앱을 완전히 종료하고 같은 바이너리를
+새로 실행하며, `open -g`처럼 실행기가 포커스를 억제하는 옵션을 섞지 않습니다.
+
+시작·종료 시점만 비교하면 잠깐 포커스를 가져갔다가 반환한 경우를 놓칠 수 있습니다.
+`windowToken`은 같은 관측 세션 안에서만 비교하고, AX 권한·응답 오류로 창 식별을 못 했다면
+앱 단위 결과와 구분합니다. 사용자 수동 전환과 관측 공백도 결과에 남깁니다.
+관측기는 지정한 시간 뒤 종료됩니다. 먼저 작업이 끝나면 이번 관측 PID도 종료하고 로그는 임시 결과물로 전달합니다.
 
 ## 종료
 
