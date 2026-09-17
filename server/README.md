@@ -45,7 +45,22 @@ server/
 
 ## 로컬 검증
 
-필수 도구는 Java 21, Docker, Node.js 24입니다.
+도구 버전은 루트 `mise.toml`에서 관리합니다. 단위·아키텍처 테스트에는 Java 21,
+PostgreSQL 통합 테스트와 서버 실행에는 Docker, 웹 자산 빌드에는 Node.js 24가 필요합니다.
+
+테스트는 소스 디렉터리와 Gradle 작업으로 구분합니다.
+
+| 범위 | 소스 디렉터리 | 명령 | Docker |
+| --- | --- | --- | --- |
+| 단위·아키텍처 | 각 모듈의 `src/test/kotlin` | `./gradlew test` | 불필요 |
+| PostgreSQL 통합 | 각 모듈의 `src/integrationTest/kotlin` | `./gradlew integrationTest` | 필수 |
+| 전체 검사 | 위 두 범위 | `./gradlew check` | 필수 |
+
+통합 테스트는 Docker가 없으면 실패합니다. 모듈이나 테스트를 지정하려면
+`./gradlew :core:integrationTest --tests '*JdbcStoreIntegrationTest'`처럼 실행합니다.
+단위 테스트만 실행하려면 `test`를 선택합니다.
+로컬 `pre-push` 훅과 Docker 이미지 빌드의 경량 검증은 `test`만 실행합니다.
+CI는 Docker를 제공하는 러너에서 `check`로 단위·통합 테스트를 모두 실행합니다.
 
 ```bash
 cd server
@@ -69,11 +84,11 @@ docker compose \
 Worker는 HTTP port를 열지 않습니다. 개발 중 수집을 끄려면
 `COLLECTORS_ENABLED=false`를 사용합니다.
 
-저장소 루트의 전체 검증 명령은 다음과 같습니다.
+저장소 루트의 전체 검증 명령은 다음과 같습니다. Docker 이미지 빌드에서는 단위·아키텍처
+테스트와 JAR 빌드를 실행하며, PostgreSQL 통합 테스트는 앞선 `check`에서 실행합니다.
 
 ```bash
-cd server
-./gradlew --no-daemon check :api:bootJar :worker:bootJar
+mise exec -- ./server/gradlew --no-daemon -p server check :api:bootJar :worker:bootJar
 docker build --target api-runtime -f server/Dockerfile .
 docker build --target worker-runtime -f server/Dockerfile .
 ```

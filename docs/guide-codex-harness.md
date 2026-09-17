@@ -44,6 +44,9 @@
 결과는 변경·실행한 검사·남은 문제로 짧게 전달합니다. 공통 협업 규칙은 [AGENTS.md](../AGENTS.md)에 있습니다.
 
 검증은 기존 [개발 안내](../CONTRIBUTING.md)를 따릅니다. 직접 UI를 확인할 때의 브라우저·모바일·PC 환경 선택은
-[환경별 Visual QA](guide-visual-qa.md)를 참고합니다. Docker가 없으면 일부 DB 통합
-테스트가 생략될 수 있으므로 성공과 구분해 보고합니다. 스킬 필터는 파일 접근을 차단하는 보안 경계가 아닙니다.
+[환경별 Visual QA](guide-visual-qa.md)를 참고합니다. 서버의 `test`는 단위·아키텍처 테스트,
+`integrationTest`는 PostgreSQL 통합 테스트를 실행하고 `check`는 둘 다 실행합니다.
+통합 테스트는 Docker가 없으면 실패합니다. `test`만 실행했다면 통합 테스트는 미실행으로 보고합니다.
+서버 경량 검증과 로컬 `pre-push`는 `test`만 실행하며, CI는 `check`로 통합 테스트까지 실행합니다.
+스킬 필터는 파일 접근을 차단하는 보안 경계가 아닙니다.
 설계 이유와 참고 자료는 [하네스 설계](explanation-codex-harness-plan.md)에 있습니다.

@@ -41,7 +41,7 @@ import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
 import org.testcontainers.postgresql.PostgreSQLContainer
 
-@Testcontainers(disabledWithoutDocker = true)
+@Testcontainers
 @AutoConfigureMockMvc
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,

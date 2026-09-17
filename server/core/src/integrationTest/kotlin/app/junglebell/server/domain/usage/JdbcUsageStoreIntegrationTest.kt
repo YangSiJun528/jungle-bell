@@ -15,7 +15,7 @@ import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
 import org.testcontainers.postgresql.PostgreSQLContainer
 
-@Testcontainers(disabledWithoutDocker = true)
+@Testcontainers
 class JdbcUsageStoreIntegrationTest {
     private lateinit var jdbc: JdbcClient
     private lateinit var store: JdbcUsageStore

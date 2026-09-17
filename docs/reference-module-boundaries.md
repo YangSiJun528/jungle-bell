@@ -13,7 +13,7 @@ ArchUnit 테스트로 검사한다. 아래 표는 저장소 내부 소스 간 �
 | `frontend/` | `npm run test:architecture` | 정상·위반 fixture로 검사 명령의 동작 검증 |
 | `frontend/` | `npm run check` | 포맷, lint, 아키텍처, 타입, 테스트 |
 | `frontend/` | `npm run verify:web` | 포맷, lint, 아키텍처, 웹 빌드, 테스트 |
-| `server/` | `./gradlew check` | 세 모듈의 아키텍처 검사와 기존 테스트 |
+| `server/` | `./gradlew test` | 세 모듈의 아키텍처 검사와 단위 테스트(Docker 불필요) |
 
 서버 아키텍처 검사만 실행하는 명령은 다음과 같다. 각 모듈의 `main` 클래스 경로를
 Gradle이 전달하므로 Gradle을 통해 실행해야 한다.

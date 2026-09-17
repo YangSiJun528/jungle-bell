@@ -7,4 +7,5 @@ API·Worker가 공유하는 비즈니스 규칙과 영속 상태의 기준입니
 기능별 [도메인·저장소 코드](src/main/kotlin/app/junglebell/server/domain/)에 정의됩니다.
 Schema를 실제 적용하는 프로세스는 API입니다.
 
-관련 단위·PostgreSQL 통합 테스트는 [Core 테스트](src/test/kotlin/app/junglebell/server/)에 있습니다.
+단위·아키텍처 테스트는 [Core 테스트](src/test/kotlin/app/junglebell/server/),
+PostgreSQL 통합 테스트는 [Core 통합 테스트](src/integrationTest/kotlin/app/junglebell/server/)에 있습니다.

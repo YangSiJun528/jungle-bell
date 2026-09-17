@@ -7,7 +7,7 @@
 ## 준비
 
 - mise 2025.8.11 이상
-- 서버를 로컬에서 실행할 경우 Docker
+- 서버 실행 또는 PostgreSQL 통합 테스트를 실행할 경우 Docker
 - Tauri가 요구하는 운영체제별 빌드 도구
 
 Node.js 24, Temurin Java 21, Rust stable과 `rustfmt`·`clippy`, prek 0.4.14는
@@ -25,7 +25,9 @@ mise install
 mise exec -- prek install
 ```
 
-`pre-commit`은 staged diff, 설정 파일, 프론트엔드 포맷·lint와 Rust 포맷을 빠르게 검사합니다. `main` 브랜치에는 직접 커밋할 수 없습니다. `pre-push`는 변경 경로에 따라 프론트엔드 check, 서버 Gradle check, 데스크톱 test·clippy를 실행합니다.
+`pre-commit`은 staged diff, 설정 파일, 프론트엔드 포맷·lint와 Rust 포맷을 빠르게 검사합니다. `main` 브랜치에는 직접 커밋할 수 없습니다. `pre-push`는 변경 경로에 따라 프론트엔드 check, 서버 Gradle test, 데스크톱 test·clippy를 실행합니다.
+서버 경량 검증은 Docker가 필요 없는 단위·아키텍처 테스트만 실행합니다.
+Docker가 필수인 통합 테스트는 CI의 `check` 또는 명시적인 `integrationTest`로 실행합니다.
 
 설정과 기본 위생 검사를 수동으로 확인하려면 다음 명령을 실행합니다.
 
@@ -123,7 +125,17 @@ cd frontend
 mise exec -- npm run verify
 ```
 
-서버 전체 검증:
+서버는 Gradle 작업으로 테스트 범위를 선택합니다. `test`는 단위·아키텍처 테스트,
+`integrationTest`는 Docker가 필요한 PostgreSQL 통합 테스트를 실행합니다.
+`check`는 둘 다 실행하며, Docker에 연결할 수 없으면 통합 테스트는 실패합니다.
+
+```bash
+cd server
+mise exec -- ./gradlew test
+mise exec -- ./gradlew integrationTest
+```
+
+서버 전체 검증과 JAR 빌드:
 
 ```bash
 cd server

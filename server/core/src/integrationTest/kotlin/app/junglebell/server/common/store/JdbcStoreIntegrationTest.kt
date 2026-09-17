@@ -30,7 +30,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer
 import tools.jackson.databind.json.JsonMapper
 import tools.jackson.module.kotlin.KotlinModule
 
-@Testcontainers(disabledWithoutDocker = true)
+@Testcontainers
 class JdbcStoreIntegrationTest {
     private lateinit var jdbc: JdbcClient
 

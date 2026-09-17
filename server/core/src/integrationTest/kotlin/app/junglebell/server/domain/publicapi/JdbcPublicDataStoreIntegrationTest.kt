@@ -17,7 +17,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer
 import tools.jackson.databind.json.JsonMapper
 import tools.jackson.module.kotlin.KotlinModule
 
-@Testcontainers(disabledWithoutDocker = true)
+@Testcontainers
 class JdbcPublicDataStoreIntegrationTest {
     private lateinit var jdbc: JdbcClient
     private lateinit var store: JdbcPublicDataStore
