@@ -18,8 +18,8 @@
 | [jb_frontend.toml](../.codex/agents/jb_frontend.toml) | 공통 React·HTTP·Web·PWA |
 | [jb_desktop.toml](../.codex/agents/jb_desktop.toml) | `desktop/**`, `frontend/src/platform/tauri/**`와 checker TypeScript |
 | [jb_server.toml](../.codex/agents/jb_server.toml) | Core·JDBC·API·Worker |
-| [jb_reviewer.toml](../.codex/agents/jb_reviewer.toml) | 선택 호출: 요청된 결함 근거·회귀 분석 |
-| [jb_visual_qa.toml](../.codex/agents/jb_visual_qa.toml) | 선택 호출: 요청된 화면·동작, 큰 기능 완료·최종 릴리스의 전체 UI 확인 |
+| [jb_reviewer.toml](../.codex/agents/jb_reviewer.toml) | 동작·계약·상태·실행 설정·검증 규칙 변경의 독립 검토, 요청된 리뷰 |
+| [jb_visual_qa.toml](../.codex/agents/jb_visual_qa.toml) | 실제 화면·OS 동작의 완료 조건 확인, 큰 기능 완료·최종 릴리스의 전체 UI 확인 |
 
 역할을 수정하거나 프로젝트 스킬을 추가하면 각 역할의 비활성 목록도 검토합니다.
 새 역할 설정은 이를 인식하는 새 앱 대화에서 사용합니다. 전역·시스템·플러그인 스킬과
@@ -43,7 +43,19 @@
 공유 계약은 한 명이 편집하고, 소비·생산 담당자가 직접 소통합니다. 같은 담당자를 목표 완료까지 재사용합니다.
 정보 전달은 `send_message`, 쉬고 있는 담당자에게 작업을 이어 맡길 때는 `followup_task`를
 사용합니다. 실패·막힘은 메인에 알리고, 메인이 결과 통합과 Goal 진행을 관리합니다.
-결과는 변경·실행한 검사·남은 문제로 짧게 전달합니다. 공통 협업 규칙은 [AGENTS.md](../AGENTS.md)에 있습니다.
+결과는 변경과 완료 조건별 통과·실패·미검증, 실행·관찰 근거와 남은 문제로 짧게 전달합니다.
+공통 협업 규칙은 [AGENTS.md](../AGENTS.md)에 있습니다.
+
+## 검증 결과 전달
+
+모든 작업은 완료 조건을 검사·관찰 결과와 연결합니다. 독립 검토가 필요한 변경은 구현 담당자의
+자체 검증 후 Reviewer가 요구사항과 실제 변경·검사 범위를 확인합니다. 메인이 직접 구현한 경우도
+동일하게 적용합니다. 결함이 발견되면 편집 담당자가 수정하고 해당 조건을 재검증합니다.
+여러 영역을 연결한 결과는 최종 조합의 계약과 대표 흐름도 확인합니다.
+
+검증자는 결함을 찾지 못한 코드 검토와 실제 실행 결과를 구분하고, 근거가 부족한 조건은
+미검증으로 반환합니다. 필수 조건의 실패·미검증이 남으면 완료로 처리하지 않습니다.
+범위 선택과 결과 통합 절차는 메인의 [작업별 검증과 완료 판정](guide-codex-main.md#작업별-검증과-완료-판정)에 있습니다.
 
 검증은 기존 [개발 안내](../CONTRIBUTING.md)를 따릅니다. 직접 UI를 확인할 때의 브라우저·모바일·PC 환경 선택은
 [환경별 Visual QA](guide-visual-qa.md)를 참고합니다. 서버의 `test`는 단위·아키텍처 테스트,
