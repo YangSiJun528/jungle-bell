@@ -2,10 +2,15 @@ import {readFileSync} from 'node:fs';
 
 import {describe, expect, it} from 'vitest';
 
-import type {AttendanceDashboard, DashboardMealsSnapshot} from '@/api/dashboard-api';
+import type {
+    AttendanceDashboard,
+    DashboardMealsSnapshot,
+    DashboardLaundrySnapshot,
+} from '@/api/dashboard-api';
 
 import {
     homeAttendanceState,
+    homeLaundrySummary,
     homeTodayMealSlots,
     homeTodayMeals,
     mealPeriodLabel,
@@ -316,5 +321,66 @@ describe('home attendance summary', () => {
             'current',
         );
         expect(homeAttendanceState(local, new Date('2026-08-19T20:15:00.001Z')).kind).toBe('stale');
+    });
+});
+
+describe('home laundry clock skew', () => {
+    it('작은 시계 차이에서는 가능 수를 유지하고 먼 미래와 원본 지연은 계속 차단한다', () => {
+        const snapshot: DashboardLaundrySnapshot = {
+            schemaVersion: 1,
+            asOf: '2026-09-19T20:35:30Z',
+            final: true,
+            quality: {
+                collectorHealthy: true,
+                collection: 'SUCCESS',
+                sourceFreshness: 'WITHIN_REFRESH_WINDOW',
+                lastCheckedAt: '2026-09-19T20:35:06Z',
+                expectedRefreshIntervalSeconds: 300,
+            },
+            machines: [
+                {
+                    id: '1',
+                    zone: 'men',
+                    washer: {appliance: 'washer', operationalStatus: 'IDLE'},
+                    dryer: null,
+                },
+            ],
+            capacity: {
+                basis: 'WASHER_AND_DRYER_HEADROOM_60_MIN',
+                men: {
+                    access: 'men',
+                    washerAvailable: 1,
+                    projectedDryerSupply: 1,
+                    pendingDryerLoads: 0,
+                    dryerHeadroom: 1,
+                    startableLoads: 1,
+                    reliable: true,
+                },
+                women: {
+                    access: 'women',
+                    washerAvailable: 0,
+                    projectedDryerSupply: 0,
+                    pendingDryerLoads: 0,
+                    dryerHeadroom: 0,
+                    startableLoads: 0,
+                    reliable: true,
+                },
+            },
+        };
+        const nowMs = Date.parse('2026-09-19T20:35:26.455Z');
+        expect(homeLaundrySummary({snapshot, nowMs})).toEqual({men: 1, women: 0});
+        expect(homeLaundrySummary({snapshot, nowMs: Date.parse(snapshot.asOf) - 60_001})).toEqual({
+            men: null,
+            women: null,
+        });
+        expect(
+            homeLaundrySummary({
+                snapshot: {
+                    ...snapshot,
+                    quality: {...snapshot.quality, sourceFreshness: 'REFRESH_OVERDUE'},
+                },
+                nowMs,
+            }),
+        ).toEqual({men: null, women: null});
     });
 });

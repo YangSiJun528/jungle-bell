@@ -84,10 +84,13 @@ describe('LaundryPage capacity summary', () => {
         expect(boundarySource).toContain('type="offline"');
     });
 
-    it('마지막 정상 시각을 페이지 데이터 범위에서 한 번만 안내한다', () => {
+    it('수집 확인과 현재 원본 내용의 첫 관측을 구분하고 정상 시각으로 오인하지 않게 안내한다', () => {
         expect(source).toContain('<LaundryStatusNotice');
         expect(source).toContain("data-data-state={presentation.dataStale ? 'stale' : 'current'}");
         expect(source.match(/lastUpdatedAt=/gu)).toHaveLength(1);
+        expect(source).toContain('lastUpdatedLabel="마지막 수집 확인"');
+        expect(source).toContain('현재 원본 내용 첫 관측');
+        expect(source).toContain('기기가 갱신한 시각과 다를 수 있습니다.');
         expect(source).not.toContain('staleBanner');
     });
 });
