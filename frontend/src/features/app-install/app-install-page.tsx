@@ -213,14 +213,20 @@ function PcInstallStep({mobileClient}: {mobileClient: boolean}) {
             className={
                 mobileClient
                     ? 'min-w-0'
-                    : 'grid min-w-0 gap-5 md:grid-cols-[minmax(0,1fr)_15rem] md:items-center'
+                    : 'grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(24rem,0.85fr)] xl:items-center'
             }
         >
             <div className="min-w-0">
                 <p className="text-base leading-7 text-muted-foreground">
-                    {mobileClient
-                        ? '출석 자동 확인과 개인 알림을 연결하려면 PC 앱 설치와 Jungle Campus 로그인을 먼저 완료하세요.'
-                        : '운영체제에 맞는 PC 앱을 설치한 뒤 Jungle Campus에 로그인합니다. 공개 세탁실과 급식만 볼 때는 이 단계가 필요하지 않습니다.'}
+                    {mobileClient ? (
+                        '출석 자동 확인과 개인 알림을 연결하려면 PC 앱 설치와 Jungle Campus 로그인을 먼저 완료하세요.'
+                    ) : (
+                        <>
+                            운영체제에 맞는 PC 앱을 설치한 뒤 Jungle Campus에 로그인합니다.
+                            <br />
+                            공개 세탁실과 급식만 볼 때는 이 단계가 필요하지 않습니다.
+                        </>
+                    )}
                 </p>
                 <Button asChild className="mt-4 h-auto min-h-11 w-full whitespace-normal sm:w-auto">
                     <ExternalLink href={PC_INSTALL_GUIDE_URL}>
@@ -230,7 +236,10 @@ function PcInstallStep({mobileClient}: {mobileClient: boolean}) {
                 </Button>
             </div>
             {mobileClient ? null : (
-                <DesktopAppMockup compact className="min-h-56 w-full shadow-none" />
+                <DesktopAppMockup
+                    compact
+                    className="min-h-80 w-full max-w-xl justify-self-center shadow-none"
+                />
             )}
         </div>
     );
@@ -308,10 +317,11 @@ function PwaInstallStep({
             </div>
             <section className="mt-6 min-w-0 border-t pt-5" aria-labelledby="manual-install-title">
                 <h3 id="manual-install-title" className="text-lg leading-7 font-semibold">
-                    수동 설치 방법
+                    설치 방법
                 </h3>
                 <p className="mt-1 text-base leading-7 text-muted-foreground">
-                    휴대폰에 맞는 탭을 선택하고 이미지를 좌우로 넘기며 빨간 번호를 따라 하세요.
+                    휴대폰에 맞는 탭을 선택하고 이미지의 빨간 표시를 따라 순서대로 진행해주세요.
+                    <br />
                     이미지를 누르면 크게 볼 수 있습니다.
                 </p>
                 <Tabs defaultValue={installPlatform} className="mt-4 min-w-0">
@@ -333,8 +343,9 @@ function PwaInstallStep({
                     </TabsContent>
                 </Tabs>
                 <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                    iOS 26 Safari·Android 16 Chrome 캡처 기준입니다. 버전에 따라 메뉴 위치가 다를 수
-                    있습니다.
+                    iOS 26 Safari · Android 16 Chrome 캡처 기준입니다.
+                    <br />
+                    버전에 따라 메뉴 위치가 다를 수 있습니다.
                 </p>
             </section>
         </div>
@@ -346,8 +357,9 @@ function PushTestStep() {
         <div className="min-w-0 space-y-4">
             <div className="min-w-0">
                 <p className="text-base leading-7 text-muted-foreground">
-                    설치한 PWA에서 ‘알림 연결하고 테스트’를 누른 뒤 iPhone과 Android 모두 시스템
-                    알림 요청을 허용하세요. 이 기기에 테스트 알림이 도착하면 설정이 끝납니다.
+                    설치한 PWA에서 ‘알림 연결하고 테스트’를 누른 뒤 시스템 알림 요청을 허용하세요.
+                    <br />
+                    이 기기에 테스트 알림이 도착하면 설정이 끝납니다.
                 </p>
             </div>
             <div className="min-w-0">

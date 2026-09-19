@@ -93,7 +93,7 @@ describe('home feature boundaries', () => {
         expect(source).not.toContain('<CardTitle>공식 정글캠퍼스</CardTitle>');
     });
 
-    it('일반 웹의 설치 안내는 320px에서 줄바꿈되고 닫을 수 있는 compact 안내다', () => {
+    it('일반 웹의 설치 안내는 320px에서 줄바꿈되고 세션 동안 닫을 수 있다', () => {
         const showcaseSource = readFileSync(
             new URL('../../components/app-showcase/app-showcase-card.tsx', import.meta.url),
             'utf8',

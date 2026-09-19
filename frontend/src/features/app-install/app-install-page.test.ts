@@ -22,7 +22,7 @@ describe('app install guidance order', () => {
             'PWA 설치',
             '푸시 알림 테스트',
             '출석·개인 알림에 필요',
-            '수동 설치 방법',
+            '설치 방법',
         ]) {
             expect(source).toContain(text);
         }
