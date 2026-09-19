@@ -68,14 +68,16 @@ export function DesktopAppMockup({
             <div
                 className={cn(
                     'absolute top-36 left-5 z-10 rounded-xl border border-white/45 bg-white/15 p-4 text-white shadow-sm backdrop-blur-sm',
-                    compact && 'top-20 w-[36%] p-2',
+                    compact && 'top-20 left-[6%] w-[34%] p-2',
                 )}
             >
                 <small className="block font-semibold">PC 앱</small>
                 <strong
                     className={cn(
-                        'mt-1 block leading-snug whitespace-nowrap',
-                        compact ? 'text-xs sm:text-sm' : 'text-base sm:text-lg',
+                        'mt-1 block leading-snug',
+                        compact
+                            ? 'text-xs whitespace-normal sm:text-sm'
+                            : 'text-base whitespace-nowrap sm:text-lg',
                     )}
                 >
                     메뉴 바에서

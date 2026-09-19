@@ -27,7 +27,7 @@ export const mobilePairingScreenshot = {
     id: 'mobile-pair',
     title: '휴대폰에서 연결 요청하기',
     description:
-        '홈 화면의 Jungle Bell을 열고 PC의 10자리 코드를 입력하세요. 연결 요청 후 두 화면의 확인번호를 비교하고 PC에서 승인합니다.',
+        '홈 화면의 Jungle Bell을 열고 PC의 10자리 코드를 입력하세요.\n연결 요청 후 두 화면의 확인번호를 비교하고 PC에서 승인합니다.',
     src: mobilePairingScreenshotImage,
     width: 851,
     height: 1848,
@@ -128,8 +128,7 @@ const notificationStart = {
 const notificationAllow = {
     id: 'notifications-02-allow',
     title: '알림 권한 허용하기',
-    description:
-        '시스템 알림 요청에서 허용을 누른 뒤 테스트 알림을 확인합니다. 아래 화면은 iPhone 예시입니다.',
+    description: '시스템 알림 요청에서 허용을 누른 뒤 테스트 알림을 확인합니다.',
     src: notificationAllowImage,
     width: 851,
     height: 1849,

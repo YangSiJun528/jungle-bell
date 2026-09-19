@@ -70,7 +70,7 @@ export function InstallScreenshotGuide({
                             {singleScreenshot ? null : `${index + 1}. `}
                             {screenshot.title}
                         </h4>
-                        <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                        <p className="mt-1 text-sm leading-6 whitespace-pre-line text-muted-foreground">
                             {screenshot.description}
                         </p>
                     </li>
@@ -97,7 +97,7 @@ export function InstallScreenshotGuide({
                                 <Dialog.Title className="text-lg leading-7 font-semibold">
                                     {selectedScreenshot?.title}
                                 </Dialog.Title>
-                                <Dialog.Description className="mt-1 text-sm leading-6 text-muted-foreground">
+                                <Dialog.Description className="mt-1 text-sm leading-6 whitespace-pre-line text-muted-foreground">
                                     {selectedScreenshot?.description}
                                 </Dialog.Description>
                             </div>
