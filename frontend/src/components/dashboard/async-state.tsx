@@ -35,6 +35,7 @@ interface EmptyStateProps extends BaseAsyncStateProps {
 
 interface TimedStateProps extends BaseAsyncStateProps {
     lastUpdatedAt?: string;
+    lastUpdatedLabel?: string;
     reason?: string;
     retryLabel?: string;
     retry?: () => void;
@@ -105,12 +106,16 @@ function withStatus(children: ReactNode, regionProps: AsyncRegionProps) {
     );
 }
 
-function statusDescriptionRows(lastUpdatedAt?: string, reason?: string) {
+function statusDescriptionRows(
+    lastUpdatedAt?: string,
+    reason?: string,
+    lastUpdatedLabel = '마지막 정상 시각',
+) {
     return (
         <>
             {lastUpdatedAt ? (
                 <p className="text-sm leading-5 text-muted-foreground">
-                    마지막 정상 시각: <span className="font-medium">{lastUpdatedAt}</span>
+                    {lastUpdatedLabel}: <span className="font-medium">{lastUpdatedAt}</span>
                 </p>
             ) : null}
             {reason ? <p className="text-base leading-6">이유: {reason}</p> : null}
@@ -278,7 +283,7 @@ export function AsyncState(props: AsyncStateProps) {
                 {props.title ?? TIMED_STATE_LABELS[props.type]}
             </p>
             {props.description ? <p>{props.description}</p> : null}
-            {statusDescriptionRows(props.lastUpdatedAt, props.reason)}
+            {statusDescriptionRows(props.lastUpdatedAt, props.reason, props.lastUpdatedLabel)}
             {props.retry ? (
                 <Button className="mt-2 min-h-11" size="sm" variant="outline" onClick={props.retry}>
                     {props.retryLabel ?? '다시 시도'}

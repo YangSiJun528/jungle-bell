@@ -1,7 +1,7 @@
 import type {DashboardLaundrySnapshot} from '@/api/dashboard-api';
 import type {LaundryCapacityEstimate, LaundryCapacitySnapshot} from '@/domain/laundry/capacity';
 import {laundryCapacity} from '@/domain/laundry/capacity';
-import {laundrySituationDataIsReliable} from '@/domain/laundry/freshness';
+import {laundrySituationDataIsReliable, laundrySnapshotIsRecent} from '@/domain/laundry/freshness';
 import {relativeTimeLabel} from '@/lib/format';
 
 export interface CapacityCardView {
@@ -32,6 +32,8 @@ export type LaundryPageStateReason =
     | 'collector-unavailable'
     | 'collection-incomplete'
     | 'source-stale'
+    | 'source-overdue'
+    | 'snapshot-unreliable'
     | 'no-machines'
     | 'recovered'
     | null;
@@ -104,8 +106,8 @@ function isLaundrySnapshotReliable(input: {
 }
 
 function lastKnownAtLabel(snapshot: DashboardLaundrySnapshot, nowMs: number): string {
-    const lastChecked = snapshot.quality.lastCheckedAt ?? snapshot.asOf;
-    return relativeTimeLabel(lastChecked, nowMs);
+    const lastChecked = snapshot.quality.lastCheckedAt;
+    return lastChecked ? relativeTimeLabel(lastChecked, nowMs) : '확인 기록 없음';
 }
 
 export function laundryPageState(input: {
@@ -164,7 +166,7 @@ export function laundryPageState(input: {
 
     let kind: LaundryPageStateKind = 'normal';
     let title = '세탁실 상태를 표시합니다.';
-    let message = '실시간 상태를 확인했습니다.';
+    let message = '세탁실 정보를 조회했습니다.';
     let reason: LaundryPageStateReason = null;
 
     if (input.isOffline) {
@@ -189,9 +191,28 @@ export function laundryPageState(input: {
         reason = 'collection-incomplete';
     } else if (sourceStale) {
         kind = 'stale';
-        title = '세탁실 상태가 늦게 반영됩니다.';
-        message = '수집이 지연되어 실시간 정보가 아닙니다.';
-        reason = 'source-stale';
+        if (
+            !laundrySnapshotIsRecent({
+                snapshotSavedAt: Date.parse(input.snapshot.asOf),
+                nowMs,
+                expectedRefreshIntervalSeconds:
+                    input.snapshot.quality.expectedRefreshIntervalSeconds,
+            })
+        ) {
+            title = '최신 세탁실 응답을 확인해 주세요.';
+            message =
+                '최신 조회 결과를 확인할 수 없어 저장된 상태를 표시합니다. 새로고침해 주세요.';
+            reason = 'snapshot-unreliable';
+        } else if (input.snapshot.quality.sourceFreshness === 'REFRESH_OVERDUE') {
+            title = '세탁실 원본 내용이 계속 동일합니다.';
+            message =
+                '수집은 성공했지만 원본 내용의 변화가 관측되지 않았습니다. 현재 기기 상태와 다를 수 있습니다.';
+            reason = 'source-overdue';
+        } else {
+            title = '세탁실 원본 상태를 확인할 수 없습니다.';
+            message = '원본 정보가 최신인지 확인할 수 없어 이전 상태를 표시합니다.';
+            reason = 'source-stale';
+        }
     } else if (input.snapshot.machines.length === 0) {
         kind = 'empty';
         title = '표시할 워시타워가 없습니다.';
@@ -213,11 +234,28 @@ export function laundryPageState(input: {
         message,
         reason,
         retryLabel: '새로고침',
-        lastKnownAt: input.snapshot.quality.lastCheckedAt ?? input.snapshot.asOf,
+        lastKnownAt: input.snapshot.quality.lastCheckedAt ?? null,
         lastKnownLabel: lastKnownAtLabel(input.snapshot, nowMs),
         canRetry: kind === 'stale',
         allowWatchCreation: allowsCreation,
     };
+}
+
+/** First observation of the current source content; repeated successful fetches keep this time. */
+export function laundrySourceObservedAt(snapshot: DashboardLaundrySnapshot): string | null {
+    let latest: string | null = null;
+    let latestMs = -Infinity;
+    for (const machine of snapshot.machines) {
+        for (const appliance of [machine.washer, machine.dryer]) {
+            const observedAt = appliance?.observedAt;
+            const observedMs = observedAt ? Date.parse(observedAt) : NaN;
+            if (observedAt && Number.isFinite(observedMs) && observedMs > latestMs) {
+                latest = observedAt;
+                latestMs = observedMs;
+            }
+        }
+    }
+    return latest;
 }
 
 export function capacityCards(

@@ -3,7 +3,12 @@ import {describe, expect, it} from 'vitest';
 import type {DashboardLaundrySnapshot} from '@/api/dashboard-api';
 import type {DashboardLaundryMachine, LaundryCapacitySnapshot} from '@/domain/laundry/capacity';
 
-import {capacityCards, laundryPageState, laundrySummaryFromSnapshot} from './laundry-page-view';
+import {
+    capacityCards,
+    laundryPageState,
+    laundrySourceObservedAt,
+    laundrySummaryFromSnapshot,
+} from './laundry-page-view';
 
 const capacity: LaundryCapacitySnapshot = {
     basis: 'WASHER_AND_DRYER_HEADROOM_60_MIN',
@@ -181,6 +186,83 @@ describe('laundryPageState', () => {
         ).toBe('recovered');
     });
 
+    it('최근 수집에 성공했어도 원본 변화 미관측을 수집 지연으로 표시하지 않는다', () => {
+        const snapshot: DashboardLaundrySnapshot = {
+            ...baseSnapshot,
+            asOf: '2026-09-19T20:13:30Z',
+            quality: {
+                ...baseSnapshot.quality,
+                lastCheckedAt: '2026-09-19T20:13:06Z',
+                sourceFreshness: 'REFRESH_OVERDUE',
+                expectedRefreshIntervalSeconds: 300,
+            },
+        };
+        const status = laundryPageState({
+            snapshot,
+            nowMs: Date.parse('2026-09-19T20:13:31Z'),
+            queryError: null,
+            manualRefreshError: null,
+        });
+        expect(status).toMatchObject({
+            kind: 'stale',
+            reason: 'source-overdue',
+            allowWatchCreation: false,
+            message: expect.stringContaining(
+                '수집은 성공했지만 원본 내용의 변화가 관측되지 않았습니다.',
+            ),
+        });
+        expect(status.message).not.toContain('수집이 지연');
+        expect(laundrySummaryFromSnapshot({snapshot, nowMs: Date.parse(snapshot.asOf)})).toEqual({
+            men: null,
+            women: null,
+        });
+    });
+
+    it('5분 미만 원본은 정상이며 로컬 만료와 시각 불일치는 별도 이유로 차단한다', () => {
+        const snapshot: DashboardLaundrySnapshot = {
+            ...baseSnapshot,
+            quality: {
+                ...baseSnapshot.quality,
+                sourceFreshness: 'WITHIN_REFRESH_WINDOW',
+                expectedRefreshIntervalSeconds: 300,
+            },
+        };
+        const input = {snapshot, queryError: null, manualRefreshError: null};
+        const savedAt = Date.parse(snapshot.asOf);
+        expect(laundryPageState({...input, nowMs: savedAt - 3_545})).toMatchObject({
+            kind: 'normal',
+            allowWatchCreation: true,
+        });
+        expect(laundrySummaryFromSnapshot({snapshot, nowMs: savedAt - 3_545})).toEqual({
+            men: 1,
+            women: 1,
+        });
+        expect(
+            laundryPageState({
+                ...input,
+                snapshot: {
+                    ...snapshot,
+                    quality: {...snapshot.quality, sourceFreshness: 'REFRESH_OVERDUE'},
+                },
+                nowMs: savedAt - 3_545,
+            }),
+        ).toMatchObject({kind: 'stale', reason: 'source-overdue', allowWatchCreation: false});
+        expect(laundryPageState({...input, nowMs: savedAt + 299_000})).toMatchObject({
+            kind: 'normal',
+            allowWatchCreation: true,
+        });
+        expect(laundryPageState({...input, nowMs: savedAt + 600_001})).toMatchObject({
+            kind: 'stale',
+            reason: 'snapshot-unreliable',
+            allowWatchCreation: false,
+        });
+        expect(laundryPageState({...input, nowMs: savedAt - 60_001})).toMatchObject({
+            kind: 'stale',
+            reason: 'snapshot-unreliable',
+            allowWatchCreation: false,
+        });
+    });
+
     it('데이터가 없는 최초 요청은 loading/offline/error를 구분한다', () => {
         expect(
             laundryPageState({
@@ -273,3 +355,38 @@ const baseSnapshot: DashboardLaundrySnapshot = {
         },
     },
 };
+
+describe('laundrySourceObservedAt', () => {
+    it('최근 수집 확인과 별개로 기기 원본 내용의 첫 관측 시각을 사용한다', () => {
+        const observedAt = '2026-09-19T19:57:41Z';
+        expect(
+            laundrySourceObservedAt({
+                ...baseSnapshot,
+                machines: [{...baseMachine, washer: {...baseMachine.washer!, observedAt}}],
+                quality: {...baseSnapshot.quality, lastCheckedAt: '2026-09-19T20:13:06Z'},
+            }),
+        ).toBe(observedAt);
+        expect(laundrySourceObservedAt(baseSnapshot)).toBeNull();
+    });
+
+    it('누락되거나 잘못된 관측 시각은 수집 확인 시각으로 대체하지 않는다', () => {
+        expect(
+            laundrySourceObservedAt({
+                ...baseSnapshot,
+                machines: [
+                    {...baseMachine, washer: {...baseMachine.washer!, observedAt: 'invalid'}},
+                ],
+            }),
+        ).toBeNull();
+        expect(
+            laundryPageState({
+                snapshot: {
+                    ...baseSnapshot,
+                    quality: {...baseSnapshot.quality, lastCheckedAt: null},
+                },
+                queryError: null,
+                manualRefreshError: null,
+            }).lastKnownAt,
+        ).toBeNull();
+    });
+});

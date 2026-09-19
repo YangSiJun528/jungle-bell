@@ -9,6 +9,9 @@ export interface LaundrySituationDataState {
 
 const DEFAULT_EXPECTED_REFRESH_INTERVAL_SECONDS = 300;
 const REFRESH_GRACE_MULTIPLIER = 2;
+// Server snapshots use 30-second time slices. Allow modest server/client clock drift,
+// but keep a finite future bound and do not extend the maximum snapshot age.
+const MAX_FUTURE_CLOCK_SKEW_MS = 60_000;
 const RELIABLE_SOURCE_FRESHNESS = new Set([
     'REFRESH_OBSERVED',
     'WITHIN_REFRESH_WINDOW',
@@ -26,11 +29,26 @@ export function laundrySituationDataIsReliable(state: LaundrySituationDataState)
         return false;
     }
 
+    return laundrySnapshotIsRecent(state);
+}
+
+export function laundrySnapshotIsRecent(
+    state: Pick<
+        LaundrySituationDataState,
+        'snapshotSavedAt' | 'nowMs' | 'expectedRefreshIntervalSeconds'
+    >,
+): boolean {
+    if (typeof state.snapshotSavedAt !== 'number' || !Number.isFinite(state.snapshotSavedAt)) {
+        return false;
+    }
     const ageMs = state.nowMs - state.snapshotSavedAt;
     const expectedRefreshIntervalSeconds =
         state.expectedRefreshIntervalSeconds ?? DEFAULT_EXPECTED_REFRESH_INTERVAL_SECONDS;
     if (!Number.isFinite(expectedRefreshIntervalSeconds) || expectedRefreshIntervalSeconds <= 0) {
         return false;
     }
-    return ageMs >= 0 && ageMs <= expectedRefreshIntervalSeconds * 1_000 * REFRESH_GRACE_MULTIPLIER;
+    return (
+        ageMs >= -MAX_FUTURE_CLOCK_SKEW_MS &&
+        ageMs <= expectedRefreshIntervalSeconds * 1_000 * REFRESH_GRACE_MULTIPLIER
+    );
 }

@@ -117,3 +117,15 @@ test('오류와 stale 복구 버튼은 최소 44px 조작 영역을 사용한다
     assert.match(error, /min-h-11/u);
     assert.match(stale, /min-h-11/u);
 });
+
+test('수집 확인 시각은 정상 데이터 시각과 다른 라벨로 표시할 수 있다', () => {
+    const markup = renderToStaticMarkup(
+        <AsyncState
+            type="stale"
+            lastUpdatedAt="2026-09-19 20:13"
+            lastUpdatedLabel="마지막 수집 확인"
+        />,
+    );
+    assert.match(markup, /마지막 수집 확인/u);
+    assert.doesNotMatch(markup, /마지막 정상 시각/u);
+});

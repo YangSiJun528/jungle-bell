@@ -22,6 +22,7 @@ import {WashTowerGrid} from '../components/wash-tower-grid';
 import {
     capacityCards,
     laundryPageState,
+    laundrySourceObservedAt,
     type CapacityCardView,
     type LaundryPageStatus,
 } from './laundry-page-view';
@@ -48,7 +49,9 @@ function laundryReasonLabel(reason: LaundryPageStatus['reason']): string | undef
     if (reason === 'refresh-failed') return '최신 세탁실 상태 갱신 실패';
     if (reason === 'collector-unavailable') return '수집 서버 응답 없음';
     if (reason === 'collection-incomplete') return '일부 기기 수집 미완료';
-    if (reason === 'source-stale') return '세탁실 데이터 갱신 지연';
+    if (reason === 'source-stale') return '원본 최신 여부 확인 불가';
+    if (reason === 'source-overdue') return '원본 내용 변화 미관측';
+    if (reason === 'snapshot-unreliable') return '저장된 응답의 유효 시간 확인 필요';
     if (reason === 'no-machines') return '수집된 기기 없음';
     if (reason === 'recovered') return '정상 조회 재개';
     return undefined;
@@ -98,6 +101,7 @@ function LaundryStatusNotice({
             type={status.kind}
             title={title}
             description={message}
+            lastUpdatedLabel="마지막 수집 확인"
             lastUpdatedAt={status.lastKnownAt ? dateTimeLabel(status.lastKnownAt) : undefined}
             reason={laundryReasonLabel(status.reason)}
             regionLabel="세탁실 데이터 상태"
@@ -173,6 +177,7 @@ type LaundryPagePresentation = ReturnType<typeof laundryPagePresentation>;
 
 function LaundryCapacitySummary({presentation}: {presentation: LaundryPagePresentation}) {
     const {nowMs, snapshot, summaries} = presentation;
+    const observedAt = laundrySourceObservedAt(snapshot);
 
     return (
         <section aria-labelledby="laundry-capacity-title">
@@ -181,10 +186,21 @@ function LaundryCapacitySummary({presentation}: {presentation: LaundryPagePresen
                     지금 시작 가능
                 </h2>
                 <p className="text-xs text-muted-foreground">
-                    마지막 확인{' '}
-                    {relativeTimeLabel(snapshot.quality.lastCheckedAt ?? snapshot.asOf, nowMs)}
+                    마지막 수집 확인{' '}
+                    {snapshot.quality.lastCheckedAt
+                        ? relativeTimeLabel(snapshot.quality.lastCheckedAt, nowMs)
+                        : '기록 없음'}
                 </p>
             </div>
+            {observedAt ? (
+                <p className="mb-3 text-xs text-muted-foreground">
+                    현재 원본 내용 첫 관측{' '}
+                    <time dateTime={observedAt} title={dateTimeLabel(observedAt)}>
+                        {relativeTimeLabel(observedAt, nowMs)}
+                    </time>
+                    {' · 기기가 갱신한 시각과 다를 수 있습니다.'}
+                </p>
+            ) : null}
             <div className="grid min-w-0 gap-3 sm:grid-cols-2">
                 {summaries.map((card) => (
                     <Card
