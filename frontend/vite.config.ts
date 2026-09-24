@@ -103,7 +103,7 @@ function injectionScriptPlugin(outDir: string): Plugin {
 function pwaHtmlPlugin(): Plugin {
     const tags = [
         '<meta name="apple-mobile-web-app-capable" content="yes"/>',
-        '<meta name="apple-mobile-web-app-status-bar-style" content="default"/>',
+        '<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>',
         '<meta name="apple-mobile-web-app-title" content="Jungle Bell"/>',
         '<link rel="icon" href="./icons/icon-32.png" type="image/png" sizes="32x32"/>',
         '<link rel="icon" href="./icons/icon.svg" type="image/svg+xml"/>',
