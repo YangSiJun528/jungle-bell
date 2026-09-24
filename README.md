@@ -1,4 +1,4 @@
-> 정글벨이 어떻게 시작되고 발전해 왔는지 궁금하시다면 [개발 여정](journey.md)을 읽어보세요.
+> 정글벨이 어떻게 시작되고 발전해 왔는지 궁금하시다면 [Jungle Bell 개발기](journey.md)을 읽어보세요.
 
 <p align="center">
   <img src="docs/assets/readme/logo.png" width="96" alt="Jungle Bell">
