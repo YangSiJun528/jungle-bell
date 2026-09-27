@@ -6,6 +6,8 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import {defineConfig, transformWithOxc, type Plugin} from 'vite';
 
+import {fontLicenseAssetPath, fontLicenseSourcePath} from './scripts/font-license';
+
 const require = createRequire(import.meta.url);
 const {VitePWA} = require('vite-plugin-pwa') as {
     VitePWA: (options: Record<string, unknown>) => Plugin[];
@@ -100,6 +102,27 @@ function injectionScriptPlugin(outDir: string): Plugin {
     };
 }
 
+function fontLicensePlugin(): Plugin {
+    return {
+        name: 'font-license',
+        generateBundle() {
+            this.addWatchFile(fontLicenseSourcePath);
+            this.emitFile({
+                type: 'asset',
+                fileName: fontLicenseAssetPath,
+                source: readFileSync(fontLicenseSourcePath),
+            });
+        },
+        configureServer(server) {
+            server.middlewares.use((request, response, next) => {
+                if (request.url?.split('?')[0] !== `/${fontLicenseAssetPath}`) return next();
+                response.setHeader('Content-Type', 'text/plain; charset=utf-8');
+                response.end(readFileSync(fontLicenseSourcePath));
+            });
+        },
+    };
+}
+
 function pwaHtmlPlugin(): Plugin {
     const tags = [
         '<meta name="apple-mobile-web-app-capable" content="yes"/>',
@@ -145,6 +168,7 @@ export default defineConfig(({command, mode}) => {
         plugins: [
             react(),
             tailwindcss(),
+            fontLicensePlugin(),
             ...(target === 'desktop'
                 ? [injectionScriptPlugin(outDir)]
                 : [
