@@ -1,12 +1,15 @@
 import {existsSync, readFileSync, readdirSync} from 'node:fs';
 import {resolve} from 'node:path';
 
+import {verifyFontLicense} from './font-license.ts';
+
 const target = process.argv[2];
 if (target !== 'web' && target !== 'desktop') {
     throw new Error('BUILD_ARTIFACT_TARGET_REQUIRED');
 }
 
 const output = resolve(import.meta.dirname, '..', 'dist', target);
+verifyFontLicense(output);
 const required =
     target === 'web'
         ? ['index.html', 'manifest.webmanifest', 'sw.js', '_headers']
