@@ -21,6 +21,7 @@ import {
 import {HomeMealSlotsList} from './home-meal-slots';
 import {homeLaundrySummary, homeTodayMealSlots} from './home-view-model';
 import {JungleCampusSummary} from './jungle-campus-summary';
+import {RecruitmentBanner} from './recruitment-banner';
 
 function SummaryCard({
     icon: Icon,
@@ -215,6 +216,8 @@ export function HomePage() {
                     </div>
                 }
             />
+
+            {platform.kind === 'browser' && !platform.pwa.installed ? <RecruitmentBanner /> : null}
 
             <HomeLivingSummaries />
 
