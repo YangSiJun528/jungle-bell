@@ -81,6 +81,7 @@ function renderGate(options: {
     enabled?: boolean;
     preserveRouteHeading?: boolean;
     pwaInstalled?: boolean;
+    pathname?: string;
 }): string {
     environment.authentication = options.authentication;
     environment.desktopAccount = options.desktopAccount ?? false;
@@ -90,7 +91,9 @@ function renderGate(options: {
     account.lmsAuthentication = options.lmsAuthentication ?? 'not-applicable';
     account.serverSession = options.serverSession ?? 'not-applicable';
     routeRenderCount = 0;
-    const router = createDashboardRouter(createMemoryHistory({initialEntries: ['/attendance']}));
+    const router = createDashboardRouter(
+        createMemoryHistory({initialEntries: [options.pathname ?? '/attendance']}),
+    );
     return renderToStaticMarkup(
         <RouterContextProvider router={router}>
             <PlatformAuthenticationGate
@@ -158,6 +161,27 @@ describe('PlatformAuthenticationGate', () => {
         expect(markup).toContain('<h1');
         expect(markup).toContain('출석</h1>');
         expect(markup).toContain('앱 설치가 필요합니다.');
+    });
+
+    test('일반 웹 출석에서 개인 본문을 실행하지 않고 Compass 새 탭 링크를 제공한다', () => {
+        const markup = renderGate({authentication: 'none', preserveRouteHeading: true});
+
+        expect(markup).toMatch(
+            /<a[^>]*href="https:\/\/jungle-lms\.krafton\.com\/check-in"[^>]*target="_blank"[^>]*rel="noopener noreferrer"[^>]*>Compass 열기/u,
+        );
+        expect(markup).toContain('href="/install"');
+        expect(markup).not.toContain('data-route-content');
+        expect(routeRenderCount).toBe(0);
+    });
+
+    test.each([
+        {authentication: 'none'},
+        {authentication: 'none', preserveRouteHeading: true, pathname: '/connections'},
+        {authentication: 'cookie', preserveRouteHeading: true, personalAccess: 'unconnected'},
+        {authentication: 'cookie', preserveRouteHeading: true, personalAccess: 'connected'},
+        {authentication: 'desktop-session', preserveRouteHeading: true, desktopAccount: true},
+    ])('다른 개인 화면·알림 패널·PWA·PC의 기존 동작은 유지한다: %j', (options) => {
+        expect(renderGate(options)).not.toContain('Compass 열기');
     });
 
     test('PWA의 개인 기능만 연결 상태에 따라 인라인으로 분기한다', () => {

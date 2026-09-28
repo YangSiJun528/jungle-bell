@@ -1,10 +1,18 @@
 import {useMutation} from '@tanstack/react-query';
 import {Link, useRouterState} from '@tanstack/react-router';
-import {CircleAlert, Download, LogIn, RefreshCw, Smartphone} from 'lucide-react';
+import {
+    CircleAlert,
+    Download,
+    ExternalLink as ExternalLinkIcon,
+    LogIn,
+    RefreshCw,
+    Smartphone,
+} from 'lucide-react';
 import {type PropsWithChildren, type ReactNode, useEffect, useId, useReducer} from 'react';
 
 import {PageHeader} from '@/components/dashboard/page-header';
 import {Button} from '@/components/ui/button';
+import {ExternalLink} from '@/components/ui/external-link';
 
 import {
     connectionsRouteSearch,
@@ -126,7 +134,7 @@ function RetryAction({fetching, retry}: {fetching: boolean; retry: () => void}) 
     );
 }
 
-function WebPersonalGate() {
+function WebPersonalGate({showCompassLink}: {showCompassLink: boolean}) {
     return (
         <GatePanel
             icon={<Download aria-hidden="true" className="size-5" />}
@@ -134,6 +142,13 @@ function WebPersonalGate() {
             description="출석과 개인 알림은 PC 앱 또는 홈 화면에 설치한 PWA에서 사용할 수 있습니다. 앱 설치 안내를 확인하세요."
             actions={
                 <>
+                    {showCompassLink ? (
+                        <Button asChild size="sm" variant="outline">
+                            <ExternalLink href="https://jungle-lms.krafton.com/check-in">
+                                Compass 열기 <ExternalLinkIcon aria-hidden="true" />
+                            </ExternalLink>
+                        </Button>
+                    ) : null}
                     <Button asChild size="sm">
                         <Link to="/install">앱 설치 안내</Link>
                     </Button>
@@ -453,7 +468,15 @@ export function PlatformAuthenticationGate({
             gate
         );
 
-    if (platform.accountAuthentication.kind === 'none') return renderGate(<WebPersonalGate />);
+    if (platform.accountAuthentication.kind === 'none') {
+        return renderGate(
+            <WebPersonalGate
+                showCompassLink={
+                    preserveRouteHeading && dashboardRouteFromPath(pathname) === 'attendance'
+                }
+            />,
+        );
+    }
     if (platform.accountAuthentication.kind === 'cookie') {
         return renderGate(
             <BrowserPersonalGate
