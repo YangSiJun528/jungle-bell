@@ -150,7 +150,7 @@ struct ActionResponseListenerSlot;
 impl ActionResponseListenerSlot {
     fn reserve() -> Option<Self> {
         ACTIVE_ACTION_RESPONSE_LISTENERS
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |active| {
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |active| {
                 (active < MAX_ACTION_RESPONSE_LISTENERS).then_some(active + 1)
             })
             .ok()
