@@ -1,20 +1,20 @@
 import {ArrowUpRight} from 'lucide-react';
 
-export function RecruitmentBanner() {
+export function ServiceEndNoticeBanner() {
     return (
         <a
-            href="https://github.com/YangSiJun528/jungle-bell/blob/main/HELP_WANTED.md"
+            href="https://github.com/YangSiJun528/jungle-bell/blob/main/SERVICE_END_NOTICE.md"
             target="_blank"
             rel="noopener noreferrer"
             className="flex min-w-0 flex-col gap-3 rounded-xl border border-primary/20 bg-primary/5 px-5 py-4 text-foreground transition-colors hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring sm:flex-row sm:items-center sm:justify-between sm:gap-5 sm:px-6 sm:py-5"
         >
             <div className="min-w-0 space-y-1 break-keep">
                 <h2 className="text-base leading-6 font-semibold">
-                    정글 생활 편의 서비스를 직접 만들고 운영할 분을 찾습니다
+                    Jungle Bell 운영 종료 예정 안내
                 </h2>
                 <p className="text-sm leading-5 text-muted-foreground">
-                    40명 이상이 사용하는 Jungle Bell을 이어받거나, 정글 생활을 돕는 새로운 서비스를
-                    시작해 보세요.
+                    서버는 2026년 10월 16일까지 운영할 예정이며, 이후에는 별도 예고 없이 종료될 수
+                    있습니다.
                 </p>
             </div>
             <span className="inline-flex shrink-0 items-center gap-1 self-start text-sm leading-6 font-semibold text-primary sm:self-center">
